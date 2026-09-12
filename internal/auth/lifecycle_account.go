@@ -34,6 +34,7 @@ type LifecycleIdentity struct {
 	EffectiveRPMLimit         string
 	ConcurrencyLimit          *string
 	EffectiveConcurrencyLimit string
+	GameBalance               string
 	Balance                   string
 	DonationCredit            string
 	EffectiveLevel            int
@@ -92,7 +93,7 @@ func (r *Runtime) ExportLifecycleIdentity(
 		RPMLimit: user.RPMLimit, EffectiveRPMLimit: user.EffectiveRPMLimit,
 		ConcurrencyLimit:          user.ConcurrencyLimit,
 		EffectiveConcurrencyLimit: user.EffectiveConcurrencyLimit,
-		Balance:                   user.Balance, DonationCredit: user.DonationCredit,
+		GameBalance:               user.GameBalance, Balance: user.Balance, DonationCredit: user.DonationCredit,
 		EffectiveLevel: user.EffectiveLevel, LevelDisplayName: user.LevelDisplayName,
 		GameProfilePublic: user.GameProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 	}

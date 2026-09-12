@@ -241,7 +241,7 @@ func TestLedgerAdapterExportIsSafeOwnerOnlyAndBounded(t *testing.T) {
 	if err := json.Unmarshal(encoded, &objects); err != nil {
 		t.Fatal(err)
 	}
-	wantKeys := []string{"created_at", "delta", "kind", "operation_id", "source_id", "source_type"}
+	wantKeys := []string{"asset_type", "created_at", "delta", "kind", "operation_id", "source_id", "source_type"}
 	for _, object := range objects {
 		keys := make([]string, 0, len(object))
 		for key := range object {
@@ -389,6 +389,7 @@ func beginAdapterTx(t *testing.T, database *sql.DB) *sql.Tx {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = tx.Rollback() })
 	return tx
 }
 
@@ -410,6 +411,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, "adapter-"+label, label, zero, zero, zero, zer
 	}
 	wallet, err := ledger.CreateUserAccount(context.Background(), tx, userID, adapterTestNow)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, adapterTestNow); err != nil {
 		t.Fatal(err)
 	}
 	user := adapterUser{id: userID, wallet: wallet}

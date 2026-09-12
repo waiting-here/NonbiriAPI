@@ -1865,9 +1865,10 @@ INSERT INTO thursday_participants(
 	// obey the cap and pool-before bounds.
 	operationID := hostileOIDVariant("op_", 'W', 'Q')
 	hostileInsertOperation(t, db, operationID, 1, "welfare_claim", "operation", operationID)
+	hostileGameAwardEntry(t, db, uid, operationID)
 	hostileMustExec(t, db, `
-INSERT INTO welfare_claims(user_id,site_day,award_milli,operation_id,threshold_milli,cap_milli,pool_before_milli,created_at)
-VALUES(?,'1970-01-01',1,?,0,1,1,0)`, uid, operationID)
+INSERT INTO welfare_claims(user_id,site_day,award_milli,operation_id,threshold_milli,cap_milli,pool_before_milli,created_at,asset_type)
+VALUES(?,'1970-01-01',1,?,0,1,1,0,'game')`, uid, operationID)
 	hostileMustExec(t, db, `UPDATE welfare_claims SET created_at=? WHERE operation_id=?`, hostileTimeMax, operationID)
 	hostileMustFail(t, db, `UPDATE welfare_claims SET created_at=? WHERE operation_id=?`, hostileTimeMax+1, operationID)
 	hostileMustFail(t, db, `
@@ -2032,11 +2033,21 @@ SET user_id=NULL,eligible_at_freeze=?,payout_mag=?,unpaid_reason=?,settled=?,
     ledger_rows_remaining=?,updated_at=1
 WHERE period_id=? AND participant_ref=?`
 
+	// Each case starts from the same period; rollback isolates its rows
+	// without rebuilding every table and trigger for each mutation.
+	db := openGenerationTwoDDLForTest(t)
+	periodID, _, _ := hostileInsertThursdayFixture(t, db)
+	beginCase := func(t *testing.T) {
+		t.Helper()
+		hostileMustExec(t, db, `SAVEPOINT matrix_case`)
+		t.Cleanup(func() {
+			hostileMustExec(t, db, `ROLLBACK TO matrix_case; RELEASE matrix_case`)
+		})
+	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run("insert/"+tt.name, func(t *testing.T) {
-			db := openGenerationTwoDDLForTest(t)
-			periodID, _, _ := hostileInsertThursdayFixture(t, db)
+			beginCase(t)
 			participantID := hostileOIDVariant("thp_", 'M', 'Q')
 			args := []any{
 				periodID, participantID, hostileBlob16(1), hostileBlob16(1), tt.eligible,
@@ -2050,9 +2061,8 @@ WHERE period_id=? AND participant_ref=?`
 		})
 
 		t.Run("update/"+tt.name, func(t *testing.T) {
-			db := openGenerationTwoDDLForTest(t)
+			beginCase(t)
 			uid := hostileInsertUser(t, db, "thursday-matrix", 0, 0)
-			periodID, _, _ := hostileInsertThursdayFixture(t, db)
 			participantID := hostileOIDVariant("thp_", 'M', 'Q')
 			hostileMustExec(t, db, `
 INSERT INTO thursday_participants(
@@ -2914,10 +2924,11 @@ func TestGenerationTwoHostileSQLiteIntegerAffinity(t *testing.T) {
 	welfareOperationID := hostileOIDVariant("op_", 'I', 'Q')
 	hostileInsertOperation(t, db, welfareOperationID, 101, "welfare_claim", "operation", welfareOperationID)
 	welfareUser := hostileInsertUser(t, db, "integer-affinity-welfare", 0, 0)
+	hostileGameAwardEntry(t, db, welfareUser, welfareOperationID)
 	welfareIDValue := hostileNextPK64(t, db, "welfare_claims")
 	welfareID := hostileMustLastID(t, hostileMustExec(t, db, `
-	INSERT INTO welfare_claims(id,user_id,site_day,operation_id,threshold_milli,cap_milli,pool_before_milli,award_milli,created_at)
-	VALUES(?,?,'1970-01-01',?,0,2,2,1,0)`, welfareIDValue, welfareUser, welfareOperationID))
+	INSERT INTO welfare_claims(id,user_id,site_day,operation_id,threshold_milli,cap_milli,pool_before_milli,award_milli,created_at,asset_type)
+	VALUES(?,?,'1970-01-01',?,0,2,2,1,0,'game')`, welfareIDValue, welfareUser, welfareOperationID))
 	hostileMustFail(t, db, `UPDATE welfare_claims SET award_milli=1.5 WHERE id=?`, welfareID)
 
 	fishingUser := hostileInsertUser(t, db, "integer-affinity-fishing", 0, 0)

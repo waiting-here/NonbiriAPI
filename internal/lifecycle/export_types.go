@@ -9,24 +9,26 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
-	SchemaVersion int                 `json:"schema_version"`
-	GeneratedAt   int64               `json:"generated_at"`
-	User          UserExport          `json:"user"`
-	Endpoints     []EndpointExport    `json:"endpoints"`
-	CatalogPairs  []CatalogPairExport `json:"catalog_pairs"`
-	Models        []ModelExport       `json:"models"`
-	CallerKey     *CallerKeyExport    `json:"caller_key"`
-	Usage         UsageExport         `json:"usage"`
-	LogSummary    LogSummaryExport    `json:"log_summary"`
-	Issues        []IssueExport       `json:"issues"`
-	CreditLedger  []LedgerEntryExport `json:"credit_ledger"`
-	WelfareClaims []WelfareExport     `json:"welfare_claims"`
-	Thursday      []ThursdayExport    `json:"thursday"`
-	Donations     []DonationExport    `json:"donations"`
-	Charity       CharityExport       `json:"charity"`
-	Fishing       FishingExport       `json:"fishing"`
-	LinkLink      LinkLinkExport      `json:"linklink"`
-	RPS           RPSExport           `json:"rps"`
+	Checkins       []CheckinExport     `json:"checkins"`
+	GameOnboarding []OnboardingExport  `json:"game_onboarding"`
+	SchemaVersion  int                 `json:"schema_version"`
+	GeneratedAt    int64               `json:"generated_at"`
+	User           UserExport          `json:"user"`
+	Endpoints      []EndpointExport    `json:"endpoints"`
+	CatalogPairs   []CatalogPairExport `json:"catalog_pairs"`
+	Models         []ModelExport       `json:"models"`
+	CallerKey      *CallerKeyExport    `json:"caller_key"`
+	Usage          UsageExport         `json:"usage"`
+	LogSummary     LogSummaryExport    `json:"log_summary"`
+	Issues         []IssueExport       `json:"issues"`
+	CreditLedger   []LedgerEntryExport `json:"credit_ledger"`
+	WelfareClaims  []WelfareExport     `json:"welfare_claims"`
+	Thursday       []ThursdayExport    `json:"thursday"`
+	Donations      []DonationExport    `json:"donations"`
+	Charity        CharityExport       `json:"charity"`
+	Fishing        FishingExport       `json:"fishing"`
+	LinkLink       LinkLinkExport      `json:"linklink"`
+	RPS            RPSExport           `json:"rps"`
 }
 
 type UserExport struct {
@@ -46,6 +48,7 @@ type UserExport struct {
 	EffectiveRPMLimit         string  `json:"effective_rpm_limit"`
 	ConcurrencyLimit          *string `json:"concurrency_limit"`
 	EffectiveConcurrencyLimit string  `json:"effective_concurrency_limit"`
+	GameBalance               string  `json:"game_balance"`
 	Balance                   string  `json:"balance"`
 	DonationCredit            string  `json:"donation_credit"`
 	EffectiveLevel            int     `json:"effective_level"`
@@ -184,6 +187,7 @@ type IssueExport struct {
 }
 
 type LedgerEntryExport struct {
+	Asset       string `json:"asset_type"`
 	OperationID string `json:"operation_id"`
 	Kind        string `json:"kind"`
 	SourceType  string `json:"source_type"`
@@ -193,6 +197,7 @@ type LedgerEntryExport struct {
 }
 
 type WelfareExport struct {
+	Asset     string `json:"asset_type"`
 	SiteDay   string `json:"site_day"`
 	Threshold string `json:"threshold"`
 	Cap       string `json:"cap"`
@@ -316,34 +321,47 @@ type FishingExport struct {
 }
 
 type FishingPendingExport struct {
-	BatchID        string `json:"batch_id"`
-	Bait           string `json:"bait"`
-	Count          int    `json:"count"`
-	EntryTotal     string `json:"entry_total"`
-	State          string `json:"state"`
-	NextAttemptAt  *int64 `json:"next_attempt_at"`
-	RetryExhausted bool   `json:"retry_exhausted"`
+	RulesVersion   int               `json:"rules_version"`
+	Payment        GamePaymentExport `json:"payment"`
+	BatchID        string            `json:"batch_id"`
+	Bait           string            `json:"bait"`
+	Count          int               `json:"count"`
+	EntryTotal     string            `json:"entry_total"`
+	State          string            `json:"state"`
+	NextAttemptAt  *int64            `json:"next_attempt_at"`
+	RetryExhausted bool              `json:"retry_exhausted"`
 }
 
 type FishingBatchExport struct {
-	BatchID     string                 `json:"batch_id"`
-	Bait        string                 `json:"bait"`
-	Count       int                    `json:"count"`
-	UnitPrice   string                 `json:"unit_price"`
-	EntryTotal  string                 `json:"entry_total"`
-	Outcomes    []FishingOutcomeExport `json:"outcomes"`
-	PayoutTotal string                 `json:"payout_total"`
-	SettledAt   int64                  `json:"settled_at"`
-	RevealedAt  *int64                 `json:"revealed_at"`
+	NetPayoutTotal string                 `json:"net_payout_total"`
+	Rake           FishingRakeExport      `json:"rake"`
+	RulesVersion   int                    `json:"rules_version"`
+	Payment        GamePaymentExport      `json:"payment"`
+	BatchID        string                 `json:"batch_id"`
+	Bait           string                 `json:"bait"`
+	Count          int                    `json:"count"`
+	UnitPrice      string                 `json:"unit_price"`
+	EntryTotal     string                 `json:"entry_total"`
+	Outcomes       []FishingOutcomeExport `json:"outcomes"`
+	PayoutTotal    string                 `json:"payout_total"`
+	SettledAt      int64                  `json:"settled_at"`
+	RevealedAt     *int64                 `json:"revealed_at"`
 }
 
+type FishingRakeExport struct {
+	Platform string `json:"platform"`
+	Welfare  string `json:"welfare"`
+	Thursday string `json:"thursday"`
+}
 type FishingOutcomeExport struct {
-	Ordinal             int     `json:"ordinal"`
-	SpeciesKey          string  `json:"species_key"`
-	Tier                string  `json:"tier"`
-	SizeCM              int     `json:"size_cm"`
-	Reward              string  `json:"reward"`
-	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
+	NetReward           string            `json:"net_reward"`
+	Rake                FishingRakeExport `json:"rake"`
+	Ordinal             int               `json:"ordinal"`
+	SpeciesKey          string            `json:"species_key"`
+	Tier                string            `json:"tier"`
+	SizeCM              int               `json:"size_cm"`
+	Reward              string            `json:"reward"`
+	BlueFatFishLengthCM *string           `json:"blue_fat_fish_length_cm"`
 }
 
 type FishingRankExport struct {
@@ -360,27 +378,35 @@ type LinkLinkExport struct {
 }
 
 type LinkLinkActiveExport struct {
-	SessionID    string `json:"session_id"`
-	Spec         string `json:"spec"`
-	Price        string `json:"price"`
-	State        string `json:"state"`
-	PairsRemoved int    `json:"pairs_removed"`
-	TotalPairs   int    `json:"total_pairs"`
-	StartedAt    int64  `json:"started_at"`
-	Deadline     int64  `json:"deadline"`
+	OpportunitiesInitial   int               `json:"opportunities_initial"`
+	OpportunitiesRemaining int               `json:"opportunities_remaining"`
+	RulesVersion           int               `json:"rules_version"`
+	Payment                GamePaymentExport `json:"payment"`
+	SessionID              string            `json:"session_id"`
+	Spec                   string            `json:"spec"`
+	Price                  string            `json:"price"`
+	State                  string            `json:"state"`
+	PairsRemoved           int               `json:"pairs_removed"`
+	TotalPairs             int               `json:"total_pairs"`
+	StartedAt              int64             `json:"started_at"`
+	Deadline               int64             `json:"deadline"`
 }
 
 type LinkLinkSummaryExport struct {
-	SessionID      string  `json:"session_id"`
-	Spec           string  `json:"spec"`
-	Price          string  `json:"price"`
-	TerminalReason string  `json:"terminal_reason"`
-	StartedAt      int64   `json:"started_at"`
-	Deadline       int64   `json:"deadline"`
-	TerminalAt     int64   `json:"terminal_at"`
-	PairsRemoved   int     `json:"pairs_removed"`
-	TotalPairs     int     `json:"total_pairs"`
-	Score          *string `json:"score"`
+	OpportunitiesInitial   int               `json:"opportunities_initial"`
+	OpportunitiesRemaining int               `json:"opportunities_remaining"`
+	RulesVersion           int               `json:"rules_version"`
+	Payment                GamePaymentExport `json:"payment"`
+	SessionID              string            `json:"session_id"`
+	Spec                   string            `json:"spec"`
+	Price                  string            `json:"price"`
+	TerminalReason         string            `json:"terminal_reason"`
+	StartedAt              int64             `json:"started_at"`
+	Deadline               int64             `json:"deadline"`
+	TerminalAt             int64             `json:"terminal_at"`
+	PairsRemoved           int               `json:"pairs_removed"`
+	TotalPairs             int               `json:"total_pairs"`
+	Score                  *string           `json:"score"`
 }
 
 type RPSExport struct {
@@ -391,27 +417,46 @@ type RPSExport struct {
 	TutorialSeen bool               `json:"tutorial_seen"`
 }
 
+type GamePaymentExport struct {
+	General string `json:"general"`
+	Game    string `json:"game"`
+}
+
+type RPSFundingExport struct {
+	BuyInGeneral   string `json:"buy_in_general"`
+	BuyInGame      string `json:"buy_in_game"`
+	CurrentGeneral string `json:"current_general"`
+	GameRemaining  string `json:"game_remaining"`
+}
+
 type RPSCurrentExport struct {
-	Kind       string  `json:"kind"`
-	ResourceID string  `json:"resource_id"`
-	Mode       string  `json:"mode"`
-	State      string  `json:"state"`
-	Phase      *string `json:"phase"`
-	Deadline   *int64  `json:"deadline"`
+	RulesVersion int                `json:"rules_version"`
+	Payment      *GamePaymentExport `json:"payment,omitempty"`
+	Funding      *RPSFundingExport  `json:"funding,omitempty"`
+	Kind         string             `json:"kind"`
+	ResourceID   string             `json:"resource_id"`
+	Mode         string             `json:"mode"`
+	State        string             `json:"state"`
+	Phase        *string            `json:"phase"`
+	Deadline     *int64             `json:"deadline"`
 }
 
 type RPSPendingExport struct {
-	OwnBuyIn       *string                `json:"own_buy_in"`
-	OwnCashOut     *string                `json:"own_cash_out"`
-	SessionID      string                 `json:"session_id"`
-	Mode           string                 `json:"mode"`
-	TerminalReason string                 `json:"terminal_reason"`
-	OwnSeatNo      int                    `json:"own_seat_no"`
-	OwnInput       string                 `json:"own_input"`
-	OwnReturned    string                 `json:"own_returned"`
-	OwnWalletNet   string                 `json:"own_wallet_net"`
-	Seats          []RPSPendingSeatExport `json:"seats"`
-	CreatedAt      int64                  `json:"created_at"`
+	OwnBuyInGeneral    *string                `json:"own_buy_in_general"`
+	OwnBuyInGame       *string                `json:"own_buy_in_game"`
+	OwnReturnedGeneral *string                `json:"own_returned_general"`
+	RulesVersion       int                    `json:"rules_version"`
+	OwnBuyIn           *string                `json:"own_buy_in"`
+	OwnCashOut         *string                `json:"own_cash_out"`
+	SessionID          string                 `json:"session_id"`
+	Mode               string                 `json:"mode"`
+	TerminalReason     string                 `json:"terminal_reason"`
+	OwnSeatNo          int                    `json:"own_seat_no"`
+	OwnInput           string                 `json:"own_input"`
+	OwnReturned        string                 `json:"own_returned"`
+	OwnWalletNet       string                 `json:"own_wallet_net"`
+	Seats              []RPSPendingSeatExport `json:"seats"`
+	CreatedAt          int64                  `json:"created_at"`
 }
 
 type RPSPendingSeatExport struct {
@@ -420,6 +465,7 @@ type RPSPendingSeatExport struct {
 }
 
 type RPSSummaryExport struct {
+	RulesVersion   int           `json:"rules_version"`
 	SessionID      string        `json:"session_id"`
 	Mode           string        `json:"mode"`
 	TerminalReason string        `json:"terminal_reason"`
@@ -429,16 +475,19 @@ type RPSSummaryExport struct {
 }
 
 type RPSSeatExport struct {
-	OwnBuyIn      *string `json:"own_buy_in"`
-	OwnCashOut    *string `json:"own_cash_out"`
-	SeatNo        int     `json:"seat_no"`
-	Input         string  `json:"input"`
-	Returned      string  `json:"returned"`
-	WalletNet     string  `json:"wallet_net"`
-	TimeoutCount  string  `json:"timeout_count"`
-	RockCount     string  `json:"rock_count"`
-	ScissorsCount string  `json:"scissors_count"`
-	PaperCount    string  `json:"paper_count"`
+	OwnBuyInGeneral    *string `json:"own_buy_in_general"`
+	OwnBuyInGame       *string `json:"own_buy_in_game"`
+	OwnReturnedGeneral *string `json:"own_returned_general"`
+	OwnBuyIn           *string `json:"own_buy_in"`
+	OwnCashOut         *string `json:"own_cash_out"`
+	SeatNo             int     `json:"seat_no"`
+	Input              string  `json:"input"`
+	Returned           string  `json:"returned"`
+	WalletNet          string  `json:"wallet_net"`
+	TimeoutCount       string  `json:"timeout_count"`
+	RockCount          string  `json:"rock_count"`
+	ScissorsCount      string  `json:"scissors_count"`
+	PaperCount         string  `json:"paper_count"`
 }
 
 type RPSFunStatsExport struct {
@@ -480,7 +529,7 @@ type LedgerExporter interface {
 }
 
 type ActivityExporter interface {
-	ExportActivities(context.Context, *sql.Tx, ExportRequest) ([]WelfareExport, []ThursdayExport, error)
+	ExportActivities(context.Context, *sql.Tx, ExportRequest) (ActivityExport, error)
 }
 
 type DonationExporter interface {
@@ -501,4 +550,25 @@ type LinkLinkExporter interface {
 
 type RPSExporter interface {
 	ExportRPS(context.Context, *sql.Tx, ExportRequest) (RPSExport, ExportFinalizer, error)
+}
+
+type CheckinExport struct {
+	Asset     string `json:"asset_type"`
+	SiteDay   string `json:"site_day"`
+	Award     string `json:"award"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type OnboardingExport struct {
+	GameKey     string `json:"game_key"`
+	TaskKey     string `json:"task_key"`
+	Award       string `json:"award"`
+	CompletedAt int64  `json:"completed_at"`
+}
+
+type ActivityExport struct {
+	Checkins       []CheckinExport
+	GameOnboarding []OnboardingExport
+	WelfareClaims  []WelfareExport
+	Thursday       []ThursdayExport
 }

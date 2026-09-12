@@ -15,6 +15,10 @@ type LedgerWalletRegistrationHook struct{}
 var _ WalletRegistrationHook = LedgerWalletRegistrationHook{}
 
 func (LedgerWalletRegistrationHook) EnsureUserWallet(ctx context.Context, tx *sql.Tx, userID, createdAt int64) error {
-	_, err := ledger.CreateUserAccount(ctx, tx, userID, createdAt)
-	return err
+	for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
+		if _, err := ledger.CreateUserAssetAccount(ctx, tx, userID, asset, createdAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

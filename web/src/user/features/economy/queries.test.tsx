@@ -64,6 +64,8 @@ interface EventHandlers {
 const OLD_SNAPSHOT: ActivitiesSnapshot = {
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
+    asset: 'game',
+    poolAsset: 'general',
     enabled: true,
     state: 'available',
     siteDay: '2026-08-31',

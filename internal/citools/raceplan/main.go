@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -59,15 +60,18 @@ type planUnit struct {
 }
 
 type shardPlan struct {
-	Index            int
-	EstimatedSeconds float64
-	WholePackages    []string
-	SplitTests       map[string][]string
+	Index               int
+	EstimatedSeconds    float64
+	WholePackages       []string
+	WholePackageWeights map[string]float64
+	SplitTests          map[string][]string
+	SplitTestWeights    map[string]map[string]float64
 }
 
 type commandGroup struct {
-	Label string
-	Args  []string
+	Label  string
+	Args   []string
+	Weight float64
 }
 
 func main() {
@@ -89,6 +93,7 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	timeout := flags.String("timeout", "30m", "per-command go test timeout")
 	hintsPath := flags.String("hints", "scripts/race-timings.json", "timing hints JSON")
 	planOnly := flags.Bool("plan-only", false, "print the complete deterministic plan without running tests")
+	workers := flags.Int("workers", 1, "maximum concurrent test commands")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -97,6 +102,9 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	}
 	if !*planOnly && *shardSpec == "" {
 		return errors.New("shard is required unless -plan-only is set")
+	}
+	if *workers < 1 {
+		return fmt.Errorf("invalid workers %d; want a positive value", *workers)
 	}
 	index, total := 0, 0
 	if *shardSpec != "" {
@@ -133,7 +141,7 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	}
 	digest := planDigest(plans)
 	if *planOnly {
-		printPlans(stdout, plans, digest)
+		printPlans(stdout, plans, digest, *timeout, *workers)
 		return nil
 	}
 	selected := plans[index-1]
@@ -143,11 +151,11 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "raceplan: shard %d/%d plan=%s estimated=%.1fs whole_packages=%d split_tests=%d\n",
 		index, total, digest, selected.EstimatedSeconds, len(selected.WholePackages), testCount)
-	groups := executionGroups(selected, *timeout)
-	return executeGroups(groups, func(args []string) error {
-		command := exec.Command(*goTool, args...)
-		command.Stdout = stdout
-		command.Stderr = stderr
+	groups := executionGroups(selected, *timeout, *workers)
+	return executeGroups(groups, *workers, func(group commandGroup, commandOutput io.Writer) error {
+		command := exec.Command(*goTool, group.Args...)
+		command.Stdout = commandOutput
+		command.Stderr = commandOutput
 		return command.Run()
 	}, stdout)
 }
@@ -434,7 +442,12 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 	})
 	plans := make([]shardPlan, total)
 	for index := range plans {
-		plans[index] = shardPlan{Index: index + 1, SplitTests: make(map[string][]string)}
+		plans[index] = shardPlan{
+			Index:               index + 1,
+			WholePackageWeights: make(map[string]float64),
+			SplitTests:          make(map[string][]string),
+			SplitTestWeights:    make(map[string]map[string]float64),
+		}
 	}
 	for _, unit := range units {
 		target := 0
@@ -446,8 +459,13 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 		plans[target].EstimatedSeconds += unit.Weight
 		if unit.Test == "" {
 			plans[target].WholePackages = append(plans[target].WholePackages, unit.Package)
+			plans[target].WholePackageWeights[unit.Package] = unit.Weight
 		} else {
 			plans[target].SplitTests[unit.Package] = append(plans[target].SplitTests[unit.Package], unit.Test)
+			if plans[target].SplitTestWeights[unit.Package] == nil {
+				plans[target].SplitTestWeights[unit.Package] = make(map[string]float64)
+			}
+			plans[target].SplitTestWeights[unit.Package][unit.Test] = unit.Weight
 		}
 	}
 	for index := range plans {
@@ -543,7 +561,7 @@ func planDigest(plans []shardPlan) string {
 	return hex.EncodeToString(hash.Sum(nil))[:16]
 }
 
-func printPlans(output io.Writer, plans []shardPlan, digest string) {
+func printPlans(output io.Writer, plans []shardPlan, digest, timeout string, workers int) {
 	fmt.Fprintf(output, "raceplan: plan=%s shards=%d\n", digest, len(plans))
 	for _, plan := range plans {
 		testCount := 0
@@ -563,15 +581,23 @@ func printPlans(output io.Writer, plans []shardPlan, digest string) {
 		for _, packagePath := range packages {
 			fmt.Fprintf(output, "raceplan: shard %d split %s tests=%s\n", plan.Index, packagePath, strings.Join(plan.SplitTests[packagePath], ","))
 		}
+		for _, group := range executionGroups(plan, timeout, workers) {
+			fmt.Fprintf(output, "raceplan: shard %d group %s weight=%.1f args=%q\n", plan.Index, group.Label, group.Weight, group.Args)
+		}
 	}
 }
 
-func executionGroups(plan shardPlan, timeout string) []commandGroup {
-	base := []string{"test", "-race", "-count=1", "-timeout=" + timeout}
-	groups := make([]commandGroup, 0, len(plan.SplitTests)+1)
-	if len(plan.WholePackages) > 0 {
-		args := append(append([]string(nil), base...), plan.WholePackages...)
-		groups = append(groups, commandGroup{Label: "whole packages", Args: args})
+func executionGroups(plan shardPlan, timeout string, workers int) []commandGroup {
+	base := []string{"test", "-race", "-count=1", "-timeout=" + timeout, "-p=1", "-v"}
+	groups := make([]commandGroup, 0, len(plan.WholePackages)+len(plan.SplitTests))
+	wholePackages := append([]string(nil), plan.WholePackages...)
+	sort.Strings(wholePackages)
+	for _, packagePath := range wholePackages {
+		groups = append(groups, commandGroup{
+			Label:  packagePath,
+			Args:   append(append([]string(nil), base...), packagePath),
+			Weight: plan.WholePackageWeights[packagePath],
+		})
 	}
 	packages := make([]string, 0, len(plan.SplitTests))
 	for packagePath := range plan.SplitTests {
@@ -580,26 +606,105 @@ func executionGroups(plan shardPlan, timeout string) []commandGroup {
 	sort.Strings(packages)
 	for _, packagePath := range packages {
 		tests := plan.SplitTests[packagePath]
-		parts := make([]string, len(tests))
-		for index, testName := range tests {
-			parts[index] = regexp.QuoteMeta(testName)
+		groupCount := workers
+		if len(tests) < groupCount {
+			groupCount = len(tests)
 		}
-		pattern := "^(" + strings.Join(parts, "|") + ")$"
-		args := append(append([]string(nil), base...), "-run", pattern, packagePath)
-		groups = append(groups, commandGroup{Label: packagePath, Args: args})
+		buckets := make([][]string, groupCount)
+		weights := make([]float64, groupCount)
+		ordered := append([]string(nil), tests...)
+		sort.SliceStable(ordered, func(i, j int) bool {
+			left := plan.SplitTestWeights[packagePath][ordered[i]]
+			right := plan.SplitTestWeights[packagePath][ordered[j]]
+			if left != right {
+				return left > right
+			}
+			return ordered[i] < ordered[j]
+		})
+		for _, testName := range ordered {
+			weight := plan.SplitTestWeights[packagePath][testName]
+			target := 0
+			for index := 1; index < len(weights); index++ {
+				if weights[index] < weights[target] {
+					target = index
+				}
+			}
+			buckets[target] = append(buckets[target], testName)
+			weights[target] += weight
+		}
+		for index, bucket := range buckets {
+			sort.Strings(bucket)
+			parts := make([]string, len(bucket))
+			for partIndex, testName := range bucket {
+				parts[partIndex] = regexp.QuoteMeta(testName)
+			}
+			pattern := "^(" + strings.Join(parts, "|") + ")$"
+			label := fmt.Sprintf("%s group %d/%d", packagePath, index+1, groupCount)
+			args := append(append([]string(nil), base...), "-run", pattern, packagePath)
+			groups = append(groups, commandGroup{Label: label, Args: args, Weight: weights[index]})
+		}
 	}
 	return groups
 }
 
-func executeGroups(groups []commandGroup, runner func([]string) error, output io.Writer) error {
-	failures := make([]string, 0)
-	for _, group := range groups {
-		started := time.Now()
-		fmt.Fprintf(output, "raceplan: running %s\n", group.Label)
-		if err := runner(group.Args); err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", group.Label, err))
+func executeGroups(groups []commandGroup, workers int, runner func(commandGroup, io.Writer) error, output io.Writer) error {
+	if workers < 1 {
+		return fmt.Errorf("invalid workers %d; want a positive value", workers)
+	}
+	order := make([]int, len(groups))
+	for index := range groups {
+		order[index] = index
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return groups[order[i]].Weight > groups[order[j]].Weight
+	})
+	workerCount := workers
+	if len(groups) < workerCount {
+		workerCount = len(groups)
+	}
+	jobs := make(chan int, workerCount)
+	errorsByIndex := make([]error, len(groups))
+	var outputMu sync.Mutex
+	worker := func() {
+		for index := range jobs {
+			group := groups[index]
+			started := time.Now()
+			outputMu.Lock()
+			fmt.Fprintf(output, "raceplan: running %s\n", group.Label)
+			outputMu.Unlock()
+			var commandOutput bytes.Buffer
+			err := runner(group, &commandOutput)
+			outputMu.Lock()
+			if commandOutput.Len() > 0 {
+				fmt.Fprintf(output, "raceplan: output %s\n", group.Label)
+				_, _ = output.Write(commandOutput.Bytes())
+				contents := commandOutput.Bytes()
+				if contents[len(contents)-1] != '\n' {
+					fmt.Fprintln(output)
+				}
+			}
+			fmt.Fprintf(output, "raceplan: finished %s in %s\n", group.Label, time.Since(started).Round(time.Millisecond))
+			outputMu.Unlock()
+			if err != nil {
+				errorsByIndex[index] = err
+			}
 		}
-		fmt.Fprintf(output, "raceplan: finished %s in %s\n", group.Label, time.Since(started).Round(time.Millisecond))
+	}
+	var wg sync.WaitGroup
+	for index := 0; index < workerCount; index++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); worker() }()
+	}
+	for _, index := range order {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
+	failures := make([]string, 0)
+	for index, err := range errorsByIndex {
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", groups[index].Label, err))
+		}
 	}
 	if len(failures) > 0 {
 		return fmt.Errorf("%d race command(s) failed: %s", len(failures), strings.Join(failures, "; "))

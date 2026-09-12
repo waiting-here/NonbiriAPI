@@ -257,16 +257,15 @@ func (r *Runtime) promoteLevel(ctx context.Context, tx *sql.Tx, u *userRow, now 
 	if err != nil {
 		return err
 	}
-	eligible := 1
+	var thresholds [5]int64
 	for level := 2; level <= 4; level++ {
 		threshold, err := configUintTx(ctx, tx, fmt.Sprintf("level_threshold_%d_milli", level), 0, db.MaxMoneyMilli)
 		if err != nil {
 			return err
 		}
-		if threshold > 0 && donation.Big().Cmp(big.NewInt(threshold)) >= 0 {
-			eligible = level
-		}
+		thresholds[level] = threshold
 	}
+	eligible := authz.AutomaticLevel(u.autoLevel, donation, thresholds)
 	if eligible <= u.autoLevel {
 		return nil
 	}
@@ -344,6 +343,10 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 	if err != nil {
 		return UserEnvelope{}, err
 	}
+	gameWallet, err := ledger.UserAssetAccount(ctx, tx, userID, ledger.Game)
+	if err != nil {
+		return UserEnvelope{}, err
+	}
 	endpointDefault, err := configUintTx(ctx, tx, "default_endpoint_limit", 0, 10000)
 	if err != nil {
 		return UserEnvelope{}, err
@@ -389,7 +392,7 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 		}
 		return strconv.FormatInt(fallback, 10)
 	}
-	return UserEnvelope{User: User{ID: strconv.FormatInt(u.id, 10), Username: u.username, Avatar: stringPtr(u.avatar), AvatarURL: discordAvatarURL(u.discordID, u.avatar), GuildNick: stringPtr(u.guildNick), GuildAvatarURL: stringPtr(u.guildAvatarURL), Lang: u.lang, IsBanned: u.isBanned && (!u.bannedUntil.Valid || u.bannedUntil.Int64 > now), BannedUntil: nullableFuture(u.bannedUntil, now), CharitySuspendedUntil: nullableFuture(u.charityUntil, now), EndpointLimit: nullableDecimal(u.endpointLimit), EffectiveEndpointLimit: effectiveLimit(u.endpointLimit, endpointDefault), RPMLimit: nullableDecimal(u.rpmLimit), EffectiveRPMLimit: effectiveLimit(u.rpmLimit, rpmDefault), ConcurrencyLimit: nullableDecimal(u.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(u.concurrencyLimit, concurrencyDefault), Balance: formatMilliPoints(wallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()), EffectiveLevel: effective, LevelDisplayName: display, GameProfilePublic: u.gamePublic, CreatedAt: u.createdAt, UpdatedAt: u.updatedAt, Usage: UsageSummary{TotalRequests: values[0].Decimal(), TotalUncachedInputTokens: values[1].Decimal(), TotalCacheWriteInputTokens: values[2].Decimal(), TotalCacheReadInputTokens: values[3].Decimal(), TotalOutputTokens: values[4].Decimal(), TotalPromptTokens: prompt.String(), TotalCompletionTokens: values[4].Decimal(), TotalUnknownUsageRequests: values[5].Decimal()}}}, nil
+	return UserEnvelope{User: User{ID: strconv.FormatInt(u.id, 10), Username: u.username, Avatar: stringPtr(u.avatar), AvatarURL: discordAvatarURL(u.discordID, u.avatar), GuildNick: stringPtr(u.guildNick), GuildAvatarURL: stringPtr(u.guildAvatarURL), Lang: u.lang, IsBanned: u.isBanned && (!u.bannedUntil.Valid || u.bannedUntil.Int64 > now), BannedUntil: nullableFuture(u.bannedUntil, now), CharitySuspendedUntil: nullableFuture(u.charityUntil, now), EndpointLimit: nullableDecimal(u.endpointLimit), EffectiveEndpointLimit: effectiveLimit(u.endpointLimit, endpointDefault), RPMLimit: nullableDecimal(u.rpmLimit), EffectiveRPMLimit: effectiveLimit(u.rpmLimit, rpmDefault), ConcurrencyLimit: nullableDecimal(u.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(u.concurrencyLimit, concurrencyDefault), Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()), EffectiveLevel: effective, LevelDisplayName: display, GameProfilePublic: u.gamePublic, CreatedAt: u.createdAt, UpdatedAt: u.updatedAt, Usage: UsageSummary{TotalRequests: values[0].Decimal(), TotalUncachedInputTokens: values[1].Decimal(), TotalCacheWriteInputTokens: values[2].Decimal(), TotalCacheReadInputTokens: values[3].Decimal(), TotalOutputTokens: values[4].Decimal(), TotalPromptTokens: prompt.String(), TotalCompletionTokens: values[4].Decimal(), TotalUnknownUsageRequests: values[5].Decimal()}}}, nil
 }
 
 func (r *Runtime) readUserEnvelope(ctx context.Context, userID int64) (UserEnvelope, error) {

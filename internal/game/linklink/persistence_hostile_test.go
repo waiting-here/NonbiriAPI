@@ -122,7 +122,7 @@ func TestHostilePersistedSessionRowsFailClosed(t *testing.T) {
 			if spec == "" {
 				spec = game.LinkLinkSpec6x8
 			}
-			started, err := fixture.service.Start(context.Background(), StartInput{
+			started, err := fixture.service.startLegacy(context.Background(), StartInput{
 				UserID: userID, Spec: spec, IdempotencyKey: fixture.key(170 + index),
 			})
 			if err != nil {

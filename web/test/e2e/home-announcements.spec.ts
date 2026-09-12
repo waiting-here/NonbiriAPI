@@ -123,6 +123,7 @@ function sessionBody(accountId: string): { user: Record<string, unknown> } {
     concurrency_limit: null,
     effective_concurrency_limit: '5',
     balance: '0',
+    game_balance: '0',
     donation_credit: '0',
     effective_level: 1,
     level_display_name: 'Lv1',
@@ -255,6 +256,12 @@ async function prepare(
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/checkin',
+    body: { enabled: false },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/checkin/game',
     body: { enabled: false },
   });
   await mockJson(page, {

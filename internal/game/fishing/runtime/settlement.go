@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
@@ -15,27 +16,30 @@ import (
 )
 
 type batchRecord struct {
-	ID                                 string
-	UserID                             int64
-	Bait                               string
-	Count                              int
-	UnitPrice, EntryTotal, PayoutTotal int64
-	OperationID                        string
-	State                              string
-	AttemptCount                       int
-	NextAttempt                        sql.NullInt64
-	RetryExhausted                     bool
-	CreatedAt                          int64
-	SettledAt                          sql.NullInt64
-	RevealedAt                         sql.NullInt64
+	NetTotal, PlatformTotal, WelfareTotal, ThursdayTotal int64
+	RulesVersion                                         int
+	GamePaid                                             int64
+	ID                                                   string
+	UserID                                               int64
+	Bait                                                 string
+	Count                                                int
+	UnitPrice, EntryTotal, PayoutTotal                   int64
+	OperationID                                          string
+	State                                                string
+	AttemptCount                                         int
+	NextAttempt                                          sql.NullInt64
+	RetryExhausted                                       bool
+	CreatedAt                                            int64
+	SettledAt                                            sql.NullInt64
+	RevealedAt                                           sql.NullInt64
 }
 
 func scanBatch(row interface{ Scan(...any) error }) (batchRecord, error) {
 	var record batchRecord
 	var exhausted int
-	err := row.Scan(&record.ID, &record.UserID, &record.Bait, &record.Count, &record.UnitPrice, &record.EntryTotal, &record.PayoutTotal, &record.OperationID, &record.State, &record.AttemptCount, &record.NextAttempt, &exhausted, &record.CreatedAt, &record.SettledAt, &record.RevealedAt)
+	err := row.Scan(&record.ID, &record.UserID, &record.Bait, &record.Count, &record.UnitPrice, &record.EntryTotal, &record.PayoutTotal, &record.OperationID, &record.State, &record.AttemptCount, &record.NextAttempt, &exhausted, &record.CreatedAt, &record.SettledAt, &record.RevealedAt, &record.RulesVersion, &record.GamePaid, &record.NetTotal, &record.PlatformTotal, &record.WelfareTotal, &record.ThursdayTotal)
 	if err == nil {
-		if exhausted != 0 && exhausted != 1 {
+		if exhausted != 0 && exhausted != 1 || record.RulesVersion < 1 || record.RulesVersion > 2 || record.GamePaid < 0 || record.GamePaid > record.EntryTotal || record.RulesVersion == 1 && record.GamePaid != 0 {
 			return batchRecord{}, ErrInvariant
 		}
 		record.RetryExhausted = exhausted == 1
@@ -43,7 +47,9 @@ func scanBatch(row interface{ Scan(...any) error }) (batchRecord, error) {
 	return record, err
 }
 
-const batchSelect = `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE id=?`
+const batchColumns = `id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli,COALESCE(net_payout_total_milli,payout_total_milli),platform_cut_total_milli,welfare_cut_total_milli,thursday_cut_total_milli`
+
+const batchSelect = `SELECT ` + batchColumns + ` FROM game_fishing_batches WHERE id=?`
 
 // settle is the only reserved->committed primitive. HTTP, worker and recovery
 // all invoke it; no caller can supply new outcomes or amounts.
@@ -83,8 +89,24 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 	if worker && record.RetryExhausted {
 		return nil, ErrConflict
 	}
+	var destinations []activities.PoolDestination
+	var welfare, thursday activities.PoolDestination
+	if record.WelfareTotal > 0 {
+		welfare, err = service.pools.WelfareDestination(ctx, tx)
+		if err != nil {
+			return nil, classifyDB(err)
+		}
+		destinations = append(destinations, welfare)
+	}
+	if record.ThursdayTotal > 0 {
+		thursday, err = service.pools.ThursdayDestination(ctx, tx, decisionNow)
+		if err != nil {
+			return nil, classifyDB(err)
+		}
+		destinations = append(destinations, thursday)
+	}
 	zero := db.EncodeU128(db.U128{})
-	err = service.finance.Settle(ctx, tx, finance.FishingSettlement{Entry: finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, ActorUserID: record.UserID, CreatedAt: decisionNow}, ResourceID: record.ID, UserID: record.UserID, Amount: ledger.AmountFromMilli(record.EntryTotal)}, Payout: ledger.AmountFromMilli(record.PayoutTotal)}, func(ctx context.Context, tx *sql.Tx) error {
+	err = service.finance.Settle(ctx, tx, finance.FishingSettlement{Entry: finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, ActorUserID: record.UserID, CreatedAt: decisionNow}, ResourceID: record.ID, UserID: record.UserID, Amount: ledger.AmountFromMilli(record.EntryTotal), GamePaid: ledger.AmountFromMilli(record.GamePaid)}, Payout: ledger.AmountFromMilli(record.PayoutTotal), Net: ledger.AmountFromMilli(record.NetTotal), Platform: ledger.AmountFromMilli(record.PlatformTotal), Welfare: ledger.AmountFromMilli(record.WelfareTotal), Thursday: ledger.AmountFromMilli(record.ThursdayTotal), WelfareAccountID: welfare.AccountID, ThursdayAccountID: thursday.AccountID}, func(ctx context.Context, tx *sql.Tx) error {
 		if err := service.applyBest(ctx, tx, record, record.CreatedAt); err != nil {
 			return err
 		}
@@ -107,6 +129,13 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 	if err != nil {
 		return nil, mapLedger(err)
 	}
+	var facts activities.PublishFacts
+	if len(destinations) > 0 {
+		facts, err = service.pools.RecordPoolTransfers(ctx, tx, decisionNow, destinations...)
+		if err != nil {
+			return nil, classifyDB(err)
+		}
+	}
 	record.State = "committed"
 	record.SettledAt = sql.NullInt64{Int64: decisionNow, Valid: true}
 	record.NextAttempt = sql.NullInt64{}
@@ -118,6 +147,7 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 	if err = tx.Commit(); err != nil {
 		return nil, classifyDB(err)
 	}
+	service.publishPoolTransfers(ctx, facts)
 	return result, nil
 }
 
@@ -159,7 +189,7 @@ FROM game_fishing_best b LEFT JOIN game_fishing_best_lengths l ON l.user_id=b.us
 }
 
 func (service *Service) applyRankFact(ctx context.Context, tx *sql.Tx, record batchRecord, settledAt int64) error {
-	payout, _ := db.U128FromBig(big.NewInt(record.PayoutTotal))
+	payout, _ := db.U128FromBig(big.NewInt(record.NetTotal))
 	one, _ := db.U128FromBig(big.NewInt(1))
 	tie, err := db.ComputeGameLeaderboardTieKeyFromDerivedKey(service.leaderboardTieKey, game.FishingID, "total", "", record.UserID)
 	if err != nil {
@@ -187,7 +217,7 @@ func (service *Service) applyRankFact(ctx context.Context, tx *sql.Tx, record ba
 	if err != nil {
 		return ErrInvariant
 	}
-	nextTotal, err := db.U128FromBig(new(big.Int).Add(total.Big(), big.NewInt(record.PayoutTotal)))
+	nextTotal, err := db.U128FromBig(new(big.Int).Add(total.Big(), big.NewInt(record.NetTotal)))
 	if err != nil {
 		return ErrInvariant
 	}
@@ -195,7 +225,7 @@ func (service *Service) applyRankFact(ctx context.Context, tx *sql.Tx, record ba
 	if err != nil {
 		return ErrInvariant
 	}
-	if record.PayoutTotal != 0 {
+	if record.NetTotal != 0 {
 		achieved = settledAt
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE game_fishing_rank_aggregates SET batch_count=?,total_payout=?,score_achieved_at=?,revision=?,updated_at=? WHERE user_id=? AND revision=?`, db.EncodeU128(nextCount), db.EncodeU128(nextTotal), achieved, db.EncodeU128(nextRevision), settledAt, record.UserID, revisionRaw)
@@ -217,7 +247,7 @@ func loadResultTx(ctx context.Context, tx *sql.Tx, record batchRecord, replay bo
 	if err != nil {
 		return nil, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,o.species_key,o.tier,o.size_cm,o.payout_milli,l.length_cm
+	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,o.species_key,o.tier,o.size_cm,o.payout_milli,l.length_cm,COALESCE(o.net_payout_milli,o.payout_milli),o.platform_cut_milli,o.welfare_cut_milli,o.thursday_cut_milli
 FROM game_fishing_outcomes o LEFT JOIN game_fishing_outcome_lengths l ON l.batch_id=o.batch_id AND l.ordinal=o.ordinal
 WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	if err != nil {
@@ -227,14 +257,16 @@ WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	outcomes := make([]FishingOutcome, 0, record.Count)
 	for rows.Next() {
 		var outcome FishingOutcome
-		var payout int64
-		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM); err != nil {
+		var payout, net, platform, welfare, thursday int64
+		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM, &net, &platform, &welfare, &thursday); err != nil {
 			return nil, classifyDB(err)
 		}
 		if outcome.BlueFatFishLengthCM != nil && (outcome.Tier != string(fishing.TierLegend) || !fishing.ValidBlueFatFishLength(*outcome.BlueFatFishLengthCM)) {
 			return nil, ErrInvariant
 		}
 		outcome.Reward = game.FormatAmount(payout)
+		outcome.NetReward = game.FormatAmount(net)
+		outcome.Rake = rakeFromMilli(platform, welfare, thursday)
 		outcomes = append(outcomes, outcome)
 	}
 	if err = rows.Err(); err != nil {
@@ -243,7 +275,11 @@ WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	if len(outcomes) != record.Count {
 		return nil, ErrInvariant
 	}
-	return &FishingBatchResult{BatchID: record.ID, Bait: record.Bait, Count: record.Count, UnitPrice: game.FormatAmount(record.UnitPrice), EntryTotal: game.FormatAmount(record.EntryTotal), Outcomes: outcomes, PayoutTotal: game.FormatAmount(record.PayoutTotal), Balance: formatWideMilli(account.Balance.Big()), SettledAt: record.SettledAt.Int64, IdempotentReplay: replay}, nil
+	gameAccount, err := ledger.UserAssetAccount(ctx, tx, record.UserID, ledger.Game)
+	if err != nil {
+		return nil, ErrInvariant
+	}
+	return &FishingBatchResult{NetPayoutTotal: game.FormatAmount(record.NetTotal), Rake: rakeFromMilli(record.PlatformTotal, record.WelfareTotal, record.ThursdayTotal), RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.EntryTotal, record.GamePaid), GameBalance: formatWideMilli(gameAccount.Balance.Big()), BatchID: record.ID, Bait: record.Bait, Count: record.Count, UnitPrice: game.FormatAmount(record.UnitPrice), EntryTotal: game.FormatAmount(record.EntryTotal), Outcomes: outcomes, PayoutTotal: game.FormatAmount(record.PayoutTotal), Balance: formatWideMilli(account.Balance.Big()), SettledAt: record.SettledAt.Int64, IdempotentReplay: replay}, nil
 }
 
 func pendingFromRecord(record batchRecord) *FishingSettlementPending {
@@ -255,7 +291,7 @@ func pendingFromRecord(record batchRecord) *FishingSettlementPending {
 		value := record.NextAttempt.Int64
 		next = &value
 	}
-	return &FishingSettlementPending{BatchID: record.ID, Bait: record.Bait, Count: record.Count, EntryTotal: game.FormatAmount(record.EntryTotal), State: state, NextAttemptAt: next, RetryExhausted: record.RetryExhausted}
+	return &FishingSettlementPending{RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.EntryTotal, record.GamePaid), BatchID: record.ID, Bait: record.Bait, Count: record.Count, EntryTotal: game.FormatAmount(record.EntryTotal), State: state, NextAttemptAt: next, RetryExhausted: record.RetryExhausted}
 }
 
 func (service *Service) loadAuthority(ctx context.Context, userID int64, batchID string, replay bool) (*FishingBatchResult, *FishingSettlementPending, error) {
@@ -458,7 +494,7 @@ func (service *Service) FishingState(ctx context.Context, userID int64) (Fishing
 	defer tx.Rollback()
 	var record batchRecord
 	// Use owner queries because batchSelect binds a concrete ID.
-	row := tx.QueryRowContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='reserved'`, userID)
+	row := tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? AND state='reserved'`, userID)
 	record, err = scanBatch(row)
 	if err == nil {
 		return FishingState{SettlementPending: pendingFromRecord(record)}, nil
@@ -466,7 +502,7 @@ func (service *Service) FishingState(ctx context.Context, userID int64) (Fishing
 	if !errors.Is(err, sql.ErrNoRows) {
 		return FishingState{}, classifyDB(err)
 	}
-	row = tx.QueryRowContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='committed' AND revealed_at IS NULL ORDER BY settled_at,id LIMIT 1`, userID)
+	row = tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? AND state='committed' AND revealed_at IS NULL ORDER BY settled_at,id LIMIT 1`, userID)
 	record, err = scanBatch(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return FishingState{}, nil

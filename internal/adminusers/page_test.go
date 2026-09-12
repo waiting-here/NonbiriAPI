@@ -42,8 +42,8 @@ SELECT i+1000,printf('scale-%05d',i),printf('scale-%05d',i),0,?,?,?,?,?,?,?,?,?,
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = tx.Exec(`INSERT INTO credit_accounts(kind,user_id,code,balance_sign,balance_mag,created_at,updated_at)
-SELECT 'user',id,NULL,0,?,?,? FROM users WHERE id>1000`, zero, adminUsersTestNow, adminUsersTestNow)
+	_, err = tx.Exec(`INSERT INTO credit_accounts(kind,user_id,code,asset_type,balance_sign,balance_mag,created_at,updated_at)
+SELECT 'user',id,NULL,asset,0,?,?,? FROM users CROSS JOIN (SELECT 'general' AS asset UNION ALL SELECT 'game') WHERE id>1000`, zero, adminUsersTestNow, adminUsersTestNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,6 +263,10 @@ func (a snapshotPageAdminAuth) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, u
 		return authz.ErrForbidden
 	}
 	return nil
+}
+
+func (a snapshotPageAdminAuth) AuthorizeStewardMutation(context.Context, *sql.Tx, int64) error {
+	return authz.ErrForbidden
 }
 
 func TestAdminNumberedLiveAuthorityAndBanTimeFiltering(t *testing.T) {

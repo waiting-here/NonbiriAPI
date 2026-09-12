@@ -51,6 +51,25 @@ describe('games snapshot normalizer', () => {
     expect(() => normalizeGamesSnapshot(boundary)).toThrow(/snapshot balance/i);
   });
 
+  it('requires all nine ordered reward facts and a consistent completion summary', () => {
+    const wire = gamesSnapshotWire();
+    expect(normalizeGamesSnapshot(wire).onboarding.linklink.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000']);
+    wire.onboarding.rps.items[0].completed = true;
+    expect(normalizeGamesSnapshot(wire).onboarding.rps.items[0].completed).toBe(true);
+    const wrongReward = structuredClone(wire);
+    wrongReward.onboarding.rps.items[0].reward = '2000';
+    const duplicate = structuredClone(wire);
+    duplicate.onboarding.rps.items[1].key = 'quick';
+    const incomplete = structuredClone(wire);
+    incomplete.onboarding.fishing.items.pop();
+    const wrongAsset = structuredClone(wire);
+    wrongAsset.onboarding.fishing.items[0].asset_type = 'game';
+    const inconsistent = structuredClone(wire);
+    inconsistent.onboarding.rps.all_completed = true;
+    for (const invalid of [wrongReward, duplicate, incomplete, wrongAsset, inconsistent])
+      expect(() => normalizeGamesSnapshot(invalid)).toThrow(/onboarding/i);
+  });
+
   it('fails closed on unknown keys, noncanonical money, and invalid pump totals', () => {
     const extra = { ...gamesSnapshotWire(), extra: true };
     expect(() => normalizeGamesSnapshot(extra)).toThrow(/invalid game data/i);

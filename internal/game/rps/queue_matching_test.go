@@ -154,11 +154,12 @@ func TestQueueIdempotencyAuthorizationCancelAndTimeoutRelease(t *testing.T) {
 	input := EnqueueInput{UserID: userID, Mode: game.RPSModeQuick, DeviceToken: token,
 		CanonicalSourceIP: [16]byte{15: 1}, IdempotencyKey: fixture.key(500)}
 	first, err := fixture.service.Enqueue(context.Background(), input)
-	if err != nil || first.HTTPStatus != 202 || first.IdempotentReplay {
+	if err != nil || first.HTTPStatus != 202 || first.IdempotentReplay || first.Queue.RulesVersion != 2 ||
+		first.Queue.Payment == nil || *first.Queue.Payment != (Payment{General: "1", Game: "0"}) {
 		t.Fatalf("first enqueue=(%+v,%v)", first, err)
 	}
 	replay, err := fixture.service.Enqueue(context.Background(), input)
-	if err != nil || !replay.IdempotentReplay || replay.Queue != first.Queue {
+	if err != nil || !replay.IdempotentReplay || !reflect.DeepEqual(replay.Queue, first.Queue) {
 		t.Fatalf("enqueue replay=(%+v,%v) first=%+v", replay, err, first)
 	}
 	changed := input

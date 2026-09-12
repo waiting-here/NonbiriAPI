@@ -21,17 +21,20 @@ function resultWire(batchID: string, balance = '12345678901234567890.125') {
     count: 1,
     unit_price: '1',
     entry_total: '1',
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
     outcomes: [
       {
         ordinal: 0,
         species_key: 'whitebait',
         tier: 'small',
         size_cm: 12,
-        reward: '1',
+        reward: '1', net_reward: '1', rake: { platform: '0', welfare: '0', thursday: '0' },
       },
     ],
-    payout_total: '1',
+    payout_total: '1', net_payout_total: '1', rake: { platform: '0', welfare: '0', thursday: '0' },
     balance,
+    game_balance: '0',
     settled_at: 1_800_000_000,
     idempotent_replay: false,
   };

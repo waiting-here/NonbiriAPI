@@ -5,6 +5,8 @@ import {
   normalizeLinkLinkMatch,
   normalizeLinkLinkState,
   normalizeLinkLinkSummary,
+  normalizeLinkLinkHint,
+  normalizeLinkLinkLeaderboard,
   shouldApplyLinkLinkReplacement,
 } from './normalize';
 
@@ -225,5 +227,44 @@ describe('server-confirmed match paths', () => {
     ],
   ])('rejects malformed geometry %j', (path) => {
     expect(() => normalizeLinkLinkMatch({ ...active(), match_path: path }, intent)).toThrow();
+  });
+});
+
+describe('hint and score projections', () => {
+  const intent = { sessionID: id, expectedRevision: '1', idempotencyKey: 'hint-key' };
+  function current() {
+    return { ...active('2'), rules_version: 2, payment: { general: '1', game: '2' }, opportunities_initial: 2, opportunities_remaining: 1 };
+  }
+  const hint = { first: { row: 0, col: 0 }, second: { row: 0, col: 1 }, path: [{ row: 0, col: 0 }, { row: 0, col: 1 }] };
+  it('keeps live opportunities and transient hint separate, including zero', () => {
+    const result = normalizeLinkLinkHint({ ...current(), hint, reshuffled: false }, intent);
+    expect(result.hint).toEqual(hint);
+    expect(result.result.opportunitiesRemaining).toBe(1);
+    expect(normalizeLinkLinkHint({ ...current(), opportunities_remaining: 0, hint: null, reshuffled: true }, intent).reshuffled).toBe(true);
+    expect(() => normalizeLinkLinkState({ ...current(), hint })).toThrow();
+    expect(() => normalizeLinkLinkState({ ...current(), opportunities_remaining: undefined })).toThrow();
+    expect(() => normalizeLinkLinkState({ ...current(), opportunities_initial: 3 })).toThrow();
+    expect(() => normalizeLinkLinkHint({ ...current(), hint: null, reshuffled: false }, intent)).toThrow();
+    expect(() => normalizeLinkLinkHint({ ...current(), revision: '3', hint, reshuffled: false }, intent)).toThrow();
+    expect(() => normalizeLinkLinkHint({ ...current(), hint, reshuffled: true }, intent)).toThrow();
+    expect(normalizeLinkLinkState(active()).opportunitiesInitial).toBe(0);
+  });
+  it('adds unused opportunities only to completed v2 scores', () => {
+    const summary = { session_id: id, spec: '6x8', price: '3', rules_version: 2, payment: { general: '3', game: '0' },
+      opportunities_initial: 2, opportunities_remaining: 1, terminal_reason: 'completed',
+      started_at: 1_800_000_000, deadline: 1_800_000_150, terminal_at: 1_800_000_140, pairs_removed: 24, total_pairs: 24, score: '2510' };
+    expect(normalizeLinkLinkSummary(summary).score).toBe('2510');
+    expect(() => normalizeLinkLinkSummary({ ...summary, score: '2410' })).toThrow();
+    expect(normalizeLinkLinkSummary({ ...summary, terminal_reason: 'timed_out', terminal_at: 1_800_000_151, pairs_removed: 10, score: '1000' }).score).toBe('1000');
+  });
+  it('rejects invalid leaderboard windows, identity leakage and mixed selections', () => {
+    const wire = { spec: '6x8', window_days: 7, window_start: 1_800_000_000 - 7 * 86400, as_of: 1_800_000_000, rules_version: 2,
+      rows: [{ rank: '1', score: '2500', achieved_at: 1_800_000_000 - 1, identity: { kind: 'anonymous' }, is_me: false }], me: null };
+    expect(normalizeLinkLinkLeaderboard(wire, '6x8', 7).rows).toHaveLength(1);
+    expect(() => normalizeLinkLinkLeaderboard(wire, '8x8', 7)).toThrow();
+    expect(() => normalizeLinkLinkLeaderboard({ ...wire, window_start: wire.window_start + 1 }, '6x8', 7)).toThrow();
+    expect(() => normalizeLinkLinkLeaderboard({ ...wire, rows: [{ ...wire.rows[0], achieved_at: wire.window_start }] }, '6x8', 7)).toThrow();
+    expect(() => normalizeLinkLinkLeaderboard({ ...wire, rows: [{ ...wire.rows[0], identity: { kind: 'anonymous', display_name: 'private' } }] }, '6x8', 7)).toThrow();
+    expect(() => normalizeLinkLinkLeaderboard({ ...wire, me: { ...wire.rows[0], is_me: true } }, '6x8', 7)).toThrow();
   });
 });

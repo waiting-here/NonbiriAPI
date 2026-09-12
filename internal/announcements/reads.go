@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -158,6 +159,10 @@ FROM announcements WHERE id=? AND state='published' AND (expires_at IS NULL OR e
 }
 
 func (service *Service) ListAdmin(ctx context.Context, adminID int64, query AdminListQuery) (Page[AdminAnnouncement], error) {
+	return service.listManaged(ctx, adminID, roleAdmin, query)
+}
+
+func (service *Service) listManaged(ctx context.Context, adminID int64, role managementRole, query AdminListQuery) (Page[AdminAnnouncement], error) {
 	empty := Page[AdminAnnouncement]{Data: []AdminAnnouncement{}}
 	if ctx == nil || service == nil || service.repository == nil || !validListWindow(query.Cursor, query.Limit, query.Numbered) ||
 		(query.State != "" && query.State != "draft" && query.State != "published" && query.State != "withdrawn" && query.State != "expired") ||
@@ -167,7 +172,7 @@ func (service *Service) ListAdmin(ctx context.Context, adminID int64, query Admi
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return empty, err
 	}
@@ -187,7 +192,7 @@ func (service *Service) ListAdmin(ctx context.Context, adminID int64, query Admi
 		where += " AND severity=?"
 		args = append(args, query.Severity)
 	}
-	owner := query.State + ":" + query.Severity
+	owner := role.actorKind() + ":" + strconv.FormatInt(adminID, 10) + ":" + query.State + ":" + query.Severity
 	if query.Cursor != "" {
 		payload, err := repository.cursors.decode(query.Cursor, "announcements:admin", owner, now)
 		if err != nil || payload.Pinned != -1 || payload.ID == "" {
@@ -263,11 +268,15 @@ ORDER BY updated_at DESC,id ASC`+suffix, args...)
 }
 
 func (service *Service) GetAdmin(ctx context.Context, adminID int64, id string) (AdminAnnouncement, error) {
+	return service.getManaged(ctx, adminID, roleAdmin, id)
+}
+
+func (service *Service) getManaged(ctx context.Context, adminID int64, role managementRole, id string) (AdminAnnouncement, error) {
 	if service == nil || service.repository == nil || !dbAnnouncementID(id) {
 		return AdminAnnouncement{}, ErrNotFound
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return AdminAnnouncement{}, err
 	}
@@ -291,12 +300,16 @@ func (service *Service) GetAdmin(ctx context.Context, adminID int64, id string) 
 }
 
 func (service *Service) Preview(ctx context.Context, adminID int64, id string, input PreviewInput) (Preview, error) {
+	return service.previewManaged(ctx, adminID, roleAdmin, id, input)
+}
+
+func (service *Service) previewManaged(ctx context.Context, adminID int64, role managementRole, id string, input PreviewInput) (Preview, error) {
 	if service == nil || service.repository == nil || !dbAnnouncementID(id) || input.ExpectedRevision < 1 ||
 		input.Draft.Severity != nil || input.Draft.Pinned != nil || input.Draft.Dismissible != nil || input.Draft.ExpiresAt.Set {
 		return Preview{}, ErrInvalidRequest
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -460,13 +473,13 @@ func (repository *Repository) adminDTO(row rawAnnouncement) (AdminAnnouncement, 
 		if !completeLanguage(row.draftTitleZH, row.draftBodyZH) {
 			return AdminAnnouncement{}, ErrUnavailable
 		}
-		value.Draft.ZH = &AnnouncementLanguageDraft{Title: row.draftTitleZH, Body: row.draftBodyZH}
+		value.Draft.ZH = &AnnouncementLanguageDraft{Title: row.draftTitleZH, Body: normalizeMarkdownLineEndings(row.draftBodyZH)}
 	}
 	if row.draftTitleEN != "" || row.draftBodyEN != "" {
 		if !completeLanguage(row.draftTitleEN, row.draftBodyEN) {
 			return AdminAnnouncement{}, ErrUnavailable
 		}
-		value.Draft.EN = &AnnouncementLanguageDraft{Title: row.draftTitleEN, Body: row.draftBodyEN}
+		value.Draft.EN = &AnnouncementLanguageDraft{Title: row.draftTitleEN, Body: normalizeMarkdownLineEndings(row.draftBodyEN)}
 	}
 	if row.publishedRevision.Valid {
 		publishedRevision, err := decimalRevision(row.publishedRevision.Int64)

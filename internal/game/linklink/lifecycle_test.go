@@ -15,7 +15,7 @@ import (
 func TestLifecycleExportContainsOnlySafeActiveAndThirtyDaySummaries(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("export", testFunding)
-	first, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(120)})
+	first, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(120)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestLifecycleExportContainsOnlySafeActiveAndThirtyDaySummaries(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
-	second, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(121)})
+	second, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(121)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestLifecycleExportContainsOnlySafeActiveAndThirtyDaySummaries(t *testing.T
 func TestLifecycleExportTxUsesFrozenDeadlineAndPostCommitFinalizer(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("export-deadline-finalizer", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(123),
 	})
 	if err != nil {
@@ -123,7 +123,7 @@ func TestLifecycleExportTxUsesFrozenDeadlineAndPostCommitFinalizer(t *testing.T)
 func TestLifecyclePrepareDeleteTxDoesNotAcquireSharedLimiterAgain(t *testing.T) {
 	fixture := newFixture(t)
 	userID, _ := fixture.seedUser("delete-shared-limiter", testFunding)
-	if _, err := fixture.service.Start(context.Background(), StartInput{
+	if _, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(124),
 	}); err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestLifecyclePrepareDeleteTxDoesNotAcquireSharedLimiterAgain(t *testing.T) 
 func TestLifecycleDeletionSharesOuterTransactionAndLateActionCannotRevive(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("delete", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(130)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(130)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestLifecycleDeletionSharesOuterTransactionAndLateActionCannotRevive(t *tes
 func TestDomainTerminalThenAccountDeletionRemovesSummary(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("domain-first-delete", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(132)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(132)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestDomainTerminalThenAccountDeletionRemovesSummary(t *testing.T) {
 func TestExportRejectsHostileSummaryScore(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("hostile-summary", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(134)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(134)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestExportRejectsHostileSummaryScore(t *testing.T) {
 func TestSummaryRetentionBoundaryAndActiveAggregateCatchup(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("retention", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(140)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(140)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,11 +314,11 @@ func TestSummaryRetentionBoundaryAndActiveAggregateCatchup(t *testing.T) {
 
 	shortID, _ := fixture.seedUser("active-short", testFunding)
 	longID, _ := fixture.seedUser("active-long", testFunding)
-	short, err := fixture.service.Start(context.Background(), StartInput{UserID: shortID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(141)})
+	short, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: shortID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(141)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.service.Start(context.Background(), StartInput{UserID: longID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(142)}); err != nil {
+	if _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: longID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(142)}); err != nil {
 		t.Fatal(err)
 	}
 	fixture.clock.Store(short.State.Deadline)
@@ -339,7 +339,7 @@ func TestLifecycleExportLimitAndBoundedRetention(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("bounded-retention", testFunding)
 	for index := 0; index < 2; index++ {
-		started, err := fixture.service.Start(context.Background(), StartInput{
+		started, err := fixture.service.startLegacy(context.Background(), StartInput{
 			UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(150 + index*2),
 		})
 		if err != nil {

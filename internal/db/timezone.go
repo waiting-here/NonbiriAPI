@@ -53,7 +53,7 @@ const (
 // timezoneFreezeTables are the tables whose first row freezes the offset.
 // They may not exist yet when this guard runs (their schema lands with their
 // own features), so existence is checked per table inside the transaction.
-var timezoneFreezeTables = []string{"checkins", "user_activity_daily", "site_activity_daily"}
+var timezoneFreezeTables = []string{"checkins", "game_checkins", "user_activity_daily", "site_activity_daily"}
 
 // ValidSiteTimezoneOffset reports whether minutes is an allowed explicit
 // offset: a multiple of 30 within [-720, +840]. Zero is valid and means UTC.

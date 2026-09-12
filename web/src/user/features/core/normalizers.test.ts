@@ -30,6 +30,34 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it.each(Array.from({ length: 16 }, (_, value) => value))(
+    'accepts a 32-byte CallerKey with final data nibble %i',
+    (value) => {
+      const bytes = Buffer.alloc(32, 255);
+      bytes[31] = value;
+      const body = bytes.toString('base64url');
+      const secret = `nbk_${body}`;
+      const metadata = {
+        display: `nbk_${body.slice(0, 4)}…${body.slice(-4)}`,
+        created_at: 1_700_000_000,
+        updated_at: 1_700_000_000,
+        generation: '2',
+      };
+      expect(normalizeCallerKeySecret({ secret, metadata }, '1')).toEqual({ secret, metadata });
+    },
+  );
+
+  it('keeps fractional negative balances valid in both wallets', () => {
+    const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as {
+      user: Record<string, unknown>;
+    };
+    const value = normalizeUserEnvelope({
+      user: { ...raw.user, balance: '-0.001', game_balance: '-0.007' },
+    });
+    expect(value.user.balance).toBe('-0.001');
+    expect(value.user.game_balance).toBe('-0.007');
+  });
+
   it('accepts the backend canonical fixtures without converting exact decimals', () => {
     const endpoint = normalizeEndpoint(jsonFixture('internal/resources/testdata/endpoint.json'));
     const key = normalizeEndpointKey(jsonFixture('internal/resources/testdata/endpoint_key.json'));
@@ -47,6 +75,7 @@ describe('core wire normalizers', () => {
     expect(
       normalizeHomeCheckinStatus({
         enabled: true,
+        asset_type: 'general',
         checked_in_today: false,
         balance: '-1.5',
         award_min: '0',
@@ -54,7 +83,10 @@ describe('core wire normalizers', () => {
         balance_cap: maximum,
       }),
     ).toMatchObject({ award_max: maximum, balance_cap: maximum });
-    expect(normalizeHomeCheckinResult({ award: maximum, balance: '-1.5' })).toEqual({
+    expect(
+      normalizeHomeCheckinResult({ asset_type: 'general', award: maximum, balance: '-1.5' }),
+    ).toEqual({
+      asset_type: 'general',
       award: maximum,
       balance: '-1.5',
     });
@@ -65,6 +97,7 @@ describe('core wire normalizers', () => {
     expect(() =>
       normalizeHomeCheckinStatus({
         enabled: true,
+        asset_type: 'general',
         checked_in_today: false,
         credits: '1',
         award_min_milli: '1',
@@ -75,6 +108,7 @@ describe('core wire normalizers', () => {
     expect(() =>
       normalizeHomeCheckinStatus({
         enabled: true,
+        asset_type: 'general',
         checked_in_today: false,
         balance: '1',
         award_min: '2',
@@ -82,9 +116,9 @@ describe('core wire normalizers', () => {
         balance_cap: '3',
       }),
     ).toThrow(/award range/i);
-    expect(() => normalizeHomeCheckinResult({ award: '1', balance: '2', extra: true })).toThrow(
-      /check-in result/i,
-    );
+    expect(() =>
+      normalizeHomeCheckinResult({ asset_type: 'general', award: '1', balance: '2', extra: true }),
+    ).toThrow(/check-in result/i);
   });
 
   it('enforces the closed game-route-state tuples in the home summary', () => {

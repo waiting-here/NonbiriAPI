@@ -80,7 +80,8 @@ const copy = {
   'home.active': ['Active', '正常'],
   'home.banned': ['Restricted', '受限'],
   'home.economyTitle': ['Balance and level', '余额与等级'],
-  'home.balance': ['Balance', '余额'],
+  'home.balance': ['General credits', '通用积分'],
+  'home.gameBalance': ['Game credits', '游戏积分'],
   'home.creditHistory': ['Credit history', '积分流水'],
   'home.donationCredit': ['Total donation rewards', '累计捐赠回馈'],
   'home.level': ['Level', '等级'],
@@ -90,7 +91,8 @@ const copy = {
   'home.promptTokens': ['Prompt tokens', '提示 Token'],
   'home.outputTokens': ['Output tokens', '输出 Token'],
   'home.unknownUsage': ['Requests with unknown usage', '用量未知请求'],
-  'home.checkinTitle': ['Daily check-in', '每日签到'],
+  'home.checkinTitle': ['General-credit check-in', '通用积分签到'],
+  'home.gameCheckinTitle': ['Game-credit check-in', '游戏积分签到'],
   'home.checkin.unavailable': ['Check-in is not available', '签到未启用'],
   'home.checkin.today': ['Today', '今日状态'],
   'home.checkin.checkedIn': ['Checked in', '已签到'],
@@ -104,8 +106,8 @@ const copy = {
   ],
   'home.checkin.submit': ['Check in', '立即签到'],
   'home.checkin.done': [
-    'Checked in: awarded {{award}} credits; the Nonbiri credits balance is now {{credits}}.',
-    '签到成功：获得 {{award}} 积分，当前悠哉积分 {{credits}}。',
+    'Checked in: awarded {{award}} credits; this wallet now holds {{credits}}.',
+    '签到成功：获得 {{award}} 积分，该钱包当前积分 {{credits}}。',
   ],
   'home.checkinRefreshFailed': [
     'Check-in succeeded, but the latest status could not be refreshed. Refresh to retry the read; the check-in will not be submitted again.',
@@ -180,7 +182,10 @@ const copy = {
   'endpoints.key': ['Key', '密钥'],
   'endpoints.keyIdentifier': ['Key identifier (partial key)', '密钥标识（非完整密钥）'],
   'endpoints.keyState': ['Key status', '密钥状态'],
-  'endpoints.storePolicy': ['Do not save chat requests (store=false)', '不保存聊天请求（store=false）'],
+  'endpoints.storePolicy': [
+    'Do not save chat requests (store=false)',
+    '不保存聊天请求（store=false）',
+  ],
   'endpoints.securityProcessing': [
     'Security processing — currently unavailable',
     '安全处理中，当前不可操作',

@@ -45,6 +45,22 @@ func (auth *testAdminAuth) AuthorizeAdmin(context.Context, *sql.Tx, int64) error
 	return auth.err
 }
 
+func (auth *testAdminAuth) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, actorID int64) error {
+	auth.calls++
+	if auth.err != nil {
+		return auth.err
+	}
+	var admin, level, banned int
+	var until sql.NullInt64
+	if err := tx.QueryRowContext(ctx, "SELECT is_admin,COALESCE(level,auto_level),is_banned,banned_until FROM users WHERE id=?", actorID).Scan(&admin, &level, &banned, &until); err != nil {
+		return authz.ErrUnauthorized
+	}
+	if admin != 0 || level != 5 || banned == 1 && (!until.Valid || until.Int64 > adminUsersTestNow) {
+		return authz.ErrForbidden
+	}
+	return nil
+}
+
 type testInvalidator struct{ users []int64 }
 
 func (sink *testInvalidator) InvalidateUserAuthority(userID int64) {
@@ -150,6 +166,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		fixture.t.Fatal(err)
 	}
 	if _, err := ledger.CreateUserAccount(context.Background(), tx, userID, adminUsersTestNow); err != nil {
+		fixture.t.Fatal(err)
+	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, adminUsersTestNow); err != nil {
 		fixture.t.Fatal(err)
 	}
 	if !admin {
@@ -326,7 +345,7 @@ WHERE id=?`, u128FromBig(t, big.NewInt(1250)), u128FromBig(t, max), u128FromBig(
 	}
 	encoded, _ := json.Marshal(user)
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(encoded, &fields) != nil || len(fields) != 26 {
+	if json.Unmarshal(encoded, &fields) != nil || len(fields) != 27 {
 		t.Fatalf("AdminUser fields=%v", fields)
 	}
 	var usageFields map[string]json.RawMessage

@@ -49,20 +49,20 @@ func (adapter *ActivityAdapter) ExportActivities(
 	ctx context.Context,
 	tx *sql.Tx,
 	request lifecycle.ExportRequest,
-) ([]lifecycle.WelfareExport, []lifecycle.ThursdayExport, error) {
+) (lifecycle.ActivityExport, error) {
 	if adapter == nil || adapter.owner == nil {
-		return nil, nil, lifecycle.ErrUnavailable
+		return lifecycle.ActivityExport{}, lifecycle.ErrUnavailable
 	}
 	value, err := adapter.owner.ExportUserTx(ctx, tx, request.UserID, request.Limit)
 	if err != nil {
 		if errors.Is(err, activities.ErrResourceLimit) {
-			return nil, nil, lifecycle.ErrTooLarge
+			return lifecycle.ActivityExport{}, lifecycle.ErrTooLarge
 		}
-		return nil, nil, err
+		return lifecycle.ActivityExport{}, err
 	}
 	welfare := make([]lifecycle.WelfareExport, len(value.WelfareClaims))
 	for index, item := range value.WelfareClaims {
-		welfare[index] = lifecycle.WelfareExport{
+		welfare[index] = lifecycle.WelfareExport{Asset: string(item.Asset),
 			SiteDay: item.SiteDay, Threshold: item.Threshold, Cap: item.Cap,
 			Awarded: item.Awarded, CreatedAt: item.CreatedAt,
 		}
@@ -76,7 +76,16 @@ func (adapter *ActivityAdapter) ExportActivities(
 			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
 		}
 	}
-	return welfare, thursday, nil
+	out := lifecycle.ActivityExport{WelfareClaims: welfare, Thursday: thursday,
+		Checkins:       make([]lifecycle.CheckinExport, len(value.Checkins)),
+		GameOnboarding: make([]lifecycle.OnboardingExport, len(value.GameOnboarding))}
+	for i, item := range value.Checkins {
+		out.Checkins[i] = lifecycle.CheckinExport{Asset: string(item.Asset), SiteDay: item.SiteDay, Award: item.Award, CreatedAt: item.CreatedAt}
+	}
+	for i, item := range value.GameOnboarding {
+		out.GameOnboarding[i] = lifecycle.OnboardingExport{GameKey: item.GameKey, TaskKey: item.TaskKey, Award: item.Award, CompletedAt: item.CompletedAt}
+	}
+	return out, nil
 }
 
 func (adapter *ActivityAdapter) PrepareDelete(

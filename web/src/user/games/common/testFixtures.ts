@@ -12,7 +12,9 @@ export function gamesSnapshotWire() {
   return {
     server_now: 1_800_000_000,
     balance: '12345678901234567890.125',
+    game_balance: '0',
     tutorial_rps_seen: false,
+    onboarding: onboardingWire(),
     games_enabled: true,
     fishing: {
       enabled: true,
@@ -31,5 +33,79 @@ export function gamesSnapshotWire() {
       enabled: true,
       modes: { quick: mode, standard: { ...mode, base: '2' }, deathmatch: { ...mode, base: '3' } },
     },
+  };
+}
+
+export function onboardingWire() {
+  return {
+    "fishing": {
+      "items": [
+        {
+          "key": "worm",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "lure",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "premium",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        }
+      ],
+      "all_completed": false
+    },
+    "linklink": {
+      "items": [
+        {
+          "key": "6x8",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "8x8",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "10x10",
+          "reward": "3000",
+          "asset_type": "general",
+          "completed": false
+        }
+      ],
+      "all_completed": false
+    },
+    "rps": {
+      "items": [
+        {
+          "key": "quick",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "standard",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "deathmatch",
+          "reward": "5000",
+          "asset_type": "general",
+          "completed": false
+        }
+      ],
+      "all_completed": false
+    }
   };
 }

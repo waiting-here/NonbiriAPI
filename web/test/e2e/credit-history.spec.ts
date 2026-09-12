@@ -27,6 +27,7 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
     const data = Array.from({ length: Math.min(size, total - offset) }, (_, i) => ({
       operation_id: `op_${(offset + i).toString(16).padStart(21, '0')}A`,
       line: 1,
+      asset_type: 'general',
       kind: params.has('category') ? 'charity_settle' : i === 1 ? 'donor_reward' : 'checkin_award',
       delta: params.has('category') ? '-0.007' : '2.5',
       created_at: 1_800_000_000 - offset - i,
@@ -41,6 +42,7 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
         total_pages: String(Math.ceil(total / size)),
         anchor,
         current_balance: '9000000000000.007',
+        game_balance: '0',
         server_now: 1_800_000_001,
       },
     });

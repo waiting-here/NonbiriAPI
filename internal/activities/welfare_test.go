@@ -11,7 +11,7 @@ func TestWelfareZeroValuesThresholdBoundaryAndDailySlot(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_000_000)
 	user, _ := fixture.seedUser("welfare-negative", false)
 	equalUser, _ := fixture.seedUser("welfare-equal", false)
-	fixture.fundUser(user, -1)
+	fixture.fundGame(user, -1)
 	var welfarePool string
 	if err := fixture.store.DB().QueryRow(`SELECT id FROM shared_pools WHERE pool_type='welfare'`).Scan(&welfarePool); err != nil {
 		t.Fatal(err)
@@ -42,12 +42,12 @@ func TestWelfareZeroValuesThresholdBoundaryAndDailySlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("paid claim: %v", err)
 	}
-	if paid.Value.Awarded != "0.1" || paid.Value.Balance != "0.099" || paid.Value.PoolBalance != "0.9" || !facts.Global {
+	if paid.Value.Awarded != "0.1" || paid.Value.Balance != "0" || paid.Value.GameBalance != "0.099" || paid.Value.Asset != "game" || paid.Value.PoolAsset != "general" || paid.Value.PoolBalance != "0.9" || !facts.Global {
 		t.Fatalf("paid claim = %+v facts=%+v", paid.Value, facts)
 	}
 	exported, err := fixture.repository.ExportUser(context.Background(), user)
 	if err != nil || len(exported.WelfareClaims) != 1 || exported.WelfareClaims[0].Threshold != "0" ||
-		exported.WelfareClaims[0].Cap != "0.1" || exported.WelfareClaims[0].Awarded != "0.1" {
+		exported.WelfareClaims[0].Asset != "game" || exported.WelfareClaims[0].Cap != "0.1" || exported.WelfareClaims[0].Awarded != "0.1" {
 		t.Fatalf("welfare export=%+v err=%v", exported.WelfareClaims, err)
 	}
 	if _, _, err := fixture.repository.ClaimWelfare(context.Background(), user,
@@ -59,7 +59,7 @@ func TestWelfareZeroValuesThresholdBoundaryAndDailySlot(t *testing.T) {
 func TestWelfareControlMutationExactReplay(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_000_100)
 	user, _ := fixture.seedUser("welfare-replay", false)
-	fixture.fundUser(user, -1)
+	fixture.fundGame(user, -1)
 	var welfarePool string
 	_ = fixture.store.DB().QueryRow(`SELECT id FROM shared_pools WHERE pool_type='welfare'`).Scan(&welfarePool)
 	fixture.fundPool(welfarePool, 1000)

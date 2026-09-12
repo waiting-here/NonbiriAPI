@@ -25,7 +25,7 @@ func TestDiscordRegistrationSessionAndDeepLink(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if users != 1 || wallets != 1 || callerKeys != 1 {
+	if users != 1 || wallets != 2 || callerKeys != 1 {
 		t.Fatalf("registration rows users=%d wallets=%d caller_keys=%d", users, wallets, callerKeys)
 	}
 	rec := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodGet, "https://user.example/api/session", "", []*http.Cookie{cookie}, nil)
@@ -180,7 +180,7 @@ func TestUserEnvelopeWideScalarsAmountsNullsAndLevelFive(t *testing.T) {
 	if _, err := f.store.DB().Exec(`UPDATE users SET donation_credit_mag=?,level=5,lang='en',endpoint_limit=0,rpm_limit=NULL,concurrency_limit=17,total_requests=?,total_uncached_input_tokens=?,total_cache_write_input_tokens=?,total_cache_read_input_tokens=?,total_output_tokens=?,total_unknown_usage_requests=?,charity_suspended_until=?,updated_at=? WHERE id=1`, db.EncodeU128(donation), db.EncodeU128(max), db.EncodeU128(donation), db.EncodeU128(donation), db.EncodeU128(donation), db.EncodeU128(donation), db.EncodeU128(donation), authTestNow+600, authTestNow+1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.DB().Exec(`UPDATE credit_accounts SET balance_sign=-1,balance_mag=? WHERE user_id=1`, db.EncodeU128(negative)); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE credit_accounts SET balance_sign=-1,balance_mag=? WHERE user_id=1 AND asset_type='general'`, db.EncodeU128(negative)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.DB().Exec(`UPDATE site_config SET value='Steward' WHERE key='level_display_name_5'`); err != nil {
@@ -194,7 +194,7 @@ func TestUserEnvelopeWideScalarsAmountsNullsAndLevelFive(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.User.Balance != "-1.5" || got.User.DonationCredit != "1.234" || got.User.EffectiveLevel != 5 || got.User.LevelDisplayName != "Steward" || got.User.EndpointLimit == nil || *got.User.EndpointLimit != "0" || got.User.RPMLimit != nil || got.User.ConcurrencyLimit == nil || *got.User.ConcurrencyLimit != "17" || got.User.Usage.TotalRequests != max.Decimal() || got.User.Usage.TotalPromptTokens != "3702" {
+	if got.User.Balance != "-1.5" || got.User.GameBalance != "0" || got.User.DonationCredit != "1.234" || got.User.EffectiveLevel != 5 || got.User.LevelDisplayName != "Steward" || got.User.EndpointLimit == nil || *got.User.EndpointLimit != "0" || got.User.RPMLimit != nil || got.User.ConcurrencyLimit == nil || *got.User.ConcurrencyLimit != "17" || got.User.Usage.TotalRequests != max.Decimal() || got.User.Usage.TotalPromptTokens != "3702" {
 		t.Fatalf("dto=%+v", got.User)
 	}
 	expectedBytes, err := os.ReadFile("testdata/user_envelope.json")

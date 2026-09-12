@@ -21,10 +21,32 @@ export interface RPSModeConfig {
   readonly queueCapacity: number;
 }
 
+export interface GamePayment {
+  readonly general: string;
+  readonly game: string;
+}
+
+export type GameID = 'fishing' | 'linklink' | 'rps';
+export type OnboardingTaskKey = Bait | LinkLinkSpec | RPSMode;
+
+export interface OnboardingItem {
+  readonly key: OnboardingTaskKey;
+  readonly reward: string;
+  readonly assetType: 'general';
+  readonly completed: boolean;
+}
+
+export interface OnboardingProgress {
+  readonly items: readonly OnboardingItem[];
+  readonly allCompleted: boolean;
+}
+
 export interface GamesSnapshot {
   readonly serverNow: number;
   readonly balance: string;
+  readonly gameBalance: string;
   readonly tutorialRPSSeen: boolean;
+  readonly onboarding: Readonly<Record<GameID, OnboardingProgress>>;
   readonly gamesEnabled: boolean;
   readonly fishing: {
     readonly enabled: boolean;

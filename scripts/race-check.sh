@@ -16,13 +16,14 @@
 # an explicit bounded deadline with an override for diagnosis.
 #
 # With no arguments this remains the complete local gate. Package arguments
-# remain supported for targeted diagnosis. CI uses --shard N/6; that mode
+# remain supported for targeted diagnosis. CI uses --shard N/TOTAL; that mode
 # derives the live package/test catalog and uses timing data only for balance.
 
 set -euo pipefail
 
 GO="${GO:-go}"
 RACE_TIMEOUT="${RACE_TIMEOUT:-30m}"
+RACE_WORKERS="${RACE_WORKERS:-1}"
 
 cd "$(dirname "$0")/.."
 
@@ -32,14 +33,22 @@ if [ -z "${CC:-}" ]; then
 fi
 
 if [ "${1:-}" = "--shard" ]; then
-  if [ "$#" -ne 2 ]; then
-    echo "usage: scripts/race-check.sh --shard N/6" >&2
+  if [ "$#" -ne 2 ] && [ "$#" -ne 4 ]; then
+    echo "usage: scripts/race-check.sh --shard N/TOTAL [--workers N]" >&2
     exit 2
+  fi
+  if [ "$#" -eq 4 ]; then
+    if [ "$3" != "--workers" ]; then
+      echo "usage: scripts/race-check.sh --shard N/TOTAL [--workers N]" >&2
+      exit 2
+    fi
+    RACE_WORKERS="$4"
   fi
   "$GO" run ./internal/citools/raceplan \
     -go "$GO" \
     -shard "$2" \
-    -timeout "$RACE_TIMEOUT"
+    -timeout "$RACE_TIMEOUT" \
+    -workers "$RACE_WORKERS"
 elif [ $# -gt 0 ]; then
   "$GO" test -race -count=1 -timeout="$RACE_TIMEOUT" "$@"
 else

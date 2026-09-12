@@ -21,6 +21,10 @@ type startBody struct {
 }
 
 func (service *Service) Start(ctx context.Context, input StartInput) (Result, error) {
+	return service.start(ctx, input, 2)
+}
+
+func (service *Service) start(ctx context.Context, input StartInput, rulesVersion int) (Result, error) {
 	if service == nil || service.closed.Load() {
 		return Result{}, ErrClosed
 	}
@@ -71,7 +75,7 @@ func (service *Service) Start(ctx context.Context, input StartInput) (Result, er
 		return Result{}, err
 	}
 	if found && now >= existing.Deadline {
-		if _, err := terminalize(ctx, tx, existing, TerminalTimedOut, now); err != nil {
+		if _, err := service.terminalize(ctx, tx, existing, TerminalTimedOut, now); err != nil {
 			return Result{}, err
 		}
 		expiredSession = existing.ID
@@ -145,9 +149,19 @@ func (service *Service) Start(ctx context.Context, input StartInput) (Result, er
 	if err != nil {
 		return Result{}, ErrInvariant
 	}
-	if userAccount.Balance.Big().Cmp(big.NewInt(specConfig.PriceMilli)) < 0 {
-		return Result{}, ErrInsufficientCredits
+	gameBalance := ledger.Amount{}
+	if rulesVersion == 2 {
+		gameAccount, err := ledger.UserAssetAccount(ctx, tx, input.UserID, ledger.Game)
+		if err != nil {
+			return Result{}, ErrInvariant
+		}
+		gameBalance = gameAccount.Balance
 	}
+	payment, err := ledger.SplitGamePayment(ledger.AmountFromMilli(specConfig.PriceMilli), userAccount.Balance, gameBalance)
+	if err != nil {
+		return Result{}, mapLedger(err)
+	}
+	gamePaid := payment.Game.Big().Int64()
 	if err := ledger.CheckImmediateCapacity(ctx, tx, db.U128{}); err != nil {
 		return Result{}, mapLedger(err)
 	}
@@ -170,13 +184,20 @@ func (service *Service) Start(ctx context.Context, input StartInput) (Result, er
 		return Result{}, ErrServiceUnavailable
 	}
 	one, _ := db.U128FromBig(big.NewInt(1))
+	assists := 0
+	if rulesVersion == 2 {
+		assists = definition.assists()
+		if err := ensureLeaderboardTieKey(ctx, tx, input.UserID, now); err != nil {
+			return Result{}, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO game_linklink_sessions(id,user_id,spec,state,revision,price_milli,board_blob,removed_bits,pairs_removed,deadline,operation_id,request_hash,created_at,updated_at)
-VALUES(?,?,?,'active',?,?,?,?,0,?,?,?,?,?)`, sessionID, input.UserID, input.Spec, db.EncodeU128(one), specConfig.PriceMilli,
-		generated.tiles, generated.removed, deadline, operationID, requestHash[:], now, now); err != nil {
+INSERT INTO game_linklink_sessions(id,user_id,spec,state,revision,price_milli,board_blob,removed_bits,pairs_removed,deadline,operation_id,request_hash,created_at,updated_at,rules_version,game_paid_milli,assists_initial,assists_remaining)
+VALUES(?,?,?,'active',?,?,?,?,0,?,?,?,?,?,?,?,?,?)`, sessionID, input.UserID, input.Spec, db.EncodeU128(one), specConfig.PriceMilli,
+		generated.tiles, generated.removed, deadline, operationID, requestHash[:], now, now, rulesVersion, gamePaid, assists, assists); err != nil {
 		return Result{}, classifyDB(err)
 	}
-	if err := service.finance.Entry(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now}, ResourceID: sessionID, UserID: input.UserID, Amount: ledger.AmountFromMilli(specConfig.PriceMilli)}); err != nil {
+	if err := service.finance.Entry(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now}, ResourceID: sessionID, UserID: input.UserID, Amount: ledger.AmountFromMilli(specConfig.PriceMilli), GamePaid: payment.Game}); err != nil {
 		return Result{}, mapLedger(err)
 	}
 	if err := recordGameActivity(ctx, tx, input.UserID, now); err != nil {
@@ -184,6 +205,7 @@ VALUES(?,?,?,'active',?,?,?,?,0,?,?,?,?,?)`, sessionID, input.UserID, input.Spec
 	}
 	record := sessionRecord{
 		ID: sessionID, UserID: input.UserID, Spec: input.Spec, State: "active", Revision: one, PriceMilli: specConfig.PriceMilli,
+		RulesVersion: rulesVersion, GamePaid: gamePaid, AssistsInitial: assists, AssistsRemaining: assists,
 		Board: generated, Deadline: deadline, OperationID: operationID, RequestHash: requestHash, CreatedAt: now, UpdatedAt: now,
 	}
 	result := stateResult(stateFromRecord(record, now), http.StatusCreated, false)

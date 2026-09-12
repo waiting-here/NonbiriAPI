@@ -12,6 +12,9 @@ import (
 
 const (
 	FishingEnabledKey                  = "game_fishing_enabled"
+	FishingRakePlatformBPKey           = "game_fishing_rake_platform_bp"
+	FishingRakeWelfareBPKey            = "game_fishing_rake_welfare_bp"
+	FishingRakeThursdayBPKey           = "game_fishing_rake_thursday_bp"
 	FishingWormPriceMilliKey           = "game_fishing_bait_worm_price_milli"
 	FishingLurePriceMilliKey           = "game_fishing_bait_lure_price_milli"
 	FishingPremiumPriceMilliKey        = "game_fishing_bait_premium_price_milli"
@@ -23,6 +26,7 @@ const (
 )
 
 type FishingWireConfig struct {
+	RakeBP              fishing.RakeBasisPoints    `json:"rake_bp"`
 	Enabled             bool                       `json:"enabled"`
 	BaitPrices          FishingBaitPrices          `json:"bait_prices"`
 	RTPPercent          FishingRTPPercent          `json:"rtp_percent"`
@@ -42,7 +46,13 @@ type FishingTreasureMultipliers struct {
 	Clover int `json:"clover"`
 	Shell  int `json:"shell"`
 }
+type FishingRakePatch struct {
+	Platform *int `json:"platform,omitempty"`
+	Welfare  *int `json:"welfare,omitempty"`
+	Thursday *int `json:"thursday,omitempty"`
+}
 type FishingConfigPatch struct {
+	RakeBP              *FishingRakePatch       `json:"rake_bp,omitempty"`
 	Enabled             *bool                   `json:"enabled,omitempty"`
 	BaitPrices          *FishingBaitPricesPatch `json:"bait_prices,omitempty"`
 	RTPPercent          *FishingRTPPatch        `json:"rtp_percent,omitempty"`
@@ -80,11 +90,11 @@ func CompileConfig(raw map[string]string) (Snapshot, error) {
 			fishingConfig.BaitPricesMilli[bait] = value
 		}
 	}
-	standardRTP, err := game.RawInt(raw, FishingStandardRTPKey, fishing.DefaultConfig().StandardRTPPercent, fishing.MinimumRTPPercent, fishing.MaximumRTPPercent)
+	standardRTP, err := game.RawInt(raw, FishingStandardRTPKey, fishingConfig.StandardRTPPercent, fishing.MinimumRTPPercent, fishing.MaximumRTPPercent)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	premiumRTP, err := game.RawInt(raw, FishingPremiumRTPKey, fishing.DefaultConfig().PremiumRTPPercent, fishing.MinimumRTPPercent, fishing.MaximumRTPPercent)
+	premiumRTP, err := game.RawInt(raw, FishingPremiumRTPKey, fishingConfig.PremiumRTPPercent, fishing.MinimumRTPPercent, fishing.MaximumRTPPercent)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -95,11 +105,25 @@ func CompileConfig(raw map[string]string) (Snapshot, error) {
 		"clover": FishingTreasureCloverMultiplierKey,
 		"shell":  FishingTreasureShellMultiplierKey,
 	} {
-		value, parseErr := game.RawInt(raw, key, fishing.DefaultConfig().TreasureMultipliers[species], fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier)
+		value, parseErr := game.RawInt(raw, key, fishingConfig.TreasureMultipliers[species], fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier)
 		if parseErr != nil {
 			return Snapshot{}, parseErr
 		}
 		fishingConfig.TreasureMultipliers[species] = value
+	}
+	for _, item := range []struct {
+		key    string
+		target *int
+	}{
+		{FishingRakePlatformBPKey, &fishingConfig.RakeBP.Platform},
+		{FishingRakeWelfareBPKey, &fishingConfig.RakeBP.Welfare},
+		{FishingRakeThursdayBPKey, &fishingConfig.RakeBP.Thursday},
+	} {
+		value, err := game.RawInt(raw, item.key, *item.target, 0, 9999)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		*item.target = value
 	}
 	rules, err := fishing.Compile(fishingConfig)
 	if err != nil {
@@ -132,6 +156,7 @@ func mustEntry(rules *fishing.Ruleset, bait fishing.Bait) int64 {
 func (snapshot Snapshot) Wire() FishingWireConfig {
 	var result FishingWireConfig
 	result.Enabled = snapshot.FishingEnabled
+	result.RakeBP = snapshot.Fishing.RakeBP
 	result.BaitPrices = FishingBaitPrices{
 		Worm:    game.FormatAmount(mustEntry(snapshot.Rules, fishing.BaitWorm)),
 		Lure:    game.FormatAmount(mustEntry(snapshot.Rules, fishing.BaitLure)),
@@ -155,6 +180,9 @@ func wireRaw(config FishingWireConfig) (map[string]string, error) {
 		}
 		raw[item.key] = strconv.FormatInt(milli, 10)
 	}
+	raw[FishingRakePlatformBPKey] = strconv.Itoa(config.RakeBP.Platform)
+	raw[FishingRakeWelfareBPKey] = strconv.Itoa(config.RakeBP.Welfare)
+	raw[FishingRakeThursdayBPKey] = strconv.Itoa(config.RakeBP.Thursday)
 	raw[FishingStandardRTPKey] = strconv.Itoa(config.RTPPercent.Standard)
 	raw[FishingPremiumRTPKey] = strconv.Itoa(config.RTPPercent.Premium)
 	raw[FishingTreasureBottleMultiplierKey] = strconv.Itoa(config.TreasureMultipliers.Bottle)
@@ -170,7 +198,7 @@ type compiled struct {
 }
 
 func (Codec) Keys() []string {
-	return []string{FishingEnabledKey, FishingWormPriceMilliKey, FishingLurePriceMilliKey, FishingPremiumPriceMilliKey, FishingStandardRTPKey, FishingPremiumRTPKey, FishingTreasureBottleMultiplierKey, FishingTreasureCloverMultiplierKey, FishingTreasureShellMultiplierKey}
+	return []string{FishingRakePlatformBPKey, FishingRakeWelfareBPKey, FishingRakeThursdayBPKey, FishingEnabledKey, FishingWormPriceMilliKey, FishingLurePriceMilliKey, FishingPremiumPriceMilliKey, FishingStandardRTPKey, FishingPremiumRTPKey, FishingTreasureBottleMultiplierKey, FishingTreasureCloverMultiplierKey, FishingTreasureShellMultiplierKey}
 }
 func (Codec) Compile(raw map[string]string) (game.ConfigValue, error) {
 	snapshot, err := CompileConfig(raw)

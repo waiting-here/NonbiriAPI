@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 )
 
@@ -36,16 +37,32 @@ var (
 	ErrClosed              = errors.New("game runtime: closed")
 )
 
+type FishingRake struct {
+	Platform string `json:"platform"`
+	Welfare  string `json:"welfare"`
+	Thursday string `json:"thursday"`
+}
+
+func rakeFromMilli(platform, welfare, thursday int64) FishingRake {
+	return FishingRake{game.FormatAmount(platform), game.FormatAmount(welfare), game.FormatAmount(thursday)}
+}
+
 type FishingOutcome struct {
-	Ordinal             int     `json:"ordinal"`
-	SpeciesKey          string  `json:"species_key"`
-	Tier                string  `json:"tier"`
-	SizeCM              int     `json:"size_cm"`
-	Reward              string  `json:"reward"`
-	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
+	NetReward           string      `json:"net_reward"`
+	Rake                FishingRake `json:"rake"`
+	Ordinal             int         `json:"ordinal"`
+	SpeciesKey          string      `json:"species_key"`
+	Tier                string      `json:"tier"`
+	SizeCM              int         `json:"size_cm"`
+	Reward              string      `json:"reward"`
+	BlueFatFishLengthCM *string     `json:"blue_fat_fish_length_cm"`
 }
 
 type FishingBatchResult struct {
+	NetPayoutTotal   string           `json:"net_payout_total"`
+	Rake             FishingRake      `json:"rake"`
+	RulesVersion     int              `json:"rules_version"`
+	Payment          game.Payment     `json:"payment"`
 	BatchID          string           `json:"batch_id"`
 	Bait             string           `json:"bait"`
 	Count            int              `json:"count"`
@@ -54,18 +71,21 @@ type FishingBatchResult struct {
 	Outcomes         []FishingOutcome `json:"outcomes"`
 	PayoutTotal      string           `json:"payout_total"`
 	Balance          string           `json:"balance"`
+	GameBalance      string           `json:"game_balance"`
 	SettledAt        int64            `json:"settled_at"`
 	IdempotentReplay bool             `json:"idempotent_replay"`
 }
 
 type FishingSettlementPending struct {
-	BatchID        string `json:"batch_id"`
-	Bait           string `json:"bait"`
-	Count          int    `json:"count"`
-	EntryTotal     string `json:"entry_total"`
-	State          string `json:"state"`
-	NextAttemptAt  *int64 `json:"next_attempt_at"`
-	RetryExhausted bool   `json:"retry_exhausted"`
+	RulesVersion   int          `json:"rules_version"`
+	Payment        game.Payment `json:"payment"`
+	BatchID        string       `json:"batch_id"`
+	Bait           string       `json:"bait"`
+	Count          int          `json:"count"`
+	EntryTotal     string       `json:"entry_total"`
+	State          string       `json:"state"`
+	NextAttemptAt  *int64       `json:"next_attempt_at"`
+	RetryExhausted bool         `json:"retry_exhausted"`
 }
 
 type FishingState struct {
@@ -163,15 +183,19 @@ type UserExport struct {
 // is deliberately kept out of FishingBatchResult so the public game response
 // remains the frozen closed DTO while account export can include ACK state.
 type FishingTerminalExport struct {
-	BatchID     string           `json:"batch_id"`
-	Bait        string           `json:"bait"`
-	Count       int              `json:"count"`
-	UnitPrice   string           `json:"unit_price"`
-	EntryTotal  string           `json:"entry_total"`
-	Outcomes    []FishingOutcome `json:"outcomes"`
-	PayoutTotal string           `json:"payout_total"`
-	SettledAt   int64            `json:"settled_at"`
-	RevealedAt  *int64           `json:"revealed_at"`
+	NetPayoutTotal string           `json:"net_payout_total"`
+	Rake           FishingRake      `json:"rake"`
+	RulesVersion   int              `json:"rules_version"`
+	Payment        game.Payment     `json:"payment"`
+	BatchID        string           `json:"batch_id"`
+	Bait           string           `json:"bait"`
+	Count          int              `json:"count"`
+	UnitPrice      string           `json:"unit_price"`
+	EntryTotal     string           `json:"entry_total"`
+	Outcomes       []FishingOutcome `json:"outcomes"`
+	PayoutTotal    string           `json:"payout_total"`
+	SettledAt      int64            `json:"settled_at"`
+	RevealedAt     *int64           `json:"revealed_at"`
 }
 
 type StartInput struct {

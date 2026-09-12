@@ -15,6 +15,7 @@ type CursorKeyDeriver interface {
 // domain read, lazy expiry, or idempotency lookup, including replay.
 type AdminFinalTxAuthorizer interface {
 	AuthorizeAdminFinalTx(context.Context, *sql.Tx, int64) error
+	AuthorizeStewardMutation(context.Context, *sql.Tx, int64) error
 }
 
 type UserPrincipal struct {
@@ -38,4 +39,8 @@ type UserRouteRegistrar interface {
 // management deliberately remains available while user maintenance is on.
 type AdminRouteRegistrar interface {
 	RegisterAdminRoute(method, pattern string, handler AuthorizedAdminHandler) error
+}
+
+type StewardRouteRegistrar interface {
+	RegisterStewardRoute(method, pattern string, handler AuthorizedAdminHandler) error
 }

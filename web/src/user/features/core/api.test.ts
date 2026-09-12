@@ -62,6 +62,7 @@ describe('core API wire contract', () => {
         jsonResponse(
           {
             enabled: true,
+            asset_type: 'general',
             checked_in_today: false,
             balance: '-1.5',
             award_min: '1',
@@ -71,7 +72,9 @@ describe('core API wire contract', () => {
           200,
         ),
       )
-      .mockResolvedValueOnce(jsonResponse({ award: '2', balance: '0.5' }, 200))
+      .mockResolvedValueOnce(
+        jsonResponse({ asset_type: 'general', award: '2', balance: '0.5' }, 200),
+      )
       .mockResolvedValueOnce(
         jsonResponse(
           {
@@ -92,7 +95,11 @@ describe('core API wire contract', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(getHomeCheckinStatus()).resolves.toMatchObject({ balance: '-1.5' });
-    await expect(submitHomeCheckin()).resolves.toEqual({ award: '2', balance: '0.5' });
+    await expect(submitHomeCheckin()).resolves.toEqual({
+      asset_type: 'general',
+      award: '2',
+      balance: '0.5',
+    });
     await expect(getHomeGameSummary()).resolves.toEqual([
       expect.objectContaining({ game: 'linklink', kind: 'continue' }),
     ]);

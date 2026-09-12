@@ -4,6 +4,34 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-beta.4] - 2026-09-12
+
+This source prerelease supports Linux/amd64 and atomic upgrades from complete beta.3 and ten exact earlier Generation 2 schemas. Existing general balances, settled fees, configuration, custom legal text and saved game rules remain intact. New game wallets start at zero; rollback requires a matching complete snapshot. Build from the tagged source; no official precompiled binaries, container images, or installers are provided.
+
+### Added
+
+- Independent game-credit check-in, daily game welfare, both-wallet displays/history/statistics and export schema 6.
+- Game-first mixed payments, original-asset refunds, per-round Rock Paper Scissors funding and nine once-only newcomer rewards totalling 17,000 general credits.
+- Fishing cuts for platform, welfare and Thursday pools, with gross/net results and net-payout rankings. Fresh gross RTP is 100%; configured existing values are preserved.
+- LinkLink hint/refresh opportunities and six size/window leaderboards, using each user's best score and earliest achievement for equal scores.
+- Effective-level user filtering and shared user/announcement management for current L5 stewards. User mutations exclude self, L5 and administrator targets, cumulative donor credit and account deletion.
+- Donor and management failure-streak resets, including bounded batches across all selected results and exact replay after uncertain responses.
+- A server-controlled next-Thursday preview.
+
+### Fixed
+
+- Account API key replacement now displays every valid generated key; the client no longer rejects valid base64url endings before showing the one-time value and Copy control.
+- Trusted actual charity chat and embedding charges can exceed their initial reserve; historical terminal charges remain unchanged.
+- Thursday multiline text accepts LF and normalizes CRLF while preserving tabs.
+- Model discovery merges duplicate normalized IDs after validating every source entry, retaining the first entry's metadata and order.
+- User limit inputs preserve canonical strings, inheritance and useful field-specific range errors.
+- LinkLink no longer reloads wallet and game-center state after every ordinary match; the next pair can be selected while a connection animation finishes.
+
+### Development
+
+- Complete race coverage runs across twelve CI shards, with four bounded test processes per shard. Independent test groups share runner capacity, while packages with process-wide test setup remain intact. Repeated equivalent database-fixture setup is reused within the affected test matrices.
+- A merge to protected `master` reuses the complete PR result after tree verification. The workflow remains available for manual runs without automatically repeating the same full checks after every merge.
+
 ## [1.0.0-beta.3] - 2026-09-11
 
 This prerelease targets Linux/amd64 and preserves existing data from the complete beta.2 schema and the nine previously supported Generation 2 schemas. Build from the tagged source commit; no official precompiled binaries, container images, or installers are provided.
@@ -265,6 +293,7 @@ This release is source-first for Linux/amd64 and keeps the documented Generation
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-beta.4]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.3...v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.1

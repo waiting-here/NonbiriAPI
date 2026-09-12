@@ -17,6 +17,7 @@
     "concurrency_limit": "17",
     "effective_concurrency_limit": "17",
     "balance": "-1.5",
+    "game_balance": "0",
     "donation_credit": "1.234",
     "effective_level": 5,
     "level_display_name": "Steward",

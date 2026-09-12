@@ -14,6 +14,7 @@ import {
   MAX_HISTORY_PAGE,
   loadHistory,
   type HistoryPage,
+  type HistoryFilter,
 } from '../features/credits/data';
 import { useCreditCopy } from '../features/credits/copy';
 import { useCreditHistoryUrl } from '../features/credits/url';
@@ -30,6 +31,7 @@ function CreditHistory({
   const client = useQueryClient();
   const url = useCreditHistoryUrl(scopeReset);
   const [draft, setDraft] = useState({
+    asset_type: url.filter.asset_type ?? 'all',
     category: url.filter.category ?? '',
     direction: url.filter.direction ?? '',
   });
@@ -45,6 +47,7 @@ function CreditHistory({
     queueMicrotask(() => {
       if (!active) return;
       setDraft({
+        asset_type: url.filter.asset_type ?? 'all',
         category: url.filter.category ?? '',
         direction: url.filter.direction ?? '',
       });
@@ -54,12 +57,21 @@ function CreditHistory({
     return () => {
       active = false;
     };
-  }, [url.filter.category, url.filter.direction, url.filter.from, url.filter.to]);
+  }, [
+    url.filter.asset_type,
+    url.filter.category,
+    url.filter.direction,
+    url.filter.from,
+    url.filter.to,
+  ]);
   const history = useQuery<HistoryPage, Error>({
     queryKey: ['user', 'credit-history', accountID, url.filter, url.refreshRevision],
     queryFn: async ({ signal }) => {
       if (!coreSessionMatchesAccount(client, accountID)) throw new CancelledError();
-      const page = await loadHistory(url.filter, signal);
+      const page = await loadHistory(
+        { ...url.filter, asset_type: url.filter.asset_type ?? 'all' },
+        signal,
+      );
       if (!coreSessionMatchesAccount(client, accountID)) throw new CancelledError();
       return page;
     },
@@ -98,6 +110,7 @@ function CreditHistory({
     }
     setValidation(null);
     url.apply({
+      asset_type: draft.asset_type as HistoryFilter['asset_type'],
       category: draft.category || undefined,
       direction: draft.direction || undefined,
       from,
@@ -119,9 +132,29 @@ function CreditHistory({
         <div className="credit-history__overview">
           <span>{copy.balance}</span>
           <strong>{history.error ? '—' : (data?.current_balance ?? '—')}</strong>
+          <span>{copy.game}</span>
+          <strong>{history.error ? '—' : (data?.game_balance ?? '—')}</strong>
           <small>{copy.note}</small>
         </div>
         <form className="credit-history__filters" onSubmit={apply}>
+          <label>
+            {copy.asset}
+            <select
+              value={draft.asset_type}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  asset_type: e.target.value as NonNullable<HistoryFilter['asset_type']>,
+                })
+              }
+            >
+              {(['general', 'game', 'all'] as const).map((asset) => (
+                <option key={asset} value={asset}>
+                  {copy[asset]}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             {copy.category}
             <select
@@ -184,6 +217,7 @@ function CreditHistory({
                     <thead>
                       <tr>
                         <th>{copy.time}</th>
+                        <th>{copy.asset}</th>
                         <th>{copy.change}</th>
                         <th>{copy.category}</th>
                         <th>{copy.request}</th>
@@ -197,6 +231,7 @@ function CreditHistory({
                               {formatDateTime(entry.created_at)}
                             </time>
                           </td>
+                          <td data-label={copy.asset}>{copy[entry.asset_type]}</td>
                           <td
                             data-label={copy.change}
                             className={`credit-history__amount ${entry.delta.startsWith('-') ? 'is-expense' : 'is-income'}`}

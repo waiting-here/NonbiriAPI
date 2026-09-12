@@ -20,6 +20,9 @@ import { useGameVisibility } from '../common/visibility';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { GameMoney } from '../common/GameMoney';
+import { GamePayment } from '../common/GamePayment';
+import { spendableGameCredits } from '../common/spendable';
+import { useGameSettlement } from '../common/useGameSettlement';
 import {
   acknowledgeRPSResult,
   cancelRPSQueue,
@@ -260,6 +263,16 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
           </dd>
         </div>
       </dl>
+      {seat.deletionState === 'active' && seat.funding ? (
+        <div>
+          <p>{text('rps.seat.currentFunding')}</p>
+          <GamePayment payment={{ general: seat.funding.currentGeneral, game: seat.funding.gameRemaining }} />
+          <details>
+            <summary>{text('rps.result.buyIn')}</summary>
+            <GamePayment payment={{ general: seat.funding.buyInGeneral, game: seat.funding.buyInGame }} />
+          </details>
+        </div>
+      ) : null}
       <div className="rps-seat__flags">
         {seat.currentAllIn ? <strong>{text('rps.seat.allIn')}</strong> : null}
         {BigInt(seat.timeoutCount) > 0n ? (
@@ -591,7 +604,7 @@ function PendingResult({
             <p>{text('rps.result.ascensionBody')}</p>
           ) : null}
         </div>
-        <div className="rps-result__seats" role="list">
+        <div className="rps-result__seats" role="list" aria-label={text('rps.result.seats')}>
           {result.seats.map((seat) => (
             <div role="listitem" data-result-seat={seat.seatNo} key={seat.seatNo}>
               <strong>
@@ -626,7 +639,9 @@ function PendingResult({
           <div>
             <dt>{text('rps.result.buyIn')}</dt>
             <dd>
-              {result.ownBuyIn === null ? (
+              {result.ownBuyInGeneral !== null && result.ownBuyInGame !== null ? (
+                <GamePayment payment={{ general: result.ownBuyInGeneral, game: result.ownBuyInGame }} />
+              ) : result.ownBuyIn === null ? (
                 text('rps.result.unrecorded')
               ) : (
                 <GameMoney value={result.ownBuyIn} />
@@ -636,7 +651,9 @@ function PendingResult({
           <div>
             <dt>{text('rps.result.cashOut')}</dt>
             <dd>
-              {result.ownCashOut === null ? (
+              {result.ownReturnedGeneral !== null ? (
+                <span>{text('common.generalBalance')} <GameMoney value={result.ownReturnedGeneral} /></span>
+              ) : result.ownCashOut === null ? (
                 text('rps.result.unrecorded')
               ) : (
                 <GameMoney value={result.ownCashOut} />
@@ -778,6 +795,7 @@ export function RPSGame() {
   const acked = useRef<string | null>(null);
   const cancelledQueue = useRef<string | null>(null);
   const pending = home?.kind === 'pending_result' ? home.result : null;
+  useGameSettlement(pending?.sessionID);
   const continuingPending = Boolean(
     pending && leaseState?.sessionID === pending.sessionID && leaseState.value === 'active',
   );
@@ -1045,16 +1063,17 @@ export function RPSGame() {
       ? multiplyCredits(selectedConfig.base, 5)
       : selectedConfig.base
     : null;
+  const available = snapshot.data ? spendableGameCredits(snapshot.data) : null;
   const affordable = Boolean(
     snapshot.data &&
     minimumRequired &&
-    creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(minimumRequired),
+    available && creditsToMilli(available.total) >= creditsToMilli(minimumRequired),
   );
   const canQueue = gateOpen && affordable && homeQuery.isSuccess && !homeQuery.error;
   const deathmatchConfig = modes?.deathmatch;
   const deathmatchCommitment =
-    deathmatchConfig && snapshot.data
-      ? queueCommitment('deathmatch', deathmatchConfig.base, snapshot.data.balance)
+    deathmatchConfig && available
+      ? queueCommitment('deathmatch', deathmatchConfig.base, available.total)
       : null;
   const deathmatchGateOpen = Boolean(
     snapshot.data?.gamesEnabled && snapshot.data.rps.enabled && deathmatchConfig?.enabled,
@@ -1062,12 +1081,19 @@ export function RPSGame() {
   const deathmatchAffordable = Boolean(
     snapshot.data &&
     deathmatchConfig &&
-    creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(deathmatchConfig.base),
+    available && creditsToMilli(available.total) >= creditsToMilli(deathmatchConfig.base),
   );
   const canQueueDeathmatch =
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const header = <GameHeader game="rps" sound={sound} onRules={() => setRulesOpen(true)} />;
+  const header = (
+    <GameHeader
+      wallets={snapshot.data}
+      game="rps"
+      sound={sound}
+      onRules={() => setRulesOpen(true)}
+    />
+  );
   const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
   if (snapshot.isPending)
     return (
@@ -1098,6 +1124,7 @@ export function RPSGame() {
   return (
     <main className={`game-page rps-page${session ? ' is-playing' : ''}`}>
       <GameHeader
+        wallets={snapshot.data}
         game="rps"
         sound={sound}
         onRules={() => setRulesOpen(true)}
@@ -1152,6 +1179,12 @@ export function RPSGame() {
         <Card className="rps-queue">
           <h2>{text('rps.pendingQueue')}</h2>
           <p>{text('rps.pendingQueuePrivacy')}</p>
+          {queue.payment ? (
+            <div>
+              <p>{text('rps.queuePayment')}</p>
+              <GamePayment payment={queue.payment} />
+            </div>
+          ) : null}
           <StatusBadge
             active={stream === 'connected'}
             danger={stream === 'disconnected'}
@@ -1192,12 +1225,13 @@ export function RPSGame() {
       {home?.kind === 'idle' ? (
         <Card className="rps-lobby">
           <h2>{text('center.rps.title')}</h2>
+          <p>{text('common.gamePaymentOrder')}</p>
           <div className="rps-modes">
             {RPS_MODES.map((mode) => {
               const config = modes?.[mode];
               const commitment =
-                config && snapshot.data
-                  ? queueCommitment(mode, config.base, snapshot.data.balance)
+                config && available
+                  ? queueCommitment(mode, config.base, available.total)
                   : null;
               const open = Boolean(
                 snapshot.data?.gamesEnabled && snapshot.data.rps.enabled && config?.enabled,
@@ -1292,6 +1326,7 @@ export function RPSGame() {
           <Card>
             <h2 id="rps-deathmatch-title">{text('rps.mode.deathmatch')}</h2>
             <p>{text('rps.deathmatchReview')}</p>
+            {available ? <GamePayment payment={available} /> : null}
             {deathmatchCommitment ? (
               <p>
                 <strong>{text('rps.entry')}:</strong> <GameMoney value={deathmatchCommitment} />

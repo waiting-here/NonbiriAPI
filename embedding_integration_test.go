@@ -45,7 +45,7 @@ func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]json.RawMessage
-		if r.Method != "POST" || r.URL.Path != "/v1/embeddings" || r.Header.Get("Authorization") != "Bearer embedding-fixture-secret" || json.NewDecoder(r.Body).Decode(&body) != nil {
+		if r.Method != "POST" || (r.URL.Path != "/v1/embeddings" && r.URL.Path != "/v1/chat/completions") || r.Header.Get("Authorization") != "Bearer embedding-fixture-secret" || json.NewDecoder(r.Body).Decode(&body) != nil {
 			w.WriteHeader(400)
 			return
 		}
@@ -63,6 +63,10 @@ func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
 		}
 		if scenario == "bad-vector" {
 			_, _ = io.WriteString(w, `{"object":"list","model":"private-model","data":[]}`)
+			return
+		}
+		if r.URL.Path == "/v1/chat/completions" {
+			_, _ = io.WriteString(w, `{"id":"chat-result","object":"chat.completion","created":1,"model":"private-model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":0,"total_tokens":2}}`)
 			return
 		}
 		count := 1
@@ -84,6 +88,9 @@ func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
 		out := map[string]any{"object": "list", "model": "private-model", "data": data, "vendor": "hidden-source"}
 		if scenario != "unknown" {
 			tokens := 3
+			if scenario == "over-reservation" {
+				tokens = 2
+			}
 			if scenario == "zero" {
 				tokens = 0
 			}
@@ -238,7 +245,12 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 func (f *embeddingHTTPFixture) call(t *testing.T, model, input, encoding, scenario string) (int, []byte) {
 	t.Helper()
 	body := `{"model":"` + model + `","input":` + input + `,"encoding_format":"` + encoding + `","dimensions":2,"user":"caller-provided","store":true,"scenario":"` + scenario + `"}`
-	r, err := http.NewRequest("POST", f.server.URL+"/v1/embeddings", strings.NewReader(body))
+	return f.post(t, "/v1/embeddings", body)
+}
+
+func (f *embeddingHTTPFixture) post(t *testing.T, path, body string) (int, []byte) {
+	t.Helper()
+	r, err := http.NewRequest("POST", f.server.URL+path, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,5 +408,46 @@ func (f *embeddingHTTPFixture) assertLatest(t *testing.T, model string, tokens i
 	defer tx.Rollback()
 	if err := ledger.ValidateRecovery(context.Background(), tx); err != nil {
 		t.Fatal(fmt.Errorf("ledger consistency: %w", err))
+	}
+}
+
+func TestCharityHTTPKnownUsageCanExceedReservation(t *testing.T) {
+	for _, route := range []string{"chat", "embeddings"} {
+		t.Run(route, func(t *testing.T) {
+			f := newEmbeddingHTTPFixture(t)
+			f.exec(t, `UPDATE site_config SET value='5' WHERE key='charity_token_reserve_milli'`)
+			f.exec(t, `UPDATE site_config SET value='0' WHERE key='charity_min_chars'`)
+			var status int
+			var body []byte
+			if route == "embeddings" {
+				status, body = f.call(t, "[公益]provider/per_token", `"hello"`, "float", "over-reservation")
+			} else {
+				status, body = f.post(t, "/v1/chat/completions", `{"model":"[公益]provider/per_token","messages":[{"role":"user","content":"hello"}],"stream":false}`)
+			}
+			if status != 200 {
+				t.Fatalf("status=%d body=%s", status, body)
+			}
+			var reserved, original, charge, reward, tokens int64
+			if err := f.store.DB().QueryRow(`SELECT cr.user_reserved_milli,cr.original_charge_milli,cr.user_charge_milli,c.donor_reward_actual_milli,l.uncached_input_tokens FROM charity_reservations cr JOIN dispatch_claims c ON c.logical_request_id=cr.logical_request_id JOIN request_logs l ON l.logical_request_id=cr.logical_request_id`).Scan(&reserved, &original, &charge, &reward, &tokens); err != nil {
+				t.Fatal(err)
+			}
+			if reserved != 5 || original != 8 || charge != 7 || reward != 4 || tokens != 2 {
+				t.Fatalf("reserved/original/charge/reward/tokens=%d/%d/%d/%d/%d", reserved, original, charge, reward, tokens)
+			}
+			tx, err := f.store.DB().BeginTx(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			for user, want := range map[int64]string{f.userID: "999993", f.donorID: "1000004"} {
+				account, err := ledger.UserAccount(context.Background(), tx, user)
+				if err != nil || account.Balance.Decimal() != want {
+					t.Fatalf("balance=%s want=%s err=%v", account.Balance.Decimal(), want, err)
+				}
+			}
+			if err := ledger.ValidateRecovery(context.Background(), tx); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

@@ -169,6 +169,7 @@ const coreBaseUser = {
   concurrency_limit: null,
   effective_concurrency_limit: '5',
   balance: '1',
+  game_balance: '0',
   donation_credit: '2',
   effective_level: 2,
   level_display_name: 'Lv2',
@@ -453,8 +454,8 @@ describe('authoritative site-config frontend', () => {
     expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
   });
 
-  test('preserves line endings at the exact 65536-byte legal boundary and rejects one byte more', async () => {
-    const prefix = '  标题\r\n\tparagraph \r\n';
+  test('uses LF at the exact 65536-byte legal boundary and rejects one byte more', async () => {
+    const prefix = '  标题\n\tparagraph \n';
     const prefixBytes = new TextEncoder().encode(prefix).byteLength;
     const document = prefix + 'x'.repeat(65_536 - prefixBytes);
     expect(new TextEncoder().encode(document)).toHaveLength(65_536);
@@ -462,7 +463,7 @@ describe('authoritative site-config frontend', () => {
       group: 'legal',
       type: 'text',
       title: { zh: '服务条款覆盖（英文）', en: 'Terms override (English)' },
-      description: { zh: '逐字节保留', en: 'Preserved byte for byte' },
+      description: { zh: '保留段落与制表符', en: 'Preserves paragraphs and tabs' },
       unit: null,
       raw_default: '',
       effective_fallback: '',
@@ -493,7 +494,7 @@ describe('authoritative site-config frontend', () => {
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
     expect(server.patches[0]?.value === editedDocument).toBe(true);
-    expect(String(server.patches[0]?.value).replaceAll('\r\n', '')).not.toContain('\n');
+    expect(String(server.patches[0]?.value)).not.toContain('\r');
 
     textarea = await screen.findByLabelText('Terms override (English)');
     form = textarea.closest<HTMLElement>('.ops-setting');
@@ -719,6 +720,7 @@ describe('admin per-user limit explanations', () => {
       effective_concurrency_limit: '5',
       lang: 'en',
       balance: '0',
+      game_balance: '0',
       donation_credit: '0',
       level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
       game_profile_public: false,
@@ -768,14 +770,12 @@ describe('admin per-user limit explanations', () => {
     await rendered.user.click(within(row!).getByRole('button', { name: 'Copy Discord ID' }));
     expect(await navigator.clipboard.readText()).toBe('1234567890123456789');
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage' }));
-    const note = screen.getByText(/built-in default of 5/i);
-    expect(note).toHaveTextContent(/global RPM, global egress, endpoint and key gates/i);
-    expect(note).toHaveTextContent(/effective is not the final minimum/i);
+    const note = await screen.findByText(/default per-user concurrency is 5/i);
+    expect(note).toHaveTextContent(/site, endpoint and key limits also apply/i);
     await rendered.i18n.changeLanguage('zh');
-    expect(await screen.findByText(/内建默认值 5/)).toHaveTextContent(
-      /全站 RPM、全站出站并发、端点和密钥/,
+    expect(await screen.findByText(/单用户并发默认为 5/)).toHaveTextContent(
+      /全站、端点和密钥的限制/,
     );
-    expect(screen.getByText(/内建默认值 5/)).toHaveTextContent(/不是所有门禁取最小后的最终上限/);
   });
 });
 
@@ -786,6 +786,7 @@ const initialGameConfig: GamesConfig = {
     enabled: false,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
+    rake_bp: { platform: 100, welfare: 100, thursday: 100 },
     treasure_multipliers: { bottle: 2, clover: 3, shell: 5 },
   },
   linklink: {
@@ -928,6 +929,22 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
 }
 
 describe('standalone Admin Games feature', () => {
+  test('validates the combined fishing deductions and submits one revision', async () => {
+    const server = installGameServer();
+    const rendered = await renderWithProviders(<AdminSessionFixture><GamesPage /></AdminSessionFixture>,
+      { station: 'admin', locale: 'en', role: 'admin' });
+    const save = await screen.findByRole('button', { name: 'Save game configuration' });
+    const platform = screen.getByLabelText(/platform deduction from each catch/i);
+    fireEvent.change(platform, { target: { value: '9800' } });
+    await rendered.user.click(save);
+    expect(server.patches).toHaveLength(0);
+    expect(screen.getByText(/Fishing pool cuts must total less than 10000/)).toBeVisible();
+    fireEvent.change(platform, { target: { value: '9799' } });
+    await rendered.user.click(save);
+    await waitFor(() => expect(server.patches).toHaveLength(1));
+    expect(server.patches[0]).toMatchObject({ expected_revision: '7', fishing: { rake_bp: { platform: 9799, welfare: 100, thursday: 100 } } });
+  });
+
   test('sends the frozen full mutable PATCH, excludes queue capacity, and renders exact active counts', async () => {
     const server = installGameServer();
     const rendered = await renderWithProviders(

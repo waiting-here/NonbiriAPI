@@ -4,6 +4,20 @@ import { useTranslation } from 'react-i18next';
 type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
+  'onboarding.title': ['Newcomer rewards', '新人奖励'],
+  'onboarding.remaining': ['{{count}} tasks left · {{reward}} general credits available', '待完成 {{count}} 项 · 共可获 {{reward}} 通用积分'],
+  'onboarding.awarded': ['Newcomer reward: +{{reward}} general credits', '新人奖励：+{{reward}} 通用积分'],
+  'onboarding.fishingHelp': ['Finish one cast or a ten-catch batch with each bait to receive its one-time reward automatically.', '分别使用三种鱼饵完成单次或十连垂钓，即可自动获得对应的一次性奖励。'],
+  'onboarding.linklinkHelp': ['Clear each board size once to receive its one-time reward automatically.', '分别成功消除三种规格的棋盘，即可自动获得对应的一次性奖励。'],
+  'onboarding.rpsHelp': ['Finish each mode once to receive its one-time reward automatically. Automatic timeout moves count too; leaving a queue does not.', '分别完成三种模式，即可自动获得对应的一次性奖励。超时自动操作完成的对局也计入；取消排队不计入。'],
+  'onboarding.board6x8': ['6×8 board', '6×8 棋盘'],
+  'onboarding.board8x8': ['8×8 board', '8×8 棋盘'],
+  'onboarding.board10x10': ['10×10 board', '10×10 棋盘'],
+  'common.gamePaymentOrder': ['Game credits are spent first, then general credits. Normal game payouts go to general credits.', '优先使用游戏积分，不足部分使用通用积分。正常游戏结算所得进入通用钱包。'],
+  'common.generalBalance': ['General credits', '通用积分'],
+  'common.entryPayment': ['Entry payment', '入场付款'],
+
+  'common.gameBalance': ['Game credits', '游戏积分'],
   'common.back': ['Back to game center', '返回游戏中心'],
   'common.retry': ['Try again', '重试'],
   'common.loading': ['Loading game status…', '正在读取游戏状态…'],
@@ -117,7 +131,13 @@ const copy = {
   'fishing.result.title': ['Your catch is ready', '收获已揭晓'],
   'fishing.result.total': ['Total catch', '本次总收获'],
   'fishing.result.entry': ['Entry total', '投入总额'],
-  'fishing.result.payout': ['Credits received', '获得积分'],
+  'fishing.result.payout': ['Net catch received · general credits', '净渔获到账 · 通用积分'],
+  'fishing.rake.details': ['Gross catch and deductions', '查看原始渔获与抽水'],
+  'fishing.rake.gross': ['Gross catch', '原始渔获'],
+  'fishing.rake.platform': ['Platform deduction', '平台抽水'],
+  'fishing.rake.welfare': ['Welfare pool deduction', '低保池抽水'],
+  'fishing.rake.thursday': ['Thursday pool deduction', '星期四池抽水'],
+  'fishing.netReceived': ['Net catch: +{{amount}} general credits', '净渔获到账：+{{amount}} 通用积分'],
   'fishing.result.balance': ['Resulting balance', '结算后余额'],
   'fishing.result.more': [
     'More catches are waiting to be shown next.',
@@ -140,7 +160,7 @@ const copy = {
   'fishing.tier.junk': ['Pond find', '池塘杂物'],
   'fishing.tier.treasure': ['Treasure', '宝物'],
   'fishing.size': ['{{size}} cm', '{{size}} 厘米'],
-  'fishing.reward': ['{{amount}} credits', '{{amount}} 积分'],
+  'fishing.reward': ['Net: {{amount}} general credits', '净到账 {{amount}} 通用积分'],
   'fishing.blueFatFish': ['Blue fat fish', '蓝色大肥鱼'],
   'fishing.blueFatFish.original': [
     'Original legendary species: {{species}}',
@@ -187,8 +207,8 @@ const copy = {
   ],
   'fishing.rules.resultTitle': ['What you receive', '你会看到什么'],
   'fishing.rules.resultBody': [
-    'Results show the catch, length and credits. Legendary fish have a 10% chance of the blue fat fish egg: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Only artwork and length rankings change; original species and rewards stay unchanged.',
-    '结果展示收获、长度和积分。传奇鱼有 10% 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
+    'Results show the catch, length and net general credits after per-catch deductions. Expand a catch to see its gross reward and deductions. Legendary fish have a 10% chance of the blue fat fish egg: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Only artwork and length rankings change; original species and rewards stay unchanged.',
+    '结果展示收获、长度和逐条抽水后的通用积分净到账，展开可看原始渔获与各项抽水。传奇鱼有 10% 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
   ],
   'fishing.rules.recoveryTitle': ['If you leave or refresh', '离开或刷新后怎么办'],
   'fishing.rules.recoveryBody': [
@@ -197,13 +217,13 @@ const copy = {
   ],
   'fishing.rules.scoresTitle': ['Catch boards', '收获榜'],
   'fishing.rules.scoresBody': [
-    'Each of the ten catches can enter the single-catch board, and all catches count toward your total.',
-    '十连中的每次收获都可以计入收获榜，全部渔获都会计入总收获。',
+    'Each catch can enter the length boards. The total board counts net catch income; newcomer rewards are separate.',
+    '每条渔获都可计入体长榜；总收获榜累计净渔获收入，新人奖励单独发放，不计入该榜。',
   ],
   'fishing.rules.startTitle': ['Before you start', '开始前确认'],
   'fishing.rules.startBody': [
-    'Check your bait, number of casts, and total price. You can start while fishing is open.',
-    '请先确认鱼饵、抛竿次数和总价，开放期间即可开始垂钓。',
+    'Check your bait, number of casts, and total price. Payment uses game credits first, then general credits.',
+    '请先确认鱼饵、抛竿次数和总价。付款优先使用游戏积分，不足部分使用通用积分。',
   ],
   'linklink.eyebrow': ['LinkLink', '连连看'],
   'linklink.title': ['Find a pair, draw a path', '找相同，连成对'],
@@ -220,6 +240,21 @@ const copy = {
     'Confirm to pay the displayed ticket price and start the timer. Leaving the page does not pause the game or refund the ticket.',
     '确认后扣除下方门票并开始计时。离开页面后计时继续，门票不退还。',
   ],
+  'linklink.hintButton': ['Hint / Refresh ({{count}} left)', '提示 / 刷新（剩余 {{count}} 次）'],
+  'linklink.hintTile': ['Hint', '提示'],
+  'linklink.hintHelp': ['Follow the dashed line between the marked tiles. Select them yourself to remove the pair.', '沿虚线查看标记的配对，再自行选择两个图块消除。'],
+  'linklink.refreshed': ['The occupied tiles were shuffled once. A refresh may still leave no legal pair.', '剩余图块已洗牌一次，刷新后仍可能没有可消除的配对。'],
+  'linklink.rules.scoreBody': ['A cleared board scores 100 per pair, plus the whole seconds left and 100 for each unused hint. A timeout scores only removed pairs; abandoning has no score. Scores enter the performance boards and do not pay credits.', '成功通关的表现分 = 配对数 × 100 + 剩余完整秒数 + 剩余提示次数 × 100。超时只计算已消除配对，放弃不计分。表现分用于排行榜，不兑换积分。'],
+  'linklink.rules.shuffleBody': ['The 6×8, 8×8 and 10×10 boards begin with 2, 3 and 5 opportunities. The Hint / Refresh button shows a legal pair when one exists; otherwise it shuffles occupied tiles once. Each use costs one opportunity. Refreshing does not guarantee a move. With none left, keep playing, wait for the timer or abandon.', '6×8、8×8、10×10 棋盘分别有 2、3、5 次机会。“提示 / 刷新”在有可消除配对时显示提示，否则只洗牌一次剩余图块。每次使用扣 1 次机会，刷新不保证有解。次数用尽后可继续操作、等待超时或放弃。'],
+  'linklink.leaderboard.title': ['Best single-game score in the past {{days}} days', '过去 {{days}} 天单局最高表现分'],
+  'linklink.leaderboard.help': ['Cleared boards only, one best score per player. Equal scores rank by achievement time, earliest first.', '仅计成功通关，每人取单局最高分。同分先达成者靠前。'],
+  'linklink.leaderboard.spec': ['Board size', '棋盘模式'],
+  'linklink.leaderboard.window': ['Time window', '统计窗口'],
+  'linklink.leaderboard.days': ['Past {{days}} days', '过去 {{days}} 天'],
+  'linklink.leaderboard.empty': ['No qualifying scores in this window yet.', '这个窗口还没有符合条件的成绩。'],
+  'linklink.leaderboard.rank': ['Rank', '名次'],
+  'linklink.leaderboard.player': ['Player', '玩家'],
+  'linklink.leaderboard.achieved': ['Achieved', '达成时间'],
   'linklink.start': ['Start {{spec}}', '开始 {{spec}}'],
   'linklink.active': ['Active board', '进行中的棋盘'],
   'linklink.progress': [
@@ -274,12 +309,12 @@ const copy = {
     '连线可以经过空格和棋盘外围的一圈空位，最多转两次弯；不能穿过尚未消除的图块。',
   ],
   'linklink.rules.scoreTitle': ['How the score is counted', '表现分怎么算'],
-  'linklink.rules.scoreBody': [
+  'linklink.rules.scoreLegacyBody': [
     'Your score is the number of pairs removed multiplied by 100, plus the whole seconds left when the board ends. The score is only a game result: it does not pay credits or enter a leaderboard.',
     '表现分 = 已消除配对数 × 100 + 棋盘结束时剩余的完整秒数。表现分只代表本局成绩，不兑换积分，也不进入排行榜。',
   ],
   'linklink.rules.shuffleTitle': ['If no move remains', '没有可走的配对时'],
-  'linklink.rules.shuffleBody': [
+  'linklink.rules.shuffleLegacyBody': [
     'The game automatically rearranges the remaining tiles for free when no legal pair remains. There is no manual shuffle button or fixed shuffle-count limit.',
     '如果没有合法配对，游戏会免费自动重排剩余图块。没有手动洗牌按钮，也没有固定的洗牌次数上限。',
   ],
@@ -350,10 +385,11 @@ const copy = {
   'rps.queue': ['Join {{mode}} queue', '进入{{mode}}队列'],
   'rps.queueing': ['Joining the queue…', '正在加入匹配…'],
   'rps.deathmatchReview': [
-    'Deathmatch uses all your available credits. You can lose the full amount. Confirm when you are ready to join.',
-    '本局会投入全部可用积分，可能全部损失。请确认后入场。',
+    'Deathmatch uses the positive available balances of both wallets. You can lose the full amount. Confirm when you are ready to join.',
+    '本局会投入两个钱包各自的全部正余额，可能全部损失。请确认后入场。',
   ],
   'rps.deathmatchConfirm': ['I understand; join deathmatch', '我已了解，进入生死斗'],
+  'rps.result.seats': ['Player results', '玩家结果'],
   'rps.pendingQueue': ['Waiting for two other players…', '正在等待另外两名玩家…'],
   'rps.pendingQueuePrivacy': [
     'The game will begin automatically once three players are matched.',
@@ -417,6 +453,8 @@ const copy = {
   'rps.actionSending': ['Submitting this decision…', '正在提交本次决定…'],
   'rps.seat.deleted': ['Deleted participant', '已删除参与者'],
   'rps.seat.balance': ['Table balance', '场内余额'],
+  'rps.seat.currentFunding': ['Your remaining table funds', '本人的场内资金分项'],
+  'rps.queuePayment': ['Entry payment · refunded in the original assets if cancelled', '入场付款 · 取消匹配时按原币种退回'],
   'rps.seat.input': ['This round', '本轮投入'],
   'rps.seat.allIn': ['All in', '全押'],
   'rps.seat.managed': ['Automatic actions: {{count}}', '自动操作：{{count}} 次'],
@@ -514,7 +552,7 @@ const copy = {
   'rps.result.returned': ['Your total returned', '本人总返还'],
   'rps.result.net': ['Your wallet net', '本人的钱包净变化'],
   'rps.result.buyIn': ['Starting buy-in (actual input)', '开局带入（实际投入）'],
-  'rps.result.cashOut': ['Ending cash-out (actual return)', '结束带出（实际返还）'],
+  'rps.result.cashOut': ['Ending cash-out in general credits', '结束带出（通用积分到账）'],
   'rps.result.unrecorded': ['Not recorded for this historical result', '该历史结果未记录'],
   'rps.result.ackWaiting': [
     'The complete private result is shown. Marking it viewed…',
@@ -574,8 +612,8 @@ const copy = {
     '标准模式：每人投入当前基础积分的五倍。庄家轮换，最多进行九个普通回合。尚未分配的平局奖池须先完成；奖池分配后，如果九个普通回合已经完成，或任一玩家剩余不足一份基础积分，本局结束并返还三人的场内余额。',
   ],
   'rps.rules.mode.deathmatch': [
-    'Deathmatch: each player brings all currently available credits, with at least the base stake, and cannot add credits from outside during the match. The first nine ordinary stakes use the base amount; it then rises to twice the base amount and rises by one more base amount after every three ordinary stakes. During a paid tied-pot continuation, the first three stakes use its starting amount and each later tie raises the next stake by one base amount. A settled pot ends the match if any player then has no credits left. When an ordinary stake leaves all three players at zero, that hand becomes the Ultimate Showdown.',
-    '生死斗：每人带入当前全部可用积分，至少需要基础积分，开局后不能从场外补充。前九次普通下注使用基础积分；之后升为两倍，并在每完成三次普通下注后再增加一倍基础积分。付费续池的前三次使用本次续池起始金额，之后每次继续平局都会让下一次增加一倍基础积分。奖池分配后若任一玩家没有剩余积分，本局结束；普通下注后若三人场内积分都变为零，该手会进入终极对决。',
+    'Deathmatch: each player brings all positive available game and general credits, with at least the base stake, and cannot add credits from outside during the match. The first nine ordinary stakes use the base amount; it then rises to twice the base amount and rises by one more base amount after every three ordinary stakes. During a paid tied-pot continuation, the first three stakes use its starting amount and each later tie raises the next stake by one base amount. A settled pot ends the match if any player then has no credits left. When an ordinary stake leaves all three players at zero, that hand becomes the Ultimate Showdown.',
+    '生死斗：每人带入游戏与通用钱包各自的全部正余额，至少需要基础积分，开局后不能从场外补充。前九次普通下注使用基础积分；之后升为两倍，并在每完成三次普通下注后再增加一倍基础积分。付费续池的前三次使用本次续池起始金额，之后每次继续平局都会让下一次增加一倍基础积分。奖池分配后若任一玩家没有剩余积分，本局结束；普通下注后若三人场内积分都变为零，该手会进入终极对决。',
   ],
   'rps.rules.feesTitle': ['Where each entry goes', '每笔投入去了哪里'],
   'rps.rules.feesBody': [
@@ -603,8 +641,8 @@ const copy = {
   ],
   'rps.rules.queueTitle': ['Joining and leaving', '排队和离开'],
   'rps.rules.queueBody': [
-    'The three modes have separate queues. A queue can wait for up to 120 seconds; cancelling or timing out before a match releases the entry amount. Once a match starts, leaving the page or switching tabs does not pause the clock or cancel the match.',
-    '三种模式分别排队，最多等待 120 秒；匹配前主动取消或等待超时会释放入场积分。对局开始后，离开页面或切换标签页不会暂停计时，也不会取消对局。',
+    'The three modes have separate queues. A queue can wait for up to 120 seconds; cancelling or timing out before a match refunds each wallet its original payment. Once a match starts, leaving the page or switching tabs does not pause the clock or cancel the match.',
+    '三种模式分别排队，最多等待 120 秒；匹配前主动取消或等待超时会按原付款分项退回各钱包。对局开始后，离开页面或切换标签页不会暂停计时，也不会取消对局。',
   ],
   'rps.rules.statsTitle': ['Stats and leaderboards', '统计和排行榜'],
   'rps.rules.statsBody': [

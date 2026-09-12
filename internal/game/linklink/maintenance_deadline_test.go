@@ -15,7 +15,7 @@ import (
 func TestMaintenanceContinuationRequiresLiveBindingExactLeaseAndAction(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("maintenance", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(70)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(70)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestMaintenanceContinuationRequiresLiveBindingExactLeaseAndAction(t *testin
 	if err != nil || matched.State == nil || matched.State.Revision != "2" {
 		t.Fatalf("maintenance exact action = (%+v,%v)", matched, err)
 	}
-	if _, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(72)}); !errors.Is(err, ErrMaintenance) {
+	if _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(72)}); !errors.Is(err, ErrMaintenance) {
 		t.Fatalf("maintenance start = %v", err)
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='linklink_entry' AND actor_user_id=?`, userID) != 1 {
@@ -63,7 +63,7 @@ func TestMaintenanceContinuationRequiresLiveBindingExactLeaseAndAction(t *testin
 func TestMaintenanceCannotCreateOrReviveExpiredLease(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("lease-expiry", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(80)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(80)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestContinuationRegistrationIsClosedAndFrozen(t *testing.T) {
 func TestExactDeadlineReadAndLateActionConvergeToTimeout(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("deadline", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(90)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(90)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestExactDeadlineReadAndLateActionConvergeToTimeout(t *testing.T) {
 func TestExactMatchReplayAtDeadlineStillMaterializesTimeout(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("deadline-replay", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(96),
 	})
 	if err != nil {
@@ -184,7 +184,7 @@ func TestDeadlineBoundaryMinusOneAndPlusOne(t *testing.T) {
 		t.Run(fmt.Sprintf("%+d", offset), func(t *testing.T) {
 			fixture := newFixture(t)
 			userID, binding := fixture.seedUser(fmt.Sprintf("deadline-%d", offset), testFunding)
-			started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(92 + int(offset+1))})
+			started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(92 + int(offset+1))})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -212,7 +212,7 @@ func TestDeadlineBoundaryMinusOneAndPlusOne(t *testing.T) {
 func TestRecoveryPrecedesWorkerAndCatchesAbsoluteDeadline(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("recovery", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(100)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(100)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestRecoveryPrecedesWorkerAndCatchesAbsoluteDeadline(t *testing.T) {
 func TestRestartRecoveryPreservesActiveAuthorityAndPrunesOldHealthLease(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("restart-recovery", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec10x10, IdempotencyKey: fixture.key(105)})
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec10x10, IdempotencyKey: fixture.key(105)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestAbandonRequiresConfirmationNeverRefundsAndAllowsFreshCharge(t *testing.
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("abandon", testFunding)
 	startInput := StartInput{UserID: userID, Spec: game.LinkLinkSpec10x10, IdempotencyKey: fixture.key(110)}
-	started, err := fixture.service.Start(context.Background(), startInput)
+	started, err := fixture.service.startLegacy(context.Background(), startInput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,17 +348,17 @@ func TestAbandonRequiresConfirmationNeverRefundsAndAllowsFreshCharge(t *testing.
 		fixture.scalar(`SELECT COUNT(*) FROM idempotency_records WHERE scope='game_linklink'`) != 2 {
 		t.Fatal("abandon refunded or left active material")
 	}
-	replayed, err := fixture.service.Start(context.Background(), startInput)
+	replayed, err := fixture.service.startLegacy(context.Background(), startInput)
 	if err != nil || !replayed.IdempotentReplay || replayed.HTTPStatus != 201 || !reflect.DeepEqual(replayed.State, started.State) ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_linklink_sessions WHERE user_id=?`, userID) != 0 || fixture.balance(userID) != "999000" {
 		t.Fatalf("abandoned start replay = (%+v,%v), balance=%s", replayed, err, fixture.balance(userID))
 	}
 	changed := startInput
 	changed.Spec = game.LinkLinkSpec6x8
-	if _, err := fixture.service.Start(context.Background(), changed); !errors.Is(err, ErrConflict) {
+	if _, err := fixture.service.startLegacy(context.Background(), changed); !errors.Is(err, ErrConflict) {
 		t.Fatalf("abandoned start key accepted a different body: %v", err)
 	}
-	fresh, err := fixture.service.Start(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(111)})
+	fresh, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(111)})
 	if err != nil || fresh.State == nil || fresh.State.SessionID == started.State.SessionID || fixture.balance(userID) != "998000" ||
 		fixture.scalar(`SELECT COUNT(*) FROM idempotency_records WHERE scope='game_linklink'`) != 3 {
 		t.Fatalf("fresh post-abandon start = (%+v,%v) balance=%s", fresh, err, fixture.balance(userID))

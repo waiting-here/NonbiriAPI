@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -56,18 +58,7 @@ type userRow struct {
 }
 
 func (service *Service) beginAuthorized(ctx context.Context, adminID int64) (*sql.Tx, error) {
-	if service == nil || service.database == nil || ctx == nil || adminID <= 0 {
-		return nil, ErrUnauthorized
-	}
-	tx, err := service.database.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, classifyDatabaseError("begin transaction", err)
-	}
-	if err := service.finalAuth.AuthorizeAdmin(ctx, tx, adminID); err != nil {
-		_ = tx.Rollback()
-		return nil, classifyAuthorizationError(err)
-	}
-	return tx, nil
+	return service.beginManagement(ctx, adminID, roleAdmin, false)
 }
 
 func commitTx(tx *sql.Tx, operation string) error {
@@ -186,9 +177,16 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	if err != nil {
 		return AdminUser{}, classifyLedgerError("read user wallet", err)
 	}
+	gameWallet, err := ledger.UserAssetAccount(ctx, tx, row.id, ledger.Game)
+	if err != nil {
+		return AdminUser{}, classifyLedgerError("read game wallet", err)
+	}
 	automatic := row.autoLevel
 	if automatic < 1 || automatic > 4 {
 		return AdminUser{}, fmt.Errorf("%w: invalid automatic level", ErrInvariant)
+	}
+	if !row.manualLevel.Valid {
+		automatic = authz.AutomaticLevel(automatic, donation, config.thresholds)
 	}
 	effective := automatic
 	var manual *int
@@ -219,7 +217,7 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		EndpointLimit:         nullableIntString(row.endpointLimit), EffectiveEndpointLimit: effectiveLimit(row.endpointLimit, config.endpointDefault),
 		RPMLimit: nullableIntString(row.rpmLimit), EffectiveRPMLimit: effectiveLimit(row.rpmLimit, config.rpmDefault),
 		ConcurrencyLimit: nullableIntString(row.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(row.concurrencyLimit, config.concurrencyDefault),
-		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
+		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
 		Level:             AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]},
 		GameProfilePublic: row.gamePublic == 1, Revision: revision.Decimal(), Usage: usage,
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
@@ -227,8 +225,12 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 }
 
 func (service *Service) ListUsers(ctx context.Context, adminID int64, query UserListQuery) (Page[AdminUser], error) {
+	return service.listUsers(ctx, adminID, roleAdmin, query)
+}
+
+func (service *Service) listUsers(ctx context.Context, adminID int64, role managementRole, query UserListQuery) (Page[AdminUser], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
-	if limit == 0 {
+	if limit == 0 || query.Level < 0 || query.Level > 5 {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
 	if query.Page != nil {
@@ -240,7 +242,7 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 	if !validNow(now) {
 		return Page[AdminUser]{}, ErrUnavailable
 	}
-	owner := usersCursorOwner(query)
+	owner := usersCursorOwner(query, role, adminID)
 	after, err := service.decodeUintCursor(query.Cursor, cursorScopeUsers, owner, now)
 	if err != nil {
 		return Page[AdminUser]{}, err
@@ -248,12 +250,16 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
+	tx, err := service.beginManagement(ctx, adminID, role, query.Page != nil)
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	config, err := readProjectionConfig(ctx, tx)
+	if err != nil {
+		return Page[AdminUser]{}, err
+	}
 	args := []any{query.Q, query.Q, query.Q, after}
 	filter := ""
 	if query.IsBanned != nil {
@@ -263,6 +269,18 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 			want = 1
 		}
 		args = append(args, now, want)
+	}
+	if query.Level != 0 {
+		// Fixed-width big-endian unsigned blobs compare in numeric order.
+		filter += " AND COALESCE(level, MAX(auto_level"
+		for level := 2; level <= 4; level++ {
+			filter += ", CASE WHEN ? > 0 AND donation_credit_mag >= ? THEN ? ELSE 1 END"
+			var threshold db.U128
+			binary.BigEndian.PutUint64(threshold[8:], uint64(config.thresholds[level]))
+			args = append(args, config.thresholds[level], db.EncodeU128(threshold), level)
+		}
+		filter += ")) = ?"
+		args = append(args, query.Level)
 	}
 	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT id FROM users
@@ -291,10 +309,6 @@ WHERE is_admin=0
 	}
 	if err := rows.Close(); err != nil {
 		return Page[AdminUser]{}, classifyDatabaseError("close user list", err)
-	}
-	config, err := readProjectionConfig(ctx, tx)
-	if err != nil {
-		return Page[AdminUser]{}, err
 	}
 	hasMore := len(ids) > limit
 	if hasMore {
@@ -326,6 +340,10 @@ WHERE is_admin=0
 }
 
 func (service *Service) GetUser(ctx context.Context, adminID, userID int64) (AdminUser, error) {
+	return service.getUser(ctx, adminID, userID, roleAdmin)
+}
+
+func (service *Service) getUser(ctx context.Context, adminID, userID int64, role managementRole) (AdminUser, error) {
 	if userID <= 0 {
 		return AdminUser{}, ErrNotFound
 	}
@@ -333,7 +351,7 @@ func (service *Service) GetUser(ctx context.Context, adminID, userID int64) (Adm
 	if !validNow(now) {
 		return AdminUser{}, ErrUnavailable
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginManagement(ctx, adminID, role, false)
 	if err != nil {
 		return AdminUser{}, err
 	}
@@ -523,7 +541,7 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	}
 	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT day,product_active,api_requests,uncached_input_tokens,cache_write_input_tokens,
- cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,game_rounds,distinct_product_users
+ cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,game_rounds,distinct_product_users,game_checkins
 FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query.Page, limit)
 	if err != nil {
 		return ActivityPage{}, err
@@ -536,8 +554,8 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 	for rows.Next() {
 		var day ActivityDay
 		var product, game int
-		raw := make([][]byte, 9)
-		if err := rows.Scan(&day.Day, &product, &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &raw[5], &raw[6], &game, &raw[7], &raw[8]); err != nil {
+		raw := make([][]byte, 10)
+		if err := rows.Scan(&day.Day, &product, &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &raw[5], &raw[6], &game, &raw[7], &raw[8], &raw[9]); err != nil {
 			_ = rows.Close()
 			return ActivityPage{}, classifyDatabaseError("scan activity", err)
 		}
@@ -549,6 +567,7 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 				return ActivityPage{}, fmt.Errorf("%w: decode activity", ErrInvariant)
 			}
 		}
+		day.GameCheckins = values[9].Decimal()
 		day.ProductActive, day.GameActive = product == 1, game == 1
 		day.APIRequests, day.UncachedInputTokens = values[0].Decimal(), values[1].Decimal()
 		day.CacheWriteInputTokens, day.CacheReadInputTokens = values[2].Decimal(), values[3].Decimal()
@@ -676,6 +695,10 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 }
 
 func (service *Service) Profile(ctx context.Context, adminID, userID int64, control ControlMutation, input ProfileMutation) (MutationResult[AdminUser], error) {
+	return service.profile(ctx, adminID, userID, roleAdmin, control, input)
+}
+
+func (service *Service) profile(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, input ProfileMutation) (MutationResult[AdminUser], error) {
 	if userID <= 0 {
 		return MutationResult[AdminUser]{}, ErrNotFound
 	}
@@ -683,15 +706,14 @@ func (service *Service) Profile(ctx context.Context, adminID, userID int64, cont
 	if !validNow(now) {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	decision, err := beginControlMutation(ctx, tx, adminID, control, now)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
+	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 5 {
+		return MutationResult[AdminUser]{}, ErrForbidden
 	}
 	if decision.Kind == idempotency.Replay {
 		result, err := replayJSON[AdminUser](decision)
@@ -703,10 +725,6 @@ func (service *Service) Profile(ctx context.Context, adminID, userID int64, cont
 		}
 		done = true
 		return result, nil
-	}
-	row, err := readUserRow(ctx, tx, userID)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
 	}
 	if !equalU128Bytes(row.revision, input.ExpectedRevision) {
 		return MutationResult[AdminUser]{}, ErrConflict
@@ -763,6 +781,10 @@ WHERE id=? AND is_admin=0 AND revision=?`,
 }
 
 func (service *Service) Economy(ctx context.Context, adminID, userID int64, control ControlMutation, input EconomyMutation) (MutationResult[AdminUser], error) {
+	return service.economy(ctx, adminID, userID, roleAdmin, control, input)
+}
+
+func (service *Service) economy(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, input EconomyMutation) (MutationResult[AdminUser], error) {
 	if userID <= 0 {
 		return MutationResult[AdminUser]{}, ErrNotFound
 	}
@@ -770,15 +792,14 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 	if !validNow(now) {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	decision, err := beginControlMutation(ctx, tx, adminID, control, now)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
+	if role == roleSteward && input.Target == "donation_credit" {
+		return MutationResult[AdminUser]{}, ErrForbidden
 	}
 	if decision.Kind == idempotency.Replay {
 		result, err := replayJSON[AdminUser](decision)
@@ -791,18 +812,18 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 		done = true
 		return result, nil
 	}
-	row, err := readUserRow(ctx, tx, userID)
-	if err != nil {
-		return MutationResult[AdminUser]{}, err
-	}
 	if !equalU128Bytes(row.revision, input.ExpectedRevision) {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
-	wallet, err := ledger.UserAccount(ctx, tx, userID)
+	asset := ledger.General
+	if input.Target == "game_balance" {
+		asset = ledger.Game
+	}
+	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyLedgerError("read adjustment wallet", err)
 	}
-	external, err := ledger.CodedAccount(ctx, tx, "external")
+	external, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyLedgerError("read external account", err)
 	}
@@ -812,7 +833,7 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 	}
 	creditDelta, donationDelta := ledger.AmountFromMilli(0), ledger.AmountFromMilli(0)
 	donationUserID := int64(0)
-	if input.Target == "balance" {
+	if input.Target == "balance" || input.Target == "game_balance" {
 		creditDelta = ledger.AmountFromMilli(delta)
 	} else {
 		donationDelta = ledger.AmountFromMilli(delta)
@@ -822,7 +843,13 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 	if err != nil || !db.ValidateOpaqueID(operationID, "op_") {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
-	plan, err := ledger.NewAdminUserAdjustment(ledger.Meta{OperationID: operationID, ActorUserID: adminID, CreatedAt: now}, wallet.ID, external.ID, creditDelta, donationUserID, donationDelta, input.Reason)
+	meta := ledger.Meta{OperationID: operationID, ActorUserID: adminID, CreatedAt: now}
+	var plan ledger.Plan
+	if asset == ledger.Game {
+		plan, err = ledger.NewAdminGameAdjustment(meta, wallet.ID, external.ID, creditDelta, input.Reason)
+	} else {
+		plan, err = ledger.NewAdminUserAdjustment(meta, wallet.ID, external.ID, creditDelta, donationUserID, donationDelta, input.Reason)
+	}
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyLedgerError("build user adjustment", err)
 	}
@@ -847,11 +874,7 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 		if err != nil {
 			return MutationResult[AdminUser]{}, err
 		}
-		for level := 2; level <= 4; level++ {
-			if config.thresholds[level] > 0 && donation.Big().Cmp(big.NewInt(config.thresholds[level])) >= 0 && level > newAuto {
-				newAuto = level
-			}
-		}
+		newAuto = authz.AutomaticLevel(newAuto, donation, config.thresholds)
 	}
 	authorityChanged := newAuto != row.autoLevel
 	var update sql.Result
@@ -897,14 +920,14 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 }
 
 func (service *Service) Ban(ctx context.Context, adminID, userID int64, control ControlMutation, input BanMutation) (MutationResult[struct{}], error) {
-	return service.setBan(ctx, adminID, userID, control, input.ExpectedRevision, true, input.Reason, input.DurationSeconds)
+	return service.setBan(ctx, adminID, userID, roleAdmin, control, input.ExpectedRevision, true, input.Reason, input.DurationSeconds)
 }
 
 func (service *Service) Unban(ctx context.Context, adminID, userID int64, control ControlMutation, expected db.U128) (MutationResult[struct{}], error) {
-	return service.setBan(ctx, adminID, userID, control, expected, false, "", nil)
+	return service.setBan(ctx, adminID, userID, roleAdmin, control, expected, false, "", nil)
 }
 
-func (service *Service) setBan(ctx context.Context, adminID, userID int64, control ControlMutation, expected db.U128, banned bool, reason string, duration *int64) (MutationResult[struct{}], error) {
+func (service *Service) setBan(ctx context.Context, adminID, userID int64, role managementRole, control ControlMutation, expected db.U128, banned bool, reason string, duration *int64) (MutationResult[struct{}], error) {
 	if userID <= 0 {
 		return MutationResult[struct{}]{}, ErrNotFound
 	}
@@ -912,16 +935,12 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, contr
 	if !validNow(now) {
 		return MutationResult[struct{}]{}, ErrUnavailable
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	decision, err := beginControlMutation(ctx, tx, adminID, control, now)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
-	}
 	if decision.Kind == idempotency.Replay {
 		result := MutationResult[struct{}]{Status: decision.HTTPStatus, Body: append([]byte(nil), decision.ResponseBody...), Replayed: true}
 		if err := commitTx(tx, "commit ban replay"); err != nil {
@@ -929,10 +948,6 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, contr
 		}
 		done = true
 		return result, nil
-	}
-	row, err := readUserRow(ctx, tx, userID)
-	if err != nil {
-		return MutationResult[struct{}]{}, err
 	}
 	if !equalU128Bytes(row.revision, expected) {
 		return MutationResult[struct{}]{}, ErrConflict
@@ -993,8 +1008,8 @@ WHERE user_id=? AND (key_hash IS NULL OR generation<?)`, now, userID, int64(math
 	return MutationResult[struct{}]{Status: http.StatusNoContent, Body: []byte{}}, nil
 }
 
-func beginControlMutation(ctx context.Context, tx *sql.Tx, adminID int64, control ControlMutation, now int64) (idempotency.Decision, error) {
-	actor, err := idempotency.ActorScopeHash("admin", strconv.FormatInt(adminID, 10))
+func beginControlMutation(ctx context.Context, tx *sql.Tx, adminID int64, role managementRole, control ControlMutation, now int64) (idempotency.Decision, error) {
+	actor, err := idempotency.ActorScopeHash(role.actorKind(), strconv.FormatInt(adminID, 10))
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}
@@ -1097,14 +1112,6 @@ func (service *Service) deriveCursorKey() ([]byte, error) {
 		return nil, ErrUnavailable
 	}
 	return key, nil
-}
-
-func usersCursorOwner(query UserListQuery) string {
-	filter := "any"
-	if query.IsBanned != nil {
-		filter = strconv.FormatBool(*query.IsBanned)
-	}
-	return filterOwner("users", filter, query.Q)
 }
 
 func filterOwner(parts ...string) string {

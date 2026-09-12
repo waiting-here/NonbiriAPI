@@ -78,6 +78,7 @@ func projectWelfareTx(ctx context.Context, tx *sql.Tx, userID, now int64, config
 	if view == nil {
 		return ErrInvariant
 	}
+	view.Asset, view.PoolAsset = ledger.Game, ledger.General
 	view.Enabled = config.welfareEnabled
 	view.Threshold = formatMilliPointsInt64(config.welfareThreshold)
 	view.Cap = formatMilliPointsInt64(config.welfareCap)
@@ -195,12 +196,16 @@ func projectThursdayTx(ctx context.Context, tx *sql.Tx, userID, now int64, confi
 			MyCount: myCount, MyContributed: myContributed,
 		}
 	}
-	if next != nil {
+	if next != nil && config.masterEnabled && config.thursdayEnabled {
 		poolBalance, err := poolBalanceTx(ctx, tx, next.currentPoolID)
 		if err != nil {
 			return err
 		}
-		view.Next = &ThursdayNext{PeriodID: next.id, OpensAt: next.opensAt, PoolBalance: poolBalance}
+		view.Next = &ThursdayNext{
+			PeriodID: next.id, OpensAt: next.opensAt, ClosesAt: next.closesAt,
+			Literature: next.literature, Entry: formatMilliPointsInt64(next.entryMilli),
+			PerUserLimit: next.perUserLimit, PoolBalance: poolBalance,
+		}
 	}
 	openNow := current != nil && now >= current.opensAt && now < current.closesAt &&
 		(current.state == PeriodStateConfigured || current.state == PeriodStateOpen)

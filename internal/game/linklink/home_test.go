@@ -16,7 +16,7 @@ func TestHomeSummaryTxDeadlineBoundaryOwnershipAndNoSideEffects(t *testing.T) {
 			fixture := newFixture(t)
 			userID, _ := fixture.seedUser(fmt.Sprintf("home-owner-%d", index), testFunding)
 			foreignID, _ := fixture.seedUser(fmt.Sprintf("home-foreign-%d", index), testFunding)
-			started, err := fixture.service.Start(context.Background(), StartInput{
+			started, err := fixture.service.startLegacy(context.Background(), StartInput{
 				UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(701 + index),
 			})
 			if err != nil || started.State == nil {

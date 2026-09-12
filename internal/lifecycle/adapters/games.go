@@ -100,6 +100,7 @@ func (adapter *FishingAdapter) ExportFishing(
 	}
 	for index, pending := range value.Pending {
 		out.Pending[index] = lifecycle.FishingPendingExport{
+			RulesVersion: pending.RulesVersion, Payment: lifecycle.GamePaymentExport(pending.Payment),
 			BatchID: pending.BatchID, Bait: pending.Bait, Count: pending.Count,
 			EntryTotal: pending.EntryTotal, State: pending.State,
 			NextAttemptAt: cloneInt64(pending.NextAttemptAt), RetryExhausted: pending.RetryExhausted,
@@ -113,13 +114,14 @@ func (adapter *FishingAdapter) ExportFishing(
 			}
 			outcomes[outcomeIndex] = lifecycle.FishingOutcomeExport{
 				Ordinal: outcome.Ordinal, SpeciesKey: outcome.SpeciesKey, Tier: outcome.Tier,
-				SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM),
+				NetReward: outcome.NetReward, Rake: lifecycle.FishingRakeExport(outcome.Rake), SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM),
 			}
 		}
 		out.Terminal[index] = lifecycle.FishingBatchExport{
+			RulesVersion: batch.RulesVersion, Payment: lifecycle.GamePaymentExport(batch.Payment),
 			BatchID: batch.BatchID, Bait: batch.Bait, Count: batch.Count,
 			UnitPrice: batch.UnitPrice, EntryTotal: batch.EntryTotal, Outcomes: outcomes,
-			PayoutTotal: batch.PayoutTotal, SettledAt: batch.SettledAt,
+			NetPayoutTotal: batch.NetPayoutTotal, Rake: lifecycle.FishingRakeExport(batch.Rake), PayoutTotal: batch.PayoutTotal, SettledAt: batch.SettledAt,
 			RevealedAt: cloneInt64(batch.RevealedAt),
 		}
 	}
@@ -201,6 +203,8 @@ func (adapter *LinkLinkAdapter) ExportLinkLink(
 	if value.Active != nil {
 		active := value.Active
 		out.Active = &lifecycle.LinkLinkActiveExport{
+			OpportunitiesInitial: active.OpportunitiesInitial, OpportunitiesRemaining: active.OpportunitiesRemaining,
+			RulesVersion: active.RulesVersion, Payment: lifecycle.GamePaymentExport(active.Payment),
 			SessionID: active.SessionID, Spec: active.Spec, Price: active.Price, State: active.State,
 			PairsRemoved: active.PairsRemoved, TotalPairs: active.TotalPairs,
 			StartedAt: active.StartedAt, Deadline: active.Deadline,
@@ -208,6 +212,8 @@ func (adapter *LinkLinkAdapter) ExportLinkLink(
 	}
 	for index, summary := range value.Summaries {
 		out.Summaries[index] = lifecycle.LinkLinkSummaryExport{
+			OpportunitiesInitial: summary.OpportunitiesInitial, OpportunitiesRemaining: summary.OpportunitiesRemaining,
+			RulesVersion: summary.RulesVersion, Payment: lifecycle.GamePaymentExport(summary.Payment),
 			SessionID: summary.SessionID, Spec: summary.Spec, Price: summary.Price,
 			TerminalReason: summary.TerminalReason, StartedAt: summary.StartedAt,
 			Deadline: summary.Deadline, TerminalAt: summary.TerminalAt,
@@ -285,7 +291,7 @@ func (adapter *RPSAdapter) ExportRPS(
 	}
 	for index, summary := range value.Summaries {
 		out.Summaries[index] = lifecycle.RPSSummaryExport{
-			SessionID: summary.SessionID, Mode: summary.Mode, TerminalReason: summary.TerminalReason,
+			SessionID: summary.SessionID, Mode: summary.Mode, TerminalReason: summary.TerminalReason, RulesVersion: summary.RulesVersion,
 			StartedAt: summary.StartedAt, TerminalAt: summary.TerminalAt,
 			OwnSeat: lifecycle.RPSSeatExport{
 				SeatNo: summary.OwnSeat.SeatNo, Input: summary.OwnSeat.Input,
@@ -293,6 +299,8 @@ func (adapter *RPSAdapter) ExportRPS(
 				TimeoutCount: summary.OwnSeat.TimeoutCount, RockCount: summary.OwnSeat.RockCount,
 				ScissorsCount: summary.OwnSeat.ScissorsCount, PaperCount: summary.OwnSeat.PaperCount,
 				OwnBuyIn: cloneString(summary.OwnSeat.OwnBuyIn), OwnCashOut: cloneString(summary.OwnSeat.OwnCashOut),
+				OwnBuyInGeneral: cloneString(summary.OwnSeat.OwnBuyInGeneral), OwnBuyInGame: cloneString(summary.OwnSeat.OwnBuyInGame),
+				OwnReturnedGeneral: cloneString(summary.OwnSeat.OwnReturnedGeneral),
 			},
 		}
 	}
@@ -307,7 +315,16 @@ func mapRPSCurrent(value *rps.HomeState) (*lifecycle.RPSCurrentExport, error) {
 	if projected == nil {
 		return nil, nil
 	}
-	out := lifecycle.RPSCurrentExport(*projected)
+	out := lifecycle.RPSCurrentExport{Kind: projected.Kind, ResourceID: projected.ResourceID, Mode: projected.Mode, State: projected.State,
+		Phase: projected.Phase, Deadline: projected.Deadline, RulesVersion: projected.RulesVersion}
+	if projected.Payment != nil {
+		payment := lifecycle.GamePaymentExport(*projected.Payment)
+		out.Payment = &payment
+	}
+	if projected.Funding != nil {
+		funding := lifecycle.RPSFundingExport(*projected.Funding)
+		out.Funding = &funding
+	}
 	return &out, nil
 }
 
@@ -323,7 +340,9 @@ func mapRPSPending(value *rps.PendingResult) *lifecycle.RPSPendingExport {
 		SessionID: value.SessionID, Mode: value.Mode, TerminalReason: value.TerminalReason,
 		OwnSeatNo: value.OwnSeatNo, OwnInput: value.OwnInput, OwnReturned: value.OwnReturned,
 		OwnWalletNet: value.OwnWalletNet, Seats: seats, CreatedAt: value.CreatedAt,
-		OwnBuyIn: cloneString(value.OwnBuyIn), OwnCashOut: cloneString(value.OwnCashOut),
+		OwnBuyIn: cloneString(value.OwnBuyIn), OwnCashOut: cloneString(value.OwnCashOut), RulesVersion: value.RulesVersion,
+		OwnBuyInGeneral: cloneString(value.OwnBuyInGeneral), OwnBuyInGame: cloneString(value.OwnBuyInGame),
+		OwnReturnedGeneral: cloneString(value.OwnReturnedGeneral),
 	}
 }
 

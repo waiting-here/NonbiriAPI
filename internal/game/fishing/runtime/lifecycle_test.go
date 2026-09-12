@@ -16,7 +16,7 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 		fixture := newGameFixture(t, legendSource(2, 100, 0, 0))
 		userID := fixture.seedUser("delete-first", fixtureFunding)
 		fixture.service.beforeSettlement = func(string) error { return errInjected }
-		_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(300)})
+		_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(300)})
 		if err != nil || pending == nil {
 			t.Fatalf("pending = (%#v,%v)", pending, err)
 		}
@@ -25,7 +25,7 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 			t.Fatal(err)
 		}
 		calls := fixture.random.callCount()
-		if _, _, startErr := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "lure", Count: 1, IdempotencyKey: validTestKey(301)}); !errors.Is(startErr, ErrConflict) {
+		if _, _, startErr := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "lure", Count: 1, IdempotencyKey: validTestKey(301)}); !errors.Is(startErr, ErrConflict) {
 			t.Fatalf("start during deletion error = %v", startErr)
 		}
 		if fixture.random.callCount() != calls {
@@ -76,7 +76,7 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 	t.Run("settle wins before deletion", func(t *testing.T) {
 		fixture := newGameFixture(t, legendSource(0, 137, 0, 0))
 		userID := fixture.seedUser("settle-first", fixtureFunding)
-		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(302)})
+		result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(302)})
 		if err != nil || pending != nil || result == nil {
 			t.Fatalf("settled = (%#v,%#v,%v)", result, pending, err)
 		}
@@ -130,7 +130,7 @@ func testFishingSettlementAndDeletionPrepare(t *testing.T, order string) {
 	fixture := newGameFixture(t, legendSource(1, 150, 0, 1, 0))
 	userID := fixture.seedUser("delete-settle-race", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
-	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(305)})
+	_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(305)})
 	if err != nil || pending == nil {
 		t.Fatalf("pending = (%#v,%v)", pending, err)
 	}
@@ -312,7 +312,7 @@ func TestFishingPrepareDeleteTxUsesCoordinatorOwnedRetirement(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{})
 	userID := fixture.seedUser("delete-tx-boundary", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
-	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+	_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(307),
 	})
 	if err != nil || pending == nil {
@@ -354,13 +354,13 @@ func TestFishingPrepareDeleteTxUsesCoordinatorOwnedRetirement(t *testing.T) {
 func TestLifecycleExportAndCleanupBoundaries(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{max: true})
 	terminalUser := fixture.seedUser("export-terminal", fixtureFunding)
-	terminal, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: terminalUser, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(310)})
+	terminal, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: terminalUser, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(310)})
 	if err != nil || pending != nil || terminal == nil {
 		t.Fatalf("terminal = (%#v,%#v,%v)", terminal, pending, err)
 	}
 	pendingUser := fixture.seedUser("export-pending", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
-	_, waiting, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: pendingUser, Bait: "lure", Count: 1, IdempotencyKey: validTestKey(311)})
+	_, waiting, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: pendingUser, Bait: "lure", Count: 1, IdempotencyKey: validTestKey(311)})
 	if err != nil || waiting == nil {
 		t.Fatalf("pending = (%#v,%v)", waiting, err)
 	}
@@ -436,7 +436,7 @@ func TestFishingExportTxAppliesTerminalCollectionLimit(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{max: true})
 	userID := fixture.seedUser("export-limit", fixtureFunding)
 	for index := 0; index < 2; index++ {
-		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+		result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{
 			UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(320 + index),
 		})
 		if err != nil || pending != nil || result == nil {

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -33,7 +34,7 @@ var (
 	ErrInvalidModelID          = errors.New("model id contains invalid characters")
 	ErrProviderTooLong         = errors.New("model provider is too long")
 	ErrInvalidProvider         = errors.New("model provider contains invalid characters")
-	ErrDuplicateModelID        = errors.New("duplicate model id in model list")
+	errSensitiveModels         = errors.New("models response contains credential material")
 	ErrModelsResponseTruncated = errors.New("models response is truncated")
 	ErrMalformedModelsJSON     = errors.New("malformed models JSON")
 )
@@ -156,17 +157,15 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 	if wireGuard.Contains(body) {
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
 	}
-	models, err := ParseModels(body)
+	models, err := parseModels(body, semanticGuard)
 	if err != nil {
+		if errors.Is(err, errSensitiveModels) {
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
+		}
 		if errors.Is(err, ErrModelsResponseTruncated) {
 			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, ErrModelsResponseTruncated.Error())
 		}
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")
-	}
-	for _, model := range models {
-		if containsSensitiveDiscoveryText(semanticGuard, model.ID) || containsSensitiveDiscoveryText(semanticGuard, model.Provider) {
-			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
-		}
 	}
 	return connectorcontract.DiscoveryResult{
 		Models:           models,
@@ -234,8 +233,13 @@ func ModelsURL(baseURL string) string {
 }
 
 // ParseModels strictly validates an OpenAI-compatible list-models response.
-// It returns connector-neutral cache rows and never a partial list.
+// It validates every original entry, then keeps the first provider for each
+// normalized ID in response order. It never returns a partial list.
 func ParseModels(body []byte) ([]connectorcontract.DiscoveredModel, error) {
+	return parseModels(body, nil)
+}
+
+func parseModels(body []byte, guard *sensitiveGuard) ([]connectorcontract.DiscoveredModel, error) {
 	if len(body) > MaxModelsBodyBytes {
 		return nil, ErrModelsResponseTruncated
 	}
@@ -265,25 +269,29 @@ func ParseModels(body []byte) ([]connectorcontract.DiscoveredModel, error) {
 	seen := make(map[string]struct{}, len(entries))
 	models := make([]connectorcontract.DiscoveredModel, 0, len(entries))
 	for _, entry := range entries {
+		// Inspect decoded fields before discarding duplicate rows or trimming IDs.
+		if guard != nil && (containsSensitiveDiscoveryText(guard, entry.ID) || containsSensitiveDiscoveryText(guard, entry.OwnedBy)) {
+			return nil, errSensitiveModels
+		}
 		id := strings.TrimSpace(entry.ID)
 		if id == "" {
 			return nil, ErrEmptyModelID
 		}
-		if utf8.RuneCountInString(id) > MaxDiscoveredModelIDRunes {
+		if utf8.RuneCountInString(entry.ID) > MaxDiscoveredModelIDRunes {
 			return nil, ErrModelIDTooLong
 		}
-		if !validDiscoveryText(id) {
+		if !validDiscoveryText(entry.ID) {
 			return nil, ErrInvalidModelID
 		}
 		provider := strings.TrimSpace(entry.OwnedBy)
-		if utf8.RuneCountInString(provider) > MaxDiscoveredProviderRunes {
+		if utf8.RuneCountInString(entry.OwnedBy) > MaxDiscoveredProviderRunes {
 			return nil, ErrProviderTooLong
 		}
-		if provider != "" && !validDiscoveryText(provider) {
+		if !validDiscoveryText(entry.OwnedBy) {
 			return nil, ErrInvalidProvider
 		}
 		if _, duplicate := seen[id]; duplicate {
-			return nil, ErrDuplicateModelID
+			continue
 		}
 		seen[id] = struct{}{}
 		models = append(models, connectorcontract.DiscoveredModel{ID: id, Provider: provider})
@@ -293,7 +301,7 @@ func ParseModels(body []byte) ([]connectorcontract.DiscoveredModel, error) {
 
 func validDiscoveryText(value string) bool {
 	for _, r := range value {
-		if r < 0x20 || r == 0x7f || r == utf8.RuneError {
+		if unicode.IsControl(r) || r == utf8.RuneError {
 			return false
 		}
 	}

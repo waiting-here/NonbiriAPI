@@ -267,8 +267,8 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		byKey[entry.Key] = entry
 	}
 	registryKeys := builtinconfig.SiteConfigKeys()
-	if len(registryKeys) != 45 {
-		t.Fatalf("game registry keys=%d, want 45", len(registryKeys))
+	if len(registryKeys) != 48 {
+		t.Fatalf("game registry keys=%d, want 48", len(registryKeys))
 	}
 	for _, key := range registryKeys {
 		entry, ok := byKey[key]
@@ -285,6 +285,9 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		fishingconfig.FishingPremiumPriceMilliKey:        defaults.BaitPricesMilli[fishing.BaitPremium],
 		fishingconfig.FishingStandardRTPKey:              defaults.StandardRTPPercent,
 		fishingconfig.FishingPremiumRTPKey:               defaults.PremiumRTPPercent,
+		fishingconfig.FishingRakePlatformBPKey:           defaults.RakeBP.Platform,
+		fishingconfig.FishingRakeWelfareBPKey:            defaults.RakeBP.Welfare,
+		fishingconfig.FishingRakeThursdayBPKey:           defaults.RakeBP.Thursday,
 		fishingconfig.FishingTreasureBottleMultiplierKey: defaults.TreasureMultipliers["bottle"],
 		fishingconfig.FishingTreasureCloverMultiplierKey: defaults.TreasureMultipliers["clover"],
 		fishingconfig.FishingTreasureShellMultiplierKey:  defaults.TreasureMultipliers["shell"],

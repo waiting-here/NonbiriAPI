@@ -1,3 +1,4 @@
+import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
 import { GamePrivacyControl } from './common/GamePrivacyControl';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
@@ -112,6 +113,7 @@ export function GameCenter() {
         title={text('center.title')}
         description={text('center.description')}
       />
+      {snapshot.data ? <GameWallets wallets={snapshot.data} /> : null}
       <div className="game-center-grid">
         {cards.map((card) => (
           <GameCard key={card.id} card={card} />

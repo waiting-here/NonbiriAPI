@@ -189,6 +189,8 @@ export type WelfareState =
   'unavailable' | 'available' | 'claimed' | 'ineligible' | 'empty' | 'configuration_error';
 
 export interface WelfareView {
+  asset: 'game';
+  poolAsset: 'general';
   enabled: boolean;
   state: WelfareState;
   siteDay: string;
@@ -217,6 +219,10 @@ export interface ThursdayCurrent {
 export interface ThursdayNext {
   periodId: string;
   opensAt: number;
+  closesAt: number;
+  literature: string;
+  entry: string;
+  perUserLimit: number;
   poolBalance: string;
 }
 
@@ -246,6 +252,9 @@ export interface ActivitiesSnapshot {
 }
 
 export interface WelfareClaimResult {
+  asset: 'game';
+  poolAsset: 'general';
+  gameBalance: string;
   awarded: string;
   balance: string;
   poolBalance: string;

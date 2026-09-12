@@ -73,9 +73,11 @@
       "reject": "Reject donation",
       "saveKeyLimits": "Save key limits",
       "deleteModelTitle": "Delete this charity model?",
-      "operationsDescription": "View authorized request records, review and manage charity settings across donations, and enable maintenance in an emergency.",
+      "operationsDescription": "View request logs, manage user access and charity donations, publish announcements, and enable maintenance in an emergency.",
       "sensitiveStateCleared": "Sensitive information on this page has been cleared.",
-      "maintenanceTab": "Maintenance"
+      "maintenanceTab": "Maintenance",
+      "usersTab": "Users",
+      "announcementsTab": "Announcements"
     },
     "endpoints": {
       "nav": "Endpoints"
@@ -337,10 +339,10 @@
         "identityTitle": "Identity and sessions",
         "identityBody": "The user station uses Discord for registration and sign-in. The service receives a Discord identifier, username, avatar information, and the membership information needed to check server and role eligibility. Sign-in tokens are used only during sign-in and are not stored as account data. The service keeps limited account, sign-in, and preference information and protects sign-in cookies according to the deployment configuration.",
         "dataTitle": "Account and configuration data",
-        "dataBody": "The service stores addresses, notes, enabled status, service types, discovered models, platform model names, and model connections for endpoints owned by your account. Some OpenAI-compatible resources can also save settings such as “do not store requests” and “convert tool calls to text”; these settings do not contain request content. Service keys are encrypted. An account API key is shown in full only once; afterward, only information needed to verify and identify it remains. The service also stores check-ins, donations and charity use, daily activities, account restrictions, usage limits, game-profile visibility, game results and best scores, plus limited information needed to prevent abuse and calculate charges. Export version 5 includes safe endpoint source information, donated-key permission and active end times, and safe source details, plus your donated keys' current recurring rules, usage, reservations and remaining capacity. Internal accounting receipts and usage buckets are excluded. Exports exclude full keys, encrypted key content, report-matching data, source-key identities, administrator notes, sign-in tokens, Debug content, random data, and other users' identities.",
+        "dataBody": "The service stores addresses, notes, enabled status, service types, discovered models, platform model names, and model connections for endpoints owned by your account. Some OpenAI-compatible resources can also save settings such as “do not store requests” and “convert tool calls to text”; these settings do not contain request content. Service keys are encrypted. An account API key is shown in full only once; afterward, only information needed to verify and identify it remains. The service also stores check-ins, donations and charity use, daily activities, account restrictions, usage limits, game-profile visibility, game results and best scores, plus limited information needed to prevent abuse and calculate charges. Export version 6 includes safe endpoint source information, donated-key permission and active end times, and safe source details, plus your donated keys' current recurring rules, usage, reservations and remaining capacity. Internal accounting receipts and usage buckets are excluded. Exports exclude full keys, encrypted key content, report-matching data, source-key identities, administrator notes, sign-in tokens, Debug content, random data, and other users' identities.",
         "economyTitle": "Credits and accounting data",
-        "creditHistoryBody": "You can view and filter your own credit history. Entries related to your API calls can link to your request logs while those logs remain available. Donation rewards do not reveal another user's request ID or logs. Request-log expiry does not remove credit history.",
-        "economyBody": "The service stores your single spendable Nonbiri credit balance, which may be negative, together with check-in awards, game rewards, and charity-use summaries. Check-in awards, donor rewards, and game rewards add to the same balance; charity calls and game costs subtract from it. The cumulative donor-reward total is used only for donation summaries and level requirements; it is not a second wallet, and ordinary spending, check-ins, and normal game events do not change it. Every balance change is recorded. Game prices, random results, funds set aside for play, recovery, and settlement are handled consistently by the game system. No game outcome or economic return is guaranteed, and level 4 provides no game-economy advantage. Leaderboards are anonymous by default. If you choose to make your profile public, your current server nickname or username and Discord avatar URL are shown together. The service does not keep a copy of that avatar or copy profile identity into historical game records.",
+        "creditHistoryBody": "You can filter your own credit history by asset. A mixed payment can appear as two entries for the same operation. Entries related to your API calls can link to your request logs while those logs remain available. Donation rewards do not reveal another user's request ID or logs. Request-log expiry does not remove credit history.",
+        "economyBody": "The service records separate general-credit and game-credit wallets, each of which may be negative. General check-ins, donation rewards and game winnings go to general credits. Game check-ins and daily welfare go to game credits. API calls and Thursday contributions use general credits. Game admission uses available game credits first and general credits for the remainder. Eligible refunds return the original assets; remaining stakes at a normal Rock Paper Scissors finish and game winnings use general credits. Each change records its asset and amount. The cumulative donor-reward total is a lifetime statistic used for donation summaries and level requirements, not spendable funds. No game result or economic return is guaranteed, and level 4 provides no game-economy advantage. Leaderboards are anonymous by default. Choosing a public profile shows your current server nickname or username and Discord avatar URL; no avatar copy or historical profile copy is stored.",
         "credentialsTitle": "Secrets and browser handling",
         "credentialsBody": "Service keys are never returned in ordinary lists, logs, alerts, errors, exports, or URLs. The browser receives only the information needed to describe a key and does not save the full service key or account API key. Deleting a key or account immediately stops future calls through it. Encrypted key content that no longer belongs to any resource is cleared within one hour. An OpenAI-compatible key can ask the connected service not to store requests (store=false), but that service may ignore or reject the request. This is not a promise of zero retention and does not control the provider's abuse monitoring. Operators must still protect the server, complete backups, and master-key file.",
         "trafficTitle": "Requests and diagnostics",
@@ -348,7 +350,7 @@
         "sharingTitle": "Providers and disclosures",
         "sharingBody": "Request content may be sent to OpenAI-compatible or Anthropic-compatible services selected by the account owner, including donor-provided charity resources operated by OpenAI, Anthropic, or another independent third party. A third party may process or retain request content, account logs, or abuse-monitoring data under its own policy, which the instance operator cannot control. A charity donor controls the related third-party account or key and may therefore see full request content in that service's account logs. Donating a key alone does not give access to caller identity or request content in this site's interface; authorized steward access is described separately. Each forwarded request also includes a system-generated safety code that can be linked only for the same user, deployment, and third-party service. It hides direct identity but is not fully anonymous. Discord processes sign-in activity under its own policy. The operator may disclose data when required by law or needed to protect the service, users, or public safety, and must describe access by other data processors, hosting providers, and support staff. For embeddings, this code replaces the request's user field; caller-supplied identity in that field is not forwarded.",
         "retentionTitle": "Retention and deletion",
-        "retentionBody": "Request logs are kept for up to 30 days. Recurring donation limits store rule settings, usage and in-flight reservations. Completed sliding-window usage totals are kept for at most 35 days; fixed periods keep the current period and any older period still needed to finish a call. Unfinished accounting keeps only the facts needed to settle it. These totals contain no request content or caller identity. Shared donation handling follows the donation's retention period; deleting its processing actor removes the account link without keeping a name or Discord copy. Records of completed donations and reviews, daily activity summaries, and completed charity payment holds are kept for 400 days. After a donated key ends or its service key is deleted, non-reversible information used only to match new abuse reports may remain for up to 90 days and cannot be used to make a call. The minimum target and donation-source relationship already saved for a report follows that case's own 90-day period or an active legal preservation requirement. Viewing a record does not extend these periods, and legal preservation does not extend the new-report matching period. Game rounds, settlements, and shared results are kept for 30 days after settlement; a paid but unfinished round remains until settlement, and a private Rock Paper Scissors result remains until you acknowledge it or delete the account. Game best scores, credit changes, and profile-visibility preferences remain for the life of the account. Debug content is not stored long term. Sign-in sessions expire after inactivity or their maximum lifetime. Resolved administrator alerts are cleared after 30 days; unresolved alerts are subject to number limits and duplicate merging. Export version 5 allows up to 10,000 rows in each collection and 16 MiB for the complete JSON. An oversized export fails clearly and is not shortened. Account deletion invalidates sign-in sessions and account API keys, clears linked private data, and keeps only necessary facts without personal identity for the periods described above. Late callbacks cannot recreate the account. Complete operator backups and third-party services may retain copies under their own policies.",
+        "retentionBody": "Request logs are kept for up to 30 days. Recurring donation limits store rule settings, usage and in-flight reservations. Completed sliding-window usage totals are kept for at most 35 days; fixed periods keep the current period and any older period still needed to finish a call. Unfinished accounting keeps only the facts needed to settle it. These totals contain no request content or caller identity. Shared donation handling follows the donation's retention period; deleting its processing actor removes the account link without keeping a name or Discord copy. Records of completed donations and reviews, daily activity summaries, and completed charity payment holds are kept for 400 days. After a donated key ends or its service key is deleted, non-reversible information used only to match new abuse reports may remain for up to 90 days and cannot be used to make a call. The minimum target and donation-source relationship already saved for a report follows that case's own 90-day period or an active legal preservation requirement. Viewing a record does not extend these periods, and legal preservation does not extend the new-report matching period. Game rounds, settlements, and shared results are kept for 30 days after settlement; a paid but unfinished round remains until settlement, and a private Rock Paper Scissors result remains until you acknowledge it or delete the account. LinkLink boards show each user's best completed score by size over 7 or 30 days, with earlier achievements first for equal scores. Fishing personal bests, asset-tagged credit changes, profile-visibility preferences, and the completion time and award for each once-only game newcomer task remain for the life of the account. Newcomer completion records are included in your export and deleted with your account. Administrators and current level-5 stewards can read non-administrator account profiles, limits, levels, both wallets and usage. Stewards may modify only other current level-1–4 accounts and cannot delete accounts or change cumulative donor credit; they can also manage announcements and donated-key failure streaks. These actions retain audits without secrets. Announcement audits last 365 days with actor identity removed after 90 days; donation reviews follow the 400-day donation retention. Debug content is not stored long term. Sign-in sessions expire after inactivity or their maximum lifetime. Resolved administrator alerts are cleared after 30 days; unresolved alerts are subject to number limits and duplicate merging. Export version 6 allows up to 10,000 rows in each collection and 16 MiB for the complete JSON. An oversized export fails clearly and is not shortened. Account deletion invalidates sign-in sessions and account API keys, clears linked private data, and keeps only necessary facts without personal identity for the periods described above. Late callbacks cannot recreate the account. Complete operator backups and third-party services may retain copies under their own policies.",
         "rightsTitle": "Your controls and rights",
         "rightsBody": "Subject to applicable law and the instance operator's process, you can update supported account settings, request an export and delete your account through the elevated self-service flow. Deletion is destructive. Contact the instance operator for access, correction, restriction or other privacy requests; the operator must publish the appropriate contact channel before production use.",
         "securityTitle": "Security boundaries",
@@ -687,11 +689,11 @@
         "reconciled": "Live activity status updated.",
         "recoveryFailed": "Live recovery could not refresh the state. Retry the page read before acting."
       },
-      "poolBalance": "Pool balance",
+      "poolBalance": "Pool balance (general credits)",
       "poolUnavailable": "Unavailable",
       "siteDay": "Site day",
       "welfare": {
-        "title": "Daily welfare",
+        "title": "Daily game welfare",
         "state": {
           "unavailable": "Unavailable",
           "available": "Available",
@@ -702,18 +704,19 @@
         },
         "body": {
           "unavailable": "Welfare claims are not available under the current master state.",
-          "available": "Your current balance is below the threshold.",
+          "available": "Your game credits are below the threshold.",
           "claimed": "This account has already completed today's welfare claim.",
           "ineligible": "This account does not currently satisfy the welfare eligibility rules.",
           "empty": "The remaining pool cannot produce a non-zero award under the current rules.",
           "configuration_error": "A valid welfare configuration could not be determined."
         },
-        "availableAmount": "Available award",
-        "threshold": "Balance threshold",
+        "availableAmount": "Available game credits",
+        "threshold": "Game-credit threshold",
         "claimedToday": "Claimed today",
         "zeroAward": "No non-zero award is available.",
-        "claimedAmount": "Awarded",
-        "claim": "Claim welfare"
+        "claimedAmount": "Game credits awarded",
+        "claim": "Claim welfare",
+        "funding": "The pool spends general credits to issue game credits. Eligibility counts your game wallet and unspent game credits in fishing or RPS."
       },
       "thursday": {
         "title": "Crazy Thursday",
@@ -734,6 +737,10 @@
           "configuration_error": "Configuration error."
         },
         "currentPoolBalance": "Current pool",
+        "currentPeriod": "Current period",
+        "nextPreview": "Next period preview",
+        "perUserLimit": "Contributions per person",
+        "closesAt": "Closes at",
         "nextPoolBalance": "Next pool",
         "fixedEntry": "Fixed contribution",
         "myCount": "My contributions",

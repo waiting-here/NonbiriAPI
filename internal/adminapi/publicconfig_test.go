@@ -315,7 +315,7 @@ func TestReadPublicConfigMultilineCopyPreservesNewlines(t *testing.T) {
 	store := openGenerationTwoPublicConfigStore(t)
 	const doc = "## Operator\n\nAcme Corp.\n\t- item one\n- item two"
 	for _, k := range []string{KeyLegalPrivacyOverrideZh, KeyLegalTermsOverrideEn, KeyCharityDonationNoticeZh} {
-		if err := store.SetSiteConfigValue(k, doc); err != nil {
+		if err := store.SetSiteConfigValue(k, strings.ReplaceAll(doc, "\n", "\r\n")); err != nil {
 			t.Fatalf("set %s: %v", k, err)
 		}
 	}

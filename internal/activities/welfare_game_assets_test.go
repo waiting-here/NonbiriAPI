@@ -23,13 +23,13 @@ func TestWelfareGameHoldsEnterAndLeaveAssetSnapshot(t *testing.T) {
 INSERT INTO game_fishing_batches(
  id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,
  operation_id,request_hash,state,ledger_rows_remaining,attempt_count,next_attempt_at,
- last_error_class,retry_exhausted,created_at,settled_at,revealed_at)
-VALUES(?,?,'worm',1,20,20,0,?,?, 'reserved',?,0,?,NULL,0,?,NULL,NULL)`,
+ last_error_class,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli,net_payout_total_milli)
+VALUES(?,?,'worm',1,20,20,0,?,?, 'reserved',?,0,?,NULL,0,?,NULL,NULL,2,13,0)`,
 		fishingID, userID, mustActivityID(t, "op_"), make([]byte, 32), one,
 		fixture.clock.Load()+120, fixture.clock.Load()); err != nil {
 		t.Fatal(err)
 	}
-	assertWelfareAssets(t, fixture, userID, "20")
+	assertWelfareAssets(t, fixture, userID, "13")
 	if _, err := fixture.store.DB().Exec(`DELETE FROM game_fishing_batches WHERE id=?`, fishingID); err != nil {
 		t.Fatal(err)
 	}
@@ -48,17 +48,17 @@ VALUES(?,?,'worm',1,20,20,0,?,?, 'reserved',?,0,?,NULL,0,?,NULL,NULL)`,
 	if _, err := tx.Exec(`
 INSERT INTO game_rps_queue(
  id,user_id,account_id,mode,revision,reservation_operation_id,reserved,
- ledger_rows_remaining,device_token_hash,source_ip_hash,deadline,created_at)
-VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?)`, queueID, userID, queueAccount.ID, one,
+ ledger_rows_remaining,device_token_hash,source_ip_hash,deadline,created_at,rules_version,game_paid)
+VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?,2,?)`, queueID, userID, queueAccount.ID, one,
 		mustActivityID(t, "op_"), db.EncodeU128(mustActivityU128(t, "30")), one,
-		make([]byte, 32), make([]byte, 32), fixture.clock.Load()+60, fixture.clock.Load()); err != nil {
+		make([]byte, 32), make([]byte, 32), fixture.clock.Load()+60, fixture.clock.Load(), db.EncodeU128(mustActivityU128(t, "18"))); err != nil {
 		tx.Rollback()
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	assertWelfareAssets(t, fixture, userID, "30")
+	assertWelfareAssets(t, fixture, userID, "18")
 	if _, err := fixture.store.DB().Exec(`DELETE FROM game_rps_queue WHERE id=?`, queueID); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ INSERT INTO game_rps_sessions(
  base_round_count,paid_tie_count,free_tie_count,paid_pool_streak,free_pool_streak,
  platform_cut_total,welfare_cut_total,thursday_cut_total,welfare_carry_total,
  phase_deadline,recent_first_seq,recent_last_seq,terminal_retry_attempt_count,started_at)
-VALUES(?,?,'quick',1,'started','gesture',?,?,?,?,?,5,0,0,0,20,15,15,?,?,?,
+VALUES(?,?,'quick',2,'started','gesture',?,?,?,?,?,5,0,0,0,20,15,15,?,?,?,
  ?,?,?,?,?,?,?,?,?,?,?,?, ?,?)`,
 		sessionID, sessionAccount.ID, one, one, one, zero, zero, forty, one, one,
 		zero, zero, zero, zero, zero, zero, zero, zero, zero,
@@ -95,16 +95,20 @@ VALUES(?,?,'quick',1,'started','gesture',?,?,?,?,?,5,0,0,0,20,15,15,?,?,?,
 INSERT INTO game_rps_seats(
  session_id,seat_no,user_id,deletion_state,starting_balance,current_balance,
  current_round_input,current_all_in,total_input,total_returned,rock_count,
- scissors_count,paper_count,timeout_count)
-VALUES(?,0,?,'active',?,?,?,0,?,?,?,?,?,?)`, sessionID, userID, forty, forty, zero,
-		make([]byte, 32), make([]byte, 32), zero, zero, zero, zero); err != nil {
+ scissors_count,paper_count,timeout_count,game_buy_in,game_remaining)
+VALUES(?,0,?,'active',?,?,?,0,?,?,?,?,?,?,?,?)`, sessionID, userID, forty, forty, zero,
+		make([]byte, 32), make([]byte, 32), zero, zero, zero, zero, db.EncodeU128(mustActivityU128(t, "25")), db.EncodeU128(mustActivityU128(t, "25"))); err != nil {
 		tx.Rollback()
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	assertWelfareAssets(t, fixture, userID, "40")
+	assertWelfareAssets(t, fixture, userID, "25")
+	if _, err := fixture.store.DB().Exec(`UPDATE game_rps_seats SET game_remaining=? WHERE session_id=? AND seat_no=0`, db.EncodeU128(mustActivityU128(t, "10")), sessionID); err != nil {
+		t.Fatal(err)
+	}
+	assertWelfareAssets(t, fixture, userID, "10")
 	if _, err := fixture.store.DB().Exec(`DELETE FROM game_rps_sessions WHERE id=?`, sessionID); err != nil {
 		t.Fatal(err)
 	}
@@ -113,9 +117,10 @@ VALUES(?,0,?,'active',?,?,?,0,?,?,?,?,?,?)`, sessionID, userID, forty, forty, ze
 
 func TestWelfareWidePositiveAssetsAreIneligibleAndClaimConflictsWithoutWrites(t *testing.T) {
 	fixture := newActivityFixture(t, 1_804_000_100)
-	userID, wallet := fixture.seedUser("wide-positive-assets", false)
-	fixture.fundUser(userID, db.MaxMoneyMilli)
-	fixture.fundUser(userID, 1)
+	userID, _ := fixture.seedUser("wide-positive-assets", false)
+	wallet := fixture.gameWallet(userID)
+	fixture.fundGame(userID, db.MaxMoneyMilli)
+	fixture.fundGame(userID, 1)
 	wideTotal := big.NewInt(db.MaxMoneyMilli + 1)
 	assertWelfareAssets(t, fixture, userID, wideTotal.String())
 	validateLedgerRecovery(t, fixture.store.DB())
@@ -139,9 +144,10 @@ func TestWelfareWidePositiveAssetsAreIneligibleAndClaimConflictsWithoutWrites(t 
 
 func TestWelfareWideNegativeWalletCanClaimAndConservesBalance(t *testing.T) {
 	fixture := newActivityFixture(t, 1_804_000_200)
-	userID, wallet := fixture.seedUser("wide-negative-wallet", false)
-	fixture.fundUser(userID, -db.MaxMoneyMilli)
-	fixture.fundUser(userID, -1000)
+	userID, _ := fixture.seedUser("wide-negative-wallet", false)
+	wallet := fixture.gameWallet(userID)
+	fixture.fundGame(userID, -db.MaxMoneyMilli)
+	fixture.fundGame(userID, -1000)
 	var welfarePoolID string
 	var welfarePoolAccountID int64
 	if err := fixture.store.DB().QueryRow(`
@@ -171,7 +177,7 @@ SELECT id,account_id FROM shared_pools WHERE pool_type='welfare' AND state='open
 	afterPool := readActivityAccountBalance(t, fixture.store.DB(), welfarePoolAccountID)
 	walletDelta := new(big.Int).Sub(afterWallet, beforeWallet)
 	poolDelta := new(big.Int).Sub(afterPool, beforePool)
-	if claimed.Value.Awarded != "0.1" || claimed.Value.Balance != formatMilliPoints(afterWallet) ||
+	if claimed.Value.Awarded != "0.1" || claimed.Value.GameBalance != formatMilliPoints(afterWallet) || claimed.Value.Balance != "0" ||
 		claimed.Value.PoolBalance != "0.9" || !facts.Global || walletDelta.Cmp(big.NewInt(100)) != 0 ||
 		poolDelta.Cmp(big.NewInt(-100)) != 0 || new(big.Int).Add(walletDelta, poolDelta).Sign() != 0 ||
 		new(big.Int).Abs(afterWallet).Cmp(big.NewInt(db.MaxMoneyMilli)) <= 0 {
@@ -186,9 +192,6 @@ func TestWelfareAssetSourceValuesRemainStrict(t *testing.T) {
 		name string
 		add  func(*big.Int) error
 	}{
-		{name: "negative logical request hold", add: func(total *big.Int) error {
-			return addWelfareNonnegativeInt(total, -1)
-		}},
 		{name: "negative fishing hold", add: func(total *big.Int) error {
 			return addWelfareNonnegativeInt(total, -1)
 		}},

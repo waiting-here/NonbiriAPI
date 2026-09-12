@@ -56,10 +56,14 @@ func replayQueue(decision idempotency.Decision) (QueueMutationResult, error) {
 }
 
 func (service *Service) Enqueue(ctx context.Context, input EnqueueInput) (QueueMutationResult, error) {
+	return service.enqueue(ctx, input, 2)
+}
+
+func (service *Service) enqueue(ctx context.Context, input EnqueueInput, rulesVersion int) (QueueMutationResult, error) {
 	if service == nil || service.closed.Load() {
 		return QueueMutationResult{}, ErrClosed
 	}
-	if input.UserID <= 0 || rpsconfig.Descriptor().ResolveMode(input.Mode) != nil ||
+	if input.UserID <= 0 || rulesVersion < 1 || rulesVersion > 2 || rpsconfig.Descriptor().ResolveMode(input.Mode) != nil ||
 		(input.Mode == game.RPSModeDeathmatch) != input.DeathmatchConfirmed {
 		return QueueMutationResult{}, ErrInvalidRequest
 	}
@@ -153,11 +157,25 @@ func (service *Service) Enqueue(ctx context.Context, input EnqueueInput) (QueueM
 	if err != nil {
 		return QueueMutationResult{}, mapLedger(err)
 	}
+	gameBalance := ledger.Amount{}
+	if rulesVersion == 2 {
+		gameAccount, err := ledger.UserAssetAccount(ctx, tx, input.UserID, ledger.Game)
+		if err != nil {
+			return QueueMutationResult{}, mapLedger(err)
+		}
+		gameBalance = gameAccount.Balance
+	}
 	reserveBig := big.NewInt(config.BaseMilli)
 	if input.Mode == game.RPSModeStandard {
 		reserveBig.Mul(reserveBig, big.NewInt(rpsconfig.RPSStandardMultiplier))
 	} else if input.Mode == game.RPSModeDeathmatch {
-		reserveBig = account.Balance.Big()
+		reserveBig = new(big.Int)
+		if account.Balance.Sign() > 0 {
+			reserveBig.Add(reserveBig, account.Balance.Big())
+		}
+		if gameBalance.Sign() > 0 {
+			reserveBig.Add(reserveBig, gameBalance.Big())
+		}
 	}
 	if reserveBig.Sign() <= 0 || reserveBig.Cmp(big.NewInt(config.BaseMilli)) < 0 {
 		return QueueMutationResult{}, ErrInsufficientCredits
@@ -169,6 +187,14 @@ func (service *Service) Enqueue(ctx context.Context, input EnqueueInput) (QueueM
 	amount, err := ledger.AmountFromBig(reserveBig)
 	if err != nil {
 		return QueueMutationResult{}, ErrInvariant
+	}
+	payment, err := ledger.SplitGamePayment(amount, account.Balance, gameBalance)
+	if err != nil {
+		return QueueMutationResult{}, mapLedger(err)
+	}
+	gamePaid, err := u128(payment.Game.Big())
+	if err != nil {
+		return QueueMutationResult{}, err
 	}
 	queueID, err := service.generate("rpsq_")
 	if err != nil {
@@ -183,12 +209,12 @@ func (service *Service) Enqueue(ctx context.Context, input EnqueueInput) (QueueM
 	if deadline < now || deadline > 253402300799 {
 		return QueueMutationResult{}, ErrServiceUnavailable
 	}
-	queueAccountID, err := service.finance.QueueReserve(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now}, ResourceID: queueID, UserID: input.UserID, Amount: amount}, func(ctx context.Context, tx *sql.Tx, queueAccountID int64) error {
+	queueAccountID, err := service.finance.QueueReserve(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now}, ResourceID: queueID, UserID: input.UserID, Amount: amount, GamePaid: payment.Game}, func(ctx context.Context, tx *sql.Tx, queueAccountID int64) error {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_queue(
 id,user_id,account_id,mode,revision,reservation_operation_id,reserved,ledger_rows_remaining,
-device_token_hash,source_ip_hash,deadline,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+device_token_hash,source_ip_hash,deadline,created_at,rules_version,game_paid) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			queueID, input.UserID, queueAccountID, input.Mode, db.EncodeU128(one), operationID,
-			db.EncodeU128(reserved), db.EncodeU128(one), deviceHash[:], ipHash[:], deadline, now); err != nil {
+			db.EncodeU128(reserved), db.EncodeU128(one), deviceHash[:], ipHash[:], deadline, now, rulesVersion, db.EncodeU128(gamePaid)); err != nil {
 			return classifyDB(err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_user_slots(user_id,queue_id,session_id,created_at) VALUES(?,?,NULL,?)`, input.UserID, queueID, now); err != nil {
@@ -201,7 +227,7 @@ device_token_hash,source_ip_hash,deadline,created_at) VALUES(?,?,?,?,?,?,?,?,?,?
 	}
 	record := queueRecord{
 		ID: queueID, UserID: input.UserID, AccountID: queueAccountID, Mode: input.Mode, Revision: one,
-		ReservationOperationID: operationID, Reserved: reserved, LedgerRowsRemaining: one,
+		ReservationOperationID: operationID, Reserved: reserved, GamePaid: gamePaid, RulesVersion: rulesVersion, LedgerRowsRemaining: one,
 		DeviceHash: deviceHash, IPHash: ipHash, Deadline: deadline, CreatedAt: now,
 	}
 	queue := queueView(record, now)
@@ -297,7 +323,11 @@ func (service *Service) releaseQueueTx(ctx context.Context, tx *sql.Tx, record q
 	if err != nil {
 		return ErrInvariant
 	}
-	err = service.finance.QueueRelease(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: actorUserID, CreatedAt: now}, ResourceID: record.ID, UserID: record.UserID, Amount: amount}, func(ctx context.Context, tx *sql.Tx) error {
+	gamePaid, err := ledger.AmountFromBig(record.GamePaid.Big())
+	if err != nil {
+		return ErrInvariant
+	}
+	err = service.finance.QueueRelease(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: actorUserID, CreatedAt: now}, ResourceID: record.ID, UserID: record.UserID, Amount: amount, GamePaid: gamePaid}, func(ctx context.Context, tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `DELETE FROM game_rps_queue WHERE id=? AND user_id=? AND revision=? AND ledger_rows_remaining=?`,
 			record.ID, record.UserID, db.EncodeU128(record.Revision), db.EncodeU128(record.LedgerRowsRemaining))
 		if err != nil {

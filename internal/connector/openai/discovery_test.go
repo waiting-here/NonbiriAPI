@@ -89,6 +89,13 @@ func TestModelDiscoveryTypedSuccessNonemptyAndEmpty(t *testing.T) {
 		wantModels []connectorcontract.DiscoveredModel
 	}{
 		{
+			name: "duplicate IDs keep the first metadata",
+			body: `{"data":[{"id":" model-b "},{"id":"model-a","owned_by":"first"},{"id":"model-b","owned_by":"later"},{"id":"model-a","owned_by":"other"}]}`,
+			wantModels: []connectorcontract.DiscoveredModel{
+				{ID: "model-b", Provider: ""}, {ID: "model-a", Provider: "first"},
+			},
+		},
+		{
 			name: "nonempty",
 			body: `{"data":[{"id":"model-a","owned_by":"provider-a"},{"id":"model-b"}]}`,
 			wantModels: []connectorcontract.DiscoveredModel{
@@ -406,6 +413,18 @@ func TestModelDiscoveryRejectsCredentialReflection(t *testing.T) {
 			plaintext:  "sk-reflected",
 			ciphertext: "cipher-safe",
 			body:       `{"data":[{"id":"sk-\u0072eflected"}]}`,
+		},
+		{
+			name:       "decoded plaintext in discarded provider",
+			plaintext:  "sk-reflected",
+			ciphertext: "cipher-safe",
+			body:       `{"data":[{"id":"model","owned_by":""},{"id":"model","owned_by":"sk-\u0072eflected"}]}`,
+		},
+		{
+			name:       "decoded ciphertext in discarded provider",
+			plaintext:  "sk-safe",
+			ciphertext: "cipher-reflected",
+			body:       `{"data":[{"id":"model"},{"id":"model","owned_by":"cipher-\u0072eflected"}]}`,
 		},
 		{
 			name:       "decoded ciphertext",

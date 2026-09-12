@@ -84,6 +84,14 @@ func (service *Service) decisionNow() (int64, error) {
 // Status returns the current check-in projection without writing lazy level
 // promotion or any other database fact.
 func (service *Service) Status(ctx context.Context, userID int64) (Status, error) {
+	return service.StatusForAsset(ctx, userID, ledger.General)
+}
+
+func (service *Service) StatusForAsset(ctx context.Context, userID int64, asset ledger.Asset) (Status, error) {
+	source, err := sourceForAsset(asset)
+	if err != nil {
+		return Status{}, err
+	}
 	if service == nil || service.database == nil || ctx == nil || userID <= 0 {
 		return Status{}, ErrInvalidRequest
 	}
@@ -99,7 +107,7 @@ func (service *Service) Status(ctx context.Context, userID int64) (Status, error
 	if err := service.authorize(ctx, tx, userID, now); err != nil {
 		return Status{}, err
 	}
-	day, config, err := readSiteDayAndConfig(ctx, tx, now)
+	day, config, err := readSiteDayAndConfig(ctx, tx, now, source)
 	if errors.Is(err, ErrFeatureDisabled) {
 		return Status{Enabled: false}, nil
 	}
@@ -115,13 +123,13 @@ func (service *Service) Status(ctx context.Context, userID int64) (Status, error
 			return Status{Enabled: false}, nil
 		}
 	}
-	wallet, err := ledger.UserAccount(ctx, tx, userID)
+	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
 	if err != nil {
 		return Status{}, mapLedgerError("read status account", err)
 	}
 	var checked int
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM checkins WHERE user_id=? AND site_day=?
+		SELECT 1 FROM `+source.table+` WHERE user_id=? AND site_day=?
 	)`, userID, day.siteDate).Scan(&checked); err != nil {
 		return Status{}, classifyDatabase("read status row", err)
 	}
@@ -129,7 +137,7 @@ func (service *Service) Status(ctx context.Context, userID int64) (Status, error
 		return Status{}, ErrInvariant
 	}
 	return Status{
-		Enabled: true, CheckedInToday: checked == 1, Balance: formatMilliPoints(wallet.Balance.Big()),
+		Enabled: true, Asset: asset, CheckedInToday: checked == 1, Balance: formatMilliPoints(wallet.Balance.Big()),
 		AwardMinimum: formatMilliPoints(big.NewInt(config.awardMin)),
 		AwardMaximum: formatMilliPoints(big.NewInt(config.awardMax)),
 		BalanceCap:   formatMilliPoints(big.NewInt(config.balanceCap)),
@@ -140,6 +148,14 @@ func (service *Service) Status(ctx context.Context, userID int64) (Status, error
 // configuration, ledger, activity, and timezone-freeze decision is part of
 // this one transaction.
 func (service *Service) Checkin(ctx context.Context, userID int64) (Result, error) {
+	return service.CheckinForAsset(ctx, userID, ledger.General)
+}
+
+func (service *Service) CheckinForAsset(ctx context.Context, userID int64, asset ledger.Asset) (Result, error) {
+	source, err := sourceForAsset(asset)
+	if err != nil {
+		return Result{}, err
+	}
 	if service == nil || service.database == nil || ctx == nil || userID <= 0 {
 		return Result{}, ErrInvalidRequest
 	}
@@ -160,7 +176,7 @@ func (service *Service) Checkin(ctx context.Context, userID int64) (Result, erro
 	if err := service.authorize(ctx, tx, userID, now); err != nil {
 		return Result{}, err
 	}
-	day, config, err := readSiteDayAndConfig(ctx, tx, now)
+	day, config, err := readSiteDayAndConfig(ctx, tx, now, source)
 	if err != nil {
 		return Result{}, err
 	}
@@ -171,14 +187,14 @@ func (service *Service) Checkin(ctx context.Context, userID int64) (Result, erro
 	if config.mode == db.CheckinModeLevelGated && level < 3 {
 		return Result{}, ErrFeatureDisabled
 	}
-	wallet, err := ledger.UserAccount(ctx, tx, userID)
+	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
 	if err != nil {
 		return Result{}, mapLedgerError("read check-in account", err)
 	}
 	if config.balanceCap > 0 && wallet.Balance.Big().Cmp(big.NewInt(config.balanceCap)) >= 0 {
 		return Result{}, ErrBalanceCap
 	}
-	external, err := ledger.CodedAccount(ctx, tx, "external")
+	external, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
 	if err != nil {
 		return Result{}, mapLedgerError("read external account", err)
 	}
@@ -190,34 +206,18 @@ func (service *Service) Checkin(ctx context.Context, userID int64) (Result, erro
 	if err != nil || !db.ValidateOpaqueID(operationID, "op_") {
 		return Result{}, ErrUnavailable
 	}
-	firstCheckin, err := temporalTableEmpty(ctx, tx, "checkins")
-	if err != nil {
-		return Result{}, err
+	var checked int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+source.table+` WHERE user_id=? AND site_day=?)`, userID, day.siteDate).Scan(&checked); err != nil {
+		return Result{}, classifyDatabase("read check-in slot", err)
 	}
-	firstUserActivity, err := temporalTableEmpty(ctx, tx, "user_activity_daily")
-	if err != nil {
-		return Result{}, err
+	if checked != 0 {
+		return Result{}, ErrAlreadyCheckedIn
 	}
-	firstSiteActivity, err := temporalTableEmpty(ctx, tx, "site_activity_daily")
-	if err != nil {
-		return Result{}, err
+	awardPlan := ledger.NewCheckinAward
+	if asset == ledger.Game {
+		awardPlan = ledger.NewGameCheckinAward
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO checkins(
-		user_id,site_day,award_milli,operation_id,created_at
-	) VALUES(?,?,?,?,?)`, userID, day.siteDate, award, operationID, now); err != nil {
-		var exists int
-		probeErr := tx.QueryRowContext(ctx, `SELECT EXISTS(
-			SELECT 1 FROM checkins WHERE user_id=? AND site_day=?
-		)`, userID, day.siteDate).Scan(&exists)
-		if probeErr == nil && exists == 1 {
-			return Result{}, ErrAlreadyCheckedIn
-		}
-		return Result{}, classifyDatabase("insert check-in", err)
-	}
-	if err := ledger.CheckImmediateCapacity(ctx, tx, db.U128{}); err != nil {
-		return Result{}, mapLedgerError("check capacity", err)
-	}
-	plan, err := ledger.NewCheckinAward(ledger.Meta{
+	plan, err := awardPlan(ledger.Meta{
 		OperationID: operationID, ActorUserID: userID, CreatedAt: now,
 	}, wallet.ID, external.ID, ledger.AmountFromMilli(award))
 	if err != nil {
@@ -226,23 +226,22 @@ func (service *Service) Checkin(ctx context.Context, userID int64) (Result, erro
 	if _, err := ledger.Apply(ctx, tx, plan); err != nil {
 		return Result{}, mapLedgerError("apply check-in award", err)
 	}
-	if err := recordCheckinActivity(ctx, tx, userID, day.activityDay, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO `+source.table+`(
+		user_id,site_day,award_milli,operation_id,created_at
+	) VALUES(?,?,?,?,?)`, userID, day.siteDate, award, operationID, now); err != nil {
+		return Result{}, classifyDatabase("insert check-in", err)
+	}
+	if err := recordCheckinActivity(ctx, tx, userID, day.activityDay, now, source.table); err != nil {
 		return Result{}, err
 	}
-	if firstCheckin || firstUserActivity || firstSiteActivity {
-		if err := freezeTimezone(ctx, tx, now); err != nil {
-			return Result{}, err
-		}
-	}
-	walletAfter, err := ledger.UserAccount(ctx, tx, userID)
-	if err != nil {
-		return Result{}, mapLedgerError("read awarded account", err)
+	if err := freezeTimezone(ctx, tx, now); err != nil {
+		return Result{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return Result{}, classifyDatabase("commit check-in", err)
 	}
 	committed = true
-	return Result{Award: formatMilliPoints(big.NewInt(award)), Balance: formatMilliPoints(walletAfter.Balance.Big())}, nil
+	return Result{Asset: asset, Award: formatMilliPoints(big.NewInt(award)), Balance: formatMilliPoints(new(big.Int).Add(wallet.Balance.Big(), big.NewInt(award)))}, nil
 }
 
 func (service *Service) authorize(ctx context.Context, tx *sql.Tx, userID, now int64) error {

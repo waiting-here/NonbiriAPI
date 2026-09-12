@@ -1,5 +1,5 @@
 import type { PublicIdentity } from '../common/strict';
-import type { Bait } from '../common/types';
+import type { Bait, GamePayment } from '../common/types';
 
 export const FISHING_TIERS = [
   'small',
@@ -12,7 +12,15 @@ export const FISHING_TIERS = [
 ] as const;
 export type FishingTier = (typeof FISHING_TIERS)[number];
 
+export interface FishingRake {
+  readonly platform: string;
+  readonly welfare: string;
+  readonly thursday: string;
+}
+
 export interface FishingOutcome {
+  readonly netReward: string;
+  readonly rake: FishingRake;
   readonly ordinal: number;
   readonly speciesKey: string;
   readonly tier: FishingTier;
@@ -23,6 +31,10 @@ export interface FishingOutcome {
 }
 
 export interface FishingBatchResult {
+  readonly netPayoutTotal: string;
+  readonly rake: FishingRake;
+  readonly rulesVersion: number;
+  readonly payment: GamePayment;
   readonly batchID: string;
   readonly bait: Bait;
   readonly count: 1 | 10;
@@ -31,11 +43,14 @@ export interface FishingBatchResult {
   readonly outcomes: readonly FishingOutcome[];
   readonly payoutTotal: string;
   readonly balance: string;
+  readonly gameBalance: string;
   readonly settledAt: number;
   readonly idempotentReplay: boolean;
 }
 
 export interface FishingSettlementPending {
+  readonly rulesVersion: number;
+  readonly payment: GamePayment;
   readonly batchID: string;
   readonly bait: Bait;
   readonly count: 1 | 10;

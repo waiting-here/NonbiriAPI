@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import { FishingGame } from './FishingGame';
@@ -15,7 +15,7 @@ function resultWire(batchID: string, count: 1 | 10) {
     species_key: 'whitebait',
     tier: 'small',
     size_cm: 12,
-    reward: '1',
+    reward: '1', net_reward: '1', rake: { platform: '0', welfare: '0', thursday: '0' },
   }));
   return {
     batch_id: batchID,
@@ -23,9 +23,12 @@ function resultWire(batchID: string, count: 1 | 10) {
     count,
     unit_price: '1',
     entry_total: String(count),
+    rules_version: 1,
+    payment: { general: String(count), game: '0' },
     outcomes,
-    payout_total: String(count),
+    payout_total: String(count), net_payout_total: String(count), rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567890.125',
+    game_balance: '0',
     settled_at: 1_800_000_000,
     idempotent_replay: false,
   };
@@ -91,6 +94,8 @@ function pendingWire(batchID = NEW_BATCH_ID) {
     bait: 'worm',
     count: 1,
     entry_total: '1',
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
     state: 'settlement_pending',
     next_attempt_at: 1_800_000_120,
     retry_exhausted: false,
@@ -120,6 +125,31 @@ async function flushZeroTimers() {
 afterEach(() => vi.useRealTimers());
 
 describe('Fishing result presentation and queue recovery', () => {
+  it('shows net general income with expandable deductions and spends a positive game wallet independently', async () => {
+    vi.useFakeTimers();
+    stubReducedMotion(true);
+    const result = resultWire(OLD_BATCH_ID, 1);
+    result.rules_version = 2;
+    result.net_payout_total = '0.97';
+    result.rake = { platform: '0.01', welfare: '0.01', thursday: '0.01' };
+    result.outcomes[0].net_reward = '0.97';
+    result.outcomes[0].rake = { ...result.rake };
+    const snapshot = { ...gamesSnapshotWire(), balance: '-100', game_balance: '10' };
+    installJsonFetchFixtures(fishingFixtures(stateWire(result)).map((fixture) =>
+      fixture.path === '/api/games' ? { ...fixture, body: snapshot } : fixture));
+    const rendered = await renderWithProviders(<FishingGame />, { station: 'user', route: '/games/fishing', role: 'user' });
+    await flushInitialFishing();
+    expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
+    const catchList = within(screen.getByRole('list', { name: 'Your catch is ready' }));
+    expect(catchList.getByText('Net: 0.97 general credits')).toBeVisible();
+    const details = catchList.getByText('Gross catch and deductions').closest('details')!;
+    expect(details).not.toHaveAttribute('open');
+    fireEvent.click(within(details).getByText('Gross catch and deductions'));
+    expect(details).toHaveAttribute('open');
+    expect(within(details).getByText('Welfare pool deduction')).toBeVisible();
+    rendered.unmount();
+  });
+
   it('disables start until the previous batch is fully presented and ignores rapid clicks', async () => {
     vi.useFakeTimers();
     stubReducedMotion(false);
@@ -142,7 +172,7 @@ describe('Fishing result presentation and queue recovery', () => {
     await flushInitialFishing();
     const start = screen.getByRole('button', { name: 'Start fishing' });
     expect(visibleBatchID()).toBe(OLD_BATCH_ID);
-    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).queryAllByRole('listitem')).toHaveLength(0);
     expect(start).toBeDisabled();
     fireEvent.click(start);
     fireEvent.click(start);
@@ -311,7 +341,7 @@ describe('Fishing result presentation and queue recovery', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FISHING_REVEAL_MS);
     });
-    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem')).toHaveLength(1);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
     });
@@ -323,7 +353,7 @@ describe('Fishing result presentation and queue recovery', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(220);
     });
-    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem')).toHaveLength(2);
     rendered.unmount();
   });
 
@@ -441,7 +471,7 @@ describe('Fishing result presentation and queue recovery', () => {
     });
     expect(screen.getByRole('button', { name: 'Retry marking as viewed' })).toBeInTheDocument();
     expect(firstAcknowledgements).toBe(1);
-    expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Your catch is ready' })).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);

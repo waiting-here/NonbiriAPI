@@ -48,6 +48,7 @@ type AdminUser struct {
 	ConcurrencyLimit          *string        `json:"concurrency_limit"`
 	EffectiveConcurrencyLimit string         `json:"effective_concurrency_limit"`
 	Lang                      string         `json:"lang"`
+	GameBalance               string         `json:"game_balance"`
 	Balance                   string         `json:"balance"`
 	DonationCredit            string         `json:"donation_credit"`
 	Level                     AdminUserLevel `json:"level"`
@@ -72,6 +73,7 @@ type ActivityDay struct {
 	CacheReadInputTokens  string  `json:"cache_read_input_tokens"`
 	OutputTokens          string  `json:"output_tokens"`
 	Checkins              string  `json:"checkins"`
+	GameCheckins          string  `json:"game_checkins"`
 	ConsoleWrites         string  `json:"console_writes"`
 	GameActive            bool    `json:"game_active"`
 	GameRounds            string  `json:"game_rounds"`
@@ -101,6 +103,7 @@ type EndpointOverview struct {
 }
 
 type UserListQuery struct {
+	Level    int
 	IsBanned *bool
 	Q        string
 	Cursor   string

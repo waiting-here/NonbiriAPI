@@ -39,6 +39,7 @@ func TestFishingLengthUpgradeUsesOnlyProvenCompleteSettlements(t *testing.T) {
 			hostileMustExec(t, database, `DELETE FROM game_fishing_batches WHERE id=?`, batch)
 		}
 	}
+	hostileMustExec(t, database, `UPDATE credit_capacity SET reserved_future_rows=? WHERE id=1`, hostileBlob16(1))
 	before := retainedTableImages(t, database, nil)
 	if err := store.Close(); err != nil {
 		t.Fatal(err)

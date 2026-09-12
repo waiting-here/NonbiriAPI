@@ -5,10 +5,12 @@ import {
   decimalValue,
   enumValue,
   exactRecord,
+  entryPayment,
   invalidResponse,
   opaqueID,
   safeInteger,
   unixTime,
+  publicIdentity,
 } from '../common/strict';
 import type {
   LinkLinkCurrent,
@@ -17,6 +19,11 @@ import type {
   LinkLinkTile,
   LinkLinkMatchIntent,
   LinkLinkMatchResult,
+  LinkLinkCoordinate,
+  LinkLinkHintIntent,
+  LinkLinkHintResult,
+  LinkLinkLeaderboard,
+  LinkLinkRank,
 } from './types';
 
 const DIMENSIONS: Readonly<Record<LinkLinkSpec, readonly [number, number]>> = {
@@ -29,6 +36,32 @@ const SECONDS: Readonly<Record<LinkLinkSpec, 150 | 180 | 240>> = {
   '8x8': 180,
   '10x10': 240,
 };
+const OPPORTUNITIES: Readonly<Record<LinkLinkSpec, number>> = { '6x8': 2, '8x8': 3, '10x10': 5 };
+
+function opportunities(record: Record<string, unknown>, rulesVersion: number, spec: LinkLinkSpec) {
+  if (
+    rulesVersion === 1 &&
+    record.opportunities_initial === undefined &&
+    record.opportunities_remaining === undefined
+  )
+    return { opportunitiesInitial: 0, opportunitiesRemaining: 0 };
+  const expected = rulesVersion === 2 ? OPPORTUNITIES[spec] : 0;
+  return {
+    opportunitiesInitial: safeInteger(
+      record.opportunities_initial,
+      expected,
+      expected,
+      'LinkLink initial opportunities',
+    ),
+    opportunitiesRemaining: safeInteger(
+      record.opportunities_remaining,
+      0,
+      expected,
+      'LinkLink remaining opportunities',
+    ),
+  };
+}
+
 const TILE_KEY = /^tile_[0-9]{2}$/;
 
 function specValue(value: unknown): LinkLinkSpec {
@@ -51,7 +84,7 @@ export function normalizeLinkLinkState(value: unknown): LinkLinkState {
       'deadline',
       'server_now',
     ],
-    [],
+    ['rules_version', 'payment', 'opportunities_initial', 'opportunities_remaining'],
     'LinkLink state',
   );
   const spec = specValue(record.spec);
@@ -112,11 +145,15 @@ export function normalizeLinkLinkState(value: unknown): LinkLinkState {
   const serverNow = unixTime(record.server_now, 'LinkLink server time');
   if (deadline - startedAt !== SECONDS[spec] || serverNow < startedAt || serverNow >= deadline)
     invalidResponse('LinkLink time range');
+  const price = creditsValue(record.price, { positive: true }, 'LinkLink price');
+  const funding = entryPayment(record, price, 'LinkLink');
   return {
+    ...funding,
+    ...opportunities(record, funding.rulesVersion, spec),
     kind: 'active',
     sessionID: opaqueID(record.session_id, 'll_', 'LinkLink session id'),
     spec,
-    price: creditsValue(record.price, { positive: true }, 'LinkLink price'),
+    price,
     revision: decimalValue(record.revision, { bits: 128, positive: true }, 'LinkLink revision'),
     board: { rows, cols, tiles },
     pairsRemoved,
@@ -142,7 +179,7 @@ export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
       'total_pairs',
       'score',
     ],
-    [],
+    ['rules_version', 'payment', 'opportunities_initial', 'opportunities_remaining'],
     'LinkLink summary',
   );
   const spec = specValue(record.spec);
@@ -183,15 +220,26 @@ export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
     invalidResponse('LinkLink terminal score');
   const score =
     record.score === null ? null : decimalValue(record.score, { bits: 256 }, 'LinkLink score');
+  const price = creditsValue(record.price, { positive: true }, 'LinkLink summary price');
+  const funding = entryPayment(record, price, 'LinkLink');
+  const assistance = opportunities(record, funding.rulesVersion, spec);
   if (score !== null) {
-    const expected = BigInt(pairsRemoved * 100) + BigInt(Math.max(0, deadline - terminalAt));
+    const expected = BigInt(
+      pairsRemoved * 100 +
+        Math.max(0, deadline - terminalAt) +
+        (funding.rulesVersion === 2 && terminalReason === 'completed'
+          ? assistance.opportunitiesRemaining * 100
+          : 0),
+    );
     if (BigInt(score) !== expected) invalidResponse('LinkLink score arithmetic');
   }
   return {
+    ...funding,
+    ...assistance,
     kind: 'summary',
     sessionID: opaqueID(record.session_id, 'll_', 'LinkLink summary id'),
     spec,
-    price: creditsValue(record.price, { positive: true }, 'LinkLink summary price'),
+    price,
     terminalReason,
     startedAt,
     deadline,
@@ -219,6 +267,10 @@ export function normalizeLinkLinkCurrent(value: unknown): LinkLinkCurrent {
       'started_at',
       'deadline',
       'server_now',
+      'rules_version',
+      'payment',
+      'opportunities_initial',
+      'opportunities_remaining',
       'terminal_reason',
       'terminal_at',
       'score',
@@ -249,9 +301,18 @@ export function normalizeLinkLinkMatch(
     : normalizeLinkLinkState(body);
   if (result.sessionID !== intent.sessionID) invalidResponse('LinkLink match session');
   if (rawPath === undefined) return { result, path: null };
+  return { result, path: normalizePath(rawPath, result.spec, intent.first, intent.second) };
+}
+
+function normalizePath(
+  rawPath: unknown,
+  spec: LinkLinkSpec,
+  first: LinkLinkCoordinate,
+  second: LinkLinkCoordinate,
+): readonly LinkLinkCoordinate[] {
   if (!Array.isArray(rawPath) || rawPath.length < 2 || rawPath.length > 4)
     invalidResponse('LinkLink match path');
-  const [rows, cols] = DIMENSIONS[result.spec];
+  const [rows, cols] = DIMENSIONS[spec];
   const path = rawPath.map((value) => {
     const point = exactRecord(value, ['row', 'col'], [], 'LinkLink path point');
     return {
@@ -260,10 +321,10 @@ export function normalizeLinkLinkMatch(
     };
   });
   if (
-    path[0].row !== intent.first.row ||
-    path[0].col !== intent.first.col ||
-    path.at(-1)?.row !== intent.second.row ||
-    path.at(-1)?.col !== intent.second.col
+    path[0].row !== first.row ||
+    path[0].col !== first.col ||
+    path.at(-1)?.row !== second.row ||
+    path.at(-1)?.col !== second.col
   )
     invalidResponse('LinkLink path endpoints');
   let previousAxis: string | null = null;
@@ -279,7 +340,7 @@ export function normalizeLinkLinkMatch(
     if (!axis || axis === previousAxis) invalidResponse('LinkLink path segment');
     previousAxis = axis;
   }
-  return { result, path };
+  return path;
 }
 
 export function boardWasRearranged(before: LinkLinkState, after: LinkLinkState): boolean {
@@ -313,4 +374,112 @@ export function shouldApplyLinkLinkReplacement(
   }
   if (next.kind === 'summary') return next.sessionID === current.sessionID;
   return next.sessionID !== current.sessionID;
+}
+
+export function normalizeLinkLinkHint(
+  value: unknown,
+  intent: LinkLinkHintIntent,
+): LinkLinkHintResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) invalidResponse('LinkLink hint');
+  const { hint: rawHint, reshuffled: rawReshuffled, ...body } = value as Record<string, unknown>;
+  const result = normalizeLinkLinkState(body);
+  const reshuffled = booleanValue(rawReshuffled, 'LinkLink refreshed');
+  if (
+    result.rulesVersion !== 2 ||
+    result.sessionID !== intent.sessionID ||
+    BigInt(result.revision) !== BigInt(intent.expectedRevision) + 1n
+  )
+    invalidResponse('LinkLink hint state');
+  if (rawHint === null) {
+    if (!reshuffled) invalidResponse('LinkLink missing hint');
+    return { result, hint: null, reshuffled };
+  }
+  if (reshuffled) invalidResponse('LinkLink mixed hint and refresh');
+  const hint = exactRecord(rawHint, ['first', 'second', 'path'], [], 'LinkLink hint pair');
+  const point = (value: unknown): LinkLinkCoordinate => {
+    const record = exactRecord(value, ['row', 'col'], [], 'LinkLink hint coordinate');
+    return {
+      row: safeInteger(record.row, 0, result.board.rows - 1, 'LinkLink hint row'),
+      col: safeInteger(record.col, 0, result.board.cols - 1, 'LinkLink hint column'),
+    };
+  };
+  const first = point(hint.first),
+    second = point(hint.second);
+  const firstTile = result.board.tiles.find(
+    (tile) => tile.row === first.row && tile.col === first.col,
+  );
+  const secondTile = result.board.tiles.find(
+    (tile) => tile.row === second.row && tile.col === second.col,
+  );
+  if (
+    !firstTile ||
+    !secondTile ||
+    firstTile === secondTile ||
+    firstTile.removed ||
+    secondTile.removed ||
+    firstTile.tileKey !== secondTile.tileKey
+  )
+    invalidResponse('LinkLink hint tiles');
+  return {
+    result,
+    reshuffled,
+    hint: { first, second, path: normalizePath(hint.path, result.spec, first, second) },
+  };
+}
+
+export function normalizeLinkLinkLeaderboard(
+  value: unknown,
+  spec: LinkLinkSpec,
+  windowDays: 7 | 30,
+): LinkLinkLeaderboard {
+  const record = exactRecord(
+    value,
+    ['spec', 'window_days', 'window_start', 'as_of', 'rules_version', 'rows', 'me'],
+    [],
+    'LinkLink leaderboard',
+  );
+  if (record.spec !== spec || record.window_days !== windowDays || record.rules_version !== 2)
+    invalidResponse('LinkLink leaderboard selection');
+  const asOf = unixTime(record.as_of, 'LinkLink leaderboard time');
+  const windowStart = unixTime(record.window_start, 'LinkLink leaderboard window');
+  if (
+    windowStart !== Math.max(0, asOf - windowDays * 86400) ||
+    !Array.isArray(record.rows) ||
+    record.rows.length > 20
+  )
+    invalidResponse('LinkLink leaderboard window or rows');
+  const row = (value: unknown): LinkLinkRank => {
+    const r = exactRecord(
+      value,
+      ['rank', 'score', 'achieved_at', 'identity', 'is_me'],
+      [],
+      'LinkLink rank',
+    );
+    const achievedAt = unixTime(r.achieved_at, 'LinkLink achievement');
+    const score = decimalValue(r.score, { bits: 128, positive: true }, 'LinkLink rank score');
+    const [rows, cols] = DIMENSIONS[spec];
+    if (
+      achievedAt <= windowStart ||
+      achievedAt > asOf ||
+      BigInt(score) < BigInt(((rows * cols) / 2) * 100) ||
+      BigInt(score) > BigInt(((rows * cols) / 2) * 100 + SECONDS[spec] + OPPORTUNITIES[spec] * 100)
+    )
+      invalidResponse('LinkLink rank achievement');
+    return {
+      rank: decimalValue(r.rank, { bits: 128, positive: true }, 'LinkLink rank'),
+      score,
+      achievedAt,
+      identity: publicIdentity(r.identity, 'LinkLink rank identity'),
+      isMe: booleanValue(r.is_me, 'LinkLink own rank'),
+    };
+  };
+  const rows = record.rows.map(row);
+  const me = record.me === null ? null : row(record.me);
+  if (
+    rows.some((r, index) => r.rank !== String(index + 1)) ||
+    rows.filter((r) => r.isMe).length > 1 ||
+    (me && (!me.isMe || BigInt(me.rank) <= 20n || rows.some((r) => r.isMe)))
+  )
+    invalidResponse('LinkLink rank positions');
+  return { spec, windowDays, windowStart, asOf, rows, me };
 }

@@ -25,7 +25,7 @@ func TestStartFishingAtomicOneTenAndAuthoritativeReplay(t *testing.T) {
 		userID := fixture.seedUser("atomic-"+test.bait+string(rune('a'+index)), fixtureFunding)
 		key := validTestKey(index + 1)
 		beforeCalls := fixture.random.callCount()
-		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: test.bait, Count: test.count, IdempotencyKey: key})
+		result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: test.bait, Count: test.count, IdempotencyKey: key})
 		if err != nil || pending != nil || result == nil {
 			t.Fatalf("start %s/%d = (%#v,%#v,%v)", test.bait, test.count, result, pending, err)
 		}
@@ -54,14 +54,14 @@ func TestStartFishingAtomicOneTenAndAuthoritativeReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 		replayCalls := fixture.random.callCount()
-		replay, replayPending, replayErr := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: test.bait, Count: test.count, IdempotencyKey: key})
+		replay, replayPending, replayErr := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: test.bait, Count: test.count, IdempotencyKey: key})
 		if replayErr != nil || replayPending != nil || replay == nil || replay.BatchID != result.BatchID || !replay.IdempotentReplay {
 			t.Fatalf("replay = (%#v,%#v,%v)", replay, replayPending, replayErr)
 		}
 		if fixture.random.callCount() != replayCalls {
 			t.Fatal("replay consumed randomness")
 		}
-		_, _, conflict := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: test.bait, Count: map[int]int{1: 10, 10: 1}[test.count], IdempotencyKey: key})
+		_, _, conflict := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: test.bait, Count: map[int]int{1: 10, 10: 1}[test.count], IdempotencyKey: key})
 		if !errors.Is(conflict, ErrConflict) {
 			t.Fatalf("same key different body error = %v", conflict)
 		}
@@ -75,7 +75,7 @@ func TestStartFishingChecksBalanceAndCapacityBeforeRandom(t *testing.T) {
 	t.Run("balance", func(t *testing.T) {
 		fixture := newGameFixture(t, &scriptedSource{})
 		userID := fixture.seedUser("empty", 0)
-		_, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(20)})
+		_, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(20)})
 		if !errors.Is(err, ErrInsufficientCredits) || fixture.random.callCount() != 0 {
 			t.Fatalf("start error=%v random=%d", err, fixture.random.callCount())
 		}
@@ -90,7 +90,7 @@ func TestStartFishingChecksBalanceAndCapacityBeforeRandom(t *testing.T) {
 		if _, err := fixture.database.Exec(`UPDATE credit_capacity SET last_ledger_seq=?,reserved_future_rows=? WHERE id=1`, int64(math.MaxInt64), zero); err != nil {
 			t.Fatal(err)
 		}
-		_, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(21)})
+		_, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(21)})
 		if !errors.Is(err, ErrServiceUnavailable) || fixture.random.callCount() != 0 {
 			t.Fatalf("start error=%v random=%d", err, fixture.random.callCount())
 		}
@@ -114,7 +114,7 @@ func TestStartFishingRequiresLiveRuntimeCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	operations := fixture.scalar(`SELECT COUNT(*) FROM credit_operations`)
-	_, _, err = fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(25)})
+	_, _, err = fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(25)})
 	if !errors.Is(err, ErrServiceUnavailable) {
 		t.Fatalf("unavailable runtime error = %v", err)
 	}
@@ -142,7 +142,7 @@ func TestStartFishingRandomAndInsertFailureRollBackEverything(t *testing.T) {
 			}
 			operations := fixture.scalar(`SELECT COUNT(*) FROM credit_operations`)
 			capacity := fixture.scalar(`SELECT last_ledger_seq FROM credit_capacity WHERE id=1`)
-			_, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitWorm), Count: 10, IdempotencyKey: validTestKey(30)})
+			_, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitWorm), Count: 10, IdempotencyKey: validTestKey(30)})
 			if err == nil {
 				t.Fatal("injected failure was accepted")
 			}
@@ -163,7 +163,7 @@ func TestFishingHighPayoutAndCrossRouteIdempotencyConflicts(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{max: true})
 	userID := fixture.seedUser("high", fixtureFunding)
 	startKey := validTestKey(40)
-	result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitPremium), Count: 1, IdempotencyKey: startKey})
+	result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitPremium), Count: 1, IdempotencyKey: startKey})
 	if err != nil || pending != nil || result == nil || result.Outcomes[0].SpeciesKey != "shell" || result.PayoutTotal != "37500" {
 		t.Fatalf("high payout start = (%#v,%#v,%v)", result, pending, err)
 	}
@@ -175,7 +175,7 @@ func TestFishingHighPayoutAndCrossRouteIdempotencyConflicts(t *testing.T) {
 	pendingUser := fixture.seedUser("pending", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	recoverKey := validTestKey(41)
-	_, firstPending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: pendingUser, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(42)})
+	_, firstPending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: pendingUser, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(42)})
 	if err != nil || firstPending == nil {
 		t.Fatalf("create pending = (%#v,%v)", firstPending, err)
 	}
@@ -187,13 +187,13 @@ func TestFishingHighPayoutAndCrossRouteIdempotencyConflicts(t *testing.T) {
 		t.Fatalf("failed recover = (%#v,%v)", recoveredPending, err)
 	}
 	calls := fixture.random.callCount()
-	_, _, err = fixture.service.StartFishing(context.Background(), StartInput{UserID: pendingUser, Bait: string(fishing.BaitLure), Count: 1, IdempotencyKey: recoverKey})
+	_, _, err = fixture.service.startLegacy(context.Background(), StartInput{UserID: pendingUser, Bait: string(fishing.BaitLure), Count: 1, IdempotencyKey: recoverKey})
 	if !errors.Is(err, ErrConflict) || fixture.random.callCount() != calls {
 		t.Fatalf("recover then start same key error=%v calls=%d->%d", err, calls, fixture.random.callCount())
 	}
 
 	fixture.userAuth.setError(authz.ErrForbidden)
-	_, _, err = fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitPremium), Count: 1, IdempotencyKey: startKey})
+	_, _, err = fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: string(fishing.BaitPremium), Count: 1, IdempotencyKey: startKey})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("replay without live authority error = %v", err)
 	}

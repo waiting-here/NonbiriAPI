@@ -68,10 +68,10 @@ var (
 var catalogMetadataByKey = map[string]catalogMetadata{
 	KeySiteName:                 {"identity", catalogText("站点名称", "Site name"), catalogText("显示在双站标题与公共配置中的实例名称。", "Instance name shown in both stations and public configuration."), unitNone, nil},
 	KeySiteLogoURL:              {"identity", catalogText("站点标志地址", "Site logo URL"), catalogText("可选的公开站点标志地址；留空不显示远端标志。", "Optional public logo URL; leave empty to show no remote logo."), unitNone, nil},
-	KeyLegalPrivacyOverrideZh:   {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("逐字节覆盖内置中文隐私政策，保留换行与制表符。", "Byte-preserving override for the built-in Chinese privacy policy."), unitNone, nil},
-	KeyLegalPrivacyOverrideEn:   {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("逐字节覆盖内置英文隐私政策，保留换行与制表符。", "Byte-preserving override for the built-in English privacy policy."), unitNone, nil},
-	KeyLegalTermsOverrideZh:     {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("逐字节覆盖内置中文服务条款，保留换行与制表符。", "Byte-preserving override for the built-in Chinese terms."), unitNone, nil},
-	KeyLegalTermsOverrideEn:     {"legal", catalogText("服务条款覆盖（英文）", "Terms override (English)"), catalogText("逐字节覆盖内置英文服务条款，保留换行与制表符。", "Byte-preserving override for the built-in English terms."), unitNone, nil},
+	KeyLegalPrivacyOverrideZh:   {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("覆盖内置中文隐私政策，保留段落与制表符。", "Custom text for the built-in Chinese privacy policy."), unitNone, nil},
+	KeyLegalPrivacyOverrideEn:   {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("覆盖内置英文隐私政策，保留段落与制表符。", "Custom text for the built-in English privacy policy."), unitNone, nil},
+	KeyLegalTermsOverrideZh:     {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("覆盖内置中文服务条款，保留段落与制表符。", "Custom text for the built-in Chinese terms."), unitNone, nil},
+	KeyLegalTermsOverrideEn:     {"legal", catalogText("服务条款覆盖（英文）", "Terms override (English)"), catalogText("覆盖内置英文服务条款，保留段落与制表符。", "Custom text for the built-in English terms."), unitNone, nil},
 	KeyLegalAuthoritativeLocale: {"legal", catalogText("法律文本权威语言", "Authoritative legal language"), catalogText("声明中英文文本发生冲突时优先采用的语言。", "Declares which language prevails if the legal versions conflict."), unitNone, nil},
 
 	KeyDefaultEndpointLimit:    {"limits", catalogText("默认端点上限", "Default endpoint limit"), catalogText("用户未单独配置时可创建的端点数量；不是显式用户值的上限。", "Endpoint count used when a user has no override; it is not a cap on explicit user values."), unitCount, nil},
@@ -92,13 +92,20 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyRegistrationOpen:          {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
 	KeySiteTimezoneOffsetMinutes: {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
 
-	KeyLevelThreshold2Milli: {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
-	KeyLevelThreshold3Milli: {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
-	KeyLevelThreshold4Milli: {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
-	KeyCheckinMode:          {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
-	KeyCheckinAwardMinMilli: {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
-	KeyCheckinAwardMaxMilli: {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
-	KeyCreditsCapMilli:      {"economy", catalogText("签到积分门槛", "Check-in credit threshold"), catalogText("可用积分达到该值后拒绝新的签到，不截断已准入奖励。", "Refuses new check-ins once spendable credits reach this value; admitted awards are not truncated."), unitMilli, nil},
+	KeyLevelThreshold2Milli:     {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold3Milli:     {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold4Milli:     {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
+	KeyCheckinMode:              {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
+	KeyCheckinAwardMinMilli:     {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
+	KeyCheckinAwardMaxMilli:     {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
+	KeyCreditsCapMilli:          {"economy", catalogText("签到积分门槛", "Check-in credit threshold"), catalogText("可用积分达到该值后拒绝新的签到，不截断已准入奖励。", "Refuses new check-ins once spendable credits reach this value; admitted awards are not truncated."), unitMilli, nil},
+	KeyGameCheckinMode:          {"economy", catalogText("游戏积分签到模式", "Game-credit check-in mode"), catalogText("独立控制游戏积分签到的开放等级。", "Controls eligibility for the independent game-credit check-in."), unitNone, nil},
+	KeyGameCheckinAwardMinMilli: {"economy", catalogText("游戏签到奖励下限", "Minimum game check-in award"), catalogText("游戏积分签到随机奖励的下限。", "Inclusive minimum game-credit check-in award."), unitMilli, []string{KeyGameCheckinAwardMaxMilli}},
+	KeyGameCheckinAwardMaxMilli: {"economy", catalogText("游戏签到奖励上限", "Maximum game check-in award"), catalogText("游戏积分签到随机奖励的上限。", "Inclusive maximum game-credit check-in award."), unitMilli, []string{KeyGameCheckinAwardMinMilli}},
+	KeyGameCreditsCapMilli:      {"economy", catalogText("游戏签到余额门槛", "Game check-in balance threshold"), catalogText("只看游戏钱包；达到门槛后不能签到，零表示不设门槛。", "Uses only the game wallet; reaching the threshold prevents check-in. Zero removes the threshold."), unitMilli, nil},
+	KeyGameFishingRakePlatform:  {"games", catalogText("垂钓平台抽成", "Fishing platform cut"), catalogText("从每次渔获收入中按基点计算，三项抽成总和须低于 10000。", "Basis-point cut from each catch; the three cuts must total less than 10000."), unitBP, []string{KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday}},
+	KeyGameFishingRakeWelfare:   {"games", catalogText("垂钓福利池抽成", "Fishing welfare-pool cut"), catalogText("从每次渔获收入划入福利池的基点比例。", "Basis-point share of each catch allocated to the welfare pool."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeThursday}},
+	KeyGameFishingRakeThursday:  {"games", catalogText("垂钓周四池抽成", "Fishing Thursday-pool cut"), catalogText("从每次渔获收入划入周四池的基点比例。", "Basis-point share of each catch allocated to the Thursday pool."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare}},
 
 	KeyCharityEnabled:           {"charity", catalogText("公益资源总开关", "Charity master switch"), catalogText("控制公益资源发现与调用是否开放。", "Controls whether charity discovery and calls are available."), unitNone, nil},
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
@@ -297,11 +304,11 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		nullValue = catalogText("原始 null 表示尚未配置；PATCH null 被拒绝。", "Raw null means not yet configured; PATCH null is rejected.")
 	case KeyLevelThreshold2Milli, KeyLevelThreshold3Milli, KeyLevelThreshold4Milli:
 		zero = catalogTextPtr("关闭该等级的自动晋级阈值。", "Disables automatic promotion at this level.")
-	case KeyCheckinAwardMinMilli:
+	case KeyCheckinAwardMinMilli, KeyGameCheckinAwardMinMilli:
 		zero = catalogTextPtr("允许签到奖励闭区间从 0 毫积分开始，仍须不大于上限。", "Allows the check-in award interval to start at zero milli-credits, subject to the maximum.")
-	case KeyCheckinAwardMaxMilli:
+	case KeyCheckinAwardMaxMilli, KeyGameCheckinAwardMaxMilli:
 		zero = catalogTextPtr("只有下限也为 0 时才形成固定 0 毫积分奖励。", "Forms a fixed zero-milli-credit award only when the minimum is also zero.")
-	case KeyCreditsCapMilli:
+	case KeyCreditsCapMilli, KeyGameCreditsCapMilli:
 		zero = catalogTextPtr("关闭签到积分门槛。", "Disables the check-in credit threshold.")
 	case KeyCharityEnabled:
 		zero = catalogTextPtr("关闭公益资源发现与调用。", "Closes charity-resource discovery and calls.")
@@ -320,6 +327,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("关闭池塘垂钓，不允许开始新垂钓局。", "Turns off pond fishing and prevents new fishing rounds.")
 	case KeyGameFishingBaitWormPrice, KeyGameFishingBaitLurePrice, KeyGameFishingBaitPremiumPrice:
 		zero = catalogTextPtr("鱼饵价格必须至少为 1 毫积分；0 被硬下限拒绝。", "Bait prices must be at least one milli-credit; the hard minimum rejects zero.")
+	case KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday:
+		zero = catalogTextPtr("该项不抽成。", "No cut for this destination.")
 	case KeyGameFishingRTP, KeyGameFishingRTPPremium:
 		zero = catalogTextPtr("0% 在字段范围内，但整体 Fishing 经济编译仍可拒绝不可行组合。", "Zero percent is within the field range, but full Fishing economy compilation may still reject an infeasible combination.")
 	case KeyAnnouncementEpoch:

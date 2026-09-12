@@ -401,8 +401,8 @@ func TestPerTokenActualMayExceedReserveAndUnknownIsConservative(t *testing.T) {
 	assertU128(t, priceUsed, 8, "token actual above reserve")
 	assertU128(t, tokensUsed, 2, "actual token count")
 	charge, err := environment.service.CalculateRequestCharge(context.Background(), requestID, claim.AccountingCommit)
-	if err != nil || charge != 5 {
-		t.Fatalf("known token capped caller charge = %d, %v; want 5", charge, err)
+	if err != nil || charge != 7 {
+		t.Fatalf("known token discounted caller charge = %d, %v; want 7", charge, err)
 	}
 
 	unknownRequest := environment.accept(t, environment.tokenModel, 5, 1)

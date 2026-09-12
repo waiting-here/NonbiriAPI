@@ -22,8 +22,8 @@ func TestFrozenRosterDefaultsAndHash(t *testing.T) {
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("prices = %#v, want %#v", got, want)
 	}
-	if config.StandardRTPPercent != 90 || config.PremiumRTPPercent != 88 {
-		t.Fatalf("RTP defaults = %d/%d, want 90/88", config.StandardRTPPercent, config.PremiumRTPPercent)
+	if config.StandardRTPPercent != 100 || config.PremiumRTPPercent != 100 {
+		t.Fatalf("RTP defaults = %d/%d, want 100/100", config.StandardRTPPercent, config.PremiumRTPPercent)
 	}
 	if got, want := config.TreasureMultipliers, map[string]int{"bottle": 2, "clover": 3, "shell": 5}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("treasure multipliers = %#v, want %#v", got, want)
@@ -50,7 +50,7 @@ func TestFrozenRosterDefaultsAndHash(t *testing.T) {
 		t.Fatalf("treasures = %#v, want %#v", got, want)
 	}
 
-	const wantHash = "ef00da7ce34e9fdc1e211cfb962ef1c85d409088c6d6b1473294f99254f873b0"
+	const wantHash = "f1243e805502e23d3656a4608b416b3471836ac082fd2583583db3f8a094d603"
 	if got := FrozenRulesHash(); got != wantHash {
 		t.Fatalf("frozen rules hash = %s, want %s", got, wantHash)
 	}
@@ -97,9 +97,9 @@ func TestCompileProvesExactRTPAndRoundingBounds(t *testing.T) {
 		weight uint64
 		target string
 	}{
-		BaitWorm:    {entry: "2500000", weight: 968, target: "9/10"},
-		BaitLure:    {entry: "5000000", weight: 994, target: "9/10"},
-		BaitPremium: {entry: "7500000", weight: 1023, target: "22/25"},
+		BaitWorm:    {entry: "2500000", weight: 968, target: "1"},
+		BaitLure:    {entry: "5000000", weight: 994, target: "1"},
+		BaitPremium: {entry: "7500000", weight: 1023, target: "1"},
 	}
 	for _, bait := range baitOrder {
 		evidence, err := rules.Evidence(bait)
@@ -292,7 +292,7 @@ func TestCryptoSourceSeededHighSampleIsStable(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("same deterministic seed produced different samples: %#v vs %#v", first, second)
 	}
-	const wantDigest = "18b07897b0b32e6ab115f2d5e9e0392a83b03afd3f58bfe27a8a7e03ba136eaf"
+	const wantDigest = "8101a84cc66df9593768bc251caf0f606af15c326b24d7e9fa049e3fb0a1fd81"
 	if first.digest != wantDigest {
 		t.Fatalf("sample digest = %s, want %s; counts=%v", first.digest, wantDigest, first.counts)
 	}
@@ -606,6 +606,7 @@ func cloneConfig(config Config) Config {
 		BaitPricesMilli:     make(map[Bait]string, len(config.BaitPricesMilli)),
 		StandardRTPPercent:  config.StandardRTPPercent,
 		PremiumRTPPercent:   config.PremiumRTPPercent,
+		RakeBP:              config.RakeBP,
 		TreasureMultipliers: make(map[string]int, len(config.TreasureMultipliers)),
 	}
 	for key, value := range config.BaitPricesMilli {

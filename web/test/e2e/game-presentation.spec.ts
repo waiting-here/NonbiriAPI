@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
+import { onboardingWire } from '../../src/user/games/common/testFixtures';
 
 const NOW = 1_800_000_000;
 const SESSION_ID = 'rps_AAAAAAAAAAAAAAAAAAAAAA';
@@ -29,7 +30,9 @@ function gamesSnapshot() {
   return {
     server_now: NOW,
     balance: '12345678901234567890.125',
+    game_balance: '0',
     tutorial_rps_seen: true,
+    onboarding: onboardingWire(),
     games_enabled: true,
     fishing: {
       enabled: true,
@@ -321,17 +324,20 @@ function fishingResult(tier: 'big' | 'legend'): Record<string, unknown> {
     count: 1,
     unit_price: '1',
     entry_total: '1',
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
     outcomes: [
       {
         ordinal: 0,
         species_key: legendary ? 'koi' : 'common_carp',
         tier,
         size_cm: legendary ? 120 : 42,
-        reward: legendary ? '8' : '3',
+        reward: legendary ? '8' : '3', net_reward: legendary ? '8' : '3', rake: { platform: '0', welfare: '0', thursday: '0' },
       },
     ],
-    payout_total: legendary ? '8' : '3',
+    payout_total: legendary ? '8' : '3', net_payout_total: legendary ? '8' : '3', rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567890.125',
+    game_balance: '0',
     settled_at: NOW + 1,
     idempotent_replay: false,
   };
@@ -571,6 +577,14 @@ async function installGameRoutes(
       await route.fulfill({ json: fishingLeaderboard(board) });
       return;
     }
+    if (url.pathname === '/api/games/linklink/leaderboard' && method === 'GET') {
+      const days = url.searchParams.get('window') === '30d' ? 30 : 7;
+      await route.fulfill({ json: {
+        spec: url.searchParams.get('spec'), window_days: days,
+        window_start: NOW - days * 86400, as_of: NOW, rules_version: 2, rows: [], me: null,
+      } });
+      return;
+    }
     if (url.pathname === '/api/games/linklink/session' && method === 'GET') {
       linkGetCount += 1;
       await route.fulfill({ json: linkHome });
@@ -677,7 +691,7 @@ test.describe('RPS result presentation and amount lifecycle', () => {
       const resultText = page.locator('.rps-result');
       if (known) {
         await expect(resultText).toContainText('Starting buy-in (actual input)');
-        await expect(resultText).toContainText('Ending cash-out (actual return)');
+        await expect(resultText).toContainText('Ending cash-out in general credits');
         await expect(resultText).toContainText('9,876,543,210,123,456,789.125');
       } else {
         await expect(resultText).toHaveText(/Not recorded for this historical result/);
@@ -685,6 +699,7 @@ test.describe('RPS result presentation and amount lifecycle', () => {
           resultText.locator('text=Not recorded for this historical result'),
         ).toHaveCount(5);
       }
+      await resultText.scrollIntoViewIfNeeded();
       await assertNoHorizontalOverflow(page);
       await saveScreenshot(page, `rps-result-${known ? 'known' : 'legacy'}-390.png`);
       if (known) {

@@ -61,6 +61,23 @@ WHERE mode=? AND deadline>? ORDER BY created_at,id LIMIT ?`, mode, now, matchCan
 	return result, nil
 }
 
+func selectCompatibleMatch(candidates []queueRecord) ([3]queueRecord, bool) {
+	var groups [2][]queueRecord
+	for _, candidate := range candidates {
+		groups[candidate.RulesVersion-1] = append(groups[candidate.RulesVersion-1], candidate)
+	}
+	var selected [3]queueRecord
+	found := false
+	for _, group := range groups {
+		triple, ok := selectMatch(group)
+		if ok && (!found || triple[0].CreatedAt < selected[0].CreatedAt ||
+			triple[0].CreatedAt == selected[0].CreatedAt && triple[0].ID < selected[0].ID) {
+			selected, found = triple, true
+		}
+	}
+	return selected, found
+}
+
 func distinctDevices(values [3]queueRecord) bool {
 	return !bytes.Equal(values[0].DeviceHash[:], values[1].DeviceHash[:]) &&
 		!bytes.Equal(values[0].DeviceHash[:], values[2].DeviceHash[:]) &&
@@ -262,7 +279,7 @@ func (service *Service) MatchOnce(ctx context.Context, mode string) (bool, error
 	if err != nil {
 		return false, err
 	}
-	selected, found := selectMatch(candidates)
+	selected, found := selectCompatibleMatch(candidates)
 	if !found {
 		return false, nil
 	}
@@ -327,7 +344,7 @@ func queueCompatibleWithConfig(queue queueRecord, config rpsconfig.RPSModeConfig
 func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [3]queueRecord, config rpsconfig.RPSModeConfig, now int64) ([]int64, activities.PublishFacts, error) {
 	mode := selected[0].Mode
 	for _, queue := range selected {
-		if queue.Mode != mode || queue.Deadline <= now {
+		if queue.Mode != mode || queue.RulesVersion != selected[0].RulesVersion || queue.Deadline <= now {
 			return nil, activities.PublishFacts{}, ErrConflict
 		}
 	}
@@ -372,7 +389,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	}
 	planInputs := [3]finance.QueueInput{}
 	record := sessionRecord{
-		ID: sessionID, Mode: mode, RulesVersion: game.RPSVersion,
+		ID: sessionID, Mode: mode, RulesVersion: selected[0].RulesVersion,
 		State: StateStarted, Phase: PhaseGesture, Revision: one, PhaseSeq: one, IdentityEpoch: one,
 		LedgerRowsRemaining: futureRows, BaseMilli: config.BaseMilli,
 		Pumps: PumpsBP(config.PumpsBP), GestureSeconds: config.GestureSeconds, DealerSeconds: config.DealerSeconds,
@@ -388,12 +405,16 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 		if amountErr != nil {
 			return nil, activities.PublishFacts{}, ErrInvariant
 		}
-		planInputs[seat] = finance.QueueInput{QueueID: queue.ID, UserID: queue.UserID, Amount: planAmount}
+		gamePaid, err := ledger.AmountFromBig(queue.GamePaid.Big())
+		if err != nil {
+			return nil, activities.PublishFacts{}, ErrInvariant
+		}
+		planInputs[seat] = finance.QueueInput{QueueID: queue.ID, UserID: queue.UserID, Amount: planAmount, GamePaid: gamePaid}
 		identity := identities[seat]
 		userID := queue.UserID
 		record.Seats[seat] = seatRecord{
 			SeatNo: seat, UserID: &userID, DeletionState: "active", DisplayName: &identity.DisplayName, AvatarURL: identity.AvatarURL,
-			StartingBalance: queue.Reserved, CurrentBalance: queue.Reserved,
+			StartingBalance: queue.Reserved, CurrentBalance: queue.Reserved, GameBuyIn: queue.GamePaid, GameRemaining: queue.GamePaid,
 			SnapshotCompletedCount: &identity.Stats[0], SnapshotProfitableCount: &identity.Stats[1], SnapshotRockCount: &identity.Stats[2],
 			SnapshotScissorsCount: &identity.Stats[3], SnapshotPaperCount: &identity.Stats[4],
 		}
@@ -425,7 +446,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	}
 	if err := service.finance.SessionStart(ctx, tx, finance.SessionStart{Meta: ledger.Meta{OperationID: operationID, CreatedAt: now}, SessionID: sessionID, FutureRows: futureRows, Queues: planInputs}, func(ctx context.Context, tx *sql.Tx, accountID int64) error {
 		record.AccountID = accountID
-		return insertStartedSessionTx(ctx, tx, &record, queuesBySeat)
+		return service.insertStartedSessionTx(ctx, tx, &record, queuesBySeat)
 	}); err != nil {
 		return nil, activities.PublishFacts{}, fmt.Errorf("session start ledger: %w", mapLedger(err))
 	}
@@ -442,7 +463,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	return users, facts, nil
 }
 
-func insertStartedSessionTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, queues [3]queueRecord) error {
+func (service *Service) insertStartedSessionTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, queues [3]queueRecord) error {
 	events, err := json.Marshal(record.RecentEvents)
 	if err != nil {
 		return ErrInvariant
@@ -479,15 +500,20 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
 session_id,seat_no,user_id,deletion_state,display_name_snapshot,avatar_url_snapshot,starting_balance,current_balance,
 current_round_input,current_all_in,current_gesture_envelope,current_gesture_phase_seq,follower_action,last_action_phase_seq,
 total_input,total_returned,terminal_return,wallet_net_sign,wallet_net_mag,rock_count,scissors_count,paper_count,timeout_count,
-snapshot_completed_count,snapshot_profitable_count,snapshot_rock_count,snapshot_scissors_count,snapshot_paper_count,stats_applied)
-VALUES(?,?,?,?,?,?,?,?,?,0,NULL,NULL,NULL,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+snapshot_completed_count,snapshot_profitable_count,snapshot_rock_count,snapshot_scissors_count,snapshot_paper_count,stats_applied,game_buy_in,game_remaining)
+VALUES(?,?,?,?,?,?,?,?,?,0,NULL,NULL,NULL,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
 			record.ID, seat, *value.UserID, value.DeletionState, *value.DisplayName, nullableString(value.AvatarURL),
 			db.EncodeU128(value.StartingBalance), db.EncodeU128(value.CurrentBalance), db.EncodeU128(value.CurrentRoundInput),
 			db.EncodeU256(value.TotalInput), db.EncodeU256(value.TotalReturned), nil, nil, nil,
 			db.EncodeU128(value.RockCount), db.EncodeU128(value.ScissorsCount), db.EncodeU128(value.PaperCount), db.EncodeU128(value.TimeoutCount),
 			nullableU128(value.SnapshotCompletedCount), nullableU128(value.SnapshotProfitableCount), nullableU128(value.SnapshotRockCount),
-			nullableU128(value.SnapshotScissorsCount), nullableU128(value.SnapshotPaperCount)); err != nil {
+			nullableU128(value.SnapshotScissorsCount), nullableU128(value.SnapshotPaperCount), db.EncodeU128(value.GameBuyIn), db.EncodeU128(value.GameRemaining)); err != nil {
 			return classifyDB(err)
+		}
+		if record.RulesVersion == 2 {
+			if err := service.finance.TransferOnboarding(ctx, tx, finance.QueueOnboardingTransfer{QueueID: queues[seat].ID, SessionID: record.ID, UserID: *value.UserID, SeatNo: seat}); err != nil {
+				return mapLedger(err)
+			}
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE game_rps_user_slots SET queue_id=NULL,session_id=? WHERE user_id=? AND queue_id=? AND session_id IS NULL`,
 			record.ID, *value.UserID, queues[seat].ID)
@@ -517,6 +543,7 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 		return activities.PublishFacts{}, ErrInvariant
 	}
 	totalCuts := cutBreakdown{}
+	gameInputTotal := new(big.Int)
 	for seat, input := range inputs {
 		if input == nil || input.Sign() < 0 || input.Cmp(record.Seats[seat].CurrentBalance.Big()) > 0 {
 			return activities.PublishFacts{}, ErrInvariant
@@ -537,6 +564,16 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 		if err != nil {
 			return activities.PublishFacts{}, err
 		}
+		gameInput := record.Seats[seat].GameRemaining.Big()
+		if gameInput.Cmp(input) > 0 {
+			gameInput.Set(input)
+		}
+		gameRemaining, err := u128(new(big.Int).Sub(record.Seats[seat].GameRemaining.Big(), gameInput))
+		if err != nil {
+			return activities.PublishFacts{}, err
+		}
+		record.Seats[seat].GameRemaining = gameRemaining
+		gameInputTotal.Add(gameInputTotal, gameInput)
 		record.Seats[seat].CurrentBalance = balance
 		record.Seats[seat].CurrentRoundInput = round
 		record.Seats[seat].CurrentAllIn = balance.Big().Sign() == 0
@@ -571,7 +608,7 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 	record.PlatformCutTotal, record.WelfareCutTotal, record.ThursdayCutTotal = platformTotal, welfareTotal, thursdayTotal
 	cutTotal := new(big.Int).Add(totalCuts.Platform, totalCuts.Welfare)
 	cutTotal.Add(cutTotal, totalCuts.Thursday)
-	if cutTotal.Sign() == 0 {
+	if cutTotal.Sign() == 0 && gameInputTotal.Sign() == 0 {
 		if err := persistSessionTx(ctx, tx, record, expectedRevision); err != nil {
 			return activities.PublishFacts{}, err
 		}
@@ -591,13 +628,18 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 	if err != nil {
 		return activities.PublishFacts{}, err
 	}
-	welfare, err := service.pools.WelfareDestination(ctx, tx)
-	if err != nil {
-		return activities.PublishFacts{}, classifyDB(err)
+	var welfare, thursday activities.PoolDestination
+	if record.RulesVersion == 1 || totalCuts.Welfare.Sign() > 0 {
+		welfare, err = service.pools.WelfareDestination(ctx, tx)
+		if err != nil {
+			return activities.PublishFacts{}, classifyDB(err)
+		}
 	}
-	thursday, err := service.pools.ThursdayDestination(ctx, tx, now)
-	if err != nil {
-		return activities.PublishFacts{}, classifyDB(err)
+	if record.RulesVersion == 1 || totalCuts.Thursday.Sign() > 0 {
+		thursday, err = service.pools.ThursdayDestination(ctx, tx, now)
+		if err != nil {
+			return activities.PublishFacts{}, classifyDB(err)
+		}
 	}
 	platformAmount, err := ledger.AmountFromBig(totalCuts.Platform)
 	if err != nil {
@@ -611,7 +653,11 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 	if err != nil {
 		return activities.PublishFacts{}, ErrInvariant
 	}
-	if err := service.finance.RoundCut(ctx, tx, finance.RoundCut{Meta: ledger.Meta{OperationID: operationID, ActorUserID: actorUserID, CreatedAt: now}, SessionID: record.ID, Sequence: cutSeq, WelfareAccountID: welfare.AccountID, ThursdayAccountID: thursday.AccountID, Amounts: ledger.RPSCutAmounts{Platform: platformAmount, Welfare: welfareAmount, Thursday: thursdayAmount}}, func(ctx context.Context, tx *sql.Tx) error {
+	gameInputAmount, err := ledger.AmountFromBig(gameInputTotal)
+	if err != nil {
+		return activities.PublishFacts{}, ErrInvariant
+	}
+	if err := service.finance.RoundCut(ctx, tx, finance.RoundCut{GameInput: gameInputAmount, Meta: ledger.Meta{OperationID: operationID, ActorUserID: actorUserID, CreatedAt: now}, SessionID: record.ID, Sequence: cutSeq, WelfareAccountID: welfare.AccountID, ThursdayAccountID: thursday.AccountID, Amounts: ledger.RPSCutAmounts{Platform: platformAmount, Welfare: welfareAmount, Thursday: thursdayAmount}}, func(ctx context.Context, tx *sql.Tx) error {
 		if err := persistSessionRowsTx(ctx, tx, record, expectedRevision); err != nil {
 			return fmt.Errorf("persist after round cut: %w", err)
 		}

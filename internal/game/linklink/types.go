@@ -5,19 +5,24 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 )
 
 const (
-	RouteSessions = "/api/games/linklink/sessions"
-	RouteSession  = "/api/games/linklink/session"
-	RouteMatches  = "/api/games/linklink/sessions/{id}/matches"
-	RouteAbandon  = "/api/games/linklink/sessions/{id}/abandon"
-	RouteLease    = "/api/games/linklink/sessions/{id}/lease"
+	RouteSessions    = "/api/games/linklink/sessions"
+	RouteSession     = "/api/games/linklink/session"
+	RouteMatches     = "/api/games/linklink/sessions/{id}/matches"
+	RouteAbandon     = "/api/games/linklink/sessions/{id}/abandon"
+	RouteLease       = "/api/games/linklink/sessions/{id}/lease"
+	RouteHint        = "/api/games/linklink/sessions/{id}/hint"
+	RouteLeaderboard = "/api/games/linklink/leaderboard"
 
 	ContinuationKind = "linklink_session"
 
 	ActionRead    = "read"
 	ActionMatch   = "match"
+	ActionHint    = "hint"
 	ActionAbandon = "abandon"
 	ActionLease   = "lease"
 	ActionTimeout = "timeout"
@@ -60,31 +65,54 @@ type BoardView struct {
 	Tiles []Tile `json:"tiles"`
 }
 
+// A nil Opportunities pointer preserves pre-extension idempotency responses.
+// Every freshly projected state and summary includes both counters, including v1 zeros.
+type Opportunities struct {
+	OpportunitiesInitial   int `json:"opportunities_initial"`
+	OpportunitiesRemaining int `json:"opportunities_remaining"`
+}
+
+func opportunities(initial, remaining int) *Opportunities {
+	return &Opportunities{initial, remaining}
+}
+
+type Hint struct {
+	First  Coordinate   `json:"first"`
+	Second Coordinate   `json:"second"`
+	Path   []Coordinate `json:"path"`
+}
+
 type State struct {
-	SessionID    string    `json:"session_id"`
-	Spec         string    `json:"spec"`
-	Price        string    `json:"price"`
-	State        string    `json:"state"`
-	Revision     string    `json:"revision"`
-	Board        BoardView `json:"board"`
-	PairsRemoved int       `json:"pairs_removed"`
-	TotalPairs   int       `json:"total_pairs"`
-	StartedAt    int64     `json:"started_at"`
-	Deadline     int64     `json:"deadline"`
-	ServerNow    int64     `json:"server_now"`
+	*Opportunities
+	RulesVersion int          `json:"rules_version,omitempty"`
+	Payment      game.Payment `json:"payment,omitzero"`
+	SessionID    string       `json:"session_id"`
+	Spec         string       `json:"spec"`
+	Price        string       `json:"price"`
+	State        string       `json:"state"`
+	Revision     string       `json:"revision"`
+	Board        BoardView    `json:"board"`
+	PairsRemoved int          `json:"pairs_removed"`
+	TotalPairs   int          `json:"total_pairs"`
+	StartedAt    int64        `json:"started_at"`
+	Deadline     int64        `json:"deadline"`
+	ServerNow    int64        `json:"server_now"`
 }
 
 type Summary struct {
-	SessionID      string  `json:"session_id"`
-	Spec           string  `json:"spec"`
-	Price          string  `json:"price"`
-	TerminalReason string  `json:"terminal_reason"`
-	StartedAt      int64   `json:"started_at"`
-	Deadline       int64   `json:"deadline"`
-	TerminalAt     int64   `json:"terminal_at"`
-	PairsRemoved   int     `json:"pairs_removed"`
-	TotalPairs     int     `json:"total_pairs"`
-	Score          *string `json:"score"`
+	*Opportunities
+	RulesVersion   int          `json:"rules_version,omitempty"`
+	Payment        game.Payment `json:"payment,omitzero"`
+	SessionID      string       `json:"session_id"`
+	Spec           string       `json:"spec"`
+	Price          string       `json:"price"`
+	TerminalReason string       `json:"terminal_reason"`
+	StartedAt      int64        `json:"started_at"`
+	Deadline       int64        `json:"deadline"`
+	TerminalAt     int64        `json:"terminal_at"`
+	PairsRemoved   int          `json:"pairs_removed"`
+	TotalPairs     int          `json:"total_pairs"`
+	Score          *string      `json:"score"`
 }
 
 // CurrentResult is the current-session wire union. Its JSON representation is
@@ -125,6 +153,8 @@ type Result struct {
 	State            *State
 	Summary          *Summary
 	MatchPath        []Coordinate
+	Hint             *Hint
+	Reshuffled       *bool
 	HTTPStatus       int
 	IdempotentReplay bool
 }
@@ -155,6 +185,14 @@ type MatchInput struct {
 	First            Coordinate
 	Second           Coordinate
 	IncludePath      bool
+	IdempotencyKey   string
+}
+
+type HintInput struct {
+	UserID           int64
+	SessionBinding   string
+	SessionID        string
+	ExpectedRevision string
 	IdempotencyKey   string
 }
 
@@ -189,14 +227,17 @@ type ActiveCount struct {
 }
 
 type SafeActiveExport struct {
-	SessionID    string `json:"session_id"`
-	Spec         string `json:"spec"`
-	Price        string `json:"price"`
-	State        string `json:"state"`
-	PairsRemoved int    `json:"pairs_removed"`
-	TotalPairs   int    `json:"total_pairs"`
-	StartedAt    int64  `json:"started_at"`
-	Deadline     int64  `json:"deadline"`
+	Opportunities
+	RulesVersion int          `json:"rules_version"`
+	Payment      game.Payment `json:"payment"`
+	SessionID    string       `json:"session_id"`
+	Spec         string       `json:"spec"`
+	Price        string       `json:"price"`
+	State        string       `json:"state"`
+	PairsRemoved int          `json:"pairs_removed"`
+	TotalPairs   int          `json:"total_pairs"`
+	StartedAt    int64        `json:"started_at"`
+	Deadline     int64        `json:"deadline"`
 }
 
 type UserExport struct {

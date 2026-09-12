@@ -29,6 +29,9 @@ function emptyFishingBoard(board: 'single' | 'recent_single' | 'total') {
 }
 function fishingResult() {
   return {
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
+    game_balance: '0',
     batch_id: 'fb_AAAAAAAAAAAAAAAAAAAAAA',
     bait: 'worm',
     count: 1,
@@ -41,10 +44,10 @@ function fishingResult() {
         tier: 'small',
         size_cm: 12,
         blue_fat_fish_length_cm: undefined as string | null | undefined,
-        reward: '2',
+        reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
       },
     ],
-    payout_total: '2',
+    payout_total: '2', net_payout_total: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567891.125',
     settled_at: 1_800_000_000,
     idempotent_replay: false,
@@ -234,7 +237,7 @@ describe('beta.1 game pages', () => {
       station: 'user',
       route: '/games/fishing',
     });
-    await screen.findByRole('list');
+    await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
     await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const batch = 'fb_AAAAAAAAAAAAAAAAAAAAAQ';
@@ -250,6 +253,8 @@ describe('beta.1 game pages', () => {
             state: 'settlement_pending',
             next_attempt_at: 1_800_000_000,
             retry_exhausted: false,
+            rules_version: 1,
+            payment: { general: '1', game: '0' },
           },
           unrevealed: null,
           has_more_unrevealed: false,
@@ -260,7 +265,7 @@ describe('beta.1 game pages', () => {
     const result = {
       ...fishingResult(),
       batch_id: batch,
-      outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 120, reward: '2' }],
+      outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 120, reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' } }],
     };
     const replace = () =>
       view.queryClient.setQueryData(
@@ -288,6 +293,8 @@ describe('beta.1 game pages', () => {
             state: 'settlement_pending',
             next_attempt_at: 1_800_000_000,
             retry_exhausted: false,
+            rules_version: 1,
+            payment: { general: '1', game: '0' },
           },
           unrevealed: null,
           has_more_unrevealed: false,
@@ -305,7 +312,7 @@ describe('beta.1 game pages', () => {
         }),
       ),
     );
-    await screen.findByRole('list');
+    await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
     await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
     expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
   });
@@ -598,7 +605,7 @@ describe('beta.1 game pages', () => {
     expect(rules).toHaveTextContent('先选鱼饵');
     await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
     expect(screen.queryByRole('dialog', { name: '池塘垂钓怎么玩' })).not.toBeInTheDocument();
-    expect(await screen.findByRole('list')).toHaveTextContent('银鱼');
+    expect(await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('银鱼');
     expect(screen.getByText('12 厘米')).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -626,7 +633,7 @@ describe('beta.1 game pages', () => {
       tier: 'legend',
       size_cm: 100,
       blue_fat_fish_length_cm: length,
-      reward: '2',
+      reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
     };
     const blueRow = {
       rank: '1',
@@ -687,7 +694,7 @@ describe('beta.1 game pages', () => {
       role: 'user',
     });
 
-    expect(await screen.findByRole('list')).toHaveTextContent('Blue fat fish');
+    expect(await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Blue fat fish');
     expect(screen.getAllByText(/Original legendary species: Koi/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(`${length} cm`).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('tab')[0]).toHaveTextContent('Rolling 30-day window');
@@ -793,10 +800,10 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
       role: 'user',
     });
-    await waitFor(() => expect(screen.getByRole('list')).toHaveTextContent('Whitebait'));
+    await waitFor(() => expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait'));
     const retry = await screen.findByRole('button', { name: 'Retry marking as viewed' });
     expect(screen.getByText(/result could not be marked viewed/i)).toBeInTheDocument();
-    expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
+    expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait');
     expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     await rendered.user.click(retry);
     await waitFor(() =>
@@ -804,7 +811,7 @@ describe('beta.1 game pages', () => {
         screen.queryByRole('button', { name: 'Retry marking as viewed' }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
+    expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait');
     expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     expect(attempts).toBe(2);
   });
@@ -818,6 +825,8 @@ describe('beta.1 game pages', () => {
       state: 'recovery_required',
       next_attempt_at: null,
       retry_exhausted: true,
+      rules_version: 1,
+      payment: { general: '1', game: '0' },
     };
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
@@ -883,7 +892,7 @@ describe('beta.1 game pages', () => {
       .find((button) => !(button as HTMLButtonElement).disabled);
     expect(replay).toBeDefined();
     await rendered.user.click(replay!);
-    await waitFor(() => expect(screen.getByRole('list')).toHaveTextContent('Whitebait'));
+    await waitFor(() => expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait'));
     const calls = fetchMock.mock.calls.filter(
       ([input, init]) =>
         new URL(String(input), window.location.origin).pathname ===
@@ -893,6 +902,100 @@ describe('beta.1 game pages', () => {
     expect((calls[0][1]?.headers as Headers).get('Idempotency-Key')).toBe(
       (calls[1][1]?.headers as Headers).get('Idempotency-Key'),
     );
+  });
+
+
+  it('keeps hint counts authoritative during a delayed response and avoids extra wallet requests', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    const initial = { ...linkLinkState(), rules_version: 2, payment: { general: '0', game: '3' }, opportunities_initial: 2, opportunities_remaining: 2 };
+    const hinted = { ...initial, revision: '2', opportunities_remaining: 1 };
+    const next = { ...hinted, revision: '3', pairs_removed: 1,
+      board: { ...hinted.board, tiles: hinted.board.tiles.map((tile, index) => ({ ...tile, removed: index < 2 })) } };
+    const base = installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
+      { method: 'GET', path: '/api/games/linklink/session', body: initial },
+      { method: 'POST', path: `/api/games/linklink/sessions/${initial.session_id}/lease`, body: { expires_at: 1_800_000_025 } },
+      { method: 'POST', path: `/api/games/linklink/sessions/${initial.session_id}/matches`, body: next },
+    ]);
+    let release: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/hint')) return new Promise<Response>(resolve => { release = resolve; });
+      return base(input, init) as Promise<Response>;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<LinkLinkGame />, { station: 'user', route: '/games/linklink', role: 'user' });
+    const button = await screen.findByRole('button', { name: 'Hint / Refresh (2 left)' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await rendered.user.click(button);
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('2 left');
+    expect(screen.queryAllByText('Hint', { selector: '.linklink-hint-tag' })).toHaveLength(0);
+    await act(async () => release?.(new Response(JSON.stringify({
+      ...hinted, reshuffled: false, hint: { first: { row: 0, col: 0 }, second: { row: 0, col: 1 }, path: [{ row: 0, col: 0 }, { row: 0, col: 1 }] },
+    }), { headers: { 'content-type': 'application/json' } })));
+    expect(await screen.findByRole('button', { name: 'Hint / Refresh (1 left)' })).toBeEnabled();
+    const grid = screen.getByRole('grid');
+    expect(grid.querySelectorAll('.is-hinted')).toHaveLength(2);
+    expect(grid.querySelector('.linklink-match-effect.is-hint polyline')).toBeInTheDocument();
+    const cells = within(grid).getAllByRole('gridcell');
+    expect(cells[0]).toHaveAttribute('aria-selected', 'false');
+    await rendered.user.click(cells[0]);
+    expect(grid.querySelectorAll('.is-hinted')).toHaveLength(2);
+    await rendered.user.click(cells[1]);
+    await waitFor(() => expect(cells[0]).toBeDisabled());
+    await waitFor(() => expect(grid.querySelectorAll('.is-hinted')).toHaveLength(0));
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url), window.location.origin).pathname === '/api/games')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/matches'))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/hint'))).toHaveLength(1);
+  });
+
+  it('waits for the current LinkLink session before fetching idle leaderboards', async () => {
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
+      { method: 'POST', path: '/api/games/linklink/sessions/ll_AAAAAAAAAAAAAAAAAAAAAA/lease', body: { expires_at: 1_800_000_025 } },
+    ]);
+    const registeredFetch = fetchMock.getMockImplementation()!;
+    let finishCurrent!: (response: Response) => void;
+    const pendingCurrent = new Promise<Response>(resolve => { finishCurrent = resolve; });
+    fetchMock.mockImplementation((input, init) =>
+      String(input).endsWith('/api/games/linklink/session')
+        ? pendingCurrent
+        : registeredFetch(input, init),
+    );
+    await renderWithProviders(<LinkLinkGame />, { station: 'user', route: '/games/linklink', role: 'user' });
+    await screen.findByRole('button', { name: 'Start 6x8' });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/linklink/leaderboard'))).toBe(false);
+    await act(async () => {
+      finishCurrent(new Response(JSON.stringify(linkLinkState()), { headers: { 'content-type': 'application/json' } }));
+    });
+    expect(await screen.findAllByRole('gridcell')).toHaveLength(48);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/linklink/leaderboard'))).toBe(false);
+  });
+
+  it('starts LinkLink with positive game credits despite a negative general wallet and switches all six boards', async () => {
+    const snapshot = { ...gamesSnapshotWire(), balance: '-10', game_balance: '3' };
+    const now = 1_800_000_000;
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: snapshot },
+      { method: 'GET', path: '/api/games/linklink/session', body: null },
+      ...(['6x8', '8x8', '10x10'] as const).flatMap(spec => ([7, 30] as const).map(days => ({
+        method: 'GET', path: `/api/games/linklink/leaderboard?spec=${spec}&window=${days}d`,
+        body: { spec, window_days: days, window_start: now - days * 86400, as_of: now, rules_version: 2, rows: [], me: null },
+      }))),
+    ]);
+    const rendered = await renderWithProviders(<LinkLinkGame />, { station: 'user', route: '/games/linklink', role: 'user' });
+    const start = await screen.findByRole('button', { name: 'Start 6x8' });
+    await waitFor(() => expect(start).toBeEnabled());
+    for (const spec of ['6x8', '8x8', '10x10']) {
+      await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Board size' }), spec);
+      for (const days of ['7', '30']) {
+        await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Time window' }), days);
+        await waitFor(() => expect(screen.getByText('No qualifying scores in this window yet.')).toBeInTheDocument());
+        expect(screen.getByRole('heading', { name: `Best single-game score in the past ${days} days` })).toBeInTheDocument();
+      }
+    }
+    const requests = new Set(fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes('/linklink/leaderboard?')));
+    expect(requests.size).toBe(6);
   });
 
   it('renders the recoverable LinkLink board and moves its roving focus with arrows', async () => {

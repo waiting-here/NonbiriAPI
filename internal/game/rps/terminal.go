@@ -126,7 +126,29 @@ func terminalOutcome(seat seatRecord) (string, error) {
 	}
 }
 
-func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, now int64) (terminalResult, error) {
+// A failed terminal attempt may still commit its retry schedule. All reward,
+// normal settlement and terminal fact writes must therefore roll back together.
+func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, now int64) (result terminalResult, err error) {
+	if _, err = tx.ExecContext(ctx, "SAVEPOINT rps_terminal"); err != nil {
+		return terminalResult{}, classifyDB(err)
+	}
+	defer func() {
+		if err != nil {
+			if _, rollbackErr := tx.ExecContext(ctx, "ROLLBACK TO rps_terminal"); rollbackErr != nil {
+				_ = tx.Rollback()
+				err = classifyDB(rollbackErr)
+				return
+			}
+		}
+		if _, releaseErr := tx.ExecContext(ctx, "RELEASE rps_terminal"); releaseErr != nil {
+			_ = tx.Rollback()
+			result, err = terminalResult{}, classifyDB(releaseErr)
+		}
+	}()
+	return service.writeTerminalTx(ctx, tx, record, now)
+}
+
+func (service *Service) writeTerminalTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, now int64) (terminalResult, error) {
 	if record == nil || record.State != StateTerminalProcessing || record.TerminalOperationID == nil || record.TerminalReason == nil {
 		return terminalResult{}, ErrInvariant
 	}
@@ -243,15 +265,19 @@ platform_total,welfare_total,thursday_total,delete_at) VALUES(?,?,?,?,?,?,?,?,?,
 			return err
 		}
 		outcomes[index] = outcome
+		generalBuyIn, err := u128(new(big.Int).Sub(seat.StartingBalance.Big(), seat.GameBuyIn.Big()))
+		if err != nil {
+			return err
+		}
 		var user any
 		if seat.DeletionState == "active" && seat.UserID != nil {
 			user = *seat.UserID
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_summary_seats(
-session_id,seat_no,user_id,input,returned,wallet_net_sign,wallet_net_mag,timeout_count,rock_count,scissors_count,paper_count)
-VALUES(?,?,?,?,?,?,?,?,?,?,?)`, record.ID, index, user, db.EncodeU256(seat.TotalInput), db.EncodeU256(seat.TotalReturned),
+session_id,seat_no,user_id,input,returned,wallet_net_sign,wallet_net_mag,timeout_count,rock_count,scissors_count,paper_count,general_buy_in,game_buy_in)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.ID, index, user, db.EncodeU256(seat.TotalInput), db.EncodeU256(seat.TotalReturned),
 			*seat.WalletNetSign, db.EncodeU128(*seat.WalletNetMag), db.EncodeU128(seat.TimeoutCount), db.EncodeU128(seat.RockCount),
-			db.EncodeU128(seat.ScissorsCount), db.EncodeU128(seat.PaperCount)); err != nil {
+			db.EncodeU128(seat.ScissorsCount), db.EncodeU128(seat.PaperCount), db.EncodeU128(generalBuyIn), db.EncodeU128(seat.GameBuyIn)); err != nil {
 			return classifyDB(err)
 		}
 		if user != nil {
@@ -264,12 +290,16 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?)`, record.ID, index, user, db.EncodeU256(seat.Total
 		if seat.DeletionState != "active" || seat.UserID == nil {
 			continue
 		}
+		generalBuyIn, err := u128(new(big.Int).Sub(seat.StartingBalance.Big(), seat.GameBuyIn.Big()))
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_pending_results(
 user_id,session_id_text,mode,terminal_reason,own_seat_no,own_input,own_returned,own_wallet_net_sign,own_wallet_net_mag,
-seat0_result,seat1_result,seat2_result,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+seat0_result,seat1_result,seat2_result,created_at,rules_version,general_buy_in,game_buy_in,own_returned_general) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			*seat.UserID, record.ID, record.Mode, *record.TerminalReason, index, db.EncodeU256(seat.TotalInput),
 			db.EncodeU256(seat.TotalReturned), *seat.WalletNetSign, db.EncodeU128(*seat.WalletNetMag),
-			outcomes[0], outcomes[1], outcomes[2], now); err != nil {
+			outcomes[0], outcomes[1], outcomes[2], now, record.RulesVersion, db.EncodeU128(generalBuyIn), db.EncodeU128(seat.GameBuyIn), nullableU128(seat.TerminalReturn)); err != nil {
 			return classifyDB(err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_pending_presentation(user_id, own_buy_in, own_cash_out, quick_seat0_gesture, quick_seat1_gesture, quick_seat2_gesture) VALUES(?, ?, ?, ?, ?, ?)`, *seat.UserID,

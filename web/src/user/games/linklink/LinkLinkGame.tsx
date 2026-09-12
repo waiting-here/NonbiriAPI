@@ -16,13 +16,18 @@ import { creditsToMilli, formatCredits } from '../common/strict';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
+import { GamePayment } from '../common/GamePayment';
+import { spendableGameCredits } from '../common/spendable';
+import { LinkLinkLeaderboard } from './LinkLinkLeaderboard';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import {
   abandonLinkLink,
   linkLinkKeys,
   matchLinkLink,
+  hintLinkLink,
   renewLinkLinkLease,
   startLinkLink,
   useLinkLinkCurrent,
@@ -34,6 +39,8 @@ import type {
   LinkLinkCoordinate,
   LinkLinkCurrent,
   LinkLinkMatchIntent,
+  LinkLinkHintIntent,
+  LinkLinkHint,
   LinkLinkState,
   LinkLinkSummary,
 } from './types';
@@ -42,13 +49,14 @@ import './linklink.css';
 type MutationIntent =
   | { readonly kind: 'start'; readonly spec: LinkLinkSpec; readonly key: string }
   | { readonly kind: 'match'; readonly value: LinkLinkMatchIntent }
+  | { readonly kind: 'hint'; readonly value: LinkLinkHintIntent }
   | {
       readonly kind: 'abandon';
       readonly sessionID: string;
       readonly revision: string;
       readonly key: string;
     };
-type LinkFeedback = 'accepted' | 'rejected' | 'rearranged';
+type LinkFeedback = 'accepted' | 'rejected' | 'rearranged' | 'hint' | 'refreshed';
 
 function isActiveLinkLink(value: LinkLinkCurrent | undefined): value is LinkLinkState {
   return value?.kind === 'active';
@@ -61,16 +69,22 @@ function isLinkLinkSummary(value: LinkLinkCurrent | undefined): value is LinkLin
 function LinkLinkRules({
   open,
   onClose,
+  legacy,
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
+  readonly legacy: boolean;
 }) {
   const { text } = useGameCopy();
   const sections: readonly GameRulesSection[] = (
     ['goal', 'board', 'path', 'score', 'shuffle', 'clock', 'recovery', 'abandon'] as const
   ).map((section) => ({
     title: text(`linklink.rules.${section}Title`),
-    paragraphs: [text(`linklink.rules.${section}Body`)],
+    paragraphs: [
+      legacy && (section === 'score' || section === 'shuffle')
+        ? text(`linklink.rules.${section}LegacyBody`)
+        : text(`linklink.rules.${section}Body`),
+    ],
   }));
   return (
     <GameRulesDialog
@@ -88,12 +102,14 @@ function LinkBoard({
   selected,
   busy,
   animation,
+  hint,
   onSelect,
 }: {
   readonly state: LinkLinkState;
   readonly selected: LinkLinkCoordinate | null;
   readonly busy: boolean;
   readonly animation: MatchAnimation | null;
+  readonly hint: LinkLinkHint | null;
   readonly onSelect: (coordinate: LinkLinkCoordinate) => void;
 }) {
   const { text } = useGameCopy();
@@ -134,6 +150,11 @@ function LinkBoard({
         {state.board.tiles.map((tile) => {
           const key = `${tile.row}:${tile.col}`;
           const isSelected = selected?.row === tile.row && selected.col === tile.col;
+          const hinted =
+            hint &&
+            [hint.first, hint.second].some(
+              (point) => point.row === tile.row && point.col === tile.col,
+            );
           const vanishing = animation?.pair.some(
             (point) => point.row === tile.row && point.col === tile.col,
           );
@@ -149,7 +170,7 @@ function LinkBoard({
               aria-rowindex={tile.row + 1}
               aria-colindex={tile.col + 1}
               aria-selected={isSelected}
-              className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}${vanishing ? ' is-vanishing' : ''}`}
+              className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}${vanishing ? ' is-vanishing' : ''}${hinted ? ' is-hinted' : ''}`}
               style={{ gridRow: tile.row + 1, gridColumn: tile.col + 1 }}
               disabled={tile.removed || busy}
               tabIndex={!tile.removed && key === effectiveFocus ? 0 : -1}
@@ -176,6 +197,9 @@ function LinkBoard({
                 focusAt(tile.row + delta[0], tile.col + delta[1]);
               }}
             >
+              {hinted ? (
+                <span className="linklink-hint-tag">{text('linklink.hintTile')}</span>
+              ) : null}
               {tile.removed && !vanishing ? (
                 <span aria-hidden="true" />
               ) : (
@@ -185,6 +209,17 @@ function LinkBoard({
           );
         })}
         {animation ? <MatchEffect key={animation.key} animation={animation} /> : null}
+        {hint ? (
+          <MatchEffect
+            hint
+            animation={{
+              key: state.revision,
+              before: state,
+              pair: [hint.first, hint.second],
+              path: hint.path,
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -204,6 +239,8 @@ function SummaryCard({
     <Card className="linklink-summary">
       <p className="eyebrow">{text(`linklink.summary.${summary.terminalReason}`)}</p>
       <h2>{text(`linklink.spec`, { spec: summary.spec })}</h2>
+      <p>{text('common.entryPayment')}</p>
+      <GamePayment payment={summary.payment} />
       <dl className="linklink-facts">
         <div>
           <dt>
@@ -284,6 +321,10 @@ export function LinkLinkGame() {
   const [mutationState, setMutationState] = useState<'idle' | 'sending' | 'unknown'>('idle');
   const [mutationError, setMutationError] = useState<unknown>(null);
   const [animation, setAnimation] = useState<MatchAnimation | null>(null);
+  const [hintState, setHintState] = useState<{
+    readonly identity: string;
+    readonly hint: LinkLinkHint;
+  } | null>(null);
   useEffect(() => {
     if (!animation) return;
     const timer = window.setTimeout(() => setAnimation(null), 650);
@@ -299,9 +340,11 @@ export function LinkLinkGame() {
   } | null>(null);
   const state: LinkLinkState | null = isActiveLinkLink(current.data) ? current.data : null;
   const summary: LinkLinkSummary | null = isLinkLinkSummary(current.data) ? current.data : null;
+  useGameSettlement(summary?.sessionID);
   const refetchCurrent = current.refetch;
   const stateIdentity = state ? `${state.sessionID}:${state.revision}` : null;
   const selected = selection?.identity === stateIdentity ? selection.coordinate : null;
+  const hint = hintState?.identity === stateIdentity ? hintState.hint : null;
   const feedback = feedbackState?.identity === stateIdentity ? feedbackState.value : null;
   const sessionID = state?.sessionID ?? null;
   const lease = sessionID
@@ -401,6 +444,25 @@ export function LinkLinkGame() {
                 }
               : null,
           );
+        } else if (intent.kind === 'hint') {
+          const { result: next, hint: nextHint, reshuffled } = await hintLinkLink(intent.value);
+          const applied = adopt(next);
+          const cached = queryClient.getQueryData<LinkLinkCurrent>(linkLinkKeys.current);
+          const currentReply =
+            applied ||
+            (cached?.kind === 'active' &&
+              cached.sessionID === next.sessionID &&
+              cached.revision === next.revision);
+          if (!currentReply) await refetchCurrent();
+          if (currentReply) {
+            setHintState(
+              nextHint ? { identity: `${next.sessionID}:${next.revision}`, hint: nextHint } : null,
+            );
+            setFeedbackState({
+              identity: `${next.sessionID}:${next.revision}`,
+              value: reshuffled ? 'refreshed' : 'hint',
+            });
+          }
         } else {
           if (!adopt(await abandonLinkLink(intent.sessionID, intent.revision, intent.key)))
             await refetchCurrent();
@@ -409,7 +471,9 @@ export function LinkLinkGame() {
         setMutation(null);
         setMutationState('idle');
         setSelection(null);
-        await queryClient.invalidateQueries({ queryKey: gameKeys.snapshot });
+        // Matching and hinting do not change wallets or game availability.
+        if (intent.kind === 'start')
+          await queryClient.invalidateQueries({ queryKey: gameKeys.snapshot });
       } catch (error) {
         setMutationError(error);
         if (isResponseUnknown(error)) setMutationState('unknown');
@@ -459,12 +523,21 @@ export function LinkLinkGame() {
   const affordable = Boolean(
     snapshot.data &&
     spec &&
-    creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(spec.price),
+    creditsToMilli(spendableGameCredits(snapshot.data).total) >= creditsToMilli(spec.price),
   );
   const canStart = current.isSuccess && gateOpen && affordable;
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const header = <GameHeader game="linklink" sound={sound} onRules={() => setRulesOpen(true)} />;
-  const rulesDialog = <LinkLinkRules open={rulesOpen} onClose={closeRules} />;
+  const header = (
+    <GameHeader
+      wallets={snapshot.data}
+      game="linklink"
+      sound={sound}
+      onRules={() => setRulesOpen(true)}
+    />
+  );
+  const rulesDialog = (
+    <LinkLinkRules open={rulesOpen} onClose={closeRules} legacy={state?.rulesVersion === 1} />
+  );
 
   if (snapshot.isPending)
     return (
@@ -496,6 +569,7 @@ export function LinkLinkGame() {
   return (
     <main className={`game-page linklink-page${state ? ' is-playing' : ''}`}>
       <GameHeader
+        wallets={snapshot.data}
         game="linklink"
         sound={sound}
         onRules={() => setRulesOpen(true)}
@@ -534,6 +608,10 @@ export function LinkLinkGame() {
                 }
               />
             </div>
+            <details>
+              <summary>{text('common.entryPayment')}</summary>
+              <GamePayment payment={state.payment} />
+            </details>
             <div className="linklink-progress">
               <progress max={state.totalPairs} value={state.pairsRemoved} />
               <span>
@@ -551,7 +629,11 @@ export function LinkLinkGame() {
                 ? text('linklink.matchRejected')
                 : feedback === 'rearranged'
                   ? text('linklink.rearranged')
-                  : text('linklink.selectFirst')}
+                  : feedback === 'hint'
+                    ? text('linklink.hintHelp')
+                    : feedback === 'refreshed'
+                      ? text('linklink.refreshed')
+                      : text('linklink.selectFirst')}
             </p>
           </Card>
           <LinkBoard
@@ -559,8 +641,33 @@ export function LinkLinkGame() {
             selected={selected}
             busy={mutationState !== 'idle' || lease !== 'active'}
             animation={animation?.before.sessionID === state.sessionID ? animation : null}
+            hint={hint}
             onSelect={chooseTile}
           />
+          {state.rulesVersion === 2 ? (
+            <button
+              type="button"
+              className="btn btn-primary linklink-hint"
+              disabled={
+                mutationState !== 'idle' ||
+                lease !== 'active' ||
+                state.opportunitiesRemaining === 0 ||
+                remaining === 0
+              }
+              onClick={() =>
+                void execute({
+                  kind: 'hint',
+                  value: {
+                    sessionID: state.sessionID,
+                    expectedRevision: state.revision,
+                    idempotencyKey: createIdempotencyKey(),
+                  },
+                })
+              }
+            >
+              {text('linklink.hintButton', { count: state.opportunitiesRemaining })}
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-secondary linklink-abandon"
@@ -578,6 +685,7 @@ export function LinkLinkGame() {
               selected={null}
               busy
               animation={animation}
+              hint={null}
               onSelect={() => undefined}
             />
           ) : null}
@@ -642,6 +750,9 @@ export function LinkLinkGame() {
             {text('linklink.start', { spec: selectedSpec })}
           </button>
         </Card>
+      ) : null}
+      {current.isSuccess && !state && !maintenance ? (
+        <LinkLinkLeaderboard spec={selectedSpec} onSpecChange={setSelectedSpec} />
       ) : null}
       <ConfirmDialog
         open={review}

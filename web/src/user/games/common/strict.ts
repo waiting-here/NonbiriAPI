@@ -33,6 +33,24 @@ export function exactRecord(
   return record;
 }
 
+export function gamePayment(value: unknown, field: string) {
+  const record = exactRecord(value, ['general', 'game'], [], field);
+  return {
+    general: creditsValue(record.general, {}, `${field} general`),
+    game: creditsValue(record.game, {}, `${field} game`),
+  };
+}
+
+export function entryPayment(record: Record<string, unknown>, total: string, field: string) {
+  const rulesVersion = record.rules_version === undefined ? 1 : safeInteger(record.rules_version, 1, 2, `${field} rules`);
+  if (rulesVersion === 2 && record.payment === undefined) invalidResponse(`${field} payment`);
+  const payment = record.payment === undefined ? { general: total, game: '0' } : gamePayment(record.payment, `${field} payment`);
+  if (creditsToMilli(payment.general) + creditsToMilli(payment.game) !== creditsToMilli(total) ||
+      rulesVersion === 1 && payment.game !== '0')
+    invalidResponse(`${field} payment arithmetic`);
+  return { rulesVersion, payment };
+}
+
 export function booleanValue(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') invalidResponse(field);
   return value;

@@ -48,8 +48,15 @@ func (r *Repository) ExportUserTx(ctx context.Context, tx *sql.Tx, userID int64,
 		return UserExport{}, ErrNotFound
 	}
 	export := UserExport{WelfareClaims: []WelfareClaimExport{}, Thursday: []ThursdayParticipantExport{}}
+	var err error
+	if export.Checkins, err = exportCheckinsTx(ctx, tx, userID, limit); err != nil {
+		return UserExport{}, err
+	}
+	if export.GameOnboarding, err = exportOnboardingTx(ctx, tx, userID, limit); err != nil {
+		return UserExport{}, err
+	}
 	claimRows, err := tx.QueryContext(ctx, `
-SELECT site_day,threshold_milli,cap_milli,award_milli,created_at
+SELECT site_day,threshold_milli,cap_milli,award_milli,created_at,asset_type
 FROM welfare_claims WHERE user_id=? ORDER BY site_day,created_at LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return UserExport{}, classifyDatabaseError("read welfare export", err)
@@ -213,4 +220,56 @@ WHERE period_id=? AND participant_ref=? AND user_id=? AND settled=0 AND ledger_r
 		return classifyDatabaseError("delete welfare claim facts", err)
 	}
 	return nil
+}
+
+func exportCheckinsTx(ctx context.Context, tx *sql.Tx, userID int64, limit int) ([]CheckinExport, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT 'general',site_day,award_milli,created_at FROM checkins WHERE user_id=?
+UNION ALL SELECT 'game',site_day,award_milli,created_at FROM game_checkins WHERE user_id=?
+ORDER BY created_at,1 LIMIT ?`, userID, userID, limit+1)
+	if err != nil {
+		return nil, classifyDatabaseError("read check-in export", err)
+	}
+	defer rows.Close()
+	items := []CheckinExport{}
+	for rows.Next() {
+		var item CheckinExport
+		var award int64
+		if err := rows.Scan(&item.Asset, &item.SiteDay, &award, &item.CreatedAt); err != nil {
+			return nil, classifyDatabaseError("scan check-in export", err)
+		}
+		item.Award = formatMilliPointsInt64(award)
+		items = append(items, item)
+		if len(items) > limit {
+			return nil, ErrResourceLimit
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, classifyDatabaseError("iterate check-in export", err)
+	}
+	return items, nil
+}
+
+func exportOnboardingTx(ctx context.Context, tx *sql.Tx, userID int64, limit int) ([]OnboardingExport, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT game_key,task_key,award_milli,completed_at FROM game_onboarding_completions WHERE user_id=? ORDER BY completed_at,game_key,task_key LIMIT ?`, userID, min(limit, 9)+1)
+	if err != nil {
+		return nil, classifyDatabaseError("read onboarding export", err)
+	}
+	defer rows.Close()
+	items := []OnboardingExport{}
+	for rows.Next() {
+		var item OnboardingExport
+		var award int64
+		if err := rows.Scan(&item.GameKey, &item.TaskKey, &award, &item.CompletedAt); err != nil {
+			return nil, classifyDatabaseError("scan onboarding export", err)
+		}
+		item.Award = formatMilliPointsInt64(award)
+		items = append(items, item)
+		if len(items) > limit || len(items) > 9 {
+			return nil, ErrResourceLimit
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, classifyDatabaseError("iterate onboarding export", err)
+	}
+	return items, nil
 }

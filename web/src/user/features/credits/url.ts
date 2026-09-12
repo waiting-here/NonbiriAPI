@@ -18,6 +18,7 @@ import {
 export const CREDIT_HISTORY_LIST_TYPE = 'credit-history';
 
 const HISTORY_URL_PARAMS = [
+  'asset_type',
   'page',
   'page_size',
   'anchor',
@@ -45,6 +46,7 @@ export interface CreditHistoryUrlState {
   invalidAnchor: boolean;
   invalidFrom: boolean;
   invalidTo: boolean;
+  invalidAsset: boolean;
   invalidCategory: boolean;
   invalidDirection: boolean;
   invalidRange: boolean;
@@ -52,6 +54,7 @@ export interface CreditHistoryUrlState {
 }
 
 export interface CreditHistoryFilterDraft {
+  asset_type?: HistoryFilter['asset_type'];
   category?: string;
   direction?: string;
   from?: number;
@@ -86,6 +89,7 @@ function parseUnixSecond(value: SingleValue): number | undefined {
 }
 
 function serializeHistoryValues(values: {
+  asset_type?: HistoryFilter['asset_type'];
   page: string;
   pageSize: PageSize;
   includePage: boolean;
@@ -97,6 +101,7 @@ function serializeHistoryValues(values: {
   direction?: string;
 }): string {
   const params = new URLSearchParams();
+  if (values.asset_type !== undefined) params.set('asset_type', values.asset_type);
   if (values.includePage || values.page !== DEFAULT_PAGE) params.set('page', values.page);
   if (values.includePageSize) params.set('page_size', String(values.pageSize));
   if (values.anchor !== undefined) params.set('anchor', values.anchor);
@@ -105,6 +110,10 @@ function serializeHistoryValues(values: {
   if (values.category !== undefined) params.set('category', values.category);
   if (values.direction !== undefined) params.set('direction', values.direction);
   return params.toString();
+}
+
+function validAsset(value: string | undefined): value is NonNullable<HistoryFilter['asset_type']> {
+  return value === 'general' || value === 'game' || value === 'all';
 }
 
 function validCategory(value: string | undefined): value is HistoryCategory {
@@ -117,6 +126,7 @@ function validDirection(value: string | undefined): value is HistoryDirection {
 
 function valuesFromState(state: CreditHistoryUrlState) {
   return {
+    asset_type: state.filter.asset_type,
     page: state.filter.page,
     pageSize: state.filter.page_size,
     includePage: state.filter.page !== DEFAULT_PAGE,
@@ -161,6 +171,9 @@ export function parseCreditHistorySearch(
     to = undefined;
   }
 
+  const assetParam = singleValue(params, 'asset_type');
+  const asset_type =
+    !assetParam.invalid && validAsset(assetParam.value) ? assetParam.value : undefined;
   const categoryParam = singleValue(params, 'category');
   const category =
     !categoryParam.invalid && validCategory(categoryParam.value) ? categoryParam.value : undefined;
@@ -170,6 +183,7 @@ export function parseCreditHistorySearch(
       ? directionParam.value
       : undefined;
   const filter: HistoryFilter = {
+    ...(asset_type !== undefined ? { asset_type } : {}),
     page,
     page_size: pageSize,
     ...(anchor !== undefined ? { anchor } : {}),
@@ -179,6 +193,7 @@ export function parseCreditHistorySearch(
     ...(direction !== undefined ? { direction } : {}),
   };
   const canonicalSearch = serializeHistoryValues({
+    asset_type,
     page,
     pageSize,
     includePage: pageParam.present,
@@ -198,6 +213,7 @@ export function parseCreditHistorySearch(
     invalidFrom:
       fromParam.present && (fromParam.invalid || parseUnixSecond(fromParam) === undefined),
     invalidTo: toParam.present && (toParam.invalid || parseUnixSecond(toParam) === undefined),
+    invalidAsset: assetParam.present && (assetParam.invalid || asset_type === undefined),
     invalidCategory: categoryParam.present && (categoryParam.invalid || category === undefined),
     invalidDirection: directionParam.present && (directionParam.invalid || direction === undefined),
     invalidRange,
@@ -206,6 +222,7 @@ export function parseCreditHistorySearch(
 }
 
 function validDraft(draft: CreditHistoryFilterDraft): boolean {
+  if (draft.asset_type !== undefined && !validAsset(draft.asset_type)) return false;
   if (draft.category !== undefined && !validCategory(draft.category)) return false;
   if (draft.direction !== undefined && !validDirection(draft.direction)) return false;
   if (
@@ -316,6 +333,7 @@ export function useCreditHistoryUrl(scopeReset = false): CreditHistoryUrlControl
         anchor: undefined,
         from: draft.from,
         to: draft.to,
+        asset_type: draft.asset_type,
         category: draft.category,
         direction: draft.direction,
       }));

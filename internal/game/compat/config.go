@@ -20,13 +20,15 @@ type GamesConfig struct {
 
 // GamesSnapshot is the exact user-facing configuration/readiness projection.
 type GamesSnapshot struct {
-	ServerNow       int64                  `json:"server_now"`
-	Balance         string                 `json:"balance"`
-	TutorialRPSSeen bool                   `json:"tutorial_rps_seen"`
-	GamesEnabled    bool                   `json:"games_enabled"`
-	Fishing         FishingSnapshotModule  `json:"fishing"`
-	LinkLink        LinkLinkSnapshotModule `json:"linklink"`
-	RPS             RPSSnapshotModule      `json:"rps"`
+	Onboarding      map[string]game.OnboardingProgress `json:"onboarding"`
+	GameBalance     string                             `json:"game_balance"`
+	ServerNow       int64                              `json:"server_now"`
+	Balance         string                             `json:"balance"`
+	TutorialRPSSeen bool                               `json:"tutorial_rps_seen"`
+	GamesEnabled    bool                               `json:"games_enabled"`
+	Fishing         FishingSnapshotModule              `json:"fishing"`
+	LinkLink        LinkLinkSnapshotModule             `json:"linklink"`
+	RPS             RPSSnapshotModule                  `json:"rps"`
 }
 
 type FishingSnapshotModule struct {

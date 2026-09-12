@@ -865,6 +865,9 @@ AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dona
 	updates := []string{"updated_at=?"}
 	args := []any{now}
 	action := "limit_update"
+	if input.ResetFailureStreak {
+		action = "failure_streak_reset"
+	}
 	if input.Enabled != nil {
 		updates = append(updates, "enabled=?")
 		args = append(args, boolInt(*input.Enabled))
@@ -919,19 +922,12 @@ AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dona
 	}
 	newGeneration := input.ResetFailureStreak || input.Enabled != nil && *input.Enabled && (currentEnabled == 0 || failureDisabled == 1)
 	if newGeneration {
-		generation, err := db.DecodeU128(generationBlob)
-		if err != nil {
-			return ErrInvariant
-		}
-		generation, err = incrementU128(generation)
+		values, err := streakResetValues(generationBlob)
 		if err != nil {
 			return err
 		}
-		zero := db.EncodeU128(db.U128{})
-		one := db.U128{}
-		one[15] = 1
-		updates = append(updates, "streak_generation=?", "failure_streak=?", "next_claim_seq=?", "next_fold_seq=?", "failure_disabled=0")
-		args = append(args, db.EncodeU128(generation), zero, db.EncodeU128(one), db.EncodeU128(one))
+		updates = append(updates, streakResetAssignments)
+		args = append(args, values...)
 	}
 	args = append(args, keyID, donationID)
 	result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET `+strings.Join(updates, ",")+`

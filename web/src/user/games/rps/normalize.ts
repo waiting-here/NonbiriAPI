@@ -6,6 +6,7 @@ import {
   decimalValue,
   enumValue,
   exactRecord,
+  gamePayment,
   httpsURL,
   invalidResponse,
   opaqueID,
@@ -109,13 +110,19 @@ export function normalizeRPSQueue(value: unknown): RPSQueue {
   const record = exactRecord(
     value,
     ['id', 'mode', 'state', 'revision', 'deadline', 'server_now'],
-    [],
+    ['rules_version', 'payment'],
     'RPS queue',
   );
   if (record.state !== 'waiting') invalidResponse('RPS queue state');
   const deadline = unixTime(record.deadline, 'RPS queue deadline');
   const serverNow = unixTime(record.server_now, 'RPS queue server time');
+  const rulesVersion = record.rules_version === undefined ? 1 : safeInteger(record.rules_version, 1, 2, 'RPS queue rules');
+  const payment = record.payment === undefined ? null : gamePayment(record.payment, 'RPS queue payment');
+  if (rulesVersion === 2 && payment === null || rulesVersion === 1 && payment !== null && payment.game !== '0')
+    invalidResponse('RPS queue funding');
   return {
+    rulesVersion,
+    payment,
     id: opaqueID(record.id, 'rpsq_', 'RPS queue id'),
     mode: mode(record.mode, 'RPS queue mode'),
     state: 'waiting',
@@ -229,6 +236,7 @@ function normalizeSeat(value: unknown, field: string): RPSSeat {
       'follower_action',
       'terminal_return',
       'wallet_net',
+      'funding',
     ],
     field,
   );
@@ -250,11 +258,20 @@ function normalizeSeat(value: unknown, field: string): RPSSeat {
         'timeout_count',
         'fun_snapshot',
       ],
-      ['visible_gesture', 'follower_action', 'terminal_return', 'wallet_net'],
+      ['visible_gesture', 'follower_action', 'terminal_return', 'wallet_net', 'funding'],
       field,
     );
     const viewer = enumValue(record.viewer, ['self', 'opponent'] as const, `${field} viewer`);
+    const funding = record.funding === undefined ? null :
+      exactRecord(record.funding, ['buy_in_general', 'buy_in_game', 'current_general', 'game_remaining'], [], `${field} funding`);
+    if (funding && viewer !== 'self') invalidResponse(`${field} private funding`);
     const seat: ActiveRPSSeat = {
+      ...(funding ? { funding: {
+        buyInGeneral: creditsValue(funding.buy_in_general, {}, `${field} general buy-in`),
+        buyInGame: creditsValue(funding.buy_in_game, {}, `${field} game buy-in`),
+        currentGeneral: creditsValue(funding.current_general, {}, `${field} current general`),
+        gameRemaining: creditsValue(funding.game_remaining, {}, `${field} game remaining`),
+      }} : {}),
       ...seatMoney(record, field),
       viewer,
       deletionState: 'active',
@@ -456,7 +473,7 @@ export function normalizeRPSState(value: unknown): RPSState {
     'RPS rule snapshot',
   );
   const ruleSnapshot = {
-    rulesVersion: safeInteger(rules.rules_version, 1, Number.MAX_SAFE_INTEGER, 'RPS rules version'),
+    rulesVersion: safeInteger(rules.rules_version, 1, 2, 'RPS rules version'),
     base: creditsValue(rules.base, { positive: true }, 'RPS base'),
     pumpsBP: normalizePumps(rules.pumps_bp, 'RPS pumps'),
     gestureSeconds: safeInteger(rules.gesture_seconds, 5, 20, 'RPS gesture seconds'),
@@ -551,6 +568,19 @@ export function normalizeRPSState(value: unknown): RPSState {
     const totalReturned = creditsToMilli(seat.totalReturned, false, 256);
     if (roundInput > totalInput || starting - totalInput + totalReturned !== current)
       invalidResponse(`RPS seat ${seat.seatNo} money arithmetic`);
+    if (seat.deletionState === 'active' && seat.viewer === 'self') {
+      if (!seat.funding && ruleSnapshot.rulesVersion === 2) invalidResponse('RPS missing funding');
+      if (seat.funding) {
+        const generalBuyIn = creditsToMilli(seat.funding.buyInGeneral);
+        const gameBuyIn = creditsToMilli(seat.funding.buyInGame);
+        const gameRemaining = creditsToMilli(seat.funding.gameRemaining);
+        if (generalBuyIn + gameBuyIn !== starting ||
+            creditsToMilli(seat.funding.currentGeneral) + gameRemaining !== current ||
+            gameRemaining !== (gameBuyIn > totalInput ? gameBuyIn - totalInput : 0n) ||
+            ruleSnapshot.rulesVersion === 1 && gameBuyIn !== 0n)
+          invalidResponse('RPS funding arithmetic');
+      }
+    }
     const hasTerminal = seat.terminalReturn !== undefined;
     if ((state === 'terminal_processing') !== hasTerminal)
       invalidResponse(`RPS seat ${seat.seatNo} terminal matrix`);
@@ -684,7 +714,7 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
       'seats',
       'created_at',
     ],
-    [],
+    ['rules_version', 'own_buy_in_general', 'own_buy_in_game', 'own_returned_general'],
     'RPS pending result',
   );
   if (!Array.isArray(record.seats) || record.seats.length !== 3)
@@ -728,6 +758,23 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
       creditsToMilli(ownCashOut) - creditsToMilli(ownBuyIn) !== ownSign)
   )
     invalidResponse('RPS wallet transfer arithmetic');
+  const rulesVersion = record.rules_version === undefined ? 1 : safeInteger(record.rules_version, 1, 2, 'RPS result rules');
+  const amountOrUnknown = (value: unknown, field: string) => value === null || value === undefined ? null : creditsValue(value, {}, field);
+  const ownBuyInGeneral = amountOrUnknown(record.own_buy_in_general, 'RPS general buy-in');
+  const ownBuyInGame = amountOrUnknown(record.own_buy_in_game, 'RPS game buy-in');
+  const ownReturnedGeneral = amountOrUnknown(record.own_returned_general, 'RPS general cash-out');
+  if ((ownBuyInGeneral === null) !== (ownBuyInGame === null) ||
+      rulesVersion === 2 && (ownBuyInGeneral === null || ownReturnedGeneral === null) ||
+      rulesVersion === 1 && ownBuyInGame !== null && ownBuyInGame !== '0')
+    invalidResponse('RPS result funding');
+  if (ownBuyInGeneral !== null && ownBuyInGame !== null) {
+    const original = creditsToMilli(ownBuyInGeneral) + creditsToMilli(ownBuyInGame);
+    if (ownBuyIn !== null && original !== creditsToMilli(ownBuyIn) ||
+        ownReturnedGeneral !== null && creditsToMilli(ownReturnedGeneral) - original !== ownSign)
+      invalidResponse('RPS result funding arithmetic');
+  }
+  if (ownReturnedGeneral !== null && ownCashOut !== null && ownReturnedGeneral !== ownCashOut)
+    invalidResponse('RPS result cash-out');
   const resultMode = mode(record.mode, 'RPS result mode');
   const terminalReason = enumValue(record.terminal_reason, TERMINAL_REASONS, 'RPS terminal reason');
   const revealed = seats.filter((seat) => seat.gesture !== null).length;
@@ -739,6 +786,7 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
   const expectedOwnResult = ownSign > 0n ? 'win' : ownSign < 0n ? 'loss' : 'tie';
   if (seats[ownSeatNo].result !== expectedOwnResult) invalidResponse('RPS own result');
   return {
+    rulesVersion, ownBuyInGeneral, ownBuyInGame, ownReturnedGeneral,
     sessionID: opaqueID(record.session_id, 'rps_', 'RPS result session'),
     mode: resultMode,
     terminalReason,

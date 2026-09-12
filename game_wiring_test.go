@@ -21,9 +21,15 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-// Compare the production host and each module's live projection with the
-// existing wire samples. Only the response's live clock is normalized.
-func TestRegisteredGamesProductionWireCompatibility(t *testing.T) {
+type gameWireFixture struct {
+	app                   *application
+	store                 *db.Store
+	userID, adminID, now  int64
+	cookies, adminCookies []*http.Cookie
+}
+
+func newGameWireFixture(t *testing.T) gameWireFixture {
+	t.Helper()
 	vault, err := secret.New(bytes.Repeat([]byte{0x53}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +86,9 @@ func TestRegisteredGamesProductionWireCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(ctx, tx, userID, ledger.Game, now); err != nil {
+		t.Fatal(err)
+	}
 	external, err := ledger.CodedAccount(ctx, tx, "external")
 	if err != nil {
 		t.Fatal(err)
@@ -104,6 +113,15 @@ func TestRegisteredGamesProductionWireCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookies := []*http.Cookie{{Name: auth.UserSessionCookieName, Value: token}}
+	return gameWireFixture{app: app, store: store, userID: userID, adminID: adminID, now: now, cookies: cookies, adminCookies: adminCookies}
+}
+
+// Compare the production host and each module's live projection with the
+// existing wire samples. Only the response's live clock is normalized.
+func TestRegisteredGamesProductionWireCompatibility(t *testing.T) {
+	fixture := newGameWireFixture(t)
+	app, cookies, adminCookies, now := fixture.app, fixture.cookies, fixture.adminCookies, fixture.now
+	var err error
 	snapshot := testApplicationRequest(t, app.handler, "GET", auditUserHost, "/api/games", "", cookies, nil)
 	if snapshot.Code != 200 {
 		t.Fatalf("snapshot: %d %s", snapshot.Code, snapshot.Body.String())

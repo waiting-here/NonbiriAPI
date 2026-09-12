@@ -110,7 +110,7 @@ func (service *Service) Read(ctx context.Context, input ReadInput) (CurrentResul
 				return CurrentResult{}, err
 			}
 		}
-		summary, err := terminalize(ctx, tx, record, TerminalTimedOut, now)
+		summary, err := service.terminalize(ctx, tx, record, TerminalTimedOut, now)
 		if err != nil {
 			return CurrentResult{}, err
 		}
@@ -212,7 +212,7 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 		if err != nil {
 			return Result{}, err
 		}
-		if _, err := terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
+		if _, err := service.terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
 			return Result{}, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -267,7 +267,7 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 	record.Board = candidate
 
 	terminal := candidate.activeCount() == 0
-	if !terminal && !candidate.hasMove() {
+	if record.RulesVersion == 1 && !terminal && !candidate.hasMove() {
 		service.rngMu.Lock()
 		reshuffled, reshuffleErr := candidate.reshuffle(service.random)
 		service.rngMu.Unlock()
@@ -282,7 +282,7 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 		record.Board = reshuffled
 	}
 	if terminal {
-		summary, err := terminalize(ctx, tx, record, TerminalCompleted, now)
+		summary, err := service.terminalize(ctx, tx, record, TerminalCompleted, now)
 		if err != nil {
 			return Result{}, err
 		}
@@ -406,7 +406,7 @@ func (service *Service) Abandon(ctx context.Context, input AbandonInput) (Summar
 		return Summary{}, ErrNotFound
 	}
 	if now >= record.Deadline {
-		if _, err := terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
+		if _, err := service.terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
 			return Summary{}, err
 		}
 		if err := tx.Commit(); err != nil {
@@ -438,7 +438,7 @@ func (service *Service) Abandon(ctx context.Context, input AbandonInput) (Summar
 	if record.Revision != expected {
 		return Summary{}, ErrConflict
 	}
-	summary, err := terminalize(ctx, tx, record, TerminalAbandoned, now)
+	summary, err := service.terminalize(ctx, tx, record, TerminalAbandoned, now)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -498,7 +498,7 @@ func (service *Service) RenewLease(ctx context.Context, input LeaseInput) (Lease
 		return LeaseResult{}, ErrNotFound
 	}
 	if now >= record.Deadline {
-		if _, err := terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
+		if _, err := service.terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
 			return LeaseResult{}, err
 		}
 		if err := tx.Commit(); err != nil {

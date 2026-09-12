@@ -13,6 +13,7 @@ import (
 var ErrInvalidHistory = errors.New("ledger: invalid history query")
 
 type HistoryFilter struct {
+	Asset                       string
 	Page                        int64
 	PageSize                    int
 	From, To                    *int64
@@ -20,6 +21,7 @@ type HistoryFilter struct {
 }
 
 type HistoryEntry struct {
+	Asset       Asset   `json:"asset_type"`
 	OperationID string  `json:"operation_id"`
 	Line        int     `json:"line"`
 	Kind        Kind    `json:"kind"`
@@ -29,6 +31,7 @@ type HistoryEntry struct {
 }
 
 type HistoryPage struct {
+	GameBalance    string         `json:"game_balance"`
 	Data           []HistoryEntry `json:"data"`
 	Page           string         `json:"page"`
 	PageSize       int            `json:"page_size"`
@@ -40,21 +43,22 @@ type HistoryPage struct {
 }
 
 var historyCategories = map[string][]Kind{
-	"checkin":  {KindCheckinAward},
-	"welfare":  {KindWelfareClaim},
-	"thursday": {KindThursdayContribution, KindThursdayPayout, KindThursdayFinalize},
-	"fishing":  {KindFishingReserve, KindFishingSettle, KindFishingRelease},
-	"linklink": {KindLinkLinkEntry},
-	"rps":      {KindRPSQueueReserve, KindRPSQueueRelease, KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal},
-	"api":      {KindForwardReserve, KindForwardSettle, KindForwardRelease},
-	"charity":  {KindCharityReserve, KindCharitySettle, KindCharityRelease},
-	"donation": {KindDonorReward},
-	"admin":    {KindAdminUserAdjustment},
-	"penalty":  {KindAntiAbusePenalty},
+	"checkin":    {KindCheckinAward},
+	"onboarding": {KindGameOnboardingReward},
+	"welfare":    {KindWelfareClaim},
+	"thursday":   {KindThursdayContribution, KindThursdayPayout, KindThursdayFinalize},
+	"fishing":    {KindFishingReserve, KindFishingSettle, KindFishingRelease},
+	"linklink":   {KindLinkLinkEntry},
+	"rps":        {KindRPSQueueReserve, KindRPSQueueRelease, KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal},
+	"api":        {KindForwardReserve, KindForwardSettle, KindForwardRelease},
+	"charity":    {KindCharityReserve, KindCharitySettle, KindCharityRelease},
+	"donation":   {KindDonorReward},
+	"admin":      {KindAdminUserAdjustment},
+	"penalty":    {KindAntiAbusePenalty},
 }
 
 func ValidateHistoryFilter(filter HistoryFilter) error {
-	if filter.Page < 1 || (filter.PageSize != 10 && filter.PageSize != 20 && filter.PageSize != 50 && filter.PageSize != 100) ||
+	if (filter.Asset != "" && filter.Asset != "general" && filter.Asset != "game" && filter.Asset != "all") || filter.Page < 1 || (filter.PageSize != 10 && filter.PageSize != 20 && filter.PageSize != 50 && filter.PageSize != 100) ||
 		(filter.From != nil && !validUnix(*filter.From)) || (filter.To != nil && !validUnix(*filter.To)) ||
 		(filter.From != nil && filter.To != nil && *filter.From >= *filter.To) ||
 		(filter.Direction != "" && filter.Direction != "income" && filter.Direction != "expense") ||
@@ -78,11 +82,21 @@ func UserHistory(ctx context.Context, tx *sql.Tx, userID, now int64, filter Hist
 	if err != nil {
 		return HistoryPage{}, err
 	}
-	page := HistoryPage{Data: []HistoryEntry{}, Page: "1", PageSize: filter.PageSize, Total: "0", TotalPages: "1",
+	gameWallet, err := UserAssetAccount(ctx, tx, userID, Game)
+	if err != nil {
+		return HistoryPage{}, err
+	}
+	walletWhere, walletArgs := "e.account_id=?", []any{wallet.ID}
+	if filter.Asset == "game" {
+		walletArgs = []any{gameWallet.ID}
+	} else if filter.Asset == "all" {
+		walletWhere, walletArgs = "e.account_id IN (?,?)", []any{wallet.ID, gameWallet.ID}
+	}
+	page := HistoryPage{GameBalance: formatDisplayCredits(gameWallet.Balance.Big()), Data: []HistoryEntry{}, Page: "1", PageSize: filter.PageSize, Total: "0", TotalPages: "1",
 		CurrentBalance: formatDisplayCredits(wallet.Balance.Big()), ServerNow: now}
 	anchorQuery := `SELECT o.id,o.ledger_seq FROM credit_entries e JOIN credit_operations o ON o.id=e.operation_id
-WHERE e.account_id=? AND e.account_kind_snapshot='user' AND e.delta_sign<>0`
-	anchorArgs := []any{wallet.ID}
+WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0`
+	anchorArgs := append([]any{}, walletArgs...)
 	if filter.Anchor != "" {
 		anchorQuery += ` AND o.id=?`
 		anchorArgs = append(anchorArgs, filter.Anchor)
@@ -102,8 +116,8 @@ WHERE e.account_id=? AND e.account_kind_snapshot='user' AND e.delta_sign<>0`
 	}
 	page.Anchor = &anchor
 	where := ` FROM credit_entries e JOIN credit_operations o ON o.id=e.operation_id
-WHERE e.account_id=? AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND o.ledger_seq<=?`
-	args := []any{wallet.ID, sequence}
+WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND o.ledger_seq<=?`
+	args := append(append([]any{}, walletArgs...), sequence)
 	if filter.From != nil {
 		where += ` AND o.created_at>=?`
 		args = append(args, *filter.From)
@@ -137,7 +151,7 @@ WHERE e.account_id=? AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND 
 	current := min(filter.Page, pages)
 	page.Page, page.Total, page.TotalPages = strconv.FormatInt(current, 10), strconv.FormatInt(count, 10), strconv.FormatInt(pages, 10)
 	// A donor reward never enters the request lookup, even for a self-donation.
-	query := `SELECT o.id,e.line_no,o.kind,o.source_type,o.source_id,o.source_seq,o.created_at,e.delta_sign,e.delta_mag,
+	query := `SELECT o.id,e.line_no,o.kind,o.source_type,o.source_id,o.source_seq,o.created_at,e.asset_type,e.delta_sign,e.delta_mag,
 CASE WHEN o.source_type='logical_request' AND o.kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release')
 THEN (SELECT l.logical_request_id FROM request_logs l WHERE l.logical_request_id=o.source_id AND l.user_id=?
 AND (l.completed_at IS NULL OR l.completed_at>?) AND (l.route_kind NOT IN ('charity_chat_completions','charity_embeddings') OR l.completed_at IS NOT NULL) LIMIT 1)
@@ -159,7 +173,7 @@ ELSE NULL END` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFF
 		var sign int
 		var requestID sql.NullString
 		if err := rows.Scan(&entry.OperationID, &entry.Line, &entry.Kind, &sourceType, &sourceID, &sourceSeq,
-			&entry.CreatedAt, &sign, &magnitude, &requestID); err != nil {
+			&entry.CreatedAt, &entry.Asset, &sign, &magnitude, &requestID); err != nil {
 			return HistoryPage{}, classifySQLError("history row", err)
 		}
 		valid := validExportOperation(UserExportEntry{OperationID: entry.OperationID, Kind: entry.Kind,
@@ -167,7 +181,7 @@ ELSE NULL END` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFF
 		amount, amountErr := amountFromParts(sign, magnitude)
 		clear(sourceSeq)
 		clear(magnitude)
-		if !valid || amountErr != nil || entry.Line < 0 || entry.Line > 255 {
+		if !valid || !entry.Asset.valid() || amountErr != nil || entry.Line < 0 || entry.Line > 255 {
 			return HistoryPage{}, ErrInvariant
 		}
 		entry.Delta = formatDisplayCredits(amount.Big())

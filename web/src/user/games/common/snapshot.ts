@@ -14,6 +14,8 @@ import {
   LINKLINK_SPECS,
   RPS_MODES,
   type GamesSnapshot,
+  type OnboardingProgress,
+  type OnboardingTaskKey,
   type LinkLinkSpec,
   type RPSMode,
   type RPSModeConfig,
@@ -66,10 +68,45 @@ function normalizeMode(value: unknown, field: string): RPSModeConfig {
   };
 }
 
+function normalizeOnboarding(
+  value: unknown,
+  tasks: readonly OnboardingTaskKey[],
+  rewards: readonly string[],
+  field: string,
+): OnboardingProgress {
+  const record = exactRecord(value, ['items', 'all_completed'], [], field);
+  if (!Array.isArray(record.items) || record.items.length !== tasks.length)
+    invalidResponse(field);
+  const items = record.items.map((value, index) => {
+    const item = exactRecord(value, ['key', 'reward', 'asset_type', 'completed'], [], field);
+    if (item.key !== tasks[index] || item.reward !== rewards[index] || item.asset_type !== 'general')
+      invalidResponse(field);
+    return {
+      key: tasks[index],
+      reward: rewards[index],
+      assetType: 'general' as const,
+      completed: booleanValue(item.completed, field),
+    };
+  });
+  const allCompleted = booleanValue(record.all_completed, field);
+  if (allCompleted !== items.every((item) => item.completed)) invalidResponse(field);
+  return { items, allCompleted };
+}
+
 export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
   const record = exactRecord(
     value,
-    ['server_now', 'balance', 'tutorial_rps_seen', 'games_enabled', 'fishing', 'linklink', 'rps'],
+    [
+      'server_now',
+      'balance',
+      'game_balance',
+      'tutorial_rps_seen',
+      'onboarding',
+      'games_enabled',
+      'fishing',
+      'linklink',
+      'rps',
+    ],
     [],
     'games snapshot',
   );
@@ -120,6 +157,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     enumValue(mode, RPS_MODES, 'RPS mode key');
     normalizedModes[mode] = normalizeMode(modes[mode], `${mode} mode`);
   }
+  const onboarding = exactRecord(record.onboarding, ['fishing', 'linklink', 'rps'], [], 'onboarding');
   const gamesEnabled = booleanValue(record.games_enabled, 'games enabled');
   const fishingEnabled = booleanValue(fishing.enabled, 'fishing enabled');
   const linkLinkEnabled = booleanValue(linklink.enabled, 'LinkLink enabled');
@@ -127,7 +165,13 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
   return {
     serverNow: unixTime(record.server_now, 'snapshot server time'),
     balance: creditsValue(record.balance, { signed: true }, 'snapshot balance'),
+    gameBalance: creditsValue(record.game_balance, { signed: true }, 'snapshot game balance'),
     tutorialRPSSeen: booleanValue(record.tutorial_rps_seen, 'tutorial flag'),
+    onboarding: {
+      fishing: normalizeOnboarding(onboarding.fishing, BAITS, ['1000', '1000', '1000'], 'fishing onboarding'),
+      linklink: normalizeOnboarding(onboarding.linklink, LINKLINK_SPECS, ['1000', '2000', '3000'], 'LinkLink onboarding'),
+      rps: normalizeOnboarding(onboarding.rps, RPS_MODES, ['1000', '2000', '5000'], 'RPS onboarding'),
+    },
     gamesEnabled,
     fishing: {
       enabled: fishingEnabled,

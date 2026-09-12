@@ -127,7 +127,8 @@ func TestLinkLinkAdapterPreservesSummaryAndFinalizers(t *testing.T) {
 				PairsRemoved: 3, TotalPairs: 24, StartedAt: 100, Deadline: 250,
 			},
 			Summaries: []linklink.Summary{{
-				SessionID: "ll_BBBBBBBBBBBBBBBBBBBBBB", Spec: "8x8", Price: "2",
+				Opportunities: &linklink.Opportunities{},
+				SessionID:     "ll_BBBBBBBBBBBBBBBBBBBBBB", Spec: "8x8", Price: "2",
 				TerminalReason: "completed", StartedAt: 10, Deadline: 190, TerminalAt: 150,
 				PairsRemoved: 32, TotalPairs: 32, Score: &score,
 			}},

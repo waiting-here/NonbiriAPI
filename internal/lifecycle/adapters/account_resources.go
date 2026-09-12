@@ -90,7 +90,7 @@ func (adapter *AccountResources) ExportIdentity(
 			RPMLimit: identity.RPMLimit, EffectiveRPMLimit: identity.EffectiveRPMLimit,
 			ConcurrencyLimit:          identity.ConcurrencyLimit,
 			EffectiveConcurrencyLimit: identity.EffectiveConcurrencyLimit,
-			Balance:                   identity.Balance, DonationCredit: identity.DonationCredit,
+			GameBalance:               identity.GameBalance, Balance: identity.Balance, DonationCredit: identity.DonationCredit,
 			EffectiveLevel: identity.EffectiveLevel, LevelDisplayName: identity.LevelDisplayName,
 			GameProfilePublic: identity.GameProfilePublic, CreatedAt: identity.CreatedAt, UpdatedAt: identity.UpdatedAt,
 		}, lifecycle.UsageExport{

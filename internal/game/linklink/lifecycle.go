@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 )
 
 var (
@@ -65,6 +67,9 @@ func (adapter *LifecycleAdapter) PrepareDeleteTx(ctx context.Context, tx *sql.Tx
 func (adapter *LifecycleAdapter) prepareDeleteTx(ctx context.Context, tx *sql.Tx, userID int64) (*DeletionFinalizer, error) {
 	if adapter == nil || adapter.service == nil || ctx == nil || tx == nil || userID <= 0 {
 		return nil, ErrInvalidRequest
+	}
+	if err := adapter.service.finance.ReleaseOnboarding(ctx, tx, userID); err != nil {
+		return nil, mapLedger(err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM game_online_leases WHERE user_id=? AND substr(session_id,1,3)='ll_'`, userID); err != nil {
 		return nil, classifyDB(err)
@@ -126,7 +131,7 @@ func (adapter *LifecycleAdapter) ExportTx(
 	}
 	var finalizer *ExportFinalizer
 	if found && decisionNow >= record.Deadline {
-		if _, err := terminalize(ctx, tx, record, TerminalTimedOut, decisionNow); err != nil {
+		if _, err := adapter.service.terminalize(ctx, tx, record, TerminalTimedOut, decisionNow); err != nil {
 			return UserExport{}, nil, err
 		}
 		finalizer = &ExportFinalizer{service: adapter.service, sessionIDs: []string{record.ID}}
@@ -134,7 +139,9 @@ func (adapter *LifecycleAdapter) ExportTx(
 	}
 	if found {
 		result.Active = &SafeActiveExport{
-			SessionID: record.ID, Spec: record.Spec, Price: stateFromRecord(record, decisionNow).Price, State: "active",
+			Opportunities: Opportunities{record.AssistsInitial, record.AssistsRemaining},
+			RulesVersion:  record.RulesVersion, Payment: game.PaymentFromMilli(record.PriceMilli, record.GamePaid),
+			SessionID: record.ID, Spec: record.Spec, Price: game.FormatAmount(record.PriceMilli), State: "active",
 			PairsRemoved: record.PairsRemoved, TotalPairs: record.Board.definition.totalPairs(),
 			StartedAt: record.CreatedAt, Deadline: record.Deadline,
 		}

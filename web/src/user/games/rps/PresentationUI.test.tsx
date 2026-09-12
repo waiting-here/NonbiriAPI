@@ -46,6 +46,10 @@ function pending(known: boolean) {
   return {
     kind: 'pending_result',
     result: {
+      rules_version: known ? 2 : 1,
+      own_buy_in_general: known ? '3' : null,
+      own_buy_in_game: known ? '2' : null,
+      own_returned_general: known ? '6' : null,
       session_id: rpsTestSessionID,
       mode: 'quick',
       terminal_reason: 'quick_resolved',
@@ -81,7 +85,7 @@ describe('RPS presentation in the real game page', () => {
       const fetch = install(pending(known));
       const view = await renderWithProviders(<RPSGame />, { station: 'user', route: '/games/rps' });
       await screen.findByRole('heading', { name: 'Quick' });
-      const seats = screen.getAllByRole('listitem');
+      const seats = within(screen.getByRole('list', { name: 'Player results' })).getAllByRole('listitem');
       expect(seats).toHaveLength(3);
       expect(seats[0]).toHaveTextContent('You');
       expect(seats[2]).toHaveTextContent('Identity-hidden seat');
@@ -91,9 +95,9 @@ describe('RPS presentation in the real game page', () => {
         expect(seats[2]).toHaveTextContent('Rock');
         expect(view.container.querySelectorAll('.rps-result__seats svg')).toHaveLength(3);
         expect(screen.getByText('Starting buy-in (actual input)').parentElement).toHaveTextContent(
-          '5 credits',
+          'General credits 3 creditsGame credits 2 credits',
         );
-        expect(screen.getByText('Ending cash-out (actual return)').parentElement).toHaveTextContent(
+        expect(screen.getByText('Ending cash-out in general credits').parentElement).toHaveTextContent(
           '6 credits',
         );
       } else {

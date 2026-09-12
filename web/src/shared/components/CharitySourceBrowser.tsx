@@ -21,6 +21,7 @@ import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http
 import { formatDateTime } from '@shared/utils/datetime';
 import { DonationHandlingStatus } from './DonationHandling';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { FailureResetControl } from './FailureResetControl';
 import { copyForRecurringLimits } from './recurringLimitsCopy';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from './States';
 import '@shared/operations/operations.css';
@@ -582,10 +583,7 @@ export function CharitySourceBrowser({
     (error) => isUnauthorized(error) || isForbidden(error),
   );
   const navigationReady = sourceKey
-    ? !sources.isPending &&
-      !sources.isFetching &&
-      !sourceKeys.isPending &&
-      !sourceKeys.isFetching
+    ? !sources.isPending && !sources.isFetching && !sourceKeys.isPending && !sourceKeys.isFetching
     : !sources.isPending && !sources.isFetching;
   const { listRef, detailRef, remember } = useDetailNavigation<HTMLElement, HTMLElement>(
     sourceKey,
@@ -894,6 +892,20 @@ export function CharitySourceBrowser({
           aria-label={t('common.operations.charity.sourceBrowser.sources')}
         >
           <h3>{t('common.operations.charity.sourceBrowser.sources')}</h3>
+          {sourcePage ? (
+            <FailureResetControl
+              key={JSON.stringify([role, accountId, sourceFilters])}
+              role={role}
+              selection={{ view: 'sources', ...sourceFilters }}
+              disabled={sourceBusy || Boolean(sources.error)}
+              onCapabilityLoss={onCapabilityLoss}
+              choices={sourcePage.data.map((item) => ({
+                id: item.source_key,
+                label: sourceLabel(item.safe_source, t),
+                target: { view: 'source_keys', source_key: item.source_key, ...sourceFilters },
+              }))}
+            />
+          ) : null}
           {sources.isPending ? (
             <LoadingState />
           ) : sources.error ? (
@@ -1025,6 +1037,24 @@ export function CharitySourceBrowser({
                   </select>
                 </label>
               </form>
+              {keyPage ? (
+                <FailureResetControl
+                  key={JSON.stringify([role, accountId, sourceKey, sourceKeysFilters])}
+                  role={role}
+                  selection={{ view: 'source_keys', source_key: sourceKey, ...sourceKeysFilters }}
+                  disabled={sourceKeysBusy || Boolean(sourceKeys.error)}
+                  onCapabilityLoss={onCapabilityLoss}
+                  choices={keyPage.data.map((item) => ({
+                    id: item.key_id,
+                    label: `${item.donation_id} / ${item.key_id} · ${item.display_head}…${item.display_tail}`,
+                    target: {
+                      donation_id: item.donation_id,
+                      key_id: item.key_id,
+                      expected_revision: item.donation_revision,
+                    },
+                  }))}
+                />
+              ) : null}
               {sourceKeysBusy && keyPage ? <LoadingState label={t('common.loading')} /> : null}
               {sourceKeys.isPending ? (
                 <LoadingState />

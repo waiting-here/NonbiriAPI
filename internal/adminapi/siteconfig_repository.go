@@ -395,7 +395,7 @@ func ensureSiteTimezoneMutable(ctx context.Context, tx *sql.Tx) error {
 	if exists != 0 {
 		return ErrSiteConfigConflict
 	}
-	for _, table := range []string{"checkins", "user_activity_daily", "site_activity_daily"} {
+	for _, table := range []string{"checkins", "game_checkins", "user_activity_daily", "site_activity_daily"} {
 		// The identifiers come only from this fixed internal list.
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+table+` LIMIT 1)`).Scan(&exists); err != nil {
 			return classifySiteConfigDatabase("read timezone data guard", err)

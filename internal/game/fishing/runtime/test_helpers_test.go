@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
@@ -147,13 +148,21 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 	if _, err = fixture.database.Exec(`UPDATE maintenance_state SET enabled=0,revision=revision+1,changed_at=? WHERE id=1`, fixtureNow); err != nil {
 		t.Fatalf("disable maintenance: %v", err)
 	}
+	// Reward and presentation fixtures use fixed historical RTP inputs.
+	if _, err = fixture.database.Exec(`UPDATE site_config SET value=CASE key WHEN 'game_fishing_rtp' THEN '90' ELSE '88' END WHERE key IN ('game_fishing_rtp','game_fishing_rtp_premium')`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = fixture.database.Exec(`UPDATE site_config SET value='1',updated_at=? WHERE key='games_enabled'`, fixtureNow); err != nil {
 		t.Fatalf("enable games: %v", err)
 	}
 	if _, err = fixture.database.Exec(`UPDATE site_config SET value='1',updated_at=? WHERE key='game_fishing_enabled'`, fixtureNow); err != nil {
 		t.Fatalf("enable fishing: %v", err)
 	}
-	service, err := New(Options{Finance: registeredFinance(t, "fishing").Fishing,
+	pools, err := activities.NewRepository(activities.RepositoryConfig{Store: store, UserFinalAuth: fixture.userAuth, AdminFinalAuth: testPoolAuthority{}, UserGate: testPoolAuthority{}, CursorKeys: vault, Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(Options{Pools: pools, ActivityEvents: &testPoolEvents{}, Finance: registeredFinance(t, "fishing").Fishing,
 		Store: store, UserAuthorizer: fixture.userAuth,
 		Random: source, Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0).UTC() },
 		LeaderboardTieKey: []byte("0123456789abcdef0123456789abcdef"),
@@ -212,6 +221,9 @@ func (fixture *gameFixture) seedUser(label string, funding int64) int64 {
 	wallet, err := ledger.CreateUserAccount(context.Background(), tx, userID, fixture.clock.Load())
 	if err != nil {
 		fixture.t.Fatalf("create wallet: %v", err)
+	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, fixture.clock.Load()); err != nil {
+		fixture.t.Fatal(err)
 	}
 	if funding != 0 {
 		external, readErr := ledger.CodedAccount(context.Background(), tx, "external")
@@ -275,4 +287,23 @@ func equalJSONValue(t *testing.T, left, right any) bool {
 		t.Fatal(err)
 	}
 	return bytes.Equal(a, b)
+}
+
+type testPoolAuthority struct{}
+
+func (testPoolAuthority) AuthorizeAdmin(context.Context, *sql.Tx, int64) error        { return nil }
+func (testPoolAuthority) AuthorizeUserActivity(context.Context, *sql.Tx, int64) error { return nil }
+
+type testPoolEvents struct{ count atomic.Int64 }
+
+func (events *testPoolEvents) Publish(_ context.Context, facts activities.PublishFacts) error {
+	if facts.Global {
+		events.count.Add(1)
+	}
+	return nil
+}
+
+// startLegacy constructs a pre-upgrade batch for compatibility regressions.
+func (service *Service) startLegacy(ctx context.Context, input StartInput) (*FishingBatchResult, *FishingSettlementPending, error) {
+	return service.startFishing(ctx, input, 1)
 }

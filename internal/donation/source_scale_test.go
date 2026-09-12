@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -85,77 +85,77 @@ INSERT INTO "` + table.name + `" (` + strings.Join(columns, ",") + `) SELECT ` +
 func TestSourcePagesUseCompleteIndexedCollectionsAtScale(t *testing.T) {
 	for _, distinct := range []bool{true, false} {
 		t.Run(fmt.Sprintf("distinct=%t", distinct), func(t *testing.T) {
-			e := newDonationTestEnv(t)
-			owner := e.seedUser(t, "scale-donor", nil, false)
-			e.seedUser(t, "", nil, true)
-			const count = 10017
-			source := seedBrowseScale(t, e, owner, count, distinct)
-			ctx := context.Background()
-			started := time.Now()
-			for _, size := range []int{10, 20, 50, 100} {
-				out, err := e.service.SourcesAdminPage(ctx, SourceFilter{}, pagination.Request{Page: pagination.MaxPage, Size: size})
-				if err != nil {
-					t.Fatal(err)
-				}
-				if distinct {
-					if out.Pagination.TotalItems != "10017" || len(out.Data) != (count-1)%size+1 {
-						t.Fatal(out.Pagination, len(out.Data))
+			dbtest.Scale(t, func(t *testing.T) {
+				e := newDonationTestEnv(t)
+				owner := e.seedUser(t, "scale-donor", nil, false)
+				e.seedUser(t, "", nil, true)
+				const count = 10017
+				source := seedBrowseScale(t, e, owner, count, distinct)
+				ctx := context.Background()
+				for _, size := range []int{10, 20, 50, 100} {
+					out, err := e.service.SourcesAdminPage(ctx, SourceFilter{}, pagination.Request{Page: pagination.MaxPage, Size: size})
+					if err != nil {
+						t.Fatal(err)
 					}
-				} else if out.Pagination.TotalItems != "1" || len(out.Data) != 1 || out.Data[0].KeyCount != "10017" || out.Data[0].DonationCount != "10017" || out.Data[0].PendingDonationCount != "10017" {
-					t.Fatal(out)
-				}
-				for _, row := range out.Data {
-					if row.UsableKeyCount != "0" {
-						t.Fatal(row)
+					if distinct {
+						if out.Pagination.TotalItems != "10017" || len(out.Data) != (count-1)%size+1 {
+							t.Fatal(out.Pagination, len(out.Data))
+						}
+					} else if out.Pagination.TotalItems != "1" || len(out.Data) != 1 || out.Data[0].KeyCount != "10017" || out.Data[0].DonationCount != "10017" || out.Data[0].PendingDonationCount != "10017" {
+						t.Fatal(out)
 					}
-				}
-				keys, err := e.service.SourceKeysAdminPage(ctx, source, SourceFilter{}, pagination.Request{Page: pagination.MaxPage, Size: size})
-				if err != nil {
-					t.Fatal(err)
-				}
-				if distinct {
-					if keys.Pagination.TotalItems != "1" || len(keys.Data) != 1 {
+					for _, row := range out.Data {
+						if row.UsableKeyCount != "0" {
+							t.Fatal(row)
+						}
+					}
+					keys, err := e.service.SourceKeysAdminPage(ctx, source, SourceFilter{}, pagination.Request{Page: pagination.MaxPage, Size: size})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if distinct {
+						if keys.Pagination.TotalItems != "1" || len(keys.Data) != 1 {
+							t.Fatal(keys.Pagination, len(keys.Data))
+						}
+					} else if keys.Pagination.TotalItems != "10017" || len(keys.Data) != (count-1)%size+1 {
 						t.Fatal(keys.Pagination, len(keys.Data))
 					}
-				} else if keys.Pagination.TotalItems != "10017" || len(keys.Data) != (count-1)%size+1 {
-					t.Fatal(keys.Pagination, len(keys.Data))
 				}
-			}
-			t.Logf("four sizes / group and key end pages over %d physical keys: %s", count, time.Since(started))
-			query, args := sourceSelectionSQL(SourceFilter{}, nil, e.clock.Load())
-			rows, err := e.store.DB().Query(`EXPLAIN QUERY PLAN SELECT `+sourceGroupColumns+`,COUNT(*) FROM (`+query+`) GROUP BY `+sourceGroupColumns+` ORDER BY `+sourceGroupColumns+` LIMIT 100 OFFSET 10000`, args...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var plan strings.Builder
-			for rows.Next() {
-				var id, parent, unused int
-				var detail string
-				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
-					rows.Close()
+				query, args := sourceSelectionSQL(SourceFilter{}, nil, e.clock.Load())
+				rows, err := e.store.DB().Query(`EXPLAIN QUERY PLAN SELECT `+sourceGroupColumns+`,COUNT(*) FROM (`+query+`) GROUP BY `+sourceGroupColumns+` ORDER BY `+sourceGroupColumns+` LIMIT 100 OFFSET 10000`, args...)
+				if err != nil {
 					t.Fatal(err)
 				}
-				plan.WriteString(detail)
-				plan.WriteByte('\n')
-			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(plan.String(), "idx_donation_keys_source_page") || strings.Contains(plan.String(), "TEMP B-TREE FOR GROUP BY") || strings.Contains(plan.String(), "TEMP B-TREE FOR ORDER BY") {
-				t.Fatal(plan.String())
-			}
-			t.Log(plan.String())
-			cancelled, cancel := context.WithCancel(ctx)
-			cancel()
-			if _, err := e.service.SourcesAdminPage(cancelled, SourceFilter{}, pagination.Default()); err == nil {
-				t.Fatal("cancelled query succeeded")
-			}
-			var violations int
-			if err := e.store.DB().QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil || violations != 0 {
-				t.Fatal(violations, err)
-			}
+				var plan strings.Builder
+				for rows.Next() {
+					var id, parent, unused int
+					var detail string
+					if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+						rows.Close()
+						t.Fatal(err)
+					}
+					plan.WriteString(detail)
+					plan.WriteByte('\n')
+				}
+				err = rows.Err()
+				rows.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(plan.String(), "idx_donation_keys_source_page") || strings.Contains(plan.String(), "TEMP B-TREE FOR GROUP BY") || strings.Contains(plan.String(), "TEMP B-TREE FOR ORDER BY") {
+					t.Fatal(plan.String())
+				}
+				t.Log(plan.String())
+				cancelled, cancel := context.WithCancel(ctx)
+				cancel()
+				if _, err := e.service.SourcesAdminPage(cancelled, SourceFilter{}, pagination.Default()); err == nil {
+					t.Fatal("cancelled query succeeded")
+				}
+				var violations int
+				if err := e.store.DB().QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil || violations != 0 {
+					t.Fatal(violations, err)
+				}
+			})
 		})
 	}
 }

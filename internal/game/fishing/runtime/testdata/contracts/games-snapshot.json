@@ -1,6 +1,78 @@
 {
   "server_now": 2000000000,
   "balance": "1000000",
+  "game_balance": "0",
+  "onboarding": {
+    "fishing": {
+      "items": [
+        {
+          "key": "worm",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "lure",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "premium",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        }
+      ],
+      "all_completed": false
+    },
+    "linklink": {
+      "items": [
+        {
+          "key": "6x8",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "8x8",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "10x10",
+          "reward": "3000",
+          "asset_type": "general",
+          "completed": false
+        }
+      ],
+      "all_completed": false
+    },
+    "rps": {
+      "items": [
+        {
+          "key": "quick",
+          "reward": "1000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "standard",
+          "reward": "2000",
+          "asset_type": "general",
+          "completed": false
+        },
+        {
+          "key": "deathmatch",
+          "reward": "5000",
+          "asset_type": "general",
+          "completed": false
+        }
+      ],
+      "all_completed": false
+    }
+  },
   "tutorial_rps_seen": false,
   "games_enabled": true,
   "fishing": {"enabled": true, "available": true, "bait_prices": {"worm": "2500", "lure": "5000", "premium": "7500"}},

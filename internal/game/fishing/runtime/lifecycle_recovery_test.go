@@ -21,7 +21,7 @@ func TestFishingLifecycleRecoveryIsBoundedAndRestartSafe(t *testing.T) {
 	batches := make([]string, 0, 3)
 	for index := range 3 {
 		userID := fixture.seedUser("lifecycle-recovery-"+string(rune('a'+index)), fixtureFunding)
-		_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+		_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{
 			UserID: userID, Bait: string(fishing.BaitWorm), Count: 1,
 			IdempotencyKey: validTestKey(800 + index),
 		})
@@ -84,7 +84,7 @@ func TestFishingLifecycleRecoveryIsBoundedAndRestartSafe(t *testing.T) {
 	if err := fixture.service.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := New(Options{Finance: registeredFinance(t, "fishing").Fishing,
+	restarted, err := New(Options{Pools: fixture.service.pools, ActivityEvents: fixture.service.activityEvents, Finance: registeredFinance(t, "fishing").Fishing,
 		Store: fixture.store, UserAuthorizer: fixture.userAuth,
 		Random: fixture.random, Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0).UTC() },
 		LeaderboardTieKey: []byte("0123456789abcdef0123456789abcdef"), WorkerInterval: time.Minute,
@@ -111,13 +111,13 @@ func TestFishingLifecycleRecoverySchedulesFailuresAndExhaustion(t *testing.T) {
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	firstUser := fixture.seedUser("lifecycle-retry", fixtureFunding)
 	secondUser := fixture.seedUser("lifecycle-exhaust", fixtureFunding)
-	_, first, err := fixture.service.StartFishing(context.Background(), StartInput{
+	_, first, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: firstUser, Bait: string(fishing.BaitLure), Count: 1, IdempotencyKey: validTestKey(810),
 	})
 	if err != nil || first == nil || first.NextAttemptAt == nil {
 		t.Fatalf("first pending = (%#v,%v)", first, err)
 	}
-	_, second, err := fixture.service.StartFishing(context.Background(), StartInput{
+	_, second, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: secondUser, Bait: string(fishing.BaitLure), Count: 1, IdempotencyKey: validTestKey(811),
 	})
 	if err != nil || second == nil || second.NextAttemptAt == nil {
@@ -171,7 +171,7 @@ func TestFishingLifecycleRecoveryUsesFrozenTimeAndBudget(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{})
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	userID := fixture.seedUser("lifecycle-frozen-time", fixtureFunding)
-	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+	_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Bait: string(fishing.BaitPremium), Count: 1, IdempotencyKey: validTestKey(820),
 	})
 	if err != nil || pending == nil || pending.NextAttemptAt == nil {
@@ -244,7 +244,7 @@ func TestFishingLifecycleRecoveryPreservesStartupCapacityValidation(t *testing.T
 	fixture := newGameFixture(t, &scriptedSource{})
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	userID := fixture.seedUser("lifecycle-capacity-validation", fixtureFunding)
-	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+	_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Bait: string(fishing.BaitWorm), Count: 1, IdempotencyKey: validTestKey(830),
 	})
 	if err != nil || pending == nil || pending.NextAttemptAt == nil {

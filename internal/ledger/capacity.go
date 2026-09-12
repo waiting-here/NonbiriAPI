@@ -251,6 +251,8 @@ func validReservation(ref ReservationRef) bool {
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "rpsq_")
 	case reservationRPSSession:
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "rps_")
+	case reservationGameOnboarding:
+		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "goh_")
 	default:
 		return false
 	}
@@ -277,6 +279,8 @@ func readReservationRemaining(ctx context.Context, tx *sql.Tx, ref ReservationRe
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_rps_queue WHERE id=?`, ref.id)
 	case reservationRPSSession:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_rps_sessions WHERE id=?`, ref.id)
+	case reservationGameOnboarding:
+		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_onboarding_holds WHERE id=?`, ref.id)
 	}
 	err := row.Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
