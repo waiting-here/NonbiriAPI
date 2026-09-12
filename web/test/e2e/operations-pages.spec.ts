@@ -449,6 +449,7 @@ test('administrator dashboard accepts the runtime activity day contract', async 
           cache_read_input_tokens: '0',
           output_tokens: '0',
           checkins: '1',
+          game_checkins: '0',
           console_writes: '0',
           game_active: false,
           game_rounds: '0',

@@ -315,6 +315,12 @@ test('reachable user home keeps level state but removes the implementation hint'
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
+    path: '/api/checkin/game',
+    body: { enabled: false },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
     path: '/api/home/game-summary',
     body: { continue: [], pending_results: [] },
   });

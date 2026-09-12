@@ -261,6 +261,12 @@ async function prepare(
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
+    path: '/api/checkin/game',
+    body: { enabled: false },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
     path: '/api/home/game-summary',
     body: { continue: [], pending_results: [] },
   });
