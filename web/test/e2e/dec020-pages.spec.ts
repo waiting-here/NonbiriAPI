@@ -904,7 +904,7 @@ test('user charity overview fails closed on an invalid numbered page and privacy
   await page.goto(`${USER_ORIGIN}/privacy`);
   await expect(page.getByRole('heading', { name: 'Privacy policy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Retention and deletion' })).toBeVisible();
-  await expect(page.locator('body')).toContainText('Export version 5');
+  await expect(page.locator('body')).toContainText('Export version 6');
   await expect(page.locator('body')).toContainText('up to 90 days');
   await assertClean(page, guard);
 });

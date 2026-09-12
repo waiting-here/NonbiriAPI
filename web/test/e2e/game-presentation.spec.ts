@@ -577,6 +577,14 @@ async function installGameRoutes(
       await route.fulfill({ json: fishingLeaderboard(board) });
       return;
     }
+    if (url.pathname === '/api/games/linklink/leaderboard' && method === 'GET') {
+      const days = url.searchParams.get('window') === '30d' ? 30 : 7;
+      await route.fulfill({ json: {
+        spec: url.searchParams.get('spec'), window_days: days,
+        window_start: NOW - days * 86400, as_of: NOW, rules_version: 2, rows: [], me: null,
+      } });
+      return;
+    }
     if (url.pathname === '/api/games/linklink/session' && method === 'GET') {
       linkGetCount += 1;
       await route.fulfill({ json: linkHome });
@@ -683,7 +691,7 @@ test.describe('RPS result presentation and amount lifecycle', () => {
       const resultText = page.locator('.rps-result');
       if (known) {
         await expect(resultText).toContainText('Starting buy-in (actual input)');
-        await expect(resultText).toContainText('Ending cash-out (actual return)');
+        await expect(resultText).toContainText('Ending cash-out in general credits');
         await expect(resultText).toContainText('9,876,543,210,123,456,789.125');
       } else {
         await expect(resultText).toHaveText(/Not recorded for this historical result/);
@@ -691,6 +699,7 @@ test.describe('RPS result presentation and amount lifecycle', () => {
           resultText.locator('text=Not recorded for this historical result'),
         ).toHaveCount(5);
       }
+      await resultText.scrollIntoViewIfNeeded();
       await assertNoHorizontalOverflow(page);
       await saveScreenshot(page, `rps-result-${known ? 'known' : 'legacy'}-390.png`);
       if (known) {
