@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -342,16 +343,47 @@ func assertRetainedImages(t *testing.T, database *sql.DB, before map[string]reta
 	}
 }
 
+// Each matrix starts from the same populated pre-asset database. Build and
+// close that input once, then give each source an independent temporary file.
+func retainedBusinessFixture(t *testing.T) func(*testing.T, string) (string, *Store) {
+	t.Helper()
+	path, vault := bootstrapTestPath(t, "retained-base.sqlite"), bootstrapTestVault(t)
+	store, err := Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	seedRetainedBusinessData(t, store, vault)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return func(t *testing.T, name string) (string, *Store) {
+		t.Helper()
+		path := bootstrapTestPath(t, name)
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		database, err := openSQLite(path, "rw")
+		if err != nil {
+			t.Fatal(err)
+		}
+		store := &Store{db: database, secrets: vault}
+		t.Cleanup(func() { _ = store.Close() })
+		hostileMustExec(t, database, `PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;`)
+		return path, store
+	}
+}
+
 func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
+	fixture := retainedBusinessFixture(t)
 	for _, source := range retainedSourceManifests {
 		t.Run(source.name, func(t *testing.T) {
-			path, vault := bootstrapTestPath(t, "retained.sqlite"), bootstrapTestVault(t)
-			store, err := Open(path, vault)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer store.Close()
-			seedRetainedBusinessData(t, store, vault)
+			path, store := fixture(t, "retained.sqlite")
+			vault := store.secrets
 			makeRetainedSource(t, store.DB(), source.hash)
 			before := retainedTableImages(t, store.DB(), nil)
 			if err := store.Close(); err != nil {
@@ -359,6 +391,7 @@ func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
 			}
 			var upgraded map[string]retainedTableImage
 			for attempt := 0; attempt < 2; attempt++ {
+				var err error
 				store, err = Open(path, vault)
 				if err != nil {
 					t.Fatalf("open %d: %v", attempt, err)
@@ -394,10 +427,10 @@ func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
 }
 
 func TestRetainedExtensionRollsBackWhenStorageFills(t *testing.T) {
+	fixture := retainedBusinessFixture(t)
 	for _, source := range retainedSourceManifests {
 		t.Run(source.name, func(t *testing.T) {
-			store := openTestStore(t, bootstrapTestPath(t, "full.sqlite"))
-			seedRetainedBusinessData(t, store, bootstrapTestVault(t))
+			_, store := fixture(t, "full.sqlite")
 			makeRetainedSource(t, store.DB(), source.hash)
 			// Reclaim dropped pages before imposing a small additional page budget.
 			hostileMustExec(t, store.DB(), `VACUUM`)
@@ -428,15 +461,11 @@ func TestRetainedExtensionRollsBackWhenStorageFills(t *testing.T) {
 }
 
 func TestRetainedExtensionRejectsMixedSourcesWithoutWriting(t *testing.T) {
+	fixture := retainedBusinessFixture(t)
 	for _, source := range retainedSourceManifests {
 		t.Run(source.name, func(t *testing.T) {
-			path, vault := bootstrapTestPath(t, "mixed.sqlite"), bootstrapTestVault(t)
-			store, err := Open(path, vault)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer store.Close()
-			seedRetainedBusinessData(t, store, vault)
+			path, store := fixture(t, "mixed.sqlite")
+			vault := store.secrets
 			makeRetainedSource(t, store.DB(), source.hash)
 			hostileMustExec(t, store.DB(), `DROP INDEX idx_users_created`)
 			if err := store.Close(); err != nil {

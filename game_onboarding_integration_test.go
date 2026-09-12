@@ -145,8 +145,10 @@ func TestGameOnboardingHTTPExportAndPhysicalDeletion(t *testing.T) {
 			}
 		}
 		service := f.app.games.AccountContinuation().(*rps.Service)
-		if matched, err := service.MatchOnce(ctx, mode); err != nil || !matched {
-			t.Fatal(matched, err)
+		// The running worker may already have matched these players. Verify
+		// the resulting game through the HTTP states and ledger below.
+		if _, err := service.MatchOnce(ctx, mode); err != nil {
+			t.Fatal(err)
 		}
 	}
 	state := func(player int) rps.HomeState {
@@ -208,6 +210,9 @@ func TestGameOnboardingHTTPExportAndPhysicalDeletion(t *testing.T) {
 	}
 	queue(game.RPSModeStandard)
 	ongoing := state(0)
+	if ongoing.Session == nil {
+		t.Fatal("standard queue did not produce a live session")
+	}
 	deleted := call(0, "POST", "/api/account/delete", `{"confirm":"DELETE"}`, true)
 	if deleted.Code != 204 {
 		t.Fatalf("delete: %d %s", deleted.Code, deleted.Body.String())
