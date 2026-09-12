@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -1088,76 +1089,79 @@ func TestGenerationTwoCurrentRejectsNonGenerationTwoSecretEnvelopes(t *testing.T
 }
 
 func TestGenerationTwoOrphanRecoveryHandles101RowsBoundaryAndRestart(t *testing.T) {
-	path := bootstrapTestPath(t, "orphan-recovery.db")
-	store := openTestStore(t, path)
-	sealVault := bootstrapTestVault(t)
-	now := time.Now().Unix()
-	old := now - 2*3600
-	exactBoundary := now - 3600
-	recent := now - 3590
+	// Keep both restarts on the same side of the one-hour expiry boundary.
+	synctest.Test(t, func(t *testing.T) {
+		path := bootstrapTestPath(t, "orphan-recovery.db")
+		store := openTestStore(t, path)
+		sealVault := bootstrapTestVault(t)
+		now := time.Now().Unix()
+		old := now - 2*3600
+		exactBoundary := now - 3600
+		recent := now - 3599
 
-	oldIDs := insertBootstrapOrphanRows(t, store, sealVault, 100, &old, 0x100)
-	exactIDs := insertBootstrapOrphanRows(t, store, sealVault, 1, &exactBoundary, 0x200)
-	recentIDs := insertBootstrapOrphanRows(t, store, sealVault, 1, &recent, 0x300)
-	unmarkedIDs := insertBootstrapOrphanRows(t, store, sealVault, 1, nil, 0x400)
-	if len(oldIDs) != 100 || len(exactIDs) != 1 || len(recentIDs) != 1 || len(unmarkedIDs) != 1 {
-		t.Fatal("orphan fixture IDs were not created")
-	}
-	if err := store.Close(); err != nil {
-		t.Fatalf("close orphan fixture before restart: %v", err)
-	}
+		oldIDs := insertBootstrapOrphanRows(t, store, sealVault, 100, &old, 0x100)
+		exactIDs := insertBootstrapOrphanRows(t, store, sealVault, 1, &exactBoundary, 0x200)
+		recentIDs := insertBootstrapOrphanRows(t, store, sealVault, 1, &recent, 0x300)
+		unmarkedIDs := insertBootstrapOrphanRows(t, store, sealVault, 1, nil, 0x400)
+		if len(oldIDs) != 100 || len(exactIDs) != 1 || len(recentIDs) != 1 || len(unmarkedIDs) != 1 {
+			t.Fatal("orphan fixture IDs were not created")
+		}
+		if err := store.Close(); err != nil {
+			t.Fatalf("close orphan fixture before restart: %v", err)
+		}
 
-	reopened := bootstrapTestVault(t)
-	recovered, err := Open(path, reopened)
-	if err != nil {
-		t.Fatalf("reopen orphan fixture: %v", err)
-	}
-	t.Cleanup(func() { _ = recovered.Close() })
-	var remaining int
-	if err := recovered.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_key_secrets`).Scan(&remaining); err != nil {
-		t.Fatalf("count recovered endpoint secrets: %v", err)
-	}
-	if remaining != 2 {
-		t.Fatalf("remaining detached secrets = %d, want recent boundary-adjacent + newly marked", remaining)
-	}
-	var exactExists, oldExists int
-	if err := recovered.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=?)`, exactIDs[0]).Scan(&exactExists); err != nil {
-		t.Fatalf("check exact-boundary orphan: %v", err)
-	}
-	if err := recovered.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=?)`, oldIDs[0]).Scan(&oldExists); err != nil {
-		t.Fatalf("check old orphan: %v", err)
-	}
-	if exactExists != 0 || oldExists != 0 {
-		t.Fatalf("orphan rows at or beyond one hour survived: exact=%d old=%d", exactExists, oldExists)
-	}
-	var recentExists, recentMarker int
-	if err := recovered.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=?), EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=? AND orphaned_at IS NOT NULL)`, recentIDs[0], unmarkedIDs[0]).Scan(&recentExists, &recentMarker); err != nil {
-		t.Fatalf("check recent and newly marked orphans: %v", err)
-	}
-	if recentExists != 1 || recentMarker != 1 {
-		t.Fatalf("recent orphan/marker state = (%d,%d), want (1,1)", recentExists, recentMarker)
-	}
+		reopened := bootstrapTestVault(t)
+		recovered, err := Open(path, reopened)
+		if err != nil {
+			t.Fatalf("reopen orphan fixture: %v", err)
+		}
+		t.Cleanup(func() { _ = recovered.Close() })
+		var remaining int
+		if err := recovered.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_key_secrets`).Scan(&remaining); err != nil {
+			t.Fatalf("count recovered endpoint secrets: %v", err)
+		}
+		if remaining != 2 {
+			t.Fatalf("remaining detached secrets = %d, want recent boundary-adjacent + newly marked", remaining)
+		}
+		var exactExists, oldExists int
+		if err := recovered.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=?)`, exactIDs[0]).Scan(&exactExists); err != nil {
+			t.Fatalf("check exact-boundary orphan: %v", err)
+		}
+		if err := recovered.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=?)`, oldIDs[0]).Scan(&oldExists); err != nil {
+			t.Fatalf("check old orphan: %v", err)
+		}
+		if exactExists != 0 || oldExists != 0 {
+			t.Fatalf("orphan rows at or beyond one hour survived: exact=%d old=%d", exactExists, oldExists)
+		}
+		var recentExists, recentMarker int
+		if err := recovered.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=?), EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=? AND orphaned_at IS NOT NULL)`, recentIDs[0], unmarkedIDs[0]).Scan(&recentExists, &recentMarker); err != nil {
+			t.Fatalf("check recent and newly marked orphans: %v", err)
+		}
+		if recentExists != 1 || recentMarker != 1 {
+			t.Fatalf("recent orphan/marker state = (%d,%d), want (1,1)", recentExists, recentMarker)
+		}
 
-	if err := recovered.Close(); err != nil {
-		t.Fatalf("close recovered orphan fixture: %v", err)
-	}
-	restartedVault := bootstrapTestVault(t)
-	restarted, err := Open(path, restartedVault)
-	if err != nil {
-		t.Fatalf("second reopen orphan fixture: %v", err)
-	}
-	t.Cleanup(func() { _ = restarted.Close() })
-	if err := restarted.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_key_secrets`).Scan(&remaining); err != nil {
-		t.Fatalf("count orphans after second restart: %v", err)
-	}
-	if remaining != 2 {
-		t.Fatalf("remaining detached secrets after restart = %d, want 2", remaining)
-	}
-	var restartedMarker int
-	if err := restarted.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=? AND orphaned_at IS NOT NULL)`, unmarkedIDs[0]).Scan(&restartedMarker); err != nil {
-		t.Fatalf("check marker after restart: %v", err)
-	}
-	if restartedMarker != 1 {
-		t.Fatal("newly marked orphan disappeared on ordinary restart")
-	}
+		if err := recovered.Close(); err != nil {
+			t.Fatalf("close recovered orphan fixture: %v", err)
+		}
+		restartedVault := bootstrapTestVault(t)
+		restarted, err := Open(path, restartedVault)
+		if err != nil {
+			t.Fatalf("second reopen orphan fixture: %v", err)
+		}
+		t.Cleanup(func() { _ = restarted.Close() })
+		if err := restarted.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_key_secrets`).Scan(&remaining); err != nil {
+			t.Fatalf("count orphans after second restart: %v", err)
+		}
+		if remaining != 2 {
+			t.Fatalf("remaining detached secrets after restart = %d, want 2", remaining)
+		}
+		var restartedMarker int
+		if err := restarted.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM endpoint_key_secrets WHERE id=? AND orphaned_at IS NOT NULL)`, unmarkedIDs[0]).Scan(&restartedMarker); err != nil {
+			t.Fatalf("check marker after restart: %v", err)
+		}
+		if restartedMarker != 1 {
+			t.Fatal("newly marked orphan disappeared on ordinary restart")
+		}
+	})
 }

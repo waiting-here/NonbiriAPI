@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -66,78 +67,76 @@ func requireHoldPage(t *testing.T, got LegalHoldPage, request pagination.Request
 }
 
 func TestLegalHoldNumberedScaleUsesCreatedIndex(t *testing.T) {
-	fixture := newLifecycleTestFixture(t, 200)
-	adminID := seedLifecycleUser(t, fixture.store.DB(), "page-scale-admin", true, 100)
-	coordinator := mustNewLifecycleCoordinator(t, fixture.config)
-	tx, err := fixture.store.DB().BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback()
-	const count = 10017
-	for i := 1; i <= count; i++ {
-		seedPageHold(t, tx, adminID, i, "active", 100, 1000, 0)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	started := time.Now()
-	for _, size := range []int{10, 20, 50, 100} {
-		request := pagination.Request{Page: pagination.MaxPage, Size: size}
-		page, err := coordinator.ListLegalHolds(context.Background(), LegalHoldListFilter{
-			AdminID: adminID, DecisionNow: 200, State: "active", Kind: HeldMaintenanceEvent, Page: &request,
-		})
+	dbtest.Scale(t, func(t *testing.T) {
+		fixture := newLifecycleTestFixture(t, 200)
+		adminID := seedLifecycleUser(t, fixture.store.DB(), "page-scale-admin", true, 100)
+		coordinator := mustNewLifecycleCoordinator(t, fixture.config)
+		tx, err := fixture.store.DB().BeginTx(context.Background(), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		requireHoldPage(t, page, request, count)
-		if len(page.Data) != count%size || page.Data[len(page.Data)-1].ID != fmt.Sprintf("lgh_%021dA", 1) {
-			t.Fatalf("last hold window=%+v rows=%d", page.Pagination, len(page.Data))
+		defer tx.Rollback()
+		const count = 10017
+		for i := 1; i <= count; i++ {
+			seedPageHold(t, tx, adminID, i, "active", 100, 1000, 0)
 		}
-	}
-	t.Logf("%d complete hold/maintenance/audit records, four page sizes: %s", count, time.Since(started))
-	started = time.Now()
-	for _, size := range []int{10, 20, 50, 100} {
-		request := pagination.Request{Page: pagination.MaxPage, Size: size}
-		page, err := coordinator.ListLegalHolds(context.Background(), LegalHoldListFilter{
-			AdminID: adminID, DecisionNow: 1000, State: "expired", Kind: HeldMaintenanceEvent, Page: &request,
-		})
-		if err != nil {
+		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		requireHoldPage(t, page, request, count)
-		for _, row := range page.Data {
-			if row.State != "expired" || row.Revision != "2" || row.EndedAt == nil || *row.EndedAt != 1000 {
-				t.Fatalf("unmaterialized due record=%+v", row)
+		for _, size := range []int{10, 20, 50, 100} {
+			request := pagination.Request{Page: pagination.MaxPage, Size: size}
+			page, err := coordinator.ListLegalHolds(context.Background(), LegalHoldListFilter{
+				AdminID: adminID, DecisionNow: 200, State: "active", Kind: HeldMaintenanceEvent, Page: &request,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireHoldPage(t, page, request, count)
+			if len(page.Data) != count%size || page.Data[len(page.Data)-1].ID != fmt.Sprintf("lgh_%021dA", 1) {
+				t.Fatalf("last hold window=%+v rows=%d", page.Pagination, len(page.Data))
 			}
 		}
-	}
-	var transitioned int
-	if err := fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM legal_hold_audits WHERE action='expire'`).Scan(&transitioned); err != nil || transitioned != 4*WorkerBatchLimit {
-		t.Fatalf("page expiry exceeded per-read work bound: transitioned=%d error=%v", transitioned, err)
-	}
-	t.Logf("%d simultaneously due holds, four page sizes with bounded expiry work: %s", count, time.Since(started))
-	rows, err := fixture.store.DB().Query(`EXPLAIN QUERY PLAN `+legalHoldPageFiltered+legalHoldPageOrder,
-		200, int64(LegalHoldMetadataLife/time.Second), "active", "maintenance_event", 20, 10000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	plan := ""
-	for rows.Next() {
-		var id, parent, unused int
-		var detail string
-		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+		for _, size := range []int{10, 20, 50, 100} {
+			request := pagination.Request{Page: pagination.MaxPage, Size: size}
+			page, err := coordinator.ListLegalHolds(context.Background(), LegalHoldListFilter{
+				AdminID: adminID, DecisionNow: 1000, State: "expired", Kind: HeldMaintenanceEvent, Page: &request,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireHoldPage(t, page, request, count)
+			for _, row := range page.Data {
+				if row.State != "expired" || row.Revision != "2" || row.EndedAt == nil || *row.EndedAt != 1000 {
+					t.Fatalf("unmaterialized due record=%+v", row)
+				}
+			}
+		}
+		var transitioned int
+		if err := fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM legal_hold_audits WHERE action='expire'`).Scan(&transitioned); err != nil || transitioned != 4*WorkerBatchLimit {
+			t.Fatalf("page expiry exceeded per-read work bound: transitioned=%d error=%v", transitioned, err)
+		}
+		rows, err := fixture.store.DB().Query(`EXPLAIN QUERY PLAN `+legalHoldPageFiltered+legalHoldPageOrder,
+			200, int64(LegalHoldMetadataLife/time.Second), "active", "maintenance_event", 20, 10000)
+		if err != nil {
 			t.Fatal(err)
 		}
-		plan += detail + ";"
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(plan, "idx_legal_holds_created") || strings.Contains(plan, "TEMP B-TREE") {
-		t.Fatalf("hold page plan=%s", plan)
-	}
+		defer rows.Close()
+		plan := ""
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan += detail + ";"
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(plan, "idx_legal_holds_created") || strings.Contains(plan, "TEMP B-TREE") {
+			t.Fatalf("hold page plan=%s", plan)
+		}
+	})
 }
 
 func TestLegalHoldNumberedExpiryAndRetentionFilters(t *testing.T) {
