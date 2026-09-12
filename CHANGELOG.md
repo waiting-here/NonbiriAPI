@@ -20,6 +20,7 @@ This candidate supports Linux/amd64 and atomic upgrades from complete beta.3 and
 
 ### Fixed
 
+- Account API key replacement now displays every valid generated key; the client no longer rejects valid base64url endings before showing the one-time value and Copy control.
 - Trusted actual charity chat and embedding charges can exceed their initial reserve; historical terminal charges remain unchanged.
 - Thursday multiline text accepts LF and normalizes CRLF while preserving tabs.
 - Model discovery merges duplicate normalized IDs after validating every source entry, retaining the first entry's metadata and order.

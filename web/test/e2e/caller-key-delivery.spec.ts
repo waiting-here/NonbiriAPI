@@ -342,7 +342,7 @@ test('requires confirmation for replacement and never recovers a closed secret a
   context,
   page,
 }) => {
-  const secret = `nbk_${'C'.repeat(42)}Q`;
+  const secret = `nbk_${'C'.repeat(42)}8`;
   const current = metadata('7', 'CCCC');
   const next = metadata('8', 'DDDD');
   const server = successServer('7', current, secret, next);
@@ -373,6 +373,10 @@ test('requires confirmation for replacement and never recovers a closed secret a
   expect(server.posts).toHaveLength(1);
   expect(server.posts[0].body).toEqual({ expected_generation: '7' });
   await expect(page.getByText(next.display, { exact: true })).toBeVisible();
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: USER_ORIGIN });
+  await page.getByRole('button', { name: 'Copy', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Copied', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard?.readText())).toBe(secret);
   await assertNoSensitiveBrowserPersistence(page, [secret]);
 
   await page.getByRole('button', { name: 'I have saved it — close', exact: true }).click();

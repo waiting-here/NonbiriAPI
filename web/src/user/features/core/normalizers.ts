@@ -55,7 +55,8 @@ const DECIMAL = /^(0|[1-9][0-9]*)$/;
 const POSITIVE_DECIMAL = /^[1-9][0-9]*$/;
 const CREDIT_AMOUNT = /^-?(0|[1-9][0-9]*)(?:\.[0-9]{1,3})?$/;
 const NONNEGATIVE_CREDIT_AMOUNT = /^(0|[1-9][0-9]*)(?:\.[0-9]{1,3})?$/;
-const CALLER_SECRET = /^nbk_[A-Za-z0-9_-]{42}[AQgw]$/;
+// A 32-byte base64url value ends with four data bits and two zero padding bits.
+const CALLER_SECRET = /^nbk_[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const OPERATION_ID = /^op_[A-Za-z0-9_-]{21}[AQgw]$/;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{22,128}$/;
 
