@@ -25,7 +25,7 @@ func TestDiscordRegistrationSessionAndDeepLink(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if users != 1 || wallets != 1 || callerKeys != 1 {
+	if users != 1 || wallets != 2 || callerKeys != 1 {
 		t.Fatalf("registration rows users=%d wallets=%d caller_keys=%d", users, wallets, callerKeys)
 	}
 	rec := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodGet, "https://user.example/api/session", "", []*http.Cookie{cookie}, nil)

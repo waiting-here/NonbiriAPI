@@ -11,6 +11,7 @@ import (
 func quotaConstraintFixture(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 	database := openGenerationTwoDDLForTest(t)
+	hostileMustExec(t, database, `INSERT INTO credit_capacity(id,last_ledger_seq,reserved_future_rows,revision) VALUES(1,0,zeroblob(16),zeroblob(16))`)
 	uid := hostileInsertUser(t, database, "quota-user", 0, 0)
 	endpoint := hostileInsertEndpoint(t, database, uid, "https://fixture.example/v1")
 	secret := hostileInsertSecret(t, database, "https://fixture.example/v1", 0)

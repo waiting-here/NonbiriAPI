@@ -574,16 +574,17 @@ func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Generat
 	if err := quickCheck(ctx, d); err != nil {
 		return startupError(StartupCorruptDatabase)
 	}
-	if _, err := generationTwoExtensionNeeded(ctx, d); err != nil {
+	prior, err := generationTwoExtensionNeeded(ctx, d)
+	if err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
-	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
+	if err := validateAssetSeedManifest(ctx, d, prior); err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
 		return startupError(StartupCredentialReject)
 	}
-	if _, err := validateCurrentGenerationTwoSiteConfig(ctx, d); err != nil {
+	if err := validateAssetSourceConfig(ctx, d, prior); err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
 	return nil
@@ -1125,6 +1126,9 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 		if _, err := tx.ExecContext(ctx, `INSERT INTO shared_pools(id,pool_type,account_id,state,revision,created_at) VALUES(?,?,?,'open',1,0)`, poolID, pool.typ, accountID); err != nil {
 			return err
 		}
+	}
+	if err := seedGameAccounts(ctx, tx); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO maintenance_state(id,enabled,revision,changed_at) VALUES(1,1,1,0)`); err != nil {
 		return err

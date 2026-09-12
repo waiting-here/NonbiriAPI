@@ -162,6 +162,13 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"checkin_award_min_milli":       amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMinMilli)), 0),
 		"checkin_award_max_milli":       amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMaxMilli)), 0),
 		"credits_cap_milli":             amountSpec(formatGenerationTwoUint(uint64(DefaultCreditsCapMilli)), 0),
+		"game_checkin_mode":             {kind: generationTwoConfigEnum, seed: generationTwoSeed(CheckinModeDisabled), allowed: []string{CheckinModeEnabled, CheckinModeLevelGated, CheckinModeDisabled}},
+		"game_checkin_award_min_milli":  amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMinMilli)), 0),
+		"game_checkin_award_max_milli":  amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMaxMilli)), 0),
+		"game_credits_cap_milli":        amountSpec(formatGenerationTwoUint(uint64(DefaultCreditsCapMilli)), 0),
+		"game_fishing_rake_platform_bp": uintSpec("100", 0, 9999),
+		"game_fishing_rake_welfare_bp":  uintSpec("100", 0, 9999),
+		"game_fishing_rake_thursday_bp": uintSpec("100", 0, 9999),
 		"charity_enabled":               boolSpec("0"),
 		"donation_accept_enabled":       boolSpec("0"),
 		"games_enabled":                 boolSpec("0"),
@@ -173,9 +180,9 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		fishingconfig.FishingPremiumPriceMilliKey: amountSpec(
 			generationTwoFishingDefaultAmount(fishingDefaults, fishing.BaitPremium), uint64(fishing.MinimumBaitPriceMilli)),
 		fishingconfig.FishingStandardRTPKey: uintSpec(
-			formatGenerationTwoUint(uint64(fishingDefaults.StandardRTPPercent)), fishing.MinimumRTPPercent, fishing.MaximumRTPPercent),
+			"100", fishing.MinimumRTPPercent, fishing.MaximumRTPPercent),
 		fishingconfig.FishingPremiumRTPKey: uintSpec(
-			formatGenerationTwoUint(uint64(fishingDefaults.PremiumRTPPercent)), fishing.MinimumRTPPercent, fishing.MaximumRTPPercent),
+			"100", fishing.MinimumRTPPercent, fishing.MaximumRTPPercent),
 		fishingconfig.FishingTreasureBottleMultiplierKey: uintSpec(
 			generationTwoFishingDefaultMultiplier(fishingDefaults, "bottle"), fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier),
 		fishingconfig.FishingTreasureCloverMultiplierKey: uintSpec(
@@ -474,10 +481,26 @@ func validateGenerationTwoConfigCombinations(values map[string]string) error {
 			return fmt.Errorf("invalid amount combination: %s", key)
 		}
 	}
-	minAward, _ := generationTwoConfigUintValue(values, "checkin_award_min_milli")
-	maxAward, _ := generationTwoConfigUintValue(values, "checkin_award_max_milli")
-	if minAward > maxAward {
-		return errors.New("checkin award bounds are inverted")
+	for _, prefix := range []string{"", "game_"} {
+		minAward, minOK := generationTwoConfigUintValue(values, prefix+"checkin_award_min_milli")
+		maxAward, maxOK := generationTwoConfigUintValue(values, prefix+"checkin_award_max_milli")
+		if !minOK || !maxOK || minAward > maxAward {
+			return errors.New("checkin award bounds are inverted")
+		}
+		if values[prefix+"checkin_mode"] != CheckinModeDisabled && values["site_timezone_offset_minutes"] == "" {
+			return errors.New("checkin requires site timezone")
+		}
+	}
+	var fishingRake uint64
+	for _, key := range []string{"game_fishing_rake_platform_bp", "game_fishing_rake_welfare_bp", "game_fishing_rake_thursday_bp"} {
+		value, ok := generationTwoConfigUintValue(values, key)
+		if !ok {
+			return errors.New("invalid Fishing rake")
+		}
+		fishingRake += value
+	}
+	if fishingRake >= 10000 {
+		return errors.New("Fishing rake must be below 100 percent")
 	}
 	var prior uint64
 	for _, key := range []string{"level_threshold_2_milli", "level_threshold_3_milli", "level_threshold_4_milli"} {
@@ -492,9 +515,6 @@ func validateGenerationTwoConfigCombinations(values map[string]string) error {
 	}
 	if generationTwoConfigBoolValue(values, "donation_accept_enabled") && !generationTwoConfigBoolValue(values, "charity_enabled") {
 		return errors.New("donation intake requires charity")
-	}
-	if values["checkin_mode"] != CheckinModeDisabled && values["site_timezone_offset_minutes"] == "" {
-		return errors.New("checkin requires site timezone")
 	}
 
 	gameValues := make(map[string]string, len(builtinconfig.SiteConfigKeys()))

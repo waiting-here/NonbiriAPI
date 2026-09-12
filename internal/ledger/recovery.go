@@ -85,7 +85,7 @@ func validateLedgerState(ctx context.Context, tx *sql.Tx, domainTotal *big.Int) 
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-SELECT id,kind,user_id,code,balance_sign,balance_mag,created_at,updated_at
+SELECT id,kind,user_id,code,asset_type,balance_sign,balance_mag,created_at,updated_at
 FROM credit_accounts ORDER BY id`)
 	if err != nil {
 		return classifySQLError("scan recovery accounts", err)
@@ -94,19 +94,20 @@ FROM credit_accounts ORDER BY id`)
 		var (
 			id                   int64
 			kind                 string
+			asset                Asset
 			user                 sql.NullInt64
 			code                 sql.NullString
 			sign                 int
 			mag                  []byte
 			createdAt, updatedAt int64
 		)
-		if err := rows.Scan(&id, &kind, &user, &code, &sign, &mag, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&id, &kind, &user, &code, &asset, &sign, &mag, &createdAt, &updatedAt); err != nil {
 			rows.Close()
 			return classifySQLError("scan recovery account", err)
 		}
 		accountKind, ok := parseAccountKind(kind)
 		balance, decodeErr := amountFromParts(sign, mag)
-		if !ok || decodeErr != nil || id <= 0 || !validUnix(createdAt) || !validUnix(updatedAt) ||
+		if !ok || !asset.valid() || decodeErr != nil || id <= 0 || !validUnix(createdAt) || !validUnix(updatedAt) ||
 			(accountKind == AccountPool || accountKind == AccountPlatform) && balance.Sign() < 0 ||
 			accountKind == AccountUser && (!user.Valid || code.Valid) || accountKind != AccountUser && (user.Valid || !code.Valid) {
 			rows.Close()
@@ -169,6 +170,9 @@ WHERE ledger_seq>? ORDER BY ledger_seq LIMIT 100`, lastSequence)
 	if lastSequence != capacity.LastLedgerSeq {
 		return ErrInvariant
 	}
+	if err := db.ValidateAssetBalances(ctx, tx); err != nil {
+		return ErrInvariant
+	}
 	return nil
 }
 
@@ -202,6 +206,7 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 		{"thursday_period", `SELECT id,ledger_rows_remaining FROM thursday_periods ORDER BY id`, reservationThursdayPeriod},
 		{"rps_queue", `SELECT id,ledger_rows_remaining FROM game_rps_queue ORDER BY id`, reservationRPSQueue},
 		{"rps_session", `SELECT id,ledger_rows_remaining FROM game_rps_sessions ORDER BY id`, reservationRPSSession},
+		{"game_onboarding", `SELECT id,ledger_rows_remaining FROM game_onboarding_holds ORDER BY id`, reservationGameOnboarding},
 	}
 	for _, item := range queries {
 		rows, err := tx.QueryContext(ctx, item.query)

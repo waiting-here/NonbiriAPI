@@ -389,6 +389,7 @@ func beginAdapterTx(t *testing.T, database *sql.DB) *sql.Tx {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = tx.Rollback() })
 	return tx
 }
 
@@ -410,6 +411,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, "adapter-"+label, label, zero, zero, zero, zer
 	}
 	wallet, err := ledger.CreateUserAccount(context.Background(), tx, userID, adapterTestNow)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, adapterTestNow); err != nil {
 		t.Fatal(err)
 	}
 	user := adapterUser{id: userID, wallet: wallet}

@@ -139,7 +139,7 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 	var balanceSign int
 	var balanceMagnitude []byte
 	if err := tx.QueryRowContext(ctx, `SELECT balance_sign,balance_mag FROM credit_accounts
-WHERE kind='user' AND user_id=?`, userID).Scan(&balanceSign, &balanceMagnitude); err != nil {
+WHERE kind='user' AND user_id=? AND asset_type='general'`, userID).Scan(&balanceSign, &balanceMagnitude); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return RuntimePreflight{}, ErrInvariant
 		}

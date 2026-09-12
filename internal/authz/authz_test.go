@@ -78,6 +78,7 @@ func beginAuthTx(t *testing.T, database *sql.DB) *sql.Tx {
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
 	}
+	t.Cleanup(func() { _ = tx.Rollback() })
 	return tx
 }
 
