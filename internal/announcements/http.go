@@ -20,6 +20,7 @@ import (
 
 type httpAPI struct {
 	service *Service
+	role    managementRole
 }
 
 func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, service *Service) error {
@@ -39,21 +40,40 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, servic
 			return fmt.Errorf("announcements: register %s %s: %w", route.method, route.pattern, err)
 		}
 	}
-	adminRoutes := []struct {
-		method, pattern string
-		handler         AuthorizedAdminHandler
-	}{
-		{http.MethodGet, routeAdminAnnouncements, api.listAdmin},
-		{http.MethodGet, routeAdminAnnouncement, api.getAdmin},
-		{http.MethodPost, routeAdminAnnouncements, api.create},
-		{http.MethodPatch, routeAdminAnnouncement, api.edit},
-		{http.MethodPost, routeAdminPreview, api.preview},
-		{http.MethodPost, routeAdminPublish, api.publish},
-		{http.MethodPost, routeAdminWithdraw, api.withdraw},
-		{http.MethodDelete, routeAdminAnnouncement, api.delete},
-	}
+	adminRoutes := api.managementRoutes()
 	for _, route := range adminRoutes {
 		if err := admins.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
+			return fmt.Errorf("announcements: register %s %s: %w", route.method, route.pattern, err)
+		}
+	}
+	return nil
+}
+
+type managementRoute struct {
+	method, pattern string
+	handler         AuthorizedAdminHandler
+}
+
+func (api *httpAPI) managementRoutes() []managementRoute {
+	return []managementRoute{
+		{http.MethodGet, api.role.route(routeAdminAnnouncements), api.listAdmin},
+		{http.MethodGet, api.role.route(routeAdminAnnouncement), api.getAdmin},
+		{http.MethodPost, api.role.route(routeAdminAnnouncements), api.create},
+		{http.MethodPatch, api.role.route(routeAdminAnnouncement), api.edit},
+		{http.MethodPost, api.role.route(routeAdminPreview), api.preview},
+		{http.MethodPost, api.role.route(routeAdminPublish), api.publish},
+		{http.MethodPost, api.role.route(routeAdminWithdraw), api.withdraw},
+		{http.MethodDelete, api.role.route(routeAdminAnnouncement), api.delete},
+	}
+}
+
+func RegisterStewardRoutes(registrar StewardRouteRegistrar, service *Service) error {
+	if isNilInterface(registrar) || service == nil || service.repository == nil {
+		return errors.New("announcements: route registrar and service are required")
+	}
+	api := &httpAPI{service: service, role: roleSteward}
+	for _, route := range api.managementRoutes() {
+		if err := registrar.RegisterStewardRoute(route.method, route.pattern, route.handler); err != nil {
 			return fmt.Errorf("announcements: register %s %s: %w", route.method, route.pattern, err)
 		}
 	}
@@ -65,7 +85,7 @@ func (api *httpAPI) getAdmin(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	id := request.PathValue("id")
-	response, err := api.service.GetAdmin(request.Context(), principal.UserID, id)
+	response, err := api.service.getManaged(request.Context(), principal.UserID, api.role, id)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -226,7 +246,7 @@ func (api *httpAPI) listAdmin(writer http.ResponseWriter, request *http.Request,
 			return
 		}
 	}
-	response, err := api.service.ListAdmin(request.Context(), principal.UserID, query)
+	response, err := api.service.listManaged(request.Context(), principal.UserID, api.role, query)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -247,11 +267,11 @@ func (api *httpAPI) create(writer http.ResponseWriter, request *http.Request, pr
 		return
 	}
 	patch, canonical := body.patchAndCanonical()
-	mutation, ok := requestMutation(writer, request, routeAdminAnnouncements, nil, canonical)
+	mutation, ok := requestMutation(writer, request, api.role.route(routeAdminAnnouncements), nil, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.service.Create(request.Context(), principal.UserID, mutation, patch)
+	result, err := api.service.create(request.Context(), principal.UserID, api.role, mutation, patch)
 	writeMutation(writer, result, err)
 }
 
@@ -282,11 +302,11 @@ func (api *httpAPI) edit(writer http.ResponseWriter, request *http.Request, prin
 		writeError(writer, ErrInvalidRequest)
 		return
 	}
-	mutation, ok := requestMutation(writer, request, routeAdminAnnouncement, []string{id}, canonical)
+	mutation, ok := requestMutation(writer, request, api.role.route(routeAdminAnnouncement), []string{id}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.service.Edit(request.Context(), principal.UserID, id, mutation, revision, patch)
+	result, err := api.service.edit(request.Context(), principal.UserID, api.role, id, mutation, revision, patch)
 	writeMutation(writer, result, err)
 }
 
@@ -331,7 +351,7 @@ func (api *httpAPI) preview(writer http.ResponseWriter, request *http.Request, p
 	if body.BodyEN.Set {
 		patch.BodyEN = &body.BodyEN.Value
 	}
-	response, err := api.service.Preview(request.Context(), principal.UserID, id, PreviewInput{ExpectedRevision: revision, Draft: patch})
+	response, err := api.service.previewManaged(request.Context(), principal.UserID, api.role, id, PreviewInput{ExpectedRevision: revision, Draft: patch})
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -344,11 +364,11 @@ func (api *httpAPI) publish(writer http.ResponseWriter, request *http.Request, p
 	if !ok {
 		return
 	}
-	mutation, ok := requestMutation(writer, request, routeAdminPublish, []string{id}, canonical)
+	mutation, ok := requestMutation(writer, request, api.role.route(routeAdminPublish), []string{id}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.service.Publish(request.Context(), principal.UserID, id, mutation, body)
+	result, err := api.service.publish(request.Context(), principal.UserID, api.role, id, mutation, body)
 	writeMutation(writer, result, err)
 }
 
@@ -374,11 +394,11 @@ func (api *httpAPI) withdraw(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	canonical := map[string]any{"expected_revision": body.ExpectedRevision.Value, "reason": body.Reason.Value}
-	mutation, ok := requestMutation(writer, request, routeAdminWithdraw, []string{id}, canonical)
+	mutation, ok := requestMutation(writer, request, api.role.route(routeAdminWithdraw), []string{id}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.service.Withdraw(request.Context(), principal.UserID, id, mutation, revision, body.Reason.Value)
+	result, err := api.service.withdraw(request.Context(), principal.UserID, api.role, id, mutation, revision, body.Reason.Value)
 	writeMutation(writer, result, err)
 }
 
@@ -406,11 +426,11 @@ func (api *httpAPI) delete(writer http.ResponseWriter, request *http.Request, pr
 	canonical := map[string]any{
 		"expected_revision": body.ExpectedRevision.Value, "confirmation": body.Confirmation.Value, "reason": body.Reason.Value,
 	}
-	mutation, ok := requestMutation(writer, request, routeAdminAnnouncement, []string{id}, canonical)
+	mutation, ok := requestMutation(writer, request, api.role.route(routeAdminAnnouncement), []string{id}, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.service.Delete(request.Context(), principal.UserID, id, mutation, revision, body.Confirmation.Value, body.Reason.Value)
+	result, err := api.service.delete(request.Context(), principal.UserID, api.role, id, mutation, revision, body.Confirmation.Value, body.Reason.Value)
 	writeMutation(writer, result, err)
 }
 

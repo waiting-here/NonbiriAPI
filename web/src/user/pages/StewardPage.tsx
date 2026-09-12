@@ -1,3 +1,8 @@
+import { useLocation } from 'react-router';
+import { UserManagement } from '@shared/components/UserManagement';
+import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
+import { AnnouncementEditor } from '@shared/components/AnnouncementEditor';
+import { listReturnPath } from '@shared/operations/listReturn';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,14 +21,18 @@ export function StewardPage() {
   const authority = useUserAuthority();
   const refetchAuthority = authority.refetch;
   const [searchParams, setSearchParams] = useSearchState();
+  const location = useLocation();
+  const requestedTab = searchParams.get('tab');
   const section =
-    searchParams.get('tab') === 'charity'
-      ? 'charity'
-      : searchParams.get('tab') === 'maintenance'
-        ? 'maintenance'
-        : 'logs';
+    requestedTab === 'charity' ||
+    requestedTab === 'maintenance' ||
+    requestedTab === 'users' ||
+    requestedTab === 'announcements'
+      ? requestedTab
+      : 'logs';
+  const announcement = searchParams.get('announcement') ?? '';
   const setSection = useCallback(
-    (value: 'logs' | 'charity' | 'maintenance') => {
+    (value: 'logs' | 'charity' | 'maintenance' | 'users' | 'announcements') => {
       setSearchParams({ tab: value }, { replace: true });
     },
     [setSearchParams],
@@ -92,6 +101,18 @@ export function StewardPage() {
         >
           {t('user.steward.charityTab')}
         </button>
+        {(['users', 'announcements'] as const).map((tab) => (
+          <button
+            key={tab}
+            className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
+            type="button"
+            role="tab"
+            aria-selected={section === tab}
+            onClick={() => setSection(tab)}
+          >
+            {tab === 'users' ? t('user.steward.usersTab') : t('user.steward.announcementsTab')}
+          </button>
+        ))}
         <button
           className={section === 'maintenance' ? 'btn btn-danger' : 'btn btn-secondary'}
           type="button"
@@ -119,6 +140,39 @@ export function StewardPage() {
           accountId={authority.data.id}
           onCapabilityLoss={authorityLoss}
         />
+      ) : null}
+      {section === 'users' ? (
+        <UserManagement
+          key={`users:${authority.data.id}`}
+          role="steward"
+          account={authority.data.id}
+          scopeReady={allowed}
+          sessionError={authority.error}
+          onAuthorityLoss={authorityLoss}
+        />
+      ) : null}
+      {section === 'announcements' ? (
+        announcement ? (
+          <AnnouncementEditor
+            key={`announcement:${authority.data.id}:${announcement}`}
+            role="steward"
+            account={authority.data.id}
+            announcementId={announcement}
+            backTo={
+              listReturnPath(location.state, '/steward') === '/steward'
+                ? '/steward?tab=announcements'
+                : listReturnPath(location.state, '/steward')
+            }
+            onAuthorityLoss={authorityLoss}
+          />
+        ) : (
+          <AnnouncementManagement
+            key={`announcements:${authority.data.id}`}
+            role="steward"
+            account={authority.data.id}
+            onAuthorityLoss={authorityLoss}
+          />
+        )
       ) : null}
       {section === 'maintenance' ? (
         <MaintenancePanel

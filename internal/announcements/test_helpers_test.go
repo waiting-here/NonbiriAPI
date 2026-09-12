@@ -178,3 +178,18 @@ func (authorizer *announcementTestAuthorizer) AuthorizeAdminFinalTx(ctx context.
 	}
 	return nil
 }
+
+func (authorizer *announcementTestAuthorizer) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, actorID int64) error {
+	authorizer.calls.Add(1)
+	if authorizer.deny.Load() {
+		return ErrForbidden
+	}
+	var admin, level, banned int
+	if err := tx.QueryRowContext(ctx, "SELECT is_admin,COALESCE(level,auto_level),is_banned FROM users WHERE id=?", actorID).Scan(&admin, &level, &banned); err != nil {
+		return ErrUnauthorized
+	}
+	if admin != 0 || level != 5 || banned != 0 {
+		return ErrForbidden
+	}
+	return nil
+}

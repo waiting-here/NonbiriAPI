@@ -238,7 +238,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'users',
     icon: 'users',
     labelKey: 'admin.navigation.users',
-    fallbackLabelKey: 'admin.users.nav',
+    fallbackLabelKey: 'management.users.nav',
   }),
   admin({
     id: 'admin-logs',
@@ -357,7 +357,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     registered: true,
     navGroup: 'content',
     icon: 'announcements',
-    labelKey: 'admin.announcements.nav',
+    labelKey: 'management.announcements.nav',
     fallbackLabelKey: 'admin.settings.nav',
   }),
   admin({

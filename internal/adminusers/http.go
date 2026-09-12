@@ -32,27 +32,50 @@ const (
 	maxRawQueryBytes           = 8192
 )
 
-type httpAPI struct{ service *Service }
+type httpAPI struct {
+	service *Service
+	role    managementRole
+}
+
+type managementRoute struct {
+	method, pattern string
+	handler         AuthorizedAdminHandler
+}
+
+func (api *httpAPI) userRoutes() []managementRoute {
+	return []managementRoute{
+		{http.MethodGet, api.role.route(routeUsers), api.listUsers},
+		{http.MethodGet, api.role.route(routeUser), api.getUser},
+		{http.MethodPatch, api.role.route(routeUser), api.patchUser},
+		{http.MethodPost, api.role.route(routeBan), api.banUser},
+		{http.MethodPost, api.role.route(routeUnban), api.unbanUser},
+	}
+}
+
+func RegisterStewardRoutes(registrar StewardRouteRegistrar, service *Service) error {
+	if nilDependency(registrar) || service == nil || service.database == nil {
+		return errors.New("adminusers: route registrar and service are required")
+	}
+	api := &httpAPI{service: service, role: roleSteward}
+	for _, route := range api.userRoutes() {
+		if err := registrar.RegisterStewardRoute(route.method, route.pattern, route.handler); err != nil {
+			return fmt.Errorf("adminusers: register %s %s: %w", route.method, route.pattern, err)
+		}
+	}
+	return nil
+}
 
 func RegisterRoutes(registrar AdminRouteRegistrar, service *Service) error {
 	if nilDependency(registrar) || service == nil || service.database == nil {
 		return errors.New("adminusers: route registrar and service are required")
 	}
 	api := &httpAPI{service: service}
-	routes := []struct {
-		method, pattern string
-		handler         AuthorizedAdminHandler
-	}{
-		{http.MethodGet, routeUsers, api.listUsers},
-		{http.MethodGet, routeUser, api.getUser},
-		{http.MethodPatch, routeUser, api.patchUser},
-		{http.MethodPost, routeBan, api.banUser},
-		{http.MethodPost, routeUnban, api.unbanUser},
+	routes := append(api.userRoutes(), []managementRoute{
 		{http.MethodGet, routeUsage, api.getUsage},
 		{http.MethodGet, routeActivity, api.getActivity},
 		{http.MethodGet, routeEndpointOverview, api.getEndpointOverview},
 		{http.MethodGet, routeEndpointOverviewUsers, api.getEndpointOverviewUsers},
-	}
+	}...)
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
 			return fmt.Errorf("adminusers: register %s %s: %w", route.method, route.pattern, err)
@@ -65,11 +88,19 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "is_banned", "q", "cursor", "limit", "page", "page_size")
+	values, ok := strictQuery(writer, request, "is_banned", "level", "q", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
 	query := UserListQuery{}
+	if raw, set := singleQuery(values, "level"); set {
+		value, err := strconv.Atoi(raw)
+		if err != nil || strconv.Itoa(value) != raw || value < 1 || value > 5 {
+			writeError(writer, ErrInvalidRequest)
+			return
+		}
+		query.Level = value
+	}
 	if raw, set := singleQuery(values, "is_banned"); set {
 		value, err := strconv.ParseBool(raw)
 		if err != nil || strconv.FormatBool(value) != raw {
@@ -88,7 +119,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
-	page, err := api.service.ListUsers(request.Context(), principal.UserID, query)
+	page, err := api.service.listUsers(request.Context(), principal.UserID, api.role, query)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -105,7 +136,7 @@ func (api *httpAPI) getUser(writer http.ResponseWriter, request *http.Request, p
 		writeError(writer, ErrNotFound)
 		return
 	}
-	user, err := api.service.GetUser(request.Context(), principal.UserID, userID)
+	user, err := api.service.getUser(request.Context(), principal.UserID, userID, api.role)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -135,11 +166,11 @@ func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request,
 			writeError(writer, ErrInvalidRequest)
 			return
 		}
-		control, ok := makeControl(writer, request, routeUser, userID, profileCanonical(input))
+		control, ok := makeControl(writer, request, api.role.route(routeUser), userID, profileCanonical(input))
 		if !ok {
 			return
 		}
-		result, err := api.service.Profile(request.Context(), principal.UserID, userID, control, input)
+		result, err := api.service.profile(request.Context(), principal.UserID, userID, api.role, control, input)
 		if err != nil {
 			writeError(writer, err)
 			return
@@ -151,11 +182,11 @@ func (api *httpAPI) patchUser(writer http.ResponseWriter, request *http.Request,
 			writeError(writer, ErrInvalidRequest)
 			return
 		}
-		control, ok := makeControl(writer, request, routeUser, userID, economyCanonical(input))
+		control, ok := makeControl(writer, request, api.role.route(routeUser), userID, economyCanonical(input))
 		if !ok {
 			return
 		}
-		result, err := api.service.Economy(request.Context(), principal.UserID, userID, control, input)
+		result, err := api.service.economy(request.Context(), principal.UserID, userID, api.role, control, input)
 		if err != nil {
 			writeError(writer, err)
 			return
@@ -196,11 +227,11 @@ func (api *httpAPI) banUser(writer http.ResponseWriter, request *http.Request, p
 		return
 	}
 	canonical := map[string]any{"expected_revision": revision.Decimal(), "reason": reason, "duration_seconds": duration}
-	control, ok := makeControl(writer, request, routeBan, userID, canonical)
+	control, ok := makeControl(writer, request, api.role.route(routeBan), userID, canonical)
 	if !ok {
 		return
 	}
-	result, err := api.service.Ban(request.Context(), principal.UserID, userID, control, BanMutation{ExpectedRevision: revision, Reason: reason, DurationSeconds: duration})
+	result, err := api.service.setBan(request.Context(), principal.UserID, userID, api.role, control, revision, true, reason, duration)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -227,11 +258,11 @@ func (api *httpAPI) unbanUser(writer http.ResponseWriter, request *http.Request,
 		writeError(writer, ErrInvalidRequest)
 		return
 	}
-	control, ok := makeControl(writer, request, routeUnban, userID, map[string]any{"expected_revision": revision.Decimal()})
+	control, ok := makeControl(writer, request, api.role.route(routeUnban), userID, map[string]any{"expected_revision": revision.Decimal()})
 	if !ok {
 		return
 	}
-	result, err := api.service.Unban(request.Context(), principal.UserID, userID, control, revision)
+	result, err := api.service.setBan(request.Context(), principal.UserID, userID, api.role, control, revision, false, "", nil)
 	if err != nil {
 		writeError(writer, err)
 		return

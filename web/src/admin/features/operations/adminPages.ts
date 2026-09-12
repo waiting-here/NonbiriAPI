@@ -1,16 +1,9 @@
+import { normalizeNumberedPage as normalizePage, validateWindow, validateText, invalidRequest, type NumberedPage } from '@shared/operations/numberedPage';
+import { getManagedUsersPage, getManagedUserDetail, managedUserKeys } from '@shared/operations/managedUsers';
 import { decoded, queryPath } from '@shared/operations/api';
+import type { PageSize } from '@shared/operations/pageNumbers';
+import { decimal, decimalID, invalidResponse, record } from '@shared/operations/wire';
 import {
-  isPageNumber,
-  isPageSize,
-  normalizePageMetadata,
-  type PageMetadata,
-  type PageSize,
-  validatePageResponse,
-} from '@shared/operations/pageNumbers';
-import { array, decimal, decimalID, invalidResponse, record } from '@shared/operations/wire';
-import { ApiError } from '@shared/query/http';
-import {
-  normalizeAdminUser,
   normalizeEndpointOverview,
   type EndpointOverview,
   type AdminUser,
@@ -24,32 +17,7 @@ import {
   type Pool,
 } from './economy';
 
-export interface AdminPage<T> {
-  data: T[];
-  next_cursor: null;
-  pagination: PageMetadata;
-}
-
-function normalizePage<T>(
-  value: unknown,
-  label: string,
-  item: (value: unknown) => T,
-  requestedPage: string,
-  requestedSize: PageSize,
-  identity?: (value: T) => string,
-): AdminPage<T> {
-  if (!isPageNumber(requestedPage)) invalidResponse(`${label} requested page`);
-  const root = record(value, ['data', 'next_cursor', 'pagination'], label);
-  if (root.next_cursor !== null) invalidResponse(`${label} cursor`);
-  const pagination = normalizePageMetadata(root.pagination);
-  if (pagination.page_size !== requestedSize) invalidResponse(`${label} page size`);
-  const data = array(root.data, `${label} data`, pagination.page_size).map(item);
-  validatePageResponse(pagination, requestedPage, requestedSize, data.length);
-  if (identity && new Set(data.map(identity)).size !== data.length) {
-    invalidResponse(`${label} duplicate identity`);
-  }
-  return { data, next_cursor: null, pagination };
-}
+export type AdminPage<T> = NumberedPage<T>;
 
 export function normalizeAdminPageResponse<T>(
   value: unknown,
@@ -113,33 +81,9 @@ function adminPagePath(
   return queryPath(path, values);
 }
 
-function invalidRequest(): never {
-  throw new ApiError('invalid_request', 'Invalid administrator list request.', 400);
-}
-
-function validateWindow(page: string, size: PageSize): void {
-  if (!isPageNumber(page) || !isPageSize(size)) invalidRequest();
-}
-
-function validateText(value: string, maxBytes: number, allowEmpty: boolean): void {
-  if (
-    typeof value !== 'string' ||
-    (!allowEmpty && !value) ||
-    value.length > maxBytes ||
-    new TextEncoder().encode(value).byteLength > maxBytes
-  )
-    invalidRequest();
-  for (const character of value) {
-    const code = character.codePointAt(0)!;
-    if (code < 0x20 || (code >= 0x7f && code <= 0x9f) || (code >= 0xd800 && code <= 0xdfff)) {
-      invalidRequest();
-    }
-  }
-}
-
 export const adminPageKeys = {
-  users: (account: string, banned: string, query: string, page: string, size: PageSize) =>
-    ['admin', 'operations', 'users', account, banned, query, page, size] as const,
+  users: (account: string, banned: string, query: string, page: string, size: PageSize, level = '') =>
+    managedUserKeys.list('admin', account, banned, query, level, page, size),
   user: (account: string, id: string) => ['admin', 'operations', 'user', account, id] as const,
   endpoints: (account: string, query: string, page: string, size: PageSize) =>
     ['admin', 'operations', 'endpoints', account, query, page, size] as const,
@@ -153,48 +97,19 @@ export const adminPageKeys = {
     ['admin', 'operations', 'pools', account, type, state, page, size] as const,
 };
 
-export async function getAdminUsersPage(
+export function getAdminUsersPage(
   banned: '' | 'true' | 'false',
   query: string,
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  level = '',
 ): Promise<AdminPage<AdminUser>> {
-  validateWindow(page, pageSize);
-  validateText(query, 512, true);
-  if (banned !== '' && banned !== 'true' && banned !== 'false') invalidRequest();
-  const path = adminPagePath('/admin/api/users', {
-    is_banned: banned || undefined,
-    q: query || undefined,
-    page,
-    page_size: pageSize,
-  });
-  return decoded(
-    path,
-    (value) =>
-      normalizePage(
-        value,
-        'administrator user page',
-        normalizeAdminUser,
-        page,
-        pageSize,
-        (user) => user.id,
-      ),
-    { signal },
-  );
+  return getManagedUsersPage('admin', banned, query, level, page, pageSize, signal);
 }
 
-export async function getAdminUserDetail(id: string, signal?: AbortSignal): Promise<AdminUser> {
-  if (!isPageNumber(id, 9_223_372_036_854_775_807n)) invalidRequest();
-  return decoded(
-    `/admin/api/users/${encodeURIComponent(decimalID(id, 'administrator user id'))}`,
-    (value) => {
-      const user = normalizeAdminUser(value);
-      if (user.id !== id) invalidResponse('administrator user identity');
-      return user;
-    },
-    { signal },
-  );
+export function getAdminUserDetail(id: string, signal?: AbortSignal): Promise<AdminUser> {
+  return getManagedUserDetail('admin', id, signal);
 }
 
 export async function getAdminEndpointsPage(

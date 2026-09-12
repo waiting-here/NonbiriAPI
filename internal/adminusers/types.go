@@ -103,6 +103,7 @@ type EndpointOverview struct {
 }
 
 type UserListQuery struct {
+	Level    int
 	IsBanned *bool
 	Q        string
 	Cursor   string

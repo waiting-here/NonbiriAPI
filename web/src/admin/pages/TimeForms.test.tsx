@@ -3,7 +3,7 @@ import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { useAdminSession } from '../data';
-import { adminAnnouncementKeys } from '../features/operations/announcements';
+import { managedAnnouncementKeys } from '@shared/operations/managedAnnouncements';
 import { ActivitiesPage } from './ActivitiesPage';
 import { AnnouncementDetailPage } from './AnnouncementDetailPage';
 import { AnnouncementsPage } from './AnnouncementsPage';
@@ -147,6 +147,7 @@ describe('administrator time forms', () => {
       role: 'admin',
     });
 
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create draft' })).toBeEnabled());
     await view.user.click(screen.getByRole('button', { name: 'Create draft' }));
     fireEvent.change(dateTimeInput(), { target: { value: '2030-01-01T00:00' } });
     await waitFor(() =>
@@ -289,13 +290,13 @@ describe('administrator time forms', () => {
     authority = { ...authority, revision: '8', expires_at: originalAnnouncementExpiry + 120 };
     await act(async () => {
       await view.queryClient.refetchQueries({
-        queryKey: adminAnnouncementKeys.detail(announcementId),
+        queryKey: managedAnnouncementKeys.detail('admin', 'admin:fixture-admin', announcementId),
       });
     });
     expect(dateTimeInput()).toHaveValue('2030-01-01T00:00');
     const save = screen.getByRole('button', { name: 'Save private draft' });
     await view.user.click(save);
-    await waitFor(() => expect(screen.getByText(/compare it with revision 8/)).toBeVisible());
+    await waitFor(() => expect(screen.getByText(/compare them with revision 8/)).toBeVisible());
     expect(revisions).toEqual(['7']);
     await waitFor(() => expect(save).toBeEnabled());
     await view.user.click(save);

@@ -12,6 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
@@ -129,7 +130,7 @@ func commitTx(tx *sql.Tx, committed *bool) error {
 	return nil
 }
 
-func (repository *Repository) beginAuthorizedAdminTx(ctx context.Context, adminID int64) (*sql.Tx, int64, error) {
+func (repository *Repository) beginManagementTx(ctx context.Context, adminID int64, role managementRole) (*sql.Tx, int64, error) {
 	if repository == nil || adminID <= 0 || isNilInterface(repository.finalAuth) {
 		return nil, 0, ErrInvalidRequest
 	}
@@ -141,16 +142,32 @@ func (repository *Repository) beginAuthorizedAdminTx(ctx context.Context, adminI
 	if err != nil {
 		return nil, 0, err
 	}
-	if err := repository.finalAuth.AuthorizeAdminFinalTx(ctx, tx, adminID); err != nil {
+	switch role {
+	case roleAdmin:
+		err = repository.finalAuth.AuthorizeAdminFinalTx(ctx, tx, adminID)
+	case roleSteward:
+		err = repository.finalAuth.AuthorizeStewardMutation(ctx, tx, adminID)
+	default:
+		err = ErrForbidden
+	}
+	if err != nil {
 		_ = tx.Rollback()
-		return nil, 0, fmt.Errorf("announcements: final administrator authorization: %w", err)
+		switch {
+		case errors.Is(err, authz.ErrUnauthorized):
+			err = ErrUnauthorized
+		case errors.Is(err, authz.ErrForbidden):
+			err = ErrForbidden
+		case errors.Is(err, authz.ErrNotFound):
+			err = ErrNotFound
+		}
+		return nil, 0, fmt.Errorf("announcements: final management authorization: %w", err)
 	}
 	return tx, now, nil
 }
 
-func beginAnnouncementMutation(ctx context.Context, tx *sql.Tx, adminID int64, mutation ControlMutation, now int64) (idempotency.Decision, error) {
+func beginAnnouncementMutation(ctx context.Context, tx *sql.Tx, adminID int64, role managementRole, mutation ControlMutation, now int64) (idempotency.Decision, error) {
 	canonicalAdmin := strconv.FormatInt(adminID, 10)
-	actor, err := idempotency.ActorScopeHash("admin", canonicalAdmin)
+	actor, err := idempotency.ActorScopeHash(role.actorKind(), canonicalAdmin)
 	if err != nil {
 		return idempotency.Decision{}, ErrInvalidRequest
 	}

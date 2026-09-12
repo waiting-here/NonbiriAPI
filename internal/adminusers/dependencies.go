@@ -17,6 +17,7 @@ type CursorKeyDeriver interface {
 
 type AdminFinalAuthorizer interface {
 	AuthorizeAdmin(context.Context, *sql.Tx, int64) error
+	AuthorizeStewardMutation(context.Context, *sql.Tx, int64) error
 }
 
 // PostCommitInvalidator revokes process-local account authority after commit.
@@ -90,4 +91,9 @@ func nilDependency(value any) bool {
 	default:
 		return false
 	}
+}
+
+// StewardRouteRegistrar preserves the user-station session and maintenance boundary.
+type StewardRouteRegistrar interface {
+	RegisterStewardRoute(method, pattern string, handler AuthorizedAdminHandler) error
 }
