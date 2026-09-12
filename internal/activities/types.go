@@ -116,9 +116,13 @@ type ThursdayCurrent struct {
 }
 
 type ThursdayNext struct {
-	PeriodID    string `json:"period_id"`
-	OpensAt     int64  `json:"opens_at"`
-	PoolBalance string `json:"pool_balance"`
+	PeriodID     string `json:"period_id"`
+	OpensAt      int64  `json:"opens_at"`
+	ClosesAt     int64  `json:"closes_at"`
+	Literature   string `json:"literature"`
+	Entry        string `json:"entry"`
+	PerUserLimit int    `json:"per_user_limit"`
+	PoolBalance  string `json:"pool_balance"`
 }
 
 type ThursdayLastResult struct {

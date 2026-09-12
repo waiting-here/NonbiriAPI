@@ -339,6 +339,10 @@ describe('economy closed-wire normalizers', () => {
     const next = {
       period_id: 'thu_abcdefghijklmnopqrstuQ',
       opens_at: ACTIVITY_FIXTURE.thursday.server_now + 3_600,
+      closes_at: ACTIVITY_FIXTURE.thursday.server_now + 90_000,
+      literature: 'Next week\nMore details',
+      entry: '50',
+      per_user_limit: 3,
       pool_balance: '80',
     };
     const lastResult = {
@@ -416,7 +420,7 @@ describe('economy closed-wire normalizers', () => {
         ...ACTIVITY_FIXTURE,
         thursday: {
           ...ACTIVITY_FIXTURE.thursday,
-          current: { ...ACTIVITY_FIXTURE.thursday.current, literature: 'bad\ntext' },
+          current: { ...ACTIVITY_FIXTURE.thursday.current, literature: 'bad\rtext' },
         },
       }),
     ).toThrow();

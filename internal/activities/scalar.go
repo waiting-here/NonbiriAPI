@@ -8,14 +8,14 @@ import (
 )
 
 func validReason(value string) bool {
-	return validBoundedText(value, 1, 1024, 4096)
+	return validBoundedText(value, 1, 1024, 4096, false)
 }
 
 func validLiterature(value string) bool {
-	return validBoundedText(value, 0, 1024, 4096)
+	return validBoundedText(value, 0, 1024, 4096, true)
 }
 
-func validBoundedText(value string, minimumRunes, maximumRunes, maximumBytes int) bool {
+func validBoundedText(value string, minimumRunes, maximumRunes, maximumBytes int, multiline bool) bool {
 	if !utf8.ValidString(value) || len(value) > maximumBytes {
 		return false
 	}
@@ -24,6 +24,9 @@ func validBoundedText(value string, minimumRunes, maximumRunes, maximumBytes int
 		return false
 	}
 	for _, character := range value {
+		if multiline && (character == '\n' || character == '\t') {
+			continue
+		}
 		if character <= 0x1f || character >= 0x7f && character <= 0x9f {
 			return false
 		}

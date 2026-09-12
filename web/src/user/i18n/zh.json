@@ -734,6 +734,10 @@
           "configuration_error": "配置错误。"
         },
         "currentPoolBalance": "当前池余额",
+        "currentPeriod": "本期",
+        "nextPreview": "下期预告",
+        "perUserLimit": "每人最多参与次数",
+        "closesAt": "结束时间",
         "nextPoolBalance": "下一周期池余额",
         "fixedEntry": "单次固定投入",
         "myCount": "我的投入次数",

@@ -1,3 +1,4 @@
+import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { ApiError } from '@shared/query/http';
 import type {
   ActivitiesMaster,
@@ -946,6 +947,11 @@ function normalizeWelfare(value: unknown): ActivitiesSnapshot['welfare'] {
   return result;
 }
 
+function activityLiterature(value: unknown): string {
+  if (!isActivityLiterature(value)) invalid('Thursday literature');
+  return value;
+}
+
 function normalizeThursdayCurrent(value: unknown): ThursdayCurrent | null {
   if (value === null) return null;
   const item = record(value, 'Thursday current period', [
@@ -968,7 +974,7 @@ function normalizeThursdayCurrent(value: unknown): ThursdayCurrent | null {
     revision: positiveDecimal(item.revision, 'Thursday period revision'),
     opensAt,
     closesAt,
-    literature: text(item.literature, 'Thursday literature', 1024, true, 4096),
+    literature: activityLiterature(item.literature),
     entry: creditAmount(item.entry, 'Thursday entry', MAX_MONEY_MILLI),
     perUserLimit: integer(item.per_user_limit, 'Thursday per-user limit', 1, 1_000),
     poolBalance: sm128CreditAmount(item.pool_balance, 'Thursday pool balance'),
@@ -987,10 +993,20 @@ function normalizeThursdayCurrent(value: unknown): ThursdayCurrent | null {
 
 function normalizeThursdayNext(value: unknown): ThursdayNext | null {
   if (value === null) return null;
-  const item = record(value, 'Thursday next period', ['period_id', 'opens_at', 'pool_balance']);
+  const item = record(value, 'Thursday next period', [
+    'period_id', 'opens_at', 'closes_at', 'literature', 'entry', 'per_user_limit', 'pool_balance',
+  ]);
+  const opensAt = timestamp(item.opens_at, 'Thursday next opens timestamp');
+  const closesAt = timestamp(item.closes_at, 'Thursday next closes timestamp');
+  const entry = creditAmount(item.entry, 'Thursday next entry', MAX_MONEY_MILLI);
+  if (closesAt !== opensAt + 86_400 || amountToMilli(entry) === 0n) invalid('Thursday next period');
   return {
     periodId: opaquePeriodID(item.period_id, 'Thursday next period id'),
-    opensAt: timestamp(item.opens_at, 'Thursday next opens timestamp'),
+    opensAt,
+    closesAt,
+    literature: activityLiterature(item.literature),
+    entry,
+    perUserLimit: integer(item.per_user_limit, 'Thursday next per-user limit', 1, 1_000),
     poolBalance: sm128CreditAmount(item.pool_balance, 'Thursday next pool balance'),
   };
 }

@@ -1,3 +1,4 @@
+import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
 import {
   amount, array, boolean, decimal, integer, invalidResponse, nullableString, nullableUnixSecond,
@@ -84,7 +85,7 @@ export function normalizePeriod(value: unknown): Period {
     id: opaqueID(root.id, 'thu_', 'Thursday period id'),
     period_key: string(root.period_key, 'Thursday period key', { min: 1, max: 128, bytes: 128, ascii: true }),
     state, revision: decimal(root.revision, 'Thursday revision', { positive: true }), opens_at: opens, closes_at: closes,
-    literature: string(root.literature, 'Thursday literature', { min: 1, max: 4_096, bytes: 16_384, multiline: true }),
+    literature: isActivityLiterature(root.literature) ? root.literature : invalidResponse('Thursday literature'),
     entry: amount(root.entry, 'Thursday entry', false), per_user_limit: integer(root.per_user_limit, 'Thursday user limit', 1, 1_000),
     pumps_bp: normalizeActivityPumps(root.pumps_bp), current_pool_id: opaqueID(root.current_pool_id, 'pol_', 'Thursday current pool id'),
     next_pool_id: opaqueID(root.next_pool_id, 'pol_', 'Thursday next pool id'), settlement,

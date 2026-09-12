@@ -396,7 +396,8 @@
         "platformBp": "平台分配（基点）",
         "save": "保存下一活动周期",
         "updateTitle": "更新已配置的下一周期",
-        "welfareBp": "公益分配（基点）"
+        "welfareBp": "公益分配（基点）",
+        "literatureInvalid": "文案最多 1024 个字符、4096 字节；可换行或使用制表符，不能包含其他控制字符。"
       },
       "pools": {
         "allStates": "全部奖池状态",

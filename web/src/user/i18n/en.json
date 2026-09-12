@@ -734,6 +734,10 @@
           "configuration_error": "Configuration error."
         },
         "currentPoolBalance": "Current pool",
+        "currentPeriod": "Current period",
+        "nextPreview": "Next period preview",
+        "perUserLimit": "Contributions per person",
+        "closesAt": "Closes at",
         "nextPoolBalance": "Next pool",
         "fixedEntry": "Fixed contribution",
         "myCount": "My contributions",

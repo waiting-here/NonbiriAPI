@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -388,6 +389,7 @@ func (api *httpAPI) putThursdayNext(writer http.ResponseWriter, request *http.Re
 		writeActivitiesError(writer, ErrInvalidRequest)
 		return
 	}
+	body.Literature.Value = strings.ReplaceAll(body.Literature.Value, "\r\n", "\n")
 	pumps := PumpsBP{Platform: body.PumpsBP.Value.Platform.Value, Welfare: body.PumpsBP.Value.Welfare.Value, NextPool: body.PumpsBP.Value.NextPool.Value}
 	canonical := map[string]any{
 		"expected_revision": body.ExpectedRevision.Value, "period_key": body.PeriodKey.Value,

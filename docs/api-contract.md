@@ -465,6 +465,8 @@ The activity master switch pauses admission while preserving each activity's swi
 
 The administrator page automatically schedules a new Thursday period for the next Thursday at 00:00 Beijing time (UTC+8), lasting 24 hours. On Thursday itself, a new period targets the following week. The page generates the date-based `period_key` and matching `opens_at`; neither requires manual input. Editing an existing configured period preserves its scheduled date. The existing `PUT /admin/api/activities/thursday/next` still receives both fields and validates the Beijing Thursday window, revision and activity state on the server. Saving the period and enabling the activity remain separate actions.
 
+Thursday `literature` accepts empty text or up to 1,024 Unicode characters and 4,096 UTF-8 bytes. LF newlines and tabs are allowed; other control characters are rejected. CRLF input is normalized to LF before idempotency comparison and storage, and responses use LF. The user activity response exposes `thursday.next` only when both the activity master switch and Thursday switch are enabled. Its fields are `period_id`, `opens_at`, `closes_at`, `literature`, `entry`, `per_user_limit` and `pool_balance`. The page shows the current period before a separate next-period preview. Contributions remain restricted to the current open period.
+
 `GET /admin/api/pools` accepts `pool_type=welfare|thursday` and `state=open|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; the response keeps the pool page envelope and adds `pagination` only in numbered mode. The page filters are independent and exact.
 
 | Method and path | Request / response |
