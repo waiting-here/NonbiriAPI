@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [master]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -48,7 +47,7 @@ jobs:
           go-version: 1.26.6
           cache: true
       - name: Run complete race shard
-        run: bash scripts/race-check.sh --shard "${{ matrix.shard }}"
+        run: bash scripts/race-check.sh --shard "${{ matrix.shard }}" --workers 4
 
   go:
     name: Go checks

@@ -65,10 +65,14 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags dist -trimpath -o nonbiriap
 
 Run each command only where its evidence is needed. One frontend build generates
 both stations, notices and hashes. CI divides the live race-test catalog across
-twelve concurrent shards and verifies that every package or split test runs exactly
+twelve concurrent shards. Each shard uses a bounded four-command worker pool;
+split packages are partitioned by timing weights and unsplit packages run one
+package per command. It verifies that every package or split test runs exactly
 once. Timing hints affect balance, not coverage; verbose results expose individual
 test durations for later rebalancing. Require all shards and aggregate Go/Web/CodeQL
-checks; daily affected-package race defaults to one shuffled round.
+checks. The protected master is validated through pull requests; after merge,
+reuse evidence for the identical tree and use manual dispatch when a rerun is
+needed. Daily affected-package race defaults to one shuffled round.
 
 - Check clean installation, `go mod verify`, current `govulncheck` and `npm audit`,
   dependency licenses/notices and redacted credential scans. Record findings and
