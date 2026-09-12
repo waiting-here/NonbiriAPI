@@ -30,6 +30,23 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it.each(Array.from({ length: 16 }, (_, value) => value))(
+    'accepts a 32-byte CallerKey with final data nibble %i',
+    (value) => {
+      const bytes = Buffer.alloc(32, 255);
+      bytes[31] = value;
+      const body = bytes.toString('base64url');
+      const secret = `nbk_${body}`;
+      const metadata = {
+        display: `nbk_${body.slice(0, 4)}…${body.slice(-4)}`,
+        created_at: 1_700_000_000,
+        updated_at: 1_700_000_000,
+        generation: '2',
+      };
+      expect(normalizeCallerKeySecret({ secret, metadata }, '1')).toEqual({ secret, metadata });
+    },
+  );
+
   it('keeps fractional negative balances valid in both wallets', () => {
     const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as {
       user: Record<string, unknown>;

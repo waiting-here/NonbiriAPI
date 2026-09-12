@@ -119,7 +119,7 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
   });
 
   it('confirms replacement of an existing key and reveals only the replacement response', async () => {
-    const secret = `nbk_${'I'.repeat(42)}Q`;
+    const secret = `nbk_${'I'.repeat(42)}8`;
     let generation = '3';
     let metadata = {
       display: 'nbk_IIII…IIII',
