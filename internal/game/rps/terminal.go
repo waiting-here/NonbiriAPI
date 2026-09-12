@@ -126,7 +126,29 @@ func terminalOutcome(seat seatRecord) (string, error) {
 	}
 }
 
-func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, now int64) (terminalResult, error) {
+// A failed terminal attempt may still commit its retry schedule. All reward,
+// normal settlement and terminal fact writes must therefore roll back together.
+func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, now int64) (result terminalResult, err error) {
+	if _, err = tx.ExecContext(ctx, "SAVEPOINT rps_terminal"); err != nil {
+		return terminalResult{}, classifyDB(err)
+	}
+	defer func() {
+		if err != nil {
+			if _, rollbackErr := tx.ExecContext(ctx, "ROLLBACK TO rps_terminal"); rollbackErr != nil {
+				_ = tx.Rollback()
+				err = classifyDB(rollbackErr)
+				return
+			}
+		}
+		if _, releaseErr := tx.ExecContext(ctx, "RELEASE rps_terminal"); releaseErr != nil {
+			_ = tx.Rollback()
+			result, err = terminalResult{}, classifyDB(releaseErr)
+		}
+	}()
+	return service.writeTerminalTx(ctx, tx, record, now)
+}
+
+func (service *Service) writeTerminalTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, now int64) (terminalResult, error) {
 	if record == nil || record.State != StateTerminalProcessing || record.TerminalOperationID == nil || record.TerminalReason == nil {
 		return terminalResult{}, ErrInvariant
 	}

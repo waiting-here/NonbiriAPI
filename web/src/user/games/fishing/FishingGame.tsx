@@ -5,6 +5,7 @@ import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
 import { GamePayment } from '../common/GamePayment';
 import { GameWallets } from '../common/GameWallets';
@@ -222,7 +223,7 @@ function ResultPanel({
             {revealed} / {result.outcomes.length}
           </span>
         </div>
-        <div className="fishing-outcomes" role="list">
+        <div className="fishing-outcomes" role="list" aria-label={text('fishing.result.title')}>
           {result.outcomes.slice(0, revealed).map((outcome) => (
             <article
               className={`fishing-outcome fishing-outcome--${outcome.tier} fishing-rarity--${outcome.tier}`}
@@ -522,6 +523,7 @@ export function FishingGame() {
   const authoritative = state.data;
   const refetchState = state.refetch;
   const result = authoritative?.unrevealed ?? null;
+  useGameSettlement(result?.batchID);
   const pending = authoritative?.settlementPending ?? null;
   const effectiveActionState = actionState;
   const replayOperation = operation;

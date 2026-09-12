@@ -10,11 +10,12 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-type rpsPort struct{}
+type rpsPort struct{ onboarding }
 
 type queueFunding struct {
 	account   int64
 	operation string
+	task      string
 	version   int
 	payment   ledger.Payment
 }
@@ -23,7 +24,7 @@ func queueSource(ctx context.Context, tx *sql.Tx, input ports.Entry) (queueFundi
 	var owner int64
 	var raw, gameRaw []byte
 	var funding queueFunding
-	if err := tx.QueryRowContext(ctx, `SELECT user_id,account_id,reserved,reservation_operation_id,rules_version,game_paid FROM game_rps_queue WHERE id=?`, input.ResourceID).Scan(&owner, &funding.account, &raw, &funding.operation, &funding.version, &gameRaw); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT user_id,account_id,reserved,reservation_operation_id,rules_version,game_paid,mode FROM game_rps_queue WHERE id=?`, input.ResourceID).Scan(&owner, &funding.account, &raw, &funding.operation, &funding.version, &gameRaw, &funding.task); err != nil {
 		return queueFunding{}, err
 	}
 	reserved, err := db.DecodeU128(raw)
@@ -36,7 +37,7 @@ func queueSource(ctx context.Context, tx *sql.Tx, input ports.Entry) (queueFundi
 	return funding, err
 }
 
-func (rpsPort) QueueReserve(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.AccountMutation) (int64, error) {
+func (port rpsPort) QueueReserve(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.AccountMutation) (int64, error) {
 	if !validEntry(ctx, tx, input, "rpsq_") || input.Meta.ActorUserID != input.UserID || write == nil {
 		return 0, ledger.ErrInvalidPlan
 	}
@@ -90,11 +91,18 @@ func (rpsPort) QueueReserve(ctx context.Context, tx *sql.Tx, input ports.Entry, 
 			return 0, err
 		}
 	}
-	_, err = ledger.Apply(ctx, tx, plan)
-	return account.ID, err
+	if _, err = ledger.Apply(ctx, tx, plan); err != nil {
+		return 0, err
+	}
+	if funding.version == 2 {
+		if err := port.reserve(ctx, tx, input.UserID, funding.task, onboardingParent{column: "rps_queue_id", id: input.ResourceID}, input.Meta.CreatedAt); err != nil {
+			return 0, err
+		}
+	}
+	return account.ID, nil
 }
 
-func (rpsPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
+func (port rpsPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
 	if !validEntry(ctx, tx, input, "rpsq_") || write == nil {
 		return ledger.ErrInvalidPlan
 	}
@@ -133,6 +141,11 @@ func (rpsPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.Entry, 
 	if err != nil {
 		return err
 	}
+	if funding.version == 2 {
+		if err := port.release(ctx, tx, onboardingParent{column: "rps_queue_id", id: input.ResourceID}); err != nil {
+			return err
+		}
+	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
 	return err
 }
@@ -141,7 +154,7 @@ func validSession(ctx context.Context, tx *sql.Tx, id string, meta ledger.Meta) 
 	return ctx != nil && tx != nil && db.ValidateOpaqueID(id, "rps_") && db.ValidateOpaqueID(meta.OperationID, "op_") && meta.CreatedAt >= 0 && meta.CreatedAt <= 253402300799 && meta.ActorUserID >= 0
 }
 
-func (rpsPort) SessionStart(ctx context.Context, tx *sql.Tx, input ports.SessionStart, write ports.AccountMutation) error {
+func (port rpsPort) SessionStart(ctx context.Context, tx *sql.Tx, input ports.SessionStart, write ports.AccountMutation) error {
 	if !validSession(ctx, tx, input.SessionID, input.Meta) || input.Meta.ActorUserID != 0 || write == nil || input.FutureRows.Big().Sign() <= 0 {
 		return ledger.ErrInvalidPlan
 	}
@@ -266,7 +279,7 @@ func validatePool(ctx context.Context, tx *sql.Tx, accountID int64, kind string)
 	return nil
 }
 
-func (rpsPort) RoundCut(ctx context.Context, tx *sql.Tx, input ports.RoundCut, write ports.Mutation) error {
+func (port rpsPort) RoundCut(ctx context.Context, tx *sql.Tx, input ports.RoundCut, write ports.Mutation) error {
 	if !validSession(ctx, tx, input.SessionID, input.Meta) || write == nil || input.GameInput.Sign() < 0 {
 		return ledger.ErrInvalidPlan
 	}
@@ -352,7 +365,7 @@ func (rpsPort) RoundCut(ctx context.Context, tx *sql.Tx, input ports.RoundCut, w
 	return err
 }
 
-func (rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Terminal, write ports.Mutation) error {
+func (port rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Terminal, write ports.Mutation) error {
 	if !validSession(ctx, tx, input.SessionID, input.Meta) || input.Meta.ActorUserID != 0 || write == nil || len(input.Payouts) > 3 {
 		return ledger.ErrInvalidPlan
 	}
@@ -363,9 +376,9 @@ func (rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Terminal, w
 	if err := validatePool(ctx, tx, input.WelfareAccountID, "welfare"); err != nil {
 		return err
 	}
-	var state, operation string
+	var state, operation, task string
 	var poolRaw []byte
-	if err := tx.QueryRowContext(ctx, `SELECT state,terminal_operation_id,player_pool FROM game_rps_sessions WHERE id=?`, input.SessionID).Scan(&state, &operation, &poolRaw); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT state,terminal_operation_id,player_pool,mode FROM game_rps_sessions WHERE id=?`, input.SessionID).Scan(&state, &operation, &poolRaw, &task); err != nil {
 		return err
 	}
 	pool, err := db.DecodeU128(poolRaw)
@@ -373,6 +386,7 @@ func (rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Terminal, w
 		return ledger.ErrInvalidPlan
 	}
 	expected := map[int64]db.U128{}
+	seats := map[int64]int{}
 	deleted := new(big.Int)
 	gameRemaining := new(big.Int)
 	rows, err := tx.QueryContext(ctx, `SELECT user_id,deletion_state,terminal_return,game_remaining FROM game_rps_seats WHERE session_id=? ORDER BY seat_no`, input.SessionID)
@@ -402,6 +416,7 @@ func (rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Terminal, w
 		}
 		if status == "active" && userID.Valid {
 			expected[userID.Int64] = amount
+			seats[userID.Int64] = count - 1
 		} else {
 			deleted.Add(deleted, amount.Big())
 		}
@@ -467,6 +482,32 @@ func (rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Terminal, w
 	if err != nil {
 		return err
 	}
+	if version == 2 {
+		for _, payout := range input.Payouts {
+			if err := port.complete(ctx, tx, payout.UserID, task, onboardingParent{column: "rps_session_id", id: input.SessionID, seat: seats[payout.UserID]}, input.Meta.CreatedAt); err != nil {
+				return err
+			}
+		}
+	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
 	return err
+}
+
+func (port rpsPort) TransferOnboarding(ctx context.Context, tx *sql.Tx, input ports.QueueOnboardingTransfer) error {
+	if ctx == nil || tx == nil || !db.ValidateOpaqueID(input.QueueID, "rpsq_") || !db.ValidateOpaqueID(input.SessionID, "rps_") ||
+		input.UserID <= 0 || input.SeatNo < 0 || input.SeatNo > 2 {
+		return ledger.ErrInvalidPlan
+	}
+	// The parent guard verifies the matched user's mode and version. No capacity
+	// changes here: the same hold survives queue deletion under its new seat.
+	_, err := tx.ExecContext(ctx, `UPDATE game_onboarding_holds SET rps_queue_id=NULL,rps_session_id=?,seat_no=?
+WHERE game_key='rps' AND rps_queue_id=? AND user_id=?`, input.SessionID, input.SeatNo, input.QueueID, input.UserID)
+	return err
+}
+
+func (port rpsPort) ReleaseOnboarding(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if ctx == nil || tx == nil || userID <= 0 {
+		return ledger.ErrInvalidPlan
+	}
+	return port.releaseUser(ctx, tx, userID)
 }

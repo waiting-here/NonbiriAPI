@@ -193,7 +193,7 @@ func deleteUserIdempotency(ctx context.Context, tx *sql.Tx, userID int64) error 
 	return classifyDB(err)
 }
 
-func terminalize(ctx context.Context, tx *sql.Tx, record sessionRecord, reason string, terminalAt int64) (Summary, error) {
+func (service *Service) terminalize(ctx context.Context, tx *sql.Tx, record sessionRecord, reason string, terminalAt int64) (Summary, error) {
 	if terminalAt < record.CreatedAt || terminalAt > 253402300799 {
 		return Summary{}, ErrInvariant
 	}
@@ -225,6 +225,11 @@ func terminalize(ctx context.Context, tx *sql.Tx, record sessionRecord, reason s
 INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score,rules_version,game_paid_milli,assists_initial,assists_remaining)
 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.ID, record.UserID, record.Spec, record.PriceMilli, reason, record.CreatedAt, record.Deadline, terminalAt, record.PairsRemoved, score, record.RulesVersion, record.GamePaid, record.AssistsInitial, record.AssistsRemaining); err != nil {
 		return Summary{}, classifyDB(err)
+	}
+	if record.RulesVersion == 2 {
+		if err := service.finance.Terminal(ctx, tx, record.ID, record.UserID, terminalAt); err != nil {
+			return Summary{}, mapLedger(err)
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM game_online_leases WHERE session_id=?`, record.ID); err != nil {
 		return Summary{}, classifyDB(err)

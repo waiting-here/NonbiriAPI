@@ -163,7 +163,7 @@ func (service *Service) timeoutOne(ctx context.Context, sessionID string, now in
 			return false, err
 		}
 	}
-	if _, err := terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
+	if _, err := service.terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
 		if errors.Is(err, ErrConflict) {
 			return false, nil
 		}

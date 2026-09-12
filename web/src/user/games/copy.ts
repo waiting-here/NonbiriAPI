@@ -4,6 +4,16 @@ import { useTranslation } from 'react-i18next';
 type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
+  'onboarding.title': ['Newcomer rewards', '新人奖励'],
+  'onboarding.remaining': ['{{count}} tasks left · {{reward}} general credits available', '待完成 {{count}} 项 · 共可获 {{reward}} 通用积分'],
+  'onboarding.awarded': ['Newcomer reward: +{{reward}} general credits', '新人奖励：+{{reward}} 通用积分'],
+  'onboarding.fishingHelp': ['Finish one cast or a ten-catch batch with each bait to receive its one-time reward automatically.', '分别使用三种鱼饵完成单次或十连垂钓，即可自动获得对应的一次性奖励。'],
+  'onboarding.linklinkHelp': ['Clear each board size once to receive its one-time reward automatically.', '分别成功消除三种规格的棋盘，即可自动获得对应的一次性奖励。'],
+  'onboarding.rpsHelp': ['Finish each mode once to receive its one-time reward automatically. Automatic timeout moves count too; leaving a queue does not.', '分别完成三种模式，即可自动获得对应的一次性奖励。超时自动操作完成的对局也计入；取消排队不计入。'],
+  'onboarding.board6x8': ['6×8 board', '6×8 棋盘'],
+  'onboarding.board8x8': ['8×8 board', '8×8 棋盘'],
+  'onboarding.board10x10': ['10×10 board', '10×10 棋盘'],
+  'common.gamePaymentOrder': ['Game credits are spent first, then general credits. Normal game payouts go to general credits.', '优先使用游戏积分，不足部分使用通用积分。正常游戏结算所得进入通用钱包。'],
   'common.generalBalance': ['General credits', '通用积分'],
   'common.entryPayment': ['Entry payment', '入场付款'],
 
@@ -354,10 +364,11 @@ const copy = {
   'rps.queue': ['Join {{mode}} queue', '进入{{mode}}队列'],
   'rps.queueing': ['Joining the queue…', '正在加入匹配…'],
   'rps.deathmatchReview': [
-    'Deathmatch uses all your available credits. You can lose the full amount. Confirm when you are ready to join.',
-    '本局会投入全部可用积分，可能全部损失。请确认后入场。',
+    'Deathmatch uses the positive available balances of both wallets. You can lose the full amount. Confirm when you are ready to join.',
+    '本局会投入两个钱包各自的全部正余额，可能全部损失。请确认后入场。',
   ],
   'rps.deathmatchConfirm': ['I understand; join deathmatch', '我已了解，进入生死斗'],
+  'rps.result.seats': ['Player results', '玩家结果'],
   'rps.pendingQueue': ['Waiting for two other players…', '正在等待另外两名玩家…'],
   'rps.pendingQueuePrivacy': [
     'The game will begin automatically once three players are matched.',
@@ -580,8 +591,8 @@ const copy = {
     '标准模式：每人投入当前基础积分的五倍。庄家轮换，最多进行九个普通回合。尚未分配的平局奖池须先完成；奖池分配后，如果九个普通回合已经完成，或任一玩家剩余不足一份基础积分，本局结束并返还三人的场内余额。',
   ],
   'rps.rules.mode.deathmatch': [
-    'Deathmatch: each player brings all currently available credits, with at least the base stake, and cannot add credits from outside during the match. The first nine ordinary stakes use the base amount; it then rises to twice the base amount and rises by one more base amount after every three ordinary stakes. During a paid tied-pot continuation, the first three stakes use its starting amount and each later tie raises the next stake by one base amount. A settled pot ends the match if any player then has no credits left. When an ordinary stake leaves all three players at zero, that hand becomes the Ultimate Showdown.',
-    '生死斗：每人带入当前全部可用积分，至少需要基础积分，开局后不能从场外补充。前九次普通下注使用基础积分；之后升为两倍，并在每完成三次普通下注后再增加一倍基础积分。付费续池的前三次使用本次续池起始金额，之后每次继续平局都会让下一次增加一倍基础积分。奖池分配后若任一玩家没有剩余积分，本局结束；普通下注后若三人场内积分都变为零，该手会进入终极对决。',
+    'Deathmatch: each player brings all positive available game and general credits, with at least the base stake, and cannot add credits from outside during the match. The first nine ordinary stakes use the base amount; it then rises to twice the base amount and rises by one more base amount after every three ordinary stakes. During a paid tied-pot continuation, the first three stakes use its starting amount and each later tie raises the next stake by one base amount. A settled pot ends the match if any player then has no credits left. When an ordinary stake leaves all three players at zero, that hand becomes the Ultimate Showdown.',
+    '生死斗：每人带入游戏与通用钱包各自的全部正余额，至少需要基础积分，开局后不能从场外补充。前九次普通下注使用基础积分；之后升为两倍，并在每完成三次普通下注后再增加一倍基础积分。付费续池的前三次使用本次续池起始金额，之后每次继续平局都会让下一次增加一倍基础积分。奖池分配后若任一玩家没有剩余积分，本局结束；普通下注后若三人场内积分都变为零，该手会进入终极对决。',
   ],
   'rps.rules.feesTitle': ['Where each entry goes', '每笔投入去了哪里'],
   'rps.rules.feesBody': [
@@ -609,8 +620,8 @@ const copy = {
   ],
   'rps.rules.queueTitle': ['Joining and leaving', '排队和离开'],
   'rps.rules.queueBody': [
-    'The three modes have separate queues. A queue can wait for up to 120 seconds; cancelling or timing out before a match releases the entry amount. Once a match starts, leaving the page or switching tabs does not pause the clock or cancel the match.',
-    '三种模式分别排队，最多等待 120 秒；匹配前主动取消或等待超时会释放入场积分。对局开始后，离开页面或切换标签页不会暂停计时，也不会取消对局。',
+    'The three modes have separate queues. A queue can wait for up to 120 seconds; cancelling or timing out before a match refunds each wallet its original payment. Once a match starts, leaving the page or switching tabs does not pause the clock or cancel the match.',
+    '三种模式分别排队，最多等待 120 秒；匹配前主动取消或等待超时会按原付款分项退回各钱包。对局开始后，离开页面或切换标签页不会暂停计时，也不会取消对局。',
   ],
   'rps.rules.statsTitle': ['Stats and leaderboards', '统计和排行榜'],
   'rps.rules.statsBody': [

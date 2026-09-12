@@ -56,7 +56,7 @@ func replayQueue(decision idempotency.Decision) (QueueMutationResult, error) {
 }
 
 func (service *Service) Enqueue(ctx context.Context, input EnqueueInput) (QueueMutationResult, error) {
-	return service.enqueue(ctx, input, 1)
+	return service.enqueue(ctx, input, 2)
 }
 
 func (service *Service) enqueue(ctx context.Context, input EnqueueInput, rulesVersion int) (QueueMutationResult, error) {

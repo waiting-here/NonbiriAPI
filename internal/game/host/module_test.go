@@ -344,7 +344,7 @@ func TestFreeModuleUsesAllRegisteredCapabilitiesWithoutLedgerKinds(t *testing.T)
 		t.Fatalf("module route: %d %s", response.Code, response.Body.String())
 	}
 	snapshot, err := service.GamesSnapshot(context.Background(), fixture.adminID, time.Unix(fixtureNow, 0))
-	if err != nil || len(snapshot) != 5 || snapshot["free"] == nil {
+	if err != nil || len(snapshot) != 6 || snapshot["free"] == nil || snapshot["onboarding"] == nil {
 		t.Fatalf("snapshot: %+v %v", snapshot, err)
 	}
 	home, err := service.HomeSummary(context.Background(), fixture.adminID)

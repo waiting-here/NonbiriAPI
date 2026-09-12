@@ -68,6 +68,9 @@ func (adapter *LifecycleAdapter) prepareDeleteTx(ctx context.Context, tx *sql.Tx
 	if adapter == nil || adapter.service == nil || ctx == nil || tx == nil || userID <= 0 {
 		return nil, ErrInvalidRequest
 	}
+	if err := adapter.service.finance.ReleaseOnboarding(ctx, tx, userID); err != nil {
+		return nil, mapLedger(err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM game_online_leases WHERE user_id=? AND substr(session_id,1,3)='ll_'`, userID); err != nil {
 		return nil, classifyDB(err)
 	}
@@ -128,7 +131,7 @@ func (adapter *LifecycleAdapter) ExportTx(
 	}
 	var finalizer *ExportFinalizer
 	if found && decisionNow >= record.Deadline {
-		if _, err := terminalize(ctx, tx, record, TerminalTimedOut, decisionNow); err != nil {
+		if _, err := adapter.service.terminalize(ctx, tx, record, TerminalTimedOut, decisionNow); err != nil {
 			return UserExport{}, nil, err
 		}
 		finalizer = &ExportFinalizer{service: adapter.service, sessionIDs: []string{record.ID}}

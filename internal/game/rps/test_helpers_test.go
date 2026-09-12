@@ -323,6 +323,9 @@ VALUES(?,?,?,?,?,?,?)`, binding, userID, fixture.clock.Load(), fixture.clock.Loa
 	if err != nil {
 		fixture.t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, fixture.clock.Load()); err != nil {
+		fixture.t.Fatal(err)
+	}
 	if funding != 0 {
 		external, err := ledger.CodedAccount(context.Background(), tx, "external")
 		if err != nil {
@@ -372,6 +375,7 @@ func (fixture *rpsFixture) setRPSConfig(enabled bool, base int64, pumps PumpsBP)
 	}
 }
 
+// enqueue builds accepted legacy games; new-rule tests use enqueueVersion or Enqueue.
 func (fixture *rpsFixture) enqueue(userID int64, mode string, deviceByte, ipByte byte, key int) QueueMutationResult {
 	fixture.t.Helper()
 	raw := make([]byte, 32)
@@ -380,9 +384,9 @@ func (fixture *rpsFixture) enqueue(userID int64, mode string, deviceByte, ipByte
 	}
 	var ip [16]byte
 	ip[15] = ipByte
-	result, err := fixture.service.Enqueue(context.Background(), EnqueueInput{UserID: userID, Mode: mode,
+	result, err := fixture.service.enqueue(context.Background(), EnqueueInput{UserID: userID, Mode: mode,
 		DeviceToken: base64.RawURLEncoding.EncodeToString(raw), CanonicalSourceIP: ip,
-		DeathmatchConfirmed: mode == game.RPSModeDeathmatch, IdempotencyKey: fixture.key(key)})
+		DeathmatchConfirmed: mode == game.RPSModeDeathmatch, IdempotencyKey: fixture.key(key)}, 1)
 	if err != nil {
 		fixture.t.Fatal(err)
 	}

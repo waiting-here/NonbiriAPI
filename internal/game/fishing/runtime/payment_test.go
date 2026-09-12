@@ -91,6 +91,17 @@ func TestFishingMixedPaymentAndOriginalRelease(t *testing.T) {
 					t.Fatalf("replay=%+v err=%v", replay, err)
 				}
 			}
+			if !tc.release && !tc.insufficient {
+				tc.wantGeneral += 1_000_000
+				if fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 1 || fixture.scalar("SELECT COUNT(*) FROM credit_operations WHERE kind='game_onboarding_reward'") != 1 {
+					t.Fatal("normal batch did not award exactly once")
+				}
+			} else if fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 0 {
+				t.Fatal("uncompleted fishing awarded")
+			}
+			if fixture.scalar("SELECT COUNT(*) FROM game_onboarding_holds") != 0 {
+				t.Fatal("finished batch retained a hold")
+			}
 			tx, err = fixture.database.BeginTx(ctx, nil)
 			if err != nil {
 				t.Fatal(err)

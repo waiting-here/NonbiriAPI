@@ -10,7 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-type fishingPort struct{}
+type fishingPort struct{ onboarding }
 
 func validEntry(ctx context.Context, tx *sql.Tx, input ports.Entry, prefix string) bool {
 	return ctx != nil && tx != nil && input.UserID > 0 && db.ValidateOpaqueID(input.ResourceID, prefix) && db.ValidateOpaqueID(input.Meta.OperationID, "op_") && input.Meta.CreatedAt >= 0 && input.Meta.CreatedAt <= 253402300799 && (input.Meta.ActorUserID == 0 || input.Meta.ActorUserID == input.UserID) && input.Amount.Sign() >= 0 && input.GamePaid.Sign() >= 0 && input.GamePaid.Big().Cmp(input.Amount.Big()) <= 0
@@ -18,6 +18,7 @@ func validEntry(ctx context.Context, tx *sql.Tx, input ports.Entry, prefix strin
 
 type fishingFunding struct {
 	payout  int64
+	task    string
 	version int
 }
 
@@ -25,7 +26,7 @@ func fishingSource(ctx context.Context, tx *sql.Tx, input ports.Entry, terminal 
 	var userID, entry, gamePaid int64
 	var funding fishingFunding
 	var state, operation string
-	if err := tx.QueryRowContext(ctx, `SELECT user_id,entry_total_milli,payout_total_milli,state,operation_id,rules_version,game_paid_milli FROM game_fishing_batches WHERE id=?`, input.ResourceID).Scan(&userID, &entry, &funding.payout, &state, &operation, &funding.version, &gamePaid); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT user_id,entry_total_milli,payout_total_milli,state,operation_id,rules_version,game_paid_milli,bait FROM game_fishing_batches WHERE id=?`, input.ResourceID).Scan(&userID, &entry, &funding.payout, &state, &operation, &funding.version, &gamePaid, &funding.task); err != nil {
 		return fishingFunding{}, err
 	}
 	if userID != input.UserID || state != "reserved" || input.Amount.Big().Cmp(big.NewInt(entry)) != 0 || input.GamePaid.Big().Cmp(big.NewInt(gamePaid)) != 0 || terminal && operation != input.Meta.OperationID {
@@ -34,7 +35,7 @@ func fishingSource(ctx context.Context, tx *sql.Tx, input ports.Entry, terminal 
 	return funding, nil
 }
 
-func (fishingPort) Reserve(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
+func (port fishingPort) Reserve(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
 	if !validEntry(ctx, tx, input, "fb_") || input.Meta.ActorUserID != input.UserID || write == nil {
 		return ledger.ErrInvalidPlan
 	}
@@ -86,11 +87,16 @@ func (fishingPort) Reserve(ctx context.Context, tx *sql.Tx, input ports.Entry, w
 			return err
 		}
 	}
-	_, err = ledger.Apply(ctx, tx, plan)
-	return err
+	if _, err = ledger.Apply(ctx, tx, plan); err != nil {
+		return err
+	}
+	if funding.version == 2 {
+		return port.reserve(ctx, tx, input.UserID, funding.task, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}, input.Meta.CreatedAt)
+	}
+	return nil
 }
 
-func (fishingPort) Settle(ctx context.Context, tx *sql.Tx, input ports.FishingSettlement, write ports.Mutation) error {
+func (port fishingPort) Settle(ctx context.Context, tx *sql.Tx, input ports.FishingSettlement, write ports.Mutation) error {
 	if !validEntry(ctx, tx, input.Entry, "fb_") || input.Meta.ActorUserID != input.UserID || write == nil {
 		return ledger.ErrInvalidPlan
 	}
@@ -137,11 +143,16 @@ func (fishingPort) Settle(ctx context.Context, tx *sql.Tx, input ports.FishingSe
 	if err != nil {
 		return err
 	}
+	if funding.version == 2 {
+		if err := port.complete(ctx, tx, input.UserID, funding.task, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}, input.Meta.CreatedAt); err != nil {
+			return err
+		}
+	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
 	return err
 }
 
-func (fishingPort) Release(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
+func (port fishingPort) Release(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
 	if !validEntry(ctx, tx, input, "fb_") || input.Meta.ActorUserID != 0 || write == nil {
 		return ledger.ErrInvalidPlan
 	}
@@ -184,6 +195,11 @@ func (fishingPort) Release(ctx context.Context, tx *sql.Tx, input ports.Entry, w
 	ref, err := ledger.FishingReservation(input.ResourceID)
 	if err != nil {
 		return err
+	}
+	if funding.version == 2 {
+		if err := port.release(ctx, tx, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}); err != nil {
+			return err
+		}
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
 	return err

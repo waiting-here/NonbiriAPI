@@ -30,6 +30,8 @@ type Fishing interface {
 }
 type LinkLink interface {
 	Entry(context.Context, *sql.Tx, Entry) error
+	Terminal(context.Context, *sql.Tx, string, int64, int64) error
+	ReleaseOnboarding(context.Context, *sql.Tx, int64) error
 }
 
 type QueueInput struct {
@@ -63,7 +65,15 @@ type Terminal struct {
 	Payouts          []Payout
 	Deleted, Carry   ledger.Amount
 }
+type QueueOnboardingTransfer struct {
+	QueueID, SessionID string
+	UserID             int64
+	SeatNo             int
+}
+
 type RPS interface {
+	TransferOnboarding(context.Context, *sql.Tx, QueueOnboardingTransfer) error
+	ReleaseOnboarding(context.Context, *sql.Tx, int64) error
 	QueueReserve(context.Context, *sql.Tx, Entry, AccountMutation) (int64, error)
 	QueueRelease(context.Context, *sql.Tx, Entry, Mutation) error
 	SessionStart(context.Context, *sql.Tx, SessionStart, AccountMutation) error

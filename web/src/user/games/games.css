@@ -205,6 +205,49 @@
   }
 }
 
+.game-onboarding {
+  margin-bottom: 1rem;
+}
+.game-onboarding h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.game-onboarding h2 button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.25rem 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+}
+.game-onboarding h2 button > span:nth-child(2) {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: normal;
+  color: var(--nb-color-text-muted);
+}
+.game-onboarding p {
+  color: var(--nb-color-text-muted);
+}
+.game-onboarding ul {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0;
+  margin-bottom: 0;
+  list-style: none;
+}
+.game-onboarding li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
 .game-wallets {
   display: flex;
   flex-wrap: wrap;

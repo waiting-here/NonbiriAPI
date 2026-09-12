@@ -75,7 +75,7 @@ func (service *Service) start(ctx context.Context, input StartInput, rulesVersio
 		return Result{}, err
 	}
 	if found && now >= existing.Deadline {
-		if _, err := terminalize(ctx, tx, existing, TerminalTimedOut, now); err != nil {
+		if _, err := service.terminalize(ctx, tx, existing, TerminalTimedOut, now); err != nil {
 			return Result{}, err
 		}
 		expiredSession = existing.ID

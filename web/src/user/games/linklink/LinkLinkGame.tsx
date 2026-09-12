@@ -16,6 +16,7 @@ import { creditsToMilli, formatCredits } from '../common/strict';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
 import { GamePayment } from '../common/GamePayment';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
@@ -302,6 +303,7 @@ export function LinkLinkGame() {
   } | null>(null);
   const state: LinkLinkState | null = isActiveLinkLink(current.data) ? current.data : null;
   const summary: LinkLinkSummary | null = isLinkLinkSummary(current.data) ? current.data : null;
+  useGameSettlement(summary?.sessionID);
   const refetchCurrent = current.refetch;
   const stateIdentity = state ? `${state.sessionID}:${state.revision}` : null;
   const selected = selection?.identity === stateIdentity ? selection.coordinate : null;

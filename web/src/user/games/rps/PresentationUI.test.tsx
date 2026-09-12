@@ -85,7 +85,7 @@ describe('RPS presentation in the real game page', () => {
       const fetch = install(pending(known));
       const view = await renderWithProviders(<RPSGame />, { station: 'user', route: '/games/rps' });
       await screen.findByRole('heading', { name: 'Quick' });
-      const seats = screen.getAllByRole('listitem');
+      const seats = within(screen.getByRole('list', { name: 'Player results' })).getAllByRole('listitem');
       expect(seats).toHaveLength(3);
       expect(seats[0]).toHaveTextContent('You');
       expect(seats[2]).toHaveTextContent('Identity-hidden seat');
