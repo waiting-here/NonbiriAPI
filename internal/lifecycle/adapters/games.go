@@ -203,6 +203,7 @@ func (adapter *LinkLinkAdapter) ExportLinkLink(
 	if value.Active != nil {
 		active := value.Active
 		out.Active = &lifecycle.LinkLinkActiveExport{
+			OpportunitiesInitial: active.OpportunitiesInitial, OpportunitiesRemaining: active.OpportunitiesRemaining,
 			RulesVersion: active.RulesVersion, Payment: lifecycle.GamePaymentExport(active.Payment),
 			SessionID: active.SessionID, Spec: active.Spec, Price: active.Price, State: active.State,
 			PairsRemoved: active.PairsRemoved, TotalPairs: active.TotalPairs,
@@ -211,6 +212,7 @@ func (adapter *LinkLinkAdapter) ExportLinkLink(
 	}
 	for index, summary := range value.Summaries {
 		out.Summaries[index] = lifecycle.LinkLinkSummaryExport{
+			OpportunitiesInitial: summary.OpportunitiesInitial, OpportunitiesRemaining: summary.OpportunitiesRemaining,
 			RulesVersion: summary.RulesVersion, Payment: lifecycle.GamePaymentExport(summary.Payment),
 			SessionID: summary.SessionID, Spec: summary.Spec, Price: summary.Price,
 			TerminalReason: summary.TerminalReason, StartedAt: summary.StartedAt,

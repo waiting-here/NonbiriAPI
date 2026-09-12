@@ -179,6 +179,7 @@ export function userSession(role: Exclude<TestRole, 'anonymous' | 'admin'>) {
       concurrency_limit: null,
       effective_concurrency_limit: '5',
       balance: '0',
+      game_balance: '0',
       donation_credit: '0',
       effective_level: level,
       level_display_name: `Lv${level}`,

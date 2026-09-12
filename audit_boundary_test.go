@@ -455,6 +455,10 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 			tx.Rollback()
 			t.Fatal(err)
 		}
+		if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, time.Now().Unix()); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
 		if _, err := tx.Exec(`UPDATE site_config SET value=CASE key WHEN 'charity_enabled' THEN '1' WHEN 'charity_violation_deduct_milli' THEN '7' WHEN 'rpm_ban_threshold' THEN '1' ELSE value END`); err != nil {
 			tx.Rollback()
 			t.Fatal(err)

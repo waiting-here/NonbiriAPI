@@ -139,7 +139,8 @@ func (adapter *LifecycleAdapter) ExportTx(
 	}
 	if found {
 		result.Active = &SafeActiveExport{
-			RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.PriceMilli, record.GamePaid),
+			Opportunities: Opportunities{record.AssistsInitial, record.AssistsRemaining},
+			RulesVersion:  record.RulesVersion, Payment: game.PaymentFromMilli(record.PriceMilli, record.GamePaid),
 			SessionID: record.ID, Spec: record.Spec, Price: game.FormatAmount(record.PriceMilli), State: "active",
 			PairsRemoved: record.PairsRemoved, TotalPairs: record.Board.definition.totalPairs(),
 			StartedAt: record.CreatedAt, Deadline: record.Deadline,

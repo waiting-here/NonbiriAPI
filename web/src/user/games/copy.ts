@@ -240,6 +240,21 @@ const copy = {
     'Confirm to pay the displayed ticket price and start the timer. Leaving the page does not pause the game or refund the ticket.',
     '确认后扣除下方门票并开始计时。离开页面后计时继续，门票不退还。',
   ],
+  'linklink.hintButton': ['Hint / Refresh ({{count}} left)', '提示 / 刷新（剩余 {{count}} 次）'],
+  'linklink.hintTile': ['Hint', '提示'],
+  'linklink.hintHelp': ['Follow the dashed line between the marked tiles. Select them yourself to remove the pair.', '沿虚线查看标记的配对，再自行选择两个图块消除。'],
+  'linklink.refreshed': ['The occupied tiles were shuffled once. A refresh may still leave no legal pair.', '剩余图块已洗牌一次，刷新后仍可能没有可消除的配对。'],
+  'linklink.rules.scoreBody': ['A cleared board scores 100 per pair, plus the whole seconds left and 100 for each unused hint. A timeout scores only removed pairs; abandoning has no score. Scores enter the performance boards and do not pay credits.', '成功通关的表现分 = 配对数 × 100 + 剩余完整秒数 + 剩余提示次数 × 100。超时只计算已消除配对，放弃不计分。表现分用于排行榜，不兑换积分。'],
+  'linklink.rules.shuffleBody': ['The 6×8, 8×8 and 10×10 boards begin with 2, 3 and 5 opportunities. The Hint / Refresh button shows a legal pair when one exists; otherwise it shuffles occupied tiles once. Each use costs one opportunity. Refreshing does not guarantee a move. With none left, keep playing, wait for the timer or abandon.', '6×8、8×8、10×10 棋盘分别有 2、3、5 次机会。“提示 / 刷新”在有可消除配对时显示提示，否则只洗牌一次剩余图块。每次使用扣 1 次机会，刷新不保证有解。次数用尽后可继续操作、等待超时或放弃。'],
+  'linklink.leaderboard.title': ['Best single-game score in the past {{days}} days', '过去 {{days}} 天单局最高表现分'],
+  'linklink.leaderboard.help': ['Cleared boards only, one best score per player. Equal scores rank by achievement time, earliest first.', '仅计成功通关，每人取单局最高分。同分先达成者靠前。'],
+  'linklink.leaderboard.spec': ['Board size', '棋盘模式'],
+  'linklink.leaderboard.window': ['Time window', '统计窗口'],
+  'linklink.leaderboard.days': ['Past {{days}} days', '过去 {{days}} 天'],
+  'linklink.leaderboard.empty': ['No qualifying scores in this window yet.', '这个窗口还没有符合条件的成绩。'],
+  'linklink.leaderboard.rank': ['Rank', '名次'],
+  'linklink.leaderboard.player': ['Player', '玩家'],
+  'linklink.leaderboard.achieved': ['Achieved', '达成时间'],
   'linklink.start': ['Start {{spec}}', '开始 {{spec}}'],
   'linklink.active': ['Active board', '进行中的棋盘'],
   'linklink.progress': [
@@ -294,12 +309,12 @@ const copy = {
     '连线可以经过空格和棋盘外围的一圈空位，最多转两次弯；不能穿过尚未消除的图块。',
   ],
   'linklink.rules.scoreTitle': ['How the score is counted', '表现分怎么算'],
-  'linklink.rules.scoreBody': [
+  'linklink.rules.scoreLegacyBody': [
     'Your score is the number of pairs removed multiplied by 100, plus the whole seconds left when the board ends. The score is only a game result: it does not pay credits or enter a leaderboard.',
     '表现分 = 已消除配对数 × 100 + 棋盘结束时剩余的完整秒数。表现分只代表本局成绩，不兑换积分，也不进入排行榜。',
   ],
   'linklink.rules.shuffleTitle': ['If no move remains', '没有可走的配对时'],
-  'linklink.rules.shuffleBody': [
+  'linklink.rules.shuffleLegacyBody': [
     'The game automatically rearranges the remaining tiles for free when no legal pair remains. There is no manual shuffle button or fixed shuffle-count limit.',
     '如果没有合法配对，游戏会免费自动重排剩余图块。没有手动洗牌按钮，也没有固定的洗牌次数上限。',
   ],

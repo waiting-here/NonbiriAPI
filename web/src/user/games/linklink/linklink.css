@@ -119,6 +119,44 @@
     stroke-width: 1;
   }
 }
+
+.linklink-match-effect.is-hint .linklink-match-beam {
+  animation: none;
+  stroke-dasharray: 6 5;
+  filter: none;
+}
+.linklink-tile.is-hinted {
+  position: relative;
+  border: 2px dashed var(--nb-color-accent);
+  background: color-mix(in srgb, var(--nb-color-accent) 15%, var(--nb-color-surface));
+}
+.linklink-hint-tag {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  font-size: clamp(8px, calc(var(--linklink-tile) * 0.18), 12px);
+  line-height: 1.1;
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+}
+.linklink-leaderboard {
+  display: grid;
+  gap: 0.75rem;
+}
+.linklink-leaderboard h2,
+.linklink-leaderboard p {
+  margin: 0;
+}
+.linklink-leaderboard label {
+  display: grid;
+  gap: 0.25rem;
+}
+.linklink-ranks-scroll {
+  overflow-x: auto;
+}
+.linklink-leaderboard .is-me {
+  background: color-mix(in srgb, var(--nb-color-accent) 12%, var(--nb-color-surface));
+}
 @keyframes linklink-ring {
   from {
     opacity: 1;

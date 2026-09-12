@@ -8,16 +8,20 @@ export interface MatchAnimation {
   readonly path: readonly LinkLinkCoordinate[] | null;
 }
 
-export function MatchEffect({ animation }: { readonly animation: MatchAnimation }) {
+export function MatchEffect({
+  animation,
+  hint = false,
+}: {
+  readonly animation: MatchAnimation;
+  readonly hint?: boolean;
+}) {
   const ref = useRef<SVGSVGElement>(null);
   useEffect(() => {
     const svg = ref.current;
     const board = svg?.parentElement;
     if (!svg || !board) return;
     const position = () => {
-      const tile = board.querySelector<HTMLButtonElement>(
-        '[aria-rowindex="1"][aria-colindex="1"]',
-      );
+      const tile = board.querySelector<HTMLButtonElement>('[aria-rowindex="1"][aria-colindex="1"]');
       if (!tile) return;
       // Vanishing tiles scale and rotate; anchor effects to the unchanged grid layout.
       const tileStyle = getComputedStyle(tile);
@@ -70,23 +74,29 @@ export function MatchEffect({ animation }: { readonly animation: MatchAnimation 
     };
   }, [animation]);
   return (
-    <svg ref={ref} className="linklink-match-effect" aria-hidden="true" focusable="false">
+    <svg
+      ref={ref}
+      className={`linklink-match-effect${hint ? ' is-hint' : ''}`}
+      aria-hidden="true"
+      focusable="false"
+    >
       <polyline
         className="linklink-match-beam"
         fill="none"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {animation.pair.map((_, index) => (
-        <g className="linklink-match-burst" key={index}>
-          <circle className="linklink-match-ring" r="12" fill="none" />
-          <g className="linklink-match-sparks">
-            {Array.from({ length: 8 }, (_, spark) => (
-              <path key={spark} transform={`rotate(${spark * 45})`} strokeLinecap="round" />
-            ))}
+      {!hint &&
+        animation.pair.map((_, index) => (
+          <g className="linklink-match-burst" key={index}>
+            <circle className="linklink-match-ring" r="12" fill="none" />
+            <g className="linklink-match-sparks">
+              {Array.from({ length: 8 }, (_, spark) => (
+                <path key={spark} transform={`rotate(${spark * 45})`} strokeLinecap="round" />
+              ))}
+            </g>
           </g>
-        </g>
-      ))}
+        ))}
     </svg>
   );
 }
