@@ -49,6 +49,7 @@ const user = {
   concurrency_limit: null,
   effective_concurrency_limit: '5',
   balance: '1000',
+  game_balance: '0',
   donation_credit: '2000',
   effective_level: 2,
   level_display_name: 'Lv2',

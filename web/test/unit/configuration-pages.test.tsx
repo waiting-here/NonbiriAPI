@@ -770,14 +770,12 @@ describe('admin per-user limit explanations', () => {
     await rendered.user.click(within(row!).getByRole('button', { name: 'Copy Discord ID' }));
     expect(await navigator.clipboard.readText()).toBe('1234567890123456789');
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage' }));
-    const note = screen.getByText(/built-in default of 5/i);
-    expect(note).toHaveTextContent(/global RPM, global egress, endpoint and key gates/i);
-    expect(note).toHaveTextContent(/effective is not the final minimum/i);
+    const note = await screen.findByText(/default per-user concurrency is 5/i);
+    expect(note).toHaveTextContent(/site, endpoint and key limits also apply/i);
     await rendered.i18n.changeLanguage('zh');
-    expect(await screen.findByText(/内建默认值 5/)).toHaveTextContent(
-      /全站 RPM、全站出站并发、端点和密钥/,
+    expect(await screen.findByText(/单用户并发默认为 5/)).toHaveTextContent(
+      /全站、端点和密钥的限制/,
     );
-    expect(screen.getByText(/内建默认值 5/)).toHaveTextContent(/不是所有门禁取最小后的最终上限/);
   });
 });
 
