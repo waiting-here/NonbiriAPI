@@ -27,6 +27,13 @@ paths = ['''^internal[\\/]adminusers[\\/]runtime_test\.go$''']
 regexes = ['''economyKey\s*:=\s*"[^"]+"''']
 
 [[allowlists]]
+description = "Exact game-wallet adjustment replay request key"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^internal[\\/]adminusers[\\/]game_balance_test\.go$''']
+regexes = ['''^ABCDEFGHIJKLMNOPQRSTG1$''']
+
+[[allowlists]]
 description = "Derived report-crypto golden reference"
 targetRules = ["generic-api-key"]
 condition = "AND"
