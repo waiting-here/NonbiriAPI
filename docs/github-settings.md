@@ -1,6 +1,6 @@
 # GitHub repository settings
 
-These settings live in GitHub and cannot be applied by `git push` or stored completely in the repository. Apply them after the repository is available at `github.com/waiting-here/NonbiriAPI`.
+These settings live in GitHub and cannot be applied by `git push` or stored completely in the repository. Use this reference when reviewing the repository's protection, security and release settings.
 
 ## Private vulnerability reporting
 
@@ -20,7 +20,9 @@ Use **Settings → Branches** (or a repository ruleset) and create a rule for `m
 
 Direct updates to `master` are disabled: all changes, including emergency fixes, must arrive through a pull request from another branch. Keep local `master` aligned with `origin/master`; do not locally merge a feature branch into `master` and then try to push it.
 
-For a multi-part version, maintainers may use a milestone integration branch (for example, `dev/v1.0.0-beta.1`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
+For a multi-part version, maintainers may use a version integration branch (for example, `codex/dev-v1.0.0-beta.4`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
+
+Complete CI runs on pull requests and can also be started manually. After merging, verify that the resulting `master` tree matches the passing PR tree before reusing its evidence for release. A changed tree requires checks for the affected inputs. CodeQL keeps its independent triggers; removing redundant post-merge CI does not remove required PR checks or authorize direct updates.
 
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 

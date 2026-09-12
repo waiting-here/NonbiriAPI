@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Current source:** 1.0.0-beta.4 development candidate, not yet released. The latest published version is [1.0.0-beta.3](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.3). Review the deployment, privacy and security documentation before exposing an instance to users.
+> **Current release:** [1.0.0-beta.4](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.4), a source prerelease for Linux/amd64. Review the deployment, privacy and security documentation before exposing an instance to users.
 >
 > **Compatibility boundary:** Generation 2 (`application_id=0x4E425249`, `user_version=2`), targeting Linux/amd64. Complete beta.3 and ten exact earlier manifests support atomic upgrades that preserve existing data and configuration and create zero game-credit wallets. Alpha/Generation 1 still requires an explicit fresh cutover. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes).
 >
@@ -105,7 +105,7 @@ The project is source-first and supports Linux/amd64 as its production target. O
 
 ## GitHub automation
 
-The repository includes a read-only CI workflow. GitHub Actions runs the Go and frontend checks on pushes to `master` and pull requests; it does not deploy the application. Release artifact automation is intentionally separate and will be added only after the supported targets and signing policy are decided.
+The repository includes a read-only CI workflow. GitHub Actions runs the complete Go and frontend checks for pull requests, with manual runs available when needed. Protected `master` changes go through those checks; after merging, verify that its tree matches the tested PR tree and reuse the result. CodeQL retains its own triggers. CI does not deploy the application. Release artifact automation is intentionally separate and will be added only after the supported targets and signing policy are decided.
 
 ## API
 
