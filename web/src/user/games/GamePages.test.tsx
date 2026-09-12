@@ -949,6 +949,29 @@ describe('beta.1 game pages', () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/hint'))).toHaveLength(1);
   });
 
+  it('waits for the current LinkLink session before fetching idle leaderboards', async () => {
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
+      { method: 'POST', path: '/api/games/linklink/sessions/ll_AAAAAAAAAAAAAAAAAAAAAA/lease', body: { expires_at: 1_800_000_025 } },
+    ]);
+    const registeredFetch = fetchMock.getMockImplementation()!;
+    let finishCurrent!: (response: Response) => void;
+    const pendingCurrent = new Promise<Response>(resolve => { finishCurrent = resolve; });
+    fetchMock.mockImplementation((input, init) =>
+      String(input).endsWith('/api/games/linklink/session')
+        ? pendingCurrent
+        : registeredFetch(input, init),
+    );
+    await renderWithProviders(<LinkLinkGame />, { station: 'user', route: '/games/linklink', role: 'user' });
+    await screen.findByRole('button', { name: 'Start 6x8' });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/linklink/leaderboard'))).toBe(false);
+    await act(async () => {
+      finishCurrent(new Response(JSON.stringify(linkLinkState()), { headers: { 'content-type': 'application/json' } }));
+    });
+    expect(await screen.findAllByRole('gridcell')).toHaveLength(48);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/linklink/leaderboard'))).toBe(false);
+  });
+
   it('starts LinkLink with positive game credits despite a negative general wallet and switches all six boards', async () => {
     const snapshot = { ...gamesSnapshotWire(), balance: '-10', game_balance: '3' };
     const now = 1_800_000_000;
