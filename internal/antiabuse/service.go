@@ -27,6 +27,7 @@ type ServiceConfig struct {
 	Rejections          RejectionRecorder
 	BeginUserRetirement func(context.Context, int64) (Retirement, error)
 	OnBan               func(int64)
+	CancelUserDuelsTx   func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
 	Now                 func() time.Time
 }
 
@@ -215,6 +216,18 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 		}
 		rejection = &charityrouting.ContentTooShortError{Actual: actual, Minimum: cfg.CharityMinChars, RequestID: requestID}
 	}
+	var finalizeDuels func(bool)
+	duelsCommitted := false
+	if banSeconds > 0 && s.config.CancelUserDuelsTx != nil {
+		finalizeDuels, err = s.config.CancelUserDuelsTx(ctx, tx, userID, "account_unavailable", now)
+		if err != nil {
+			return nil, err
+		}
+		if finalizeDuels == nil {
+			return nil, charityrouting.ErrInvariant
+		}
+		defer func() { finalizeDuels(duelsCommitted) }()
+	}
 	if banSeconds > 0 || suspendSeconds > 0 {
 		if err := applyRestrictions(ctx, tx, userID, now, revision, banSeconds, suspendSeconds); err != nil {
 			return nil, err
@@ -223,6 +236,7 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	duelsCommitted = true
 	s.events += len(window.events) - len(old.events)
 	s.windows[key] = window
 	<-s.gate

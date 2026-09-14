@@ -180,11 +180,7 @@ func validatePlan(plan Plan) error {
 	if !ok || wantType != spec.sourceType {
 		return ErrInvalidPlan
 	}
-	prefix := map[sourceType]string{
-		sourceOperation: "op_", sourceLogicalRequest: "req_", sourceDispatchClaim: "clm_", sourcePeriod: "thu_",
-		sourceFishingBatch: "fb_", sourceLinkLinkSession: "ll_", sourceRPSQueue: "rpsq_", sourceRPSSession: "rps_",
-	}[spec.sourceType]
-	if !db.ValidateOpaqueID(spec.sourceID, prefix) || spec.sourceType == sourceOperation && spec.sourceID != spec.meta.OperationID {
+	if !validSourceID(spec.sourceType, spec.sourceID) || spec.sourceType == sourceOperation && spec.sourceID != spec.meta.OperationID {
 		return ErrInvalidPlan
 	}
 	if spec.kind == KindRPSRoundCut {

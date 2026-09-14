@@ -39,21 +39,23 @@ type AdminRouteRegistrar interface {
 }
 
 type ServiceConfig struct {
-	Database    *sql.DB
-	CursorKeys  CursorKeyDeriver
-	FinalAuth   AdminFinalAuthorizer
-	Invalidator PostCommitInvalidator
-	Now         func() time.Time
-	NewID       func(string) (string, error)
+	Database          *sql.DB
+	CursorKeys        CursorKeyDeriver
+	FinalAuth         AdminFinalAuthorizer
+	Invalidator       PostCommitInvalidator
+	Now               func() time.Time
+	NewID             func(string) (string, error)
+	CancelUserDuelsTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
 }
 
 type Service struct {
-	database    *sql.DB
-	cursorKeys  CursorKeyDeriver
-	finalAuth   AdminFinalAuthorizer
-	invalidator PostCommitInvalidator
-	now         func() time.Time
-	newID       func(string) (string, error)
+	database          *sql.DB
+	cursorKeys        CursorKeyDeriver
+	finalAuth         AdminFinalAuthorizer
+	invalidator       PostCommitInvalidator
+	now               func() time.Time
+	newID             func(string) (string, error)
+	cancelUserDuelsTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
 }
 
 func NewService(config ServiceConfig) (*Service, error) {
@@ -70,6 +72,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		database: config.Database, cursorKeys: config.CursorKeys,
 		finalAuth: config.FinalAuth, invalidator: config.Invalidator,
 		now: config.Now, newID: config.NewID,
+		cancelUserDuelsTx: config.CancelUserDuelsTx,
 	}
 	if service.now == nil {
 		service.now = time.Now

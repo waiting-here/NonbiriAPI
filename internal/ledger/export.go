@@ -114,17 +114,7 @@ func validExportOperation(entry UserExportEntry, sourceSeqRaw []byte) bool {
 	if !ok || entry.SourceType != string(wantSource) {
 		return false
 	}
-	prefix := map[sourceType]string{
-		sourceOperation:       "op_",
-		sourceLogicalRequest:  "req_",
-		sourceDispatchClaim:   "clm_",
-		sourcePeriod:          "thu_",
-		sourceFishingBatch:    "fb_",
-		sourceLinkLinkSession: "ll_",
-		sourceRPSQueue:        "rpsq_",
-		sourceRPSSession:      "rps_",
-	}[wantSource]
-	if prefix == "" || !db.ValidateOpaqueID(entry.SourceID, prefix) ||
+	if !validSourceID(wantSource, entry.SourceID) ||
 		wantSource == sourceOperation && entry.SourceID != entry.OperationID {
 		return false
 	}

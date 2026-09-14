@@ -48,6 +48,10 @@ const (
 	KindRPSRoundCut          Kind = "rps_round_cut"
 	KindRPSTerminal          Kind = "rps_terminal"
 	KindGameOnboardingReward Kind = "game_onboarding_reward"
+	KindDuelQueueReserve     Kind = "duel_queue_reserve"
+	KindDuelQueueRelease     Kind = "duel_queue_release"
+	KindDuelSessionStart     Kind = "duel_session_start"
+	KindDuelTerminal         Kind = "duel_terminal"
 )
 
 type sourceType string
@@ -61,6 +65,8 @@ const (
 	sourceLinkLinkSession sourceType = "linklink_session"
 	sourceRPSQueue        sourceType = "rps_queue"
 	sourceRPSSession      sourceType = "rps_session"
+	sourceDuelQueue       sourceType = "duel_queue"
+	sourceDuelSession     sourceType = "duel_session"
 )
 
 // Asset identifies one independently conserved credit balance.
@@ -151,6 +157,8 @@ const (
 	reservationRPSQueue
 	reservationRPSSession
 	reservationGameOnboarding
+	reservationDuelQueue
+	reservationDuelSession
 )
 
 // ReservationRef is an unforgeable reference to one frozen domain remaining
@@ -186,6 +194,39 @@ func RPSQueueReservation(id string) (ReservationRef, error) {
 
 func RPSSessionReservation(id string) (ReservationRef, error) {
 	return opaqueReservation(reservationRPSSession, id, "rps_")
+}
+
+func DuelQueueReservation(id string) (ReservationRef, error) {
+	if duelIDGame(id, true) == "" {
+		return ReservationRef{}, ErrInvalidReservation
+	}
+	return ReservationRef{kind: reservationDuelQueue, id: id}, nil
+}
+
+func DuelSessionReservation(id string) (ReservationRef, error) {
+	if duelIDGame(id, false) == "" {
+		return ReservationRef{}, ErrInvalidReservation
+	}
+	return ReservationRef{kind: reservationDuelSession, id: id}, nil
+}
+
+func duelIDGame(id string, queue bool) string {
+	if queue {
+		if db.ValidateOpaqueID(id, "bidq_") {
+			return "bidding"
+		}
+		if db.ValidateOpaqueID(id, "likq_") {
+			return "likes"
+		}
+	} else {
+		if db.ValidateOpaqueID(id, "bid_") {
+			return "bidding"
+		}
+		if db.ValidateOpaqueID(id, "lik_") {
+			return "likes"
+		}
+	}
+	return ""
 }
 
 // GameOnboardingHold reserves the single future reward operation.

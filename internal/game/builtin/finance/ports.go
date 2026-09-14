@@ -14,6 +14,7 @@ type Capabilities struct {
 	Fishing  ports.Fishing
 	LinkLink ports.LinkLink
 	RPS      ports.RPS
+	Duel     ports.Duel
 }
 
 // ForModule grants only the operations registered for this compiled module.
@@ -26,6 +27,8 @@ func ForModule(id string) (Capabilities, error) {
 		return Capabilities{LinkLink: linkLinkPort{onboarding{linklinkconfig.Descriptor()}}}, nil
 	case game.RPSID:
 		return Capabilities{RPS: rpsPort{onboarding{rpsconfig.Descriptor()}}}, nil
+	case "bidding", "likes":
+		return Capabilities{Duel: duelPort{game: id}}, nil
 	default:
 		return Capabilities{}, ledger.ErrInvalidPlan
 	}
