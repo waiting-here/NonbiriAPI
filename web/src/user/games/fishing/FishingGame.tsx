@@ -269,6 +269,8 @@ function ResultPanel({
                     ? text('fishing.size', { size: outcomeDisplayLength(outcome)! })
                     : text(`fishing.tier.${outcome.tier}`)}
                 </span>
+              </div>
+              <div className="fishing-outcome__payout">
                 <span>{text('fishing.reward', { amount: formatCredits(outcome.netReward) })}</span>
                 <RakeDetails gross={outcome.reward} rake={outcome.rake} />
               </div>

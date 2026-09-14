@@ -694,6 +694,7 @@
       "siteDay": "Site day",
       "welfare": {
         "title": "Daily game welfare",
+        "poolBalance": "Pool balance",
         "state": {
           "unavailable": "Unavailable",
           "available": "Available",
@@ -716,7 +717,7 @@
         "zeroAward": "No non-zero award is available.",
         "claimedAmount": "Game credits awarded",
         "claim": "Claim welfare",
-        "funding": "The pool spends general credits to issue game credits. Eligibility counts your game wallet and unspent game credits in fishing or RPS."
+        "funding": "The pool issues an equal amount of game credits. Eligibility counts your game wallet and unused game credits reserved for you in games."
       },
       "thursday": {
         "title": "Crazy Thursday",

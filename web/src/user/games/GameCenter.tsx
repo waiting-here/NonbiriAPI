@@ -10,7 +10,7 @@ import { useGamesSnapshot } from './common/snapshot';
 import type { GamesSnapshot } from './common/types';
 import './games.css';
 
-type Availability = 'open' | 'partial' | 'closed' | 'maintenance';
+type Availability = 'open' | 'closed' | 'maintenance';
 
 interface CenterCard {
   readonly id: GameHeroKind;
@@ -36,13 +36,13 @@ function cardState(
     const values = Object.values(snapshot.linklink.specs);
     const count = snapshot.linklink.enabled ? values.filter((spec) => spec.enabled).length : 0;
     return {
-      state: count === 3 ? 'open' : count > 0 ? 'partial' : 'closed',
+      state: count > 0 ? 'open' : 'closed',
       detail: String(count),
     };
   }
   const modes = Object.values(snapshot.rps.modes);
   const count = snapshot.rps.enabled ? modes.filter((mode) => mode.enabled).length : 0;
-  return { state: count === 3 ? 'open' : count > 0 ? 'partial' : 'closed', detail: String(count) };
+  return { state: count > 0 ? 'open' : 'closed', detail: String(count) };
 }
 
 function GameCard({ card }: { card: CenterCard }) {
