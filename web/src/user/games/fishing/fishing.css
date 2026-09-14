@@ -128,8 +128,9 @@
 }
 .fishing-outcomes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: 0.65rem;
+  align-items: start;
 }
 .fishing-outcome {
   display: grid;
@@ -145,6 +146,15 @@
   display: grid;
   gap: 0.2rem;
   min-width: 0;
+}
+.fishing-outcome__payout {
+  grid-column: 1 / -1;
+}
+.fishing-outcome strong {
+  overflow-wrap: anywhere;
+}
+.fishing-outcome__payout > span {
+  overflow-wrap: anywhere;
 }
 .fishing-outcome span {
   color: var(--nb-color-text-muted);

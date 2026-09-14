@@ -694,6 +694,7 @@
       "siteDay": "站点日期",
       "welfare": {
         "title": "每日游戏低保",
+        "poolBalance": "资金池余额",
         "state": {
           "unavailable": "不可用",
           "available": "可领取",
@@ -716,7 +717,7 @@
         "zeroAward": "无法提供非零领取额。",
         "claimedAmount": "获得游戏积分",
         "claim": "领取低保",
-        "funding": "资金池扣除通用积分，发放等额游戏积分。资格按游戏钱包与垂钓、猜拳中尚未使用的游戏积分计算。"
+        "funding": "从资金池发放等额游戏积分。资格按游戏钱包与游戏中尚未使用、仍归本人的预留游戏积分计算。"
       },
       "thursday": {
         "title": "疯狂星期四",
