@@ -141,7 +141,15 @@ func validateAssetCapacity(ctx context.Context, tx *sql.Tx) error {
 		return errors.New("ledger sequence/capacity mismatch")
 	}
 	total := new(big.Int)
-	for _, table := range []string{"logical_requests", "game_fishing_batches", "thursday_periods", "thursday_participants", "game_rps_queue", "game_rps_sessions", "game_onboarding_holds"} {
+	tables := []string{"logical_requests", "game_fishing_batches", "thursday_periods", "thursday_participants", "game_rps_queue", "game_rps_sessions", "game_onboarding_holds"}
+	present, err := DuelStoragePresent(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if present {
+		tables = append(tables, "game_duel_queue", "game_duel_sessions")
+	}
+	for _, table := range tables {
 		rows, err := tx.QueryContext(ctx, `SELECT ledger_rows_remaining FROM `+quoteSQLiteIdentifier(table))
 		if err != nil {
 			return err

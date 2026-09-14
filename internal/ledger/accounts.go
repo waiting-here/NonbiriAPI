@@ -102,6 +102,20 @@ func CreateRPSSessionAssetAccount(ctx context.Context, tx *sql.Tx, sessionID str
 	return createCodedAccount(ctx, tx, AccountPlatform, "rps-session:"+sessionID, asset, at)
 }
 
+func CreateDuelQueueAssetAccount(ctx context.Context, tx *sql.Tx, queueID string, asset Asset, at int64) (Account, error) {
+	if duelIDGame(queueID, true) == "" {
+		return Account{}, ErrInvalidPlan
+	}
+	return createCodedAccount(ctx, tx, AccountPlatform, "duel-queue:"+queueID, asset, at)
+}
+
+func CreateDuelSessionAssetAccount(ctx context.Context, tx *sql.Tx, sessionID string, asset Asset, at int64) (Account, error) {
+	if duelIDGame(sessionID, false) == "" {
+		return Account{}, ErrInvalidPlan
+	}
+	return createCodedAccount(ctx, tx, AccountPlatform, "duel-session:"+sessionID, asset, at)
+}
+
 func createCodedAccount(ctx context.Context, tx *sql.Tx, kind AccountKind, code string, asset Asset, at int64) (Account, error) {
 	if tx == nil || ctx == nil || !asset.valid() || !validUnix(at) {
 		return Account{}, ErrInvalidPlan

@@ -82,3 +82,25 @@ type RPS interface {
 	RoundCut(context.Context, *sql.Tx, RoundCut, Mutation) error
 	Terminal(context.Context, *sql.Tx, Terminal, Mutation) error
 }
+
+type DuelAccountMutation func(context.Context, *sql.Tx, ledger.AccountPair) error
+type DuelTerminalMutation func(context.Context, *sql.Tx, ledger.DuelCuts) error
+type DuelStart struct {
+	Meta      ledger.Meta
+	SessionID string
+	Queues    [2]QueueInput
+}
+type DuelFinish struct {
+	Meta                                ledger.Meta
+	SessionID                           string
+	Winner                              *int
+	WelfareAccountID, ThursdayAccountID int64
+}
+
+// Duel is bound to one compiled game key by the adapter constructor.
+type Duel interface {
+	QueueReserve(context.Context, *sql.Tx, Entry, DuelAccountMutation) error
+	QueueRelease(context.Context, *sql.Tx, Entry, Mutation) error
+	SessionStart(context.Context, *sql.Tx, DuelStart, DuelAccountMutation) error
+	Terminal(context.Context, *sql.Tx, DuelFinish, DuelTerminalMutation) error
+}
