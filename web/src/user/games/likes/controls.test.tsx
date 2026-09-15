@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import rawCatalog from '../../../../../internal/game/likes/catalog/quick.json';
 import wire from './testdata/authority.json';
 import { likesCatalog } from './catalog';
 import { likesView } from './normalize';
 import { PlanEditor } from './PlanEditor';
+import { Arena } from './Arena';
 import { ResourceMeter } from './ResourceMeter';
 import { planControls } from './planControls';
 import type { DuelState } from '../common/duel/types';
@@ -72,6 +73,38 @@ function stun(key: string): Status {
   };
 }
 describe('resource and casting controls', () => {
+  it('groups subscription and image quota while keeping uncapped balances outside', () => {
+    const state = stateFixture();
+    render(
+      <Arena
+        catalog={catalog}
+        view={state.view}
+        profiles={state.profiles}
+        you={0}
+        round={1}
+        locked={[false, false]}
+        resolution={null}
+        roundStart={null}
+        now={100}
+        reduced
+        onInspect={vi.fn()}
+      />,
+    );
+    const subscriptions = screen.getAllByRole('group', { name: 'SUBSCRIPTION USAGE' });
+    expect(subscriptions).toHaveLength(2);
+    for (const group of subscriptions) {
+      expect(within(group).getByRole('meter', { name: 'Subscription burst' })).toBeInTheDocument();
+      expect(within(group).getByRole('meter', { name: 'Subscription total' })).toBeInTheDocument();
+      expect(within(group).queryByText('API reserve')).not.toBeInTheDocument();
+      expect(within(group).queryByText('Gold')).not.toBeInTheDocument();
+    }
+    expect(
+      within(subscriptions[0]).getByRole('meter', { name: 'Image quota' }),
+    ).toBeInTheDocument();
+    expect(within(subscriptions[1]).queryByText('Image quota')).not.toBeInTheDocument();
+    expect(screen.queryByRole('meter', { name: 'API reserve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('meter', { name: 'Gold' })).not.toBeInTheDocument();
+  });
   it('animates uncapped values without presenting a capacity bar', () => {
     const { rerender } = render(
       <ResourceMeter label="API reserve" from={100} to={200} progress={0.2} />,

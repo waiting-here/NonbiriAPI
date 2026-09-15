@@ -24,7 +24,7 @@ export function ResourceMeter({
     delta = to - from;
   return (
     <div
-      className={`likes-meter ${cap === undefined ? 'likes-counter' : ''} ${tone} ${delta > 0 ? 'is-gaining' : delta < 0 ? 'is-spending' : ''}`}
+      className={`likes-meter ${cap === undefined ? 'likes-counter' : ''} ${tone} ${delta > 0 ? 'is-gaining' : delta < 0 ? 'is-spending' : ''} ${delta !== 0 && cap !== undefined && Math.abs(delta) >= cap / 2 ? 'likes-meter--major' : ''}`}
       data-resource-label={label}
       data-from={from}
       data-to={to}

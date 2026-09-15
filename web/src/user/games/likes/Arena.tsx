@@ -9,6 +9,7 @@ import { buffName, reasonName, resourceName, skillName, stageName } from './labe
 import { arenaMotion, interpolate, overloadCues } from './motion';
 import { ResourceMeter } from './ResourceMeter';
 import { PlanSummary } from './PlanEditor';
+import { CastImpact } from './CastImpact';
 
 export function CompactScores({
   view,
@@ -195,21 +196,28 @@ function ResourcePanel({
         ]
       : []),
   ];
+  const isSubscription = (key: string) => ['burst', 'sub', 'R_IMAGE'].includes(key);
+  const renderMeter = (m: (typeof meters)[number]) => (
+    <ResourceMeter
+      key={`${identity}:${m.key}`}
+      label={resourceName(m.key, t)}
+      from={m.from}
+      to={m.to}
+      cap={m.cap}
+      progress={progress}
+      reduced={reduced}
+      tone={m.tone}
+      unit={m.unit}
+    />
+  );
   return (
     <div className="likes-resource-grid">
-      {meters.map((m) => (
-        <ResourceMeter
-          key={`${identity}:${m.key}`}
-          label={resourceName(m.key, t)}
-          from={m.from}
-          to={m.to}
-          cap={m.cap}
-          progress={progress}
-          reduced={reduced}
-          tone={m.tone}
-          unit={m.unit}
-        />
-      ))}
+      {meters.filter((m) => m.key === 'likes').map(renderMeter)}
+      <fieldset className="likes-subscription">
+        <legend>{t('订阅用量', 'SUBSCRIPTION USAGE')}</legend>
+        <div>{meters.filter((m) => isSubscription(m.key)).map(renderMeter)}</div>
+      </fieldset>
+      {meters.filter((m) => m.key !== 'likes' && !isSubscription(m.key)).map(renderMeter)}
     </div>
   );
 }
@@ -259,6 +267,7 @@ export function Arena({
       className={`likes-arena ${impact ? `likes-impact--${impact}` : ''}`}
       aria-label={t('双侧对战', 'Both players')}
       data-stage={motion.stage}
+      data-reduced-motion={reduced}
     >
       <div className="likes-battery" key={`${round}:${motion.stage}:battery`}>
         <div className="likes-battery-heading">
@@ -320,7 +329,11 @@ export function Arena({
               <header>
                 <DuelProfile profile={profiles[seat]} you={seat === you} />
                 <span className="likes-lock">
-                  {running ? t('结算中', 'Resolving') : locked[seat] ? t('已锁定', 'Locked') : t('选择中', 'Choosing')}
+                  {running
+                    ? t('结算中', 'Resolving')
+                    : locked[seat]
+                      ? t('已锁定', 'Locked')
+                      : t('选择中', 'Choosing')}
                 </span>
               </header>
               <div className="likes-character">
@@ -372,6 +385,16 @@ export function Arena({
                   )}
                 </div>
               </div>
+              <CastImpact
+                key={`${round}:${motion.stage}`}
+                events={casts}
+                from={motion.from.players[seat].likes}
+                to={motion.to.players[seat].likes}
+                target={catalog.parameters.TARGET_LIKES}
+                progress={motion.progress}
+                reduced={reduced}
+                overloaded={!!overloadedNow[seat] && impact === 'overload'}
+              />
               <ResourcePanel
                 from={motion.from.players[seat]}
                 to={motion.to.players[seat]}
