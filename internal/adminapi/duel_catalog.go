@@ -23,10 +23,16 @@ func addDuelKeySpecs(known map[string]keySpec) {
 			}
 			switch {
 			case strings.HasSuffix(key, "_enabled"):
+				if n < 0 || n > 1 {
+					panic("invalid built-in duel switch")
+				}
 				known[key] = keySpec{kind: kindBool, def: int(n)}
 			case strings.HasSuffix(key, "_ticket_milli"):
 				known[key] = keySpec{kind: kindAmount, defAmount: n}
 			case strings.HasSuffix(key, "_bp"):
+				if n < 0 || n > 9999 {
+					panic("invalid built-in duel percentage")
+				}
 				known[key] = keySpec{kind: kindInt, min: 0, max: 9999, def: int(n)}
 			default:
 				panic("unknown built-in duel setting")
