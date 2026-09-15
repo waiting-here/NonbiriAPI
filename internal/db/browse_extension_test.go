@@ -5,10 +5,22 @@ import (
 	"testing"
 )
 
-func TestBrowseExtensionPreservesPopulatedRecurringAndPresentationState(t *testing.T) {
-	for _, hash := range []string{preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preHourlyQuotaManifestHash} {
-		t.Run(hash, func(t *testing.T) { testIndexExtensionPreservesPopulatedState(t, hash) })
-	}
+// Keep each historical source independently schedulable by the race test
+// planner. Combining all four migrations consumes one command's whole deadline.
+func TestBrowseExtensionPreservesPopulatedStateFromPreBrowse(t *testing.T) {
+	testIndexExtensionPreservesPopulatedState(t, preBrowseManifestHash)
+}
+
+func TestBrowseExtensionPreservesPopulatedStateFromPreQuotaCleanup(t *testing.T) {
+	testIndexExtensionPreservesPopulatedState(t, preQuotaCleanupManifestHash)
+}
+
+func TestBrowseExtensionPreservesPopulatedStateFromPreStewardHoldRead(t *testing.T) {
+	testIndexExtensionPreservesPopulatedState(t, preStewardHoldReadManifestHash)
+}
+
+func TestBrowseExtensionPreservesPopulatedStateFromPreHourlyQuota(t *testing.T) {
+	testIndexExtensionPreservesPopulatedState(t, preHourlyQuotaManifestHash)
 }
 
 func testIndexExtensionPreservesPopulatedState(t *testing.T, hash string) {
