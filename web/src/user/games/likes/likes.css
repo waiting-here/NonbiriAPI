@@ -517,6 +517,13 @@
 .likes-meter--image {
   --meter: #5ecaab;
 }
+.likes-counter {
+  border-inline-start: 2px solid var(--meter);
+  padding-inline-start: 0.5rem;
+}
+.likes-counter .likes-meter-label > strong {
+  color: var(--meter);
+}
 .likes-meter-label {
   display: flex;
   justify-content: space-between;
@@ -686,10 +693,6 @@
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
-}
-.likes-game .likes-skip {
-  width: 100%;
-  margin-top: 0.7rem;
 }
 .likes-plan-summary {
   display: flex;

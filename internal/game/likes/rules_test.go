@@ -111,3 +111,26 @@ func TestLikesCommandsRejectMissingAndNullCollections(t *testing.T) {
 		}
 	}
 }
+
+func TestManualEmptyActionRejectedButAutomaticTimeoutStillResolves(t *testing.T) {
+	r, state := adapterState(t)
+	var actions [2]json.RawMessage
+	for seat := range 2 {
+		var err error
+		actions[seat], err = r.Automatic("quick", state, seat)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Accept("quick", state, seat, actions[seat]); err == nil {
+			t.Fatal("manual empty plan accepted")
+		}
+	}
+	next, err := r.Resolve("quick", state, actions)
+	if err != nil {
+		t.Fatal("automatic timeout could not settle", err)
+	}
+	info, err := r.Inspect("quick", next.State)
+	if err != nil || info.Phase != "settlement" {
+		t.Fatal(info, err)
+	}
+}

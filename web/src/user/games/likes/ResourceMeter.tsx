@@ -24,7 +24,7 @@ export function ResourceMeter({
     delta = to - from;
   return (
     <div
-      className={`likes-meter ${tone} ${delta > 0 ? 'is-gaining' : delta < 0 ? 'is-spending' : ''}`}
+      className={`likes-meter ${cap === undefined ? 'likes-counter' : ''} ${tone} ${delta > 0 ? 'is-gaining' : delta < 0 ? 'is-spending' : ''}`}
       data-resource-label={label}
       data-from={from}
       data-to={to}
@@ -39,17 +39,19 @@ export function ResourceMeter({
           </small>
         </strong>
       </div>
-      <div
-        className="likes-meter-track"
-        role="meter"
-        aria-label={label}
-        aria-valuenow={to}
-        aria-valuemin={0}
-        aria-valuemax={extent}
-      >
-        <span className="likes-meter-trail" style={{ width: `${(from / extent) * 100}%` }} />
-        <span className="likes-meter-fill" style={{ width: `${(value / extent) * 100}%` }} />
-      </div>
+      {cap !== undefined && (
+        <div
+          className="likes-meter-track"
+          role="meter"
+          aria-label={label}
+          aria-valuenow={to}
+          aria-valuemin={0}
+          aria-valuemax={extent}
+        >
+          <span className="likes-meter-trail" style={{ width: `${(from / extent) * 100}%` }} />
+          <span className="likes-meter-fill" style={{ width: `${(value / extent) * 100}%` }} />
+        </div>
+      )}
       {delta !== 0 && (
         <div className="likes-meter-change">
           <span>

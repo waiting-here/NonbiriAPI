@@ -65,7 +65,14 @@ func TestHTTPStrictBodyQueriesAndSafeProjection(t *testing.T) {
 		}
 	}
 	path := "/api/games/likes/sessions/" + state.ID + "/actions"
-	body := `{"phase_seq":"` + state.PhaseSeq + `","action":` + emptyPlan + `}`
+	empty := `{"phase_seq":"` + state.PhaseSeq + `","action":{"kind":"plan","plan":{"purchases":[],"main":null,"extra":[]}}}`
+	if got := request("POST", path, empty, f.key()); got.Code != 400 {
+		t.Fatal("normal player skipped through HTTP", got.Code)
+	}
+	if f.read(0).Current.Locked[state.You] {
+		t.Fatal("rejected skip acquired a lock")
+	}
+	body := `{"phase_seq":"` + state.PhaseSeq + `","action":` + basicPlan + `}`
 	if got := request("POST", path, body); got.Code != 400 {
 		t.Fatal("missing idempotency key", got.Code)
 	}

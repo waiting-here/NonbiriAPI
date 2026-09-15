@@ -97,6 +97,9 @@ type action struct {
 }
 
 func (r *Rules) Accept(mode string, raw json.RawMessage, seat int, body json.RawMessage) (json.RawMessage, error) {
+	return r.accept(mode, raw, seat, body, true)
+}
+func (r *Rules) accept(mode string, raw json.RawMessage, seat int, body json.RawMessage, manual bool) (json.RawMessage, error) {
 	s, err := r.state(mode, raw)
 	if err != nil {
 		return nil, err
@@ -118,7 +121,11 @@ func (r *Rules) Accept(mode string, raw json.RawMessage, seat int, body json.Raw
 	if duel.Decode(body, &a) != nil || a.Kind != "plan" || a.Plan == nil || duel.Decode(body, &fields) != nil || !duel.HasFields(fields.Plan, "purchases", "main", "extra") || a.Plan.Purchases == nil || a.Plan.Extra == nil {
 		return nil, duel.ErrInvalidRequest
 	}
-	plan, err := r.engines[mode].ValidatePlan(s, seat, *a.Plan)
+	validate := r.engines[mode].ValidatePlan
+	if manual {
+		validate = r.engines[mode].ValidateManualPlan
+	}
+	plan, err := validate(s, seat, *a.Plan)
 	if err != nil {
 		return nil, duel.ErrInvalidRequest
 	}
@@ -149,7 +156,7 @@ func (r *Rules) Resolve(mode string, raw json.RawMessage, actions [2]json.RawMes
 			plans[seat] = engine.EmptyPlan()
 			continue
 		}
-		validated, err := r.Accept(mode, raw, seat, body)
+		validated, err := r.accept(mode, raw, seat, body, false)
 		if err != nil {
 			return duel.Transition{}, err
 		}
