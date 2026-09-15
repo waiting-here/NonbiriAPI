@@ -9,7 +9,11 @@ import { outcomeText, useDuelText } from './copy';
 
 type Props<V, F, P, S, L, A> = {
   readonly codec: DuelCodec<V, F, P, S, L, A>;
-  readonly renderRound: (round: DuelRound<V, F, S>, you: Seat) => ReactNode;
+  readonly renderRound: (
+    round: DuelRound<V, F, S>,
+    you: Seat,
+    context: { mode: string; contentHash: string },
+  ) => ReactNode;
   readonly renderDetail?: (detail: DuelDetail<V, P, S, A>) => ReactNode;
 };
 export function DuelRoundLog<V, F, P, S, L, A>({
@@ -114,7 +118,12 @@ function HistoryDetail<V, F, P, S, L, A>({
             id={id}
             active={false}
             you={query.data.result.you}
-            renderRound={renderRound}
+            renderRound={(round, you) =>
+              renderRound(round, you, {
+                mode: query.data!.result.mode,
+                contentHash: query.data!.contentHash,
+              })
+            }
           />
         </>
       )}
