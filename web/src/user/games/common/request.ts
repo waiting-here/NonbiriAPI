@@ -14,6 +14,7 @@ export interface GameRequestOptions {
   readonly idempotencyKey?: string;
   readonly signal?: AbortSignal;
   readonly expectedStatuses?: readonly number[];
+  readonly maxResponseBytes?: number;
 }
 
 function boundedError(value: unknown, fallback: string): string {
@@ -40,9 +41,9 @@ function errorFrom(status: number, body: unknown): ApiError {
   );
 }
 
-async function responseJSON(response: Response): Promise<unknown> {
+async function responseJSON(response: Response, maximum: number): Promise<unknown> {
   const declaredLength = response.headers.get('Content-Length');
-  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > MAX_RESPONSE_BYTES)
+  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maximum)
     throw new ApiError(
       'invalid_response',
       'The game response exceeded its safe limit.',
@@ -57,7 +58,7 @@ async function responseJSON(response: Response): Promise<unknown> {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > MAX_RESPONSE_BYTES) {
+      if (total > maximum) {
         await reader.cancel().catch(() => undefined);
         throw new ApiError(
           'invalid_response',
@@ -102,6 +103,9 @@ export async function gameRequest<T>(
   path: string,
   options: GameRequestOptions = {},
 ): Promise<GameResponse<T>> {
+  const maximum = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
+  if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 8 * 1024 * 1024)
+    throw new ApiError('invalid_request', 'Invalid response budget.', 0);
   const headers = new Headers({ Accept: 'application/json', 'Cache-Control': 'no-store' });
   if (options.json !== undefined) headers.set('Content-Type', 'application/json');
   if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey);
@@ -119,7 +123,7 @@ export async function gameRequest<T>(
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError('network_error', 'The game request response is unknown.', 0);
   }
-  const body = await responseJSON(response);
+  const body = await responseJSON(response, response.ok ? maximum : MAX_RESPONSE_BYTES);
   if (!response.ok) throw errorFrom(response.status, body);
   if (options.expectedStatuses && !options.expectedStatuses.includes(response.status)) {
     throw new ApiError(

@@ -239,7 +239,7 @@ export async function readRounds<V, F, P, S, L, A>(
     (
       await gameRequest<unknown>(
         `/api/games/${codec.game}/${active ? 'sessions' : 'history'}/${id}/rounds?${search}`,
-        { signal, expectedStatuses: [200] },
+        { signal, expectedStatuses: [200], maxResponseBytes: 8 * 1024 * 1024 },
       )
     ).data,
     ['items', 'next_cursor', 'server_now'],
