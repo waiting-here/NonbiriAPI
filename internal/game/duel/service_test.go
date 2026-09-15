@@ -78,11 +78,13 @@ type fixture struct {
 	mode     string
 	serial   int
 	loadouts [2]json.RawMessage
+	admin    *adminAuthorization
+	audit    func(duel.AdminAudit)
 }
 
 func newFixture(t *testing.T, kind string) *fixture {
 	t.Helper()
-	f := &fixture{t: t, ctx: context.Background()}
+	f := &fixture{t: t, ctx: context.Background(), admin: &adminAuthorization{}}
 	f.clock.Store(100)
 	path := filepath.Join(t.TempDir(), "game.db")
 	dbfixture.Materialize(t, path)
@@ -182,7 +184,11 @@ func newFixture(t *testing.T, kind string) *fixture {
 		t.Fatal(err)
 	}
 	registry := maintenance.NewRegistry()
-	f.s, err = duel.New(duel.Options{Database: f.db, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, Continuation: registryAuthorizer{registry}, Limiter: limiter, Pools: deps{}, Publisher: deps{}, Keys: deps{}, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }})
+	f.s, err = duel.New(duel.Options{Database: f.db, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
+		if f.audit != nil {
+			f.audit(a)
+		}
+	}, Continuation: registryAuthorizer{registry}, Limiter: limiter, Pools: deps{}, Publisher: deps{}, Keys: deps{}, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }})
 	if err != nil {
 		t.Fatal(err)
 	}

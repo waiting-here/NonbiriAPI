@@ -841,9 +841,9 @@ const activeGameCounts: ActiveCounts = {
     { game: 'rps', mode: 'deathmatch', spec: null, phase: 'gesture', count: '3' },
   ],
   queues: [
-    { mode: 'quick', count: '5' },
-    { mode: 'standard', count: '0' },
-    { mode: 'deathmatch', count: '7' },
+    { game: 'rps', mode: 'quick', count: '5' },
+    { game: 'rps', mode: 'standard', count: '0' },
+    { game: 'rps', mode: 'deathmatch', count: '7' },
   ],
 };
 
@@ -963,7 +963,7 @@ describe('standalone Admin Games feature', () => {
       screen.getByText(/Specification: 10×10 · Phase: Unknown value \(playing\) · 2/),
     ).toBeVisible();
     expect(screen.getByText(/Mode: Deathmatch · Phase: Gesture selection · 3/)).toBeVisible();
-    const queues = screen.getByRole('heading', { name: 'RPS queues' }).closest('section');
+    const queues = screen.getByRole('heading', { name: 'Matchmaking queues' }).closest('section');
     expect(queues).toHaveTextContent('Quick: 5');
     expect(queues).toHaveTextContent('Standard: 0');
     expect(queues).toHaveTextContent('Deathmatch: 7');

@@ -24,6 +24,9 @@ func (s *Service) Module() *host.Module {
 			if err := s.RegisterRoutes(r.User, r.Continuation); err != nil {
 				return err
 			}
+			if err := s.RegisterAdminRoutes(r.Admin); err != nil {
+				return err
+			}
 			return r.Maintenance.Register(maintenance.ContinuationKind(s.rules.ID()+"_session"), s.ContinuationRegistration())
 		},
 		StartWorker: s.StartWorker, Close: s.Close, Available: s.Available, ReadyTx: s.Ready,

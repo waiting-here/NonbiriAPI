@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +22,9 @@ import {
   type RPSModeConfig,
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
+import { DuelConfiguration } from '../features/games/Configuration';
+import { validateDuelConfigurations } from '../features/games/config';
+import { gameLabel, modeLabel, useGameAdminText } from '../features/games/copy';
 import '@shared/operations/operations.css';
 
 type GameName = 'fishing' | 'linklink' | 'rps';
@@ -120,10 +124,22 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
   }
   for (const pump of ['platform', 'welfare', 'thursday'] as const) {
     if (!validInteger(draft.fishing.rake_bp[pump], 0, 9_999))
-      return t('admin.games.validation.integerRange', { field: t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) }), minimum: 0, maximum: 9_999 });
+      return t('admin.games.validation.integerRange', {
+        field: t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) }),
+        minimum: 0,
+        maximum: 9_999,
+      });
   }
-  if (draft.fishing.rake_bp.platform + draft.fishing.rake_bp.welfare + draft.fishing.rake_bp.thursday >= 10_000)
-    return t('admin.games.validation.totalCuts', { mode: t('admin.games.sections.fishing'), maximum: 10_000 });
+  if (
+    draft.fishing.rake_bp.platform +
+      draft.fishing.rake_bp.welfare +
+      draft.fishing.rake_bp.thursday >=
+    10_000
+  )
+    return t('admin.games.validation.totalCuts', {
+      mode: t('admin.games.sections.fishing'),
+      maximum: 10_000,
+    });
   for (const treasure of ['bottle', 'clover', 'shell'] as const) {
     if (!validInteger(draft.fishing.treasure_multipliers[treasure], 0, 1_000_000)) {
       return t('admin.games.validation.integerRange', {
@@ -224,6 +240,11 @@ function canonicalGamesDraft(draft: GamesConfig): GamesConfig {
     result.linklink.specs[spec].price = canonical(result.linklink.specs[spec].price);
   for (const mode of RPS_MODES)
     result.rps.modes[mode].base = canonical(result.rps.modes[mode].base);
+  for (const game of ['bidding', 'likes'] as const) {
+    const config = result[game];
+    if (config)
+      for (const mode of Object.values(config.modes)) mode.ticket = canonical(mode.ticket);
+  }
   return result;
 }
 function GamesEditor({
@@ -234,6 +255,7 @@ function GamesEditor({
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
+  const duelText = useGameAdminText();
   const toast = useOptionalToast();
   const [draft, setDraft] = useState(authority);
   const [validation, setValidation] = useState<string | null>(null);
@@ -260,7 +282,7 @@ function GamesEditor({
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const error = validateGamesDraft(draft, t);
+    const error = validateGamesDraft(draft, t) ?? validateDuelConfigurations(draft, duelText);
     setValidation(error);
     if (error === null && changed && !stale && !save.isPending) {
       void save
@@ -277,7 +299,8 @@ function GamesEditor({
     setValidation(null);
     setDraft(authority);
   };
-  const formError = validation ?? validateGamesDraft(draft, t);
+  const formError =
+    validation ?? validateGamesDraft(draft, t) ?? validateDuelConfigurations(draft, duelText);
   const changed = JSON.stringify(canonicalGamesDraft(draft)) !== JSON.stringify(authority);
   const stale = draft.revision !== authority.revision;
 
@@ -363,11 +386,26 @@ function GamesEditor({
           {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
             <label key={pump}>
               <span>{t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}</span>
-              <input type="number" min="0" max="9999" step="1"
-                value={numberInput(draft.fishing.rake_bp[pump])} disabled={save.isPending}
-                onChange={(event) => edit((current) => ({ ...current, fishing: { ...current.fishing,
-                  rake_bp: { ...current.fishing.rake_bp, [pump]: numberFromInput(event.target.value) },
-                } }))} />
+              <input
+                type="number"
+                min="0"
+                max="9999"
+                step="1"
+                value={numberInput(draft.fishing.rake_bp[pump])}
+                disabled={save.isPending}
+                onChange={(event) =>
+                  edit((current) => ({
+                    ...current,
+                    fishing: {
+                      ...current.fishing,
+                      rake_bp: {
+                        ...current.fishing.rake_bp,
+                        [pump]: numberFromInput(event.target.value),
+                      },
+                    },
+                  }))
+                }
+              />
             </label>
           ))}
           {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
@@ -589,6 +627,18 @@ function GamesEditor({
           })}
         </div>
       </Card>
+      {(['bidding', 'likes'] as const).map(
+        (game) =>
+          draft[game] && (
+            <DuelConfiguration
+              key={game}
+              game={game}
+              value={draft[game]}
+              disabled={save.isPending}
+              onChange={(value) => edit((current) => ({ ...current, [game]: value }))}
+            />
+          ),
+      )}
       {formError ? (
         <p className="field-error" role="alert">
           {formError}
@@ -622,6 +672,7 @@ function GamesEditor({
 }
 export function GamesPage() {
   const { t } = useTranslation();
+  const duelText = useGameAdminText();
   const config = useQuery({
     queryKey: adminEconomyKeys.games,
     queryFn: getGamesConfig,
@@ -661,7 +712,10 @@ export function GamesPage() {
                   [
                     row.mode
                       ? t('admin.games.counts.mode', {
-                          value: enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
+                          value:
+                            row.game === 'bidding' || row.game === 'likes'
+                              ? modeLabel(row.mode, duelText)
+                              : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
                         })
                       : null,
                     row.spec
@@ -671,7 +725,15 @@ export function GamesPage() {
                       : null,
                     row.phase
                       ? t('admin.games.counts.phase', {
-                          value: enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
+                          value:
+                            row.game === 'bidding' || row.game === 'likes'
+                              ? ({
+                                  plan: duelText('选招', 'Choosing skills'),
+                                  settlement: duelText('结算展示', 'Settlement presentation'),
+                                  joker: duelText('王的决定', 'Joker choice'),
+                                  bid: duelText('竞标', 'Bidding'),
+                                }[row.phase] ?? row.phase)
+                              : enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
                         })
                       : null,
                   ]
@@ -679,23 +741,41 @@ export function GamesPage() {
                     .join(' · ') || t('admin.games.counts.active');
                 return (
                   <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
-                    <StatusBadge active label={enumLabel(t, GAME_LABEL_KEYS, row.game)} />{' '}
+                    <StatusBadge
+                      active
+                      label={
+                        row.game === 'bidding' || row.game === 'likes'
+                          ? gameLabel(row.game, duelText)
+                          : enumLabel(t, GAME_LABEL_KEYS, row.game)
+                      }
+                    />{' '}
                     {dimensions} · {row.count}
                   </p>
                 );
               })}
             </section>
             <section>
-              <h3>{t('admin.games.counts.rpsQueues')}</h3>
+              <h3>{duelText('匹配队列', 'Matchmaking queues')}</h3>
               {counts.data.queues.map((row) => (
-                <p key={row.mode}>
-                  {t(RPS_MODE_LABEL_KEYS[row.mode])}: {row.count}
+                <p key={`${row.game}:${row.mode}`}>
+                  {row.game === 'rps'
+                    ? `${t('admin.games.sections.rps')} · ${enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode)}`
+                    : `${gameLabel(row.game, duelText)} · ${modeLabel(row.mode, duelText)}`}
+                  : {row.count}
                 </p>
               ))}
             </section>
           </div>
         )}
       </Card>
+      {config.data?.bidding && config.data.likes && (
+        <Card>
+          <h2>{duelText('对战历史与导出', 'Match history and exports')}</h2>
+          <Link className="btn btn-secondary" to="/games/history">
+            {duelText('查看竞标对决与点赞大战历史', 'Browse Bidding Duel and Likes Battle history')}
+          </Link>
+        </Card>
+      )}
       {config.isPending ? (
         <LoadingState />
       ) : initialConfigFailure ? (
