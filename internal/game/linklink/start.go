@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
@@ -165,14 +166,26 @@ func (service *Service) start(ctx context.Context, input StartInput, rulesVersio
 	if err := ledger.CheckImmediateCapacity(ctx, tx, db.U128{}); err != nil {
 		return Result{}, mapLedger(err)
 	}
-	service.rngMu.Lock()
-	generated, generationErr := newBoard(definition, service.random)
-	service.rngMu.Unlock()
-	if generationErr != nil {
-		return Result{}, ErrServiceUnavailable
-	}
 	sessionID, err := service.generateID("ll_")
 	if err != nil || !db.ValidateOpaqueID(sessionID, "ll_") {
+		return Result{}, ErrServiceUnavailable
+	}
+	source := service.random
+	var proof *randomness.Secret
+	if service.proofs {
+		proof, err = randomness.New("linklink", sessionID, strconv.Itoa(rulesVersion)+"/"+input.Spec, nil)
+		if err != nil {
+			return Result{}, ErrServiceUnavailable
+		}
+		source, err = proof.Stream("initial")
+		if err != nil {
+			return Result{}, ErrServiceUnavailable
+		}
+	}
+	service.rngMu.Lock()
+	generated, generationErr := newBoard(definition, source)
+	service.rngMu.Unlock()
+	if generationErr != nil {
 		return Result{}, ErrServiceUnavailable
 	}
 	operationID, err := service.generateID("op_")
@@ -199,6 +212,9 @@ VALUES(?,?,?,'active',?,?,?,?,0,?,?,?,?,?,?,?,?,?)`, sessionID, input.UserID, in
 	}
 	if err := service.finance.Entry(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now}, ResourceID: sessionID, UserID: input.UserID, Amount: ledger.AmountFromMilli(specConfig.PriceMilli), GamePaid: payment.Game}); err != nil {
 		return Result{}, mapLedger(err)
+	}
+	if err := randomness.Insert(ctx, tx, proof); err != nil {
+		return Result{}, err
 	}
 	if err := recordGameActivity(ctx, tx, input.UserID, now); err != nil {
 		return Result{}, err

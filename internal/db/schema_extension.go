@@ -55,7 +55,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash, preEmbeddingManifestHash, preBetaFourManifestHash, preRCOneManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash, preEmbeddingManifestHash, preBetaFourManifestHash, preRCOneManifestHash, preBlackjackManifestHash, preRandomnessManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -93,78 +93,88 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest != preRCOneManifestHash {
-		if digest != preBetaFourManifestHash {
-			if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
-				// Extend any pre-beta.1 structure to the complete beta.1 schema first.
-				if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
-					if digest == preRoutingManifestHash {
-						if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+	if digest != preRandomnessManifestHash {
+		if digest != preBlackjackManifestHash {
+			if digest != preRCOneManifestHash {
+				if digest != preBetaFourManifestHash {
+					if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
+						// Extend any pre-beta.1 structure to the complete beta.1 schema first.
+						if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
+							if digest == preRoutingManifestHash {
+								if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+									return err
+								}
+							}
+							if digest != preResponseStartsManifestHash {
+								if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+									return err
+								}
+							}
+							if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
+								return err
+							}
+						}
+						if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
+							// Prior schemas have no recurring-limit or presentation sidecars.
+							if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
+								return err
+							}
+							if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
+								return err
+							}
+						}
+						if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
+							if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
+								return err
+							}
+						}
+						if digest != preStewardHoldReadManifestHash {
+							if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
+								return err
+							}
+						}
+						if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
+							return err
+						}
+						if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
+							return err
+						}
+						if err := migrateFishingLengthFacts(ctx, tx); err != nil {
 							return err
 						}
 					}
-					if digest != preResponseStartsManifestHash {
-						if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+					if digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
+						if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
 							return err
 						}
 					}
-					if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
+					if err := extendHourlyQuotaInterval(ctx, tx); err != nil {
 						return err
 					}
-				}
-				if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
-					// Prior schemas have no recurring-limit or presentation sidecars.
-					if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
+					if err := extendEmbeddingRoutes(ctx, tx); err != nil {
 						return err
 					}
-					if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
+					manifest, err := readGenerationManifest(ctx, tx)
+					if err != nil {
 						return err
 					}
-				}
-				if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
-					if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
-						return err
+					if generationManifestDigest(manifest) != preBetaFourManifestHash {
+						return errors.New("prior schema extension did not reach the asset baseline")
 					}
 				}
-				if digest != preStewardHoldReadManifestHash {
-					if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
-						return err
-					}
-				}
-				if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
-					return err
-				}
-				if err := migrateFishingLengthFacts(ctx, tx); err != nil {
+				if err := extendDualAssetSchema(ctx, tx); err != nil {
 					return err
 				}
 			}
-			if digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
-				if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
-					return err
-				}
-			}
-			if err := extendHourlyQuotaInterval(ctx, tx); err != nil {
+			if err := ApplyDuelExtension(ctx, tx); err != nil {
 				return err
-			}
-			if err := extendEmbeddingRoutes(ctx, tx); err != nil {
-				return err
-			}
-			manifest, err := readGenerationManifest(ctx, tx)
-			if err != nil {
-				return err
-			}
-			if generationManifestDigest(manifest) != preBetaFourManifestHash {
-				return errors.New("prior schema extension did not reach the asset baseline")
 			}
 		}
-		if err := extendDualAssetSchema(ctx, tx); err != nil {
+		if err := applyBlackjackExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if err := ApplyDuelExtension(ctx, tx); err != nil {
+	if err := applyRandomnessExtension(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

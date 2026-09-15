@@ -243,6 +243,8 @@ func validReservation(ref ReservationRef) bool {
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "req_")
 	case reservationFishingBatch:
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "fb_")
+	case reservationBlackjackPayment:
+		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "bjp_")
 	case reservationThursdayPeriod:
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "thu_")
 	case reservationThursdayParticipant:
@@ -275,6 +277,8 @@ func readReservationRemaining(ctx context.Context, tx *sql.Tx, ref ReservationRe
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM logical_requests WHERE id=?`, ref.id)
 	case reservationFishingBatch:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_fishing_batches WHERE id=?`, ref.id)
+	case reservationBlackjackPayment:
+		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_blackjack_payments WHERE id=?`, ref.id)
 	case reservationThursdayPeriod:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM thursday_periods WHERE id=?`, ref.id)
 	case reservationThursdayParticipant:

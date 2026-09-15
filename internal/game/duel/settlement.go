@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -67,8 +69,33 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 	if !v.Seats[0].Locked || !v.Seats[1].Locked {
 		return activities.PublishFacts{}, ErrInvariant
 	}
-	next, err := s.rules.Resolve(v.Mode, v.Payload.Rules, [2]json.RawMessage{v.Seats[0].Action, v.Seats[1].Action})
+	secret, err := randomness.Load(ctx, tx, s.rules.ID(), v.ID)
 	if err != nil {
+		return activities.PublishFacts{}, err
+	}
+	actions := [2]json.RawMessage{v.Seats[0].Action, v.Seats[1].Action}
+	var next Transition
+	if rules, ok := s.rules.(interface {
+		ResolveWithRandom(string, json.RawMessage, [2]json.RawMessage, func(int) (int, error)) (Transition, error)
+	}); ok && secret != nil {
+		stream, streamErr := secret.Stream("round/" + strconv.Itoa(v.Round))
+		if streamErr != nil {
+			return activities.PublishFacts{}, streamErr
+		}
+		next, err = rules.ResolveWithRandom(v.Mode, v.Payload.Rules, actions, func(bound int) (int, error) {
+			if bound <= 0 {
+				return 0, ErrInvariant
+			}
+			value, err := stream.Uint64n(uint64(bound))
+			return int(value), err
+		})
+	} else {
+		next, err = s.rules.Resolve(v.Mode, v.Payload.Rules, actions)
+	}
+	if err != nil {
+		return activities.PublishFacts{}, err
+	}
+	if err := randomness.Save(ctx, tx, secret); err != nil {
 		return activities.PublishFacts{}, err
 	}
 	if len(next.Record) > 0 {

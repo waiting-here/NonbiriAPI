@@ -461,7 +461,17 @@
   .rps-match__heading {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
+  }
+  .rps-match__heading > div:first-child {
+    flex: 1 1 10rem;
+  }
+  .rps-connection,
+  .rps-connection > * {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .rps-match__heading .eyebrow {
     display: none;

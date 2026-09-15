@@ -11,6 +11,7 @@ import (
 // Restore an empty extension to its exact predecessor for upgrade fixtures.
 func makePreDuelFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreBlackjackFixture(t, database)
 	present, err := DuelStoragePresent(context.Background(), database)
 	if err != nil {
 		t.Fatal(err)

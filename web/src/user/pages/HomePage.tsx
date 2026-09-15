@@ -45,6 +45,7 @@ const GAME_PATHS: Record<HomeGameSummary['route_id'], string> = {
   'game-linklink': '/games/linklink',
   'game-rps': '/games/rps',
   'game-bidding': '/games/bidding',
+  'game-blackjack': '/games/blackjack',
   'game-likes': '/games/likes',
 };
 
@@ -53,6 +54,7 @@ const GAME_LABELS = {
   'game-linklink': 'home.gameLinklink',
   'game-rps': 'home.gameRps',
   'game-bidding': 'home.gameBidding',
+  'game-blackjack': 'home.gameBlackjack',
   'game-likes': 'home.gameLikes',
 } as const;
 

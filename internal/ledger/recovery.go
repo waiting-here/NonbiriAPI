@@ -216,6 +216,13 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 	if present {
 		queries = append(queries, reservationQuery{"duel_queue", `SELECT id,ledger_rows_remaining FROM game_duel_queue ORDER BY id`, reservationDuelQueue}, reservationQuery{"duel_session", `SELECT id,ledger_rows_remaining FROM game_duel_sessions ORDER BY id`, reservationDuelSession})
 	}
+	blackjackPresent, err := db.BlackjackStoragePresent(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if blackjackPresent {
+		queries = append(queries, reservationQuery{"blackjack_payment", `SELECT id,ledger_rows_remaining FROM game_blackjack_payments ORDER BY id`, reservationBlackjackPayment})
+	}
 	for _, item := range queries {
 		rows, err := tx.QueryContext(ctx, item.query)
 		if err != nil {

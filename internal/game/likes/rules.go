@@ -146,6 +146,9 @@ func (r *Rules) Automatic(mode string, raw json.RawMessage, seat int) (json.RawM
 	return duel.Encode(action{Kind: "plan", Plan: &plan})
 }
 func (r *Rules) Resolve(mode string, raw json.RawMessage, actions [2]json.RawMessage) (duel.Transition, error) {
+	return r.ResolveWithRandom(mode, raw, actions, nil)
+}
+func (r *Rules) ResolveWithRandom(mode string, raw json.RawMessage, actions [2]json.RawMessage, pick func(int) (int, error)) (duel.Transition, error) {
 	s, err := r.state(mode, raw)
 	if err != nil {
 		return duel.Transition{}, err
@@ -164,7 +167,7 @@ func (r *Rules) Resolve(mode string, raw json.RawMessage, actions [2]json.RawMes
 		_ = json.Unmarshal(validated, &a)
 		plans[seat] = *a.Plan
 	}
-	next, record, err := r.engines[mode].Resolve(s, plans, nil)
+	next, record, err := r.engines[mode].Resolve(s, plans, pick)
 	if err != nil {
 		return duel.Transition{}, duel.ErrInvariant
 	}

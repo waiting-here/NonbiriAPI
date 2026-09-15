@@ -42,7 +42,14 @@ func validateAssetSourceConfig(ctx context.Context, q generationTwoConfigQueryer
 	}
 	if prior {
 		for key, value := range duelConfigDefaults() {
-			values[key] = value
+			if _, exists := values[key]; !exists {
+				values[key] = value
+			}
+		}
+		for key, value := range blackjackConfigDefaults() {
+			if _, exists := values[key]; !exists {
+				values[key] = value
+			}
 		}
 		for key, value := range dualAssetConfigDefaults() {
 			if _, exists := values[key]; !exists {

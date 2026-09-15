@@ -1,8 +1,10 @@
-import type { ComponentType } from 'react';
+import { createElement, lazy, Suspense, type ComponentType } from 'react';
 import { FishingGame } from './fishing/FishingGame';
 import { LinkLinkGame } from './linklink/LinkLinkGame';
 import { RPSGame } from './rps/RPSGame';
 import { BiddingPage, LikesPage } from './common/duel/DuelPage';
+const Blackjack = lazy(async () => ({ default: (await import('./blackjack/BlackjackGame')).BlackjackGame }));
+function BlackjackPage() { return createElement(Suspense, {}, createElement(Blackjack)); }
 
 /**
  * The user station keeps game registration separate from connector
@@ -54,4 +56,5 @@ export const gameRegistry: readonly GameRegistration[] = Object.freeze([
   },
   { id: 'bidding', version: 1, titleKey: 'games.bidding.title', page: BiddingPage },
   { id: 'likes', version: 1, titleKey: 'games.likes.title', page: LikesPage },
+  { id: 'blackjack', version: 1, titleKey: 'games.blackjack.title', page: BlackjackPage },
 ]);

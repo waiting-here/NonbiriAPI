@@ -52,21 +52,25 @@ const (
 	KindDuelQueueRelease     Kind = "duel_queue_release"
 	KindDuelSessionStart     Kind = "duel_session_start"
 	KindDuelTerminal         Kind = "duel_terminal"
+	KindBlackjackReserve     Kind = "blackjack_reserve"
+	KindBlackjackSettle      Kind = "blackjack_settle"
+	KindBlackjackRelease     Kind = "blackjack_release"
 )
 
 type sourceType string
 
 const (
-	sourceOperation       sourceType = "operation"
-	sourceLogicalRequest  sourceType = "logical_request"
-	sourceDispatchClaim   sourceType = "dispatch_claim"
-	sourcePeriod          sourceType = "period"
-	sourceFishingBatch    sourceType = "fishing_batch"
-	sourceLinkLinkSession sourceType = "linklink_session"
-	sourceRPSQueue        sourceType = "rps_queue"
-	sourceRPSSession      sourceType = "rps_session"
-	sourceDuelQueue       sourceType = "duel_queue"
-	sourceDuelSession     sourceType = "duel_session"
+	sourceOperation        sourceType = "operation"
+	sourceLogicalRequest   sourceType = "logical_request"
+	sourceDispatchClaim    sourceType = "dispatch_claim"
+	sourcePeriod           sourceType = "period"
+	sourceFishingBatch     sourceType = "fishing_batch"
+	sourceLinkLinkSession  sourceType = "linklink_session"
+	sourceRPSQueue         sourceType = "rps_queue"
+	sourceRPSSession       sourceType = "rps_session"
+	sourceDuelQueue        sourceType = "duel_queue"
+	sourceDuelSession      sourceType = "duel_session"
+	sourceBlackjackPayment sourceType = "blackjack_payment"
 )
 
 // Asset identifies one independently conserved credit balance.
@@ -159,6 +163,7 @@ const (
 	reservationGameOnboarding
 	reservationDuelQueue
 	reservationDuelSession
+	reservationBlackjackPayment
 )
 
 // ReservationRef is an unforgeable reference to one frozen domain remaining
@@ -175,6 +180,10 @@ func LogicalRequestReservation(id string) (ReservationRef, error) {
 
 func FishingReservation(id string) (ReservationRef, error) {
 	return opaqueReservation(reservationFishingBatch, id, "fb_")
+}
+
+func BlackjackReservation(id string) (ReservationRef, error) {
+	return opaqueReservation(reservationBlackjackPayment, id, "bjp_")
 }
 
 func ThursdayPeriodReservation(id string) (ReservationRef, error) {

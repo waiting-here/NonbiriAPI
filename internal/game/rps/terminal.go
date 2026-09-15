@@ -10,6 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -184,6 +185,9 @@ func (service *Service) writeTerminalTx(ctx context.Context, tx *sql.Tx, record 
 	}
 	err = service.finance.Terminal(ctx, tx, finance.Terminal{Meta: ledger.Meta{OperationID: *record.TerminalOperationID, CreatedAt: now}, SessionID: record.ID, WelfareAccountID: welfare.AccountID, Payouts: payouts, Deleted: deleted, Carry: carry}, func(ctx context.Context, tx *sql.Tx) error {
 		if err := service.insertTerminalFactsTx(ctx, tx, record, now); err != nil {
+			return err
+		}
+		if err := randomness.MoveToSummary(ctx, tx, "rps", record.ID); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(ctx, `DELETE FROM game_rps_sessions WHERE id=? AND state='terminal_processing' AND revision=?`,

@@ -52,7 +52,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	wantOrder := []string{"identity", "resources", "issues", "ledger", "activities", "donations", "charity", "fishing", "linklink", "rps", "bidding", "likes"}
+	wantOrder := []string{"identity", "resources", "issues", "ledger", "activities", "donations", "charity", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "randomness"}
 	if !reflect.DeepEqual(fixture.exports.calls, wantOrder) {
 		t.Fatalf("export order = %v, want %v", fixture.exports.calls, wantOrder)
 	}
@@ -63,7 +63,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err := json.Unmarshal(body, &document); err != nil {
 		t.Fatalf("decode export: %v", err)
 	}
-	if document.SchemaVersion != 7 || document.GeneratedAt != 100 {
+	if document.SchemaVersion != 8 || document.GeneratedAt != 100 {
 		t.Fatalf("export header = version %d at %d", document.SchemaVersion, document.GeneratedAt)
 	}
 	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.Issues == nil ||
@@ -188,7 +188,7 @@ func configuredDeleteAdapters(calls *[]string, finalizers []*testFinalizer, fail
 		AuthSessionCallerKey: makeAdapter(0, "auth"), Resources: makeAdapter(1, "resources"), ClaimLog: makeAdapter(2, "claim_log"),
 		IssuesAnnouncements: makeAdapter(3, "issues"), Donations: makeAdapter(4, "donations"), Activities: makeAdapter(5, "activities"),
 		Reports: makeAdapter(6, "reports"), Fishing: makeAdapter(7, "fishing"), LinkLink: makeAdapter(8, "linklink"),
-		RPS: makeAdapter(9, "rps"), Bidding: makeAdapter(10, "bidding"), Likes: makeAdapter(11, "likes"), DebugAccountStream: makeAdapter(12, "debug"),
+		RPS: makeAdapter(9, "rps"), Bidding: makeAdapter(10, "bidding"), Likes: makeAdapter(11, "likes"), Blackjack: makeAdapter(12, "blackjack"), DebugAccountStream: makeAdapter(13, "debug"),
 	}
 }
 
@@ -196,7 +196,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-success", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 13)
+	finalizers := make([]*testFinalizer, 14)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -216,7 +216,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	if err := coordinator.DeleteAccount(context.Background(), userID, 100); err != nil {
 		t.Fatalf("DeleteAccount: %v", err)
 	}
-	wantOrder := []string{"auth", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "debug", "ledger"}
+	wantOrder := []string{"auth", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "debug", "ledger"}
 	if !reflect.DeepEqual(calls, wantOrder) {
 		t.Fatalf("delete order = %v, want %v", calls, wantOrder)
 	}
@@ -241,7 +241,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-rollback", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 13)
+	finalizers := make([]*testFinalizer, 14)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}

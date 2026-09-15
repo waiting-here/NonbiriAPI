@@ -32,6 +32,8 @@ type ExportAdapters struct {
 	RPS        RPSExporter
 	Bidding    DuelExporter
 	Likes      DuelExporter
+	Blackjack  BlackjackExporter
+	Randomness RandomnessExporter
 }
 
 // DeleteAdapters is the closed account-deletion registry. Each adapter owns
@@ -49,6 +51,7 @@ type DeleteAdapters struct {
 	RPS                  DeleteAdapter
 	Bidding              DeleteAdapter
 	Likes                DeleteAdapter
+	Blackjack            DeleteAdapter
 	DebugAccountStream   DeleteAdapter
 }
 
@@ -66,6 +69,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 		adapters.RPS,
 		adapters.Bidding,
 		adapters.Likes,
+		adapters.Blackjack,
 		adapters.DebugAccountStream,
 	}
 }
@@ -84,6 +88,7 @@ type RecoveryAdapters struct {
 	RPS         RecoveryAdapter
 	Bidding     RecoveryAdapter
 	Likes       RecoveryAdapter
+	Blackjack   RecoveryAdapter
 	Donations   RecoveryAdapter
 	Secrets     RecoveryAdapter
 }
@@ -100,6 +105,7 @@ func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
 		adapters.RPS,
 		adapters.Bidding,
 		adapters.Likes,
+		adapters.Blackjack,
 		adapters.Donations,
 		adapters.Secrets,
 	}
@@ -117,6 +123,7 @@ type RetentionAdapters struct {
 	RPS         RetentionAdapter
 	Bidding     RetentionAdapter
 	Likes       RetentionAdapter
+	Blackjack   RetentionAdapter
 	Reports     RetentionAdapter
 	Donations   RetentionAdapter
 	Charity     RetentionAdapter
@@ -135,6 +142,7 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.RPS,
 		adapters.Bidding,
 		adapters.Likes,
+		adapters.Blackjack,
 		adapters.Reports,
 		adapters.Donations,
 		adapters.Charity,
@@ -235,7 +243,7 @@ func New(config Config) (*Coordinator, error) {
 func completeExportAdapters(a ExportAdapters) bool {
 	return a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
 		a.Activities != nil && a.Donations != nil && a.Charity != nil && a.Fishing != nil &&
-		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil
+		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil
 }
 
 func completeDeleteAdapters(a DeleteAdapters) bool {
@@ -359,6 +367,15 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if err != nil {
 		return nil, err
 	}
+	if document.Blackjack, finalizer, err = coordinator.export.Blackjack.ExportBlackjack(ctx, tx, request); finalizer != nil {
+		finalizers = append(finalizers, finalizer)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if document.Randomness, err = coordinator.export.Randomness.ExportRandomness(ctx, tx, request); err != nil {
+		return nil, err
+	}
 	normalizeExportDocument(&document)
 	if err := validateExportCollectionBounds(document); err != nil {
 		return nil, err
@@ -381,6 +398,12 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 }
 
 func normalizeExportDocument(document *ExportDocument) {
+	if document.Randomness == nil {
+		document.Randomness = []RandomnessProofExport{}
+	}
+	if document.Blackjack.History == nil {
+		document.Blackjack.History = []BlackjackHistoryExport{}
+	}
 	for _, value := range []*DuelExport{&document.Bidding, &document.Likes} {
 		if value.CurrentRounds == nil {
 			value.CurrentRounds = []DuelRoundExport{}
@@ -471,6 +494,13 @@ func normalizeExportDocument(document *ExportDocument) {
 }
 
 func validateExportCollectionBounds(document ExportDocument) error {
+	blackjackRows := len(document.Blackjack.History)
+	if document.Blackjack.Current != nil {
+		blackjackRows++
+	}
+	if blackjackRows > CollectionLimit {
+		return ErrTooLarge
+	}
 	for _, value := range []DuelExport{document.Bidding, document.Likes} {
 		rows := len(value.CurrentRounds) + len(value.History)
 		if value.Queue != nil {
@@ -487,6 +517,7 @@ func validateExportCollectionBounds(document ExportDocument) error {
 		}
 	}
 	lengths := []int{
+		len(document.Randomness),
 		len(document.Endpoints), len(document.CatalogPairs), len(document.Models), len(document.Issues),
 		len(document.Checkins), len(document.GameOnboarding), len(document.CreditLedger), len(document.WelfareClaims), len(document.Thursday), len(document.Donations),
 		len(document.Fishing.Pending), len(document.Fishing.Terminal), len(document.LinkLink.Summaries), len(document.RPS.Summaries),

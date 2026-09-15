@@ -145,6 +145,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({ id: 'game-bidding', path: '/games/bidding', access: 'user', layout: 'game', registered: true }),
   user({ id: 'game-likes', path: '/games/likes', access: 'user', layout: 'game', registered: true }),
+  user({ id: 'game-blackjack', path: '/games/blackjack', access: 'user', layout: 'game', registered: true }),
   user({
     id: 'logs',
     path: '/logs',
@@ -332,6 +333,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.games.nav',
   }),
   admin({ id: 'admin-game-history', path: '/games/history', access: 'admin', layout: 'wide', registered: true }),
+  admin({ id: 'admin-blackjack-history', path: '/games/blackjack/history', access: 'admin', layout: 'wide', registered: true }),
   admin({
     id: 'admin-reports',
     path: '/reports',

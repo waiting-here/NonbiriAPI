@@ -19,6 +19,7 @@ import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameVisibility } from '../common/visibility';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { RandomnessProof } from '../common/RandomnessProof';
 import { GameMoney } from '../common/GameMoney';
 import { GamePayment } from '../common/GamePayment';
 import { spendableGameCredits } from '../common/spendable';
@@ -266,10 +267,14 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
       {seat.deletionState === 'active' && seat.funding ? (
         <div>
           <p>{text('rps.seat.currentFunding')}</p>
-          <GamePayment payment={{ general: seat.funding.currentGeneral, game: seat.funding.gameRemaining }} />
+          <GamePayment
+            payment={{ general: seat.funding.currentGeneral, game: seat.funding.gameRemaining }}
+          />
           <details>
             <summary>{text('rps.result.buyIn')}</summary>
-            <GamePayment payment={{ general: seat.funding.buyInGeneral, game: seat.funding.buyInGame }} />
+            <GamePayment
+              payment={{ general: seat.funding.buyInGeneral, game: seat.funding.buyInGame }}
+            />
           </details>
         </div>
       ) : null}
@@ -640,7 +645,9 @@ function PendingResult({
             <dt>{text('rps.result.buyIn')}</dt>
             <dd>
               {result.ownBuyInGeneral !== null && result.ownBuyInGame !== null ? (
-                <GamePayment payment={{ general: result.ownBuyInGeneral, game: result.ownBuyInGame }} />
+                <GamePayment
+                  payment={{ general: result.ownBuyInGeneral, game: result.ownBuyInGame }}
+                />
               ) : result.ownBuyIn === null ? (
                 text('rps.result.unrecorded')
               ) : (
@@ -652,7 +659,9 @@ function PendingResult({
             <dt>{text('rps.result.cashOut')}</dt>
             <dd>
               {result.ownReturnedGeneral !== null ? (
-                <span>{text('common.generalBalance')} <GameMoney value={result.ownReturnedGeneral} /></span>
+                <span>
+                  {text('common.generalBalance')} <GameMoney value={result.ownReturnedGeneral} />
+                </span>
               ) : result.ownCashOut === null ? (
                 text('rps.result.unrecorded')
               ) : (
@@ -1067,7 +1076,8 @@ export function RPSGame() {
   const affordable = Boolean(
     snapshot.data &&
     minimumRequired &&
-    available && creditsToMilli(available.total) >= creditsToMilli(minimumRequired),
+    available &&
+    creditsToMilli(available.total) >= creditsToMilli(minimumRequired),
   );
   const canQueue = gateOpen && affordable && homeQuery.isSuccess && !homeQuery.error;
   const deathmatchConfig = modes?.deathmatch;
@@ -1081,7 +1091,8 @@ export function RPSGame() {
   const deathmatchAffordable = Boolean(
     snapshot.data &&
     deathmatchConfig &&
-    available && creditsToMilli(available.total) >= creditsToMilli(deathmatchConfig.base),
+    available &&
+    creditsToMilli(available.total) >= creditsToMilli(deathmatchConfig.base),
   );
   const canQueueDeathmatch =
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
@@ -1143,6 +1154,11 @@ export function RPSGame() {
           </button>
         ) : null}
       </GameHeader>
+      <RandomnessProof
+        game="rps"
+        id={session?.sessionID ?? pending?.sessionID}
+        terminal={!!pending && !session}
+      />
       {maintenance ? (
         <p className="game-inline-notice game-inline-notice--warning">
           {text('common.maintenanceContinuation')}
@@ -1230,9 +1246,7 @@ export function RPSGame() {
             {RPS_MODES.map((mode) => {
               const config = modes?.[mode];
               const commitment =
-                config && available
-                  ? queueCommitment(mode, config.base, available.total)
-                  : null;
+                config && available ? queueCommitment(mode, config.base, available.total) : null;
               const open = Boolean(
                 snapshot.data?.gamesEnabled && snapshot.data.rps.enabled && config?.enabled,
               );

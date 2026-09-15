@@ -5,6 +5,7 @@ package config
 import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
+	blackjackconfig "github.com/waiting-here/NonbiriAPI/internal/game/blackjack/config"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
@@ -13,7 +14,7 @@ import (
 
 func Registry() (*game.Registry, error) {
 	registry := game.NewRegistry()
-	for _, descriptor := range []game.ModuleDescriptor{fishingconfig.Descriptor(), linklinkconfig.Descriptor(), rpsconfig.Descriptor(), biddingconfig.Descriptor(), likesconfig.Descriptor()} {
+	for _, descriptor := range []game.ModuleDescriptor{fishingconfig.Descriptor(), linklinkconfig.Descriptor(), rpsconfig.Descriptor(), biddingconfig.Descriptor(), likesconfig.Descriptor(), blackjackconfig.Descriptor()} {
 		if err := registry.Register(descriptor); err != nil {
 			return nil, err
 		}

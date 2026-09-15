@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
+import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuel } from '../common/duel/api';
@@ -97,6 +98,11 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
         </div>
       </header>
       <GameWallets wallets={wallets} />
+      <RandomnessProof
+        game="bidding"
+        id={current?.id ?? home?.latestResult?.id}
+        terminal={!current && !!home?.latestResult}
+      />
       <DuelFeedback
         error={duel.error ?? duel.query.error}
         pending={duel.pending || duel.query.isPending}

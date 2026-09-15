@@ -3,11 +3,11 @@
 package engine
 
 import (
-	"crypto/rand"
 	"errors"
 	"io"
-	"math/big"
 	"slices"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 )
 
 const (
@@ -90,9 +90,6 @@ type RoundRecord struct {
 // New shuffles the two reward decks independently, without modulo bias.
 // A nil reader selects the operating system's cryptographic random source.
 func New(random io.Reader) (State, error) {
-	if random == nil {
-		random = rand.Reader
-	}
 	state := State{Round: 1, JokerAvailable: [2]bool{true, true}}
 	for side := range 2 {
 		state.Hands[side] = make([]int, Rounds)
@@ -102,11 +99,11 @@ func New(random io.Reader) (State, error) {
 			state.Hands[side][index] = index + 1
 		}
 		for index := Rounds - 1; index > 0; index-- {
-			pick, err := rand.Int(random, big.NewInt(int64(index+1)))
+			pick, err := randomness.Index(random, uint64(index+1))
 			if err != nil {
 				return State{}, ErrRandom
 			}
-			other := int(pick.Int64())
+			other := int(pick)
 			state.Decks[side][index], state.Decks[side][other] = state.Decks[side][other], state.Decks[side][index]
 		}
 	}

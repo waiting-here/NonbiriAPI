@@ -242,6 +242,16 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 			catalog[key] = uintSpec(value, 0, 9999)
 		}
 	}
+	for key, value := range blackjackConfigDefaults() {
+		switch {
+		case strings.HasSuffix(key, "_enabled"):
+			catalog[key] = boolSpec(value)
+		case strings.HasSuffix(key, "_milli"):
+			catalog[key] = amountSpec(value, 1)
+		default:
+			catalog[key] = uintSpec(value, 0, 9999)
+		}
+	}
 	return catalog
 }
 

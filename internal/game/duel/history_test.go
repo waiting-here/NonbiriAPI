@@ -16,6 +16,10 @@ const basicPlan = `{"kind":"plan","plan":{"purchases":[],"main":{"skillId":"PUB0
 func TestAnonymousBiddingRetainsDecksWithoutParticipantDisclosure(t *testing.T) {
 	f := newFixture(t, "bidding")
 	state := f.matched()
+	var commitment string
+	if err := f.db.QueryRow(`SELECT json_extract(private_json,'$.commitment') FROM game_random_proofs WHERE resource_id=?`, state.ID).Scan(&commitment); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.s.Surrender(f.ctx, duel.ActionInput{Identity: f.identity(0), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq}); err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +46,10 @@ func TestAnonymousBiddingRetainsDecksWithoutParticipantDisclosure(t *testing.T) 
 	}
 	if json.Unmarshal([]byte(raw), &archived) != nil || len(archived.Initial.Decks[0]) != 13 || len(archived.Initial.Decks[1]) != 13 || strings.Contains(raw, state.ID) {
 		t.Fatal("anonymous gameplay facts lost or linked")
+	}
+	var proofs int
+	if err := f.db.QueryRow(`SELECT COUNT(*) FROM game_random_proofs WHERE resource_id=?`, state.ID).Scan(&proofs); err != nil || proofs != 0 || strings.Contains(raw, commitment) {
+		t.Fatal("anonymous history retained a random fingerprint", err)
 	}
 	f.ledger()
 }

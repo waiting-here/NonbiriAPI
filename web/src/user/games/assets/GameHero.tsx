@@ -7,6 +7,7 @@ const heroSources = {
   linklink: linkLinkHero,
   rps: rpsHero,
   bidding: linkLinkHero,
+  blackjack: linkLinkHero,
   likes: rpsHero,
 } as const;
 

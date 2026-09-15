@@ -110,6 +110,7 @@ type Service struct {
 	publishErrors  PublishErrorReporter
 	keys           cryptoKeys
 	random         io.Reader
+	proofs         bool
 	now            func() time.Time
 	generateID     func(string) (string, error)
 	healthEpoch    int64
@@ -142,6 +143,7 @@ func New(options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	proofs := options.Random == nil
 	if options.Random == nil {
 		options.Random = rand.Reader
 	}
@@ -170,7 +172,7 @@ func New(options Options) (*Service, error) {
 		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, continuation: options.Continuation, finance: options.Finance,
 		limiter: options.Limiter, pools: options.Pools, accountEvents: options.AccountEvents,
 		activityEvents: options.ActivityEvents, publishErrors: options.PublishErrors, keys: keys,
-		random: options.Random, now: options.Now, generateID: options.GenerateID,
+		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,
 		healthEpoch: options.HealthEpoch, workerInterval: options.WorkerInterval,
 		actionWindows: make(map[int64]*actionWindow), leaseBindings: make(map[leaseBindingKey]leaseBinding),
 	}, nil

@@ -1,6 +1,14 @@
 {
   "revision": "1",
   "master_enabled": false,
+  "blackjack": {
+    "enabled": false,
+    "min_stake": "1000",
+    "max_stake": "50000",
+    "stake_step": "1000",
+    "default_stake": "5000",
+    "rake_bp": {"platform": 100, "welfare": 100, "thursday": 100}
+  },
   "fishing": {
     "enabled": false,
     "bait_prices": {

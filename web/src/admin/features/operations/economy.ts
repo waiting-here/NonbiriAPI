@@ -1,4 +1,5 @@
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
+import { blackjackConfig, type BlackjackConfig } from '@shared/games/blackjack';
 import { normalizeDuelConfig, type DuelGameConfig } from '../games/config';
 import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
 import {
@@ -140,6 +141,7 @@ interface GamesConfig {
   rps: { enabled: boolean; modes: Record<'quick' | 'standard' | 'deathmatch', RPSModeConfig> };
   bidding: DuelGameConfig;
   likes: DuelGameConfig;
+  blackjack: BlackjackConfig;
 }
 
 function normalizeRPSMode(value: unknown, label: string): RPSModeConfig {
@@ -172,7 +174,7 @@ function normalizeRPSMode(value: unknown, label: string): RPSModeConfig {
 export function normalizeGamesConfig(value: unknown): GamesConfig {
   const root = record(
     value,
-    ['revision', 'master_enabled', 'fishing', 'linklink', 'rps', 'bidding', 'likes'],
+    ['revision', 'master_enabled', 'fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'],
     'games configuration',
   );
   const fishing = record(
@@ -202,6 +204,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
     revision: decimal(root.revision, 'games configuration revision', { positive: true }),
     master_enabled: boolean(root.master_enabled, 'games master switch'),
     bidding: normalizeDuelConfig(root.bidding, 'bidding'),
+    blackjack: blackjackConfig(root.blackjack),
     likes: normalizeDuelConfig(root.likes, 'likes'),
     fishing: {
       enabled: boolean(fishing.enabled, 'Fishing switch'),
@@ -255,7 +258,7 @@ export function gamesConfigPatch(input: GamesConfig): Record<string, unknown> {
     master_enabled: input.master_enabled,
     fishing: input.fishing,
     linklink: input.linklink,
-    bidding: input.bidding, likes: input.likes,
+    bidding: input.bidding, likes: input.likes, blackjack: input.blackjack,
     rps: {
       enabled: input.rps.enabled,
       modes: {
@@ -274,13 +277,13 @@ export function thursdayMutationRevision(config: ActivitiesConfig | undefined, p
 
 export interface ActiveCounts {
   games: {
-    game: 'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes';
+    game: 'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes' | 'blackjack';
     mode: string | null;
     spec: string | null;
     phase: string | null;
     count: string;
   }[];
-  queues: { game: 'rps' | 'bidding' | 'likes'; mode: string; count: string }[];
+  queues: { game: 'rps' | 'bidding' | 'likes' | 'blackjack'; mode: string; count: string }[];
 }
 export function normalizeActiveCounts(value: unknown): ActiveCounts {
   const root = record(value, ['games', 'queues'], 'active game counts');
@@ -290,7 +293,7 @@ export function normalizeActiveCounts(value: unknown): ActiveCounts {
       return {
         game: oneOf(
           row.game,
-          ['fishing', 'linklink', 'rps', 'bidding', 'likes'] as const,
+          ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const,
           'active game',
         ),
         mode: nullableString(row.mode, 'active game mode', {
@@ -314,11 +317,11 @@ export function normalizeActiveCounts(value: unknown): ActiveCounts {
         count: decimal(row.count, 'active game count'),
       };
     }),
-    queues: array(root.queues, 'game queue counts', 8).map((entry) => {
+    queues: array(root.queues, 'game queue counts', 9).map((entry) => {
       const row = record(entry, ['game', 'mode', 'count'], 'game queue count');
-      const game = oneOf(row.game, ['rps', 'bidding', 'likes'], 'queue game');
+      const game = oneOf(row.game, ['rps', 'bidding', 'likes', 'blackjack'], 'queue game');
       const modes =
-        game === 'bidding'
+        game === 'blackjack' ? ['table'] : game === 'bidding'
           ? ['tier1', 'tier2', 'tier3']
           : game === 'likes'
             ? ['quick', 'standard']

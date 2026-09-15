@@ -357,6 +357,10 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
   }
   if (record.state === 'waiting' || record.state === 'active') {
     const state = record.state;
+    if (record.game === 'blackjack' && record.route_id === 'game-blackjack') {
+      return { game: 'blackjack', route_id: 'game-blackjack', kind: 'continue', state,
+        resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'bjq_' : 'bjt_', 'blackjack resource') };
+    }
     if (record.game === 'bidding' && record.route_id === 'game-bidding') {
       return { game: 'bidding', route_id: 'game-bidding', kind: 'continue', state,
         resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'bidq_' : 'bid_', 'bidding resource') };

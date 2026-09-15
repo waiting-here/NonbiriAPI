@@ -81,14 +81,15 @@ func ExternalSettlementDestination(accountID int64) (SettlementDestination, erro
 
 func validSourceID(typ sourceType, sourceID string) bool {
 	prefix := map[sourceType]string{
-		sourceOperation:       "op_",
-		sourceLogicalRequest:  "req_",
-		sourceDispatchClaim:   "clm_",
-		sourcePeriod:          "thu_",
-		sourceFishingBatch:    "fb_",
-		sourceLinkLinkSession: "ll_",
-		sourceRPSQueue:        "rpsq_",
-		sourceRPSSession:      "rps_",
+		sourceOperation:        "op_",
+		sourceLogicalRequest:   "req_",
+		sourceDispatchClaim:    "clm_",
+		sourcePeriod:           "thu_",
+		sourceFishingBatch:     "fb_",
+		sourceLinkLinkSession:  "ll_",
+		sourceRPSQueue:         "rpsq_",
+		sourceRPSSession:       "rps_",
+		sourceBlackjackPayment: "bjp_",
 	}[typ]
 	validID := prefix != "" && db.ValidateOpaqueID(sourceID, prefix)
 	if typ == sourceDuelQueue {
@@ -154,6 +155,8 @@ func sourceTypeForKind(kind Kind) (sourceType, bool) {
 		return sourceDuelQueue, true
 	case KindDuelSessionStart, KindDuelTerminal:
 		return sourceDuelSession, true
+	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
+		return sourceBlackjackPayment, true
 	default:
 		return "", false
 	}

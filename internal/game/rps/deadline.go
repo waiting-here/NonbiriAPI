@@ -1,6 +1,11 @@
 package rps
 
-import "github.com/waiting-here/NonbiriAPI/internal/game"
+import (
+	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
+)
 
 func (value *reducer) applyDeadlineDefaults() error {
 	if value.record == nil || value.record.State != StateStarted || value.record.PhaseDeadline == nil || value.now < *value.record.PhaseDeadline {
@@ -13,12 +18,25 @@ func (value *reducer) applyDeadlineDefaults() error {
 	value.record.Revision = nextRevision
 	switch value.record.Phase {
 	case PhaseGesture, PhasePaidPoolGesture, PhaseFreePoolGesture, PhaseUltimateGesture:
+		proof, err := randomness.Load(value.ctx, value.tx, "rps", value.record.ID)
+		if err != nil {
+			return err
+		}
 		for seat := range value.record.Seats {
 			if value.record.Seats[seat].GestureEnvelope != nil {
 				continue
 			}
+			var gesture string
+			var randomErr error
+			if proof != nil {
+				index, e := proof.Indexed("automatic/"+strconv.Itoa(seat)+"/"+value.record.PhaseSeq.Decimal(), 3)
+				randomErr = e
+				gesture = []string{GestureRock, GestureScissors, GesturePaper}[index]
+			}
 			value.service.randomMu.Lock()
-			gesture, randomErr := randomGesture(value.service.random)
+			if proof == nil {
+				gesture, randomErr = randomGesture(value.service.random)
+			}
 			var envelope []byte
 			if randomErr == nil {
 				envelope, randomErr = sealGesture(value.service.random, value.service.keys.gesture, value.record.ID, seat,

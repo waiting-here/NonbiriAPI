@@ -109,6 +109,13 @@ func CreateDuelQueueAssetAccount(ctx context.Context, tx *sql.Tx, queueID string
 	return createCodedAccount(ctx, tx, AccountPlatform, "duel-queue:"+queueID, asset, at)
 }
 
+func CreateBlackjackPaymentAccount(ctx context.Context, tx *sql.Tx, paymentID string, asset Asset, at int64) (Account, error) {
+	if !db.ValidateOpaqueID(paymentID, "bjp_") {
+		return Account{}, ErrInvalidPlan
+	}
+	return createCodedAccount(ctx, tx, AccountPlatform, "blackjack-payment:"+paymentID, asset, at)
+}
+
 func CreateDuelSessionAssetAccount(ctx context.Context, tx *sql.Tx, sessionID string, asset Asset, at int64) (Account, error) {
 	if duelIDGame(sessionID, false) == "" {
 		return Account{}, ErrInvalidPlan
