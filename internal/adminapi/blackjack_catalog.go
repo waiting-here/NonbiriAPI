@@ -19,10 +19,16 @@ func addBlackjackKeySpecs(known map[string]keySpec) {
 		}
 		switch {
 		case key == config.EnabledKey:
+			if n < 0 || n > 1 {
+				panic("invalid blackjack switch")
+			}
 			known[key] = keySpec{kind: kindBool, def: int(n)}
 		case isBlackjackAmountKey(key):
 			known[key] = keySpec{kind: kindAmount, defAmount: n}
 		case strings.HasSuffix(key, "_bp"):
+			if n < 0 || n > 9999 {
+				panic("invalid blackjack percentage")
+			}
 			known[key] = keySpec{kind: kindInt, min: 0, max: 9999, def: int(n)}
 		default:
 			panic("unknown blackjack setting")
