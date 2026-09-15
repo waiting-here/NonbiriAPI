@@ -31,6 +31,12 @@
     "github.com/waiting-here/NonbiriAPI/internal/resourcebridge": 33
   },
   "test_seconds": {
+    "github.com/waiting-here/NonbiriAPI/internal/db": {
+      "TestBrowseExtensionPreservesPopulatedStateFromPreBrowse": 449.590,
+      "TestBrowseExtensionPreservesPopulatedStateFromPreQuotaCleanup": 443.060,
+      "TestBrowseExtensionPreservesPopulatedStateFromPreStewardHoldRead": 444.670,
+      "TestBrowseExtensionPreservesPopulatedStateFromPreHourlyQuota": 441.230
+    },
     "github.com/waiting-here/NonbiriAPI/internal/activities": {
       "TestAcceptedPeriodFinalizesAtCapacityMaximum": 3.260,
       "TestActivitiesProjectionAndGlobalPublisherAreCompleteAndPrivate": 3.242,
