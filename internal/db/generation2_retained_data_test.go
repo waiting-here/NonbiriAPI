@@ -221,6 +221,14 @@ func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[st
 func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, prior map[string]retainedTableImage) map[string]retainedTableImage {
 	t.Helper()
 	projectPriorAssets := false
+	projectPriorDuels := false
+	if prior != nil && prior["game_duel_catalogs"].Columns == nil {
+		var present int
+		if err := database.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='game_duel_catalogs'`).Scan(&present); err != nil {
+			t.Fatal(err)
+		}
+		projectPriorDuels = present == 1
+	}
 	if accounts, ok := prior["credit_accounts"]; ok {
 		hasAsset := false
 		for _, column := range accounts.Columns {
@@ -273,7 +281,7 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 		if projectPriorAssets && table == "credit_accounts" {
 			query += " WHERE asset_type='general'"
 		}
-		if projectPriorAssets && table == "site_config" {
+		if (projectPriorAssets || projectPriorDuels) && table == "site_config" {
 			var marks []string
 			for _, key := range prior[table].Keys {
 				marks = append(marks, "?")

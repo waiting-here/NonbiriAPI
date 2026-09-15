@@ -3,16 +3,22 @@ package builtin
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/bidding"
+	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
 	builtinconfig "github.com/waiting-here/NonbiriAPI/internal/game/builtin/config"
 	builtinfinance "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
 	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
+	"github.com/waiting-here/NonbiriAPI/internal/game/likes"
+	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -37,12 +43,21 @@ type Options struct {
 	AccountEvents     rps.AccountEventSink
 	ActivityEvents    rps.ActivityPublisher
 	PublishErrors     rps.PublishErrorReporter
+	DuelAdminAudit    func(duel.AdminAudit)
 	BindAccountSource func(AccountEventSource) error
 	Now               func() time.Time
 }
 type Runtime struct {
 	*host.Service
 	accountContinuation AccountContinuation
+	cancelUserDuelsTx   func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
+}
+
+func (runtime *Runtime) CancelUserDuelsTx(ctx context.Context, tx *sql.Tx, user int64, reason string, now int64) (func(bool), error) {
+	if runtime == nil || runtime.cancelUserDuelsTx == nil {
+		return nil, game.ErrRuntimeUnavailable
+	}
+	return runtime.cancelUserDuelsTx(ctx, tx, user, reason, now)
 }
 
 func (runtime *Runtime) AccountContinuation() AccountContinuation {
@@ -61,7 +76,38 @@ func New(options Options) (*Runtime, error) {
 		return nil, err
 	}
 	runtime := &Runtime{}
+	duels := map[string]*duel.Service{}
+	duelFactory := func(descriptor game.ModuleDescriptor, rules duel.Rules) host.Factory {
+		return func(shared host.Services) (*host.Module, error) {
+			financial, err := builtinfinance.ForModule(descriptor.ID)
+			if err != nil {
+				return nil, err
+			}
+			service, err := duel.New(duel.Options{
+				Database: shared.Database, Descriptor: descriptor, Rules: rules, Finance: financial.Duel,
+				UserAuthorizer: shared.UserAuthorizer, AdminAuthorizer: shared.AdminAuthorizer,
+				AdminAudit: options.DuelAdminAudit, Continuation: options.Continuation,
+				Limiter: shared.Limiter, Pools: options.Pools, Publisher: options.ActivityEvents,
+				Keys: options.Vault, Now: shared.Now, ReportError: func(err error) {
+					if options.PublishErrors != nil {
+						options.PublishErrors.ReportRPSPublishError(err)
+					}
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+			duels[descriptor.ID] = service
+			return service.Module(), nil
+		}
+	}
+	likesRules, err := likes.NewRules()
+	if err != nil {
+		return nil, err
+	}
 	factories := map[string]host.Factory{
+		game.BiddingID: duelFactory(biddingconfig.Descriptor(), bidding.Rules{}),
+		game.LikesID:   duelFactory(likesconfig.Descriptor(), likesRules),
 		game.FishingID: func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(game.FishingID)
 			if err != nil {
@@ -104,6 +150,11 @@ func New(options Options) (*Runtime, error) {
 	}
 	runtime.Service, err = host.New(host.Options{Database: options.Store.DB(), Registry: registry, Factories: factories, UserAuthorizer: options.UserAuthorizer, AdminAuthorizer: options.AdminAuthorizer, Now: options.Now})
 	if err != nil {
+		return nil, err
+	}
+	runtime.cancelUserDuelsTx, err = duel.Cancellation(duels[game.BiddingID], duels[game.LikesID])
+	if err != nil {
+		_ = runtime.Close()
 		return nil, err
 	}
 	return runtime, nil

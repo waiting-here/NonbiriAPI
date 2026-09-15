@@ -40,8 +40,8 @@ function cardState(
       detail: String(count),
     };
   }
-  const modes = Object.values(snapshot.rps.modes);
-  const count = snapshot.rps.enabled ? modes.filter((mode) => mode.enabled).length : 0;
+  const modes = Object.values(snapshot[kind].modes);
+  const count = snapshot[kind].enabled ? modes.filter((mode) => mode.enabled).length : 0;
   return { state: count > 0 ? 'open' : 'closed', detail: String(count) };
 }
 
@@ -93,7 +93,7 @@ export function GameCenter() {
   if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
   if (snapshot.error && !maintenance)
     return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
-  const cards: CenterCard[] = (['fishing', 'linklink', 'rps'] as const).map((id) => {
+  const cards: CenterCard[] = (['fishing', 'linklink', 'rps', 'bidding', 'likes'] as const).map((id) => {
     const availability =
       maintenance || !snapshot.data
         ? { state: 'maintenance' as const, detail: '' }

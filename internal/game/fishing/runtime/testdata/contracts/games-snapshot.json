@@ -71,25 +71,172 @@
         }
       ],
       "all_completed": false
+    },
+    "bidding": {
+      "items": [],
+      "all_completed": true
+    },
+    "likes": {
+      "items": [],
+      "all_completed": true
     }
   },
   "tutorial_rps_seen": false,
   "games_enabled": true,
-  "fishing": {"enabled": true, "available": true, "bait_prices": {"worm": "2500", "lure": "5000", "premium": "7500"}},
+  "fishing": {
+    "enabled": true,
+    "available": true,
+    "bait_prices": {
+      "worm": "2500",
+      "lure": "5000",
+      "premium": "7500"
+    }
+  },
   "linklink": {
     "enabled": false,
     "specs": {
-      "6x8": {"enabled": false, "price": "0", "seconds": 150},
-      "8x8": {"enabled": false, "price": "0", "seconds": 180},
-      "10x10": {"enabled": false, "price": "0", "seconds": 240}
+      "6x8": {
+        "enabled": false,
+        "price": "0",
+        "seconds": 150
+      },
+      "8x8": {
+        "enabled": false,
+        "price": "0",
+        "seconds": 180
+      },
+      "10x10": {
+        "enabled": false,
+        "price": "0",
+        "seconds": 240
+      }
     }
   },
   "rps": {
     "enabled": false,
     "modes": {
-      "quick": {"enabled": false, "base": "0", "pumps_bp": {"platform": 100, "welfare": 100, "thursday": 100}, "queue_seconds": 120, "gesture_seconds": 20, "dealer_seconds": 15, "follower_seconds": 15, "queue_capacity": 4096},
-      "standard": {"enabled": false, "base": "0", "pumps_bp": {"platform": 100, "welfare": 100, "thursday": 100}, "queue_seconds": 120, "gesture_seconds": 20, "dealer_seconds": 15, "follower_seconds": 15, "queue_capacity": 4096},
-      "deathmatch": {"enabled": false, "base": "0", "pumps_bp": {"platform": 100, "welfare": 100, "thursday": 100}, "queue_seconds": 120, "gesture_seconds": 20, "dealer_seconds": 15, "follower_seconds": 15, "queue_capacity": 4096}
+      "quick": {
+        "enabled": false,
+        "base": "0",
+        "pumps_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "queue_seconds": 120,
+        "gesture_seconds": 20,
+        "dealer_seconds": 15,
+        "follower_seconds": 15,
+        "queue_capacity": 4096
+      },
+      "standard": {
+        "enabled": false,
+        "base": "0",
+        "pumps_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "queue_seconds": 120,
+        "gesture_seconds": 20,
+        "dealer_seconds": 15,
+        "follower_seconds": 15,
+        "queue_capacity": 4096
+      },
+      "deathmatch": {
+        "enabled": false,
+        "base": "0",
+        "pumps_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "queue_seconds": 120,
+        "gesture_seconds": 20,
+        "dealer_seconds": 15,
+        "follower_seconds": 15,
+        "queue_capacity": 4096
+      }
     }
+  },
+  "bidding": {
+    "enabled": false,
+    "modes": {
+      "tier1": {
+        "enabled": false,
+        "ticket": "5000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "available": true,
+        "terms_hash": "1493c83a49a2a1aed52d33549c936ca05f972c4cf893e4119b9b22050cbe7c28",
+        "content_hash": "ade777472e06fc1f8c550ec4b7ac265bf1379a4f9d0827a0383db7d04f5a52a2"
+      },
+      "tier2": {
+        "enabled": false,
+        "ticket": "10000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "available": true,
+        "terms_hash": "0b2438d363852e5271808ccefb0b8c06cb2d38c2612dbe8311bb23dc2a4503d1",
+        "content_hash": "ade777472e06fc1f8c550ec4b7ac265bf1379a4f9d0827a0383db7d04f5a52a2"
+      },
+      "tier3": {
+        "enabled": false,
+        "ticket": "50000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "available": true,
+        "terms_hash": "7a040aa6bcc2d692bcfbf031c30cb18747a399f955e477e7aadd423c7d304dad",
+        "content_hash": "ade777472e06fc1f8c550ec4b7ac265bf1379a4f9d0827a0383db7d04f5a52a2"
+      }
+    },
+    "available": true,
+    "queue_seconds": 120,
+    "queue_capacity": 4096,
+    "joker_seconds": 10,
+    "bid_seconds": 20
+  },
+  "likes": {
+    "enabled": false,
+    "modes": {
+      "quick": {
+        "enabled": false,
+        "ticket": "5000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "available": true,
+        "terms_hash": "811e853550498190b701b574efe06ffa85f7c4f631914f7ae5c61bdbb16cf125",
+        "content_hash": "65512e407ece9c31486cc808100780607b524cc6a95d1e2a9b6ef0424c6f7333"
+      },
+      "standard": {
+        "enabled": false,
+        "ticket": "25000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        },
+        "available": true,
+        "terms_hash": "dc53d6b33d08208156071ed999c0c09b8ca1c4d8a4e8bcf3cbc95143138bba6d",
+        "content_hash": "55473a4623bf7974a64210f1afbcc2f0411d7557888c9a20fc8df88ad23d0dd7"
+      }
+    },
+    "available": true,
+    "queue_seconds": 120,
+    "queue_capacity": 4096,
+    "plan_seconds": 20,
+    "settlement_seconds": 5
   }
 }

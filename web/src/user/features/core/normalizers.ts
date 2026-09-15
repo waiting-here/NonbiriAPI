@@ -355,6 +355,17 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
       state: record.state,
     };
   }
+  if (record.state === 'waiting' || record.state === 'active') {
+    const state = record.state;
+    if (record.game === 'bidding' && record.route_id === 'game-bidding') {
+      return { game: 'bidding', route_id: 'game-bidding', kind: 'continue', state,
+        resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'bidq_' : 'bid_', 'bidding resource') };
+    }
+    if (record.game === 'likes' && record.route_id === 'game-likes') {
+      return { game: 'likes', route_id: 'game-likes', kind: 'continue', state,
+        resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'likq_' : 'lik_', 'likes resource') };
+    }
+  }
   return invalid('home game continuation');
 }
 

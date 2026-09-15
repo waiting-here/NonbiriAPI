@@ -2,11 +2,18 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
 func TestDuelExtensionRequiresExactSourceAndPreservesExistingRows(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(generationTwoWithoutDuelsSchema); err != nil {
+		t.Fatal(err)
+	}
 	defer database.Close()
 	ctx := context.Background()
 	tx, err := database.BeginTx(ctx, nil)
@@ -16,6 +23,11 @@ func TestDuelExtensionRequiresExactSourceAndPreservesExistingRows(t *testing.T) 
 	defer tx.Rollback()
 	if err := seedGenerationTwo(ctx, tx, hostileOID("b1e_")); err != nil {
 		t.Fatal(err)
+	}
+	for key := range duelConfigDefaults() {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM site_config WHERE key=?`, key); err != nil {
+			t.Fatal(err)
+		}
 	}
 	zero := EncodeU128(U128{})
 	if _, err := tx.ExecContext(ctx, `INSERT INTO users(username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES('Existing account',?,?,?,?,?,?,?,?,100,101)`, zero, zero, zero, zero, zero, zero, zero, zero); err != nil {

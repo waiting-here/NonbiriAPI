@@ -214,7 +214,6 @@
         "games": "对局",
         "mode": "模式：{{value}}",
         "phase": "阶段：{{value}}",
-        "rpsQueues": "猜拳队列",
         "spec": "规格：{{value}}",
         "title": "实时权威数量"
       },

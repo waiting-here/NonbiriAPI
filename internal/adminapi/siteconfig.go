@@ -348,6 +348,7 @@ var knownSiteConfig = func() map[string]keySpec {
 		known["game_rps_"+mode+"_dealer_seconds"] = keySpec{kind: kindInt, min: 5, max: 15, def: 15}
 		known["game_rps_"+mode+"_follower_seconds"] = keySpec{kind: kindInt, min: 5, max: 15, def: 15}
 	}
+	addDuelKeySpecs(known)
 	return known
 }()
 
@@ -733,7 +734,7 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			// display value to raw milli-credits exactly once at this boundary.
 			n, err := parseAdminWireAmount(value)
 			if err != nil || n < 0 || n > db.MaxMoneyMilli ||
-				(isFishingBaitPriceKey(key) && n < fishing.MinimumBaitPriceMilli) {
+				((isFishingBaitPriceKey(key) || isDuelTicketKey(key)) && n < 1) {
 				return "", invalid
 			}
 			return strconv.FormatInt(n, 10), httperr.Error{}

@@ -349,6 +349,8 @@ func newLifecycleCoordinator(
 	fishingAdapter := lifecycleadapters.NewRegisteredFishing(gameRuntimes.Service)
 	linkLinkAdapter := lifecycleadapters.NewRegisteredLinkLink(gameRuntimes.Service)
 	rpsAdapter := lifecycleadapters.NewRegisteredRPS(gameRuntimes.Service)
+	biddingAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.BiddingID)
+	likesAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.LikesID)
 	reportAdapter := lifecycleadapters.NewReportLifecycle(reportRepository)
 	announcementAdapter := lifecycleadapters.NewAnnouncementAuditLifecycle(announcementRepository)
 	secretAdapter := lifecycleadapters.NewOrphanSecretRecovery(claimService)
@@ -366,12 +368,14 @@ func newLifecycleCoordinator(
 			Identity: accountResources, Resources: accountResources, Issues: accountResources,
 			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter,
 		},
 		Delete: lifecycle.DeleteAdapters{
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,
 			IssuesAnnouncements: lifecycleadapters.NewIssueAnnouncementDelete(issueService.Sources()),
 			Donations:           donationAdapter, Activities: activityAdapter, Reports: reportAdapter,
 			Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter,
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
@@ -383,6 +387,8 @@ func newLifecycleCoordinator(
 			Fishing:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
 			LinkLink:    lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
 			RPS:         lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
+			Bidding:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
+			Likes:       lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
 			Donations:   lifecycleadapters.NewDonationRecovery(donationService),
 			Secrets:     secretAdapter,
 		},
@@ -392,6 +398,7 @@ func newLifecycleCoordinator(
 			Audits:      lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
 			Issues:      lifecycleadapters.NewIssueRetention(issueService),
 			Fishing:     fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,
 		},

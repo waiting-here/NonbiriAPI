@@ -37,8 +37,8 @@ for (const fixture of cases) {
 
     const cards = page.locator('.game-center-card');
     const heroes = cards.locator('.game-center-card__hero img.game-hero');
-    await expect(cards).toHaveCount(3);
-    await expect(heroes).toHaveCount(3);
+    await expect(cards).toHaveCount(5);
+    await expect(heroes).toHaveCount(5);
     for (const hero of await heroes.all()) {
       await hero.scrollIntoViewIfNeeded();
       await expect(hero).toHaveJSProperty('complete', true);
@@ -78,7 +78,7 @@ for (const fixture of cases) {
       }),
     );
 
-    expect(measurements).toHaveLength(3);
+    expect(measurements).toHaveLength(5);
     for (const measurement of measurements) {
       expect(measurement).toMatchObject({
         alt: '',

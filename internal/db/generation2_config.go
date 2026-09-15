@@ -232,6 +232,16 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		catalog["game_rps_"+mode+"_dealer_seconds"] = uintSpec("15", 5, 15)
 		catalog["game_rps_"+mode+"_follower_seconds"] = uintSpec("15", 5, 15)
 	}
+	for key, value := range duelConfigDefaults() {
+		switch {
+		case strings.HasSuffix(key, "_enabled"):
+			catalog[key] = boolSpec(value)
+		case strings.HasSuffix(key, "_ticket_milli"):
+			catalog[key] = amountSpec(value, 1)
+		default:
+			catalog[key] = uintSpec(value, 0, 9999)
+		}
+	}
 	return catalog
 }
 

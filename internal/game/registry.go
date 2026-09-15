@@ -10,6 +10,10 @@ const (
 	LinkLinkVersion = 1
 	RPSID           = "rps"
 	RPSVersion      = 1
+	BiddingID       = "bidding"
+	BiddingVersion  = 1
+	LikesID         = "likes"
+	LikesVersion    = 1
 
 	LinkLinkSpec6x8   = "6x8"
 	LinkLinkSpec8x8   = "8x8"

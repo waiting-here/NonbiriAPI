@@ -36,9 +36,6 @@ func TestDuelRealLedgerMatchTerminalAndRollbackAtCapacityBoundary(t *testing.T) 
 					t.Fatal(err)
 				}
 				defer tx.Rollback()
-				if err := db.ApplyDuelExtension(ctx, tx); err != nil {
-					t.Fatal(err)
-				}
 				id := func(prefix string) string {
 					v, err := db.GenerateOpaqueID(prefix)
 					if err != nil {

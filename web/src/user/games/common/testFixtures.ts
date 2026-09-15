@@ -16,6 +16,8 @@ export function gamesSnapshotWire() {
     tutorial_rps_seen: false,
     onboarding: onboardingWire(),
     games_enabled: true,
+    bidding: duelSnapshotWire('bidding'),
+    likes: duelSnapshotWire('likes'),
     fishing: {
       enabled: true,
       available: true,
@@ -36,8 +38,19 @@ export function gamesSnapshotWire() {
   };
 }
 
+export function duelSnapshotWire(game: 'bidding' | 'likes') {
+  const mode = { enabled: false, available: true, ticket: '1',
+    rake_bp: { platform: 0, welfare: 0, thursday: 0 },
+    terms_hash: 'a'.repeat(64), content_hash: 'b'.repeat(64) };
+  return { enabled: false, available: true, queue_seconds: 120, queue_capacity: 4096,
+    ...(game === 'bidding' ? { joker_seconds: 10, bid_seconds: 20 } : { plan_seconds: 20, settlement_seconds: 5 }),
+    modes: Object.fromEntries((game === 'bidding' ? ['tier1', 'tier2', 'tier3'] : ['quick', 'standard']).map((key) => [key, { ...mode }])) };
+}
+
 export function onboardingWire() {
   return {
+    bidding: { items: [], all_completed: true },
+    likes: { items: [], all_completed: true },
     "fishing": {
       "items": [
         {

@@ -138,8 +138,8 @@ interface GamesConfig {
     specs: Record<'6x8' | '8x8' | '10x10', { enabled: boolean; price: string }>;
   };
   rps: { enabled: boolean; modes: Record<'quick' | 'standard' | 'deathmatch', RPSModeConfig> };
-  bidding?: DuelGameConfig;
-  likes?: DuelGameConfig;
+  bidding: DuelGameConfig;
+  likes: DuelGameConfig;
 }
 
 function normalizeRPSMode(value: unknown, label: string): RPSModeConfig {
@@ -174,9 +174,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
     value,
     ['revision', 'master_enabled', 'fishing', 'linklink', 'rps', 'bidding', 'likes'],
     'games configuration',
-    ['revision', 'master_enabled', 'fishing', 'linklink', 'rps'],
   );
-  if ('bidding' in root !== 'likes' in root) invalidResponse('duel modules');
   const fishing = record(
     root.fishing,
     ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers', 'rake_bp'],
@@ -203,12 +201,8 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
   return {
     revision: decimal(root.revision, 'games configuration revision', { positive: true }),
     master_enabled: boolean(root.master_enabled, 'games master switch'),
-    ...('bidding' in root
-      ? {
-          bidding: normalizeDuelConfig(root.bidding, 'bidding'),
-          likes: normalizeDuelConfig(root.likes, 'likes'),
-        }
-      : {}),
+    bidding: normalizeDuelConfig(root.bidding, 'bidding'),
+    likes: normalizeDuelConfig(root.likes, 'likes'),
     fishing: {
       enabled: boolean(fishing.enabled, 'Fishing switch'),
       rake_bp: normalizeGamePumps(fishing.rake_bp),
@@ -261,7 +255,7 @@ export function gamesConfigPatch(input: GamesConfig): Record<string, unknown> {
     master_enabled: input.master_enabled,
     fishing: input.fishing,
     linklink: input.linklink,
-    ...(input.bidding && input.likes ? { bidding: input.bidding, likes: input.likes } : {}),
+    bidding: input.bidding, likes: input.likes,
     rps: {
       enabled: input.rps.enabled,
       modes: {
@@ -321,9 +315,8 @@ export function normalizeActiveCounts(value: unknown): ActiveCounts {
       };
     }),
     queues: array(root.queues, 'game queue counts', 8).map((entry) => {
-      const row = record(entry, ['game', 'mode', 'count'], 'game queue count', ['mode', 'count']);
-      const game =
-        'game' in row ? oneOf(row.game, ['rps', 'bidding', 'likes'], 'queue game') : 'rps';
+      const row = record(entry, ['game', 'mode', 'count'], 'game queue count');
+      const game = oneOf(row.game, ['rps', 'bidding', 'likes'], 'queue game');
       const modes =
         game === 'bidding'
           ? ['tier1', 'tier2', 'tier3']

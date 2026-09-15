@@ -11,6 +11,29 @@ import (
 
 const preRCOneManifestHash = "49638d0096f60b55246851f30a08de53b51847ca33b3a6586345c3029c694dcd"
 
+// Build the fresh DDL from the same closed table changes used by upgrades.
+// The resulting complete source and manifest are pinned independently.
+func duelBootstrapSchema(previous string) string {
+	for _, table := range []string{"credit_accounts", "credit_operations", "idempotency_records"} {
+		start := "CREATE TABLE " + table + " ("
+		_, tail, ok := strings.Cut(previous, start)
+		if !ok {
+			panic("missing canonical duel table")
+		}
+		body, _, ok := strings.Cut(tail, ";")
+		if !ok {
+			panic("incomplete canonical duel table")
+		}
+		old := start + body
+		target, err := extendDuelTableSQL(table, old)
+		if err != nil || strings.Count(previous, old) != 1 {
+			panic("invalid canonical duel table")
+		}
+		previous = strings.Replace(previous, old, target, 1)
+	}
+	return previous + duelTablesSchema
+}
+
 // DuelStoragePresent supports validation of both sides of the exact migration.
 // A partial extension is never accepted as an older, empty deployment.
 func DuelStoragePresent(ctx context.Context, q queryer) (bool, error) {

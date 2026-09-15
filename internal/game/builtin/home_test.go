@@ -285,6 +285,9 @@ func newHomeService(t *testing.T, database *sql.DB, authorizer *homeAuthorizer, 
 		},
 	}
 	for _, descriptor := range production.Descriptors() {
+		if projections[descriptor.ID] == nil {
+			continue
+		}
 		// This fixture isolates observation capabilities; production routing is
 		// exercised by the application tests and module route contracts.
 		descriptor.Routes = nil

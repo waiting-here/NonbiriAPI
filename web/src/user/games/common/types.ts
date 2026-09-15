@@ -1,3 +1,5 @@
+import type { DuelConfig } from './duel/types';
+
 export const BAITS = ['worm', 'lure', 'premium'] as const;
 export const LINKLINK_SPECS = ['6x8', '8x8', '10x10'] as const;
 export const RPS_MODES = ['quick', 'standard', 'deathmatch'] as const;
@@ -26,7 +28,8 @@ export interface GamePayment {
   readonly game: string;
 }
 
-export type GameID = 'fishing' | 'linklink' | 'rps';
+export type OnboardingGameID = 'fishing' | 'linklink' | 'rps';
+export type GameID = OnboardingGameID | 'bidding' | 'likes';
 export type OnboardingTaskKey = Bait | LinkLinkSpec | RPSMode;
 
 export interface OnboardingItem {
@@ -48,6 +51,8 @@ export interface GamesSnapshot {
   readonly tutorialRPSSeen: boolean;
   readonly onboarding: Readonly<Record<GameID, OnboardingProgress>>;
   readonly gamesEnabled: boolean;
+  readonly bidding: DuelConfig;
+  readonly likes: DuelConfig;
   readonly fishing: {
     readonly enabled: boolean;
     readonly available: boolean;

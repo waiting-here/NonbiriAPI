@@ -5,13 +5,23 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 go_command=${GO:-go}
+python_command=${PYTHON:-python3}
 released_commit=74be70ae0e19d39219ff610de3e6dc3a9c058d38
 test "$(git rev-parse 'v1.0.0-beta.3^{commit}')" = "$released_commit"
-temporary=$(mktemp -d)
-trap 'rm -rf -- "$temporary"' EXIT
+temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
+temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
+cleanup() {
+    local resolved
+    resolved=$(cd "$temporary" && pwd -P) || return
+    case "$resolved" in
+        "$temporary_base"/nonbiri-upgrade.*) rm -rf -- "$resolved" ;;
+        *) return 1 ;;
+    esac
+}
+trap cleanup EXIT
 mkdir "$temporary/released" "$temporary/data"
 git archive "$released_commit" | tar -x -C "$temporary/released"
-python3 - "$root" "$temporary" <<'PY'
+"$python_command" - "$root" "$temporary" <<'PY'
 import json, pathlib, sys
 root, temporary = map(pathlib.Path, sys.argv[1:])
 legacy = temporary / "released"
@@ -39,3 +49,4 @@ export NONBIRI_UPGRADED_FIXTURE="$temporary/data/upgraded.db"
 printf 'Released source: %s\n' "$released_commit"
 "$go_command" version
 sha256sum "$temporary/data/"*.db
+bash scripts/check-duel-upgrade.sh

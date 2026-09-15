@@ -192,9 +192,9 @@ func Load(mode string) (Config, string, error) {
 	if err := config.Validate(); err != nil {
 		return Config{}, "", err
 	}
-	// The rule revision includes the shared-energy exception and settlement split.
+	// Pin the shared-energy exception, settlement split and manual casting rule.
 	hash := sha256.New()
-	hash.Write([]byte("likes@1;positive-energy-overload;separate-round-start\n"))
+	hash.Write([]byte("likes@1;positive-energy-overload;separate-round-start;manual-main-unless-stunned;overload-state\n"))
 	hash.Write(body)
 	return config, hex.EncodeToString(hash.Sum(nil)), nil
 }

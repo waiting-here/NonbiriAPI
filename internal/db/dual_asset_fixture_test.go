@@ -12,6 +12,7 @@ import (
 // upgrade acceptance additionally uses a database made by the prior binary.
 func makePreAssetFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreDuelFixture(t, database)
 	var present int
 	if err := database.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&present); err != nil {
 		t.Fatal(err)

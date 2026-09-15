@@ -141,6 +141,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 }
 
 func init() {
+	addDuelCatalogMetadata()
 	add := func(key, group, titleZh, titleEn, descriptionZh, descriptionEn string, unit localizedCatalogText, gates ...string) {
 		catalogMetadataByKey[key] = catalogMetadata{
 			group: group, title: catalogText(titleZh, titleEn),
@@ -225,7 +226,7 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 		return nil, nil, formatAdminWireAmount(1), formatAdminWireAmount(db.MaxMoneyMilli), true
 	case kindAmount:
 		minimum = formatAdminWireAmount(0)
-		if isFishingBaitPriceKey(key) {
+		if isFishingBaitPriceKey(key) || isDuelTicketKey(key) {
 			minimum = formatAdminWireAmount(fishing.MinimumBaitPriceMilli)
 		}
 		return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), minimum, formatAdminWireAmount(db.MaxMoneyMilli), false
@@ -381,6 +382,12 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 	}
 	if strings.HasSuffix(key, "_bp") {
 		zero = catalogTextPtr("该目标池不接收此模式的抽成；同模式三项之和仍须小于 10000。", "This target receives no cut for the mode; the three values must still sum to less than 10000.")
+	}
+	if isDuelTicketKey(key) {
+		zero = catalogTextPtr("票价必须至少为1毫积分。", "Entry prices must be at least one milli-credit.")
+	}
+	if (strings.HasPrefix(key, "game_bidding_") || strings.HasPrefix(key, "game_likes_")) && strings.HasSuffix(key, "_enabled") {
+		zero = catalogTextPtr("关闭新的排队，不改变在途对局。", "Disables new queues without changing accepted games.")
 	}
 	if strings.HasPrefix(key, alertPrefsPrefix) {
 		empty = catalogTextPtr("保存一个有界的空告警偏好值。", "Stores a bounded empty alert-preference value.")

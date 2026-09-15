@@ -77,9 +77,6 @@ func releasedImages(t *testing.T, database *sql.DB) map[string]releasedTableImag
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if len(tables) != 99 {
-		t.Fatalf("released table count=%d", len(tables))
-	}
 	out := map[string]releasedTableImage{}
 	for _, table := range tables {
 		rows, err := database.Query("SELECT * FROM " + quotedSQLName(table) + " LIMIT 0")
@@ -135,6 +132,12 @@ func upgradedReleasedFixture(t *testing.T, variable string, key byte) (*db.Store
 		t.Fatal(err)
 	}
 	before := releasedImages(t, prior)
+	if !strings.Contains(variable, "DUAL") && len(before) != 99 {
+		t.Fatalf("released table count=%d", len(before))
+	}
+	if strings.Contains(variable, "DUAL") && (before["game_onboarding_completions"].columns == "" || !strings.Contains(before["credit_accounts"].columns, "asset_type")) {
+		t.Fatal("fixture is not from the dual-asset release")
+	}
 	if err := prior.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -175,17 +178,25 @@ func checkUpgradedLedger(t *testing.T, store *db.Store) {
 }
 
 func TestReleasedGameplayUpgradeAndRecovery(t *testing.T) {
-	store, vault, before, path := upgradedReleasedFixture(t, "NONBIRI_GAMEPLAY_FIXTURE", 0x53)
+	testReleasedGameplayUpgrade(t, "NONBIRI_GAMEPLAY_FIXTURE", 1)
+}
+
+func TestReleasedDualAssetGameplayUpgrade(t *testing.T) {
+	testReleasedGameplayUpgrade(t, "NONBIRI_DUAL_GAMEPLAY_FIXTURE", 2)
+}
+
+func testReleasedGameplayUpgrade(t *testing.T, variable string, rulesVersion int) {
+	store, vault, before, path := upgradedReleasedFixture(t, variable, 0x53)
 	database := store.DB()
 	for _, check := range []struct {
 		sql  string
 		want int64
 	}{
-		{"SELECT COUNT(*) FROM game_fishing_batches WHERE state='reserved' AND rules_version=1", 1},
-		{"SELECT COUNT(*) FROM game_fishing_batches WHERE state='committed' AND rules_version=1", 1},
-		{"SELECT COUNT(*) FROM game_linklink_sessions WHERE rules_version=1", 1},
-		{"SELECT COUNT(*) FROM game_linklink_summaries WHERE rules_version=1", 1},
-		{"SELECT COUNT(*) FROM game_rps_sessions WHERE rules_version=1", 4},
+		{fmt.Sprintf("SELECT COUNT(*) FROM game_fishing_batches WHERE state='reserved' AND rules_version=%d", rulesVersion), 1},
+		{fmt.Sprintf("SELECT COUNT(*) FROM game_fishing_batches WHERE state='committed' AND rules_version=%d", rulesVersion), 1},
+		{fmt.Sprintf("SELECT COUNT(*) FROM game_linklink_sessions WHERE rules_version=%d", rulesVersion), 1},
+		{fmt.Sprintf("SELECT COUNT(*) FROM game_linklink_summaries WHERE rules_version=%d", rulesVersion), 1},
+		{fmt.Sprintf("SELECT COUNT(*) FROM game_rps_sessions WHERE rules_version=%d", rulesVersion), 4},
 		{"SELECT COUNT(DISTINCT phase) FROM game_rps_sessions", 4},
 		{"SELECT COUNT(*) FROM game_rps_pending_results", 3},
 		{"SELECT COUNT(*) FROM game_rps_queue", 1},
@@ -229,10 +240,33 @@ func TestReleasedGameplayUpgradeAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	upgradeScalar(t, database, "SELECT COUNT(*) FROM logical_requests WHERE state<>'terminal'", 0)
-	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_onboarding_completions", 0)
-	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_onboarding_holds", 0)
-	upgradeScalar(t, database, "SELECT COUNT(*) FROM credit_entries WHERE asset_type='game'", 0)
-	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_fishing_batches WHERE net_payout_total_milli<>payout_total_milli OR platform_cut_total_milli<>0 OR welfare_cut_total_milli<>0 OR thursday_cut_total_milli<>0", 0)
+	var priorCompletions int64
+	for _, count := range before["game_onboarding_completions"].rows {
+		priorCompletions += int64(count)
+	}
+	// The newer fixture contains thirteen accepted newcomer tasks whose
+	// original zero-value awards complete while their games recover.
+	if rulesVersion == 2 {
+		priorCompletions += 13
+	}
+	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_onboarding_completions", priorCompletions)
+	upgradeScalar(t, database, "SELECT COUNT(*) FROM site_config WHERE key IN ('game_bidding_enabled','game_likes_enabled') AND value<>'0'", 0)
+	var remainingHolds int64
+	if rulesVersion == 2 {
+		// The saved LinkLink board remains playable with its original hold.
+		remainingHolds = 1
+	}
+	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_onboarding_holds", remainingHolds)
+	if rulesVersion == 1 {
+		upgradeScalar(t, database, "SELECT COUNT(*) FROM credit_entries WHERE asset_type='game'", 0)
+	} else {
+		// Dual-asset gameplay writes both payment legs, including zero legs.
+		upgradeScalar(t, database, "SELECT COUNT(*) FROM credit_entries WHERE asset_type='game' AND delta_sign<>0", 0)
+	}
+	if rulesVersion == 1 {
+		upgradeScalar(t, database, "SELECT COUNT(*) FROM game_fishing_batches WHERE net_payout_total_milli<>payout_total_milli OR platform_cut_total_milli<>0 OR welfare_cut_total_milli<>0 OR thursday_cut_total_milli<>0", 0)
+	}
+	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_fishing_batches WHERE net_payout_total_milli+platform_cut_total_milli+welfare_cut_total_milli+thursday_cut_total_milli<>payout_total_milli", 0)
 	upgradeScalar(t, database, "SELECT COUNT(*) FROM game_fishing_batches WHERE state='committed'", 2)
 	requireReleasedRows(t, database, map[string]releasedTableImage{"credit_entries": before["credit_entries"], "credit_operations": before["credit_operations"], "site_config": before["site_config"]})
 	checkUpgradedLedger(t, store)
@@ -260,7 +294,15 @@ func TestReleasedGameplayUpgradeAndRecovery(t *testing.T) {
 }
 
 func TestReleasedBillingUpgradePreservesTerminalAndSettlesActual(t *testing.T) {
-	store, vault, before, _ := upgradedReleasedFixture(t, "NONBIRI_BILLING_FIXTURE", 0x63)
+	testReleasedBillingUpgrade(t, "NONBIRI_BILLING_FIXTURE")
+}
+
+func TestReleasedDualAssetBillingUpgrade(t *testing.T) {
+	testReleasedBillingUpgrade(t, "NONBIRI_DUAL_BILLING_FIXTURE")
+}
+
+func testReleasedBillingUpgrade(t *testing.T, variable string) {
+	store, vault, before, _ := upgradedReleasedFixture(t, variable, 0x63)
 	upgradeScalar(t, store.DB(), "SELECT COUNT(*) FROM logical_requests WHERE state<>'terminal'", 3)
 	app, err := buildApplication(auditConfig(), store, vault)
 	if err != nil {
@@ -269,7 +311,11 @@ func TestReleasedBillingUpgradePreservesTerminalAndSettlesActual(t *testing.T) {
 	if err := app.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for index, want := range []int64{5, 7, 0, 0} {
+	settledCharge := int64(5)
+	if strings.Contains(variable, "DUAL") {
+		settledCharge = 7
+	}
+	for index, want := range []int64{settledCharge, 7, 0, 0} {
 		// A dispatched attempt without valid output follows the existing zero-charge rule.
 		query := fmt.Sprintf("SELECT c.user_charge_milli FROM charity_reservations c JOIN logical_requests r ON r.id=c.logical_request_id WHERE r.model_snapshot='synthetic/billing-%d'", index)
 		upgradeScalar(t, store.DB(), query, want)

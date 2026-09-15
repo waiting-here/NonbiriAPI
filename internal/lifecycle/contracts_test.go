@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 6 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 7 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -46,6 +46,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
+		"bidding", "likes",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
 		"fishing", "generated_at", "issues", "linklink", "log_summary", "models", "rps",
 		"schema_version", "thursday", "usage", "user", "welfare_claims",

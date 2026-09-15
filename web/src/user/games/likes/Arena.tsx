@@ -320,7 +320,7 @@ export function Arena({
               <header>
                 <DuelProfile profile={profiles[seat]} you={seat === you} />
                 <span className="likes-lock">
-                  {locked[seat] ? t('已锁定', 'Locked') : t('选择中', 'Choosing')}
+                  {running ? t('结算中', 'Resolving') : locked[seat] ? t('已锁定', 'Locked') : t('选择中', 'Choosing')}
                 </span>
               </header>
               <div className="likes-character">

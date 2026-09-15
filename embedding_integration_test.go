@@ -142,7 +142,7 @@ func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600})
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx)
 	if err != nil {
 		t.Fatal(err)
 	}

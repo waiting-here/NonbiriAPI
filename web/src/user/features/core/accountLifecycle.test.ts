@@ -9,7 +9,7 @@ function fixture(path: string): unknown {
 
 function exportDocument(): Record<string, unknown> {
   return {
-    schema_version: 6,
+    schema_version: 7,
     generated_at: 1_700_000_000,
     user: {},
     endpoints: [],
@@ -29,6 +29,8 @@ function exportDocument(): Record<string, unknown> {
     fishing: {},
     linklink: {},
     rps: {},
+    bidding: {},
+    likes: {},
   };
 }
 
@@ -37,7 +39,7 @@ function exportResponse(body: unknown, headers: HeadersInit = {}): Response {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v6.json"',
+      'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v7.json"',
       ...headers,
     },
   });
@@ -48,17 +50,17 @@ afterEach(() => {
 });
 
 describe('production account lifecycle adapter', () => {
-  it('downloads one bounded schema-v6 attachment with only the elevated capability header', async () => {
+  it('downloads one bounded schema-v7 attachment with only the elevated capability header', async () => {
     const document = exportDocument();
     const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
     vi.stubGlobal('fetch', fetchMock);
 
-    const attachment = await productionAccountLifecycleAdapter.exportV6({
+    const attachment = await productionAccountLifecycleAdapter.exportV7({
       accountId: '1',
       elevatedToken: 'elevated_token',
     });
 
-    expect(attachment.schemaVersion).toBe(6);
+    expect(attachment.schemaVersion).toBe(7);
     expect(JSON.parse(await attachment.blob.text())).toEqual(document);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0] ?? [];
@@ -80,7 +82,7 @@ describe('production account lifecycle adapter', () => {
 
     for (let index = 0; index < 3; index += 1) {
       await expect(
-        productionAccountLifecycleAdapter.exportV6({
+        productionAccountLifecycleAdapter.exportV7({
           accountId: '1',
           elevatedToken: 'elevated_token',
         }),
@@ -141,7 +143,7 @@ describe('production account lifecycle adapter', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      productionAccountLifecycleAdapter.exportV6({ accountId: '01', elevatedToken: 'short' }),
+      productionAccountLifecycleAdapter.exportV7({ accountId: '01', elevatedToken: 'short' }),
     ).rejects.toMatchObject({ code: 'invalid_request' });
     expect(fetchMock).not.toHaveBeenCalled();
   });

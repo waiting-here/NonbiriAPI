@@ -732,6 +732,10 @@ func (activityPublishReporter) ReportActivitiesPublishError(err error) {
 }
 
 func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
+	return buildApplicationWithGameClock(cfg, store, vault, nil)
+}
+
+func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *secret.Vault, gameNow func() time.Time) (*application, error) {
 	if cfg == nil || store == nil || vault == nil {
 		return nil, errors.New("application dependencies are required")
 	}
@@ -1053,6 +1057,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	gameRuntimes, err = newGameRuntimeBundle(
 		store, vault, authRuntime, roleAuthorizer, maintenanceService, activityRepository,
 		activityPublisher, activityEvents, accountSources,
+		gameNow,
 	)
 	if err != nil {
 		cleanup()
@@ -1081,6 +1086,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	}
 	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
 		Database: store.DB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
+		CancelUserDuelsTx: gameRuntimes.CancelUserDuelsTx,
 	})
 	if err != nil {
 		cleanup()
@@ -1088,7 +1094,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
 		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
-		connectorRegistry, localBackend, debugHub, gate, rpmLimits, userInvalidations.InvalidateUserAuthority,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits, gameRuntimes.CancelUserDuelsTx, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
 		cleanup()
