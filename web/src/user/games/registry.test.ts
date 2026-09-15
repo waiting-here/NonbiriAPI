@@ -3,7 +3,7 @@ import { gameRegistry, resolveGameRegistration, type GameRegistration } from './
 
 describe('user game registry', () => {
   it('resolves the registered fishing page by id and version', () => {
-    expect(gameRegistry.map(({ id }) => id)).toEqual(['fishing', 'linklink', 'rps']);
+    expect(gameRegistry.map(({ id }) => id)).toEqual(['fishing', 'linklink', 'rps', 'bidding', 'likes']);
     const registration = resolveGameRegistration(gameRegistry, 'fishing', 1);
     expect(registration).toBe(gameRegistry[0]);
     expect(registration?.titleKey).toBe('games.fishing.title');

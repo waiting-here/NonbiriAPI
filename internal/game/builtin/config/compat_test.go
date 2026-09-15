@@ -235,7 +235,7 @@ func FuzzCanonicalWireAmount(f *testing.F) {
 
 func TestSiteConfigKeysReturnsCopy(t *testing.T) {
 	first, second := SiteConfigKeys(), SiteConfigKeys()
-	if len(first) != 48 || len(second) != 48 {
+	if len(first) != 75 || len(second) != 75 {
 		t.Fatalf("key lengths = %d, %d", len(first), len(second))
 	}
 	first[0] = "mutated"

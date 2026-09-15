@@ -261,6 +261,8 @@ const ACCOUNT_EXPORT_KEYS = [
   'fishing',
   'linklink',
   'rps',
+  'bidding',
+  'likes',
 ] as const;
 const ELEVATED_TOKEN = /^[A-Za-z0-9._-]{8,512}$/;
 
@@ -323,7 +325,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   const record = value as Record<string, unknown>;
   const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
   if (
-    record.schema_version !== 6 ||
+    record.schema_version !== 7 ||
     Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
     Object.keys(record).some((key) => !expected.has(key))
   ) {
@@ -331,7 +333,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   }
 }
 
-export async function exportAccountV6(
+export async function exportAccountV7(
   accountId: string,
   elevatedToken: string,
   signal?: AbortSignal,
@@ -347,7 +349,7 @@ export async function exportAccountV6(
   const disposition = response.headers.get('Content-Disposition') ?? '';
   if (
     !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v6.json"'
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v7.json"'
   ) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
@@ -357,7 +359,7 @@ export async function exportAccountV6(
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 6,
+    schemaVersion: 7,
   };
 }
 

@@ -19,6 +19,7 @@ type Route = Parameters<RouteHandler>[0];
 const EPHEMERAL_MARKER = 'admin-games-ephemeral-marker';
 
 const INITIAL_CONFIG: GamesConfig = {
+  bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -96,6 +97,7 @@ type GamesPatch = {
 function applyPatch(config: GamesConfig, rawPatch: Record<string, unknown>): GamesConfig {
   const patch = rawPatch as GamesPatch;
   return {
+    bidding: structuredClone(config.bidding), likes: structuredClone(config.likes),
     revision: String(BigInt(config.revision) + 1n),
     master_enabled: patch.master_enabled,
     fishing: structuredClone(patch.fishing),
@@ -200,6 +202,8 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   expect(config.patches[0]).toEqual({
     expected_revision: '7',
     master_enabled: true,
+    bidding: INITIAL_CONFIG.bidding,
+    likes: INITIAL_CONFIG.likes,
     fishing: {
       ...INITIAL_CONFIG.fishing,
       bait_prices: { ...INITIAL_CONFIG.fishing.bait_prices, worm: '3' },
@@ -257,3 +261,4 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();
 });
+import { duelConfigFixture } from '../duelConfigFixture';

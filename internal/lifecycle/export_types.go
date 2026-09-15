@@ -29,6 +29,8 @@ type ExportDocument struct {
 	Fishing        FishingExport       `json:"fishing"`
 	LinkLink       LinkLinkExport      `json:"linklink"`
 	RPS            RPSExport           `json:"rps"`
+	Bidding        DuelExport          `json:"bidding"`
+	Likes          DuelExport          `json:"likes"`
 }
 
 type UserExport struct {

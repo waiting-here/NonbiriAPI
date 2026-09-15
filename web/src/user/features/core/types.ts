@@ -373,6 +373,8 @@ export type HomeCheckinCapability =
   | { state: 'unavailable' };
 
 export type HomeGameSummary =
+  | { game: 'bidding'; route_id: 'game-bidding'; kind: 'continue'; resource_id: string; state: 'waiting' | 'active' }
+  | { game: 'likes'; route_id: 'game-likes'; kind: 'continue'; resource_id: string; state: 'waiting' | 'active' }
   | {
       game: 'fishing';
       route_id: 'game-fishing';
@@ -437,15 +439,15 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 6;
+  schemaVersion: 7;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV6: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportV7: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV6(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportV7(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

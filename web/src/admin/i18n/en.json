@@ -214,7 +214,6 @@
         "games": "Games",
         "mode": "Mode: {{value}}",
         "phase": "Phase: {{value}}",
-        "rpsQueues": "RPS queues",
         "spec": "Specification: {{value}}",
         "title": "Live authority counts"
       },

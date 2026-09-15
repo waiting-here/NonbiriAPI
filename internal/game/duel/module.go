@@ -17,6 +17,12 @@ func (s *Service) Module() *host.Module {
 	return &host.Module{
 		ValidatePersistedState: s.ValidatePersistedState,
 		RecoverBeforeListen: func(ctx context.Context, now int64, limit int, deadline time.Time) (host.WorkResult, error) {
+			// The coordinator reuses this capability during periodic recovery.
+			// Only the first startup drain may cancel pre-existing games.
+			if s.recovered.Load() {
+				r, err := s.work(ctx, false, limit, deadline)
+				return host.WorkResult{Processed: r.Processed, More: r.More}, err
+			}
 			r, err := s.RecoverBeforeListenAt(ctx, now, limit, deadline)
 			return host.WorkResult{Processed: r.Processed, More: r.More}, err
 		},

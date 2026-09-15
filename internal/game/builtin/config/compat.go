@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/compat"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
+	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
@@ -20,6 +22,8 @@ type ConfigSnapshot struct {
 	Rules          *fishing.Ruleset
 	LinkLink       linklinkconfig.LinkLinkConfig
 	RPS            rpsconfig.RPSConfig
+	Bidding        biddingconfig.Snapshot
+	Likes          likesconfig.Snapshot
 }
 
 func CompileConfig(raw map[string]string) (ConfigSnapshot, error) {
@@ -35,18 +39,29 @@ func CompileConfig(raw map[string]string) (ConfigSnapshot, error) {
 	if err != nil {
 		return ConfigSnapshot{}, err
 	}
-	return ConfigSnapshot{GamesEnabled: fish.GamesEnabled, FishingEnabled: fish.FishingEnabled, Fishing: fish.Fishing, Rules: fish.Rules, LinkLink: link.LinkLink, RPS: rps.RPS}, nil
+	bidding, err := biddingconfig.CompileConfig(raw)
+	if err != nil {
+		return ConfigSnapshot{}, err
+	}
+	likes, err := likesconfig.CompileConfig(raw)
+	if err != nil {
+		return ConfigSnapshot{}, err
+	}
+	return ConfigSnapshot{GamesEnabled: fish.GamesEnabled, FishingEnabled: fish.FishingEnabled, Fishing: fish.Fishing, Rules: fish.Rules, LinkLink: link.LinkLink, RPS: rps.RPS, Bidding: bidding, Likes: likes}, nil
 }
 
 func SiteConfigKeys() []string {
 	keys := []string{game.GamesEnabledKey}
 	keys = append(keys, (fishingconfig.Codec{}).Keys()...)
 	keys = append(keys, (linklinkconfig.Codec{}).Keys()...)
-	return append(keys, (rpsconfig.Codec{}).Keys()...)
+	keys = append(keys, (rpsconfig.Codec{}).Keys()...)
+	keys = append(keys, (biddingconfig.Codec{}).Keys()...)
+	return append(keys, (likesconfig.Codec{}).Keys()...)
 }
 
 func (snapshot ConfigSnapshot) GamesConfig(revision string) compat.GamesConfig {
 	return compat.GamesConfig{Revision: revision, MasterEnabled: snapshot.GamesEnabled,
+		Bidding: snapshot.Bidding.Wire(), Likes: snapshot.Likes.Wire(),
 		Fishing:  (fishingconfig.Snapshot{GamesEnabled: snapshot.GamesEnabled, FishingEnabled: snapshot.FishingEnabled, Fishing: snapshot.Fishing, Rules: snapshot.Rules}).Wire(),
 		LinkLink: (linklinkconfig.Snapshot{GamesEnabled: snapshot.GamesEnabled, LinkLink: snapshot.LinkLink}).Wire(),
 		RPS:      (rpsconfig.Snapshot{GamesEnabled: snapshot.GamesEnabled, RPS: snapshot.RPS}).Wire()}
@@ -60,7 +75,7 @@ func CompileGamesConfig(config compat.GamesConfig) (ConfigSnapshot, map[string]s
 	if err != nil {
 		return ConfigSnapshot{}, nil, err
 	}
-	fragments := map[string]json.RawMessage{game.FishingID: game.ConfigJSON(config.Fishing), game.LinkLinkID: game.ConfigJSON(config.LinkLink), game.RPSID: game.ConfigJSON(config.RPS)}
+	fragments := map[string]json.RawMessage{game.FishingID: game.ConfigJSON(config.Fishing), game.LinkLinkID: game.ConfigJSON(config.LinkLink), game.RPSID: game.ConfigJSON(config.RPS), "bidding": game.ConfigJSON(config.Bidding), "likes": game.ConfigJSON(config.Likes)}
 	raw := map[string]string{game.GamesEnabledKey: game.BoolRaw(config.MasterEnabled)}
 	for _, module := range registry.Descriptors() {
 		value, err := module.Codec.CompileWire(fragments[module.ID], config.MasterEnabled)

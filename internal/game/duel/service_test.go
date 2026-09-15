@@ -99,9 +99,6 @@ func newFixture(t *testing.T, kind string) *fixture {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if err := db.ApplyDuelExtension(f.ctx, tx); err != nil {
-		t.Fatal(err)
-	}
 	descriptor := bidconfig.Descriptor()
 	f.rules = bidding.Rules{}
 	f.mode = "tier1"

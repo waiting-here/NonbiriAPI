@@ -22,6 +22,7 @@ export const router = createBrowserRouter([
       { path: pathFor('admin-settings'), lazy: async () => ({ Component: (await import('./pages/SettingsPage')).SettingsPage }) },
       { path: pathFor('admin-mainstream-channels'), lazy: async () => ({ Component: (await import('./features/operations/MainstreamChannels')).MainstreamChannelsPage }) },
       { path: pathFor('admin-games'), lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }) },
+      { path: pathFor('admin-game-history'), lazy: async () => ({ Component: (await import('./pages/DuelHistoryPage')).DuelHistoryPage }) },
       { path: pathFor('admin-charity'), lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }) },
       { path: pathFor('admin-activities'), lazy: async () => ({ Component: (await import('./pages/ActivitiesPage')).ActivitiesPage }) },
       { path: pathFor('admin-reports'), lazy: async () => ({ Component: (await import('./pages/ReportsPage')).ReportsPage }) },

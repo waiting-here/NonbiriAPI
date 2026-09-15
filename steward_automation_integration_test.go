@@ -558,7 +558,7 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 	if err := json.Unmarshal(exported.Body.Bytes(), &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.SchemaVersion != 6 || len(document.Endpoints) != 1 || len(document.Endpoints[0].Keys) != 2 ||
+	if document.SchemaVersion != 7 || len(document.Endpoints) != 1 || len(document.Endpoints[0].Keys) != 2 ||
 		len(document.Donations) != 1 || document.Donations[0].ID != created.DonationID || document.Donations[0].Status != "approved" ||
 		len(document.Donations[0].Keys) != 2 || len(document.Donations[0].Keys[0].RecurringLimits) != 1 || len(document.CatalogPairs) != 2 {
 		t.Fatal("automation resources are missing from the existing export")

@@ -49,8 +49,8 @@ function Rules({
       <p>
         {t('每轮双方有', 'Both players have')} {p.TURN_SECONDS}{' '}
         {t(
-          '秒选择购物、主技能和允许的额外技能。确认后不可更改，双方锁定或超时后共同揭示；未锁定的一方自动跳过出招。',
-          'seconds to choose purchases, a main skill and any permitted extra skill. Confirming locks your plan. Plans are revealed when both lock or time expires; an unlocked player automatically skips casting.',
+          '秒选择购物、主技能和允许的额外技能。必须选择主招；只有购物后仍眩晕才可跳过。确认后不可更改，双方锁定或超时后共同揭示；未锁定的一方自动跳过出招。',
+          'seconds to choose purchases, a main skill and any permitted extra skill. A main skill is required unless you remain stunned after shopping. Confirming locks your plan. Plans are revealed when both lock or time expires; an unlocked player automatically skips casting.',
         )}
       </p>
       <p>

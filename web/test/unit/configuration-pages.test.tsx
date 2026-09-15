@@ -780,6 +780,7 @@ describe('admin per-user limit explanations', () => {
 });
 
 const initialGameConfig: GamesConfig = {
+  bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -894,6 +895,7 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
     };
     const previous = state;
     state = {
+      bidding: structuredClone(previous.bidding), likes: structuredClone(previous.likes),
       revision: String(BigInt(state.revision) + 1n),
       master_enabled: mutable.master_enabled,
       fishing: structuredClone(mutable.fishing),
@@ -975,6 +977,8 @@ describe('standalone Admin Games feature', () => {
     expect(server.patches[0]).toEqual({
       expected_revision: '7',
       master_enabled: true,
+      bidding: initialGameConfig.bidding,
+      likes: initialGameConfig.likes,
       fishing: {
         ...initialGameConfig.fishing,
         bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '3' },
@@ -1523,3 +1527,4 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toBe('9007199254740991');
   });
 });
+import { duelConfigFixture } from '../duelConfigFixture';

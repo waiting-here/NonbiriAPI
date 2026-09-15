@@ -6,6 +6,8 @@ const heroSources = {
   fishing: fishingHero,
   linklink: linkLinkHero,
   rps: rpsHero,
+  bidding: linkLinkHero,
+  likes: rpsHero,
 } as const;
 
 export type GameHeroKind = keyof typeof heroSources;
