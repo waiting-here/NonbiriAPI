@@ -80,6 +80,7 @@ CREATE TABLE game_duel_sessions (
 CREATE INDEX idx_duel_sessions_due ON game_duel_sessions(game_key,state,phase_deadline,id);
 CREATE INDEX idx_duel_sessions_terminal ON game_duel_sessions(game_key,state,terminal_at,id);
 CREATE INDEX idx_duel_sessions_expiry ON game_duel_sessions(game_key,state,delete_at,id);
+CREATE INDEX idx_credit_duel_terminal ON credit_operations(substr(source_id,1,4),ledger_seq) WHERE kind='duel_terminal' AND source_type='duel_session';
 CREATE TABLE game_duel_seats (
  session_id TEXT NOT NULL REFERENCES game_duel_sessions(id) ON DELETE RESTRICT,
  seat_no INTEGER NOT NULL CHECK(seat_no IN (0,1)),
@@ -118,6 +119,7 @@ CREATE TABLE game_duel_anonymous (
  FOREIGN KEY(game_key,content_hash) REFERENCES game_duel_catalogs(game_key,content_hash) ON DELETE RESTRICT
 ) STRICT;
 CREATE INDEX idx_duel_anonymous_export ON game_duel_anonymous(game_key,mode,export_seq);
+CREATE INDEX idx_duel_anonymous_archive ON game_duel_anonymous(game_key,archive_id);
 CREATE TABLE game_duel_anonymous_rounds (
  archive_id TEXT NOT NULL REFERENCES game_duel_anonymous(archive_id) ON DELETE CASCADE,
  round_no INTEGER NOT NULL CHECK(round_no BETWEEN 1 AND 75),

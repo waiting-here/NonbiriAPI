@@ -21,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -40,19 +41,21 @@ type Publisher interface {
 	Publish(context.Context, activities.PublishFacts) error
 }
 type Options struct {
-	Database       *sql.DB
-	Descriptor     game.ModuleDescriptor
-	Rules          Rules
-	Finance        finance.Duel
-	UserAuthorizer resources.FinalTxAuthorizer
-	Continuation   ContinuationAuthorizer
-	Limiter        *game.StartLimiter
-	Pools          PoolRepository
-	Publisher      Publisher
-	Keys           KeyDeriver
-	Now            func() time.Time
-	GenerateID     func(string) (string, error)
-	ReportError    func(error)
+	Database        *sql.DB
+	Descriptor      game.ModuleDescriptor
+	Rules           Rules
+	Finance         finance.Duel
+	UserAuthorizer  resources.FinalTxAuthorizer
+	AdminAuthorizer host.AdminAuthorizer
+	AdminAudit      func(AdminAudit)
+	Continuation    ContinuationAuthorizer
+	Limiter         *game.StartLimiter
+	Pools           PoolRepository
+	Publisher       Publisher
+	Keys            KeyDeriver
+	Now             func() time.Time
+	GenerateID      func(string) (string, error)
+	ReportError     func(error)
 }
 type Service struct {
 	database                    *sql.DB
@@ -60,6 +63,10 @@ type Service struct {
 	rules                       Rules
 	finance                     finance.Duel
 	authorizer                  resources.FinalTxAuthorizer
+	adminAuthorizer             host.AdminAuthorizer
+	adminAudit                  func(AdminAudit)
+	exportMu                    sync.Mutex
+	exporting                   map[int64]bool
 	continuation                ContinuationAuthorizer
 	limiter                     *game.StartLimiter
 	pools                       PoolRepository
@@ -82,6 +89,7 @@ func New(o Options) (*Service, error) {
 		return nil, ErrInvariant
 	}
 	s := &Service{database: o.Database, descriptor: o.Descriptor, rules: o.Rules, finance: o.Finance, authorizer: o.UserAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, actions: map[int64][]time.Time{}}
+	s.adminAuthorizer, s.adminAudit, s.exporting = o.AdminAuthorizer, o.AdminAudit, map[int64]bool{}
 	switch s.rules.ID() {
 	case "bidding":
 		s.queuePrefix = "bidq_"

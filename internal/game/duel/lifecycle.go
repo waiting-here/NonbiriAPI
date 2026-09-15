@@ -176,7 +176,11 @@ func (s *Service) anonymousHeader(v sessionRecord) (anonymousHeader, error) {
 	if err != nil {
 		return anonymousHeader{}, err
 	}
-	return anonymousHeader{Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Initial: initial, Final: final, TerminalActions: v.Payload.TerminalActions, RoundStartEvents: v.Payload.RoundStartEvents, Outcome: v.Outcome, Reason: v.Reason, Winner: v.Winner, Scores: v.Scores, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, Prize: game.FormatAmount(v.Prize), Cuts: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}}, nil
+	outcome := v.Outcome
+	if outcome == "decided" {
+		outcome = "normal"
+	}
+	return anonymousHeader{Game: s.rules.ID(), Mode: v.Mode, RulesVersion: 1, ContentHash: v.Terms.ContentHash, Initial: initial, Final: final, TerminalActions: v.Payload.TerminalActions, RoundStartEvents: v.Payload.RoundStartEvents, Outcome: outcome, Reason: v.Reason, Winner: v.Winner, Scores: v.Scores, Ticket: v.Terms.Ticket, Rake: v.Terms.Rake, Prize: game.FormatAmount(v.Prize), Cuts: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}}, nil
 }
 func (s *Service) anonymize(ctx context.Context, tx *sql.Tx, v sessionRecord) error {
 	if v.State != "terminal" {
