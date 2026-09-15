@@ -267,8 +267,8 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		byKey[entry.Key] = entry
 	}
 	registryKeys := builtinconfig.SiteConfigKeys()
-	if len(registryKeys) != 48 {
-		t.Fatalf("game registry keys=%d, want 48", len(registryKeys))
+	if len(registryKeys) != 83 {
+		t.Fatalf("game registry keys=%d, want 83", len(registryKeys))
 	}
 	for _, key := range registryKeys {
 		entry, ok := byKey[key]
@@ -366,7 +366,7 @@ func TestSiteConfigCatalogSemanticsMatchTypedValidatorsForEveryKnownKey(t *testi
 			zeroAccepted := zeroErr.Code == ""
 			wantZero := spec.kind == kindBool || spec.kind == kindTimezoneOffset ||
 				(spec.kind == kindInt && spec.min == 0) ||
-				(spec.kind == kindAmount && !isFishingBaitPriceKey(key))
+				(spec.kind == kindAmount && !isFishingBaitPriceKey(key) && !isDuelTicketKey(key) && !isBlackjackAmountKey(key))
 			if zeroAccepted != wantZero {
 				t.Fatalf("zero validator accepted=%v, want %v; entry=%+v", zeroAccepted, wantZero, entry)
 			}

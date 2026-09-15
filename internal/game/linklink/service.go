@@ -64,6 +64,7 @@ type Service struct {
 	continuation   ContinuationAuthorizer
 	limiter        *game.StartLimiter
 	random         IntSource
+	proofs         bool
 	now            func() time.Time
 	generateID     func(string) (string, error)
 	healthEpoch    int64
@@ -94,6 +95,7 @@ func New(options Options) (*Service, error) {
 	if options.GenerateID == nil {
 		options.GenerateID = db.GenerateOpaqueID
 	}
+	proofs := options.Random == nil
 	if options.Random == nil {
 		options.Random = CryptoSource{}
 	}
@@ -116,7 +118,7 @@ func New(options Options) (*Service, error) {
 	return &Service{
 		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		continuation: options.Continuation, limiter: options.Limiter,
-		random: options.Random, now: options.Now, generateID: options.GenerateID,
+		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,
 		healthEpoch: options.HealthEpoch, workerInterval: options.WorkerInterval,
 		leases: make(map[leaseBindingKey]leaseBinding),
 	}, nil

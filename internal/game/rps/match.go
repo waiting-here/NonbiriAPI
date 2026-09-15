@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
@@ -348,9 +349,25 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 			return nil, activities.PublishFacts{}, ErrConflict
 		}
 	}
+	sessionID, err := service.generate("rps_")
+	if err != nil {
+		return nil, activities.PublishFacts{}, err
+	}
+	source := service.random
+	var proof *randomness.Secret
+	if service.proofs {
+		proof, err = randomness.New("rps", sessionID, strconv.Itoa(selected[0].RulesVersion)+"/"+mode, nil)
+		if err != nil {
+			return nil, activities.PublishFacts{}, err
+		}
+		source, err = proof.Stream("seats-and-dealer")
+		if err != nil {
+			return nil, activities.PublishFacts{}, err
+		}
+	}
 	service.randomMu.Lock()
-	order, err := randomSeatOrder(service.random)
-	dealer, dealerErr := randomIndex(service.random, 3)
+	order, err := randomSeatOrder(source)
+	dealer, dealerErr := randomIndex(source, 3)
 	service.randomMu.Unlock()
 	if err != nil || dealerErr != nil {
 		return nil, activities.PublishFacts{}, ErrServiceUnavailable
@@ -369,10 +386,6 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 		}
 		queuesBySeat[seat], identities[seat] = queue, identity
 		users = append(users, queue.UserID)
-	}
-	sessionID, err := service.generate("rps_")
-	if err != nil {
-		return nil, activities.PublishFacts{}, err
 	}
 	operationID, err := service.generate("op_")
 	if err != nil {
@@ -446,7 +459,10 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	}
 	if err := service.finance.SessionStart(ctx, tx, finance.SessionStart{Meta: ledger.Meta{OperationID: operationID, CreatedAt: now}, SessionID: sessionID, FutureRows: futureRows, Queues: planInputs}, func(ctx context.Context, tx *sql.Tx, accountID int64) error {
 		record.AccountID = accountID
-		return service.insertStartedSessionTx(ctx, tx, &record, queuesBySeat)
+		if err := service.insertStartedSessionTx(ctx, tx, &record, queuesBySeat); err != nil {
+			return err
+		}
+		return randomness.Insert(ctx, tx, proof)
 	}); err != nil {
 		return nil, activities.PublishFacts{}, fmt.Errorf("session start ledger: %w", mapLedger(err))
 	}

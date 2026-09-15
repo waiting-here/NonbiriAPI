@@ -965,6 +965,16 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 			}
 			until = now + *duration
 		}
+		if service.cancelUserDuelsTx != nil {
+			finalize, err := service.cancelUserDuelsTx(ctx, tx, userID, "account_unavailable", now)
+			if err != nil {
+				return MutationResult[struct{}]{}, classifyDatabaseError("cancel user games", err)
+			}
+			if finalize == nil {
+				return MutationResult[struct{}]{}, ErrInvariant
+			}
+			defer func() { finalize(done) }()
+		}
 		result, err = tx.ExecContext(ctx, `
 UPDATE users SET is_banned=1,banned_reason=?,banned_until=?,auto_banned=0,revision=?,updated_at=?
 WHERE id=? AND is_admin=0 AND revision=?`, reason, until, db.EncodeU128(next), now, userID, row.revision)

@@ -196,17 +196,32 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 		return nil
 	}
 
-	queries := []struct {
+	type reservationQuery struct {
 		domain string
 		query  string
 		kind   reservationKind
-	}{
+	}
+	queries := []reservationQuery{
 		{"logical_request", `SELECT id,ledger_rows_remaining FROM logical_requests ORDER BY id`, reservationLogicalRequest},
 		{"fishing_batch", `SELECT id,ledger_rows_remaining FROM game_fishing_batches ORDER BY id`, reservationFishingBatch},
 		{"thursday_period", `SELECT id,ledger_rows_remaining FROM thursday_periods ORDER BY id`, reservationThursdayPeriod},
 		{"rps_queue", `SELECT id,ledger_rows_remaining FROM game_rps_queue ORDER BY id`, reservationRPSQueue},
 		{"rps_session", `SELECT id,ledger_rows_remaining FROM game_rps_sessions ORDER BY id`, reservationRPSSession},
 		{"game_onboarding", `SELECT id,ledger_rows_remaining FROM game_onboarding_holds ORDER BY id`, reservationGameOnboarding},
+	}
+	present, err := db.DuelStoragePresent(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if present {
+		queries = append(queries, reservationQuery{"duel_queue", `SELECT id,ledger_rows_remaining FROM game_duel_queue ORDER BY id`, reservationDuelQueue}, reservationQuery{"duel_session", `SELECT id,ledger_rows_remaining FROM game_duel_sessions ORDER BY id`, reservationDuelSession})
+	}
+	blackjackPresent, err := db.BlackjackStoragePresent(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if blackjackPresent {
+		queries = append(queries, reservationQuery{"blackjack_payment", `SELECT id,ledger_rows_remaining FROM game_blackjack_payments ORDER BY id`, reservationBlackjackPayment})
 	}
 	for _, item := range queries {
 		rows, err := tx.QueryContext(ctx, item.query)

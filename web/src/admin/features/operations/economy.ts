@@ -1,12 +1,22 @@
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
+import { blackjackConfig, type BlackjackConfig } from '@shared/games/blackjack';
+import { normalizeDuelConfig, type DuelGameConfig } from '../games/config';
 import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
 import {
   amount, array, boolean, decimal, integer, invalidResponse, nullableString, nullableUnixSecond,
   oneOf, opaqueID, page, record, string, unixSecond, type CursorPage,
 } from '@shared/operations/wire';
 
-interface ActivityPumps { platform: number; welfare: number; next_pool: number }
-interface GamePumps { platform: number; welfare: number; thursday: number }
+interface ActivityPumps {
+  platform: number;
+  welfare: number;
+  next_pool: number;
+}
+interface GamePumps {
+  platform: number;
+  welfare: number;
+  thursday: number;
+}
 function normalizeActivityPumps(value: unknown): ActivityPumps {
   const root = record(value, ['platform', 'welfare', 'next_pool'], 'pool split');
   const result = {
@@ -115,46 +125,121 @@ interface RPSModeConfig {
   gesture_seconds: number; dealer_seconds: number; follower_seconds: number; queue_capacity: number;
 }
 interface GamesConfig {
-  revision: string; master_enabled: boolean;
-  fishing: { rake_bp: GamePumps; enabled: boolean; bait_prices: { worm: string; lure: string; premium: string }; rtp_percent: { standard: number; premium: number }; treasure_multipliers: { bottle: number; clover: number; shell: number } };
-  linklink: { enabled: boolean; specs: Record<'6x8' | '8x8' | '10x10', { enabled: boolean; price: string }> };
+  revision: string;
+  master_enabled: boolean;
+  fishing: {
+    rake_bp: GamePumps;
+    enabled: boolean;
+    bait_prices: { worm: string; lure: string; premium: string };
+    rtp_percent: { standard: number; premium: number };
+    treasure_multipliers: { bottle: number; clover: number; shell: number };
+  };
+  linklink: {
+    enabled: boolean;
+    specs: Record<'6x8' | '8x8' | '10x10', { enabled: boolean; price: string }>;
+  };
   rps: { enabled: boolean; modes: Record<'quick' | 'standard' | 'deathmatch', RPSModeConfig> };
+  bidding: DuelGameConfig;
+  likes: DuelGameConfig;
+  blackjack: BlackjackConfig;
 }
 
 function normalizeRPSMode(value: unknown, label: string): RPSModeConfig {
-  const root = record(value, ['enabled', 'base', 'pumps_bp', 'queue_seconds', 'gesture_seconds', 'dealer_seconds', 'follower_seconds', 'queue_capacity'], label);
+  const root = record(
+    value,
+    [
+      'enabled',
+      'base',
+      'pumps_bp',
+      'queue_seconds',
+      'gesture_seconds',
+      'dealer_seconds',
+      'follower_seconds',
+      'queue_capacity',
+    ],
+    label,
+  );
   return {
-    enabled: boolean(root.enabled, `${label} switch`), base: amount(root.base, `${label} base`, false), pumps_bp: normalizeGamePumps(root.pumps_bp),
-    queue_seconds: integer(root.queue_seconds, `${label} queue seconds`, 30, 120), gesture_seconds: integer(root.gesture_seconds, `${label} gesture seconds`, 5, 20),
-    dealer_seconds: integer(root.dealer_seconds, `${label} dealer seconds`, 5, 15), follower_seconds: integer(root.follower_seconds, `${label} follower seconds`, 5, 15),
+    enabled: boolean(root.enabled, `${label} switch`),
+    base: amount(root.base, `${label} base`, false),
+    pumps_bp: normalizeGamePumps(root.pumps_bp),
+    queue_seconds: integer(root.queue_seconds, `${label} queue seconds`, 30, 120),
+    gesture_seconds: integer(root.gesture_seconds, `${label} gesture seconds`, 5, 20),
+    dealer_seconds: integer(root.dealer_seconds, `${label} dealer seconds`, 5, 15),
+    follower_seconds: integer(root.follower_seconds, `${label} follower seconds`, 5, 15),
     queue_capacity: integer(root.queue_capacity, `${label} queue capacity`, 1, 4_096),
   };
 }
 
 export function normalizeGamesConfig(value: unknown): GamesConfig {
-  const root = record(value, ['revision', 'master_enabled', 'fishing', 'linklink', 'rps'], 'games configuration');
-  const fishing = record(root.fishing, ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers', 'rake_bp'], 'Fishing configuration');
+  const root = record(
+    value,
+    ['revision', 'master_enabled', 'fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'],
+    'games configuration',
+  );
+  const fishing = record(
+    root.fishing,
+    ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers', 'rake_bp'],
+    'Fishing configuration',
+  );
   const bait = record(fishing.bait_prices, ['worm', 'lure', 'premium'], 'Fishing bait prices');
   const rtp = record(fishing.rtp_percent, ['standard', 'premium'], 'Fishing RTP');
-  const treasure = record(fishing.treasure_multipliers, ['bottle', 'clover', 'shell'], 'Fishing treasure multipliers');
+  const treasure = record(
+    fishing.treasure_multipliers,
+    ['bottle', 'clover', 'shell'],
+    'Fishing treasure multipliers',
+  );
   const linklink = record(root.linklink, ['enabled', 'specs'], 'LinkLink configuration');
   const specs = record(linklink.specs, ['6x8', '8x8', '10x10'], 'LinkLink specifications');
   const normalizeSpec = (name: '6x8' | '8x8' | '10x10') => {
     const spec = record(specs[name], ['enabled', 'price'], `LinkLink ${name}`);
-    return { enabled: boolean(spec.enabled, `LinkLink ${name} switch`), price: amount(spec.price, `LinkLink ${name} price`, false) };
+    return {
+      enabled: boolean(spec.enabled, `LinkLink ${name} switch`),
+      price: amount(spec.price, `LinkLink ${name} price`, false),
+    };
   };
   const rps = record(root.rps, ['enabled', 'modes'], 'RPS configuration');
   const modes = record(rps.modes, ['quick', 'standard', 'deathmatch'], 'RPS modes');
   return {
-    revision: decimal(root.revision, 'games configuration revision', { positive: true }), master_enabled: boolean(root.master_enabled, 'games master switch'),
+    revision: decimal(root.revision, 'games configuration revision', { positive: true }),
+    master_enabled: boolean(root.master_enabled, 'games master switch'),
+    bidding: normalizeDuelConfig(root.bidding, 'bidding'),
+    blackjack: blackjackConfig(root.blackjack),
+    likes: normalizeDuelConfig(root.likes, 'likes'),
     fishing: {
-      enabled: boolean(fishing.enabled, 'Fishing switch'), rake_bp: normalizeGamePumps(fishing.rake_bp),
-      bait_prices: { worm: amount(bait.worm, 'worm price', false), lure: amount(bait.lure, 'lure price', false), premium: amount(bait.premium, 'premium price', false) },
-      rtp_percent: { standard: integer(rtp.standard, 'standard RTP', 0, 100), premium: integer(rtp.premium, 'premium RTP', 0, 100) },
-      treasure_multipliers: { bottle: integer(treasure.bottle, 'bottle multiplier', 0, 1_000_000), clover: integer(treasure.clover, 'clover multiplier', 0, 1_000_000), shell: integer(treasure.shell, 'shell multiplier', 0, 1_000_000) },
+      enabled: boolean(fishing.enabled, 'Fishing switch'),
+      rake_bp: normalizeGamePumps(fishing.rake_bp),
+      bait_prices: {
+        worm: amount(bait.worm, 'worm price', false),
+        lure: amount(bait.lure, 'lure price', false),
+        premium: amount(bait.premium, 'premium price', false),
+      },
+      rtp_percent: {
+        standard: integer(rtp.standard, 'standard RTP', 0, 100),
+        premium: integer(rtp.premium, 'premium RTP', 0, 100),
+      },
+      treasure_multipliers: {
+        bottle: integer(treasure.bottle, 'bottle multiplier', 0, 1_000_000),
+        clover: integer(treasure.clover, 'clover multiplier', 0, 1_000_000),
+        shell: integer(treasure.shell, 'shell multiplier', 0, 1_000_000),
+      },
     },
-    linklink: { enabled: boolean(linklink.enabled, 'LinkLink switch'), specs: { '6x8': normalizeSpec('6x8'), '8x8': normalizeSpec('8x8'), '10x10': normalizeSpec('10x10') } },
-    rps: { enabled: boolean(rps.enabled, 'RPS switch'), modes: { quick: normalizeRPSMode(modes.quick, 'quick RPS'), standard: normalizeRPSMode(modes.standard, 'standard RPS'), deathmatch: normalizeRPSMode(modes.deathmatch, 'deathmatch RPS') } },
+    linklink: {
+      enabled: boolean(linklink.enabled, 'LinkLink switch'),
+      specs: {
+        '6x8': normalizeSpec('6x8'),
+        '8x8': normalizeSpec('8x8'),
+        '10x10': normalizeSpec('10x10'),
+      },
+    },
+    rps: {
+      enabled: boolean(rps.enabled, 'RPS switch'),
+      modes: {
+        quick: normalizeRPSMode(modes.quick, 'quick RPS'),
+        standard: normalizeRPSMode(modes.standard, 'standard RPS'),
+        deathmatch: normalizeRPSMode(modes.deathmatch, 'deathmatch RPS'),
+      },
+    },
   };
 }
 
@@ -173,6 +258,7 @@ export function gamesConfigPatch(input: GamesConfig): Record<string, unknown> {
     master_enabled: input.master_enabled,
     fishing: input.fishing,
     linklink: input.linklink,
+    bidding: input.bidding, likes: input.likes, blackjack: input.blackjack,
     rps: {
       enabled: input.rps.enabled,
       modes: {
@@ -190,8 +276,14 @@ export function thursdayMutationRevision(config: ActivitiesConfig | undefined, p
 }
 
 export interface ActiveCounts {
-  games: { game: 'fishing' | 'linklink' | 'rps'; mode: string | null; spec: string | null; phase: string | null; count: string }[];
-  queues: { mode: 'quick' | 'standard' | 'deathmatch'; count: string }[];
+  games: {
+    game: 'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes' | 'blackjack';
+    mode: string | null;
+    spec: string | null;
+    phase: string | null;
+    count: string;
+  }[];
+  queues: { game: 'rps' | 'bidding' | 'likes' | 'blackjack'; mode: string; count: string }[];
 }
 export function normalizeActiveCounts(value: unknown): ActiveCounts {
   const root = record(value, ['games', 'queues'], 'active game counts');
@@ -199,16 +291,46 @@ export function normalizeActiveCounts(value: unknown): ActiveCounts {
     games: array(root.games, 'active game rows', 256).map((entry) => {
       const row = record(entry, ['game', 'mode', 'spec', 'phase', 'count'], 'active game row');
       return {
-        game: oneOf(row.game, ['fishing', 'linklink', 'rps'] as const, 'active game'),
-        mode: nullableString(row.mode, 'active game mode', { min: 1, max: 64, bytes: 64, ascii: true }),
-        spec: nullableString(row.spec, 'active game specification', { min: 1, max: 64, bytes: 64, ascii: true }),
-        phase: nullableString(row.phase, 'active game phase', { min: 1, max: 64, bytes: 64, ascii: true }),
+        game: oneOf(
+          row.game,
+          ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const,
+          'active game',
+        ),
+        mode: nullableString(row.mode, 'active game mode', {
+          min: 1,
+          max: 64,
+          bytes: 64,
+          ascii: true,
+        }),
+        spec: nullableString(row.spec, 'active game specification', {
+          min: 1,
+          max: 64,
+          bytes: 64,
+          ascii: true,
+        }),
+        phase: nullableString(row.phase, 'active game phase', {
+          min: 1,
+          max: 64,
+          bytes: 64,
+          ascii: true,
+        }),
         count: decimal(row.count, 'active game count'),
       };
     }),
-    queues: array(root.queues, 'game queue counts', 3).map((entry) => {
-      const row = record(entry, ['mode', 'count'], 'game queue count');
-      return { mode: oneOf(row.mode, ['quick', 'standard', 'deathmatch'] as const, 'queue mode'), count: decimal(row.count, 'queue count') };
+    queues: array(root.queues, 'game queue counts', 9).map((entry) => {
+      const row = record(entry, ['game', 'mode', 'count'], 'game queue count');
+      const game = oneOf(row.game, ['rps', 'bidding', 'likes', 'blackjack'], 'queue game');
+      const modes =
+        game === 'blackjack' ? ['table'] : game === 'bidding'
+          ? ['tier1', 'tier2', 'tier3']
+          : game === 'likes'
+            ? ['quick', 'standard']
+            : ['quick', 'standard', 'deathmatch'];
+      return {
+        game,
+        mode: oneOf(row.mode, modes, 'queue mode'),
+        count: decimal(row.count, 'queue count'),
+      };
     }),
   };
 }
@@ -229,8 +351,18 @@ export const getAdminThursday = () => decoded('/admin/api/activities/thursday', 
 export const getPools = (type: string, state: string, cursor: string | null): Promise<CursorPage<Pool>> => decoded(queryPath('/admin/api/pools', { pool_type: type || undefined, state: state || undefined, cursor, limit: 50 }), (value) => page(value, 'shared pool page', normalizePool));
 export const patchActivitiesConfig = (body: unknown, key: string) => decoded('/admin/api/activities/config', normalizeActivitiesConfig, idempotentOptions(key, { method: 'PATCH', json: body }));
 export const putThursdayNext = (body: unknown, key: string) => decoded('/admin/api/activities/thursday/next', normalizePeriod, idempotentOptions(key, { method: 'PUT', json: body }));
-export const resumeThursday = (id: string, revision: string, key: string) => decoded(`/admin/api/activities/thursday/${encodeURIComponent(opaqueID(id, 'thu_', 'Thursday period id'))}/resume`, normalizePeriod, idempotentOptions(key, { method: 'POST', json: { expected_revision: revision } }));
-export const adjustPool = (id: string, body: unknown, key: string) => decoded(`/admin/api/pools/${encodeURIComponent(opaqueID(id, 'pol_', 'pool id'))}/adjustments`, normalizePool, idempotentOptions(key, { method: 'POST', json: body }));
+export const resumeThursday = (id: string, revision: string, key: string) =>
+  decoded(
+    `/admin/api/activities/thursday/${encodeURIComponent(opaqueID(id, 'thu_', 'Thursday period id'))}/resume`,
+    normalizePeriod,
+    idempotentOptions(key, { method: 'POST', json: { expected_revision: revision } }),
+  );
+export const adjustPool = (id: string, body: unknown, key: string) =>
+  decoded(
+    `/admin/api/pools/${encodeURIComponent(opaqueID(id, 'pol_', 'pool id'))}/adjustments`,
+    normalizePool,
+    idempotentOptions(key, { method: 'POST', json: body }),
+  );
 export const getGamesConfig = () => decoded('/admin/api/games/config', normalizeGamesConfig);
 export const getActiveCounts = () => decoded('/admin/api/games/active-counts', normalizeActiveCounts);
 export const patchGamesConfig = (body: unknown, key: string) => decoded('/admin/api/games/config', normalizeGamesConfig, idempotentOptions(key, { method: 'PATCH', json: body }));

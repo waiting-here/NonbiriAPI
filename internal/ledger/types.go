@@ -48,19 +48,29 @@ const (
 	KindRPSRoundCut          Kind = "rps_round_cut"
 	KindRPSTerminal          Kind = "rps_terminal"
 	KindGameOnboardingReward Kind = "game_onboarding_reward"
+	KindDuelQueueReserve     Kind = "duel_queue_reserve"
+	KindDuelQueueRelease     Kind = "duel_queue_release"
+	KindDuelSessionStart     Kind = "duel_session_start"
+	KindDuelTerminal         Kind = "duel_terminal"
+	KindBlackjackReserve     Kind = "blackjack_reserve"
+	KindBlackjackSettle      Kind = "blackjack_settle"
+	KindBlackjackRelease     Kind = "blackjack_release"
 )
 
 type sourceType string
 
 const (
-	sourceOperation       sourceType = "operation"
-	sourceLogicalRequest  sourceType = "logical_request"
-	sourceDispatchClaim   sourceType = "dispatch_claim"
-	sourcePeriod          sourceType = "period"
-	sourceFishingBatch    sourceType = "fishing_batch"
-	sourceLinkLinkSession sourceType = "linklink_session"
-	sourceRPSQueue        sourceType = "rps_queue"
-	sourceRPSSession      sourceType = "rps_session"
+	sourceOperation        sourceType = "operation"
+	sourceLogicalRequest   sourceType = "logical_request"
+	sourceDispatchClaim    sourceType = "dispatch_claim"
+	sourcePeriod           sourceType = "period"
+	sourceFishingBatch     sourceType = "fishing_batch"
+	sourceLinkLinkSession  sourceType = "linklink_session"
+	sourceRPSQueue         sourceType = "rps_queue"
+	sourceRPSSession       sourceType = "rps_session"
+	sourceDuelQueue        sourceType = "duel_queue"
+	sourceDuelSession      sourceType = "duel_session"
+	sourceBlackjackPayment sourceType = "blackjack_payment"
 )
 
 // Asset identifies one independently conserved credit balance.
@@ -151,6 +161,9 @@ const (
 	reservationRPSQueue
 	reservationRPSSession
 	reservationGameOnboarding
+	reservationDuelQueue
+	reservationDuelSession
+	reservationBlackjackPayment
 )
 
 // ReservationRef is an unforgeable reference to one frozen domain remaining
@@ -167,6 +180,10 @@ func LogicalRequestReservation(id string) (ReservationRef, error) {
 
 func FishingReservation(id string) (ReservationRef, error) {
 	return opaqueReservation(reservationFishingBatch, id, "fb_")
+}
+
+func BlackjackReservation(id string) (ReservationRef, error) {
+	return opaqueReservation(reservationBlackjackPayment, id, "bjp_")
 }
 
 func ThursdayPeriodReservation(id string) (ReservationRef, error) {
@@ -186,6 +203,39 @@ func RPSQueueReservation(id string) (ReservationRef, error) {
 
 func RPSSessionReservation(id string) (ReservationRef, error) {
 	return opaqueReservation(reservationRPSSession, id, "rps_")
+}
+
+func DuelQueueReservation(id string) (ReservationRef, error) {
+	if duelIDGame(id, true) == "" {
+		return ReservationRef{}, ErrInvalidReservation
+	}
+	return ReservationRef{kind: reservationDuelQueue, id: id}, nil
+}
+
+func DuelSessionReservation(id string) (ReservationRef, error) {
+	if duelIDGame(id, false) == "" {
+		return ReservationRef{}, ErrInvalidReservation
+	}
+	return ReservationRef{kind: reservationDuelSession, id: id}, nil
+}
+
+func duelIDGame(id string, queue bool) string {
+	if queue {
+		if db.ValidateOpaqueID(id, "bidq_") {
+			return "bidding"
+		}
+		if db.ValidateOpaqueID(id, "likq_") {
+			return "likes"
+		}
+	} else {
+		if db.ValidateOpaqueID(id, "bid_") {
+			return "bidding"
+		}
+		if db.ValidateOpaqueID(id, "lik_") {
+			return "likes"
+		}
+	}
+	return ""
 }
 
 // GameOnboardingHold reserves the single future reward operation.

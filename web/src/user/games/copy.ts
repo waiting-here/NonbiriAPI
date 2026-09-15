@@ -56,8 +56,8 @@ const copy = {
   'center.eyebrow': ['Game lounge', '游戏小馆'],
   'center.title': ['Choose your pace', '挑一种轻松节奏'],
   'center.description': [
-    'Unwind with fishing, tile matching, or a round of rock-paper-scissors.',
-    '垂钓、连连看、三人猜拳，换种方式放松一下。',
+    'Relax by the pond, clear a board, or challenge another player.',
+    '池塘小憩、消除棋盘，或与其他玩家一决高下。',
   ],
   'center.fishing.title': ['Pond fishing', '池塘垂钓'],
   'center.fishing.body': [
@@ -70,6 +70,12 @@ const copy = {
     '在时间结束前消除棋盘，离开后也可继续。',
   ],
   'center.rps.title': ['Three-player RPS', '三人猜拳'],
+  'center.bidding.title': ['Bidding Duel', '竞标对决'],
+  'center.bidding.body': ['Plan your bids across thirteen simultaneous rounds.', '十三轮共同暗选，安排每张牌的出场时机。'],
+  'center.likes.title': ['Like Battle', '点赞大战'],
+  'center.blackjack.title': ['Blackjack', '二十一点'],
+  'center.blackjack.body': ['One table, eight seats and a new hand every minute.', '单桌八席，每分钟新一局。与同桌一起向庄家挑战。'],
+  'center.likes.body': ['Build your loadout and race for likes on shared power.', '搭配角色与技能，在共享电池下争取得赞。'],
   'center.rps.body': [
     'Take a seat, read your opponents, and reveal your next move.',
     '三人同桌，揣摩对手，亮出你的下一手。',

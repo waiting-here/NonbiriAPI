@@ -30,6 +30,18 @@ type Fishing interface {
 	Settle(context.Context, *sql.Tx, FishingSettlement, Mutation) error
 	Release(context.Context, *sql.Tx, Entry, Mutation) error
 }
+
+type BlackjackAccountMutation func(context.Context, *sql.Tx, ledger.AccountPair) error
+type BlackjackSettlement struct {
+	Entry
+	Net, Platform, Welfare, Thursday    ledger.Amount
+	WelfareAccountID, ThursdayAccountID int64
+}
+type Blackjack interface {
+	Reserve(context.Context, *sql.Tx, Entry, BlackjackAccountMutation) error
+	Settle(context.Context, *sql.Tx, BlackjackSettlement, Mutation) error
+	Release(context.Context, *sql.Tx, Entry, Mutation) error
+}
 type LinkLink interface {
 	Entry(context.Context, *sql.Tx, Entry) error
 	Terminal(context.Context, *sql.Tx, string, int64, int64) error
@@ -81,4 +93,26 @@ type RPS interface {
 	SessionStart(context.Context, *sql.Tx, SessionStart, AccountMutation) error
 	RoundCut(context.Context, *sql.Tx, RoundCut, Mutation) error
 	Terminal(context.Context, *sql.Tx, Terminal, Mutation) error
+}
+
+type DuelAccountMutation func(context.Context, *sql.Tx, ledger.AccountPair) error
+type DuelTerminalMutation func(context.Context, *sql.Tx, ledger.DuelCuts) error
+type DuelStart struct {
+	Meta      ledger.Meta
+	SessionID string
+	Queues    [2]QueueInput
+}
+type DuelFinish struct {
+	Meta                                ledger.Meta
+	SessionID                           string
+	Winner                              *int
+	WelfareAccountID, ThursdayAccountID int64
+}
+
+// Duel is bound to one compiled game key by the adapter constructor.
+type Duel interface {
+	QueueReserve(context.Context, *sql.Tx, Entry, DuelAccountMutation) error
+	QueueRelease(context.Context, *sql.Tx, Entry, Mutation) error
+	SessionStart(context.Context, *sql.Tx, DuelStart, DuelAccountMutation) error
+	Terminal(context.Context, *sql.Tx, DuelFinish, DuelTerminalMutation) error
 }

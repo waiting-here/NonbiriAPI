@@ -36,7 +36,7 @@
       "inactiveValue": "无活动",
       "noActivity": "暂无活动记录",
       "noActivityBody": "暂时没有活动记录。",
-      "endpointGroupsFirstPage": "当前预览包含 {{groupCount}} 个端点组，可打开端点页查看全部。",
+      "endpointGroups": "共有 {{groupCount}} 个端点组，可打开端点页查看详情。",
       "reportsTitle": "凭据举报",
       "nonTerminalReports": "未终态总数",
       "pendingIndexing": "正在索引",
@@ -214,7 +214,6 @@
         "games": "对局",
         "mode": "模式：{{value}}",
         "phase": "阶段：{{value}}",
-        "rpsQueues": "猜拳队列",
         "spec": "规格：{{value}}",
         "title": "实时权威数量"
       },

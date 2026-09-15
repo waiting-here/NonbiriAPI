@@ -53,7 +53,7 @@ func TestHTTPRoutesUseOrdinaryStartAndContinuationOnlyForExistingFlow(t *testing
 	if err := RegisterRoutes(ordinary, continuation, fixture.service); err != nil {
 		t.Fatal(err)
 	}
-	if len(ordinary.handlers) != 2 || ordinary.handlers[http.MethodPost+" "+RouteSessions] == nil || len(continuation.handlers) != 5 {
+	if len(ordinary.handlers) != 2 || ordinary.handlers[http.MethodPost+" "+RouteSessions] == nil || len(continuation.handlers) != 6 || continuation.handlers["GET /api/games/linklink/randomness/{id}"] == nil {
 		t.Fatalf("registered ordinary=%v continuation=%v", ordinary.handlers, continuation.handlers)
 	}
 	for _, key := range []string{

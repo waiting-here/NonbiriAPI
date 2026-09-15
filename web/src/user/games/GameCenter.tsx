@@ -10,7 +10,7 @@ import { useGamesSnapshot } from './common/snapshot';
 import type { GamesSnapshot } from './common/types';
 import './games.css';
 
-type Availability = 'open' | 'partial' | 'closed' | 'maintenance';
+type Availability = 'open' | 'closed' | 'maintenance';
 
 interface CenterCard {
   readonly id: GameHeroKind;
@@ -26,6 +26,7 @@ function cardState(
   kind: GameHeroKind,
 ): { state: Availability; detail: string } {
   if (!snapshot.gamesEnabled) return { state: 'closed', detail: '' };
+  if (kind === 'blackjack') return { state: snapshot.blackjack.enabled && snapshot.blackjack.available ? 'open' : 'closed', detail: formatCredits(snapshot.blackjack.min_stake) };
   if (kind === 'fishing') {
     return {
       state: snapshot.fishing.enabled && snapshot.fishing.available ? 'open' : 'closed',
@@ -36,20 +37,20 @@ function cardState(
     const values = Object.values(snapshot.linklink.specs);
     const count = snapshot.linklink.enabled ? values.filter((spec) => spec.enabled).length : 0;
     return {
-      state: count === 3 ? 'open' : count > 0 ? 'partial' : 'closed',
+      state: count > 0 ? 'open' : 'closed',
       detail: String(count),
     };
   }
-  const modes = Object.values(snapshot.rps.modes);
-  const count = snapshot.rps.enabled ? modes.filter((mode) => mode.enabled).length : 0;
-  return { state: count === 3 ? 'open' : count > 0 ? 'partial' : 'closed', detail: String(count) };
+  const modes = Object.values(snapshot[kind].modes);
+  const count = snapshot[kind].enabled ? modes.filter((mode) => mode.enabled).length : 0;
+  return { state: count > 0 ? 'open' : 'closed', detail: String(count) };
 }
 
 function GameCard({ card }: { card: CenterCard }) {
   const { text } = useGameCopy();
   const stateLabel = text(`common.${card.state}` as GameCopyKey);
   const detail =
-    card.id === 'fishing'
+    card.id === 'fishing' || card.id === 'blackjack'
       ? text('center.from', { amount: card.detail })
       : card.id === 'linklink'
         ? text('center.specs', { count: card.detail })
@@ -93,7 +94,7 @@ export function GameCenter() {
   if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
   if (snapshot.error && !maintenance)
     return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
-  const cards: CenterCard[] = (['fishing', 'linklink', 'rps'] as const).map((id) => {
+  const cards: CenterCard[] = (['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const).map((id) => {
     const availability =
       maintenance || !snapshot.data
         ? { state: 'maintenance' as const, detail: '' }

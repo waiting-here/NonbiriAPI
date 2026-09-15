@@ -151,10 +151,11 @@ func (service *Service) ActiveCounts(ctx context.Context) (game.ActiveCounts, er
 				return game.ActiveCounts{}, ErrInvariant
 			}
 		}
-		for _, item := range fragment.Queues {
-			if descriptor.ResolveMode(item.Mode) != nil || !validCount(item.Count) {
+		for index, item := range fragment.Queues {
+			if item.Game != "" && item.Game != descriptor.ID || descriptor.ResolveMode(item.Mode) != nil || !validCount(item.Count) {
 				return game.ActiveCounts{}, ErrInvariant
 			}
+			fragment.Queues[index].Game = descriptor.ID
 		}
 		result.Games = append(result.Games, fragment.Games...)
 		result.Queues = append(result.Queues, fragment.Queues...)

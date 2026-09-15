@@ -79,21 +79,33 @@ func ExternalSettlementDestination(accountID int64) (SettlementDestination, erro
 	return SettlementDestination{role: externalRole(accountID)}, nil
 }
 
+func validSourceID(typ sourceType, sourceID string) bool {
+	prefix := map[sourceType]string{
+		sourceOperation:        "op_",
+		sourceLogicalRequest:   "req_",
+		sourceDispatchClaim:    "clm_",
+		sourcePeriod:           "thu_",
+		sourceFishingBatch:     "fb_",
+		sourceLinkLinkSession:  "ll_",
+		sourceRPSQueue:         "rpsq_",
+		sourceRPSSession:       "rps_",
+		sourceBlackjackPayment: "bjp_",
+	}[typ]
+	validID := prefix != "" && db.ValidateOpaqueID(sourceID, prefix)
+	if typ == sourceDuelQueue {
+		validID = duelIDGame(sourceID, true) != ""
+	}
+	if typ == sourceDuelSession {
+		validID = duelIDGame(sourceID, false) != ""
+	}
+	return validID
+}
+
 func newPlan(meta Meta, kind Kind, typ sourceType, sourceID string, sourceSeq db.U128) (Plan, error) {
 	if !db.ValidateOpaqueID(meta.OperationID, "op_") || meta.ActorUserID < 0 || !validUnix(meta.CreatedAt) {
 		return Plan{}, ErrInvalidPlan
 	}
-	prefix := map[sourceType]string{
-		sourceOperation:       "op_",
-		sourceLogicalRequest:  "req_",
-		sourceDispatchClaim:   "clm_",
-		sourcePeriod:          "thu_",
-		sourceFishingBatch:    "fb_",
-		sourceLinkLinkSession: "ll_",
-		sourceRPSQueue:        "rpsq_",
-		sourceRPSSession:      "rps_",
-	}[typ]
-	if prefix == "" || !db.ValidateOpaqueID(sourceID, prefix) || typ == sourceOperation && sourceID != meta.OperationID {
+	if !validSourceID(typ, sourceID) || typ == sourceOperation && sourceID != meta.OperationID {
 		return Plan{}, ErrInvalidPlan
 	}
 	wantType, ok := sourceTypeForKind(kind)
@@ -139,6 +151,12 @@ func sourceTypeForKind(kind Kind) (sourceType, bool) {
 		return sourceRPSQueue, true
 	case KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal:
 		return sourceRPSSession, true
+	case KindDuelQueueReserve, KindDuelQueueRelease:
+		return sourceDuelQueue, true
+	case KindDuelSessionStart, KindDuelTerminal:
+		return sourceDuelSession, true
+	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
+		return sourceBlackjackPayment, true
 	default:
 		return "", false
 	}

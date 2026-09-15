@@ -16,6 +16,7 @@ import { creditsToMilli, formatCredits } from '../common/strict';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { RandomnessProof } from '../common/RandomnessProof';
 import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
 import { GamePayment } from '../common/GamePayment';
@@ -574,6 +575,11 @@ export function LinkLinkGame() {
         sound={sound}
         onRules={() => setRulesOpen(true)}
         compact={Boolean(state)}
+      />
+      <RandomnessProof
+        game="linklink"
+        id={state?.sessionID ?? summary?.sessionID}
+        terminal={!!summary && !state}
       />
       {maintenance ? (
         <p className="game-inline-notice game-inline-notice--warning">

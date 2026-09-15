@@ -154,6 +154,10 @@ func randomIndex(random io.Reader, upper byte) (int, error) {
 	if random == nil || upper == 0 {
 		return 0, ErrInvariant
 	}
+	if source, ok := random.(interface{ Uint64n(uint64) (uint64, error) }); ok {
+		value, err := source.Uint64n(uint64(upper))
+		return int(value), err
+	}
 	limit := byte(255 - (256 % int(upper)))
 	var raw [1]byte
 	for {

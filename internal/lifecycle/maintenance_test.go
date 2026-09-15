@@ -25,6 +25,7 @@ func recoveryAdaptersWithRecorder(record func(string)) RecoveryAdapters {
 		Idempotency: makeAdapter("idempotency"), Discovery: makeAdapter("discovery"), Claims: makeAdapter("claims"),
 		Thursday: makeAdapter("thursday"), Reports: makeAdapter("reports"), Fishing: makeAdapter("fishing"),
 		LinkLink: makeAdapter("linklink"), RPS: makeAdapter("rps"), Donations: makeAdapter("donations"), Secrets: makeAdapter("secrets"),
+		Bidding: makeAdapter("bidding"), Likes: makeAdapter("likes"), Blackjack: makeAdapter("blackjack"),
 	}
 }
 
@@ -42,6 +43,7 @@ func retentionAdaptersWithRecorder(record func(string)) RetentionAdapters {
 		Sessions: makeAdapter("sessions"), RequestLogs: makeAdapter("request_logs"), Audits: makeAdapter("audits"),
 		Issues: makeAdapter("issues"), Fishing: makeAdapter("fishing"), LinkLink: makeAdapter("linklink"),
 		RPS: makeAdapter("rps"), Reports: makeAdapter("reports"), Donations: makeAdapter("donations"),
+		Bidding: makeAdapter("bidding"), Likes: makeAdapter("likes"), Blackjack: makeAdapter("blackjack"),
 		Charity: makeAdapter("charity"), Idempotency: makeAdapter("idempotency"), Secrets: makeAdapter("secrets"),
 	}
 }
@@ -58,9 +60,9 @@ func TestMaintenanceRunsFrozenRecoveryThenRetentionOrder(t *testing.T) {
 	}
 	want := []string{
 		"recovery:idempotency", "recovery:discovery", "recovery:claims", "recovery:thursday", "recovery:reports",
-		"recovery:fishing", "recovery:linklink", "recovery:rps", "recovery:donations", "recovery:secrets",
+		"recovery:fishing", "recovery:linklink", "recovery:rps", "recovery:bidding", "recovery:likes", "recovery:blackjack", "recovery:donations", "recovery:secrets",
 		"retention:sessions", "retention:request_logs", "retention:audits", "retention:issues", "retention:fishing",
-		"retention:linklink", "retention:rps", "retention:reports", "retention:donations", "retention:charity",
+		"retention:linklink", "retention:rps", "retention:bidding", "retention:likes", "retention:blackjack", "retention:reports", "retention:donations", "retention:charity",
 		"retention:idempotency", "retention:secrets",
 	}
 	if !reflect.DeepEqual(calls, want) {

@@ -7,16 +7,7 @@ import { gameRegistry, resolveGameRegistration } from '../games/registry';
 export function GamesPage() {
   const location = useLocation();
   const path = location.pathname.replace(/\/+$/, '') || '/';
-  const id =
-    path === '/games'
-      ? null
-      : path === '/games/fishing'
-        ? 'fishing'
-        : path === '/games/linklink'
-          ? 'linklink'
-          : path === '/games/rps'
-            ? 'rps'
-            : null;
+  const id = gameRegistry.find((entry) => path === `/games/${entry.id}`)?.id ?? null;
   const registration = id ? resolveGameRegistration(gameRegistry, id, 1) : null;
   if (id && !registration) throw new Error('Game registration is unavailable.');
   const Game = registration?.page;

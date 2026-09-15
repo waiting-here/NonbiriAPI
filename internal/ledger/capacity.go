@@ -243,6 +243,8 @@ func validReservation(ref ReservationRef) bool {
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "req_")
 	case reservationFishingBatch:
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "fb_")
+	case reservationBlackjackPayment:
+		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "bjp_")
 	case reservationThursdayPeriod:
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "thu_")
 	case reservationThursdayParticipant:
@@ -253,6 +255,10 @@ func validReservation(ref ReservationRef) bool {
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "rps_")
 	case reservationGameOnboarding:
 		return ref.parentID == "" && db.ValidateOpaqueID(ref.id, "goh_")
+	case reservationDuelQueue:
+		return ref.parentID == "" && duelIDGame(ref.id, true) != ""
+	case reservationDuelSession:
+		return ref.parentID == "" && duelIDGame(ref.id, false) != ""
 	default:
 		return false
 	}
@@ -271,6 +277,8 @@ func readReservationRemaining(ctx context.Context, tx *sql.Tx, ref ReservationRe
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM logical_requests WHERE id=?`, ref.id)
 	case reservationFishingBatch:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_fishing_batches WHERE id=?`, ref.id)
+	case reservationBlackjackPayment:
+		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_blackjack_payments WHERE id=?`, ref.id)
 	case reservationThursdayPeriod:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM thursday_periods WHERE id=?`, ref.id)
 	case reservationThursdayParticipant:
@@ -281,6 +289,10 @@ func readReservationRemaining(ctx context.Context, tx *sql.Tx, ref ReservationRe
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_rps_sessions WHERE id=?`, ref.id)
 	case reservationGameOnboarding:
 		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_onboarding_holds WHERE id=?`, ref.id)
+	case reservationDuelQueue:
+		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_duel_queue WHERE id=?`, ref.id)
+	case reservationDuelSession:
+		row = tx.QueryRowContext(ctx, `SELECT ledger_rows_remaining FROM game_duel_sessions WHERE id=?`, ref.id)
 	}
 	err := row.Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -317,7 +317,7 @@ describe('beta.1 game pages', () => {
     expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
   });
 
-  it('renders three center cards with open, partial, and explicitly closed availability', async () => {
+  it('renders six center cards and marks any playable mode as open', async () => {
     const snapshot = gamesSnapshotWire();
     snapshot.fishing.enabled = false;
     snapshot.rps.modes.standard.enabled = false;
@@ -329,9 +329,9 @@ describe('beta.1 game pages', () => {
     });
     expect(await screen.findByRole('heading', { name: 'Choose your pace' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
-    expect(screen.getAllByText('Partly open')).toHaveLength(2);
-    expect(screen.getByText('Closed')).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(3);
+    expect(screen.getAllByText('Open')).toHaveLength(2);
+    expect(screen.getAllByText('Closed')).toHaveLength(4);
+    expect(screen.getAllByRole('link')).toHaveLength(6);
     const heroes = Array.from(
       rendered.container.querySelectorAll<HTMLImageElement>(
         '.game-center-card__hero img.game-hero',
@@ -341,13 +341,12 @@ describe('beta.1 game pages', () => {
       expect.stringMatching(/fishing\.webp$/),
       expect.stringMatching(/linklink\.webp$/),
       expect.stringMatching(/rps\.webp$/),
+      expect.stringMatching(/linklink\.webp$/),
+      expect.stringMatching(/rps\.webp$/),
+      expect.stringMatching(/linklink\.webp$/),
     ]);
-    expect(heroes.map(({ width, height }) => [width, height])).toEqual([
-      [960, 480],
-      [960, 480],
-      [960, 480],
-    ]);
-    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy']);
+    expect(heroes.map(({ width, height }) => [width, height])).toEqual(Array.from({ length: 6 }, () => [960, 480]));
+    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy', 'lazy', 'lazy', 'lazy']);
     expect(heroes.every((hero) => hero.getAttribute('alt') === '')).toBe(true);
     expect(rendered.container.querySelector('.game-center-card__hero svg')).not.toBeInTheDocument();
   });
@@ -362,7 +361,7 @@ describe('beta.1 game pages', () => {
       },
     ]);
     await renderWithProviders(<GameCenter />, { station: 'user', route: '/games', role: 'user' });
-    expect(await screen.findAllByText('Maintenance')).toHaveLength(6);
+    expect(await screen.findAllByText('Maintenance')).toHaveLength(12);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 

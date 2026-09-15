@@ -187,7 +187,7 @@ export function WelfareCard({
       <p>{t('user.activities.welfare.funding')}</p>
       <div className="economy-stat-grid">
         <section>
-          <span>{t('user.activities.poolBalance')}</span>
+          <span>{t('user.activities.welfare.poolBalance')}</span>
           <strong>
             <CreditAmount value={welfare.poolBalance} />
           </strong>

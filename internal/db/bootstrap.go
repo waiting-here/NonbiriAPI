@@ -578,7 +578,15 @@ func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Generat
 	if err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
-	if err := validateAssetSeedManifest(ctx, d, prior); err != nil {
+	priorAssets := false
+	if prior {
+		var columns int
+		if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&columns); err != nil {
+			return startupError(StartupSchemaMismatch)
+		}
+		priorAssets = columns == 0
+	}
+	if err := validateVersionSeedManifest(ctx, d, priorAssets, prior); err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
