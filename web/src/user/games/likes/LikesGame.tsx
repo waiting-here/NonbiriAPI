@@ -29,6 +29,7 @@ import type { LikesView, Presentation, Selection } from './types';
 import '../games.css';
 import '../common/duel/duel.css';
 import './likes.css';
+import './effects.css';
 
 function Rules({
   catalog,
