@@ -46,10 +46,25 @@ registration points. A new financial operation requires an audited ledger
 constructor and a corresponding module port. Modules do not perform schema
 migrations or register themselves through package initialization.
 
-New entries use the registered version-2 financial and gameplay rules. Recovery
-selects saved rules per batch, queue or session; version 1 remains available only
-for accepted old work. Caller input cannot downgrade a new game. The game host
+New Fishing, LinkLink and RPS entries use their registered version-2 rules.
+Recovery selects saved version-1 or version-2 rules for accepted old work.
+Bidding Duel and Likes Battle each use independent rules version 1, with their
+own queues and user slots. Caller input cannot downgrade a new game. The game host
 projects both wallets and immutable newcomer-task metadata, while the terminal
 transaction consumes the corresponding reward hold and records the once-only
 completion. Modules retain source payment amounts for refunds and never infer
 historical funding that was not recorded.
+
+The two-player service shares admission, ledger ports, simultaneous phase locks,
+bounded workers, safe history and lifecycle behavior. Rules remain in independent
+Bidding and Likes engines. Likes commits a round atomically before its five-second
+presentation; clients consume the server's structured events and replenish from
+the next round's facts. A process startup cancels unfinished two-player games;
+later periodic recovery only advances live deadlines. Neither presentation nor a
+client acknowledgement controls final accounting.
+
+Both new games have empty newcomer-task lists. Their personal export sections
+are added through the central version-7 envelope. Thirty-day complete histories
+become anonymous long-term traces through one transactional migration, and the
+administrator exporter uses bounded pages without copying opponent identities
+into ordinary user exports.
