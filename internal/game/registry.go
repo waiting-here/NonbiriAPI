@@ -11,6 +11,7 @@ const (
 	RPSID           = "rps"
 	RPSVersion      = 1
 	BiddingID       = "bidding"
+	BlackjackID     = "blackjack"
 	BiddingVersion  = 1
 	LikesID         = "likes"
 	LikesVersion    = 1

@@ -149,6 +149,13 @@ func validateAssetCapacity(ctx context.Context, tx *sql.Tx) error {
 	if present {
 		tables = append(tables, "game_duel_queue", "game_duel_sessions")
 	}
+	blackjackPresent, err := BlackjackStoragePresent(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if blackjackPresent {
+		tables = append(tables, "game_blackjack_payments")
+	}
 	for _, table := range tables {
 		rows, err := tx.QueryContext(ctx, `SELECT ledger_rows_remaining FROM `+quoteSQLiteIdentifier(table))
 		if err != nil {

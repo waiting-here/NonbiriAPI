@@ -513,7 +513,7 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 				}
 				exported := f.call(seat, "POST", "/api/account/export", nil, true)
 				var doc lifecycle.ExportDocument
-				if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &doc) != nil || doc.SchemaVersion != 7 {
+				if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &doc) != nil || doc.SchemaVersion != 8 {
 					t.Fatalf("personal export: %d %s", exported.Code, exported.Body.String())
 				}
 				v := doc.Bidding

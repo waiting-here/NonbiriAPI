@@ -145,6 +145,7 @@ const copy = {
   'home.gameLinklink': ['Link Link', '连连看'],
   'home.gameRps': ['Three-player rock paper scissors', '三人猜拳'],
   'home.gameBidding': ['Bidding Duel', '竞标对决'],
+  'home.gameBlackjack': ['Blackjack', '二十一点'],
   'home.gameLikes': ['Like Battle', '点赞大战'],
   'home.capabilityUnavailable': ['This summary is not available yet.', '此摘要暂不可用。'],
   'endpoints.title': ['Resources', '资源'],

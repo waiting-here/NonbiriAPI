@@ -26,6 +26,7 @@ function cardState(
   kind: GameHeroKind,
 ): { state: Availability; detail: string } {
   if (!snapshot.gamesEnabled) return { state: 'closed', detail: '' };
+  if (kind === 'blackjack') return { state: snapshot.blackjack.enabled && snapshot.blackjack.available ? 'open' : 'closed', detail: formatCredits(snapshot.blackjack.min_stake) };
   if (kind === 'fishing') {
     return {
       state: snapshot.fishing.enabled && snapshot.fishing.available ? 'open' : 'closed',
@@ -49,7 +50,7 @@ function GameCard({ card }: { card: CenterCard }) {
   const { text } = useGameCopy();
   const stateLabel = text(`common.${card.state}` as GameCopyKey);
   const detail =
-    card.id === 'fishing'
+    card.id === 'fishing' || card.id === 'blackjack'
       ? text('center.from', { amount: card.detail })
       : card.id === 'linklink'
         ? text('center.specs', { count: card.detail })
@@ -93,7 +94,7 @@ export function GameCenter() {
   if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
   if (snapshot.error && !maintenance)
     return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
-  const cards: CenterCard[] = (['fishing', 'linklink', 'rps', 'bidding', 'likes'] as const).map((id) => {
+  const cards: CenterCard[] = (['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const).map((id) => {
     const availability =
       maintenance || !snapshot.data
         ? { state: 'maintenance' as const, detail: '' }

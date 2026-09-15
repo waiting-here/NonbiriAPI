@@ -50,3 +50,4 @@ printf 'Released source: %s\n' "$released_commit"
 "$go_command" version
 sha256sum "$temporary/data/"*.db
 bash scripts/check-duel-upgrade.sh
+bash scripts/check-blackjack-upgrade.sh

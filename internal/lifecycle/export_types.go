@@ -31,6 +31,7 @@ type ExportDocument struct {
 	RPS            RPSExport           `json:"rps"`
 	Bidding        DuelExport          `json:"bidding"`
 	Likes          DuelExport          `json:"likes"`
+	Blackjack      BlackjackExport     `json:"blackjack"`
 }
 
 type UserExport struct {

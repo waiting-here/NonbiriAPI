@@ -6,6 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
+	blackjackconfig "github.com/waiting-here/NonbiriAPI/internal/game/blackjack/config"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
@@ -20,6 +21,7 @@ type GamesConfig struct {
 	RPS           rpsconfig.RPSWireConfig           `json:"rps"`
 	Bidding       biddingconfig.Wire                `json:"bidding"`
 	Likes         likesconfig.Wire                  `json:"likes"`
+	Blackjack     blackjackconfig.Wire              `json:"blackjack"`
 }
 
 // GamesSnapshot is the exact user-facing configuration/readiness projection.
@@ -35,6 +37,18 @@ type GamesSnapshot struct {
 	RPS             RPSSnapshotModule                  `json:"rps"`
 	Bidding         BiddingSnapshotModule              `json:"bidding"`
 	Likes           LikesSnapshotModule                `json:"likes"`
+	Blackjack       BlackjackSnapshotModule            `json:"blackjack"`
+}
+
+type BlackjackSnapshotModule struct {
+	blackjackconfig.Wire
+	Available       bool   `json:"available"`
+	ConfigHash      string `json:"config_hash"`
+	QueueCapacity   int    `json:"queue_capacity"`
+	Seats           int    `json:"seats"`
+	SeatingSeconds  int    `json:"seating_seconds"`
+	DecisionSeconds int    `json:"decision_seconds"`
+	RoundSeconds    int    `json:"round_seconds"`
 }
 
 type DuelSnapshotMode struct {
@@ -89,6 +103,7 @@ type GamesConfigPatch struct {
 	RPS              *rpsconfig.RPSConfigPatch           `json:"rps,omitempty"`
 	Bidding          *biddingconfig.Patch                `json:"bidding,omitempty"`
 	Likes            *likesconfig.Patch                  `json:"likes,omitempty"`
+	Blackjack        *blackjackconfig.Patch              `json:"blackjack,omitempty"`
 }
 
 // Merge assembles validated partial DTO fragments. Each module codec still

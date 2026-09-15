@@ -18,6 +18,7 @@ export function gamesSnapshotWire() {
     games_enabled: true,
     bidding: duelSnapshotWire('bidding'),
     likes: duelSnapshotWire('likes'),
+    blackjack: blackjackSnapshotWire(),
     fishing: {
       enabled: true,
       available: true,
@@ -49,6 +50,7 @@ export function duelSnapshotWire(game: 'bidding' | 'likes') {
 
 export function onboardingWire() {
   return {
+    blackjack: { items: [], all_completed: true },
     bidding: { items: [], all_completed: true },
     likes: { items: [], all_completed: true },
     "fishing": {
@@ -121,4 +123,8 @@ export function onboardingWire() {
       "all_completed": false
     }
   };
+}
+
+export function blackjackSnapshotWire() {
+  return { enabled: false, available: true, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 }, config_hash: 'c'.repeat(64), queue_capacity: 4096, seats: 8, seating_seconds: 15, decision_seconds: 30, round_seconds: 60 };
 }

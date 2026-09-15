@@ -142,6 +142,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 
 func init() {
 	addDuelCatalogMetadata()
+	addBlackjackCatalogMetadata()
 	add := func(key, group, titleZh, titleEn, descriptionZh, descriptionEn string, unit localizedCatalogText, gates ...string) {
 		catalogMetadataByKey[key] = catalogMetadata{
 			group: group, title: catalogText(titleZh, titleEn),
@@ -225,6 +226,9 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 	case kindOptionalAmount:
 		return nil, nil, formatAdminWireAmount(1), formatAdminWireAmount(db.MaxMoneyMilli), true
 	case kindAmount:
+		if isBlackjackAmountKey(key) {
+			return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), formatAdminWireAmount(1), blackjackAmountMaximum(), false
+		}
 		minimum = formatAdminWireAmount(0)
 		if isFishingBaitPriceKey(key) || isDuelTicketKey(key) {
 			minimum = formatAdminWireAmount(fishing.MinimumBaitPriceMilli)
@@ -385,6 +389,12 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 	}
 	if isDuelTicketKey(key) {
 		zero = catalogTextPtr("票价必须至少为1毫积分。", "Entry prices must be at least one milli-credit.")
+	}
+	if isBlackjackAmountKey(key) {
+		zero = catalogTextPtr("投入及步长必须为正数。", "Stakes and step must be positive.")
+	}
+	if key == "game_blackjack_enabled" {
+		zero = catalogTextPtr("停止新入队并退还候补及未发牌席位，已发牌的局完成结算。", "Stops new entries and refunds waiting and undealt seats; dealt tables finish.")
 	}
 	if (strings.HasPrefix(key, "game_bidding_") || strings.HasPrefix(key, "game_likes_")) && strings.HasSuffix(key, "_enabled") {
 		zero = catalogTextPtr("关闭新的排队，不改变在途对局。", "Disables new queues without changing accepted games.")

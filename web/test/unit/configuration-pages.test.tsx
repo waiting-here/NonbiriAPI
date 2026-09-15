@@ -780,6 +780,7 @@ describe('admin per-user limit explanations', () => {
 });
 
 const initialGameConfig: GamesConfig = {
+  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 } },
   bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
@@ -881,6 +882,7 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
       );
     }
     const mutable = patch as {
+      blackjack: GamesConfig['blackjack'];
       expected_revision: string;
       master_enabled: boolean;
       fishing: GamesConfig['fishing'];
@@ -895,6 +897,7 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
     };
     const previous = state;
     state = {
+      blackjack: structuredClone(mutable.blackjack),
       bidding: structuredClone(previous.bidding), likes: structuredClone(previous.likes),
       revision: String(BigInt(state.revision) + 1n),
       master_enabled: mutable.master_enabled,
@@ -979,6 +982,7 @@ describe('standalone Admin Games feature', () => {
       master_enabled: true,
       bidding: initialGameConfig.bidding,
       likes: initialGameConfig.likes,
+      blackjack: initialGameConfig.blackjack,
       fishing: {
         ...initialGameConfig.fishing,
         bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '3' },

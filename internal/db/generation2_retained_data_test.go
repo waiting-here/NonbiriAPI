@@ -222,6 +222,7 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 	t.Helper()
 	projectPriorAssets := false
 	projectPriorDuels := false
+	projectPriorBlackjack := prior != nil && prior["game_blackjack_entries"].Columns == nil
 	if prior != nil && prior["game_duel_catalogs"].Columns == nil {
 		var present int
 		if err := database.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='game_duel_catalogs'`).Scan(&present); err != nil {
@@ -281,7 +282,7 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 		if projectPriorAssets && table == "credit_accounts" {
 			query += " WHERE asset_type='general'"
 		}
-		if (projectPriorAssets || projectPriorDuels) && table == "site_config" {
+		if (projectPriorAssets || projectPriorDuels || projectPriorBlackjack) && table == "site_config" {
 			var marks []string
 			for _, key := range prior[table].Keys {
 				marks = append(marks, "?")

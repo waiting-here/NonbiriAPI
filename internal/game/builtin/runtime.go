@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/bidding"
 	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
+	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack"
 	builtinconfig "github.com/waiting-here/NonbiriAPI/internal/game/builtin/config"
 	builtinfinance "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
@@ -77,6 +78,7 @@ func New(options Options) (*Runtime, error) {
 	}
 	runtime := &Runtime{}
 	duels := map[string]*duel.Service{}
+	var blackjackService *blackjack.Service
 	duelFactory := func(descriptor game.ModuleDescriptor, rules duel.Rules) host.Factory {
 		return func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(descriptor.ID)
@@ -106,6 +108,32 @@ func New(options Options) (*Runtime, error) {
 		return nil, err
 	}
 	factories := map[string]host.Factory{
+		game.BlackjackID: func(shared host.Services) (*host.Module, error) {
+			financial, err := builtinfinance.ForModule(game.BlackjackID)
+			if err != nil {
+				return nil, err
+			}
+			service, err := blackjack.New(blackjack.Options{
+				Database: shared.Database, Finance: financial.Blackjack, UserAuthorizer: shared.UserAuthorizer,
+				AdminAuthorizer: shared.AdminAuthorizer, Continuation: options.Continuation, Limiter: shared.Limiter,
+				Pools: options.Pools, Publisher: options.ActivityEvents, Keys: options.Vault, Now: shared.Now,
+				ReportError: func(err error) {
+					if options.PublishErrors != nil {
+						options.PublishErrors.ReportRPSPublishError(err)
+					}
+				},
+				AdminAudit: func(event blackjack.AdminAudit) {
+					if options.DuelAdminAudit != nil {
+						options.DuelAdminAudit(duel.AdminAudit{Actor: event.Actor, Role: "administrator", Game: game.BlackjackID, Dataset: event.Dataset, Filters: []string{}, Records: event.Records, Result: event.Result})
+					}
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+			blackjackService = service
+			return service.Module(), nil
+		},
 		game.BiddingID: duelFactory(biddingconfig.Descriptor(), bidding.Rules{}),
 		game.LikesID:   duelFactory(likesconfig.Descriptor(), likesRules),
 		game.FishingID: func(shared host.Services) (*host.Module, error) {
@@ -152,10 +180,35 @@ func New(options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	runtime.cancelUserDuelsTx, err = duel.Cancellation(duels[game.BiddingID], duels[game.LikesID])
+	cancelDuels, err := duel.Cancellation(duels[game.BiddingID], duels[game.LikesID])
 	if err != nil {
 		_ = runtime.Close()
 		return nil, err
+	}
+	runtime.cancelUserDuelsTx = func(ctx context.Context, tx *sql.Tx, user int64, reason string, now int64) (func(bool), error) {
+		finish, err := cancelDuels(ctx, tx, user, reason, now)
+		if err != nil {
+			return nil, err
+		}
+		end, err := blackjackService.CancelUserTx(ctx, tx, user, now)
+		if err != nil {
+			if finish != nil {
+				finish(false)
+			}
+			return nil, err
+		}
+		return func(committed bool) {
+			if finish != nil {
+				finish(committed)
+			}
+			if end != nil {
+				if committed {
+					end.Commit()
+				} else {
+					end.Abort()
+				}
+			}
+		}, nil
 	}
 	return runtime, nil
 }

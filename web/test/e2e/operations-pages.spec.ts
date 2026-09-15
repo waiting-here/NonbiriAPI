@@ -471,8 +471,12 @@ test('administrator dashboard accepts the runtime activity day contract', async 
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/overview/endpoints?limit=50',
-    body: { data: [], next_cursor: null },
+    path: '/admin/api/overview/endpoints?page=1&page_size=20',
+    body: {
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+    },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,

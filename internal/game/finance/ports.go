@@ -30,6 +30,18 @@ type Fishing interface {
 	Settle(context.Context, *sql.Tx, FishingSettlement, Mutation) error
 	Release(context.Context, *sql.Tx, Entry, Mutation) error
 }
+
+type BlackjackAccountMutation func(context.Context, *sql.Tx, ledger.AccountPair) error
+type BlackjackSettlement struct {
+	Entry
+	Net, Platform, Welfare, Thursday    ledger.Amount
+	WelfareAccountID, ThursdayAccountID int64
+}
+type Blackjack interface {
+	Reserve(context.Context, *sql.Tx, Entry, BlackjackAccountMutation) error
+	Settle(context.Context, *sql.Tx, BlackjackSettlement, Mutation) error
+	Release(context.Context, *sql.Tx, Entry, Mutation) error
+}
 type LinkLink interface {
 	Entry(context.Context, *sql.Tx, Entry) error
 	Terminal(context.Context, *sql.Tx, string, int64, int64) error

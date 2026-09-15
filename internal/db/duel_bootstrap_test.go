@@ -63,7 +63,15 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for key := range blackjackConfigDefaults() {
+		if _, err := tx.Exec(`DELETE FROM site_config WHERE key=?`, key); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := ApplyDuelExtension(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyBlackjackExtension(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
 	got, err := readGenerationManifest(ctx, tx)

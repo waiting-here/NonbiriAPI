@@ -245,6 +245,15 @@ WHERE seat.user_id=? AND session.state IN ('started','terminal_processing')`); e
 			return nil, ledger.Account{}, err
 		}
 	}
+	blackjackPresent, err := db.BlackjackStoragePresent(ctx, tx)
+	if err != nil {
+		return nil, ledger.Account{}, classifyDatabaseError("read blackjack asset storage", err)
+	}
+	if blackjackPresent {
+		if err := addIntRows(`SELECT p.game_paid_milli FROM game_blackjack_payments p JOIN game_blackjack_entries e ON e.id=p.entry_id WHERE e.user_id=? AND p.state='reserved'`); err != nil {
+			return nil, ledger.Account{}, err
+		}
+	}
 	return total, wallet, nil
 }
 

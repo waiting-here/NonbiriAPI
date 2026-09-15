@@ -73,6 +73,8 @@ const copy = {
   'center.bidding.title': ['Bidding Duel', '竞标对决'],
   'center.bidding.body': ['Plan your bids across thirteen simultaneous rounds.', '十三轮共同暗选，安排每张牌的出场时机。'],
   'center.likes.title': ['Like Battle', '点赞大战'],
+  'center.blackjack.title': ['Blackjack', '二十一点'],
+  'center.blackjack.body': ['One table, eight seats and a new hand every minute.', '单桌八席，每分钟新一局。与同桌一起向庄家挑战。'],
   'center.likes.body': ['Build your loadout and race for likes on shared power.', '搭配角色与技能，在共享电池下争取得赞。'],
   'center.rps.body': [
     'Take a seat, read your opponents, and reveal your next move.',
