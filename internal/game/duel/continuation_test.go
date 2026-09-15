@@ -13,8 +13,8 @@ func TestMaintenanceContinuationRequiresCurrentParticipantSession(t *testing.T) 
 	if _, err := f.db.Exec(`UPDATE maintenance_state SET enabled=1 WHERE id=1`); err != nil {
 		t.Fatal(err)
 	}
-	f.action(0, state, emptyPlan)
-	f.action(1, state, emptyPlan)
+	f.action(0, state, basicPlan)
+	f.action(1, state, basicPlan)
 	if _, err := f.s.Rounds(f.ctx, f.identity(0), state.ID, duel.PageInput{}, true); err != nil {
 		t.Fatal(err)
 	}

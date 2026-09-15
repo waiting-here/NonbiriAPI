@@ -11,7 +11,7 @@ import (
 	likeengine "github.com/waiting-here/NonbiriAPI/internal/game/likes/engine"
 )
 
-const emptyPlan = `{"kind":"plan","plan":{"purchases":[],"main":null,"extra":[]}}`
+const basicPlan = `{"kind":"plan","plan":{"purchases":[],"main":{"skillId":"PUB01"},"extra":[]}}`
 
 func TestAnonymousBiddingRetainsDecksWithoutParticipantDisclosure(t *testing.T) {
 	f := newFixture(t, "bidding")
@@ -49,7 +49,7 @@ func TestAnonymousBiddingRetainsDecksWithoutParticipantDisclosure(t *testing.T) 
 func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 	f := newFixture(t, "likes")
 	state := f.matched()
-	f.action(0, state, emptyPlan)
+	f.action(0, state, basicPlan)
 	page, err := f.s.Rounds(f.ctx, f.identity(0), state.ID, duel.PageInput{}, true)
 	if err != nil || len(page.Items) != 0 {
 		t.Fatal(page, err)
@@ -57,7 +57,7 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 	if _, err := f.s.HistoryDetail(f.ctx, f.identity(0), state.ID); !errors.Is(err, duel.ErrNotFound) {
 		t.Fatal(err)
 	}
-	f.action(1, state, emptyPlan)
+	f.action(1, state, basicPlan)
 	for user := range 2 {
 		page, err = f.s.Rounds(f.ctx, f.identity(user), state.ID, duel.PageInput{Limit: 1}, true)
 		if err != nil || len(page.Items) != 1 {
@@ -73,8 +73,8 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 	if state.RoundStart == nil || state.RoundStart.StartedAt != 105 || state.RoundStart.Round != 2 || !strings.Contains(string(state.RoundStart.Events), `"before"`) || !strings.Contains(string(state.RoundStart.Events), `"after"`) {
 		t.Fatal("round-start resource facts missing")
 	}
-	f.action(0, state, emptyPlan)
-	f.action(1, state, emptyPlan)
+	f.action(0, state, basicPlan)
+	f.action(1, state, basicPlan)
 	page, err = f.s.Rounds(f.ctx, f.identity(0), state.ID, duel.PageInput{Limit: 1}, true)
 	if err != nil || len(page.Items) != 1 || page.NextCursor == nil {
 		t.Fatal(page, err)
@@ -88,7 +88,7 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 	}
 	f.clock.Store(110)
 	state = *f.read(0).Current
-	f.action(0, state, emptyPlan)
+	f.action(0, state, basicPlan)
 	if _, err := f.s.Surrender(f.ctx, duel.ActionInput{Identity: f.identity(1), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq}); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(detail.TerminalActions[state.You]) != emptyPlan {
+	if string(detail.TerminalActions[state.You]) != basicPlan {
 		t.Fatal("accepted unfinished plan lost", string(detail.TerminalActions[state.You]))
 	}
 	var initial likeengine.View
@@ -137,8 +137,8 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 func TestDeleteCancellationRollbackAndDeidentification(t *testing.T) {
 	f := newFixture(t, "likes")
 	state := f.matched()
-	f.action(0, state, emptyPlan)
-	f.action(1, state, emptyPlan)
+	f.action(0, state, basicPlan)
+	f.action(1, state, basicPlan)
 	tx, err := f.db.BeginTx(f.ctx, nil)
 	if err != nil {
 		t.Fatal(err)

@@ -5,13 +5,16 @@ import type { ModeCatalog } from './catalog';
 import type { Choice, LikesEvent, LikesView, Plan, Presentation, Purchase } from './types';
 import { buffName, chosenEffect, kindName, shopName, skillName } from './labels';
 import { SkillCost } from './Glossary';
+import { planControls } from './planControls';
 
 export function PlanSummary({
   catalog,
   plan,
+  emptyMainLabel,
 }: {
   readonly catalog: ModeCatalog;
   readonly plan: Plan;
+  readonly emptyMainLabel?: string;
 }) {
   const t = useDuelText();
   const describe = (choice: Choice) =>
@@ -41,7 +44,8 @@ export function PlanSummary({
           : t('无', 'None')}
       </span>
       <span>
-        {t('主招', 'Main')}: {plan.main ? describe(plan.main) : t('跳过', 'Skip')}
+        {t('主招', 'Main')}:{' '}
+        {plan.main ? describe(plan.main) : (emptyMainLabel ?? t('跳过', 'Skip'))}
       </span>
       {plan.extra.map((choice, i) => (
         <span key={i}>
@@ -170,7 +174,9 @@ export function PlanEditor({
   const [draft, setDraft] = useState<Plan>({ purchases: [], main: null, extra: [] });
   const [tab, setTab] = useState<'skills' | 'shop'>('skills');
   const locked = state.locked[state.you],
-    plan = locked && state.view.lockedPlan ? state.view.lockedPlan : draft;
+    originalPlan = locked && state.view.lockedPlan ? state.view.lockedPlan : draft;
+  const { affordable, skipCasting } = planControls(catalog, player, state.round, originalPlan);
+  const plan = !locked && skipCasting ? { ...draft, main: null, extra: [] } : originalPlan;
   const disabled = blocked || locked || state.phase !== 'plan' || player.overloaded;
   const effect = chosenEffect(catalog, player, plan.main),
     allowExtra = effect?.kind === 'INSERT';
@@ -197,15 +203,31 @@ export function PlanEditor({
         </span>
       </div>
       <div className="likes-plan-confirm">
-        <PlanSummary catalog={catalog} plan={plan} />
+        <PlanSummary
+          catalog={catalog}
+          plan={plan}
+          emptyMainLabel={!skipCasting && !locked ? t('待选择', 'Choose a skill') : undefined}
+        />
         <button
           type="button"
           className="likes-primary"
-          disabled={disabled}
+          disabled={disabled || !affordable || (!skipCasting && !plan.main)}
           onClick={() => onLock(plan)}
         >
-          {locked ? t('已锁定', 'Locked') : t('确认方案', 'Lock in plan')}
+          {locked
+            ? t('已锁定', 'Locked')
+            : skipCasting
+              ? t('跳过出招', 'Skip casting')
+              : t('确认方案', 'Lock in plan')}
         </button>
+        {!locked && !affordable && (
+          <p className="likes-warning">
+            {t('金币不足，请调整购物方案。', 'Not enough gold. Adjust your purchases.')}
+          </p>
+        )}
+        {!locked && !skipCasting && !plan.main && (
+          <p>{t('请选择本轮主招。', 'Choose a main skill for this round.')}</p>
+        )}
       </div>
       {player.overloaded && (
         <p className="likes-warning">
@@ -323,6 +345,7 @@ export function PlanEditor({
                   type="button"
                   disabled={
                     disabled ||
+                    skipCasting ||
                     (skill.maxUses !== null && (player.used[skill.id] ?? 0) >= skill.maxUses)
                   }
                   aria-pressed={plan.main?.skillId === skill.id}
@@ -348,15 +371,6 @@ export function PlanEditor({
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            className="likes-skip"
-            disabled={disabled}
-            aria-pressed={plan.main === null}
-            onClick={() => selectMain(null)}
-          >
-            {t('本轮跳过出招', 'Skip casting this round')}
-          </button>
           {plan.main && (
             <ChoiceOptions
               catalog={catalog}

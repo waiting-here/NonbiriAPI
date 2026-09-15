@@ -300,7 +300,7 @@ func TestRealBiddingSamePhaseLocksAndDeadlineWins(t *testing.T) {
 func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 	f := newFixture(t, "likes")
 	state := f.matched()
-	body := `{"kind":"plan","plan":{"purchases":[],"main":null,"extra":[]}}`
+	body := `{"kind":"plan","plan":{"purchases":[],"main":{"skillId":"PUB01"},"extra":[]}}`
 	f.action(0, state, body)
 	f.action(1, state, body)
 	settled := *f.read(0).Current

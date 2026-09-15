@@ -26,7 +26,7 @@ func TestConcurrentLocksSettleExactlyOnce(t *testing.T) {
 	state := f.matched()
 	tasks := []func() error{}
 	for user := range 2 {
-		in := duel.ActionInput{Identity: f.identity(user), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq, Action: []byte(emptyPlan)}
+		in := duel.ActionInput{Identity: f.identity(user), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq, Action: []byte(basicPlan)}
 		tasks = append(tasks, func() error { _, err := f.s.Action(f.ctx, in); return err })
 	}
 	for _, err := range together(tasks...) {
@@ -47,9 +47,9 @@ func TestConcurrentLocksSettleExactlyOnce(t *testing.T) {
 func TestDeadlineWorkerAndLastActionUseOneRound(t *testing.T) {
 	f := newFixture(t, "likes")
 	state := f.matched()
-	f.action(0, state, emptyPlan)
+	f.action(0, state, basicPlan)
 	f.clock.Store(*state.Deadline)
-	in := duel.ActionInput{Identity: f.identity(1), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq, Action: []byte(emptyPlan)}
+	in := duel.ActionInput{Identity: f.identity(1), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq, Action: []byte(basicPlan)}
 	errs := together(func() error { _, err := f.s.Tick(f.ctx); return err }, func() error {
 		_, err := f.s.Action(f.ctx, in)
 		if !errors.Is(err, duel.ErrConflict) {
@@ -74,8 +74,8 @@ func TestSettlementProgressAndQualificationCancellationAreAtomic(t *testing.T) {
 		t.Run(map[bool]string{false: "ban", true: "delete"}[deletion], func(t *testing.T) {
 			f := newFixture(t, "likes")
 			state := f.matched()
-			f.action(0, state, emptyPlan)
-			f.action(1, state, emptyPlan)
+			f.action(0, state, basicPlan)
+			f.action(1, state, basicPlan)
 			f.clock.Store(105)
 			cancel := func() error {
 				tx, err := f.db.BeginTx(f.ctx, nil)

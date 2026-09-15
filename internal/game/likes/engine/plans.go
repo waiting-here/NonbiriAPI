@@ -210,3 +210,21 @@ func (e *Engine) ValidatePlan(state State, seat int, plan Plan) (Plan, error) {
 	}
 	return next, nil
 }
+
+// ValidateManualPlan requires a main skill unless shopping leaves the player
+// stunned. Empty automatic timeout plans are validated separately.
+func (e *Engine) ValidateManualPlan(state State, seat int, plan Plan) (Plan, error) {
+	next, err := e.ValidatePlan(state, seat, plan)
+	if err != nil {
+		return Plan{}, err
+	}
+	prepared, err := e.prepare(state, seat, next)
+	if err != nil {
+		return Plan{}, err
+	}
+	_, stunned := restriction(&prepared, seat)
+	if next.Main == nil && !stunned {
+		return Plan{}, ErrPlan
+	}
+	return next, nil
+}
