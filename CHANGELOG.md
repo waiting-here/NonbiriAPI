@@ -4,6 +4,27 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-rc.1] - Unreleased
+
+### Added
+
+- Two-player Bidding Duel with 13 simultaneous card rounds, and Likes Battle with quick/standard modes, five characters, eight harnesses and the complete skill/buff catalog.
+- Separate per-game queues, frozen entry terms, mixed-wallet admission, original-asset refunds and atomic winner/fee settlement. Both games start disabled and do not add newcomer awards.
+- Synchronized five-second Likes settlement with score breakdowns, resource changes, round-start refills, independent stun/overload artwork slots, reduced-motion feedback and a paginated round log. Existing images fill 127 replaceable art slots.
+- Thirty-day player and administrator match history, long-term anonymous traces and resumable bounded administrator NDJSON export. Account export v7 includes safe new-game records.
+
+### Fixed
+
+- Shared battery overload affects only positive-energy plans when the other plan costs zero; exact remaining energy is allowed and Flash keeps its independent check.
+- Uncapped API reserve and gold use numeric displays. Still-stunned plans show only skip; cleansing plans require a cast and restore confirmation.
+- Game availability badges reflect partial mode availability, ten-catch results keep long names and amounts readable, and welfare-pool labels avoid the wrong currency.
+- Periodic recovery preserves live duels while a real restart cancels and refunds unfinished matches.
+
+### Compatibility
+
+- Generation 2 now has 110 tables and accepts twelve exact predecessor manifests, including populated beta.4 databases. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
+- Artwork remains placeholder content. This candidate has not been released or deployed.
+
 ## [1.0.0-beta.4] - 2026-09-12
 
 This source prerelease supports Linux/amd64 and atomic upgrades from complete beta.3 and ten exact earlier Generation 2 schemas. Existing general balances, settled fees, configuration, custom legal text and saved game rules remain intact. New game wallets start at zero; rollback requires a matching complete snapshot. Build from the tagged source; no official precompiled binaries, container images, or installers are provided.

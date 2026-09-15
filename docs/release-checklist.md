@@ -10,14 +10,13 @@ own checks. This checklist does not itself assert a pass.
 
 - Freeze scope and synchronize README, changelog, package metadata, HTTP contract,
   configuration, game-module and lifecycle documentation.
-- Verify Generation 2 identity, eleven exact predecessor paths, atomic rollback on
+- Verify Generation 2 identity, twelve exact predecessor paths, atomic rollback on
   injected failure, unknown/partial schema zero-write rejection and second-start
-  no-op. Build the exact beta.3 source to create a populated synthetic fixture;
+  no-op. Build the exact beta.4 source to create a populated synthetic fixture;
   exercise the target on Linux, with old API reservations and all three games.
 - Preserve original account/entry IDs, settled charges, saved game rules, configured
-  RTP, security roots and custom legal text. New game wallets start at zero.
-- Verify that old version-1 games drain while new admissions always select version
-  2; never infer unrecorded historical payment sources.
+  RTP, security roots and custom legal text. Existing game wallets remain unchanged; only older sources without them receive zero game wallets. Both new games start disabled.
+- Verify that saved old games retain their rules, new Fishing/LinkLink/RPS admissions use version 2 and the two new games use their own version 1; never infer unrecorded historical payment sources.
 - Verify matching complete-snapshot restore and old-binary rejection of the new
   schema. Do not open an online production database with external SQLite.
 
@@ -39,7 +38,7 @@ own checks. This checklist does not itself assert a pass.
   replay. Do not introduce persistent background jobs for browser batching.
 - Verify multiline Thursday text/preview and complete validation before model-ID
   deduplication.
-- Verify export v6 and synchronous deletion across both assets, holds, game state,
+- Verify export v7 and synchronous deletion across both assets, holds, game state,
   rankings and permanent newcomer completions, including both late-write orders.
 - Synchronize bilingual embedded privacy/terms and administrator/steward calling
   instructions. Keep instance custom legal overrides intact unless their
@@ -79,8 +78,15 @@ needed. Daily affected-package race defaults to one shuffled round.
   dispositions; an unavailable scan is not a pass.
 - Confirm pinned Actions and real embedded bundles. Build Windows/amd64 and the
   final Linux/amd64 pure-Go artifact, record VCS/tree/toolchain and SHA256.
-- Compare complete first-party JS/CSS gzip totals with an exact beta.3 clean build
-  using the same tools; each station may grow by at most 64 KiB.
+- Compare complete first-party JS/CSS gzip totals with an exact beta.4 clean build
+  using the same tools; the user station may grow by at most 256 KiB and the
+  administrator station by 96 KiB.
+- Verify both new games with real participant sessions, full match results and
+  sealed per-asset accounting. Exercise 4096 queues, large history datasets and
+  bounded export/worker transactions. Check the 127 art slots, simultaneous
+  settlement, resource refill feedback, uncapped numeric counters and reduced
+  motion at phone and desktop sizes. Unfinished final presentation must not
+  delay or repeat wallet settlement.
 - Cover actual HTTP financial/control flows and representative Chinese/English,
   light/dark, desktop/mobile combinations. Play LinkLink through ordinary UI,
   including a 10×10 board at 320 px; measure latency without extra anticheat.
