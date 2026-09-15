@@ -61,8 +61,11 @@ func TestGameDependencyAndFinancialExecutionBoundaries(t *testing.T) {
 			if strings.HasPrefix(relative, "host/") && (strings.HasPrefix(dependency, "game/") || dependency == "forward" || dependency == "routing" || strings.HasPrefix(dependency, "connector")) {
 				t.Errorf("host reverse dependency: %s -> %s", relative, dependency)
 			}
-			if owner != "" && strings.HasPrefix(dependency, "game/") && dependency != "game/host" && dependency != "game/finance" && dependency != "game/"+owner && !strings.HasPrefix(dependency, "game/"+owner+"/") {
+			if owner != "" && strings.HasPrefix(dependency, "game/") && dependency != "game/host" && dependency != "game/finance" && dependency != "game/randomness" && dependency != "game/randomness/httpapi" && dependency != "game/"+owner && !strings.HasPrefix(dependency, "game/"+owner+"/") {
 				t.Errorf("module crosses owner: %s -> %s", relative, dependency)
+			}
+			if strings.HasPrefix(relative, "randomness/") && (dependency == "ledger" || dependency == "forward" || dependency == "routing" || strings.HasPrefix(dependency, "connector") || strings.HasPrefix(dependency, "game/") && dependency != "game/randomness") {
+				t.Errorf("random proof imports execution or concrete rules: %s -> %s", relative, dependency)
 			}
 			if owner != "" && (dependency == "forward" || dependency == "routing" || strings.HasPrefix(dependency, "connector")) {
 				t.Errorf("game imports API execution: %s -> %s", relative, dependency)

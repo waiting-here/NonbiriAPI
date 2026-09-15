@@ -9,29 +9,30 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
-	Checkins       []CheckinExport     `json:"checkins"`
-	GameOnboarding []OnboardingExport  `json:"game_onboarding"`
-	SchemaVersion  int                 `json:"schema_version"`
-	GeneratedAt    int64               `json:"generated_at"`
-	User           UserExport          `json:"user"`
-	Endpoints      []EndpointExport    `json:"endpoints"`
-	CatalogPairs   []CatalogPairExport `json:"catalog_pairs"`
-	Models         []ModelExport       `json:"models"`
-	CallerKey      *CallerKeyExport    `json:"caller_key"`
-	Usage          UsageExport         `json:"usage"`
-	LogSummary     LogSummaryExport    `json:"log_summary"`
-	Issues         []IssueExport       `json:"issues"`
-	CreditLedger   []LedgerEntryExport `json:"credit_ledger"`
-	WelfareClaims  []WelfareExport     `json:"welfare_claims"`
-	Thursday       []ThursdayExport    `json:"thursday"`
-	Donations      []DonationExport    `json:"donations"`
-	Charity        CharityExport       `json:"charity"`
-	Fishing        FishingExport       `json:"fishing"`
-	LinkLink       LinkLinkExport      `json:"linklink"`
-	RPS            RPSExport           `json:"rps"`
-	Bidding        DuelExport          `json:"bidding"`
-	Likes          DuelExport          `json:"likes"`
-	Blackjack      BlackjackExport     `json:"blackjack"`
+	Checkins       []CheckinExport         `json:"checkins"`
+	GameOnboarding []OnboardingExport      `json:"game_onboarding"`
+	SchemaVersion  int                     `json:"schema_version"`
+	GeneratedAt    int64                   `json:"generated_at"`
+	User           UserExport              `json:"user"`
+	Endpoints      []EndpointExport        `json:"endpoints"`
+	CatalogPairs   []CatalogPairExport     `json:"catalog_pairs"`
+	Models         []ModelExport           `json:"models"`
+	CallerKey      *CallerKeyExport        `json:"caller_key"`
+	Usage          UsageExport             `json:"usage"`
+	LogSummary     LogSummaryExport        `json:"log_summary"`
+	Issues         []IssueExport           `json:"issues"`
+	CreditLedger   []LedgerEntryExport     `json:"credit_ledger"`
+	WelfareClaims  []WelfareExport         `json:"welfare_claims"`
+	Thursday       []ThursdayExport        `json:"thursday"`
+	Donations      []DonationExport        `json:"donations"`
+	Charity        CharityExport           `json:"charity"`
+	Fishing        FishingExport           `json:"fishing"`
+	LinkLink       LinkLinkExport          `json:"linklink"`
+	RPS            RPSExport               `json:"rps"`
+	Bidding        DuelExport              `json:"bidding"`
+	Likes          DuelExport              `json:"likes"`
+	Blackjack      BlackjackExport         `json:"blackjack"`
+	Randomness     []RandomnessProofExport `json:"randomness"`
 }
 
 type UserExport struct {

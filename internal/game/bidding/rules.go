@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"slices"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
@@ -34,12 +35,15 @@ func (r Rules) Loadout(mode string, raw json.RawMessage) (json.RawMessage, error
 	return json.RawMessage(`{}`), nil
 }
 func (r Rules) Create(mode string, loadouts [2]json.RawMessage) (json.RawMessage, error) {
+	return r.CreateWithRandom(mode, loadouts, nil)
+}
+func (r Rules) CreateWithRandom(mode string, loadouts [2]json.RawMessage, random io.Reader) (json.RawMessage, error) {
 	for _, raw := range loadouts {
 		if _, err := r.Loadout(mode, raw); err != nil {
 			return nil, err
 		}
 	}
-	s, err := engine.New(nil)
+	s, err := engine.New(random)
 	if err != nil {
 		return nil, duel.ErrUnavailable
 	}

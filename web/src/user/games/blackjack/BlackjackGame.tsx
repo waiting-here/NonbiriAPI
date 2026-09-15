@@ -9,6 +9,7 @@ import {
 } from '@shared/games/blackjack';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { GameWallets } from '../common/GameWallets';
+import { RandomnessProof } from '../common/RandomnessProof';
 import { GameSoundButton } from '../common/GameSoundButton';
 import { useGameSound, type GameSoundControl } from '../common/useGameSound';
 import { useAuthoritativeCountdown } from '../common/countdown';
@@ -184,6 +185,7 @@ function History({ close }: { readonly close: () => void }) {
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
           ) : (
             <div className="bidding-game blackjack-game">
+              <RandomnessProof game="blackjack" id={detail.data.table.id} terminal />
               <BlackjackBoard table={detail.data.table} ownSeat={detail.data.summary.seat} />
               {detail.data.table.phase === 'result' ? (
                 <BlackjackSettlement
@@ -373,6 +375,11 @@ export function BlackjackGame() {
           </div>
         </header>
         {snapshot.data && <GameWallets wallets={snapshot.data} />}
+        <RandomnessProof
+          game="blackjack"
+          id={home?.table?.id}
+          terminal={home?.table?.phase === 'result' || home?.table?.phase === 'cancelled'}
+        />
         {game.query.isPending ? (
           <LoadingState />
         ) : game.query.error ? (

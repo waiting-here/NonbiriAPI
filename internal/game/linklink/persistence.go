@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
 
@@ -258,6 +259,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.ID, record.UserID, record.Spec, rec
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM game_online_leases WHERE session_id=?`, record.ID); err != nil {
 		return Summary{}, classifyDB(err)
+	}
+	if err := randomness.MoveToSummary(ctx, tx, "linklink", record.ID); err != nil {
+		return Summary{}, err
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM game_linklink_sessions WHERE id=? AND user_id=? AND revision=?`, record.ID, record.UserID, db.EncodeU128(record.Revision))
 	if err != nil {

@@ -3,11 +3,11 @@
 package engine
 
 import (
-	"crypto/rand"
 	"errors"
 	"io"
-	"math/big"
 	"slices"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 )
 
 const (
@@ -103,18 +103,15 @@ type Action struct {
 
 func Shuffle(random io.Reader) ([DeckSize]Card, error) {
 	var deck [DeckSize]Card
-	if random == nil {
-		random = rand.Reader
-	}
 	for i := range deck {
 		deck[i] = Card(i)
 	}
 	for i := DeckSize - 1; i > 0; i-- {
-		pick, err := rand.Int(random, big.NewInt(int64(i+1)))
+		pick, err := randomness.Index(random, uint64(i+1))
 		if err != nil {
 			return [DeckSize]Card{}, ErrRandom
 		}
-		j := int(pick.Int64())
+		j := int(pick)
 		deck[i], deck[j] = deck[j], deck[i]
 	}
 	return deck, nil

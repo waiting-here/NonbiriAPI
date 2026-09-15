@@ -264,6 +264,7 @@ const ACCOUNT_EXPORT_KEYS = [
   'bidding',
   'likes',
   'blackjack',
+  'randomness',
 ] as const;
 const ELEVATED_TOKEN = /^[A-Za-z0-9._-]{8,512}$/;
 

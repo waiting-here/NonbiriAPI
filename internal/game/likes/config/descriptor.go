@@ -8,6 +8,7 @@ func Descriptor() game.ModuleDescriptor {
 		ResourcePrefixes: []string{"likq_", "lik_"}, Modes: Modes(),
 		HomeRouteID: "game-likes", ContinuationIDs: []string{"likes_session"}, Codec: Codec{},
 		Routes: []game.RouteDeclaration{
+			{Station: "user", Method: "GET", Pattern: "/api/games/likes/randomness/{id}", Continuation: true},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/likes/history"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/likes/history/{id}"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/likes/history/{id}/rounds"},

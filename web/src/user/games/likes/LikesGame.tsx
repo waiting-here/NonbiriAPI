@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
+import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
 import { gameRequest } from '../common/request';
 import { useAuthoritativeCountdown } from '../common/countdown';
@@ -257,6 +258,11 @@ export function LikesGame(context: DuelLobbyContext) {
         </div>
       </header>
       <GameWallets wallets={context.wallets} />
+      <RandomnessProof
+        game="likes"
+        id={current?.id ?? result?.id}
+        terminal={!current && !!result}
+      />
       <DuelFeedback
         error={duel.error ?? duel.query.error ?? catalogQuery.error}
         uncertain={duel.uncertain}

@@ -52,7 +52,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	wantOrder := []string{"identity", "resources", "issues", "ledger", "activities", "donations", "charity", "fishing", "linklink", "rps", "bidding", "likes", "blackjack"}
+	wantOrder := []string{"identity", "resources", "issues", "ledger", "activities", "donations", "charity", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "randomness"}
 	if !reflect.DeepEqual(fixture.exports.calls, wantOrder) {
 		t.Fatalf("export order = %v, want %v", fixture.exports.calls, wantOrder)
 	}

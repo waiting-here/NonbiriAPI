@@ -7,6 +7,7 @@ func Descriptor() game.ModuleDescriptor {
 		ID: ID, Version: Version, StableOrder: 5, ResourcePrefixes: []string{"bjq_", "bjt_", "bjp_"},
 		Modes: []string{"table"}, HomeRouteID: "game-blackjack", ContinuationIDs: []string{"blackjack_session"}, Codec: Codec{},
 		Routes: []game.RouteDeclaration{
+			{Station: "user", Method: "GET", Pattern: "/api/games/blackjack/randomness/{id}", Continuation: true},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/blackjack/history"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/blackjack/history/{id}"},
 			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/blackjack/history/export"},

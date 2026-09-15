@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
+
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -21,6 +23,9 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 		return ErrInvariant
 	}
 	base := "/api/games/" + s.rules.ID()
+	if err := randomhttp.RegisterContinuation(continuation, s.database, s.authorizer, s.rules.ID(), s.now, s.authorizeRandomness); err != nil {
+		return err
+	}
 	if err := user.RegisterUserRoute("POST", base+"/queue", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 		if r.URL.RawQuery != "" {
 			writeError(w, ErrInvalidRequest)
@@ -49,7 +54,7 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 		return err
 	}
 	for _, route := range s.descriptor.Routes {
-		if route.Station != "user" || !route.Continuation {
+		if route.Station != "user" || !route.Continuation || route.Pattern == base+"/randomness/{id}" {
 			continue
 		}
 		path := route.Pattern

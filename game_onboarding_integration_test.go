@@ -21,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -165,12 +166,24 @@ func TestGameOnboardingHTTPExportAndPhysicalDeletion(t *testing.T) {
 	}
 	queue(game.RPSModeQuick)
 	sessionID := ""
+	openingCommitment := ""
 	for i := range users {
 		current := state(i)
 		if current.Session == nil {
 			t.Fatal("new HTTP entry did not select current rules")
 		}
 		sessionID = current.Session.SessionID
+		proofResponse := call(i, "GET", "/api/games/rps/randomness/"+sessionID, "", false)
+		var opening struct {
+			Proof randomness.Proof `json:"proof"`
+		}
+		if proofResponse.Code != 200 || json.Unmarshal(proofResponse.Body.Bytes(), &opening) != nil || opening.Proof.Seed != "" || len(opening.Proof.Streams) != 0 || len(opening.Proof.Commitment) != 64 {
+			t.Fatal("RPS active random disclosure", proofResponse.Code)
+		}
+		if openingCommitment != "" && openingCommitment != opening.Proof.Commitment {
+			t.Fatal("RPS seats have different commitments")
+		}
+		openingCommitment = opening.Proof.Commitment
 		body := fmt.Sprintf(`{"phase_seq":%q,"expected_revision":%q,"action":"gesture","payload":{"gesture":"rock"}}`, current.Session.PhaseSeq, current.Session.Revision)
 		response := call(i, "POST", "/api/games/rps/sessions/"+sessionID+"/actions", body, false)
 		if response.Code != 200 {
@@ -201,6 +214,18 @@ func TestGameOnboardingHTTPExportAndPhysicalDeletion(t *testing.T) {
 	}
 	if document.SchemaVersion != 8 || len(document.GameOnboarding) != 1 || document.GameOnboarding[0].GameKey != "rps" || document.GameOnboarding[0].TaskKey != "quick" || document.GameOnboarding[0].Award != "1000" || document.User.GameBalance != "0" {
 		t.Fatalf("earned reward missing from export: %+v", document.GameOnboarding)
+	}
+	if len(document.Randomness) != 1 || document.Randomness[0].Commitment != openingCommitment || len(document.Randomness[0].Seed) != 64 {
+		t.Fatal("terminal RPS proof missing from export")
+	}
+	for i := range users {
+		r := call(i, "GET", "/api/games/rps/randomness/"+sessionID, "", false)
+		var final struct {
+			Proof randomness.Proof `json:"proof"`
+		}
+		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &final) != nil || final.Proof.Commitment != openingCommitment || randomness.Verify(final.Proof) != nil {
+			t.Fatal("RPS terminal proof invalid", r.Code)
+		}
 	}
 	for i := range users {
 		response := call(i, "POST", rps.RoutePendingACK, fmt.Sprintf(`{"session_id":%q}`, sessionID), false)

@@ -370,6 +370,7 @@ func newLifecycleCoordinator(
 			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			Randomness: lifecycleadapters.RandomnessAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,

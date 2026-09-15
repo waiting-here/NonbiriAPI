@@ -268,11 +268,18 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 
 	terminal := candidate.activeCount() == 0
 	if record.RulesVersion == 1 && !terminal && !candidate.hasMove() {
+		source, save, err := service.randomSource(ctx, tx, record.ID, "automatic/"+record.Revision.Big().String())
+		if err != nil {
+			return Result{}, err
+		}
 		service.rngMu.Lock()
-		reshuffled, reshuffleErr := candidate.reshuffle(service.random)
+		reshuffled, reshuffleErr := candidate.reshuffle(source)
 		service.rngMu.Unlock()
 		if reshuffleErr != nil {
 			return Result{}, ErrServiceUnavailable
+		}
+		if err := save(); err != nil {
+			return Result{}, err
 		}
 		if service.beforeReshuffleCommit != nil {
 			if err := service.beforeReshuffleCommit(); err != nil {

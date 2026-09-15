@@ -2,13 +2,13 @@ package duel
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
-	"math/big"
+	"io"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -60,13 +60,6 @@ func (s *Service) match(ctx context.Context, tx *sql.Tx, now int64) (bool, error
 			continue
 		}
 		pair := [2]queueRecord{a, queues[chosen]}
-		seat, err := rand.Int(rand.Reader, big.NewInt(2))
-		if err != nil {
-			return false, ErrUnavailable
-		}
-		if seat.Sign() != 0 {
-			pair[0], pair[1] = pair[1], pair[0]
-		}
 		return true, s.startSession(ctx, tx, pair, now)
 	}
 	return false, nil
@@ -80,7 +73,34 @@ func (s *Service) startSession(ctx context.Context, tx *sql.Tx, queues [2]queueR
 	if err != nil {
 		return err
 	}
-	state, err := s.rules.Create(queues[0].Mode, [2]json.RawMessage{queues[0].Loadout, queues[1].Loadout})
+	secret, err := randomness.New(s.rules.ID(), id, queues[0].Mode+"/"+queues[0].Terms.ContentHash, nil)
+	if err != nil {
+		return err
+	}
+	seatRandom, err := secret.Stream("seat-order")
+	if err != nil {
+		return err
+	}
+	seat, err := seatRandom.Uint64n(2)
+	if err != nil {
+		return err
+	}
+	if seat != 0 {
+		queues[0], queues[1] = queues[1], queues[0]
+	}
+	loadouts := [2]json.RawMessage{queues[0].Loadout, queues[1].Loadout}
+	var state json.RawMessage
+	if rules, ok := s.rules.(interface {
+		CreateWithRandom(string, [2]json.RawMessage, io.Reader) (json.RawMessage, error)
+	}); ok {
+		stream, streamErr := secret.Stream("initial")
+		if streamErr != nil {
+			return streamErr
+		}
+		state, err = rules.CreateWithRandom(queues[0].Mode, loadouts, stream)
+	} else {
+		state, err = s.rules.Create(queues[0].Mode, loadouts)
+	}
 	if err != nil {
 		return err
 	}
@@ -98,6 +118,9 @@ func (s *Service) startSession(ctx context.Context, tx *sql.Tx, queues [2]queueR
 		v.GeneralAccount = accounts.General
 		v.GameAccount = accounts.Game
 		if err := s.insertSession(ctx, tx, v); err != nil {
+			return err
+		}
+		if err := randomness.Insert(ctx, tx, secret); err != nil {
 			return err
 		}
 		for _, q := range queues {

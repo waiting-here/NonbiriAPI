@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { RandomnessProof } from '../RandomnessProof';
 import { useQuery } from '@tanstack/react-query';
 import { duelKeys, readDetail, readHistory, readRounds } from './api';
 import type { DuelCodec, DuelDetail, DuelRound, Seat } from './types';
@@ -112,6 +113,7 @@ function HistoryDetail<V, F, P, S, L, A>({
       {query.data && (
         <>
           <DuelFinance result={query.data.result} />
+          <RandomnessProof game={codec.game} id={id} terminal />
           {renderDetail?.(query.data)}
           <DuelRoundLog
             codec={codec}

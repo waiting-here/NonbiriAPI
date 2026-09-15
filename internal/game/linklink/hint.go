@@ -148,11 +148,18 @@ func (service *Service) Hint(ctx context.Context, input HintInput) (Result, erro
 	hint := record.Board.firstHint()
 	reshuffled := hint == nil
 	if reshuffled {
+		source, save, err := service.randomSource(ctx, tx, record.ID, "hint/"+record.Revision.Big().String())
+		if err != nil {
+			return Result{}, err
+		}
 		service.rngMu.Lock()
-		candidate, err := record.Board.shuffleOccupied(service.random)
+		candidate, err := record.Board.shuffleOccupied(source)
 		service.rngMu.Unlock()
 		if err != nil {
 			return Result{}, ErrServiceUnavailable
+		}
+		if err := save(); err != nil {
+			return Result{}, err
 		}
 		if service.beforeReshuffleCommit != nil {
 			if err := service.beforeReshuffleCommit(); err != nil {

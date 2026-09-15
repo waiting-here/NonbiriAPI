@@ -288,6 +288,7 @@ func TestDuelProductionCancellationEntrypointsAreAtomic(t *testing.T) {
 			f := newDuelWireFixture(t)
 			bid := f.matched("bidding", "tier1")
 			likes := f.settlement()
+			openings := map[string]string{"bidding": readRandomProof(f, 1, "bidding", bid.ID).Commitment, "likes": readRandomProof(f, 1, "likes", likes.ID).Commitment}
 			reason := "account_unavailable"
 			switch kind {
 			case "administrator", "ban rollback":
@@ -358,6 +359,12 @@ func TestDuelProductionCancellationEntrypointsAreAtomic(t *testing.T) {
 			}
 			f.assertCancelled("bidding", bid.ID, reason)
 			f.assertCancelled("likes", likes.ID, reason)
+			for game, id := range map[string]string{"bidding": bid.ID, "likes": likes.ID} {
+				proof := readRandomProof(f, 1, game, id)
+				if proof.Commitment != openings[game] || len(proof.Seed) != 64 {
+					t.Fatal("cancellation lost or changed opening", game)
+				}
+			}
 			f.clock.Add(10)
 			f.assertCancelled("likes", likes.ID, reason)
 			f.checkLedger()
@@ -382,7 +389,7 @@ func TestDuelProductionMaintenanceAllowsSettlementAndManualPlanIsRequired(t *tes
 		if h := f.read(seat, "likes"); h.Current == nil || h.Current.Phase != "settlement" {
 			t.Fatal("maintenance lost settlement")
 		}
-		for _, path := range []string{"/api/games/likes/catalog", "/api/games/likes/sessions/" + s.ID + "/rounds"} {
+		for _, path := range []string{"/api/games/likes/catalog", "/api/games/likes/sessions/" + s.ID + "/rounds", "/api/games/likes/randomness/" + s.ID} {
 			r := f.call(seat, "GET", path, nil, false)
 			if r.Code != 200 {
 				t.Fatalf("continuation %s: %d %s", path, r.Code, r.Body.String())

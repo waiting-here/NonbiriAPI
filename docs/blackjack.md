@@ -8,6 +8,8 @@
 
 每局重新洗完整六副牌。A 按 1 或 11，J/Q/K 按 10。庄家软 17 停牌，美式底牌预查；底牌在全桌完成决策前隐藏。原始两张 A 加十点牌是自然二十一点，优先于普通 21。所有玩家同时操作，每秒每席最多处理一次，同批按轮换后的座位顺序发牌。未结束的手在截止时自动停牌。
 
+落座阶段即可保存本局随机承诺；底牌和未来牌序只在服务端保存。全桌完成决策并提交结果后可核验种子与洗牌抽样，详见[随机验证说明](game-randomness.md)。
+
 - 要牌：为该手补一张牌；超过 21 点爆牌。
 - 停牌：结束该手操作。
 - 加倍：额外支付一份基础投入，只补一张即停。余额不足不会改变手牌。
@@ -37,6 +39,8 @@ One shared table seats up to eight players and starts with one. Each server minu
 Joining reserves the base stake immediately, using game credits before general credits, and freezes the stake and three fee rates. The first eight accepted entries take seats; up to 4,096 wait in a persistent FIFO queue. Retries and multiple tabs cannot duplicate or reorder an entry. Before dealing, seated players may leave for an original-asset refund and the next waiter is promoted. Waiting entries never expire automatically and may leave at any time. After settlement, players explicitly join the tail again; seats and stakes never renew automatically.
 
 Every round shuffles six complete decks. Aces count as 1 or 11 and face cards as 10. The dealer stands on soft 17 and peeks for natural blackjack. The hole card stays hidden until decisions finish. An original ace plus a ten-value card beats an ordinary 21. Each seat submits at most one action per second; batches draw in rotating seat order, and unfinished hands stand at the deadline.
+
+Save the random commitment during seating. The hole card and undealt shoe stay server-side until decisions end and the result commits; the revealed seed and shuffle draws can then be checked using the [verification guide](game-randomness.md).
 
 Hit, stand, double or split equal-value initial cards once. Doubling reserves one additional base stake and draws one final card. Doubling after ordinary splits is allowed. Split aces receive one card each and stand; split 21 is an ordinary win. Unfunded additions leave the hand unchanged. No insurance, surrender, five-card bonus or side bets. Maximum personal exposure is four base stakes. Defaults are 1,000–50,000 in steps of 1,000, with 5,000 selected. Administrators can configure these values; the game starts disabled.
 

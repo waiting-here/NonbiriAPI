@@ -11,6 +11,7 @@ import (
 
 func makePreBlackjackFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreRandomnessFixture(t, database)
 	present, err := BlackjackStoragePresent(context.Background(), database)
 	if err != nil {
 		t.Fatal(err)

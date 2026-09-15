@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -19,6 +20,22 @@ func TestHistoryOwnershipPaginationExportAndAnonymousRetention(t *testing.T) {
 		start := int64(120 + 60*round)
 		f.clock.Store(start)
 		f.join(0)
+		id := f.read(0).Table.ID
+		proof, err := randomness.New("blackjack", id, "six-decks-s17-v1", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx, err := f.db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := randomness.Insert(f.ctx, tx, proof); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 		f.clock.Store(start + 15)
 		home := f.read(0)
 		ids = append(ids, home.Table.ID)
@@ -83,12 +100,12 @@ func TestHistoryOwnershipPaginationExportAndAnonymousRetention(t *testing.T) {
 			t.Fatal("original game ID in anonymous export")
 		}
 	}
-	for _, forbidden := range []string{"started_at", "terminal_at", "emote_at", "user_id", "payment", "operations", "deck"} {
+	for _, forbidden := range []string{"started_at", "terminal_at", "emote_at", "user_id", "payment", "operations", "deck", "seed", "commitment", "streams", "randomness"} {
 		if strings.Contains(string(body), `"`+forbidden+`"`) {
 			t.Fatalf("anonymous field %s", forbidden)
 		}
 	}
-	for _, table := range []string{"game_blackjack_entries", "game_blackjack_payments", "game_blackjack_events", "game_blackjack_sessions"} {
+	for _, table := range []string{"game_blackjack_entries", "game_blackjack_payments", "game_blackjack_events", "game_blackjack_sessions", "game_random_proofs"} {
 		var n int
 		if err := f.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil || n != 0 {
 			t.Fatalf("retained %s=%d err=%v", table, n, err)

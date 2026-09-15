@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
+	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -23,6 +24,9 @@ func (s *Service) RegisterRoutes(r host.Registrars) error {
 		return ErrInvariant
 	}
 	base := "/api/games/blackjack"
+	if err := randomhttp.RegisterContinuation(r.Continuation, s.database, s.authorizer, "blackjack", s.now, s.authorizeRandomness); err != nil {
+		return err
+	}
 	if err := r.User.RegisterUserRoute("POST", base+"/queue", func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 		if r.URL.RawQuery != "" {
 			writeError(w, ErrInvalid)
@@ -45,7 +49,7 @@ func (s *Service) RegisterRoutes(r host.Registrars) error {
 		return err
 	}
 	for _, route := range config.Descriptor().Routes {
-		if route.Station != "user" || !route.Continuation {
+		if route.Station != "user" || !route.Continuation || route.Pattern == base+"/randomness/{id}" {
 			continue
 		}
 		if err := r.Continuation.RegisterContinuationUserRoute(route.Method, route.Pattern, func(w http.ResponseWriter, r *http.Request, p resources.ContinuationUserPrincipal) {

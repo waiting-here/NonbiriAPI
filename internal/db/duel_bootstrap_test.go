@@ -74,6 +74,9 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 	if err := applyBlackjackExtension(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
+	if err := applyRandomnessExtension(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
 	got, err := readGenerationManifest(ctx, tx)
 	if err != nil || generationManifestDigest(got) != generationManifestDigest(want) {
 		t.Fatal("fresh and upgraded structures differ", generationManifestDigest(got), err)

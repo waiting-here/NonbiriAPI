@@ -8,6 +8,7 @@ func Descriptor() game.ModuleDescriptor {
 		ResourcePrefixes: []string{"bidq_", "bid_"}, Modes: Modes(),
 		HomeRouteID: "game-bidding", ContinuationIDs: []string{"bidding_session"}, Codec: Codec{},
 		Routes: []game.RouteDeclaration{
+			{Station: "user", Method: "GET", Pattern: "/api/games/bidding/randomness/{id}", Continuation: true},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/bidding/history"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/bidding/history/{id}"},
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/bidding/history/{id}/rounds"},

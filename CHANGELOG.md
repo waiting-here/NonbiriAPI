@@ -12,6 +12,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Separate per-game queues, frozen entry terms, mixed-wallet admission, original-asset refunds and atomic winner/fee settlement. Both games start disabled and do not add newcomer awards.
 - Synchronized five-second Likes settlement with score breakdowns, resource changes, round-start refills, independent stun/overload artwork slots, reduced-motion feedback and a paginated round log. Existing images fill 127 replaceable art slots.
 - Thirty-day player and administrator match history, long-term anonymous traces and resumable bounded administrator NDJSON export. Account export v8 includes safe new-game records.
+- Private per-game randomness for all six games, with opening SHA-256 commitments, HMAC-SHA256 rejection sampling, terminal seed disclosure, bounded proofs, independent browser/Node verification and safe account export. Active responses never disclose seeds or future draws; retained legacy games explicitly lack proofs.
 - One shared eight-seat Blackjack table with minute-aligned seating/decisions/results, persistent FIFO waiting, simultaneous batched actions, six-deck rules, splitting and doubling. Frozen mixed-wallet stakes settle per hand into general credits after fees; the game starts disabled.
 
 ### Fixed
@@ -24,7 +25,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Generation 2 now has 116 tables and accepts thirteen exact predecessor manifests, including populated beta.4 and the previous development candidate databases. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
+- Generation 2 now has 117 tables and accepts fourteen exact predecessor manifests, including populated beta.4 and both preceding development schemas. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
 - Artwork remains placeholder content. This candidate has not been released or deployed.
 
 ## [1.0.0-beta.4] - 2026-09-12

@@ -13,7 +13,8 @@ package db
 const generationTwoWithoutDuelsSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema + browseIndexesSchema + quotaCleanupIndexesSchema + stewardHoldReadSchema + fishingLengthSchema + charityModelReserveSchema + dualAssetSchema
 
 var generationTwoWithoutBlackjackSchema = duelBootstrapSchema(generationTwoWithoutDuelsSchema)
-var generationTwoSchema = blackjackBootstrapSchema(generationTwoWithoutBlackjackSchema)
+var generationTwoWithoutRandomnessSchema = blackjackBootstrapSchema(generationTwoWithoutBlackjackSchema)
+var generationTwoSchema = generationTwoWithoutRandomnessSchema + gameRandomnessSchema
 
 // Steward reads use their own audit so account deletion can remove the actor
 // link without changing immutable administrator audit identities.

@@ -32,6 +32,7 @@ function exportDocument(): Record<string, unknown> {
     bidding: {},
     likes: {},
     blackjack: {},
+    randomness: [],
   };
 }
 

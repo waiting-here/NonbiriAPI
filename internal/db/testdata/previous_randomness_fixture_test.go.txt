@@ -1,0 +1,71 @@
+package main
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+)
+
+func TestWritePreviousRandomnessFixtures(t *testing.T) {
+	directory := os.Getenv("NONBIRI_RANDOMNESS_FIXTURES")
+	if directory == "" {
+		t.Fatal("missing fixture directory")
+	}
+	for _, phase := range []string{"seating", "decision", "result"} {
+		t.Run(phase, func(t *testing.T) {
+			f := newBlackjackHTTPFixture(t)
+			joinBlackjackHTTP(f, 0)
+			h := readBlackjackHTTP(f, 0)
+			if phase != "seating" {
+				f.clock.Store(h.Table.StartedAt + 15)
+				readBlackjackHTTP(f, 0)
+			}
+			if phase == "result" {
+				f.clock.Store(h.Table.StartedAt + 45)
+				readBlackjackHTTP(f, 0)
+			}
+			if err := f.app.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.store.DB().Exec(`VACUUM INTO ?`, filepath.Join(directory, phase+".db")); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPreviousBinaryRejectsRandomnessUpgrade(t *testing.T) {
+	directory := os.Getenv("NONBIRI_RANDOMNESS_FIXTURES")
+	if directory == "" {
+		t.Fatal("missing fixture directory")
+	}
+	vault, err := secret.New(bytes.Repeat([]byte{0x53}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	for _, phase := range []string{"seating", "decision", "result"} {
+		path := filepath.Join(directory, phase+"-upgraded.db")
+		before, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store, err := db.Open(path, vault)
+		if store != nil {
+			store.Close()
+			t.Fatal("previous binary accepted newer storage")
+		}
+		if err == nil {
+			t.Fatal("expected rejection")
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
+			t.Fatal("rejection modified source", err)
+		}
+	}
+}

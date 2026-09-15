@@ -46,7 +46,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
-		"bidding", "likes", "blackjack",
+		"bidding", "likes", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
 		"fishing", "generated_at", "issues", "linklink", "log_summary", "models", "rps",
 		"schema_version", "thursday", "usage", "user", "welfare_claims",

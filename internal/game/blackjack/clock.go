@@ -8,6 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 )
 
 // progress runs under SQLite's writer position, shared with queue acceptance,
@@ -59,8 +60,22 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 					for i, e := range list {
 						numbers[i] = int(e.Seat.Int64)
 					}
-					state, err := engine.New(numbers, int(v.StartedAt/60%8), s.random)
+					secret, err := randomness.Load(ctx, tx, "blackjack", v.ID)
 					if err != nil {
+						return facts, err
+					}
+					random := s.random
+					if secret != nil {
+						random, err = secret.Stream("shoe")
+						if err != nil {
+							return facts, err
+						}
+					}
+					state, err := engine.New(numbers, int(v.StartedAt/60%8), random)
+					if err != nil {
+						return facts, err
+					}
+					if err := randomness.Save(ctx, tx, secret); err != nil {
 						return facts, err
 					}
 					if _, err := tx.ExecContext(ctx, `UPDATE game_blackjack_entries SET state='playing' WHERE session_id=? AND state='seated'`, v.ID); err != nil {
@@ -132,6 +147,15 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_blackjack_sessions(id,started_at,phase,revision,last_batch) VALUES(?,?,'seating',1,?)`, id, start, start); err != nil {
 			return facts, err
+		}
+		if s.random == nil {
+			secret, err := randomness.New("blackjack", id, "six-decks-s17-v1", nil)
+			if err != nil {
+				return facts, err
+			}
+			if err := randomness.Insert(ctx, tx, secret); err != nil {
+				return facts, err
+			}
 		}
 		v = sessionRecord{ID: id, StartedAt: start, Phase: "seating", Revision: 1, LastBatch: start}
 	}

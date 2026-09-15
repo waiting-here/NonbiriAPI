@@ -160,6 +160,10 @@ func (a testDuelExport) ExportBlackjack(_ context.Context, tx *sql.Tx, _ ExportR
 	return BlackjackExport{}, a.end, a.owner.record(a.name, tx)
 }
 
+func (a testDuelExport) ExportRandomness(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]RandomnessProofExport, error) {
+	return nil, a.owner.record(a.name, tx)
+}
+
 func (finalizer *testFinalizer) Commit() bool {
 	finalizer.mu.Lock()
 	defer finalizer.mu.Unlock()
@@ -335,7 +339,8 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Identity: exports, Resources: exports, Issues: exports, Ledger: exports, Activities: exports,
 			Donations: exports, Charity: exports, Fishing: exports, LinkLink: exports, RPS: exports,
 			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"},
-			Blackjack: testDuelExport{owner: exports, name: "blackjack"},
+			Blackjack:  testDuelExport{owner: exports, name: "blackjack"},
+			Randomness: testDuelExport{owner: exports, name: "randomness"},
 		},
 		Delete: DeleteAdapters{
 			AuthSessionCallerKey: noopDelete("auth"), Resources: noopDelete("resources"), ClaimLog: noopDelete("claim_log"),

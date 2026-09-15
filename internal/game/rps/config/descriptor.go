@@ -8,6 +8,7 @@ import (
 
 func Descriptor() game.ModuleDescriptor {
 	return game.ModuleDescriptor{ID: game.RPSID, Version: game.RPSVersion, StableOrder: 2, ResourcePrefixes: []string{"rps_", "rpsq_"}, Modes: append([]string(nil), rpsModes[:]...), BoardIDs: []string{"profit_rate", "net_profit"}, HomeRouteID: "game-rps", SnapshotFields: []string{"tutorial_rps_seen"}, ContinuationIDs: []string{"rps_session"}, Codec: Codec{}, Onboarding: []game.OnboardingTask{{Key: "quick", RewardMilli: 1_000_000}, {Key: "standard", RewardMilli: 2_000_000}, {Key: "deathmatch", RewardMilli: 5_000_000}}, Routes: []game.RouteDeclaration{
+		{Station: "user", Method: "GET", Pattern: "/api/games/rps/randomness/{id}", Continuation: true},
 		{Station: "user", Method: "POST", Pattern: "/api/games/rps/tutorial/seen"},
 		{Station: "user", Method: "POST", Pattern: "/api/games/rps/queue"},
 		{Station: "user", Method: "DELETE", Pattern: "/api/games/rps/queue/{id}"},
