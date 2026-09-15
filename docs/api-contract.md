@@ -71,7 +71,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Fresh creation requires the main/WAL/SHM set to be absent. Fourteen exact predecessor manifests, including complete beta.4, both preceding development schemas and the eleven earlier sources, receive an atomic upgrade to 117 tables. Missing predecessor extensions and the duel schema are applied before the complete manifest, foreign keys, both asset ledgers and reward capacity are validated. Unknown or partial structures are rejected before source writes; a second startup adds nothing. Existing identities, both wallets, settled charges, game rules, configuration and custom legal text remain intact. Game wallets are initialized to zero only when upgrading a source that did not have them. Existing Fishing, LinkLink and RPS games retain their saved version-1 or version-2 rules. The three new games use independent rules version 1 and start disabled. No historical payment source or newcomer completion is invented. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. Alpha/Generation 1 and arbitrary schema repair remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
 
-Account export `schema_version=7` is independent of SQLite `user_version`.
+Account export `schema_version=8` is independent of SQLite `user_version`.
 
 ## 2. OpenAI-compatible ingress
 
