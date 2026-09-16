@@ -8,6 +8,8 @@
 
 普通用户可以读取本人当前和最近 30 天对局的凭证。二十一点旁观者仅能读取当前分钟的公开承诺和终局凭证，之后的历史限实际参与者。维护期间沿用各游戏原有的继续读取权限，未满足条件时需等维护结束。所有响应禁止缓存。个人导出第八版增加 `randomness`：进行中仅含承诺，结束后含完整凭证。凭证随对应历史清理；去身份长期历史不含种子、承诺或凭证。
 
+终局（含取消）公开种子后，可重建本局完整的竞标奖励牌堆或二十一点牌鞋，包括没有使用的牌。普通游戏历史和游戏导出字段不直接列出这些牌，但独立凭证及导出中的 `randomness` 足以进行重建。进行中的牌序仍保密，其他玩家的身份、支付来源和其他局的秘密不会随之开放。
+
 随机种子不用于会话、加密 nonce、身份、防作弊令牌、游标、匿名化或其他对局。知道一局的公开种子不能推导其他局的种子。开局承诺使已经保存承诺的玩家能发现终局更换种子；它不证明可信运营者从未事先筛选种子，也不证明所有日志完整或单局必定获利。
 
 ## English
@@ -17,6 +19,8 @@ New games use independent 256-bit secret server seeds. The game page offers an o
 Blackjack reveals after the whole table's result commits. Bidding, Likes, RPS and LinkLink reveal only after the entire match ends, including cancellation. Likes includes random target selection. Fishing reveals after the whole batch settles, independently of frontend animations; an instant batch can return commitment and seed together, so it offers no independently observed pre-stake commitment. Legacy games are explicitly unverifiable.
 
 Proofs are owner-scoped and retained for up to 30 days. Blackjack spectators can read only the current minute's table; later history requires actual participation. Existing maintenance continuation restrictions apply. Responses are `no-store`. Account export v8 adds `randomness`, with only public commitments for active games. Proofs disappear with the corresponding retained parent; long-term anonymous archives omit seeds and commitments.
+
+Once a terminal seed is disclosed, including after cancellation, the complete Bidding reward decks or Blackjack shoe can be reconstructed, including unused cards. Ordinary game history and game export fields do not list those cards, but the separate proof and exported `randomness` allow reconstruction. Active deck order remains secret; disclosure does not expose other players' identities, funding sources or other games' secrets.
 
 Seeds never derive login tokens, encryption nonces, other games, cursors or anonymization keys. Saving the opening commitment lets a player detect a later seed substitution. This is not a proof that a trusted operator never selected among seeds, that the transcript is complete, or that a player will profit.
 
