@@ -81,6 +81,9 @@ i18n.json
 
 # ===== User-supplied site assets (not part of the open-source repo) =====
 
+# Local source media, working files, references, and private audio imports.
+/local-assets/
+
 *.ico
 *.png
 *.jpg
