@@ -646,7 +646,7 @@ describe('donation composer recovery', () => {
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: '',
-        keys: [{ endpointKeyId: '61', expiresAt: null }],
+        keys: [{ endpointKeyId: '61', expiresAt: null, failureDisableThreshold: '10' }],
         ownershipAuthorized: true,
       }),
     );
@@ -753,7 +753,7 @@ describe('donation composer recovery', () => {
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: '',
-        keys: [{ endpointKeyId: '61', expiresAt: instant }],
+        keys: [{ endpointKeyId: '61', expiresAt: instant, failureDisableThreshold: '10' }],
         ownershipAuthorized: true,
       }),
     );
@@ -783,6 +783,7 @@ describe('donation composer recovery', () => {
       },
       tokenReserve: 8,
       expiresAt: 1_900_000_000,
+      failureDisableThreshold: '10',
       streak: { generation: '2', count: '3', failureDisabled: false },
       endedReason: null,
     } satisfies DonationKey;
@@ -855,6 +856,7 @@ describe('donation composer recovery', () => {
       },
       tokenReserve: 0,
       expiresAt: null,
+      failureDisableThreshold: '10',
       streak: { generation: '1', count: '10', failureDisabled: true },
       endedReason: null,
     };
@@ -871,6 +873,7 @@ describe('donation composer recovery', () => {
           physicalEnabled: true,
           charityState: 'exhausted',
           limits: { price: '0', calls: '0', tokens: '0' },
+          failureDisableThreshold: '10',
           streak: { generation: '1', count: '0', failureDisabled: false },
         }}
       />,

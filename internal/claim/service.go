@@ -610,7 +610,7 @@ func validCandidateIdentity(candidate Candidate) bool {
 		return false
 	}
 	switch candidate.ConnectorType {
-	case connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible:
+	case connectorcontract.TypeOpenAICompatible, connectorcontract.TypeAnthropicCompatible, connectorcontract.TypeAISDKGatewayV3:
 		return true
 	default:
 		return false

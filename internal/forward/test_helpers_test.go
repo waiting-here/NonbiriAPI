@@ -337,13 +337,15 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	anthropicDescriptor, _ := registry.Descriptor(connectorcontract.TypeAnthropicCompatible)
 	openAI := &fakeConnector{connectorType: connectorcontract.TypeOpenAICompatible, capabilities: openAIDescriptor.Capabilities, consume: true}
 	anthropic := &fakeConnector{connectorType: connectorcontract.TypeAnthropicCompatible, capabilities: anthropicDescriptor.Capabilities, consume: true}
+	gatewayDescriptor, _ := registry.Descriptor(connectorcontract.TypeAISDKGatewayV3)
+	gateway := &fakeConnector{connectorType: connectorcontract.TypeAISDKGatewayV3, capabilities: gatewayDescriptor.Capabilities, consume: true}
 	safety, err := NewSafetyIdentifierFactory(fixedSubkeyDeriver{})
 	if err != nil {
 		t.Fatalf("NewSafetyIdentifierFactory: %v", err)
 	}
 	service, err := NewService(Config{
 		Personal: personal, Charity: charity, Claims: claims, CharityCharges: charges,
-		Debug: capture, Registry: registry, Connectors: []connector.Connector{openAI, anthropic}, Safety: safety,
+		Debug: capture, Registry: registry, Connectors: []connector.Connector{openAI, anthropic, gateway}, Safety: safety,
 		Now:            func() time.Time { return time.Unix(2_000, 0) },
 		ForwardTimeout: time.Minute, Settlement: time.Second,
 		Backoff: BackoffConfig{Max: time.Nanosecond},

@@ -63,6 +63,7 @@ const copy = {
   ],
   'connector.openai': ['OpenAI-compatible', 'OpenAI 兼容'],
   'connector.anthropic': ['Anthropic-compatible', 'Anthropic 兼容'],
+  'connector.gateway': ['AI SDK Gateway v3', 'AI SDK Gateway v3'],
   'home.title': ['Welcome back, {{name}}', '欢迎回来，{{name}}'],
   'home.signedOutTitle': ['Your AI routing workspace', '你的 AI 路由工作台'],
   'home.signedOutBody': [

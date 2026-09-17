@@ -17,7 +17,7 @@ import (
 )
 
 func (s *Service) create(ctx context.Context, userID int64, key string, canonical []byte, input createInput) ([]byte, error) {
-	if input.Endpoint == nil || (input.Endpoint.ConnectorType != "openai-compatible" && input.Endpoint.ConnectorType != "anthropic-compatible") ||
+	if input.Endpoint == nil ||
 		strings.TrimSpace(input.Description) == "" || len(input.Keys) < 1 || len(input.Keys) > maxKeys {
 		return nil, errInvalid
 	}
@@ -80,7 +80,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 		if err != nil {
 			return nil, err
 		}
-		donationKeys[index] = donation.CreateKeyInput{EndpointKeyID: physicalID, ExpiresAt: item.AuthorizedExpiresAt}
+		donationKeys[index] = donation.CreateKeyInput{EndpointKeyID: physicalID, ExpiresAt: item.AuthorizedExpiresAt, FailureDisableThreshold: item.FailureDisableThreshold}
 		result.Keys[index].EndpointKeyID = physical.ID
 	}
 	submission, err := s.donations.CreateInTransaction(ctx, tx, userID, donation.CreateInput{Description: input.Description, Keys: donationKeys, OwnershipAuthorized: true})

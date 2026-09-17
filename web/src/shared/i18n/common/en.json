@@ -14,6 +14,22 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "gatewayName": "AI SDK Gateway v3",
+    "gatewayAttribution": {
+      "label": "Gateway cost attribution tag",
+      "sent": "Sent",
+      "notSent": "Not sent"
+    },
+    "failurePolicy": {
+      "label": "Consecutive failure disable threshold",
+      "help": "Default: 10. Enter an integer from 0 to 340282366920938463463374607431768211455 without leading zeros.",
+      "zeroWarning": "Never disable automatically for errors: this key may still be called after repeated failures. Manual disabling, expiry, bans and quota limits still apply.",
+      "saved": "Current disable threshold: {{value}}",
+      "recalculate": "Saving preserves the failure count and immediately recalculates the error-disabled state. It does not enable the key or reset its failure count.",
+      "save": "Save failure policy",
+      "done": "Failure policy saved and recalculated.",
+      "invalid": "Enter a valid consecutive failure threshold."
+    },
     "refresh": "Refresh",
     "donationHandling": {
       "title": "Shared follow-up",

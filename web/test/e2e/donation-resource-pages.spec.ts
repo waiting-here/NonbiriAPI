@@ -196,6 +196,7 @@ test.describe('donation resource submission', () => {
                 },
                 token_reserve: 0,
                 expires_at: key.expires_at,
+                failure_disable_threshold: '10',
                 streak: { generation: '1', count: '0', failure_disabled: false },
                 ended_reason: null,
               })),
@@ -260,9 +261,9 @@ test.describe('donation resource submission', () => {
           description: 'Cross-page contribution',
           ownership_authorized: true,
           keys: [
-            { endpoint_key_id: '101', expires_at: EXPIRY },
-            { endpoint_key_id: '121', expires_at: null },
-            { endpoint_key_id: '201', expires_at: null },
+            { endpoint_key_id: '101', expires_at: EXPIRY, failure_disable_threshold: '10' },
+            { endpoint_key_id: '121', expires_at: null, failure_disable_threshold: '10' },
+            { endpoint_key_id: '201', expires_at: null, failure_disable_threshold: '10' },
           ],
         },
       ]);

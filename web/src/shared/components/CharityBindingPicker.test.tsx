@@ -98,6 +98,7 @@ function key({
     token_reserve: 0,
     expires_at: null,
     authorized_expires_at: null,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: endedReason,
     safe_note: safeNote,
@@ -489,11 +490,9 @@ describe('CharityBindingPicker numbered source flow', () => {
     authorize(view.queryClient);
     await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
     await screen.findByRole('button', { name: /safe key note/ });
-    const sourceQuery = view.queryClient
-      .getQueryCache()
-      .findAll({
-        queryKey: [...charityKeys.root('admin'), 'binding-picker', 'root', '31', 'sources'],
-      })[0];
+    const sourceQuery = view.queryClient.getQueryCache().findAll({
+      queryKey: [...charityKeys.root('admin'), 'binding-picker', 'root', '31', 'sources'],
+    })[0];
     expect(sourceQuery).toBeDefined();
     await view.queryClient.refetchQueries({ queryKey: sourceQuery!.queryKey, exact: true });
     expect(await screen.findByText('The service is temporarily unavailable.')).toBeVisible();

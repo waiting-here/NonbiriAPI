@@ -852,6 +852,7 @@ function sourceManagedKey(
     token_reserve: 32,
     authorized_expires_at: null,
     expires_at: null,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     safe_note: `Reviewed key ${index} — ${'long note '.repeat(12)}`,
@@ -908,6 +909,7 @@ function managedDonation(id: number) {
         token_reserve: 32,
         authorized_expires_at: null,
         expires_at: null,
+        failure_disable_threshold: '10',
         streak: { generation: '1', count: '0', failure_disabled: false },
         ended_reason: null,
         safe_note: 'Reviewed note',
@@ -1266,8 +1268,12 @@ test.describe('donation selection expiry in UTC', () => {
       .toEqual({
         description: 'A helpful description for the shared resources',
         keys: [
-          { endpoint_key_id: '20001', expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000 },
-          { endpoint_key_id: '1002', expires_at: null },
+          {
+            endpoint_key_id: '20001',
+            expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000,
+            failure_disable_threshold: '10',
+          },
+          { endpoint_key_id: '1002', expires_at: null, failure_disable_threshold: '10' },
         ],
         ownership_authorized: true,
       });

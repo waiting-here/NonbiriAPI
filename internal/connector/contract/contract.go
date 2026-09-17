@@ -19,6 +19,7 @@ type Type string
 const (
 	TypeOpenAICompatible    Type = "openai-compatible"
 	TypeAnthropicCompatible Type = "anthropic-compatible"
+	TypeAISDKGatewayV3      Type = "ai-sdk-gateway-v3"
 )
 
 // Operation selects an ingress protocol operation without classifying models.
@@ -101,16 +102,17 @@ type Usage struct {
 // generated safe category; it must never contain an upstream body, URL,
 // request value, credential, or raw transport error.
 type AttemptResult struct {
-	Success         bool
-	Committed       bool
-	SinkFailed      bool
-	Failure         FailureKind
-	Diagnostic      string
-	ErrorDetail     upstreamerror.Detail
-	UpstreamStatus  int
-	ClientStatus    int
-	EndpointBaseURL string
-	Usage           Usage
+	GatewayUserAttributionSent *bool
+	Success                    bool
+	Committed                  bool
+	SinkFailed                 bool
+	Failure                    FailureKind
+	Diagnostic                 string
+	ErrorDetail                upstreamerror.Detail
+	UpstreamStatus             int
+	ClientStatus               int
+	EndpointBaseURL            string
+	Usage                      Usage
 }
 
 // Target is the final revalidated physical target of one attempt. Fields are

@@ -546,7 +546,7 @@ func validDiagnostic(value string) bool {
 }
 
 func validConnector(value string) bool {
-	return value == "openai-compatible" || value == "anthropic-compatible"
+	return value == "openai-compatible" || value == "anthropic-compatible" || value == "ai-sdk-gateway-v3"
 }
 
 func validBaseURL(value string) bool {

@@ -52,7 +52,11 @@ export type AdminCharityKeyState = (typeof ADMIN_CHARITY_KEY_STATES)[number];
 export const ADMIN_CHARITY_CATEGORIES = ['subscription', 'api_platform'] as const;
 export type AdminCharityCategory = (typeof ADMIN_CHARITY_CATEGORIES)[number];
 
-export const ADMIN_CHARITY_CONNECTOR_TYPES = ['openai-compatible', 'anthropic-compatible'] as const;
+export const ADMIN_CHARITY_CONNECTOR_TYPES = [
+  'openai-compatible',
+  'anthropic-compatible',
+  'ai-sdk-gateway-v3',
+] as const;
 export type AdminCharityConnectorType = (typeof ADMIN_CHARITY_CONNECTOR_TYPES)[number];
 
 export const ADMIN_CHARITY_ENDED_REASONS = [
@@ -136,6 +140,7 @@ export interface AdminCharityMainstreamSource {
 export type AdminCharitySource = AdminCharityCustomSource | AdminCharityMainstreamSource;
 
 export interface AdminCharityKey {
+  failure_disable_threshold: string;
   id: string;
   display_head: string;
   display_tail: string;
@@ -229,6 +234,7 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   // The allow-list mirrors the server wire, but forbidden reviewer/physical
   // identity fields are intentionally not read into the returned object.
   const required = [
+    'failure_disable_threshold',
     'id',
     'binding_count',
     'idle',
@@ -326,6 +332,7 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   return {
     id,
     display_head: displayHead,
+    failure_disable_threshold: decimal(root.failure_disable_threshold, 'failure threshold'),
     display_tail: displayTail,
     safe_source: normalizeAdminCharitySource(root.safe_source),
     physical_enabled: boolean(root.physical_enabled, 'administrator charity physical state'),

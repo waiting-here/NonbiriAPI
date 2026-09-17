@@ -512,8 +512,8 @@ SELECT EXISTS(
  JOIN endpoint_keys k ON k.id=b.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
  WHERE e.id=? AND e.user_id=? AND m.user_id=?
-   AND e.connector_type=? AND k.enabled=1 AND m.flatten_tool_calls=1
-)`, endpointID, userID, userID, string(connectorcontract.TypeAnthropicCompatible)).Scan(&incompatible); err != nil {
+   AND e.connector_type<>? AND k.enabled=1 AND m.flatten_tool_calls=1
+)`, endpointID, userID, userID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
 		return false, fmt.Errorf("resources: validate endpoint flatten restoration: %w", err)
 	}
 	return incompatible == 1, nil
@@ -1109,8 +1109,8 @@ SELECT EXISTS(
  JOIN endpoint_keys k ON k.id=b.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
  WHERE e.id=? AND e.user_id=? AND m.user_id=? AND k.id=?
-   AND e.connector_type=? AND e.enabled=1 AND m.flatten_tool_calls=1
-)`, endpointID, userID, userID, keyID, string(connectorcontract.TypeAnthropicCompatible)).Scan(&incompatible); err != nil {
+   AND e.connector_type<>? AND e.enabled=1 AND m.flatten_tool_calls=1
+)`, endpointID, userID, userID, keyID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
 		return false, fmt.Errorf("resources: validate endpoint key flatten restoration: %w", err)
 	}
 	return incompatible == 1, nil

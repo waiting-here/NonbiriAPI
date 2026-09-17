@@ -160,7 +160,7 @@ func TestRegistryNormalizesTypedNilDiscovererToUnsupported(t *testing.T) {
 func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 	registry := NewDefaultRegistry()
 	types := registry.Types()
-	if len(types) != 2 || types[0] != connectorcontract.TypeAnthropicCompatible || types[1] != connectorcontract.TypeOpenAICompatible {
+	if len(types) != 3 || types[0] != connectorcontract.TypeAISDKGatewayV3 || types[1] != connectorcontract.TypeAnthropicCompatible || types[2] != connectorcontract.TypeOpenAICompatible {
 		t.Fatalf("default registry types=%v", types)
 	}
 	for _, connectorType := range types {

@@ -23,6 +23,7 @@ func RegisterOwnerRoutes(registrar UserRouteRegistrar, service *Service) error {
 		{http.MethodGet, routeDonation, api.getOwner},
 		{http.MethodGet, routeOwnerKeys, api.keysOwner},
 		{http.MethodPost, routeOwnerFailureReset, api.failureResetOwner},
+		{http.MethodPatch, routeOwnerFailurePolicy, api.failurePolicyOwner},
 		{http.MethodGet, routeOwnerRecurring, api.recurringOwner},
 		{http.MethodPatch, routeDonation, api.editOwner},
 		{http.MethodPost, routeWithdraw, api.withdrawOwner},
@@ -58,6 +59,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodPut, routeAdminRecurring, api.replaceRecurringAdmin},
 		{http.MethodPost, routeAdminReview, api.reviewAdmin},
 		{http.MethodPatch, routeAdminKey, api.manageKeyAdmin},
+		{http.MethodPatch, routeAdminFailurePolicy, api.failurePolicyAdmin},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
@@ -89,6 +91,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPut, routeStewardRecurring, api.replaceRecurringSteward},
 		{http.MethodPost, routeStewardReview, api.reviewSteward},
 		{http.MethodPatch, routeStewardKey, api.manageKeySteward},
+		{http.MethodPatch, routeStewardFailurePolicy, api.failurePolicySteward},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterUserRoute(route.method, route.pattern, route.handler); err != nil {
@@ -156,8 +159,9 @@ func (api *httpAPI) getOwner(writer http.ResponseWriter, request *http.Request, 
 }
 
 type createKeyWire struct {
-	EndpointKeyID requiredField[string] `json:"endpoint_key_id"`
-	ExpiresAt     nullableField[int64]  `json:"expires_at"`
+	FailureDisableThreshold requiredField[string] `json:"failure_disable_threshold"`
+	EndpointKeyID           requiredField[string] `json:"endpoint_key_id"`
+	ExpiresAt               nullableField[int64]  `json:"expires_at"`
 }
 
 type createWire struct {
@@ -188,6 +192,11 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 		}
 		keys[index] = CreateKeyInput{EndpointKeyID: id, ExpiresAt: key.ExpiresAt.Value}
 		canonicalKeys[index] = map[string]any{"endpoint_key_id": key.EndpointKeyID.Value, "expires_at": key.ExpiresAt.Value}
+		if key.FailureDisableThreshold.Set {
+			value := key.FailureDisableThreshold.Value
+			keys[index].FailureDisableThreshold = &value
+			canonicalKeys[index]["failure_disable_threshold"] = value
+		}
 	}
 	canonical := map[string]any{"description": wire.Description.Value, "keys": canonicalKeys,
 		"ownership_authorized": wire.OwnershipAuthorized.Value}

@@ -24,6 +24,26 @@ type anthropicDefaultMaxTokensProvider struct {
 	store *db.Store
 }
 
+type gatewayAttributionProvider struct{ store *db.Store }
+
+func (provider gatewayAttributionProvider) GatewayUserAttributionEnabled(ctx context.Context) (bool, error) {
+	if provider.store == nil || ctx == nil {
+		return false, errors.New("gateway attribution configuration unavailable")
+	}
+	raw, err := provider.store.GetSiteConfigValueContext(ctx, adminapi.KeyGatewayUserAttributionEnabled)
+	if err != nil {
+		return false, err
+	}
+	switch raw {
+	case "", "0":
+		return false, nil
+	case "1":
+		return true, nil
+	default:
+		return false, errors.New("gateway attribution configuration invalid")
+	}
+}
+
 func (provider anthropicDefaultMaxTokensProvider) RawAnthropicDefaultMaxTokens(ctx context.Context) (*int64, error) {
 	if provider.store == nil || ctx == nil {
 		return nil, errors.New("anthropic max-tokens configuration is unavailable")

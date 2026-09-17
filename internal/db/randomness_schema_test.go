@@ -8,6 +8,7 @@ import (
 
 func makePreRandomnessFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreGatewayPolicyFixture(t, database)
 	var n int
 	if err := database.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='game_random_proofs'`).Scan(&n); err != nil {
 		t.Fatal(err)
@@ -38,6 +39,9 @@ func TestGameRandomnessSchemaExtension(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := applyRandomnessExtension(context.Background(), tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyGatewayPolicyExtension(context.Background(), tx); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {

@@ -308,6 +308,7 @@ const managedKeyFixture = {
   token_reserve: 32,
   authorized_expires_at: null,
   expires_at: null,
+  failure_disable_threshold: '10',
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
   safe_note: 'reviewer-safe',
@@ -1322,6 +1323,7 @@ describe('experimental policy and charity controls', () => {
           },
           token_reserve: 0,
           expires_at: null,
+          failure_disable_threshold: '10',
           streak: { generation: '1', count: '0', failure_disabled: false },
           ended_reason: null,
         },
@@ -1441,7 +1443,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/donations')).toEqual({
         description: 'fixture donation',
-        keys: [{ endpoint_key_id: '2', expires_at: null }],
+        keys: [{ endpoint_key_id: '2', expires_at: null, failure_disable_threshold: '10' }],
         ownership_authorized: true,
       }),
     );
