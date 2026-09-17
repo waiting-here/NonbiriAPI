@@ -10,7 +10,7 @@
 
 | Station | Host | Authentication |
 | --- | --- | --- |
-| User | configured public host | user session for `/api/*`, except the two steward automation routes in §6.3; CallerKey Bearer for `/v1/*` and those two routes |
+| User | configured public host | user session for `/api/*`, except the steward automation routes in §6.3; CallerKey Bearer for `/v1/*` and those automation routes |
 | Administrator | distinct configured admin host | administrator session for `/admin/api/*` |
 
 Host selection is a security boundary. A route on the wrong host is `404 not_found`, and a user, administrator, or steward credential never changes station. `GET /healthz` is an anonymous liveness probe on both hosts and returns `{"status":"ok"}` without opening the database.
@@ -18,6 +18,16 @@ Host selection is a security boundary. A route on the wrong host is `404 not_fou
 User and administrator session cookies are host-only, HttpOnly, SameSite=Lax, and Secure on HTTPS. Unsafe cookie-authenticated methods require the same validated origin (and compatible Fetch Metadata when supplied). `/v1/*` accepts only `Authorization: Bearer nbk_<secret>`; an upstream credential is never a CallerKey.
 
 Account export/deletion and selected administrator legal-hold/user actions require a short-lived, single-use elevation capability bound to the active session. Live level-5 steward permission is resolved again for every request and in the final mutation transaction.
+
+#### Browser cross-origin access
+
+The three exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.
+
+A valid `OPTIONS` preflight needs no CallerKey and returns an empty `204` before maintenance, authentication or request admission. It does not call an upstream, consume caller limits, reserve credits or create a call log. It permits only the exact route's method, echoes validated requested header **names** (including Authorization, Content-Type and SDK metadata headers), and permits browser preflight caching for 600 seconds. It includes `Cache-Control: no-store` and `Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`. Origin is not reflected; opaque browser origins such as `null` use the same wildcard permission.
+
+Preflight Origin must be a single nonempty value of at most 2,048 bytes. Requested header names must form one comma-separated list of at most 4,096 bytes and 64 names, each at most 128 ASCII HTTP-token characters. Malformed preflight headers or query strings return `400 invalid_request`; unsupported methods return `405 method_not_allowed`. Ordinary OPTIONS without `Access-Control-Request-Method` retains the normal method rejection. Unknown, encoded or trailing-slash paths receive no CORS permission. Host validation still runs first, and all actual calls retain the usual CallerKey, authorization, routing and accounting checks.
+
+Session, administrator and steward automation routes have no cross-origin permission. The cookie API's existing same-origin protection is unchanged. A failed browser preflight prevents the actual model request from being sent, so it cannot appear in user call logs.
 
 ### 1.2 Strict JSON, scalars, pagination, and replay
 
