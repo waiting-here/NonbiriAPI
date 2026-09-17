@@ -4,12 +4,16 @@
 > the implemented export, deletion, retention, and privacy boundary.
 >
 > Canonical DDL: `internal/db/schema.go`; manifest: `internal/db/schema_manifest.go`;
-> current `GenerationTwoSchemaHash`: `f4342dbef6d067b949189ab95630d8828eff1cf98ed2b698e24eb1aef1f0ddf6`.
+> current `GenerationTwoSchemaHash`: `cd6391861014de4f6847488a8db08b0a88f0957b608defd451e2de66acf0a2ed`.
 
 The table cells below describe the version contract for each exact Generation 2 table
 family. The registered routes, export builder, deletion coordinator, retention workers,
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
+
+Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
+
+Gateway v3 adds a default-off site setting for cost attribution. The optional pseudonym is computed per user and final gateway origin from the deployment key and is never stored as a new identity table, exported, or shown in diagnostics. Debug records only whether it was sent. The receiving gateway can link requests in that scope; ordinary request content and provider retention retain their existing boundaries. The schema expansion preserves existing credentials, counters, generations, error-disablement and configured legal overrides.
 
 The signed-in credit history is a read-only projection of the current user's wallet
 entries. It adds no stored data or retention period. Request links use the existing
@@ -130,7 +134,7 @@ historical snapshots.
 
 Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
 existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. The fourteen exact predecessor manifests, including complete beta.4 and both supported development schemas, receive a validated atomic upgrade to 117 tables. Existing economic facts, saved version-1/version-2 games and custom legal settings are preserved; only missing game wallets are initialized to zero. Bidding, Likes and Blackjack start disabled on sources without their configuration. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
+envelope/config, or an unsafe path fails closed. The fifteen exact predecessor manifests, including complete beta.4 and the preceding release-candidate schema, receive a validated atomic upgrade to 117 tables. Existing economic facts, saved version-1/version-2 games and custom legal settings are preserved; only missing game wallets are initialized to zero. Bidding, Likes and Blackjack start disabled on sources without their configuration. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
 data import are unsupported. Current and supported predecessor databases are validated
 before any source write and before writable open. Destructive fresh starts with
 maintenance on and registration/game/activity off, and does not merge a source
