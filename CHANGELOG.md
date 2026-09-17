@@ -8,6 +8,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Per-donation-key consecutive failure thresholds, default 10. Zero records errors without automatically disabling the key; donor, administrator and steward pages warn persistently. Saving preserves counts and immediately recalculates the error-disabled state, independently of enablement and reset.
+- Native AI SDK Gateway v3 chat, true streaming, function tools, image input, text embeddings and model discovery/manual configuration, with strict compatibility checks before reservations or credential access.
+- Administrator-controlled Gateway cost attribution, disabled by default, and debug metadata showing only whether the tag was sent. Steward CallerKey automation can read and update failure policies with revision and idempotency protection.
 - Two-player Bidding Duel with 13 simultaneous card rounds, and Likes Battle with quick/standard modes, five characters, eight harnesses and the complete skill/buff catalog.
 - Separate per-game queues, frozen entry terms, mixed-wallet admission, original-asset refunds and atomic winner/fee settlement. Both games start disabled and do not add newcomer awards.
 - Synchronized five-second Likes settlement with score breakdowns, resource changes, round-start refills, independent stun/overload artwork slots, reduced-motion feedback and a paginated round log. Existing images fill 127 replaceable art slots.
@@ -25,7 +28,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Generation 2 now has 117 tables and accepts fourteen exact predecessor manifests, including populated beta.4 and both preceding development schemas. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
+- Generation 2 now has 117 tables and accepts fifteen exact predecessor manifests, including populated beta.4 and the preceding release-candidate schema. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
 - Artwork remains placeholder content. This candidate has not been released or deployed.
 
 ## [1.0.0-beta.4] - 2026-09-12

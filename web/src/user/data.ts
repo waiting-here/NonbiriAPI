@@ -315,7 +315,12 @@ function requiredTimestamp(value: unknown, field: string): string {
   // Alpha.2 wire timestamps are Unix seconds, never ISO strings.  Keeping
   // this boundary numeric prevents an invalid string from becoming a blank
   // datetime-local value that a later edit could accidentally clear.
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 253402300799) {
+  if (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 253402300799
+  ) {
     const date = new Date(value * 1000);
     if (!Number.isNaN(date.getTime())) return date.toISOString();
   }
@@ -324,7 +329,12 @@ function requiredTimestamp(value: unknown, field: string): string {
 
 function optionalTimestamp(value: unknown, field: string): number | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > 253402300799) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    value > 253402300799
+  ) {
     throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
   }
   return value;
@@ -360,7 +370,12 @@ function donationStatus(value: unknown): Donation['status'] {
 }
 
 function connectorType(value: unknown): Endpoint['connector_type'] {
-  if (value === 'openai-compatible' || value === 'anthropic-compatible') return value;
+  if (
+    value === 'openai-compatible' ||
+    value === 'anthropic-compatible' ||
+    value === 'ai-sdk-gateway-v3'
+  )
+    return value;
   throw new ApiError('invalid_response', 'The server returned an invalid connector type.', 200);
 }
 

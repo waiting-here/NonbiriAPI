@@ -148,6 +148,18 @@ function TraceCard({ trace }: { trace: DebugTrace }) {
                 <div><dt>{t('user.debug.upstream.safeCode')}</dt><dd>{trace.upstream_result.upstream_code ?? t('common.none')}</dd></div>
                 <div><dt>{t('user.debug.upstream.safeDiagnostic')}</dt><dd>{trace.upstream_result.diag ?? t('common.none')}</dd></div>
                 <div><dt>{t('user.debug.upstream.charge')}</dt><dd>{trace.upstream_result.usage.charge} {t('common.creditsUnit')}</dd></div>
+                {typeof trace.upstream_result.gateway_user_attribution_sent === 'boolean' ? (
+                  <div>
+                    <dt>{t('common.gatewayAttribution.label')}</dt>
+                    <dd>
+                      {t(
+                        trace.upstream_result.gateway_user_attribution_sent
+                          ? 'common.gatewayAttribution.sent'
+                          : 'common.gatewayAttribution.notSent',
+                      )}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             ) : <p>{t(trace.state === 'capturing' ? 'user.debug.upstream.awaitingProjection' : 'user.debug.upstream.notDispatched')}</p>}
             <p className="inline-notice">{t('user.debug.upstream.rawSuppressed')}</p>

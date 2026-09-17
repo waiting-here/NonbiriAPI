@@ -59,9 +59,10 @@ func newStewardAutomationHandler(service *stewardautomation.Service, repository 
 		ctx := authz.WithStewardCaller(r.Context(), authz.StewardCaller{UserID: identity.UserID, Generation: identity.Generation})
 		service.ServeHTTP(w, r.WithContext(ctx))
 	})
-	return maintenance.GateMiddleware(gate, callerKey.WrapExact(inner, map[string]string{
-		stewardautomation.DonationsPath: http.MethodPost,
-		stewardautomation.BindingsPath:  http.MethodPost,
+	return maintenance.GateMiddleware(gate, callerKey.WrapExactMethods(inner, map[string][]string{
+		stewardautomation.DonationsPath:     {http.MethodPost},
+		stewardautomation.BindingsPath:      {http.MethodPost},
+		stewardautomation.FailurePolicyPath: {http.MethodGet, http.MethodPatch},
 	})), nil
 }
 
@@ -145,6 +146,7 @@ func newPublicForwardRuntime(
 	for _, connectorType := range registry.Types() {
 		instance, createErr := registry.NewConnector(connectorType, connector.Dependencies{
 			Backend: outboundBackend, AnthropicDefaultMaxTokens: provider,
+			GatewayAttribution: gatewayAttributionProvider{store: store},
 		})
 		if createErr != nil {
 			_ = safety.Close()

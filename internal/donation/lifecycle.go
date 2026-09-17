@@ -627,7 +627,8 @@ func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
 	for index, value := range values {
 		owner := ownerKey(value)
 		out[index] = ExportDonationKey{
-			ID: owner.ID, EndpointKeyID: owner.EndpointKeyID,
+			FailureDisableThreshold: owner.FailureDisableThreshold,
+			ID:                      owner.ID, EndpointKeyID: owner.EndpointKeyID,
 			DisplayHead: owner.DisplayHead, DisplayTail: owner.DisplayTail,
 			SafeSource: owner.SafeSource, PhysicalEnabled: owner.PhysicalEnabled,
 			CharityState: owner.CharityState, Limits: owner.Limits, Usage: owner.Usage,

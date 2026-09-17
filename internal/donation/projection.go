@@ -451,7 +451,7 @@ dk.canonical_base_url,dk.connector_type,dk.mainstream_channel_id,dk.mainstream_c
 dk.mainstream_channel_name,dk.mainstream_channel_category,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
-dk.token_reserve,dk.enabled,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.safe_note,
+dk.token_reserve,dk.enabled,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.failure_disable_threshold,dk.safe_note,
 dk.authorized_expires_at,dk.expires_at,dk.ended_reason,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpoint_key_id),
 EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
@@ -486,7 +486,7 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &bindingCount); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &bindingCount); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
@@ -552,6 +552,9 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 			return nil, err
 		}
 		item.Streak.Count, err = decimalFromBlob(streak)
+		if err == nil {
+			_, err = db.ParseU128Decimal(item.FailureDisableThreshold)
+		}
 		if err == nil {
 			item.Streak.Generation, err = decimalFromBlob(generation)
 		}
@@ -633,7 +636,8 @@ func ownerKey(value AdminDonationKey) DonationKey {
 		Name:          value.SafeSource.Name,
 	}
 	return DonationKey{
-		ID: value.ID, EndpointKeyID: value.EndpointKeyID, DisplayHead: value.DisplayHead,
+		FailureDisableThreshold: value.FailureDisableThreshold,
+		ID:                      value.ID, EndpointKeyID: value.EndpointKeyID, DisplayHead: value.DisplayHead,
 		DisplayTail: value.DisplayTail, SafeSource: source, PhysicalEnabled: value.PhysicalEnabled,
 		CharityState: value.CharityState, Limits: value.Limits, Usage: value.Usage,
 		TokenReserve: value.TokenReserve, ExpiresAt: value.ExpiresAt, Streak: value.Streak,

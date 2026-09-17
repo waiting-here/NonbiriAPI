@@ -58,12 +58,12 @@ export interface DonationPageResult<T> {
 export type DonationPageSafeSource =
   | {
       kind: 'custom';
-      connector_type: 'openai-compatible' | 'anthropic-compatible';
+      connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
       base_url: string;
     }
   | {
       kind: 'mainstream';
-      connector_type: 'openai-compatible' | 'anthropic-compatible';
+      connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
       base_url: string;
       channel_id: string;
       name: string;
@@ -175,6 +175,7 @@ const DONATION_COMMON_FIELDS = [
 ] as const;
 
 const DONATION_KEY_FIELDS = [
+  'failure_disable_threshold',
   'binding_count',
   'idle',
   'id',
@@ -490,6 +491,7 @@ function normalizeKeySummary(value: unknown, index: number): ManagedDonationKeyS
   const key = normalizeManagedKey(
     {
       binding_count: root.binding_count,
+      failure_disable_threshold: root.failure_disable_threshold,
       idle: root.idle,
       id: root.id,
       endpoint_key_id: root.endpoint_key_id,

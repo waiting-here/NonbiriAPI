@@ -225,7 +225,7 @@ func TestEndpointCreateStrictSourceUnionAndOptionsProjection(t *testing.T) {
 		t.Fatalf("endpoint options status=%d body=%s", options.Code, options.Body.String())
 	}
 	var projected EndpointCreateOptions
-	if err := json.Unmarshal(options.Body.Bytes(), &projected); err != nil || len(projected.BaseConnectorTypes) != 2 || len(projected.MainstreamChannels) != 1 {
+	if err := json.Unmarshal(options.Body.Bytes(), &projected); err != nil || len(projected.BaseConnectorTypes) != 3 || len(projected.MainstreamChannels) != 1 {
 		t.Fatalf("endpoint options body=%+v err=%v", projected, err)
 	}
 	if projected.MainstreamChannels[0].ID != channel.ID || projected.MainstreamChannels[0].Name != channel.Name || projected.MainstreamChannels[0].ConnectorType != channel.ConnectorType {

@@ -47,7 +47,7 @@ export interface ManagedDonationFilters {
   q?: string;
 }
 
-type CharityConnectorType = 'openai-compatible' | 'anthropic-compatible';
+type CharityConnectorType = 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
 
 export type ManagedSafeSource =
   | {
@@ -66,6 +66,7 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey {
+  failure_disable_threshold: string;
   binding_count: string;
   idle: boolean;
   id: string;
@@ -142,7 +143,7 @@ export function normalizeManagedSource(
   const kind = oneOf(discriminator.kind, ['custom', 'mainstream'] as const, `${label} kind`);
   const connectorType = oneOf(
     discriminator.connector_type,
-    ['openai-compatible', 'anthropic-compatible'] as const,
+    ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
     `${label} connector`,
   );
   const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`, 4_096, 4_096);
@@ -191,6 +192,7 @@ export function normalizeManagedKey(
   role: CharityRole,
 ): ManagedDonationKey {
   const required = [
+    'failure_disable_threshold',
     'binding_count',
     'idle',
     'id',
@@ -260,6 +262,7 @@ export function normalizeManagedKey(
   }
   return {
     binding_count: bindingCount,
+    failure_disable_threshold: decimal(root.failure_disable_threshold, 'failure threshold'),
     idle,
     id: decimalID(root.id, `${label} id`),
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, `${label} endpoint key id`),
@@ -794,7 +797,7 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
       root.max_rpm === undefined ? 0 : integer(root.max_rpm, `${label} RPM`, 0, 2_147_483_647),
     connector_type: oneOf(
       root.connector_type,
-      ['openai-compatible', 'anthropic-compatible'] as const,
+      ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
       `${label} connector`,
     ),
     canonical_base_url: string(root.canonical_base_url, `${label} base URL`, {

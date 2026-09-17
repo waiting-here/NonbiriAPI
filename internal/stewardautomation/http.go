@@ -17,15 +17,16 @@ import (
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if r.URL == nil || r.URL.EscapedPath() != r.URL.Path || (r.URL.Path != DonationsPath && r.URL.Path != BindingsPath) {
+	if r.URL == nil || r.URL.EscapedPath() != r.URL.Path || (r.URL.Path != DonationsPath && r.URL.Path != BindingsPath && r.URL.Path != FailurePolicyPath) {
 		httperr.WriteError(w, httperr.New(httperr.CodeNotFound, "not found"))
 		return
 	}
-	if r.Method != http.MethodPost {
+	policyRoute := r.URL.Path == FailurePolicyPath
+	if policyRoute && r.Method != http.MethodGet && r.Method != http.MethodPatch || !policyRoute && r.Method != http.MethodPost {
 		httperr.WriteError(w, httperr.New(httperr.CodeMethodNotAllowed, "method not allowed"))
 		return
 	}
-	if r.URL.RawQuery != "" || r.URL.ForceQuery {
+	if !(policyRoute && r.Method == http.MethodGet) && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
 		writeError(w, errInvalid)
 		return
 	}
@@ -46,7 +47,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.release(identity.UserID)
 	timeout := s.bindingTimeout
-	if r.URL.Path == DonationsPath {
+	if r.URL.Path == DonationsPath || policyRoute {
 		timeout = s.createTimeout
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
@@ -55,6 +56,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	controller := http.NewResponseController(w)
 	_ = controller.SetReadDeadline(time.Now().Add(timeout))
 	defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
+	if policyRoute {
+		s.failurePolicyHTTP(w, r.WithContext(ctx), identity.UserID)
+		return
+	}
 	if r.Body == nil {
 		writeError(w, errInvalid)
 		return

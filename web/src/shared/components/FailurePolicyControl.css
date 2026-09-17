@@ -1,0 +1,35 @@
+.failure-policy-control {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #7778);
+  border-radius: 0.65rem;
+}
+.failure-policy-input {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.failure-policy-input input {
+  width: 100%;
+  max-width: 30rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.failure-policy-warning {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  border: 2px solid #d97706;
+  border-radius: 0.4rem;
+  background: #fff1c2;
+  color: #713600;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.failure-policy-warning > span {
+  font-size: 1.4em;
+}

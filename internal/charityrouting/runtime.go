@@ -353,7 +353,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
 		}
 		candidate.ConnectorType = connectorcontract.Type(connector)
-		if candidate.ConnectorType != connectorcontract.TypeOpenAICompatible && candidate.ConnectorType != connectorcontract.TypeAnthropicCompatible {
+		if candidate.ConnectorType != connectorcontract.TypeOpenAICompatible && candidate.ConnectorType != connectorcontract.TypeAnthropicCompatible && candidate.ConnectorType != connectorcontract.TypeAISDKGatewayV3 {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
 		sawRuntimeCandidate = true
@@ -629,12 +629,12 @@ func capabilityTokenPrices(values [4]int64) *CapabilityTokenPrices {
 }
 
 func runtimeConnectorSet(connectorTypes []connectorcontract.Type) (map[connectorcontract.Type]struct{}, error) {
-	if len(connectorTypes) < 1 || len(connectorTypes) > 2 {
+	if len(connectorTypes) < 1 || len(connectorTypes) > 3 {
 		return nil, ErrInvalidRequest
 	}
 	connectorSet := make(map[connectorcontract.Type]struct{}, len(connectorTypes))
 	for _, connectorType := range connectorTypes {
-		if connectorType != connectorcontract.TypeOpenAICompatible && connectorType != connectorcontract.TypeAnthropicCompatible {
+		if connectorType != connectorcontract.TypeOpenAICompatible && connectorType != connectorcontract.TypeAnthropicCompatible && connectorType != connectorcontract.TypeAISDKGatewayV3 {
 			return nil, ErrInvalidRequest
 		}
 		if _, duplicate := connectorSet[connectorType]; duplicate {

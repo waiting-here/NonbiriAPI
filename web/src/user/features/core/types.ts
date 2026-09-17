@@ -1,4 +1,8 @@
-export const CONNECTOR_TYPES = ['openai-compatible', 'anthropic-compatible'] as const;
+export const CONNECTOR_TYPES = [
+  'openai-compatible',
+  'anthropic-compatible',
+  'ai-sdk-gateway-v3',
+] as const;
 
 export type ConnectorType = (typeof CONNECTOR_TYPES)[number];
 export type CreditAsset = 'general' | 'game';
@@ -373,9 +377,27 @@ export type HomeCheckinCapability =
   | { state: 'unavailable' };
 
 export type HomeGameSummary =
-  | { game: 'blackjack'; route_id: 'game-blackjack'; kind: 'continue'; resource_id: string; state: 'waiting' | 'active' }
-  | { game: 'bidding'; route_id: 'game-bidding'; kind: 'continue'; resource_id: string; state: 'waiting' | 'active' }
-  | { game: 'likes'; route_id: 'game-likes'; kind: 'continue'; resource_id: string; state: 'waiting' | 'active' }
+  | {
+      game: 'blackjack';
+      route_id: 'game-blackjack';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
+  | {
+      game: 'bidding';
+      route_id: 'game-bidding';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
+  | {
+      game: 'likes';
+      route_id: 'game-likes';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
   | {
       game: 'fishing';
       route_id: 'game-fishing';

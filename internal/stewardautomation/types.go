@@ -1,4 +1,4 @@
-// Package stewardautomation composes the two CallerKey-only steward controls.
+// Package stewardautomation composes the CallerKey-only steward controls.
 package stewardautomation
 
 import (
@@ -15,6 +15,7 @@ import (
 
 const DonationsPath = "/api/steward/automation/donations"
 const BindingsPath = "/api/steward/automation/model-bindings"
+const FailurePolicyPath = "/api/steward/automation/donation-key-failure-policy"
 const maxKeys = 100
 
 var errInvalid = errors.New("invalid automation input")
@@ -53,21 +54,22 @@ type endpointInput struct {
 }
 
 type keyInput struct {
-	Secret              string                    `json:"secret"`
-	Note                string                    `json:"note"`
-	Enabled             *bool                     `json:"enabled"`
-	ForceStoreFalse     bool                      `json:"force_store_false"`
-	MaxConcurrency      int64                     `json:"max_concurrency"`
-	MaxRPM              int64                     `json:"max_rpm"`
-	AuthorizedExpiresAt *int64                    `json:"authorized_expires_at"`
-	ExpiresAt           optionalTime              `json:"expires_at"`
-	PriceLimit          *string                   `json:"price_limit"`
-	CallsLimit          *string                   `json:"calls_limit"`
-	TokensLimit         *string                   `json:"tokens_limit"`
-	TokenReserve        int64                     `json:"token_reserve"`
-	CharityEnabled      *bool                     `json:"charity_enabled"`
-	SafeNote            string                    `json:"safe_note"`
-	RecurringLimits     []donationquota.RuleInput `json:"recurring_limits"`
+	FailureDisableThreshold *string                   `json:"failure_disable_threshold"`
+	Secret                  string                    `json:"secret"`
+	Note                    string                    `json:"note"`
+	Enabled                 *bool                     `json:"enabled"`
+	ForceStoreFalse         bool                      `json:"force_store_false"`
+	MaxConcurrency          int64                     `json:"max_concurrency"`
+	MaxRPM                  int64                     `json:"max_rpm"`
+	AuthorizedExpiresAt     *int64                    `json:"authorized_expires_at"`
+	ExpiresAt               optionalTime              `json:"expires_at"`
+	PriceLimit              *string                   `json:"price_limit"`
+	CallsLimit              *string                   `json:"calls_limit"`
+	TokensLimit             *string                   `json:"tokens_limit"`
+	TokenReserve            int64                     `json:"token_reserve"`
+	CharityEnabled          *bool                     `json:"charity_enabled"`
+	SafeNote                string                    `json:"safe_note"`
+	RecurringLimits         []donationquota.RuleInput `json:"recurring_limits"`
 }
 
 type createInput struct {

@@ -91,44 +91,45 @@ const (
 	// KeyCharityTokenReserveMilli is OPTIONAL like the timezone offset: unset
 	// (JSON null) means no global default. Per-token models without a custom
 	// reserve then fail closed at routing. It must never be mistaken for 0.
-	KeyCharityTokenReserveMilli    = "charity_token_reserve_milli"
-	KeyAnthropicDefaultMaxTokens   = "anthropic_default_max_tokens"
-	KeyAnnouncementEpoch           = "announcement_epoch"
-	KeyLevelDisplayName1           = "level_display_name_1"
-	KeyLevelDisplayName2           = "level_display_name_2"
-	KeyLevelDisplayName3           = "level_display_name_3"
-	KeyLevelDisplayName4           = "level_display_name_4"
-	KeyLevelDisplayName5           = "level_display_name_5"
-	KeyActivitiesEnabled           = "activities_enabled"
-	KeyActivityWelfareEnabled      = "activity_welfare_enabled"
-	KeyActivityWelfareThreshold    = "activity_welfare_threshold_milli"
-	KeyActivityWelfareCap          = "activity_welfare_cap_milli"
-	KeyActivityThursdayEnabled     = "activity_thursday_enabled"
-	KeyGameLinkLinkEnabled         = "game_linklink_enabled"
-	KeyGameLinkLink6x8Enabled      = "game_linklink_6x8_enabled"
-	KeyGameLinkLink8x8Enabled      = "game_linklink_8x8_enabled"
-	KeyGameLinkLink10x10Enabled    = "game_linklink_10x10_enabled"
-	KeyGameLinkLink6x8Price        = "game_linklink_6x8_price_milli"
-	KeyGameLinkLink8x8Price        = "game_linklink_8x8_price_milli"
-	KeyGameLinkLink10x10Price      = "game_linklink_10x10_price_milli"
-	KeyGameRPSEnabled              = "game_rps_enabled"
-	KeyGameRPSQuickEnabled         = "game_rps_quick_enabled"
-	KeyGameRPSStandardEnabled      = "game_rps_standard_enabled"
-	KeyGameRPSDeathmatchEnabled    = "game_rps_deathmatch_enabled"
-	KeyGameRPSQuickB               = "game_rps_quick_b_milli"
-	KeyGameRPSStandardB            = "game_rps_standard_b_milli"
-	KeyGameRPSDeathmatchB          = "game_rps_deathmatch_b_milli"
-	KeyReportPendingTTLSeconds     = "report_pending_ttl_seconds"
-	KeyGamesEnabled                = game.GamesEnabledKey
-	KeyGameFishingEnabled          = fishingconfig.FishingEnabledKey
-	KeyGameFishingBaitWormPrice    = fishingconfig.FishingWormPriceMilliKey
-	KeyGameFishingBaitLurePrice    = fishingconfig.FishingLurePriceMilliKey
-	KeyGameFishingBaitPremiumPrice = fishingconfig.FishingPremiumPriceMilliKey
-	KeyGameFishingRTP              = fishingconfig.FishingStandardRTPKey
-	KeyGameFishingRTPPremium       = fishingconfig.FishingPremiumRTPKey
-	KeyGameFishingTreasureBottle   = fishingconfig.FishingTreasureBottleMultiplierKey
-	KeyGameFishingTreasureClover   = fishingconfig.FishingTreasureCloverMultiplierKey
-	KeyGameFishingTreasureShell    = fishingconfig.FishingTreasureShellMultiplierKey
+	KeyCharityTokenReserveMilli      = "charity_token_reserve_milli"
+	KeyAnthropicDefaultMaxTokens     = "anthropic_default_max_tokens"
+	KeyGatewayUserAttributionEnabled = "gateway_user_attribution_enabled"
+	KeyAnnouncementEpoch             = "announcement_epoch"
+	KeyLevelDisplayName1             = "level_display_name_1"
+	KeyLevelDisplayName2             = "level_display_name_2"
+	KeyLevelDisplayName3             = "level_display_name_3"
+	KeyLevelDisplayName4             = "level_display_name_4"
+	KeyLevelDisplayName5             = "level_display_name_5"
+	KeyActivitiesEnabled             = "activities_enabled"
+	KeyActivityWelfareEnabled        = "activity_welfare_enabled"
+	KeyActivityWelfareThreshold      = "activity_welfare_threshold_milli"
+	KeyActivityWelfareCap            = "activity_welfare_cap_milli"
+	KeyActivityThursdayEnabled       = "activity_thursday_enabled"
+	KeyGameLinkLinkEnabled           = "game_linklink_enabled"
+	KeyGameLinkLink6x8Enabled        = "game_linklink_6x8_enabled"
+	KeyGameLinkLink8x8Enabled        = "game_linklink_8x8_enabled"
+	KeyGameLinkLink10x10Enabled      = "game_linklink_10x10_enabled"
+	KeyGameLinkLink6x8Price          = "game_linklink_6x8_price_milli"
+	KeyGameLinkLink8x8Price          = "game_linklink_8x8_price_milli"
+	KeyGameLinkLink10x10Price        = "game_linklink_10x10_price_milli"
+	KeyGameRPSEnabled                = "game_rps_enabled"
+	KeyGameRPSQuickEnabled           = "game_rps_quick_enabled"
+	KeyGameRPSStandardEnabled        = "game_rps_standard_enabled"
+	KeyGameRPSDeathmatchEnabled      = "game_rps_deathmatch_enabled"
+	KeyGameRPSQuickB                 = "game_rps_quick_b_milli"
+	KeyGameRPSStandardB              = "game_rps_standard_b_milli"
+	KeyGameRPSDeathmatchB            = "game_rps_deathmatch_b_milli"
+	KeyReportPendingTTLSeconds       = "report_pending_ttl_seconds"
+	KeyGamesEnabled                  = game.GamesEnabledKey
+	KeyGameFishingEnabled            = fishingconfig.FishingEnabledKey
+	KeyGameFishingBaitWormPrice      = fishingconfig.FishingWormPriceMilliKey
+	KeyGameFishingBaitLurePrice      = fishingconfig.FishingLurePriceMilliKey
+	KeyGameFishingBaitPremiumPrice   = fishingconfig.FishingPremiumPriceMilliKey
+	KeyGameFishingRTP                = fishingconfig.FishingStandardRTPKey
+	KeyGameFishingRTPPremium         = fishingconfig.FishingPremiumRTPKey
+	KeyGameFishingTreasureBottle     = fishingconfig.FishingTreasureBottleMultiplierKey
+	KeyGameFishingTreasureClover     = fishingconfig.FishingTreasureCloverMultiplierKey
+	KeyGameFishingTreasureShell      = fishingconfig.FishingTreasureShellMultiplierKey
 	// Anti-abuse policy keys are process-independent values; the policy rail
 	// reads them authoritatively for each relevant event.
 	KeyRPMBanThreshold                  = antiabuse.KeyRPMBanThreshold
@@ -245,34 +246,35 @@ func mustDefaultFishingMultiplier(species string) int {
 // knownSiteConfig maps every exact known key to its typed spec.
 var knownSiteConfig = func() map[string]keySpec {
 	known := map[string]keySpec{
-		KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
-		KeySiteLogoURL:               {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
-		KeyLegalPrivacyOverrideZh:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyLegalPrivacyOverrideEn:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyLegalTermsOverrideZh:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyLegalTermsOverrideEn:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-		KeyCharityDonationNoticeZh:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
-		KeyCharityDonationNoticeEn:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
-		KeyLegalAuthoritativeLocale:  {kind: kindLocaleOpt},
-		KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
-		KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
-		KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
-		KeyDefaultBindingLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
-		KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
-		KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
-		KeyDefaultPerEndpointConc:    {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
-		KeyEgressGlobalConc:          {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
-		KeyDiscordGuildID:            {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-		KeyDiscordRoleID:             {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-		KeyOAuthStartRateLimit:       {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
-		KeyOAuthStartRateWindowSecs:  {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
-		KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
-		KeyMaintenanceMode:           {kind: kindBool, def: 0},
-		KeyRegistrationOpen:          {kind: kindBool, def: 1},
-		KeySiteTimezoneOffsetMinutes: {kind: kindTimezoneOffset},
-		KeyLevelThreshold2Milli:      {kind: kindAmount},
-		KeyLevelThreshold3Milli:      {kind: kindAmount},
-		KeyLevelThreshold4Milli:      {kind: kindAmount},
+		KeySiteName:                      {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
+		KeySiteLogoURL:                   {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
+		KeyLegalPrivacyOverrideZh:        {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalPrivacyOverrideEn:        {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalTermsOverrideZh:          {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalTermsOverrideEn:          {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyCharityDonationNoticeZh:       {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyCharityDonationNoticeEn:       {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyLegalAuthoritativeLocale:      {kind: kindLocaleOpt},
+		KeyDefaultEndpointLimit:          {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
+		KeyDefaultEndpointKeyLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
+		KeyDefaultModelLimit:             {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
+		KeyDefaultBindingLimit:           {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
+		KeyDefaultRPMPerUser:             {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+		KeyGlobalRPM:                     {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
+		KeyDefaultPerEndpointConc:        {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
+		KeyEgressGlobalConc:              {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
+		KeyDiscordGuildID:                {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+		KeyDiscordRoleID:                 {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+		KeyOAuthStartRateLimit:           {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
+		KeyOAuthStartRateWindowSecs:      {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
+		KeyOAuthStartRatePenaltySecs:     {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
+		KeyMaintenanceMode:               {kind: kindBool, def: 0},
+		KeyRegistrationOpen:              {kind: kindBool, def: 1},
+		KeyGatewayUserAttributionEnabled: {kind: kindBool, def: 0},
+		KeySiteTimezoneOffsetMinutes:     {kind: kindTimezoneOffset},
+		KeyLevelThreshold2Milli:          {kind: kindAmount},
+		KeyLevelThreshold3Milli:          {kind: kindAmount},
+		KeyLevelThreshold4Milli:          {kind: kindAmount},
 		KeyCheckinMode: {kind: kindEnum,
 			allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
 			defStr:  db.CheckinModeDisabled},

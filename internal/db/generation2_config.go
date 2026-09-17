@@ -143,8 +143,9 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		// Fresh is deliberately fail-closed even though the inherited effective
 		// defaults remain maintenance=false and registration=true in the admin
 		// catalog when a row is absent.
-		"maintenance_mode":  boolSpec("1"),
-		"registration_open": boolSpec("0"),
+		"maintenance_mode":                 boolSpec("1"),
+		"registration_open":                boolSpec("0"),
+		"gateway_user_attribution_enabled": boolSpec("0"),
 		// These three inherited keys have a real raw-null state. They are known,
 		// but intentionally have no required seed row.
 		"site_timezone_offset_minutes":  {kind: generationTwoConfigTimezone},

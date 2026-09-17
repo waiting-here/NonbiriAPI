@@ -246,6 +246,7 @@ func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Run
 		automation := httpmw.API(automationHandlers[0])
 		mux.Handle(stewardautomation.DonationsPath, automation)
 		mux.Handle(stewardautomation.BindingsPath, automation)
+		mux.Handle(stewardautomation.FailurePolicyPath, automation)
 	}
 
 	callerAPI := httpmw.API(callerHandler)

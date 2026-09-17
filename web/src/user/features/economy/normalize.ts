@@ -199,7 +199,12 @@ function cursor(value: unknown, field: string): string | null {
 
 function connectorType(value: unknown, field: string): string {
   const candidate = asciiText(value, field, 64, false);
-  if (candidate !== 'openai-compatible' && candidate !== 'anthropic-compatible') invalid(field);
+  if (
+    candidate !== 'openai-compatible' &&
+    candidate !== 'anthropic-compatible' &&
+    candidate !== 'ai-sdk-gateway-v3'
+  )
+    invalid(field);
   return candidate;
 }
 
@@ -538,6 +543,7 @@ function validateUsageDimension(
 
 export function normalizeDonationKey(value: unknown): DonationKey {
   const item = record(value, 'donation key', [
+    'failure_disable_threshold',
     'id',
     'endpoint_key_id',
     'display_head',
@@ -572,6 +578,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       ? null
       : enumValue(item.ended_reason, 'donation key ended reason', ENDED_REASONS);
   const result: DonationKey = {
+    failureDisableThreshold: decimal(item.failure_disable_threshold, 'failure threshold'),
     id: decimalID(item.id, 'donation key id'),
     endpointKeyId:
       item.endpoint_key_id === null ? null : decimalID(item.endpoint_key_id, 'endpoint key id'),

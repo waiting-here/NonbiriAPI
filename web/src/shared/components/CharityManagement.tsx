@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
 import { CharitySourceBrowser } from './CharitySourceBrowser';
 import { FailureResetControl } from './FailureResetControl';
+import { FailurePolicyControl } from './FailurePolicyControl';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
@@ -450,6 +451,14 @@ function DonationKeyEditor({
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
       <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} readOnly />
+      <FailurePolicyControl
+        role={role}
+        donationID={donation.id}
+        keyID={item.id}
+        revision={donation.revision}
+        threshold={item.failure_disable_threshold}
+        refresh={refresh}
+      />
       <div className="ops-toolbar">
         <StatusBadge
           active={item.charity_state === 'available'}

@@ -10,7 +10,7 @@ own checks. This checklist does not itself assert a pass.
 
 - Freeze scope and synchronize README, changelog, package metadata, HTTP contract,
   configuration, game-module and lifecycle documentation.
-- Verify Generation 2 identity, fourteen exact predecessor paths, atomic rollback on
+- Verify Generation 2 identity, fifteen exact predecessor paths, atomic rollback on
   injected failure, unknown/partial schema zero-write rejection and second-start
   no-op. Build the exact beta.4 source to create a populated synthetic fixture;
   exercise the target on Linux, with old API reservations and existing games.

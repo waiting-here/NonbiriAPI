@@ -414,6 +414,7 @@ func (handle *TraceHandle) RecordUpstream(result DebugUpstreamResult) error {
 			result.CompletedAt = record.trace.CreatedAt
 		}
 		result.UpstreamCode = cloneString(result.UpstreamCode)
+		result.GatewayUserAttributionSent = cloneBool(result.GatewayUserAttributionSent)
 		if result.Diag != nil {
 			bounded := diagnostic.Bound(*result.Diag)
 			if !safeDiagnostic(bounded) {

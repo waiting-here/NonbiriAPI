@@ -179,12 +179,12 @@ donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connect
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
 failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at,
 authorized_expires_at,expires_at,mainstream_channel_id,mainstream_channel_revision,
-mainstream_channel_name,mainstream_channel_category,source_endpoint_key_id,report_fingerprint)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+mainstream_channel_name,mainstream_channel_category,source_endpoint_key_id,report_fingerprint,failure_disable_threshold)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			donationID, key.id, key.head, key.tail, key.baseURL, key.connector,
 			zero, zero, zero, zero, zero, zero, zero, db.EncodeU128(one), db.EncodeU128(one), db.EncodeU128(one), now, now,
 			key.expiresAt, key.expiresAt, key.channelID, key.channelRevision, key.channelName, key.channelCategory,
-			key.id, key.reportFingerprint)
+			key.id, key.reportFingerprint, key.failureDisableThreshold.Decimal())
 		if err != nil {
 			return Donation{}, classifyWrite("create donation key", err)
 		}
@@ -1027,6 +1027,7 @@ func (s *Service) materializeRoleExpiryStandalone(
 }
 
 type submissionKey struct {
+	failureDisableThreshold        db.U128
 	id                             int64
 	head, tail, baseURL, connector string
 	expiresAt                      *int64
@@ -1061,7 +1062,17 @@ func submissionAutoApproval(keys []submissionKey) (bool, error) {
 func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput) ([]submissionKey, error) {
 	ids := make([]int64, len(inputs))
 	expiries := make(map[int64]*int64, len(inputs))
+	thresholds := make(map[int64]db.U128, len(inputs))
 	for index, input := range inputs {
+		value := "10"
+		if input.FailureDisableThreshold != nil {
+			value = *input.FailureDisableThreshold
+		}
+		threshold, err := db.ParseU128Decimal(value)
+		if err != nil {
+			return nil, ErrInvalidRequest
+		}
+		thresholds[input.EndpointKeyID] = threshold
 		ids[index] = input.EndpointKeyID
 		expiries[input.EndpointKeyID] = input.ExpiresAt
 	}
@@ -1091,6 +1102,7 @@ ORDER BY k.id`, args...)
 			return nil, fmt.Errorf("donation: scan submission key: %w", err)
 		}
 		key.expiresAt = expiries[key.id]
+		key.failureDisableThreshold = thresholds[key.id]
 		key.reportFingerprint = append([]byte(nil), key.reportFingerprint...)
 		keys = append(keys, key)
 	}

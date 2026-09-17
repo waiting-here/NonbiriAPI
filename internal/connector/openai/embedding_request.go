@@ -23,6 +23,18 @@ type EmbeddingRequest struct {
 	Dimensions     int
 }
 
+// TopLevelFields returns an immutable field-name projection for fidelity checks.
+func (r *EmbeddingRequest) TopLevelFields() []string {
+	if r == nil {
+		return nil
+	}
+	names := make([]string, len(r.fields))
+	for i, field := range r.fields {
+		names[i] = field.name
+	}
+	return names
+}
+
 func (*EmbeddingRequest) String() string   { return "[redacted embedding request]" }
 func (*EmbeddingRequest) GoString() string { return "[redacted embedding request]" }
 func (*EmbeddingRequest) LogValue() slog.Value {

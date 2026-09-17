@@ -2,6 +2,10 @@
 
 NonbiriAPI separates **startup security roots** from **runtime site settings**. Startup values are read only when the process starts; `site_config` values are administrator-controlled and applied without rebuilding the binary.
 
+## Gateway cost attribution
+
+The runtime administrator setting `gateway_user_attribution_enabled` is a boolean, off by default (site-config JSON `false|true`). Enabling it includes a server-generated user-and-gateway-origin pseudonym in subsequent Gateway v3 chat and embedding requests for cost attribution. Disabling it omits the tag. It can correlate requests from the same user; it is not anonymous and does not claim upstream safety processing. The caller cannot override it. Existing OpenAI and Anthropic settings remain independent. It uses the ordinary configuration catalog, administrator authorization, revision and audit rules; no startup environment variable or rebuild is required.
+
 ## Startup environment
 
 Copy [admin.env.example](../admin.env.example) to a private path outside the checkout and replace every placeholder. The example uses production-style `/etc` and `/var` paths; change them for local builds.

@@ -66,13 +66,14 @@ var (
 // site-config key. Runtime alert_prefs_* rows use a separate bounded generic
 // descriptor because their suffixes are data, not new configuration types.
 var catalogMetadataByKey = map[string]catalogMetadata{
-	KeySiteName:                 {"identity", catalogText("站点名称", "Site name"), catalogText("显示在双站标题与公共配置中的实例名称。", "Instance name shown in both stations and public configuration."), unitNone, nil},
-	KeySiteLogoURL:              {"identity", catalogText("站点标志地址", "Site logo URL"), catalogText("可选的公开站点标志地址；留空不显示远端标志。", "Optional public logo URL; leave empty to show no remote logo."), unitNone, nil},
-	KeyLegalPrivacyOverrideZh:   {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("覆盖内置中文隐私政策，保留段落与制表符。", "Custom text for the built-in Chinese privacy policy."), unitNone, nil},
-	KeyLegalPrivacyOverrideEn:   {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("覆盖内置英文隐私政策，保留段落与制表符。", "Custom text for the built-in English privacy policy."), unitNone, nil},
-	KeyLegalTermsOverrideZh:     {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("覆盖内置中文服务条款，保留段落与制表符。", "Custom text for the built-in Chinese terms."), unitNone, nil},
-	KeyLegalTermsOverrideEn:     {"legal", catalogText("服务条款覆盖（英文）", "Terms override (English)"), catalogText("覆盖内置英文服务条款，保留段落与制表符。", "Custom text for the built-in English terms."), unitNone, nil},
-	KeyLegalAuthoritativeLocale: {"legal", catalogText("法律文本权威语言", "Authoritative legal language"), catalogText("声明中英文文本发生冲突时优先采用的语言。", "Declares which language prevails if the legal versions conflict."), unitNone, nil},
+	KeyGatewayUserAttributionEnabled: {"connector", catalogText("发送 Gateway 费用归因标签", "Send Gateway cost attribution"), catalogText("默认不发送。开启后，Gateway 聊天和向量请求携带可关联同一用户的伪名，仅供网关费用归因。", "Off by default. When enabled, Gateway chat and embedding requests carry a pseudonym that links requests from the same user for gateway cost attribution."), unitNone, nil},
+	KeySiteName:                      {"identity", catalogText("站点名称", "Site name"), catalogText("显示在双站标题与公共配置中的实例名称。", "Instance name shown in both stations and public configuration."), unitNone, nil},
+	KeySiteLogoURL:                   {"identity", catalogText("站点标志地址", "Site logo URL"), catalogText("可选的公开站点标志地址；留空不显示远端标志。", "Optional public logo URL; leave empty to show no remote logo."), unitNone, nil},
+	KeyLegalPrivacyOverrideZh:        {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("覆盖内置中文隐私政策，保留段落与制表符。", "Custom text for the built-in Chinese privacy policy."), unitNone, nil},
+	KeyLegalPrivacyOverrideEn:        {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("覆盖内置英文隐私政策，保留段落与制表符。", "Custom text for the built-in English privacy policy."), unitNone, nil},
+	KeyLegalTermsOverrideZh:          {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("覆盖内置中文服务条款，保留段落与制表符。", "Custom text for the built-in Chinese terms."), unitNone, nil},
+	KeyLegalTermsOverrideEn:          {"legal", catalogText("服务条款覆盖（英文）", "Terms override (English)"), catalogText("覆盖内置英文服务条款，保留段落与制表符。", "Custom text for the built-in English terms."), unitNone, nil},
+	KeyLegalAuthoritativeLocale:      {"legal", catalogText("法律文本权威语言", "Authoritative legal language"), catalogText("声明中英文文本发生冲突时优先采用的语言。", "Declares which language prevails if the legal versions conflict."), unitNone, nil},
 
 	KeyDefaultEndpointLimit:    {"limits", catalogText("默认端点上限", "Default endpoint limit"), catalogText("用户未单独配置时可创建的端点数量；不是显式用户值的上限。", "Endpoint count used when a user has no override; it is not a cap on explicit user values."), unitCount, nil},
 	KeyDefaultEndpointKeyLimit: {"limits", catalogText("默认端点密钥上限", "Default endpoint-key limit"), catalogText("每个端点可保存的物理密钥数量上限。", "Maximum physical keys stored for one endpoint."), unitCount, nil},
@@ -304,6 +305,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("关闭维护模式，普通入口不再因该开关被拦截。", "Turns maintenance mode off, so this switch no longer blocks regular entry points.")
 	case KeyRegistrationOpen:
 		zero = catalogTextPtr("关闭新账号注册。", "Closes new-account registration.")
+	case KeyGatewayUserAttributionEnabled:
+		zero = catalogTextPtr("不发送 Gateway 费用归因标签。", "Does not send a Gateway cost attribution tag.")
 	case KeySiteTimezoneOffsetMinutes:
 		zero = catalogTextPtr("显式设为 UTC+00:00，不同于未配置。", "Explicitly selects UTC+00:00, distinct from being unconfigured.")
 		nullValue = catalogText("原始 null 表示尚未配置；PATCH null 被拒绝。", "Raw null means not yet configured; PATCH null is rejected.")

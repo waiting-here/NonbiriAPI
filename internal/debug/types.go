@@ -176,12 +176,13 @@ func (request DebugRequest) valid() bool {
 // bytes. Connector integration must first reduce an outcome to these bounded
 // structured fields.
 type DebugUpstreamResult struct {
-	ResultKind   ResultKind `json:"result_kind"`
-	StatusCode   *int       `json:"status_code"`
-	UpstreamCode *string    `json:"upstream_code"`
-	Diag         *string    `json:"diag"`
-	Usage        LogUsage   `json:"usage"`
-	CompletedAt  int64      `json:"completed_at"`
+	GatewayUserAttributionSent *bool      `json:"gateway_user_attribution_sent,omitempty"`
+	ResultKind                 ResultKind `json:"result_kind"`
+	StatusCode                 *int       `json:"status_code"`
+	UpstreamCode               *string    `json:"upstream_code"`
+	Diag                       *string    `json:"diag"`
+	Usage                      LogUsage   `json:"usage"`
+	CompletedAt                int64      `json:"completed_at"`
 }
 
 func (result DebugUpstreamResult) valid() bool {
@@ -580,6 +581,14 @@ func cloneString(value *string) *string {
 	return &copyValue
 }
 
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
+}
+
 func cloneTrace(trace DebugTrace) DebugTrace {
 	copyTrace := trace
 	copyTrace.Request.Body.Text = cloneString(trace.Request.Body.Text)
@@ -589,6 +598,7 @@ func cloneTrace(trace DebugTrace) DebugTrace {
 		upstream.StatusCode = statusPointer(valueOrZero(trace.UpstreamResult.StatusCode))
 		upstream.UpstreamCode = cloneString(trace.UpstreamResult.UpstreamCode)
 		upstream.Diag = cloneString(trace.UpstreamResult.Diag)
+		upstream.GatewayUserAttributionSent = cloneBool(trace.UpstreamResult.GatewayUserAttributionSent)
 		copyTrace.UpstreamResult = &upstream
 	}
 	if trace.CallerResult != nil {

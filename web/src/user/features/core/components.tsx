@@ -203,7 +203,17 @@ export function StatusPill({
 
 export function ConnectorLabel({ value }: { value: ConnectorType }) {
   const { t } = useCoreCopy();
-  return <>{value === 'openai-compatible' ? t('connector.openai') : t('connector.anthropic')}</>;
+  return (
+    <>
+      {t(
+        value === 'openai-compatible'
+          ? 'connector.openai'
+          : value === 'anthropic-compatible'
+            ? 'connector.anthropic'
+            : 'connector.gateway',
+      )}
+    </>
+  );
 }
 
 export function DiscoveryStatus({ evidence }: { evidence: DiscoveryEvidence }) {

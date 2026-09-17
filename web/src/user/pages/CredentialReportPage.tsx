@@ -13,6 +13,7 @@ import '@shared/operations/operations.css';
 const CONNECTOR_LABEL_KEYS: Record<CredentialReportInput['connector_type'], string> = {
   'openai-compatible': 'user.report.connector.openaiCompatible',
   'anthropic-compatible': 'user.report.connector.anthropicCompatible',
+  'ai-sdk-gateway-v3': 'common.gatewayName',
 };
 
 function validBaseURL(value: string): boolean {
@@ -105,6 +106,7 @@ export function CredentialReportPage() {
                 <select value={connector} onChange={(event) => { intentKey.current = null; setConnector(event.target.value as CredentialReportInput['connector_type']); }}>
                   <option value="openai-compatible">{t(CONNECTOR_LABEL_KEYS['openai-compatible'])}</option>
                   <option value="anthropic-compatible">{t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}</option>
+                  <option value="ai-sdk-gateway-v3">{t(CONNECTOR_LABEL_KEYS['ai-sdk-gateway-v3'])}</option>
                 </select>
               </label>
               <label className="ops-form-field">{t('user.report.baseUrlLabel')}

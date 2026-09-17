@@ -37,10 +37,11 @@ type Observation struct {
 	Usage        connectorcontract.Usage
 	// Safe policy-state booleans only. No endpoint/key/origin/credential or
 	// caller-provided value crosses this body-free observation boundary.
-	StoreForcedFalse        bool
-	FlattenApplied          bool
-	SafetyIdentifierApplied bool
-	CallerStorePresent      bool
+	StoreForcedFalse           bool
+	FlattenApplied             bool
+	SafetyIdentifierApplied    bool
+	GatewayUserAttributionSent bool
+	CallerStorePresent         bool
 	// CallerStoreValue is a non-secret OpenAI policy bit. It is separated
 	// from CallerStorePresent so an omitted field is not confused with an
 	// explicit false; the observer only receives it after strict bool decode.

@@ -59,6 +59,7 @@ const CATEGORY_LABEL_KEYS: Record<MainstreamChannelCategory, string> = {
 const CONNECTOR_LABEL_KEYS: Record<MainstreamConnectorType, string> = {
   'openai-compatible': 'admin.mainstreamChannels.connector.openaiCompatible',
   'anthropic-compatible': 'admin.mainstreamChannels.connector.anthropicCompatible',
+  'ai-sdk-gateway-v3': 'common.gatewayName',
 };
 
 const STATE_LABEL_KEYS: Record<'active' | 'retired', string> = {

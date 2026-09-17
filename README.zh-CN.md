@@ -4,20 +4,22 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 
 > **当前源码：** 1.0.0-rc.1 开发候选，尚未正式发布。最新已发布版本为 [1.0.0-beta.4](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.4)。向用户开放前，请阅读部署、隐私和安全文档。
 >
-> **兼容边界：** 继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。支持完整 beta.4、此前两种开发结构和更早十一种精确结构原子升级至 117 张表，保留现有钱包、数据和配置，三款新游戏初始关闭。Alpha/Generation 1 仍须显式全新切换；具体来源见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
+> **兼容边界：** 继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。支持包括完整 beta.4 和前序发布候选结构在内的十五种精确前驱原子升级至 117 张表，保留现有钱包、数据和配置，三款新游戏初始关闭。Alpha/Generation 1 仍须显式全新切换；具体来源见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## 主要功能
 
-- OpenAI-compatible `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings` 入站接口。聊天支持 OpenAI-compatible、Anthropic-compatible 上游连接器；向量嵌入只接入 OpenAI-compatible 上游。
+- 捐赠者、管理员和协管可逐密钥配置连续失败阈值，默认 10；0 表示永不因报错下架，页面持续显示醒目警示。保存保留计数并立即重算报错下架状态；协管 CallerKey 可通过[自动化接口](docs/steward-automation.md)读写。
+- Gateway 费用归因由管理员配置，默认不发送；开启后发送按用户及最终网关 origin 生成的伪名，调试只显示是否发送。严格兼容矩阵及已验证的 Runable 向量接口限制见 [API 契约](docs/api-contract.md#24-native-ai-sdk-gateway-v3-compatibility)。
+- OpenAI-compatible `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings` 入站接口。聊天支持 OpenAI-compatible、Anthropic-compatible 和原生 AI SDK Gateway v3 上游连接器；向量嵌入支持 OpenAI-compatible 和 Gateway 的严格文本子集。
 - Discord OAuth 普通用户登录，以及独立的管理员站点。
 - 用户级端点、主流渠道模板、加密上游凭据、自动/手动模型目录、平台模型命名，以及“端点 → 密钥 → 模型”的连续连接流程。
 - 自用顺序/随机路由，公益顺序/均匀随机/到期加权路由，可选的提交前重试，单用户并发限制，以及由所有者配置、自用/公益/实发调试共用的每把密钥并发与 RPM 限额。
 - SSRF、DNS 重绑定、重定向、代理、响应大小、超时、取消、并发和流式安全边界。
 - 上游密钥加密保存；明文凭据不会出现在列表、日志、告警或账号导出中。
 - 请求元数据、用量统计、留存清理、账号导出/删除、问题中心、告警中心和运行时限制。
-- 账号导出 schema 6 包含双钱包、按币分录、独立签到、游戏付款来源和永久新人任务完成记录；继续排除密钥、其他用户及内部容量、调度和审核数据。
+- 账号导出 schema 8 包含游戏随机性凭证、双钱包、按币分录、独立签到、游戏付款来源和永久新人任务完成记录；继续排除密钥、其他用户及内部容量、调度和审核数据。
 - 分开的通用积分和游戏积分及独立签到；游戏优先使用游戏积分，不足用通用积分，未使用付款原币退回，普通 API 和周四只使用通用积分。每日低保发放游戏积分。九项一次性新人任务共奖励 17,000 通用积分。
 - 管理员与 5 级协管共用用户限制、等级筛选和公告管理。协管只能修改其他 1～4 级用户，不能删号或调整累计捐赠回馈。捐赠人和管理者可以重置捐赠密钥的连续失败状态，管理者可分批处理整个筛选结果。
 - 垂钓新库毛回报率默认 100%，已有设置保留；逐次向平台、低保和周四池抽水，默认各 1%，展示毛奖励、扣除和净奖励。
@@ -29,11 +31,11 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - 《从头再来》低保、《疯狂星期四》共享池活动、中英文公告，以及由管理员受理的公共凭据防盗举报。创建星期四周期时自动选定北京时间下一个周四 00:00，持续 24 小时；若当天是周四，则选择下一周。管理页直接显示北京时间活动区间，编辑已有周期时保留原排期。
 - 默认关闭并明确标注风险的两项 OpenAI-only 聊天实验策略：物理密钥级 `store:false` 和逻辑模型级工具调用展平。
 - 只驻留内存的调试中心：新会话始终 dry run，明确确认后才发送到真实上游。实发结果由调试页捕获，API 调用者收到专用的 HTTP 422 调试响应。
-- 服务端负责结果和账务的游戏中心，包含《池塘垂钓》《连连看》《三人猜拳》《竞标对决》和《点赞大战》，支持幂等处理、自动恢复、隐私榜单和随程序打包的本地图像。《池塘垂钓》默认打开近 30 天单次最大收获榜，历史单次最大收获榜和近 30 天总收获榜仍可切换；透明背景的白饭主题蓝色大肥鱼彩蛋保留原传奇鱼种和奖励，榜单行使用紧凑的原鱼种名，结果说明仍保留原传奇鱼种说明。
-- 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
+- 服务端负责结果和账务的游戏中心，包含《池塘垂钓》《连连看》《三人猜拳》《竞标对决》《点赞大战》和《二十一点》，支持幂等处理、自动恢复、隐私榜单和随程序打包的本地图像。《池塘垂钓》默认打开近 30 天单次最大收获榜，历史单次最大收获榜和近 30 天总收获榜仍可切换；透明背景的白饭主题蓝色大肥鱼彩蛋保留原传奇鱼种和奖励，榜单行使用紧凑的原鱼种名，结果说明仍保留原传奇鱼种说明。
+- OpenAI／Anthropic 使用的服务端上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
 - 重新设计的中英文 React 双站，包含响应式导航、连续资源操作、安全 Markdown 说明与自定义站点品牌，并嵌入一个 Go 单二进制。
 
-当前源码暴露上述三个 OpenAI-compatible 入站接口。向量嵌入支持文本和 Token ID 的单条／批量输入、float／base64 编码和可选输出维度，自用与公益均可使用。模型不设置用途分类：请求路径决定操作，实际模型是否支持由上游判断。Rerank 暂不支持。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
+当前源码暴露上述三个 OpenAI-compatible 入站接口。OpenAI-compatible 向量嵌入支持文本和 Token ID 的单条／批量输入、float／base64 编码和可选输出维度，自用与公益均可使用。模型不设置用途分类：请求路径决定操作，实际模型是否支持由上游判断。Rerank 暂不支持。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。`ai-sdk-gateway-v3` 使用原生 Gateway 协议，支持文本、工具、图片输入和文本向量。其他 OpenAI API 家族和连接器类型仍留待后续版本；各连接器的严格兼容边界见 [API 契约](docs/api-contract.md)。
 
 连连看新局共用 2／3／5 次提示或刷新机会，通关每次剩余机会加 100 分；不再自动重排。六个榜单按尺寸和 7／30 天窗口分开，每人只取最好成绩，同分先达成者靠前。普通消除不再额外刷新钱包和整个游戏中心，连接动画不阻止下一次选牌。旧局保留原规则。
 
@@ -104,7 +106,7 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-当前候选使用 117 张表的 Generation 2 结构，接受包括完整 beta.4 和此前两种开发结构在内的十四种精确前序结构。升级先验证来源，再原子扩展并检查结构、外键和两种资产的账务。现有双钱包、已结算费用、旧三款游戏已保存的版本 1／2 规则、运营配置和自定义法律正文保持。只有尚无游戏钱包的更早来源新增零余额钱包；三款新游戏使用独立版本 1 规则且默认关闭。不能只换旧二进制降级，须恢复相匹配的完整停服快照。全新数据库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+当前候选使用 117 张表的 Generation 2 结构，接受包括完整 beta.4 和前序发布候选结构在内的十五种精确前序结构。升级先验证来源，再原子扩展并检查结构、外键和两种资产的账务。现有双钱包、已结算费用、旧三款游戏已保存的版本 1／2 规则、运营配置和自定义法律正文保持。只有尚无游戏钱包的更早来源新增零余额钱包；三款新游戏使用独立版本 1 规则且默认关闭。不能只换旧二进制降级，须恢复相匹配的完整停服快照。全新数据库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
 Beta.3 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
 
@@ -165,7 +167,7 @@ curl https://api.example.com/v1/embeddings \
   -d '{"model":"provider/model","input":["Hello","World"],"encoding_format":"float"}'
 ```
 
-上游填写带版本的 base，如 `https://provider.example/v1`；连接器追加 `/embeddings`，不会自动补 `/v1`。成功批量请求按次只计一次；公益按 Token 计费使用整批输入 Token 和输入价格，向量维度不算输出 Token。校验、未知用量结算、限额和调试行为见[向量接口契约](docs/api-contract.md#23-post-v1embeddings)。
+OpenAI-compatible 上游填写带版本的 base，如 `https://provider.example/v1`；连接器追加 `/embeddings`，不会自动补 `/v1`。成功批量请求按次只计一次；公益按 Token 计费使用整批输入 Token 和输入价格，向量维度不算输出 Token。校验、未知用量结算、限额和调试行为见[向量接口契约](docs/api-contract.md#23-post-v1embeddings)。
 
 ## 开发门禁
 
@@ -183,7 +185,7 @@ npm --prefix web run build
 
 应用内包含中英文隐私政策和服务条款页面。运营方在接受真实用户前，必须根据实际运营主体、联系方式、司法辖区、部署方式和数据处理实践审阅并定制这些文本。
 
-请求可能发送到账号选择的 OpenAI-compatible 或 Anthropic-compatible 提供方，包括捐赠者提供的公益资源；这些独立第三方可能按自身政策处理或留存正文，实验性 `store:false` 只是尽力请求，无法保证零留存。NonbiriAPI 自身不把普通请求/响应正文写入持久日志，Debug 捕获则经过脱敏、有界并只驻留内存。通用积分可用于公益与游戏，游戏积分只用于游戏；游戏付款优先使用游戏积分，符合退款规则时按原币种退还。两类签到独立，游戏低保发游戏积分，正常游戏收益与一次性新人奖励发通用积分。`donation_credit` 是累计捐赠者回馈统计，普通消费不会减少它。
+请求可能发送到账号选择的 OpenAI-compatible、Anthropic-compatible 或原生 AI SDK Gateway v3 提供方，包括捐赠者提供的公益资源；这些独立第三方可能按自身政策处理或留存正文，实验性 `store:false` 只是尽力请求，无法保证零留存。NonbiriAPI 自身不把普通请求/响应正文写入持久日志，Debug 捕获则经过脱敏、有界并只驻留内存。通用积分可用于公益与游戏，游戏积分只用于游戏；游戏付款优先使用游戏积分，符合退款规则时按原币种退还。两类签到独立，游戏低保发游戏积分，正常游戏收益与一次性新人奖励发通用积分。`donation_credit` 是累计捐赠者回馈统计，普通消费不会减少它。
 
 数据导出、删除、留存和隐私不变量见 [`docs/data-lifecycle-checklist.md`](docs/data-lifecycle-checklist.md)。
 

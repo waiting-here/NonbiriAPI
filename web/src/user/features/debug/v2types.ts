@@ -78,6 +78,7 @@ export interface DebugRequest {
 }
 
 export interface DebugUpstreamResult {
+  gateway_user_attribution_sent?: boolean;
   result_kind: 'response' | 'synthetic';
   status_code: number | null;
   upstream_code: string | null;
@@ -251,9 +252,10 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
   }
   let upstream: DebugUpstreamResult | null = null;
   if (root.upstream_result !== null) {
-    const item = record(root.upstream_result, ['result_kind', 'status_code', 'upstream_code', 'diag', 'usage', 'completed_at'], 'Debug upstream result');
+    const item = record(root.upstream_result, ['result_kind', 'status_code', 'upstream_code', 'diag', 'usage', 'completed_at', 'gateway_user_attribution_sent'], 'Debug upstream result', ['result_kind', 'status_code', 'upstream_code', 'diag', 'usage', 'completed_at']);
     upstream = {
       result_kind: oneOf(item.result_kind, ['response', 'synthetic'] as const, 'Debug upstream result kind'),
+      ...(item.gateway_user_attribution_sent === undefined ? {} : { gateway_user_attribution_sent: boolean(item.gateway_user_attribution_sent, 'Gateway cost attribution sent') }),
       status_code: nullableInteger(item.status_code, 'Debug upstream status', 100, 599),
       upstream_code: nullableString(item.upstream_code, 'Debug upstream code', { min: 1, max: 64, bytes: 64, ascii: true }),
       diag: nullableString(item.diag, 'Debug safe diagnostic', { max: 4_096, bytes: 4_096 }),
