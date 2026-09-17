@@ -20,6 +20,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Browser clients can use the three public CallerKey model routes across origins. Valid OPTIONS preflights return 204 without authentication or model usage, and actual responses expose errors and streams through CORS. Cookie-authenticated APIs retain their same-origin boundary.
 - Administrator dashboard endpoint totals use the bounded numbered endpoint page, including addresses shared by more than 100 users.
 - Shared battery overload affects only positive-energy plans when the other plan costs zero; exact remaining energy is allowed and Flash keeps its independent check.
 - Uncapped API reserve and gold use numeric displays. Still-stunned plans show only skip; cleansing plans require a cast and restore confirmation.

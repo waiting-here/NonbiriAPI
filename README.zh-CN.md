@@ -169,6 +169,21 @@ curl https://api.example.com/v1/embeddings \
 
 OpenAI-compatible 上游填写带版本的 base，如 `https://provider.example/v1`；连接器追加 `/embeddings`，不会自动补 `/v1`。成功批量请求按次只计一次；公益按 Token 计费使用整批输入 Token 和输入价格，向量维度不算输出 Token。校验、未知用量结算、限额和调试行为见[向量接口契约](docs/api-contract.md#23-post-v1embeddings)。
 
+浏览器客户端可以跨源调用这三个公开模型接口，并在 Authorization 中显式提供 CallerKey。使用 fetch 默认凭据模式或 `credentials: 'omit'`，不要设置为 `include`。例如，由用户在运行时提供 CallerKey：
+
+```js
+const response = await fetch('https://api.example.com/v1/embeddings', {
+  method: 'POST',
+  credentials: 'omit',
+  headers: { Authorization: `Bearer ${callerKey}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ model: 'provider/model', input: 'Hello' }),
+});
+const result = await response.json();
+if (!response.ok) throw new Error(result.error.message);
+```
+
+浏览器自动发送的 OPTIONS 预检不需要密钥，不调用模型或产生费用；实际请求仍须通过鉴权。用户会话及管理员接口继续保留同源保护。具体限制见 [CORS 契约](docs/api-contract.md#browser-cross-origin-access)。若预检失败，浏览器不会发送模型请求，因此不会产生调用日志。
+
 ## 开发门禁
 
 ```sh

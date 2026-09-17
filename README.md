@@ -146,6 +146,21 @@ curl https://api.example.com/v1/embeddings \
 
 Use a versioned upstream base such as `https://provider.example/v1`; the connector appends `/embeddings` without inserting `/v1`. A successful batch counts as one request. Token-priced charity embeddings charge all input tokens at the input rate; vector dimensions are not output tokens. See the [embedding contract](docs/api-contract.md#23-post-v1embeddings) for limits, unknown-usage settlement, and Debug behavior.
 
+Browser clients can call all three public model routes across origins with an explicit Bearer CallerKey. Use the default fetch credentials mode or `credentials: 'omit'`; do not use `credentials: 'include'`. For example, with a CallerKey supplied by the user at runtime:
+
+```js
+const response = await fetch('https://api.example.com/v1/embeddings', {
+  method: 'POST',
+  credentials: 'omit',
+  headers: { Authorization: `Bearer ${callerKey}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ model: 'provider/model', input: 'Hello' }),
+});
+const result = await response.json();
+if (!response.ok) throw new Error(result.error.message);
+```
+
+The browser's OPTIONS preflight needs no key and incurs no model call or charge. Authentication remains required for the actual request. Session and administrator APIs retain their same-origin protection. See [CORS rules and limits](docs/api-contract.md#browser-cross-origin-access); if a preflight fails, the browser does not send the model request and no call log is created.
+
 The complete CallerKey is shown only once after creation or replacement. Save it immediately; if it was not saved, replace it to receive a new value.
 
 Treat caller keys and upstream credentials as secrets. Do not put them in URLs, issue reports, notes, shell history, screenshots, or logs.

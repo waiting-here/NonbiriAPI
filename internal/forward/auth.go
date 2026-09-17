@@ -180,17 +180,8 @@ func bearerCallerKey(request *http.Request) (string, bool) {
 }
 
 func exactIngressFailure(method, path, escapedPath string) *wireFailure {
-	if path == "" || escapedPath != path {
-		failure := platformFailure(httperr.CodeNotFound, "not found")
-		return &failure
-	}
-	want := ""
-	switch path {
-	case "/v1/models":
-		want = http.MethodGet
-	case "/v1/chat/completions", "/v1/embeddings":
-		want = http.MethodPost
-	default:
+	want := exactIngressMethod(path, escapedPath)
+	if want == "" {
 		failure := platformFailure(httperr.CodeNotFound, "not found")
 		return &failure
 	}
@@ -199,4 +190,19 @@ func exactIngressFailure(method, path, escapedPath string) *wireFailure {
 		return &failure
 	}
 	return nil
+}
+
+// Authentication and browser preflights share the same exact route table.
+func exactIngressMethod(path, escapedPath string) string {
+	if path == "" || escapedPath != path {
+		return ""
+	}
+	switch path {
+	case "/v1/models":
+		return http.MethodGet
+	case "/v1/chat/completions", "/v1/embeddings":
+		return http.MethodPost
+	default:
+		return ""
+	}
 }

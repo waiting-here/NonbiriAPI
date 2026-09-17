@@ -172,8 +172,8 @@ func newPublicForwardRuntime(
 		_ = service.Close()
 		return fail(fmt.Errorf("create CallerKey middleware: %w", err))
 	}
-	handler := maintenance.GateMiddleware(maintenanceGate,
-		callerKey.Wrap(flowHandler))
+	handler := forward.BrowserCORS(maintenance.GateMiddleware(maintenanceGate,
+		callerKey.Wrap(flowHandler)))
 	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
 }
 
