@@ -119,11 +119,6 @@
   overflow-wrap: anywhere;
 }
 
-.economy-catalog-item__provider {
-  color: var(--nb-color-text-muted);
-  overflow-wrap: anywhere;
-}
-
 .economy-catalog-item__statuses {
   display: flex;
   flex: 0 1 auto;

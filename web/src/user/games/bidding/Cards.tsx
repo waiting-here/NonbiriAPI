@@ -22,7 +22,7 @@ export function RewardCard({ card }: { readonly card: Reward }) {
         {card.rank * card.multiplier}
         <small>{t('分', 'pts')}</small>
       </strong>
-      {card.multiplier === 2 && <span className="bid-double">×2 {t('王', 'Joker')}</span>}
+      {card.multiplier === 2 && <span className="bid-double">×2 Joker</span>}
     </div>
   );
 }
@@ -101,15 +101,15 @@ export function BiddingControls({
   const selection = locked ? state.view.selected : draft;
   if (state.phase === 'joker')
     return (
-      <section className="bid-decision" aria-label={t('王的选择', 'Joker decision')}>
+      <section className="bid-decision" aria-label={t('Joker 的选择', 'Joker decision')}>
         <h2>
           {state.view.dealer === state.you
-            ? t('你的王，你的时机', 'Your joker, your moment')
-            : t('等待对手决定是否使用王', 'Waiting for the opponent’s joker decision')}
+            ? t('你的 Joker，你的时机', 'Your joker, your moment')
+            : t('等待对手决定是否使用 Joker', 'Waiting for the opponent’s joker decision')}
         </h2>
         <p>
           {t(
-            '使用王，让本轮己方奖励牌分值翻倍。整局仅能使用一次。',
+            '使用 Joker，让本轮己方奖励牌分值翻倍。整局仅能使用一次。',
             'Double your reward card this round. Your joker can be used only once per game.',
           )}
         </p>
@@ -121,7 +121,7 @@ export function BiddingControls({
               disabled={blocked || locked}
               onClick={() => onAction({ kind: 'joker', use: true })}
             >
-              {t('使用王 · 奖励翻倍', 'Use joker · double reward')}
+              {t('使用 Joker · 奖励翻倍', 'Use joker · double reward')}
             </button>
             <button
               type="button"
@@ -129,7 +129,7 @@ export function BiddingControls({
               disabled={blocked || locked}
               onClick={() => onAction({ kind: 'joker', use: false })}
             >
-              {t('保留王', 'Save joker')}
+              {t('保留 Joker', 'Save joker')}
             </button>
           </div>
         )}

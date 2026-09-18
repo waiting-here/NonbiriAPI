@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next';
+import { useCallback } from 'react';
 import type { DuelResult } from './types';
 
 export function useDuelText() {
   const { i18n } = useTranslation();
-  return (zh: string, en: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
+  const chinese = !!i18n.resolvedLanguage?.startsWith('zh');
+  return useCallback((zh: string, en: string) => (chinese ? zh : en), [chinese]);
 }
 
 export function outcomeText(

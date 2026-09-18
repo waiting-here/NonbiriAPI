@@ -27,8 +27,8 @@ export function BiddingRoundView({
       {fact.joker !== null && (
         <p>
           {fact.joker === you
-            ? t('你使用了王', 'You used a joker')
-            : t('对手使用了王', 'Opponent used a joker')}
+            ? t('你使用了 Joker', 'You used a joker')
+            : t('对手使用了 Joker', 'Opponent used a joker')}
         </p>
       )}
       <p>

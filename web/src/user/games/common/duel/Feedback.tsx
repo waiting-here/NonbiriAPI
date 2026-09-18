@@ -1,17 +1,22 @@
 import { ApiError } from '@shared/query/http';
 import type { Profile } from './types';
 import { useDuelText } from './copy';
+import { entryMessage, type EntryProblem } from './availability';
 
 export function DuelFeedback({
   error,
   uncertain = false,
   pending = false,
   onRetry,
+  queueAttempt = false,
+  entryProblem,
 }: {
   readonly error: unknown;
   readonly uncertain?: boolean;
   readonly pending?: boolean;
   readonly onRetry: () => void;
+  readonly queueAttempt?: boolean;
+  readonly entryProblem?: EntryProblem | null;
 }) {
   const t = useDuelText();
   if (!error && !pending) return null;
@@ -22,10 +27,17 @@ export function DuelFeedback({
         'The response is unconfirmed. Retry the same request before continuing.',
       )
     : code === 'conflict'
-      ? t(
-          '对局状态已变化，请按刷新后的状态继续。',
-          'The game state changed. Continue with the refreshed state.',
-        )
+      ? queueAttempt
+        ? entryProblem
+          ? entryMessage(entryProblem, t)
+          : t(
+              '匹配条件已更新，请核对后重试。',
+              'Matching conditions changed. Review them and try again.',
+            )
+        : t(
+            '对局状态已变化，请按刷新后的状态继续。',
+            'The game state changed. Continue with the refreshed state.',
+          )
       : code === 'insufficient_credits'
         ? t('可用积分不足，请检查钱包。', 'Insufficient available credits. Check your wallets.')
         : code === 'maintenance' || code === 'service_unavailable'

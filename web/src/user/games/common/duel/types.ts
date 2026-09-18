@@ -30,7 +30,7 @@ export interface DuelLobbyContext {
   readonly config: DuelConfig;
   readonly wallets: { readonly balance: string; readonly gameBalance: string };
   readonly accepting: boolean;
-  readonly refreshWallets?: () => void;
+  readonly refreshWallets?: () => void | Promise<unknown>;
 }
 export interface Resolution<P> {
   readonly round: number;
