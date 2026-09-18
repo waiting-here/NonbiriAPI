@@ -256,6 +256,7 @@ export function Arena({
       aria-label={t('双侧对战', 'Both players')}
       data-stage={motion.stage}
       data-step={motion.stepIndex}
+      data-presenting={running}
       data-reduced-motion={reduced}
     >
       {running && (
@@ -327,7 +328,8 @@ export function Arena({
           const awardedNow = casts.reduce((sum, event) => sum + event.cast!.likes, 0);
           return (
             <article
-              className={`likes-player ${overloaded ? 'is-overloaded' : ''} ${stunned ? 'is-stunned' : ''}`}
+              className={`likes-player ${slot ? 'likes-player--casting' : ''} ${overloaded ? 'is-overloaded' : ''} ${stunned ? 'is-stunned' : ''}`}
+              data-side={seat === you ? 'you' : 'opponent'}
               key={seat}
             >
               <header>
@@ -357,6 +359,7 @@ export function Arena({
                     <LikesArt
                       slot={slot}
                       label={`${player.role} · ${skillName(catalog, lastCast!.skillId)}`}
+                      eager
                     />
                     <strong>
                       {skillName(catalog, lastCast!.skillId)}

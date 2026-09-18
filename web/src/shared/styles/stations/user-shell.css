@@ -15,6 +15,14 @@
   min-width: 0;
 }
 
+@media (min-width: 64rem) {
+  .nb-user-shell__main > .nb-page {
+    width: 100%;
+    max-width: none;
+    padding-inline: 0;
+  }
+}
+
 .nb-user-header {
   position: sticky;
   top: 0;
