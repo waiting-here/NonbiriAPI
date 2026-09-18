@@ -127,6 +127,191 @@
   font-size: 0.85rem;
   color: var(--bid-muted);
 }
+.bid-presentation {
+  display: grid;
+  grid-template-columns: minmax(17rem, 23rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.1rem;
+  min-height: 11rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--bid-line);
+  border-radius: 0.65rem;
+  background: linear-gradient(110deg, #a8965d18, transparent);
+  pointer-events: none;
+  overflow: hidden;
+}
+.bid-presentation--idle {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--bid-muted);
+}
+.bid-presentation__stage {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+}
+.bid-presentation__side {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  text-align: center;
+}
+.bid-presentation__deck,
+.bid-presentation__bid {
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 3.6rem;
+  border: 1px solid var(--bid-line);
+  border-radius: 0.3rem;
+  background: var(--bid-paper);
+  font-size: 1.4rem;
+  font-weight: 700;
+  box-shadow: 2px 3px 0 #796c3e25;
+}
+.bid-presentation__deck {
+  background: repeating-linear-gradient(45deg, var(--bid-paper) 0 5px, #a8965d30 5px 7px);
+}
+.bid-presentation__side.is-you .bid-presentation__deck {
+  color: var(--bid-red);
+}
+.bid-presentation__center {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.bid-presentation__cards {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.bid-presentation__stage .bid-reward {
+  width: 2.7rem;
+  min-width: 2.7rem;
+  font-size: 0.7rem;
+  animation: none;
+}
+.bid-presentation__stage .bid-reward__corner {
+  left: 0.2rem;
+  top: 0.15rem;
+  font-size: 0.65rem;
+}
+.bid-presentation__stage .bid-reward__suit {
+  font-size: 1.2rem;
+}
+.bid-presentation__stage .bid-reward > strong {
+  font-size: 0.7rem;
+}
+.bid-presentation__stage .bid-double {
+  font-size: 0.5rem;
+  bottom: -0.3rem;
+}
+.bid-presentation__pot {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--bid-line);
+  border-radius: 2rem;
+  background: var(--bid-paper);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.bid-presentation--draw .bid-reward--0 {
+  animation: bid-presentation-draw-left 0.8s ease-out both;
+}
+.bid-presentation--draw .bid-reward--1 {
+  animation: bid-presentation-draw-right 0.8s ease-out both;
+}
+.bid-presentation--reveal .bid-presentation__bid {
+  animation: bid-presentation-flip 0.8s ease-out both;
+}
+.bid-presentation--settle .is-owner-you .bid-presentation__center {
+  animation: bid-presentation-collect-you 1.1s ease-in-out both;
+}
+.bid-presentation--settle .is-owner-opponent .bid-presentation__center {
+  animation: bid-presentation-collect-opponent 1.1s ease-in-out both;
+}
+.bid-presentation--settle .is-discarded .bid-presentation__center {
+  animation: bid-presentation-discard 1.1s ease-in both;
+}
+.bid-presentation--settle .is-owner-you .is-you,
+.bid-presentation--settle .is-owner-opponent .is-opponent {
+  color: var(--bid-red);
+  font-weight: 800;
+}
+.bid-presentation__copy {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bid-presentation__copy strong {
+  font-size: 1rem;
+}
+.bid-presentation__copy span,
+.bid-presentation__copy small {
+  color: var(--bid-muted);
+  font-size: 0.8rem;
+}
+@keyframes bid-presentation-draw-left {
+  from {
+    opacity: 0;
+    transform: translateX(-3.5rem) rotate(-12deg) scale(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bid-presentation-draw-right {
+  from {
+    opacity: 0;
+    transform: translateX(3.5rem) rotate(12deg) scale(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bid-presentation-flip {
+  from {
+    opacity: 0.2;
+    transform: perspective(300px) rotateY(90deg);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(300px) rotateY(0);
+  }
+}
+@keyframes bid-presentation-collect-you {
+  25% {
+    transform: scale(1.08);
+  }
+  to {
+    transform: translateX(-65%) scale(0.3);
+    opacity: 0;
+  }
+}
+@keyframes bid-presentation-collect-opponent {
+  25% {
+    transform: scale(1.08);
+  }
+  to {
+    transform: translateX(65%) scale(0.3);
+    opacity: 0;
+  }
+}
+@keyframes bid-presentation-discard {
+  to {
+    transform: translateY(1.8rem) scale(0.5);
+    opacity: 0;
+  }
+}
 .bid-table {
   display: flex;
   align-items: center;
@@ -439,11 +624,24 @@
   .bid-phase {
     gap: 0.65rem;
   }
+  .bid-presentation {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 16rem;
+    gap: 0.8rem;
+    padding: 0.75rem;
+  }
+  .bid-presentation__copy {
+    text-align: center;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .bidding-game * {
     animation: none !important;
     transition: none !important;
     transform: none !important;
+  }
+  .bid-presentation__stage .bid-reward,
+  .bid-presentation__bid {
+    opacity: 1;
   }
 }
