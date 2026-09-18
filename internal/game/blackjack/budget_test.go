@@ -15,25 +15,25 @@ func TestBlackjackFullWaitingQueueAndDrain(t *testing.T) {
 		t.Skip("full queue resource gate")
 	}
 	started := time.Now()
-	f := newFixture(t, 4105)
+	f := newFixture(t, 4106)
 	config := f.read(0).ConfigHash
-	for i := 0; i < 4104; i++ {
+	for i := 0; i < 4105; i++ {
 		if _, err := f.s.Enqueue(f.ctx, blackjack.EnqueueInput{Identity: f.users[i], Key: f.id("op_"), Stake: "5000", ConfigHash: config}); err != nil {
 			t.Fatal(i, err)
 		}
 	}
-	last := f.read(4103)
-	if last.QueueCount != "4096" || last.You == nil || last.You.Position != "4096" || len(last.Table.Fact.Seats) != 8 {
+	last := f.read(4104)
+	if last.QueueCount != "4096" || last.You == nil || last.You.Position != "4096" || len(last.Table.Fact.Seats) != 9 {
 		t.Fatal("queue boundary", last.QueueCount, last.You)
 	}
-	if _, err := f.s.Enqueue(f.ctx, blackjack.EnqueueInput{Identity: f.users[4104], Key: f.id("op_"), Stake: "5000", ConfigHash: config}); !errors.Is(err, blackjack.ErrLimit) {
+	if _, err := f.s.Enqueue(f.ctx, blackjack.EnqueueInput{Identity: f.users[4105], Key: f.id("op_"), Stake: "5000", ConfigHash: config}); !errors.Is(err, blackjack.ErrLimit) {
 		t.Fatal("over capacity admitted", err)
 	}
 	// The request is already funded and retains its position across a retry.
-	if _, err := f.s.Enqueue(f.ctx, blackjack.EnqueueInput{Identity: f.users[4103], Key: f.id("op_"), Stake: "5000", ConfigHash: config}); err != nil {
+	if _, err := f.s.Enqueue(f.ctx, blackjack.EnqueueInput{Identity: f.users[4104], Key: f.id("op_"), Stake: "5000", ConfigHash: config}); err != nil {
 		t.Fatal(err)
 	}
-	if f.read(4103).You.Position != "4096" {
+	if f.read(4104).You.Position != "4096" {
 		t.Fatal("duplicate request reordered queue")
 	}
 	admitted := time.Since(started)
@@ -48,7 +48,7 @@ func TestBlackjackFullWaitingQueueAndDrain(t *testing.T) {
 		t.Fatal("unfinished drain", active, err)
 	}
 	var wrong int
-	if err := f.db.QueryRow(`SELECT COUNT(*) FROM credit_accounts WHERE kind='user' AND asset_type='game' AND (balance_sign<>1 OR balance_mag<>(SELECT balance_mag FROM credit_accounts WHERE kind='user' AND asset_type='game' AND user_id=?))`, f.users[4104].UserID).Scan(&wrong); err != nil || wrong != 0 {
+	if err := f.db.QueryRow(`SELECT COUNT(*) FROM credit_accounts WHERE kind='user' AND asset_type='game' AND (balance_sign<>1 OR balance_mag<>(SELECT balance_mag FROM credit_accounts WHERE kind='user' AND asset_type='game' AND user_id=?))`, f.users[4105].UserID).Scan(&wrong); err != nil || wrong != 0 {
 		t.Fatal("refund wallet mismatch", wrong, err)
 	}
 	f.recovery()

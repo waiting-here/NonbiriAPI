@@ -71,7 +71,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 							return facts, err
 						}
 					}
-					state, err := engine.New(numbers, int(v.StartedAt/60%8), random)
+					state, err := engine.New(numbers, int(v.StartedAt/60%engine.MaxSeats), random)
 					if err != nil {
 						return facts, err
 					}
@@ -166,11 +166,11 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 	if err != nil {
 		return facts, err
 	}
-	occupied := [8]bool{}
+	occupied := [engine.MaxSeats]bool{}
 	for _, e := range list {
 		occupied[e.Seat.Int64] = true
 	}
-	if len(list) == 8 {
+	if len(list) == engine.MaxSeats {
 		return facts, nil
 	}
 	waiting, err := entries(ctx, tx, `state='waiting' ORDER BY ordinal LIMIT 4096`)
@@ -178,7 +178,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 		return facts, err
 	}
 	i := 0
-	for number := range 8 {
+	for number := range engine.MaxSeats {
 		if occupied[number] || i >= len(waiting) {
 			continue
 		}

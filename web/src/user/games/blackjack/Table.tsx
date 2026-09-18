@@ -172,7 +172,7 @@ export function BlackjackBoard({
       )}
       {controls}
       <div className="bj-seats" aria-label={t('同桌玩家', 'Other seats')}>
-        {Array.from({ length: 8 }, (_, number) => {
+        {Array.from({ length: 9 }, (_, number) => {
           if (number === ownSeat && mine) return null;
           const terms = table.fact.seats.find((s) => s.seat === number),
             seat = cards?.seats.find((s) => s.number === number);

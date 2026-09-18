@@ -60,7 +60,7 @@ describe('blackjack public state and simultaneous controls', () => {
       role: 'user',
     });
     expect(await screen.findByRole('region', { name: 'Your hands' })).toBeVisible();
-    expect(screen.getAllByRole('region', { name: /^Seat / })).toHaveLength(7);
+    expect(screen.getAllByRole('region', { name: /^Seat / })).toHaveLength(8);
     expect(screen.getByRole('img', { name: 'Dealer hole card' })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Hit' }));
     await waitFor(() =>

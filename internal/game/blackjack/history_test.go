@@ -122,8 +122,8 @@ func TestHistoryOwnershipPaginationExportAndAnonymousRetention(t *testing.T) {
 }
 
 func TestClosingGameDrainsQueueAndLetsDealtTableSettle(t *testing.T) {
-	f := newFixture(t, 9)
-	for i := range 9 {
+	f := newFixture(t, 10)
+	for i := range 10 {
 		f.join(i)
 	}
 	f.clock.Store(135)
@@ -134,7 +134,7 @@ func TestClosingGameDrainsQueueAndLetsDealtTableSettle(t *testing.T) {
 	if home.Table.Phase != "decision" || home.QueueCount != "0" {
 		t.Fatalf("closed prematurely: %+v", home)
 	}
-	if f.read(8).You != nil {
+	if f.read(9).You != nil {
 		t.Fatal("waiting entry retained while closed")
 	}
 	f.clock.Store(165)

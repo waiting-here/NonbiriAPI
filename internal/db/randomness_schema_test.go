@@ -44,6 +44,9 @@ func TestGameRandomnessSchemaExtension(t *testing.T) {
 	if err := applyGatewayPolicyExtension(context.Background(), tx); err != nil {
 		t.Fatal(err)
 	}
+	if err := applyBlackjackNineSeatExtension(context.Background(), tx); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}

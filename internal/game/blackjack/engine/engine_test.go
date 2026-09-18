@@ -234,7 +234,7 @@ func TestFullTablesConserveShoeAndBoundInvestment(t *testing.T) {
 	for round := range 2000 {
 		deck := shoe(t)
 		random.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
-		seats := []int{0, 1, 2, 3, 4, 5, 6, 7}
+		seats := []int{0, 1, 2, 3, 4, 5, 6, 7, 8}
 		s, err := Deal(deck, seats, round%MaxSeats)
 		if err != nil {
 			t.Fatal(err)

@@ -178,7 +178,7 @@ func (c compiled) UserWire(available func(string, string) bool) json.RawMessage 
 		SeatingSeconds  int  `json:"seating_seconds"`
 		DecisionSeconds int  `json:"decision_seconds"`
 		RoundSeconds    int  `json:"round_seconds"`
-	}{c.snapshot.Wire(), available("table", ""), QueueCapacity, 8, 15, 30, 60}
+	}{c.snapshot.Wire(), available("table", ""), QueueCapacity, 9, 15, 30, 60}
 	w.Enabled = w.Enabled && w.Available
 	return game.ConfigJSON(w)
 }

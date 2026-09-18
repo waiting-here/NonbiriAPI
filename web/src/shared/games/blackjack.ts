@@ -48,7 +48,7 @@ export interface BlackjackConfig {
 }
 const money = (v: unknown) => amount(v, 'blackjack amount', false);
 const wide = (v: unknown) => decimal(v, 'blackjack integer');
-const seatNo = (v: unknown) => integer(v, 'blackjack seat', 0, 7);
+const seatNo = (v: unknown) => integer(v, 'blackjack seat', 0, 8);
 function rates(v: unknown) {
   const r = record(v, ['platform', 'welfare', 'thursday'], 'blackjack fees');
   const result = {
@@ -80,7 +80,7 @@ export function blackjackSnapshot(v: unknown) {
   const r = record(v, [...configFields, ...snapshotFields], 'blackjack snapshot');
   const cfg = blackjackConfig(Object.fromEntries(configFields.map((k) => [k, r[k]])));
   integer(r.queue_capacity, 'queue capacity', 4096, 4096);
-  integer(r.seats, 'seats', 8, 8);
+  integer(r.seats, 'seats', 9, 9);
   integer(r.seating_seconds, 'seating seconds', 15, 15);
   integer(r.decision_seconds, 'decision seconds', 30, 30);
   integer(r.round_seconds, 'round seconds', 60, 60);
@@ -125,7 +125,7 @@ function cards(v: unknown) {
     ['seats', 'dealer', 'dealer_total', 'hole_hidden', 'finished'],
     'table cards',
   );
-  const seats = array(r.seats, 'seats', 8).map((v) => {
+  const seats = array(r.seats, 'seats', 9).map((v) => {
     const p = record(v, ['number', 'hands'], 'seat');
     return { number: seatNo(p.number), hands: array(p.hands, 'hands', 2).map(hand) };
   });
@@ -173,7 +173,7 @@ export function blackjackFact(v: unknown) {
   ]);
   return {
     cards: r.cards === null ? null : cards(r.cards),
-    seats: array(r.seats, 'seat terms', 8).map((v) => {
+    seats: array(r.seats, 'seat terms', 9).map((v) => {
       const required = ['seat', 'stake', 'rake_bp', 'stopped'];
       const p = record(v, [...required, 'emote', 'emote_at'], 'seat terms', required);
       return {
@@ -185,14 +185,14 @@ export function blackjackFact(v: unknown) {
         ...(p.emote_at === undefined ? {} : { emote_at: unixSecond(p.emote_at, 'emote time') }),
       };
     }),
-    settlements: array(r.settlements, 'settlements', 8).map((v) => {
+    settlements: array(r.settlements, 'settlements', 9).map((v) => {
       const p = record(v, ['seat', 'hands'], 'seat settlement');
       return { seat: seatNo(p.seat), hands: array(p.hands, 'settled hands', 2).map(settlement) };
     }),
     ...(r.refunds === undefined
       ? {}
       : {
-          refunds: array(r.refunds, 'refunds', 8).map((v) => {
+          refunds: array(r.refunds, 'refunds', 9).map((v) => {
             const p = record(v, ['seat', 'amount'], 'refund');
             return { seat: seatNo(p.seat), amount: money(p.amount) };
           }),
@@ -260,7 +260,7 @@ function own(v: unknown) {
     stake: money(r.stake),
     rake_bp: rates(r.rake_bp),
     payment: payment(r.payment),
-    seat: nullableInteger(r.seat, 'own seat', 0, 7),
+    seat: nullableInteger(r.seat, 'own seat', 0, 8),
     session_id: r.session_id === null ? null : opaqueID(r.session_id, 'bjt_', 'own table'),
     pending: boolean(r.pending, 'pending action'),
     legal_actions: actions,
@@ -292,7 +292,7 @@ export function blackjackState(v: unknown) {
     config_hash: hash(r.config_hash),
     queue_count: wide(r.queue_count),
     you: r.you === null ? null : own(r.you),
-    your_seat: nullableInteger(r.your_seat, 'your seat', 0, 7),
+    your_seat: nullableInteger(r.your_seat, 'your seat', 0, 8),
     table: r.table === null ? null : blackjackTable(r.table),
   };
 }

@@ -310,11 +310,11 @@ func TestBlackjackFixedSeedReturn(t *testing.T) {
 			policies[index][up] = makePolicy(up, float64(index-20)/2, .97)
 		}
 	}
-	for _, seats := range []int{1, 8} {
+	for _, seats := range []int{1, 9} {
 		for _, counting := range []bool{false, true} {
 			rng := rand.New(rand.NewSource(seed + int64(seats)*2 + int64(boolIndex(counting))))
 			var whole returnSample
-			var bySeat [8]returnSample
+			var bySeat [9]returnSample
 			maxCards, splits, doubles, naturals := 0, 0, 0, 0
 			for round := range rounds / 4 {
 				var deck [engine.DeckSize]engine.Card
@@ -322,11 +322,11 @@ func TestBlackjackFixedSeedReturn(t *testing.T) {
 					deck[i] = engine.Card(i)
 				}
 				rng.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
-				numbers := []int{round % 8}
-				if seats == 8 {
-					numbers = []int{0, 1, 2, 3, 4, 5, 6, 7}
+				numbers := []int{round % 9}
+				if seats == 9 {
+					numbers = []int{0, 1, 2, 3, 4, 5, 6, 7, 8}
 				}
-				state, err := engine.Deal(deck, numbers, round%8)
+				state, err := engine.Deal(deck, numbers, round%9)
 				if err != nil {
 					t.Fatal(err)
 				}
