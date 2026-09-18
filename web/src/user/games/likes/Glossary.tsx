@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DuelDialog } from '../common/duel/Dialog';
 import { useDuelText } from '../common/duel/copy';
 import type { ModeCatalog, Skill } from './catalog';
-import { buffName, kindName, resourceName, skillName } from './labels';
+import { kindName, resourceName } from './labels';
 import { LikesArt } from './LikesArt';
 import { artRegistry } from './art';
-import { buffFacts, effectFacts } from './effectFacts';
+import { guideLevels, knowledge, levelName, relatedEntries, type GuideLevel } from './knowledge';
+import { GuideText } from './GuideText';
 
 export function SkillCost({ skill }: { readonly skill: Skill }) {
   const t = useDuelText();
@@ -33,6 +34,7 @@ export function SkillCost({ skill }: { readonly skill: Skill }) {
     </span>
   );
 }
+
 export function Glossary({
   catalog,
   initial,
@@ -43,22 +45,41 @@ export function Glossary({
   readonly onClose: () => void;
 }) {
   const t = useDuelText();
-  const [selected, setSelected] = useState(initial ?? catalog.skills[0].id);
+  const [path, setPath] = useState([
+    { id: initial || catalog.skills[0].id, level: 'base' as GuideLevel },
+  ]);
   const [search, setSearch] = useState('');
-  const skill = catalog.skills.find((s) => s.id === selected),
-    buff = catalog.buffs.find((s) => s.id === selected),
-    harness = catalog.harnesses.find((s) => s.id === selected),
-    passive = catalog.passives.find((s) => s.id === selected);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const selected = path[path.length - 1];
+  const entry = knowledge(catalog, selected.id, selected.level, t);
+  const related = relatedEntries(catalog, entry, t);
+  const skill = catalog.skills.find((s) => s.id === selected.id);
+  const harness = catalog.harnesses.find((h) => h.id === selected.id);
+  const cost = selected.level === 'base' ? skill : catalog.skills.find((s) => s.id === 'PUB41');
   const entries = [...catalog.skills, ...catalog.buffs, ...catalog.harnesses, ...catalog.passives];
+  const focus = () =>
+    requestAnimationFrame(() => {
+      heading.current?.focus();
+      heading.current?.scrollIntoView?.({ block: 'nearest' });
+    });
+  const inspect = (id: string) => {
+    setPath((p) => [...p, { id, level: 'base' }]);
+    focus();
+  };
   return (
-    <DuelDialog title={t('词条手册', 'Field guide')} onClose={onClose} className="likes-glossary">
+    <DuelDialog
+      title={t('词条手册', 'Field guide')}
+      onClose={onClose}
+      className="likes-glossary likes-reader"
+    >
       <p>
+        {catalog.mode === 'quick' ? t('快速模式', 'Quick mode') : t('标准模式', 'Standard mode')} ·{' '}
         {t(
-          '手册与本局规则版本一致。阅读不会暂停倒计时。',
-          'This guide matches the game’s rules. Reading does not pause the countdown.',
+          '阅读不会暂停正式对局计时。点击彩色术语查看关联规则。',
+          'Reading does not pause a live game. Select a highlighted term to read its rules.',
         )}
       </p>
-      <div className="likes-glossary-grid">
+      <div className="likes-reader-grid">
         <nav aria-label={t('词条导航', 'Guide navigation')}>
           <label>
             {t('搜索词条', 'Find an entry')}
@@ -66,162 +87,121 @@ export function Glossary({
           </label>
           <div className="likes-glossary-nav">
             {entries
-              .filter((item) =>
-                `${item.id} ${item.name}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-              )
+              .filter((item) => item.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
               .map((item) => (
                 <button
                   type="button"
                   key={item.id}
-                  aria-current={selected === item.id ? 'page' : undefined}
-                  onClick={() => setSelected(item.id)}
+                  aria-current={selected.id === item.id ? 'page' : undefined}
+                  onClick={() => inspect(item.id)}
                 >
-                  {item.name}
+                  {knowledge(catalog, item.id, 'base', t).title}
                 </button>
               ))}
           </div>
         </nav>
-        <article aria-live="polite">
+        <article className="likes-reader-main">
+          <button
+            type="button"
+            disabled={path.length <= 1}
+            onClick={() => {
+              setPath((p) => p.slice(0, -1));
+              focus();
+            }}
+          >
+            {t('← 返回上一词条', '← Back to previous entry')}
+          </button>
+          {harness && (
+            <LikesArt
+              slot={artRegistry[`harness.${harness.id}`]}
+              label={harness.name}
+              className="likes-harness-art"
+            />
+          )}
+          <h3 ref={heading} tabIndex={-1}>
+            {entry.title}
+          </h3>
           {skill && (
             <>
-              <h3>{skill.name}</h3>
               <p>
                 {skill.owner} · {kindName(skill.kind, t)}
               </p>
-              <SkillCost skill={skill} />
-              <p>{skill.note}</p>
-              <p>{skill.meme}</p>
-              <p>
-                {t('可用次数', 'Uses')}: {skill.maxUses ?? t('不限', 'Unlimited')} ·{' '}
-                {t('稳定技能', 'Stable')}: {skill.stable ? t('是', 'Yes') : t('否', 'No')}
-              </p>
-              <p>
-                {t(
-                  '此处显示基础费用；Buff和付款方式可能影响最终消耗，实际结果以结算为准。',
-                  'These are base costs. Buffs and payment choices may change the final cost; settlement shows what was actually paid.',
-                )}
-              </p>
-              {(['base', ...(skill.copyable ? ['I', 'II'] : [])] as ('base' | 'I' | 'II')[]).map(
-                (level) => {
-                  const fx = skill.effects[level];
-                  return (
-                    <section key={level} className="likes-glossary-effect">
-                      <h4>
-                        {level === 'base'
-                          ? t('原版', 'Original')
-                          : `${t('蒸馏', 'Distilled')} ${level}`}
-                      </h4>
-                      <dl>
-                        <div>
-                          <dt>{t('基础得赞', 'Base likes')}</dt>
-                          <dd>{fx.likes}</dd>
-                        </div>
-                        {effectFacts(fx, t).map(([name, value]) => (
-                          <div key={name}>
-                            <dt>{name}</dt>
-                            <dd>{value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                      <p>{fx.meme}</p>
-                      {[fx.buffId, fx.extraBuffId]
-                        .filter((id): id is string => !!id)
-                        .map((id) => (
-                          <button
-                            type="button"
-                            className="likes-tag"
-                            key={id}
-                            onClick={() => setSelected(id)}
-                          >
-                            {buffName(catalog, id)} ↗
-                          </button>
-                        ))}
-                      {fx.cacheTarget && (
-                        <button
-                          type="button"
-                          className="likes-tag"
-                          onClick={() => setSelected(fx.cacheTarget!)}
-                        >
-                          {skillName(catalog, fx.cacheTarget)} ↗
-                        </button>
-                      )}
-                    </section>
-                  );
-                },
-              )}
-            </>
-          )}
-          {buff && (
-            <>
-              <h3>{buff.name}</h3>
-              <p>{buff.category === 'state' ? t('状态', 'State') : 'Buff'}</p>
-              <p>{buff.description}</p>
-              <dl>
-                {[
-                  [t('触发', 'Trigger'), buff.trigger],
-                  [t('持续与结束', 'Duration and expiry'), buff.expiry],
-                  [t('叠加与覆盖', 'Stacking'), buff.overwrite],
-                  [t('作用对象', 'Target'), buff.target],
-                ].map(([title, body]) => (
-                  <div key={title}>
-                    <dt>{title}</dt>
-                    <dd>{body}</dd>
-                  </div>
-                ))}
-              </dl>
-              <dl>
-                {buffFacts(buff, t).map(([name, value]) => (
-                  <div key={name}>
-                    <dt>{name}</dt>
-                    <dd>{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <p>{buff.meme}</p>
-            </>
-          )}
-          {harness && (
-            <>
-              <LikesArt
-                slot={artRegistry[`harness.${harness.id}`]}
-                label={harness.name}
-                className="likes-harness-art"
-              />
-              <h3>{harness.name}</h3>
-              <p>{harness.description}</p>
-              <p>
-                {t('额外主动槽', 'Extra active slots')}: {harness.activeSlots}
-              </p>
-              {harness.passives.map((id) => (
-                <button
-                  type="button"
-                  className="likes-tag"
-                  key={id}
-                  onClick={() => setSelected(id)}
+              {skill.copyable && (
+                <div
+                  className="likes-reader-levels"
+                  role="group"
+                  aria-label={t('技能版本', 'Skill version')}
                 >
-                  {catalog.passives.find((p) => p.id === id)?.name} ↗
-                </button>
-              ))}
-              <p>{harness.meme}</p>
+                  {guideLevels.map((level) => (
+                    <button
+                      type="button"
+                      key={level}
+                      aria-pressed={level === selected.level}
+                      onClick={() => setPath((p) => [...p.slice(0, -1), { ...selected, level }])}
+                    >
+                      {levelName(level, t)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <h4>{t('基础费用与次数', 'Base costs and uses')}</h4>
+              {cost && <SkillCost skill={cost} />}
+              <p>
+                {selected.level === 'base'
+                  ? t('成功次数', 'Successful uses')
+                  : t('蒸馏施放次数', 'Distillation casts')}
+                : {cost?.maxUses ?? t('不限', 'Unlimited')}
+                {selected.level === 'base' && !skill.copyable
+                  ? ` · ${t('不可蒸馏', 'Cannot be distilled')}`
+                  : ''}
+              </p>
+              <p>
+                {selected.level === 'base'
+                  ? t(
+                      '以上为原始费用；当前被动、Buff、支付选择与倍速会影响实际费用和得赞。',
+                      'These are original costs. Current passives, buffs, payment choices and speed affect actual costs and likes.',
+                    )
+                  : t(
+                      '蒸馏使用上列自身费用，不继承原技能的金币、图像消耗及次数限制。',
+                      'Distillation uses its own costs above, without inheriting original gold/image costs or use limits.',
+                    )}
+              </p>
             </>
           )}
-          {passive && (
-            <>
-              <h3>{passive.name}</h3>
-              <p>{passive.description}</p>
-              <p>{passive.meme}</p>
-              {passive.buffId && (
-                <button
-                  type="button"
-                  className="likes-tag"
-                  onClick={() => setSelected(passive.buffId!)}
-                >
-                  {buffName(catalog, passive.buffId)} ↗
-                </button>
-              )}
-            </>
+          {entry.paragraphs.map((text, index) => (
+            <p key={index}>
+              <GuideText catalog={catalog} text={text} onInspect={inspect} />
+            </p>
+          ))}
+          {entry.meme && (
+            <figure className="likes-flavor">
+              <figcaption>{t('玩梗台词', 'Flavor quote')}</figcaption>
+              <blockquote>{entry.meme}</blockquote>
+            </figure>
           )}
         </article>
+        {related.length > 0 && (
+          <aside
+            className="likes-reader-related"
+            aria-label={t('关联解释', 'Related explanations')}
+          >
+            <h3>{t('关联解释', 'Related explanations')}</h3>
+            {related.map((item) => (
+              <section key={item.id}>
+                <h4>
+                  <button className="likes-term" type="button" onClick={() => inspect(item.id)}>
+                    {item.title} ↗
+                  </button>
+                </h4>
+                {item.paragraphs.map((text, index) => (
+                  <p key={index}>
+                    <GuideText catalog={catalog} text={text} onInspect={inspect} />
+                  </p>
+                ))}
+              </section>
+            ))}
+          </aside>
+        )}
       </div>
     </DuelDialog>
   );

@@ -12,6 +12,7 @@ export interface ArcadeSoundControl {
   readonly enabled: boolean;
   readonly toggle: () => void;
   readonly play: (cue: EffectCue) => void;
+  readonly stop: (cue: EffectCue) => void;
 }
 
 export function useArcadeAudio(
@@ -87,6 +88,7 @@ export function useArcadeAudio(
     if (choices.current.effects && document.visibilityState === 'visible')
       engine.current?.play(cue);
   }, []);
+  const stop = useCallback((cue: EffectCue) => engine.current?.stopEffect(cue), []);
 
   useEffect(() => {
     scene.current = options.scene ?? 'lobby';
@@ -128,7 +130,7 @@ export function useArcadeAudio(
   }, [activate]);
 
   return {
-    sound: { enabled: effects, toggle: toggleEffects, play } satisfies ArcadeSoundControl,
+    sound: { enabled: effects, toggle: toggleEffects, play, stop } satisfies ArcadeSoundControl,
     music: { enabled: music, toggle: toggleMusic },
     unavailable,
   };

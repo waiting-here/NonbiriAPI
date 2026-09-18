@@ -1,4 +1,6 @@
 import { interpolate } from './motion';
+import { useDuelText } from '../common/duel/copy';
+import type { ResourceShortage } from './shortage';
 
 export function ResourceMeter({
   label,
@@ -9,6 +11,8 @@ export function ResourceMeter({
   reduced = false,
   tone = '',
   unit = '',
+  shortage,
+  shortagePulse = false,
 }: {
   readonly label: string;
   readonly from: number;
@@ -18,13 +22,18 @@ export function ResourceMeter({
   readonly reduced?: boolean;
   readonly tone?: string;
   readonly unit?: string;
+  readonly shortage?: ResourceShortage;
+  readonly shortagePulse?: boolean;
 }) {
+  const t = useDuelText();
   const value = reduced ? to : interpolate(from, to, progress),
     extent = Math.max(cap ?? 0, from, to, 1),
     delta = to - from;
   return (
     <div
-      className={`likes-meter ${cap === undefined ? 'likes-counter' : ''} ${tone} ${delta > 0 ? 'is-gaining' : delta < 0 ? 'is-spending' : ''} ${delta !== 0 && cap !== undefined && Math.abs(delta) >= cap / 2 ? 'likes-meter--major' : ''}`}
+      className={`likes-meter ${shortage ? 'likes-meter--shortage' : ''} ${cap === undefined ? 'likes-counter' : ''} ${tone} ${delta > 0 ? 'is-gaining' : delta < 0 ? 'is-spending' : ''} ${delta !== 0 && cap !== undefined && Math.abs(delta) >= cap / 2 ? 'likes-meter--major' : ''}`}
+      data-shortage={shortage?.resource}
+      data-shortage-pulse={!!shortage && shortagePulse && !reduced}
       data-resource-label={label}
       data-from={from}
       data-to={to}
@@ -62,6 +71,13 @@ export function ResourceMeter({
             {delta}
           </strong>
         </div>
+      )}
+      {shortage && (
+        <small className="likes-resource-warning" role="status">
+          {t('过载时', 'At overload')}: {t('需', 'need')} {shortage.required}
+          {unit} · {t('可用', 'available')} {shortage.available}
+          {unit}
+        </small>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import type { ModeCatalog } from './catalog';
 import type { Choice, LikesEvent, LikesView, Plan, Presentation, Purchase } from './types';
 import { buffName, chosenEffect, kindName, shopName, skillName } from './labels';
 import { SkillCost } from './Glossary';
+import { EffectSummary } from './GuideText';
 import { planControls } from './planControls';
 
 export function PlanSummary({
@@ -84,6 +85,7 @@ function ChoiceOptions({
         <label>
           {t('付款方式', 'Payment')}
           <select
+            data-guide="payment"
             value={value.pay ?? 'auto'}
             disabled={disabled}
             onChange={(e) => onChange({ ...value, pay: e.target.value === 'api' ? 'api' : 'auto' })}
@@ -124,6 +126,7 @@ function ChoiceOptions({
               <label className="likes-check" key={s.key}>
                 <input
                   type="checkbox"
+                  data-guide={`target:${s.key}`}
                   checked={value.targets?.includes(s.key) ?? false}
                   disabled={
                     !value.targets?.includes(s.key) &&
@@ -218,6 +221,7 @@ export function PlanEditor({
         <button
           type="button"
           className="likes-primary"
+          data-guide="lock"
           disabled={disabled || !affordable || (!skipCasting && !plan.main)}
           onClick={() => onLock(plan)}
         >
@@ -253,10 +257,20 @@ export function PlanEditor({
         </p>
       )}
       <div className="likes-tabs" role="group" aria-label={t('方案编辑区', 'Plan sections')}>
-        <button type="button" aria-pressed={tab === 'skills'} onClick={() => setTab('skills')}>
+        <button
+          type="button"
+          data-guide="tab:skills"
+          aria-pressed={tab === 'skills'}
+          onClick={() => setTab('skills')}
+        >
           {t('技能', 'Skills')}
         </button>
-        <button type="button" aria-pressed={tab === 'shop'} onClick={() => setTab('shop')}>
+        <button
+          type="button"
+          data-guide="tab:shop"
+          aria-pressed={tab === 'shop'}
+          onClick={() => setTab('shop')}
+        >
           {t('购物', 'Shop')} ({plan.purchases.length}/{catalog.parameters.PREP_MAX})
         </button>
       </div>
@@ -302,6 +316,7 @@ export function PlanEditor({
                   </small>
                   <button
                     type="button"
+                    data-guide={`buy:${item}`}
                     disabled={(unavailable && !selected) || disabled}
                     onClick={() =>
                       selected
@@ -357,6 +372,7 @@ export function PlanEditor({
                   }
                   aria-pressed={plan.main?.skillId === skill.id}
                   onClick={() => selectMain({ skillId: skill.id, pay: 'auto' })}
+                  data-guide={`cast:${skill.id}`}
                 >
                   <strong>{skill.name}</strong>
                   <small>
@@ -366,6 +382,16 @@ export function PlanEditor({
                       : `${Math.max(0, skill.maxUses - (player.used[skill.id] ?? 0))} ${t('次剩余', 'uses left')}`}
                   </small>
                   <SkillCost skill={skill} />
+                  <EffectSummary
+                    catalog={catalog}
+                    id={
+                      skill.id === 'PUB41' && player.distill?.template
+                        ? player.distill.template
+                        : skill.id
+                    }
+                    level={skill.id === 'PUB41' ? (player.distill?.level ?? 'base') : 'base'}
+                    harness={player.harness}
+                  />
                 </button>
                 <button
                   type="button"

@@ -35,7 +35,7 @@ export function DuelDialog({
           event.currentTarget.querySelectorAll<HTMLElement>(
             'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
           ),
-        );
+        ).filter((item) => !item.closest('[inert]') && item.getClientRects().length > 0);
         const target = event.shiftKey ? items.at(-1) : items[0];
         if (!target) {
           event.preventDefault();

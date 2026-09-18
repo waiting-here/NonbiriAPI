@@ -47,6 +47,10 @@ export const musicUrls = {
 } as const;
 
 export const effectUrls = {
+  likes_countdown: new URL(
+    '../../../../shared/assets/game-audio/sfx/common_lock.wav',
+    import.meta.url,
+  ).href,
   common_select: new URL(
     '../../../../shared/assets/game-audio/sfx/common_select.wav',
     import.meta.url,

@@ -3,7 +3,7 @@ import { useDuelText } from '../common/duel/copy';
 import type { ModeCatalog } from './catalog';
 import type { LikesEvent, LikesView, RoundFacts } from './types';
 import type { JSONValue } from './value';
-import { buffName, reasonName, shopName, skillName, stageName } from './labels';
+import { buffName, reasonName, resourceName, shopName, skillName, stageName } from './labels';
 import { FrameChanges } from './Arena';
 import { PlanSummary } from './PlanEditor';
 
@@ -61,6 +61,9 @@ function EventData({
     status: t('状态', 'Status'),
     result: t('结果', 'Result'),
     plans: t('双方方案', 'Both plans'),
+    shortage: t('过载原因', 'Overload cause'),
+    payment: t('支付方式', 'Payment'),
+    resources: t('相关资源', 'Affected resources'),
   };
   const render = (value: JSONValue, key: string): string => {
     if (value === null) return '—';
@@ -75,7 +78,16 @@ function EventData({
             ? reasonName(value, t)
             : key === 'item'
               ? shopName(value, t)
-              : value;
+              : key === 'resource'
+                ? resourceName(value, t)
+                : key === 'payment'
+                  ? ({
+                      energy: t('共享电能不足', 'Shared energy shortage'),
+                      api: t('API 余量不足', 'API reserve shortage'),
+                      sub: t('订阅额度不足', 'Subscription shortage'),
+                      mix: t('Token 不足', 'Token shortage'),
+                    }[value] ?? value)
+                  : value;
     if (Array.isArray(value)) return value.map((v) => render(v, key)).join(' / ');
     return Object.entries(value)
       .map(([k, v]) => `${labels[k] ?? k}: ${render(v, k)}`)
