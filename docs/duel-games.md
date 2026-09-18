@@ -19,8 +19,10 @@ that user's wallet. Displayed game points are separate from spendable credits.
 
 ## Bidding Duel
 
-Each player receives a shuffled hand of ranks 1–13. All 13 rounds reveal one
-reward rank from each player's separate shuffled reward deck. The first 12
+Each player receives a shuffled hand of ranks 1–13. The deal uses fixed A–K
+13-card slots for 13 rounds, and each player has a separate shuffled reward
+deck. Both hands remain visible with fixed positions, and played cards stay grey
+and unavailable. Reward cards use red diamond (♦) and black club (♣) suits. The first 12
 rounds alternate the dealer; each player is dealer six times. A dealer holding
 a joker has 10 seconds to use or save it. A used joker doubles only that
 player's reward for the current round, and does not double carried rewards.
@@ -30,8 +32,11 @@ the hand until both choices are locked or the deadline expires. Timeout selects
 the smallest remaining card. Higher rank wins the current rewards and carry;
 a tie carries rewards into the next round. Final-round ties discard the carry.
 The joker phase is skipped when unavailable and in round 13. Highest total
-points wins; equal totals draw. Unused reward-deck order is never disclosed to
-players, including in their history or personal export.
+points wins; equal totals draw. Active matches never disclose the unused
+reward-deck order. Players may inspect the
+remaining reward-card set sorted by point value, but the future draw order is
+never exposed during play. After the match, the disclosed randomness proof
+allows participants to reconstruct the full draw order.
 
 Reward draws, both bid reveals and collection of the whole pool play in order.
 The presentation stays in view while scrolling; reduced motion keeps the cards
@@ -70,7 +75,7 @@ overload receive extra visual emphasis. The character, action, outcome and
 harness illustrations are bundled as transparent local images.
 
 Music and effects have separate switches, off by default, remembered per game
-in this browser. Likes music follows your own overload, speed and battle states;
+in this browser. Turn-based Battle Minigame (Test) music follows your own overload, speed and battle states;
 changes crossfade over one beat starting at the next beat on a shared timeline.
 Result music starts after the final settlement animation. Changing mode or
 loadout, or joining a queue, returns to lobby music. Defeat cuts the background
@@ -121,18 +126,18 @@ can resume from the last completed page, while the signed cursor is valid.
 
 门票优先使用游戏积分，不足部分用通用积分；一只钱包欠款不抵扣另一只钱包的正余额。取消排队、120 秒未匹配、平局或系统取消均按原币种退票。胜负局退还胜者原门票，再把败者门票扣除平台、福利池和星期四池各自向下取整的抽成后，以通用积分奖励胜者。认输算负，断线不停表；服务重启、封禁或删号取消未完成对局，删号后的钱包不会被迟到结算重建。局内分数不是可消费积分。
 
-竞标共 13 轮，前 12 轮双方各当 6 次庄家。持王的庄家有 10 秒决定使用或保留；王只加倍本轮自己的奖励牌，不加倍此前累积奖励。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。未揭示奖励牌顺序不会通过玩家历史或个人导出泄露。
+竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持王的庄家有 10 秒决定使用或保留；王只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。奖励使用红方块 ♦ 与黑梅花 ♣，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
 
-点赞在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
+回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
 竞标按顺序展示奖励抽取、双方亮牌、整个奖池的归属，滚动页面时演出仍保持可见；减少动态模式保留静态牌面和结果。回合制对战中，本人的倍速模式使用全页加速光线，过载使用低电量警示，过载优先；对手状态不影响本人的全页效果，减少动态模式保留静态提示。
 
 双方锁定或超时后，服务端立即结算，并按内容依次展示方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。每一步单独确定时长，连续技能逐个展示，总时长不限；全部结束后才开始下一轮完整 20 秒。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
 
-音乐和音效分别开关，默认关闭，按游戏记住当前浏览器的选择。点赞音乐按本人过载、倍速、普通对战的优先级播放，共用时间轴，下一拍开始、一拍完成交接。最后一轮完整演出结束后进入结果音乐；修改模式、配装或开始排队时回大厅音乐。失败切断背景，若音效开启则播放一次短片段后静音。账户页本机偏好提供轻量版和无损版音乐，下次开启或进入游戏时生效。页面进入后台暂停声音，离开游戏释放资源。
+音乐和音效分别开关，默认关闭，按游戏记住当前浏览器的选择。回合制对战小游戏（测试）音乐按本人过载、倍速、普通对战的优先级播放，共用时间轴，下一拍开始、一拍完成交接。最后一轮完整演出结束后进入结果音乐；修改模式、配装或开始排队时回大厅音乐。失败切断背景，若音效开启则播放一次短片段后静音。账户页本机偏好提供轻量版和无损版音乐，下次开启或进入游戏时生效。页面进入后台暂停声音，离开游戏释放资源。
 
 共享电池以双方购物后的电量和冻结方案的声明报价判断，恰好耗尽不算过载。总需求超限时电池清零，只让正耗电方过载并取消其技能付款与效果，购物保留；零耗电方按自身资源正常执行，不被连带取消或清理状态。双方报价都为正仍沿用双方过载规则，Flash 连答另行检查。
 
 对战中的“结算日志”可分页查看已结算轮次，不暂停计时。重连按服务端时间继续，不补播过期动画；减少动态效果模式保留完整数值和原因。最终胜负与账务立即提交，界面播完本轮剩余演出再显示胜负图。
 
-本人和管理员可查看近 30 天完整结果；点赞局中对手未用配装保持隐藏，终局开放。到期后仅管理员可访问去身份的长期存档，保留完整规则与过程，移除用户、原始局／账务标识、绝对时间、付款来源和跨局身份关联。协管没有该管理权限。管理员下载可跨页继续，页面到期记录会计入跳过数，只有完整结束才显示成功。
+本人和管理员可查看近 30 天完整结果；回合制对战小游戏（测试）局中对手未用配装保持隐藏，终局开放。到期后仅管理员可访问去身份的长期存档，保留完整规则与过程，移除用户、原始局／账务标识、绝对时间、付款来源和跨局身份关联。协管没有该管理权限。管理员下载可跨页继续，页面到期记录会计入跳过数，只有完整结束才显示成功。

@@ -2,9 +2,9 @@
 
 ## 中文
 
-全站共用一张八人牌桌，一人即可开局。每个服务器整分钟的前 15 秒落座，随后 30 秒同时决策，最后 15 秒展示结果。全桌提前结束可提前展示，下一局仍在整分钟开始；无人时不保存空局。
+全站共用一张九人牌桌，一人即可开局。每个服务器整分钟的前 15 秒落座，随后 30 秒同时决策，最后 15 秒展示结果。全桌提前结束可提前展示，下一局仍在整分钟开始；无人时不保存空局。
 
-点击“加入队列”会立即预留基础投入，先花游戏积分，再由通用积分补足，并冻结本次金额和费率。按服务器首次有效受理的顺序落座前八人，候补最多 4,096 人。刷新、重复请求和多标签页不会重复排队或改变位置。落座窗口内退出原币退款并递补；发牌后不能退出退款。未落座候补跨轮保留，可以随时离开退款。参与者在整桌结算后须主动重新加入队尾，不保座、不自动续投。
+点击“加入队列”会立即预留基础投入，先花游戏积分，再由通用积分补足，并冻结本次金额和费率。按服务器首次有效受理的顺序落座前九人，候补最多 4,096 人。刷新、重复请求和多标签页不会重复排队或改变位置。落座窗口内退出原币退款并递补；发牌后不能退出退款。未落座候补跨轮保留，可以随时离开退款。参与者在整桌结算后须主动重新加入队尾，不保座、不自动续投。
 
 每局重新洗完整六副牌。A 按 1 或 11，J/Q/K 按 10。庄家软 17 停牌，美式底牌预查；底牌在全桌完成决策前隐藏。原始两张 A 加十点牌是自然二十一点，优先于普通 21。所有玩家同时操作，每秒每席最多处理一次，同批按轮换后的座位顺序发牌。未结束的手在截止时自动停牌。
 
@@ -34,9 +34,9 @@
 
 ## English
 
-One shared table seats up to eight players and starts with one. Each server minute has 15 seconds for seating, 30 seconds for simultaneous decisions and 15 seconds for results. An early finish extends the result display without changing the next minute. Empty rounds are not saved.
+One shared table seats up to nine players and starts with one. Each server minute has 15 seconds for seating, 30 seconds for simultaneous decisions and 15 seconds for results. An early finish extends the result display without changing the next minute. Empty rounds are not saved.
 
-Joining reserves the base stake immediately, using game credits before general credits, and freezes the stake and three fee rates. The first eight accepted entries take seats; up to 4,096 wait in a persistent FIFO queue. Retries and multiple tabs cannot duplicate or reorder an entry. Before dealing, seated players may leave for an original-asset refund and the next waiter is promoted. Waiting entries never expire automatically and may leave at any time. After settlement, players explicitly join the tail again; seats and stakes never renew automatically.
+Joining reserves the base stake immediately, using game credits before general credits, and freezes the stake and three fee rates. The first nine accepted entries take seats; up to 4,096 wait in a persistent FIFO queue. Retries and multiple tabs cannot duplicate or reorder an entry. Before dealing, seated players may leave for an original-asset refund and the next waiter is promoted. Waiting entries never expire automatically and may leave at any time. After settlement, players explicitly join the tail again; seats and stakes never renew automatically.
 
 Every round shuffles six complete decks. Aces count as 1 or 11 and face cards as 10. The dealer stands on soft 17 and peeks for natural blackjack. The hole card stays hidden until decisions finish. An original ace plus a ten-value card beats an ordinary 21. Each seat submits at most one action per second; batches draw in rotating seat order, and unfinished hands stand at the deadline.
 

@@ -10,11 +10,12 @@ own checks. This checklist does not itself assert a pass.
 
 - Freeze scope and synchronize README, changelog, package metadata, HTTP contract,
   configuration, game-module and lifecycle documentation.
-- Verify Generation 2 identity, fifteen exact predecessor paths, atomic rollback on
-  injected failure, unknown/partial schema zero-write rejection and second-start
-  no-op. Build the exact beta.4 source to create a populated synthetic fixture;
-  exercise the target on Linux, with old API reservations and existing games.
-  Include both supported development schemas and validate the 117-table manifest.
+- Verify Generation 2 identity, atomic rollback on injected failure,
+  unknown/partial schema zero-write rejection and second-start no-op.
+  The deployed beta.4 source is the upgrade baseline for this target. Build that
+  exact source to generate populated fixtures, then exercise the target on Linux
+  with existing API reservations, wallets and games. Validate the final 117-table
+  manifest; unreleased intermediate schemas are outside this upgrade gate.
 - Preserve original account/entry IDs, settled charges, saved game rules, configured
   RTP, security roots and custom legal text. Existing game wallets remain unchanged; only older sources without them receive zero game wallets. Bidding, Likes and Blackjack start disabled on sources without their configuration.
 - Verify that saved old games retain their rules, new Fishing/LinkLink/RPS admissions use version 2 and Bidding/Likes/Blackjack use their own version 1; never infer unrecorded historical payment sources or fabricate proofs for old games.
@@ -41,14 +42,14 @@ own checks. This checklist does not itself assert a pass.
   deduplication.
 - Verify export v8 and synchronous deletion across both assets, holds, game state,
   rankings and permanent newcomer completions, including both late-write orders.
-- Verify Blackjack's single eight-seat table, fixed-minute stages, persistent FIFO,
+- Verify Blackjack's single nine-seat table, fixed-minute stages, persistent FIFO,
   withdrawal/replacement cutoff and requeue behavior. Cover all 50 default stakes,
   game/general/mixed payment, atomic split/double additions, independently rounded
   per-hand fees, normal General Credit returns and original-source cancellation.
   Check maintenance, bans, deletion, restart before/after settlement and welfare
   asset accounting without restoring deleted accounts or cancelling other seats.
 - Verify every table rule and fixed-seed strategy simulations over at least one
-  million tables, including one/eight players and each seat. Report confidence
+  million tables, including one/nine players and each seat. Report confidence
   bounds and actual rounding; do not infer negative expectation from random play.
 - Verify six-game commitments, whole-game disclosure, deterministic replay and
   source/proof tamper rejection. Active status, logs, history, errors and export
@@ -101,7 +102,7 @@ needed. Daily affected-package race defaults to one shuffled round.
   settlement, resource refill feedback, uncapped numeric counters and reduced
   motion at phone and desktop sizes. Unfinished final presentation must not
   delay or repeat wallet settlement.
-- Include eight Blackjack players and spectators, public-card privacy, split-hand
+- Include nine Blackjack players and spectators, public-card privacy, split-hand
   controls, reconnect de-duplication, and proof verification/download in all six
   games. Verify the dashboard endpoint total with 101 shared users and the large
   existing numbered-page fixture while retaining the legacy response limit.

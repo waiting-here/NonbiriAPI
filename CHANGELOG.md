@@ -18,7 +18,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Dedicated covers for the three new games, 35 Fishing catch illustrations with SVG fallback, synchronized Likes music and sampled effects for Likes, Bidding and Blackjack. Sound and music preferences are separate and off by default; browser-local music quality offers lightweight MP3 or lossless FLAC.
 - Thirty-day player and administrator match history, long-term anonymous traces and resumable bounded administrator NDJSON export. Account export v8 includes safe new-game records.
 - Private per-game randomness for all six games, with opening SHA-256 commitments, HMAC-SHA256 rejection sampling, terminal seed disclosure, bounded proofs, independent browser/Node verification and safe account export. Active responses never disclose seeds or future draws; retained legacy games explicitly lack proofs.
-- One shared eight-seat Blackjack table with minute-aligned seating/decisions/results, persistent FIFO waiting, simultaneous batched actions, six-deck rules, splitting and doubling. Frozen mixed-wallet stakes settle per hand into general credits after fees; the game starts disabled.
+- One shared nine-seat Blackjack table with minute-aligned seating/decisions/results, persistent FIFO waiting, simultaneous batched actions, six-deck rules, splitting and doubling. Frozen mixed-wallet stakes settle per hand into general credits after fees; the game starts disabled.
+- The user station supports wide desktop layouts while preserving the mobile layout. Turn-based Battle Minigame (Test) uses server-authored event-paced settlement steps without a fixed total-duration promise.
+- Bidding uses fixed 13-card slots and public remaining reward-card sets without exposing future order. Blackjack documents the nine-seat table, and bundled music provenance distinguishes CC0 source material from project arrangements and original effects.
 
 ### Fixed
 

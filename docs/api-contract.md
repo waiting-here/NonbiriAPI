@@ -452,7 +452,7 @@ Authenticated `GET /api/games/{game}/randomness/{id}` is available for `fishing`
 
 ### 5.8 Blackjack
 
-The independent eight-seat module uses `/api/games/blackjack`. All responses are `no-store`. Mutations require the existing `Idempotency-Key` header; repeat uncertain requests with the exact same key and body. JSON is strict, limited to 4 KiB, with no unknown, duplicate or case-aliased keys. IDs are opaque, revisions and positions are decimal strings, amounts are decimal credit strings, and timestamps are Unix seconds.
+The independent nine-seat module uses `/api/games/blackjack`. All responses are `no-store`. Mutations require the existing `Idempotency-Key` header; repeat uncertain requests with the exact same key and body. JSON is strict, limited to 4 KiB, with no unknown, duplicate or case-aliased keys. IDs are opaque, revisions and positions are decimal strings, amounts are decimal credit strings, and timestamps are Unix seconds.
 
 | Method and suffix | Request / response |
 | --- | --- |
@@ -468,7 +468,7 @@ The table rotates on server minutes: 15 seconds of seating, 30 of decisions and 
 
 Owner `payment` is `{general,game}` for all reserved additions. Public hand settlement amounts are decimal integer **milli-credit** strings: `stake_milli,gross_milli,platform_milli,welfare_milli,thursday_milli,net_milli`, plus `outcome`. Each hand is independently rounded and then summed; all normal net returns, including pushes and principal, are general credits. Cancelled tables include public per-seat total `refunds` without funding sources. See [full bilingual rules](blackjack.md).
 
-`GET/PATCH /admin/api/games/config` adds `blackjack:{enabled,min_stake,max_stake,stake_step,default_stake,rake_bp:{platform,welfare,thursday}}`. Credit fields are decimal strings and basis points are integers. The defaults are disabled, 1,000–50,000, step 1,000, default 5,000 and three 100 bp fees. Positive stake values must align to the minimum/step; the maximum base stake is 140625000000 credits, preserving capacity for eight players with split/double exposure. Running counts include Blackjack waiting entries and active tables.
+`GET/PATCH /admin/api/games/config` adds `blackjack:{enabled,min_stake,max_stake,stake_step,default_stake,rake_bp:{platform,welfare,thursday}}`. Credit fields are decimal strings and basis points are integers. The defaults are disabled, 1,000–50,000, step 1,000, default 5,000 and three 100 bp fees. Positive stake values must align to the minimum/step; the `max_stake` ceiling is `140625000000` credits. Each player can invest at most four times the base stake and receive at most eight times the base stake before fees. Nine-seat table totals use decimal strings without truncating them to the per-operation amount limit. Running counts include Blackjack waiting entries and active tables.
 
 Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` accept `dataset=recent|anonymous` (default recent); list pages use the same 20/50 limits. Recent details include retained participant IDs, payment composition and operation references. Anonymous details contain only rules version, outcome and public card/settlement facts, with independent archive IDs and no absolute timestamps or emotes. Stewards cannot read these histories.
 
