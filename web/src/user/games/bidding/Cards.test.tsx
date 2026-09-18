@@ -2,7 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { homeValue } from '../common/duel/normalize';
-import { BiddingControls } from './Cards';
+import { BiddingControls, PublicCards, RewardDeck, remainingRewardRanks } from './Cards';
 import { biddingCodec } from './normalize';
 import { biddingHomeWire } from './testFixtures';
 
@@ -48,6 +48,60 @@ describe('bidding decisions', () => {
     rendered.rerender(
       <BiddingControls state={{ ...state, you: 1 }} blocked={false} onAction={onAction} />,
     );
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Your thirteen cards' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(13);
+  });
+  it('keeps both hands in fixed A-K positions and greys played cards', async () => {
+    const state = homeValue(biddingHomeWire(), biddingCodec).current!;
+    const view = {
+      ...state.view,
+      hands: [
+        [2, 4, 6],
+        [1, 3, 5],
+      ] as const,
+      played: [
+        [1, 3, 5, 7, 8, 9, 10, 11, 12, 13],
+        [2, 4, 6, 8, 9, 10, 11, 12, 13],
+      ] as const,
+    };
+    const rendered = await renderWithProviders(<PublicCards view={view} you={0} />, {
+      station: 'user',
+    });
+    expect(
+      screen.getByRole('group', { name: 'Opponent’s thirteen cards' }).querySelectorAll('button'),
+    ).toHaveLength(13);
+    expect(
+      screen.getByRole('button', { name: /Opponent’s thirteen cards 2 \(2\).*Played/ }),
+    ).toHaveClass('is-played');
+    expect(rendered.container.querySelectorAll('.bid-card:disabled')).toHaveLength(13);
+  });
+  it('shows a sorted remaining rank set without exposing future reward order', async () => {
+    const state = homeValue(biddingHomeWire(), biddingCodec).current!;
+    const view = {
+      ...state.view,
+      rewards: [
+        ...state.view.rewards,
+        {
+          round: 2,
+          side: 0 as const,
+          rank: 9,
+          multiplier: 1,
+          status: 'pool' as const,
+          owner: null,
+        },
+      ],
+    };
+    expect(remainingRewardRanks(view, 0, 1)).toContain(9);
+    const rendered = await renderWithProviders(
+      <RewardDeck view={view} side={0} round={1} you={0} />,
+      {
+        station: 'user',
+      },
+    );
+    await rendered.user.click(rendered.container.querySelector('summary')!);
+    expect(
+      screen.getByText('Ranks only; this does not reveal the future order.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/9/)).toBeInTheDocument();
   });
 });
