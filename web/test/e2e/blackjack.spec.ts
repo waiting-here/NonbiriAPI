@@ -23,7 +23,7 @@ for (const theme of ['light', 'dark'] as const) {
       });
       await page.goto(`${USER_ORIGIN}/games/blackjack`);
       await expect(page.locator('.bj-mine')).toBeVisible();
-      await expect(page.locator('.bj-seat')).toHaveCount(7);
+      await expect(page.locator('.bj-seat')).toHaveCount(8);
       const card = page.locator('.bj-mine .bj-card').first();
       await expect(card).toHaveCSS('background-color', 'rgb(252, 248, 239)');
       await expect(card).toHaveCSS('color', 'rgb(40, 57, 47)');

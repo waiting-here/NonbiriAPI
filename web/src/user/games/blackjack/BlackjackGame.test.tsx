@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe('blackjack public state and simultaneous controls', () => {
-  it('renders all eight seats, hides the hole, and submits the exact own hand revision', async () => {
+  it('renders all nine seats, hides the hole, and submits the exact own hand revision', async () => {
     const server = install();
     const view = await renderWithProviders(<BlackjackGame />, {
       station: 'user',

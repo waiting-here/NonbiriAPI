@@ -63,8 +63,8 @@ export function BlackjackConfiguration({
       <h2>{t('二十一点', 'Blackjack')}</h2>
       <p>
         {t(
-          '单桌八席，每分钟按15秒落座、30秒决策、15秒展示轮转。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
-          'One table with eight seats: 15 seconds for seating, 30 for decisions and 15 for results. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
+          '单桌九席，每分钟按15秒落座、30秒决策、15秒展示轮转。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
+          'One table with nine seats: 15 seconds for seating, 30 for decisions and 15 for results. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
         )}
       </p>
       <label className="checkbox-label">
