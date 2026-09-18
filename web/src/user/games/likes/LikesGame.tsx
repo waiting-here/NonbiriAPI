@@ -29,6 +29,7 @@ import { skillName } from './labels';
 import { likesAudioFacts, likesMusicScene } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
+import { BattleAtmosphere } from './BattleAtmosphere';
 import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import type { LikesView, Presentation, Selection } from './types';
 import '../games.css';
@@ -47,7 +48,7 @@ function Rules({
     p = catalog.parameters;
   return (
     <DuelDialog
-      title={t('点赞大战 · 对战规则', 'Likes Battle · Rules')}
+      title={t('回合制对战小游戏（测试） · 对战规则', 'Turn-based Battle Minigame (Test) · Rules')}
       onClose={onClose}
       className="likes-glossary"
     >
@@ -67,11 +68,11 @@ function Rules({
           'rounds. If both reach the target together, their final totals decide the winner. The round limit also compares totals; equal totals draw.',
         )}
       </p>
-      <h3>{t('五秒结算', 'Five-second settlement')}</h3>
+      <h3>{t('逐步结算演出', 'Step-by-step resolution')}</h3>
       <p>
         {t(
-          '方案揭示 → 购物充电 → 费用与过载 → 净化与Buff → 得赞 → 追加效果 → 轮末变化。双方同步展示，结束后开始新的完整20秒。资源补充与结果均以服务端记录为准。',
-          'Plans → shopping and charge → payment and overload → cleansing and buffs → likes → follow-ups → round end. Both sides display together, followed by a fresh twenty seconds. Resource changes and results follow server records.',
+          '方案揭示 → 购物充电 → 费用与过载 → 净化与Buff → 得赞 → 追加效果 → 轮末变化。每一步按内容留出阅读时间，连续技能逐个展示，总时长不限。双方同步展示，全部结束后开始新的完整20秒。资源补充与结果均以服务端记录为准。',
+          'Plans → shopping and charge → payment and overload → cleansing and buffs → likes → follow-ups → round end. Each step has its own reading time. Consecutive casts play one by one, with no overall time cap. Both sides display together; the next full twenty seconds starts when every step finishes. Changes and results follow server records.',
         )}
       </p>
       <h3>{t('共享电能与过载', 'Shared energy and overload')}</h3>
@@ -262,7 +263,16 @@ export function LikesGame(context: DuelLobbyContext) {
       <header className="likes-heading">
         <div>
           <span className="likes-eyebrow">LIKES // DUEL</span>
-          <h1>{t('点赞大战', 'Likes Battle')}</h1>
+          <h1>{t('回合制对战小游戏（测试）', 'Turn-based Battle Minigame (Test)')}</h1>
+          <BattleAtmosphere
+            reduced={reduced}
+            mode={
+              (!!current || !!terminalPresentation) &&
+              (musicScene === 'danger' || musicScene === 'accelerated')
+                ? musicScene
+                : null
+            }
+          />
           <p>
             {t(
               '共享电池，独立选择，同时爆发。',

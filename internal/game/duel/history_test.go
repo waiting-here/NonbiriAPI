@@ -76,9 +76,9 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 			t.Fatal("round leaked an unplayed loadout")
 		}
 	}
-	f.clock.Store(105)
+	f.clock.Store(*f.read(0).Current.Deadline)
 	state = *f.read(0).Current
-	if state.RoundStart == nil || state.RoundStart.StartedAt != 105 || state.RoundStart.Round != 2 || !strings.Contains(string(state.RoundStart.Events), `"before"`) || !strings.Contains(string(state.RoundStart.Events), `"after"`) {
+	if state.RoundStart == nil || state.RoundStart.StartedAt != f.clock.Load() || state.RoundStart.Round != 2 || !strings.Contains(string(state.RoundStart.Events), `"before"`) || !strings.Contains(string(state.RoundStart.Events), `"after"`) {
 		t.Fatal("round-start resource facts missing")
 	}
 	f.action(0, state, basicPlan)
@@ -94,7 +94,7 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 	if err != nil || len(second.Items) != 1 || second.Items[0].Round != 2 || len(second.Items[0].StartEvents) == 0 || second.NextCursor != nil {
 		t.Fatal(second, err)
 	}
-	f.clock.Store(110)
+	f.clock.Store(*f.read(0).Current.Deadline)
 	state = *f.read(0).Current
 	f.action(0, state, basicPlan)
 	if _, err := f.s.Surrender(f.ctx, duel.ActionInput{Identity: f.identity(1), IdempotencyKey: f.key(), SessionID: state.ID, PhaseSeq: state.PhaseSeq}); err != nil {
@@ -112,7 +112,7 @@ func TestHistoryFogPagingAcceptedPlansAndExactExpiry(t *testing.T) {
 		t.Fatal("terminal loadout missing")
 	}
 	f.ledger()
-	f.clock.Store(110 + duel.RetentionSeconds)
+	f.clock.Add(duel.RetentionSeconds)
 	if _, err := f.s.HistoryDetail(f.ctx, f.identity(0), state.ID); !errors.Is(err, duel.ErrNotFound) {
 		t.Fatal("expired detail", err)
 	}

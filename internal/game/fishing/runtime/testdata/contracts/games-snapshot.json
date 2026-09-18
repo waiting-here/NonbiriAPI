@@ -253,6 +253,6 @@
     "queue_seconds": 120,
     "queue_capacity": 4096,
     "plan_seconds": 20,
-    "settlement_seconds": 5
+    "settlement_seconds": 0
   }
 }

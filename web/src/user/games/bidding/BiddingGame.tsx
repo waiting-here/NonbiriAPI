@@ -19,6 +19,7 @@ import { biddingAudioFacts } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
 import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
+import { BiddingPresentation } from './BiddingPresentation';
 import '../games.css';
 import '../common/duel/duel.css';
 import './bidding.css';
@@ -74,7 +75,9 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
     queue = home?.queue;
   const audioFacts = useSnapshotAudioFacts(home, biddingAudioFacts);
   const audio = useArcadeAudio('bidding', {
-    facts: audioFacts,
+    facts: audioFacts.filter(
+      (fact) => !['bidding_reveal', 'bidding_pot_add', 'bidding_pot_collect'].includes(fact.cue),
+    ),
     now: (home?.serverNow ?? 0) * 1000,
     ready: !!home,
   });
@@ -120,6 +123,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
         uncertain={duel.uncertain}
         onRetry={duel.uncertain ? duel.retry : duel.refresh}
       />
+      <BiddingPresentation home={home} onCue={audio.sound.play} />
       {current ? (
         <>
           <div className="bid-phase">

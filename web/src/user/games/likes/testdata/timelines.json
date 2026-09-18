@@ -1,0 +1,296 @@
+{
+  "rounds": [
+    {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2700,
+          "event_ids": [2, 3]
+        },
+        {
+          "stage": "aftereffects",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 1300,
+          "event_ids": [6]
+        }
+      ],
+      "seconds": 9
+    },
+    {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "shopping",
+          "duration_ms": 1500,
+          "event_ids": [9, 11]
+        },
+        {
+          "stage": "shopping",
+          "duration_ms": 1500,
+          "event_ids": [10, 12]
+        },
+        {
+          "stage": "shopping",
+          "duration_ms": 1500,
+          "event_ids": [13]
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 3000,
+          "event_ids": [14, 15]
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [16]
+        },
+        {
+          "stage": "aftereffects",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 2100,
+          "event_ids": [19]
+        }
+      ],
+      "seconds": 17
+    }
+  ],
+  "scenarios": {
+    "api_gain": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [2, 3]
+        },
+        {
+          "stage": "aftereffects",
+          "duration_ms": 1500,
+          "event_ids": [4]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 1600,
+          "event_ids": [6]
+        }
+      ],
+      "seconds": 9
+    },
+    "chain": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [2]
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [3]
+        },
+        {
+          "stage": "aftereffects",
+          "duration_ms": 2400,
+          "event_ids": [6]
+        },
+        {
+          "stage": "aftereffects",
+          "duration_ms": 2400,
+          "event_ids": [9]
+        },
+        {
+          "stage": "aftereffects",
+          "duration_ms": 2400,
+          "event_ids": [12]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 1500,
+          "event_ids": [15]
+        }
+      ],
+      "seconds": 17
+    },
+    "double_overload": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": [2, 3]
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 2000,
+          "event_ids": [6]
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": [7]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 2000,
+          "event_ids": []
+        }
+      ],
+      "seconds": 9
+    },
+    "replenish": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [30, 31]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 2100,
+          "event_ids": [34]
+        }
+      ],
+      "seconds": 8
+    },
+    "single_overload": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": [2]
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 2000,
+          "event_ids": [3]
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [4]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 2100,
+          "event_ids": [7]
+        }
+      ],
+      "seconds": 10
+    },
+    "stun": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [9, 10]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 2100,
+          "event_ids": [13]
+        }
+      ],
+      "seconds": 8
+    },
+    "terminal": {
+      "timeline": [
+        {
+          "stage": "reveal",
+          "duration_ms": 2000,
+          "event_ids": []
+        },
+        {
+          "stage": "payment",
+          "duration_ms": 1500,
+          "event_ids": []
+        },
+        {
+          "stage": "score",
+          "duration_ms": 2400,
+          "event_ids": [2, 3]
+        },
+        {
+          "stage": "round-end",
+          "duration_ms": 2100,
+          "event_ids": [6]
+        }
+      ],
+      "seconds": 8
+    }
+  }
+}

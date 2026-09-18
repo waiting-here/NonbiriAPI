@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"math"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
@@ -35,14 +36,20 @@ func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
 		v.Deadline = nil
 		return nil
 	}
+	if info.Phase == "settlement" {
+		resolution := v.Payload.Resolution
+		if resolution == nil || resolution.Round != info.Round || resolution.StartedAt != now || resolution.EndsAt <= now {
+			return ErrInvariant
+		}
+		deadline := resolution.EndsAt
+		v.Deadline = &deadline
+		return nil
+	}
 	if info.Seconds < 1 || info.Seconds > 20 {
 		return ErrInvariant
 	}
 	deadline := now + info.Seconds
 	v.Deadline = &deadline
-	if info.Phase == "settlement" {
-		return nil
-	}
 	for seat, required := range info.Required {
 		if required {
 			continue
@@ -113,7 +120,11 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 	}
 	v.Payload.Rules = next.State
 	if len(next.Presentation) > 0 {
-		v.Payload.Resolution = &Resolution{Round: next.Round, StartedAt: now, EndsAt: now + 5, Summary: next.Presentation}
+		duration, err := s.presentationDuration(next.Presentation)
+		if err != nil || duration <= 0 || now > math.MaxInt64-duration {
+			return activities.PublishFacts{}, ErrInvariant
+		}
+		v.Payload.Resolution = &Resolution{Round: next.Round, StartedAt: now, EndsAt: now + duration, Summary: next.Presentation}
 	}
 	if err := s.enterPhase(v, now, true); err != nil {
 		return activities.PublishFacts{}, err
@@ -126,6 +137,16 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 		return s.terminal(ctx, tx, v, expected, now, info.Result.Winner, info.Result.Reason, false)
 	}
 	return activities.PublishFacts{}, s.saveSession(ctx, tx, v, expected)
+}
+
+func (s *Service) presentationDuration(summary json.RawMessage) (int64, error) {
+	rules, ok := s.rules.(interface {
+		PresentationDuration(json.RawMessage) (int64, error)
+	})
+	if !ok {
+		return 0, ErrInvariant
+	}
+	return rules.PresentationDuration(summary)
 }
 func (s *Service) advance(ctx context.Context, tx *sql.Tx, v *sessionRecord, now int64) (activities.PublishFacts, bool, error) {
 	if v.State != "active" || v.Deadline == nil || now < *v.Deadline {

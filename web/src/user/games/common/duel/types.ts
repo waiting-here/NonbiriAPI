@@ -131,6 +131,7 @@ export interface DuelCodec<V, F, P = never, S = never, L = never, A = never> {
   readonly view: (value: unknown) => V;
   readonly facts: (value: unknown) => F;
   readonly presentation?: (value: unknown) => P;
+  readonly presentationDuration?: (value: P) => number;
   readonly start?: (value: unknown) => S;
   readonly loadout?: (value: unknown) => L;
   readonly action?: (value: unknown) => A;

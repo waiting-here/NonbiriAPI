@@ -23,7 +23,10 @@ import {
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import { DuelConfiguration } from '../features/games/Configuration';
-import { BlackjackConfiguration, validateBlackjackConfiguration } from '../features/games/BlackjackConfiguration';
+import {
+  BlackjackConfiguration,
+  validateBlackjackConfiguration,
+} from '../features/games/BlackjackConfiguration';
 import { validateDuelConfigurations } from '../features/games/config';
 import { gameLabel, modeLabel, useGameAdminText } from '../features/games/copy';
 import '@shared/operations/operations.css';
@@ -246,7 +249,8 @@ function canonicalGamesDraft(draft: GamesConfig): GamesConfig {
     if (config)
       for (const mode of Object.values(config.modes)) mode.ticket = canonical(mode.ticket);
   }
-  for (const field of ['min_stake', 'max_stake', 'stake_step', 'default_stake'] as const) result.blackjack[field] = canonical(result.blackjack[field]);
+  for (const field of ['min_stake', 'max_stake', 'stake_step', 'default_stake'] as const)
+    result.blackjack[field] = canonical(result.blackjack[field]);
   return result;
 }
 function GamesEditor({
@@ -284,7 +288,10 @@ function GamesEditor({
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const error = validateGamesDraft(draft, t) ?? validateDuelConfigurations(draft, duelText) ?? validateBlackjackConfiguration(draft, duelText);
+    const error =
+      validateGamesDraft(draft, t) ??
+      validateDuelConfigurations(draft, duelText) ??
+      validateBlackjackConfiguration(draft, duelText);
     setValidation(error);
     if (error === null && changed && !stale && !save.isPending) {
       void save
@@ -302,7 +309,10 @@ function GamesEditor({
     setDraft(authority);
   };
   const formError =
-    validation ?? validateGamesDraft(draft, t) ?? validateDuelConfigurations(draft, duelText) ?? validateBlackjackConfiguration(draft, duelText);
+    validation ??
+    validateGamesDraft(draft, t) ??
+    validateDuelConfigurations(draft, duelText) ??
+    validateBlackjackConfiguration(draft, duelText);
   const changed = JSON.stringify(canonicalGamesDraft(draft)) !== JSON.stringify(authority);
   const stale = draft.revision !== authority.revision;
 
@@ -641,7 +651,11 @@ function GamesEditor({
             />
           ),
       )}
-      <BlackjackConfiguration value={draft.blackjack} disabled={save.isPending} onChange={value => edit(current => ({ ...current, blackjack: value }))} />
+      <BlackjackConfiguration
+        value={draft.blackjack}
+        disabled={save.isPending}
+        onChange={(value) => edit((current) => ({ ...current, blackjack: value }))}
+      />
       {formError ? (
         <p className="field-error" role="alert">
           {formError}
@@ -716,7 +730,9 @@ export function GamesPage() {
                     row.mode
                       ? t('admin.games.counts.mode', {
                           value:
-                            row.game === 'bidding' || row.game === 'likes' || row.game === 'blackjack'
+                            row.game === 'bidding' ||
+                            row.game === 'likes' ||
+                            row.game === 'blackjack'
                               ? modeLabel(row.mode, duelText)
                               : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
                         })
@@ -729,7 +745,9 @@ export function GamesPage() {
                     row.phase
                       ? t('admin.games.counts.phase', {
                           value:
-                            row.game === 'bidding' || row.game === 'likes' || row.game === 'blackjack'
+                            row.game === 'bidding' ||
+                            row.game === 'likes' ||
+                            row.game === 'blackjack'
                               ? ({
                                   plan: duelText('选招', 'Choosing skills'),
                                   settlement: duelText('结算展示', 'Settlement presentation'),
@@ -777,11 +795,18 @@ export function GamesPage() {
         <Card>
           <h2>{duelText('对战历史与导出', 'Match history and exports')}</h2>
           <Link className="btn btn-secondary" to="/games/history">
-            {duelText('查看竞标对决与点赞大战历史', 'Browse Bidding Duel and Likes Battle history')}
+            {duelText(
+              '查看竞标对决与回合制对战小游戏（测试）历史',
+              'Browse Bidding Duel and Turn-based Battle Minigame (Test) history',
+            )}
           </Link>
         </Card>
       )}
-      <Card><Link className="btn btn-secondary" to="/games/blackjack/history">{duelText('二十一点历史与导出', 'Blackjack history and exports')}</Link></Card>
+      <Card>
+        <Link className="btn btn-secondary" to="/games/blackjack/history">
+          {duelText('二十一点历史与导出', 'Blackjack history and exports')}
+        </Link>
+      </Card>
       {config.isPending ? (
         <LoadingState />
       ) : initialConfigFailure ? (

@@ -51,7 +51,7 @@ func TestConfigurationDefaultsStrictPatchAndTiming(t *testing.T) {
 	if err := json.Unmarshal(next.UserWire(func(mode, _ string) bool { return mode == "standard" }), &public); err != nil {
 		t.Fatal(err)
 	}
-	if public.PlanSeconds != 20 || public.SettlementSeconds != 5 || public.QueueSeconds != 120 || public.Modes["quick"].Enabled {
+	if public.PlanSeconds != 20 || public.SettlementSeconds != 0 || public.QueueSeconds != 120 || public.Modes["quick"].Enabled {
 		t.Fatal("bad availability or phase timing")
 	}
 	registry := game.NewRegistry()

@@ -86,12 +86,9 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
     game === 'bidding' ? 10 : 20,
     'phase duration',
   );
-  safeInteger(
-    r[timers[1]],
-    game === 'bidding' ? 20 : 5,
-    game === 'bidding' ? 20 : 5,
-    'phase duration',
-  );
+  if (game === 'bidding') safeInteger(r.bid_seconds, 20, 20, 'phase duration');
+  else if (r.settlement_seconds !== 0 && r.settlement_seconds !== 5)
+    invalidResponse('presentation duration');
   const raw = exactRecord(r.modes, modes);
   const normalized: Record<string, DuelConfig['modes'][string]> = {};
   for (const mode of modes) {
@@ -138,17 +135,24 @@ function optionalDecode<T>(value: unknown, decode?: (item: unknown) => T): T | n
   if (!decode) invalidResponse('unexpected game field');
   return decode(value);
 }
-function resolutionValue<P>(value: unknown, decode?: (item: unknown) => P): Resolution<P> | null {
+function resolutionValue<P>(
+  value: unknown,
+  decode?: (item: unknown) => P,
+  duration?: (value: P) => number,
+): Resolution<P> | null {
   if (value === null) return null;
   const r = exactRecord(value, ['round', 'started_at', 'ends_at', 'summary']);
   const startedAt = unixTime(r.started_at, 'resolution start');
   const endsAt = unixTime(r.ends_at, 'resolution end');
-  if (endsAt !== startedAt + 5 || !decode) invalidResponse('resolution duration');
+  if (!decode) invalidResponse('resolution decoder');
+  const summary = decode(r.summary);
+  if (endsAt <= startedAt || endsAt - startedAt !== (duration?.(summary) ?? 5))
+    invalidResponse('resolution duration');
   return {
     round: safeInteger(r.round, 1, 75, 'resolution round'),
     startedAt,
     endsAt,
-    summary: decode(r.summary),
+    summary,
   };
 }
 function roundStartValue<S>(value: unknown, decode?: (item: unknown) => S): RoundStart<S> | null {
@@ -215,7 +219,7 @@ export function resultValue<V, F, P, S, L, A>(
     profiles: pair(r.profiles, profileValue),
     you: seatValue(r.you),
     view: nullable(r.view, c.view),
-    resolution: resolutionValue(r.resolution, c.presentation),
+    resolution: resolutionValue(r.resolution, c.presentation, c.presentationDuration),
   };
 }
 function stateValue<V, F, P, S, L, A>(
@@ -273,7 +277,7 @@ function stateValue<V, F, P, S, L, A>(
     payment: gamePayment(r.own_payment, 'payment'),
     profiles: pair(r.profiles, profileValue),
     view: c.view(r.view),
-    resolution: resolutionValue(r.resolution, c.presentation),
+    resolution: resolutionValue(r.resolution, c.presentation, c.presentationDuration),
     roundStart: roundStartValue(r.round_start, c.start),
   };
 }

@@ -307,16 +307,17 @@ func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 	f.action(0, state, body)
 	f.action(1, state, body)
 	settled := *f.read(0).Current
-	if settled.Phase != "settlement" || *settled.Deadline != 105 || settled.Resolution == nil || settled.Resolution.Round != 1 {
+	if settled.Phase != "settlement" || settled.Resolution == nil || settled.Resolution.Round != 1 || *settled.Deadline != settled.Resolution.EndsAt || *settled.Deadline <= 105 {
 		t.Fatal(settled)
 	}
-	f.clock.Store(104)
+	end := *settled.Deadline
+	f.clock.Store(end - 1)
 	if f.read(1).Current.Phase != "settlement" {
 		t.Fatal("shortened presentation")
 	}
-	f.clock.Store(105)
+	f.clock.Store(end)
 	next := *f.read(0).Current
-	if next.Phase != "plan" || next.Round != 2 || *next.Deadline != 125 {
+	if next.Phase != "plan" || next.Round != 2 || *next.Deadline != end+20 {
 		t.Fatal(next)
 	}
 	f.action(0, next, body)
@@ -332,7 +333,7 @@ func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 		t.Fatal(replay, err)
 	}
 	home := f.read(0)
-	if home.Current != nil || home.LatestResult == nil || home.LatestResult.Outcome != "loss" || home.LatestResult.TerminalAt != 105 {
+	if home.Current != nil || home.LatestResult == nil || home.LatestResult.Outcome != "loss" || home.LatestResult.TerminalAt != end {
 		t.Fatal(home)
 	}
 	other := f.read(1)
@@ -367,4 +368,28 @@ func TestSameDeviceWaitsAndRestartRefundsOnce(t *testing.T) {
 		t.Fatal(home)
 	}
 	f.ledger()
+}
+
+func TestLikesFinalPresentationDoesNotDelayTerminalLedger(t *testing.T) {
+	f := newFixture(t, "likes")
+	state := f.matched()
+	for round := 0; round < 25; round++ {
+		f.action(0, state, basicPlan)
+		f.action(1, state, basicPlan)
+		home := f.read(0)
+		if home.Current == nil {
+			result := home.LatestResult
+			if result == nil || result.Resolution == nil || result.TerminalAt != f.clock.Load() || result.Resolution.EndsAt <= result.TerminalAt || result.Outcome != "draw" {
+				t.Fatal("terminal facts delayed by presentation", result)
+			}
+			if f.read(1).LatestResult.TerminalAt != result.TerminalAt {
+				t.Fatal("players diverged")
+			}
+			f.ledger()
+			return
+		}
+		f.clock.Store(*home.Current.Deadline)
+		state = *f.read(0).Current
+	}
+	t.Fatal("match never completed")
 }

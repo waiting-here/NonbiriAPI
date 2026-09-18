@@ -58,7 +58,7 @@ func TestLikesAdapterKeepsSettlementUntilBeginAndHidesLoadout(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := r.Inspect("quick", next.State)
-	if err != nil || info.Phase != "settlement" || info.Seconds != 5 || info.Round != 1 {
+	if err != nil || info.Phase != "settlement" || info.Seconds != 0 || info.Round != 1 {
 		t.Fatal(info, err)
 	}
 	if _, err := r.Accept("quick", next.State, 0, actions[0]); err == nil {
@@ -67,6 +67,9 @@ func TestLikesAdapterKeepsSettlementUntilBeginAndHidesLoadout(t *testing.T) {
 	var cues presentation
 	if json.Unmarshal(next.Presentation, &cues) != nil || len(cues.Frames) != 7 {
 		t.Fatal("missing semantic stages")
+	}
+	if duration, err := r.PresentationDuration(next.Presentation); err != nil || duration <= 5 || len(cues.Timeline) == 0 {
+		t.Fatal("missing readable presentation", duration, err)
 	}
 	casts := 0
 	for _, event := range cues.Events {

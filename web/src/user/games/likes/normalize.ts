@@ -8,6 +8,7 @@ import {
 import { list, nullable, pair, seatValue } from '../common/duel/normalize';
 import type { DuelCodec } from '../common/duel/types';
 import { roleID } from './catalog';
+import { STAGES } from './labels';
 import { amount, dictionary, label, prose, safeJSON, signedAmount, unique } from './value';
 import type {
   Cast,
@@ -391,14 +392,51 @@ export function eventValue(value: unknown): LikesEvent {
   };
 }
 export function presentationValue(value: unknown): Presentation {
-  const r = exactRecord(value, ['plans', 'before', 'after', 'frames', 'events']);
-  return {
+  const r = exactRecord(value, ['plans', 'before', 'after', 'frames', 'events'], ['timeline']);
+  const p: Presentation = {
     plans: pair(r.plans, planValue),
     before: frame(r.before, false),
     after: frame(r.after, false),
     frames: list(r.frames, 7, (v) => frame(v, false)),
     events: list(r.events, 512, eventValue),
   };
+  if (r.timeline !== undefined) {
+    const seen = new Set<number>();
+    let lastStage = -1;
+    p.timeline = list(r.timeline, 519, (value) => {
+      const step = exactRecord(value, ['stage', 'duration_ms', 'event_ids']);
+      const stage = enumValue(step.stage, STAGES, 'presentation stage');
+      const index = STAGES.indexOf(stage);
+      if (index < lastStage) invalidResponse('presentation order');
+      lastStage = index;
+      const seats = new Set<number | null>();
+      const eventIDs = list(step.event_ids, 2, (value) => {
+        const id = safeInteger(value, 1, Number.MAX_SAFE_INTEGER, 'presentation event');
+        const event = p.events.find((event) => event.id === id);
+        if (!event || seen.has(id) || event.stage !== stage || seats.has(event.seat))
+          invalidResponse('presentation event reference');
+        seen.add(id);
+        seats.add(event.seat);
+        return id;
+      });
+      if (seats.has(null) && eventIDs.length !== 1) invalidResponse('shared presentation event');
+      return {
+        stage,
+        durationMS: safeInteger(step.duration_ms, 500, 60000, 'presentation step duration'),
+        eventIDs,
+      };
+    });
+    if (
+      !p.timeline.length ||
+      p.timeline[0].stage !== 'reveal' ||
+      p.timeline.at(-1)?.stage !== 'round-end' ||
+      seen.size !== p.events.length
+    )
+      invalidResponse('incomplete presentation');
+    const duration = p.timeline.reduce((sum, step) => sum + step.durationMS, 0);
+    if (duration % 1000 !== 0) invalidResponse('presentation clock');
+  }
+  return p;
 }
 export function roundFacts(value: unknown): RoundFacts {
   const r = exactRecord(value, [
@@ -455,6 +493,8 @@ export const likesCodec: DuelCodec<
   view: likesView,
   facts: roundFacts,
   presentation: presentationValue,
+  presentationDuration: (value) =>
+    value.timeline ? value.timeline.reduce((total, step) => total + step.durationMS, 0) / 1000 : 5,
   start: startEvents,
   loadout: selectionValue,
   action: likesAction,

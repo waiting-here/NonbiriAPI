@@ -239,7 +239,7 @@ func TestDuelPeriodicRecoveryPreservesAcceptedGames(t *testing.T) {
 	if h := f.read(0, "likes"); h.Current == nil || h.Current.ID != likes.ID || h.Current.Phase != "settlement" || h.LatestResult != nil {
 		t.Fatal("periodic recovery cancelled settlement", h)
 	}
-	f.clock.Add(5)
+	f.clock.Store(*f.read(0, "likes").Current.Deadline)
 	if _, err := f.app.games.RecoverModule(context.Background(), "likes", f.clock.Load(), 100, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -471,8 +471,23 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 					} else if h.LatestResult != nil {
 						resolution = h.LatestResult.Resolution
 					}
-					if resolution == nil || resolution.Round != round || resolution.EndsAt-resolution.StartedAt != 5 {
-						t.Fatal("presentation timing", resolution)
+					if resolution == nil || resolution.Round != round {
+						t.Fatal("missing round presentation")
+					}
+					var summary struct {
+						Timeline []struct {
+							DurationMS int64 `json:"duration_ms"`
+						} `json:"timeline"`
+					}
+					if err := json.Unmarshal(resolution.Summary, &summary); err != nil || len(summary.Timeline) == 0 {
+						t.Fatal("missing presentation steps", err)
+					}
+					var totalMS int64
+					for _, step := range summary.Timeline {
+						totalMS += step.DurationMS
+					}
+					if totalMS <= 5000 || totalMS%1000 != 0 || resolution.EndsAt-resolution.StartedAt != totalMS/1000 {
+						t.Fatal("presentation timing does not match steps", totalMS, resolution.StartedAt, resolution.EndsAt)
 					}
 					other := f.read(1, g)
 					var otherResolution *duel.Resolution

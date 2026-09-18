@@ -143,7 +143,8 @@ func (s *Service) scanSession(row scanner) (sessionRecord, error) {
 		return v, ErrInvariant
 	}
 	if r := v.Payload.Resolution; r != nil {
-		if s.rules.ID() != "likes" || r.Round < 1 || r.Round > v.Round || r.EndsAt != r.StartedAt+5 || r.StartedAt < v.Started || len(r.Summary) == 0 || len(r.Summary) > 128<<10 {
+		duration, durationErr := s.presentationDuration(r.Summary)
+		if s.rules.ID() != "likes" || durationErr != nil || duration <= 0 || r.Round < 1 || r.Round > v.Round || r.EndsAt <= r.StartedAt || r.EndsAt-r.StartedAt != duration || r.StartedAt < v.Started || len(r.Summary) == 0 || len(r.Summary) > 128<<10 {
 			return v, ErrInvariant
 		}
 		if v.Phase == "settlement" && (r.Round != v.Round || *v.Deadline != r.EndsAt) {
