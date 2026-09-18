@@ -23,6 +23,22 @@
   overflow: visible;
 }
 
+.fishing-art__image {
+  display: block;
+  inline-size: min(100%, 10rem);
+  block-size: auto;
+  aspect-ratio: 5 / 3;
+  object-fit: contain;
+}
+
+.fishing-art__canvas--fallback {
+  display: none;
+}
+
+.fishing-art--fallback .fishing-art__canvas--fallback {
+  display: block;
+}
+
 .fishing-art__canvas path,
 .fishing-art__canvas circle,
 .fishing-art__canvas ellipse,
@@ -252,6 +268,14 @@
   .fishing-art__canvas,
   .fishing-art__label {
     forced-color-adjust: auto;
+  }
+
+  .fishing-art__image {
+    display: none;
+  }
+
+  .fishing-art__canvas--fallback {
+    display: block;
   }
 }
 

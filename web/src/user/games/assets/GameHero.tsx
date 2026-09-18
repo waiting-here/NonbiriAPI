@@ -1,14 +1,17 @@
 import fishingHero from '@shared/assets/game-heroes/fishing.webp';
 import linkLinkHero from '@shared/assets/game-heroes/linklink.webp';
 import rpsHero from '@shared/assets/game-heroes/rps.webp';
+import blackjackHero from '@shared/assets/game-heroes/blackjack.webp';
+import biddingHero from '@shared/assets/game-heroes/bidding.webp';
+import likesHero from '@shared/assets/game-heroes/likes.webp';
 
 const heroSources = {
   fishing: fishingHero,
   linklink: linkLinkHero,
   rps: rpsHero,
-  bidding: linkLinkHero,
-  blackjack: linkLinkHero,
-  likes: rpsHero,
+  bidding: biddingHero,
+  blackjack: blackjackHero,
+  likes: likesHero,
 } as const;
 
 export type GameHeroKind = keyof typeof heroSources;

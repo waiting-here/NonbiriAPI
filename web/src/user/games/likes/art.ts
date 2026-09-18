@@ -119,7 +119,11 @@ export const artRegistry: Readonly<Record<string, ArtSlot>> = Object.fromEntries
   Object.entries(placeholders).map(([key, slot]) => [key, { ...slot, ...artReplacements[key] }]),
 );
 export function assertArtCoverage(catalog: ModeCatalog): void {
-  if (Object.keys(artRegistry).length !== 127) throw new Error('Incomplete art registry');
+  if (
+    Object.keys(artRegistry).length !== 127 ||
+    Object.values(artRegistry).some((slot) => slot.placeholder)
+  )
+    throw new Error('Incomplete art registry');
   for (const role of catalog.roles)
     for (const skill of catalog.skills.filter(
       (s) => s.owner === role.id || s.owner === '全局公共' || s.id === 'GEM01',

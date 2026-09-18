@@ -162,12 +162,14 @@ export function PlanEditor({
   blocked,
   onLock,
   onInspect,
+  onSelect,
 }: {
   readonly catalog: ModeCatalog;
   readonly state: DuelState<LikesView, Presentation, LikesEvent[]>;
   readonly blocked: boolean;
   readonly onLock: (plan: Plan) => void;
   readonly onInspect: (id: string) => void;
+  readonly onSelect?: () => void;
 }) {
   const t = useDuelText(),
     player = state.view.players[state.you];
@@ -189,9 +191,14 @@ export function PlanEditor({
     regulator: catalog.parameters.REGULATOR_PRICE,
   };
   const cleansable = player.effects.filter((s) => s.category !== 'state' && !s.positive);
-  const addPurchase = (purchase: Purchase) =>
+  const addPurchase = (purchase: Purchase) => {
     setDraft({ ...draft, purchases: [...draft.purchases, purchase] });
-  const selectMain = (main: Choice | null) => setDraft({ ...draft, main, extra: [] });
+    onSelect?.();
+  };
+  const selectMain = (main: Choice | null) => {
+    setDraft({ ...draft, main, extra: [] });
+    onSelect?.();
+  };
   return (
     <section className="likes-plan-editor">
       <div className="likes-section-heading">

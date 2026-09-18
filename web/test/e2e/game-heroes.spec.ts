@@ -12,13 +12,10 @@ const cases = [
 for (const fixture of cases) {
   test(`game artwork is local, complete, and undistorted in ${fixture.name}`, async ({ page }) => {
     await page.setViewportSize({ width: fixture.width, height: 900 });
-    await page.addInitScript(
-      ({ language, theme }) => {
-        localStorage.setItem('nb.lang', language);
-        localStorage.setItem('nb.theme', theme);
-      },
-      fixture,
-    );
+    await page.addInitScript(({ language, theme }) => {
+      localStorage.setItem('nb.lang', language);
+      localStorage.setItem('nb.theme', theme);
+    }, fixture);
     await mockPublicConfig(page, 'user');
     await mockRoleSession(page, 'user', 'user');
     await mockJson(page, {
@@ -110,10 +107,12 @@ for (const fixture of cases) {
       expect(imageURL.origin).toBe(USER_ORIGIN);
     }
     const artworkRequests = imageRequests.filter((rawURL) => rawURL.endsWith('.webp'));
-    expect(artworkRequests).toHaveLength(3);
+    expect(artworkRequests).toHaveLength(6);
     for (const rawURL of artworkRequests) {
       const imageURL = new URL(rawURL);
-      expect(imageURL.pathname).toMatch(/^\/assets\/(fishing|linklink|rps)-[A-Za-z0-9_-]+\.webp$/);
+      expect(imageURL.pathname).toMatch(
+        /^\/assets\/(fishing|linklink|rps|bidding|likes|blackjack)-[A-Za-z0-9_-]+\.webp$/,
+      );
     }
     consoleGuard.assertNone();
   });

@@ -341,9 +341,9 @@ describe('beta.1 game pages', () => {
       expect.stringMatching(/fishing\.webp$/),
       expect.stringMatching(/linklink\.webp$/),
       expect.stringMatching(/rps\.webp$/),
-      expect.stringMatching(/linklink\.webp$/),
-      expect.stringMatching(/rps\.webp$/),
-      expect.stringMatching(/linklink\.webp$/),
+      expect.stringMatching(/bidding\.webp$/),
+      expect.stringMatching(/likes\.webp$/),
+      expect.stringMatching(/blackjack\.webp$/),
     ]);
     expect(heroes.map(({ width, height }) => [width, height])).toEqual(Array.from({ length: 6 }, () => [960, 480]));
     expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy', 'lazy', 'lazy', 'lazy']);

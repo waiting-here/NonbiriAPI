@@ -26,6 +26,10 @@ import { useReducedMotion, useServerClock } from './motion';
 import { likesCodec } from './normalize';
 import { PlanEditor } from './PlanEditor';
 import { skillName } from './labels';
+import { likesAudioFacts, likesMusicScene } from './audioFacts';
+import { useArcadeAudio } from '../common/audio/useArcadeAudio';
+import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
+import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import type { LikesView, Presentation, Selection } from './types';
 import '../games.css';
 import '../common/duel/duel.css';
@@ -129,12 +133,14 @@ function Lobby({
   blocked,
   onQueue,
   onInspect,
+  onEdit,
 }: {
   readonly catalog: ModeCatalog;
   readonly context: DuelLobbyContext;
   readonly blocked: boolean;
   readonly onQueue: (selection: Selection) => void;
   readonly onInspect: (id: string) => void;
+  readonly onEdit: () => void;
 }) {
   const t = useDuelText();
   const [selection, setSelection] = useState(() => initialSelection(catalog));
@@ -148,7 +154,10 @@ function Lobby({
       <LoadoutEditor
         catalog={catalog}
         value={selection}
-        onChange={setSelection}
+        onChange={(next) => {
+          setSelection(next);
+          onEdit();
+        }}
         disabled={blocked}
         onInspect={onInspect}
       />
@@ -198,6 +207,7 @@ export function LikesGame(context: DuelLobbyContext) {
     staleTime: Infinity,
   });
   const [mode, setMode] = useState<'quick' | 'standard'>('quick');
+  const [lobbyForResult, setLobbyForResult] = useState<string | null>(null);
   const [rules, setRules] = useState(false),
     [guide, setGuide] = useState<string | null>(null),
     [history, setHistory] = useState(false),
@@ -219,6 +229,21 @@ export function LikesGame(context: DuelLobbyContext) {
       !!queue ||
       (!!result?.resolution && (home?.serverNow ?? 0) < result.resolution.endsAt),
   );
+  const audioFacts = useSnapshotAudioFacts(home, likesAudioFacts);
+  const musicScene =
+    !home || (!current && !queue && result?.id === lobbyForResult)
+      ? 'lobby'
+      : likesMusicScene(home, now);
+  const audio = useArcadeAudio('likes', {
+    scene: musicScene,
+    facts: audioFacts,
+    now: now * 1000,
+    ready: !!home,
+  });
+  const editLobby = () => {
+    setLobbyForResult(result?.id ?? null);
+    audio.sound.play('common_select');
+  };
   const remaining = useAuthoritativeCountdown(
     current ? `${current.id}:${current.phaseSeq}` : (queue?.id ?? 'idle'),
     current?.deadline ?? queue?.deadline ?? null,
@@ -246,6 +271,11 @@ export function LikesGame(context: DuelLobbyContext) {
           </p>
         </div>
         <div className="duel-actions">
+          <ArcadeAudioControls
+            sound={audio.sound}
+            music={audio.music}
+            unavailable={audio.unavailable}
+          />
           <button type="button" disabled={!c} onClick={() => setRules(true)}>
             {t('规则', 'Rules')}
           </button>
@@ -345,6 +375,7 @@ export function LikesGame(context: DuelLobbyContext) {
                   state={current}
                   blocked={duel.blocked || remaining === 0}
                   onInspect={setGuide}
+                  onSelect={() => audio.sound.play('common_select')}
                   onLock={(plan) =>
                     duel.run({
                       kind: 'action',
@@ -434,7 +465,10 @@ export function LikesGame(context: DuelLobbyContext) {
                     type="button"
                     aria-pressed={mode === m}
                     disabled={duel.pending || duel.uncertain}
-                    onClick={() => setMode(m)}
+                    onClick={() => {
+                      setMode(m);
+                      editLobby();
+                    }}
                   >
                     <strong>{m === 'quick' ? t('快速', 'Quick') : t('标准', 'Standard')}</strong>
                     <span>
@@ -450,14 +484,16 @@ export function LikesGame(context: DuelLobbyContext) {
                 context={context}
                 blocked={duel.blocked}
                 onInspect={setGuide}
-                onQueue={(selection) =>
+                onEdit={editLobby}
+                onQueue={(selection) => {
+                  setLobbyForResult(result?.id ?? null);
                   duel.run({
                     kind: 'queue',
                     mode,
                     termsHash: context.config.modes[mode].termsHash,
                     loadout: selection,
-                  })
-                }
+                  });
+                }}
               />
             </>
           )}

@@ -10,8 +10,6 @@ import {
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { GameWallets } from '../common/GameWallets';
 import { RandomnessProof } from '../common/RandomnessProof';
-import { GameSoundButton } from '../common/GameSoundButton';
-import { useGameSound, type GameSoundControl } from '../common/useGameSound';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuelText } from '../common/duel/copy';
 import { DuelDialog } from '../common/duel/Dialog';
@@ -19,12 +17,16 @@ import { creditsToMilli, formatCredits } from '../common/strict';
 import { useGamesSnapshot, gameKeys } from '../common/snapshot';
 import { blackjackKeys, readBlackjackDetail, readBlackjackHistory, useBlackjack } from './api';
 import { BlackjackBoard, BlackjackSettlement, emoteText } from './Table';
+import { blackjackAudioFacts } from './audioFacts';
+import { useArcadeAudio } from '../common/audio/useArcadeAudio';
+import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
+import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import '../games.css';
 import '../common/duel/duel.css';
 import '../bidding/bidding.css';
 import './blackjack.css';
 
-function useTableMotion(home: BlackjackState | undefined, sound: GameSoundControl) {
+function useTableMotion(home: BlackjackState | undefined) {
   const surface = useRef<HTMLDivElement>(null);
   const previous = useRef<{
     time: number;
@@ -33,7 +35,6 @@ function useTableMotion(home: BlackjackState | undefined, sound: GameSoundContro
     result: string | null;
   } | null>(null);
   const client = useQueryClient();
-  const play = sound.play;
   useEffect(() => {
     const node = surface.current;
     if (!home || !node) return;
@@ -84,22 +85,10 @@ function useTableMotion(home: BlackjackState | undefined, sound: GameSoundContro
           ],
           { duration: 650, easing: 'ease-out' },
         );
-      const hands =
-        home.table?.fact.settlements.find((s) => s.seat === home.your_seat)?.hands ?? [];
-      const delta = hands.reduce((sum, h) => sum + BigInt(h.net_milli) - BigInt(h.stake_milli), 0n);
-      play(
-        home.table?.phase === 'cancelled'
-          ? 'end'
-          : hands.every((h) => h.outcome === 'push')
-            ? 'tie'
-            : delta > 0n
-              ? 'win'
-              : 'loss',
-      );
       void client.invalidateQueries({ queryKey: gameKeys.snapshot });
       void client.invalidateQueries({ queryKey: [...blackjackKeys.root, 'history'] });
-    } else if (dealt) play('follow');
-  }, [home, play, client]);
+    }
+  }, [home, client]);
   return surface;
 }
 
@@ -258,9 +247,15 @@ export function BlackjackGame() {
   const t = useDuelText();
   const game = useBlackjack();
   const snapshot = useGamesSnapshot();
-  const sound = useGameSound('blackjack');
   const home = game.query.data;
-  const surface = useTableMotion(home, sound);
+  const audioFacts = useSnapshotAudioFacts(home, blackjackAudioFacts);
+  const audio = useArcadeAudio('blackjack', {
+    facts: audioFacts,
+    now: (home?.server_now ?? 0) * 1000,
+    ready: !!home,
+  });
+  const sound = audio.sound;
+  const surface = useTableMotion(home);
   const [stakeDraft, setStakeDraft] = useState<string | null>(null);
   const [panel, setPanel] = useState<'rules' | 'history' | null>(null);
   const close = useCallback(() => setPanel(null), []);
@@ -317,7 +312,7 @@ export function BlackjackGame() {
                     const h = home.table?.fact.cards?.seats.find((s) => s.number === own.seat)
                       ?.hands[Number(hand)];
                     if (h && own.session_id) {
-                      sound.play('select');
+                      sound.play('common_select');
                       game.run({
                         kind: 'action',
                         id: own.session_id,
@@ -371,7 +366,7 @@ export function BlackjackGame() {
             <button className="btn btn-secondary" onClick={() => setPanel('history')}>
               {t('对局记录', 'History')}
             </button>
-            <GameSoundButton sound={sound} />
+            <ArcadeAudioControls sound={sound} unavailable={audio.unavailable} />
           </div>
         </header>
         {snapshot.data && <GameWallets wallets={snapshot.data} />}

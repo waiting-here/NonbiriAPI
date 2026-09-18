@@ -15,6 +15,10 @@ import { creditsToMilli, formatCredits } from '../common/strict';
 import { BIDDING_MODES, biddingCodec } from './normalize';
 import { BiddingControls, PublicCards, RewardCard } from './Cards';
 import { BiddingRoundView, PlayedHistory } from './HistoryView';
+import { biddingAudioFacts } from './audioFacts';
+import { useArcadeAudio } from '../common/audio/useArcadeAudio';
+import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
+import { ArcadeAudioControls } from '../common/audio/ArcadeAudioControls';
 import '../games.css';
 import '../common/duel/duel.css';
 import './bidding.css';
@@ -68,6 +72,12 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
   const home = duel.query.data,
     current = home?.current,
     queue = home?.queue;
+  const audioFacts = useSnapshotAudioFacts(home, biddingAudioFacts);
+  const audio = useArcadeAudio('bidding', {
+    facts: audioFacts,
+    now: (home?.serverNow ?? 0) * 1000,
+    ready: !!home,
+  });
   const remaining = useAuthoritativeCountdown(
     current ? `${current.id}:${current.phaseSeq}` : (queue?.id ?? 'idle'),
     current?.deadline ?? queue?.deadline ?? null,
@@ -89,6 +99,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
           <p>{t('留一手，赢下整个奖池。', 'Hold your nerve. Take the whole pool.')}</p>
         </div>
         <div className="duel-actions">
+          <ArcadeAudioControls sound={audio.sound} unavailable={audio.unavailable} />
           <button type="button" className="btn btn-secondary" onClick={() => setRules(true)}>
             {t('游戏规则', 'Rules')}
           </button>
@@ -177,6 +188,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
             </div>
           </section>
           <BiddingControls
+            onSelect={() => audio.sound.play('common_select')}
             key={`${current.id}:${current.phaseSeq}`}
             state={current}
             blocked={duel.blocked || remaining === 0}

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FishingArtwork } from './FishingArtwork';
 import {
@@ -73,15 +73,20 @@ describe('fishing artwork registry', () => {
 });
 
 describe('FishingArtwork', () => {
-  it('renders every registered item in the common 160x96 coordinate system', () => {
+  it('renders every registered item with a transparent WebP and SVG fallback', () => {
     for (const descriptor of fishingArtwork) {
       const { container, unmount } = render(
         <FishingArtwork itemKey={descriptor.key} label={`Localized ${descriptor.key}`} />,
       );
       const figure = container.querySelector('figure');
+      const image = container.querySelector('img');
       const svg = container.querySelector('svg');
       expect(figure).toHaveAttribute('data-art-key', descriptor.key);
       expect(figure).toHaveAttribute('data-art-kind', descriptor.kind);
+      expect(figure).toHaveAttribute('data-art-source', 'raster');
+      expect(image).toHaveAttribute('src', expect.stringMatching(/\.webp$/));
+      expect(image).toHaveAttribute('width', '480');
+      expect(image).toHaveAttribute('height', '288');
       expect(svg).toHaveAttribute('viewBox', '0 0 160 96');
       expect(svg).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
       expect(svg).toHaveAttribute('aria-hidden', 'true');
@@ -120,6 +125,20 @@ describe('FishingArtwork', () => {
     expect(screen.getByRole('img', { name: 'Unknown catch' })).toBeInTheDocument();
     expect(container.querySelector('figure')).toHaveAttribute('data-art-key', 'unknown');
     expect(container.querySelector('figure')).toHaveAttribute('data-art-kind', 'unknown');
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      expect.stringMatching(/unknown\.webp$/),
+    );
+  });
+
+  it('keeps the code-native SVG visible when the raster image fails', () => {
+    const { container } = render(<FishingArtwork itemKey="koi" label="Localized koi" />);
+    const image = container.querySelector('img');
+    expect(image).toBeInTheDocument();
+    fireEvent.error(image!);
+    expect(container.querySelector('figure')).toHaveAttribute('data-art-source', 'svg');
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('keeps all rendered SVG free of executable or external content', () => {
@@ -137,14 +156,15 @@ describe('FishingArtwork', () => {
     );
   });
 
-  it('ships only code-native source with responsive, contrast, and motion fallbacks', () => {
+  it('ships local raster sources with responsive, contrast, and motion fallbacks', () => {
     const sources = ['FishingArtwork.tsx', 'artRegistry.ts', 'fishing-art.css'].map((name) =>
       readFileSync(new URL(name, import.meta.url), 'utf8'),
     );
     const joined = sources.join('\n').toLowerCase();
     expect(joined).not.toMatch(
-      /dangerouslysetinnerhtml|<script|<image|<use|<foreignobject|\shref\s*=|https?:|data:|url\s*\(|\.png|\.jpe?g|\.gif|\.webp/,
+      /dangerouslysetinnerhtml|<script|<image|<use|<foreignobject|\shref\s*=|https?:|data:|url\s*\(|\.png|\.jpe?g|\.gif/,
     );
+    expect(joined).toMatch(/game-fishing\/catches\/.*\.webp/);
     expect(joined).not.toMatch(/[\u{1f000}-\u{1faff}]/u);
 
     const css = sources[2];

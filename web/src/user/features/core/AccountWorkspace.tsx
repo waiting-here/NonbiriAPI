@@ -12,6 +12,7 @@ import { disabledAccountLifecycleAdapter } from './adapters';
 import { patchLanguage } from './api';
 import { CoreErrorPanel, CoreLoading, CoreTime, MutationNotice, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
+import { MusicQualityPreference } from './MusicQualityPreference';
 import {
   clearCoreUserSession,
   coreKeys,
@@ -292,6 +293,7 @@ function LocalPreferences() {
         <h2>{t('account.localTitle')}</h2>
       </div>
       <p className="core-muted">{t('account.localBody')}</p>
+      <MusicQualityPreference />
       <fieldset>
         <legend>{t('account.theme')}</legend>
         <div className="core-radio-group">
