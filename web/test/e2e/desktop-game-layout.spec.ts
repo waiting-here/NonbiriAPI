@@ -7,6 +7,49 @@ import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
 import wire from '../../src/user/games/likes/testdata/authority.json' with { type: 'json' };
 import timings from '../../src/user/games/likes/testdata/timelines.json' with { type: 'json' };
+import { biddingHomeWire } from '../../src/user/games/bidding/testFixtures';
+import { blackjackWire } from '../../src/user/games/blackjack/testFixtures';
+
+test('nine-seat blackjack presents the other eight players as two complete desktop rows', async ({
+  page,
+}) => {
+  const errors = collectConsoleViolations(page);
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  await page.route('**/api/games**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/games') return route.fulfill({ json: gamesSnapshotWire() });
+    if (path === '/api/games/blackjack/state')
+      return route.fulfill({ json: blackjackWire('decision', 8) });
+    return route.fallback();
+  });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto(`${USER_ORIGIN}/games/blackjack`);
+  await expect(page.getByRole('region', { name: 'Your hands' })).toBeVisible();
+  await expect(page.locator('.bj-seats > .bj-seat')).toHaveCount(8);
+  const boxes = await page.locator('.bj-seats > .bj-seat').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return { x: rect.x, y: rect.y };
+    }),
+  );
+  expect(new Set(boxes.map((box) => Math.round(box.y))).size).toBe(2);
+  for (let i = 0; i < 4; i++) {
+    expect(boxes[i].y).toBeCloseTo(boxes[0].y, 0);
+    expect(boxes[i + 4].y).toBeCloseTo(boxes[4].y, 0);
+    expect(boxes[i].x).toBeCloseTo(boxes[i + 4].x, 0);
+  }
+  await page.locator('.bj-seats').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: '../tmp/blackjack-nine-desktop.png', fullPage: true });
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.locator('.bj-seats > .bj-seat')).toHaveCount(8);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+  errors.assertNone();
+});
 
 function catalogFixture() {
   const modes = Object.fromEntries(
@@ -130,5 +173,55 @@ test('desktop battle uses both screen halves while narrow screens retain compact
       .first()
       .evaluate((node) => getComputedStyle(node).animationName),
   ).toBe('none');
+  errors.assertNone();
+});
+
+test('bidding keeps thirteen hand positions and reward decks usable at every width', async ({
+  page,
+}) => {
+  const errors = collectConsoleViolations(page);
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const home = biddingHomeWire();
+  home.current.you = 1;
+  home.current.round = 2;
+  home.current.view.played = [[1], [2]];
+  home.current.view.hand_remaining = [
+    home.current.view.hand_remaining[0].filter((rank) => rank !== 1),
+    home.current.view.hand_remaining[1].filter((rank) => rank !== 2),
+  ];
+  home.current.view.rewards.push(
+    { round: 2, side: 0, rank: 4, multiplier: 1, status: 'pool', owner: null },
+    { round: 2, side: 1, rank: 9, multiplier: 1, status: 'pool', owner: null },
+  );
+  await page.route('**/api/games**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/games') return route.fulfill({ json: gamesSnapshotWire() });
+    if (path === '/api/games/bidding/state') return route.fulfill({ json: home });
+    return route.fallback();
+  });
+  await page.goto(`${USER_ORIGIN}/games/bidding`);
+  await expect(page.locator('.bid-hand')).toHaveCount(2);
+  await expect(page.locator('.bid-decision .bid-card')).toHaveCount(13);
+  await expect(page.locator('.bid-public .bid-card')).toHaveCount(13);
+  await expect(page.getByRole('button', { name: 'Bid 2 (2)', exact: true })).toBeDisabled();
+  await expect(page.locator('.bid-public .is-played')).toHaveCount(1);
+  for (const width of [1920, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const side of ['is-you', 'is-opponent']) {
+      const deck = page.locator(`.bid-reward-deck.${side}`);
+      await deck.locator('summary').click();
+      const popup = await deck.locator('[role=dialog]').boundingBox();
+      expect(popup!.x).toBeGreaterThanOrEqual(0);
+      expect(popup!.x + popup!.width).toBeLessThanOrEqual(width);
+      await deck.locator('summary').click();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('.bid-table').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: '../tmp/bidding-desktop.png', fullPage: true });
   errors.assertNone();
 });

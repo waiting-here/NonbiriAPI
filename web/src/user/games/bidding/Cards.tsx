@@ -232,9 +232,7 @@ function PokerHand({
           >
             <span className="bid-card__corner">{cardLabel(card)}</span>
             <strong className="bid-card__center">◆</strong>
-            <small className="bid-card__corner bid-card__corner--bottom">
-              {isPlayed ? t('已出', 'Played') : cardLabel(card)}
-            </small>
+            <small className="bid-card__corner bid-card__corner--bottom">{cardLabel(card)}</small>
           </button>
         );
       })}

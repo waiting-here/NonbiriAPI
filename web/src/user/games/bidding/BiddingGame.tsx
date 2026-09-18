@@ -180,6 +180,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
             <div className="bid-rewards">
               {current.view.rewards
                 .filter((card) => card.round === current.round)
+                .sort((a, b) => (a.side === current.you ? -1 : b.side === current.you ? 1 : 0))
                 .map((card) => (
                   <RewardCard key={`${card.round}:${card.side}`} card={card} />
                 ))}

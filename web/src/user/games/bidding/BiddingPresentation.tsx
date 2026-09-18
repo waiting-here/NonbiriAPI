@@ -297,9 +297,12 @@ export function BiddingPresentation({
         </div>
         <div className="bid-presentation__center">
           <div className="bid-presentation__cards">
-            {shownRewards.slice(0, 2).map((reward) => (
-              <RewardCard key={`${reward.round}:${reward.side}`} card={reward} />
-            ))}
+            {shownRewards
+              .slice(0, 2)
+              .sort((a, b) => (a.side === scene.you ? -1 : b.side === scene.you ? 1 : 0))
+              .map((reward) => (
+                <RewardCard key={`${reward.round}:${reward.side}`} card={reward} />
+              ))}
           </div>
           {visibleStep !== 'draw' && (
             <strong className="bid-presentation__pot">

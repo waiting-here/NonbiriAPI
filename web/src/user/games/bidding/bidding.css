@@ -143,7 +143,9 @@
 }
 .bid-presentation--idle {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
+  min-height: 0;
   text-align: center;
   color: var(--bid-muted);
 }
@@ -156,6 +158,9 @@
   z-index: 4;
   background: var(--bid-paper);
   box-shadow: 0 0.5rem 1.5rem #0003;
+}
+.nb-user-shell__main .bid-presentation:not(.bid-presentation--idle) {
+  top: 4.25rem;
 }
 .bid-presentation[data-reduced-motion='true'] * {
   animation: none !important;
@@ -563,6 +568,20 @@
   color: var(--bid-red);
   font-size: 1.15rem;
   line-height: 1;
+}
+.bid-card {
+  aspect-ratio: 2 / 3;
+  min-height: 5rem;
+  justify-content: space-between;
+}
+.bid-card .bid-card__corner {
+  font-size: clamp(0.85rem, 1.15vw, 1.25rem);
+}
+.bid-card .bid-card__center {
+  font-size: clamp(1.2rem, 2vw, 2.2rem);
+}
+.bid-public .bid-card:not(.is-played) {
+  opacity: 1;
 }
 .bid-card small {
   color: var(--bid-muted);
