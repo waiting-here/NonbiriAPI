@@ -71,8 +71,10 @@ describe('likes catalog, art and projections', () => {
     );
     expect(castSlot('Claude', 'GEM01')).not.toBeNull();
     expect(castSlot('Claude', 'GPT01')).toBeNull();
-    expect(new Set(slots.map((s) => s.source)).size).toBe(4);
-    expect(slots.every((s) => s.transparentRequired && s.placeholder)).toBe(true);
+    expect(new Set(slots.map((s) => s.source)).size).toBe(127);
+    expect(slots.every((s) => s.transparentRequired && !s.placeholder)).toBe(true);
+    expect(slots.every((s) => s.source.endsWith('.webp'))).toBe(true);
+    expect(slots.every((s) => s.sourceFile.includes('/game-likes/'))).toBe(true);
   });
   it('decodes genuine rule-engine states, complete rounds, compact summaries and replenishment', () => {
     for (const view of [wire.initial, ...Object.values(wire.role_views)])

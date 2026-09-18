@@ -13,13 +13,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Administrator-controlled Gateway cost attribution, disabled by default, and debug metadata showing only whether the tag was sent. Steward CallerKey automation can read and update failure policies with revision and idempotency protection.
 - Two-player Bidding Duel with 13 simultaneous card rounds, and Likes Battle with quick/standard modes, five characters, eight harnesses and the complete skill/buff catalog.
 - Separate per-game queues, frozen entry terms, mixed-wallet admission, original-asset refunds and atomic winner/fee settlement. Both games start disabled and do not add newcomer awards.
-- Synchronized five-second Likes settlement with score breakdowns, resource changes, round-start refills, independent stun/overload artwork slots, reduced-motion feedback and a paginated round log. Existing images fill 127 replaceable art slots.
+- Synchronized five-second Likes settlement with score breakdowns, resource changes, round-start refills, independent stun/overload artwork, reduced-motion feedback and a paginated round log. All 127 character, skill and harness slots have dedicated illustrations.
+- Dedicated covers for the three new games, 35 Fishing catch illustrations with SVG fallback, synchronized Likes music and sampled effects for Likes, Bidding and Blackjack. Sound and music preferences are separate and off by default; browser-local music quality offers lightweight MP3 or lossless FLAC.
 - Thirty-day player and administrator match history, long-term anonymous traces and resumable bounded administrator NDJSON export. Account export v8 includes safe new-game records.
 - Private per-game randomness for all six games, with opening SHA-256 commitments, HMAC-SHA256 rejection sampling, terminal seed disclosure, bounded proofs, independent browser/Node verification and safe account export. Active responses never disclose seeds or future draws; retained legacy games explicitly lack proofs.
 - One shared eight-seat Blackjack table with minute-aligned seating/decisions/results, persistent FIFO waiting, simultaneous batched actions, six-deck rules, splitting and doubling. Frozen mixed-wallet stakes settle per hand into general credits after fees; the game starts disabled.
 
 ### Fixed
 
+- LinkLink match effects wait for valid layout measurements and ignore resize frames after their board is removed, preventing invalid SVG coordinates during transitions.
 - Browser clients can use the three public CallerKey model routes across origins. Valid OPTIONS preflights return 204 without authentication or model usage, and actual responses expose errors and streams through CORS. Cookie-authenticated APIs retain their same-origin boundary.
 - Administrator dashboard endpoint totals use the bounded numbered endpoint page, including addresses shared by more than 100 users.
 - Shared battery overload affects only positive-energy plans when the other plan costs zero; exact remaining energy is allowed and Flash keeps its independent check.
@@ -30,7 +32,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Compatibility
 
 - Generation 2 now has 117 tables and accepts fifteen exact predecessor manifests, including populated beta.4 and the preceding release-candidate schema. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
-- Artwork remains placeholder content. This candidate has not been released or deployed.
+- This candidate has not been released or deployed.
 
 ## [1.0.0-beta.4] - 2026-09-12
 

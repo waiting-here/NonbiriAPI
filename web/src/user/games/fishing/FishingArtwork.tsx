@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import {
   resolveFishingArtwork,
   type FinStyle,
@@ -7,7 +7,82 @@ import {
   type FishPattern,
   type FishingArtDescriptor,
 } from './artRegistry';
+
 import './fishing-art.css';
+
+const catchSources: Readonly<Record<string, string>> = {
+  ayu: catch01,
+  bighead_carp: catch02,
+  black_carp: catch03,
+  boot: catch04,
+  bottle: catch05,
+  branch: catch06,
+  catfish: catch07,
+  clover: catch08,
+  common_carp: catch09,
+  crucian: catch10,
+  fry: catch11,
+  glasses: catch12,
+  grass_carp: catch13,
+  gudgeon: catch14,
+  horse_mouth: catch15,
+  japanese_eel: catch16,
+  koi: catch17,
+  loach: catch18,
+  mandarin_fish: catch19,
+  old_tire: catch20,
+  phone_case: catch21,
+  plastic_bag: catch22,
+  rainbow_trout: catch23,
+  seaweed: catch24,
+  shell: catch25,
+  silver_carp: catch26,
+  smelt: catch27,
+  snakehead: catch28,
+  stream_carp: catch29,
+  taimen: catch30,
+  tilapia: catch31,
+  unknown: catch32,
+  whitebait: catch33,
+  yellow_catfish: catch34,
+  yellowcheek: catch35,
+};
+
+import catch01 from '@shared/assets/game-fishing/catches/ayu.webp';
+import catch02 from '@shared/assets/game-fishing/catches/bighead_carp.webp';
+import catch03 from '@shared/assets/game-fishing/catches/black_carp.webp';
+import catch04 from '@shared/assets/game-fishing/catches/boot.webp';
+import catch05 from '@shared/assets/game-fishing/catches/bottle.webp';
+import catch06 from '@shared/assets/game-fishing/catches/branch.webp';
+import catch07 from '@shared/assets/game-fishing/catches/catfish.webp';
+import catch08 from '@shared/assets/game-fishing/catches/clover.webp';
+import catch09 from '@shared/assets/game-fishing/catches/common_carp.webp';
+import catch10 from '@shared/assets/game-fishing/catches/crucian.webp';
+import catch11 from '@shared/assets/game-fishing/catches/fry.webp';
+import catch12 from '@shared/assets/game-fishing/catches/glasses.webp';
+import catch13 from '@shared/assets/game-fishing/catches/grass_carp.webp';
+import catch14 from '@shared/assets/game-fishing/catches/gudgeon.webp';
+import catch15 from '@shared/assets/game-fishing/catches/horse_mouth.webp';
+import catch16 from '@shared/assets/game-fishing/catches/japanese_eel.webp';
+import catch17 from '@shared/assets/game-fishing/catches/koi.webp';
+import catch18 from '@shared/assets/game-fishing/catches/loach.webp';
+import catch19 from '@shared/assets/game-fishing/catches/mandarin_fish.webp';
+import catch20 from '@shared/assets/game-fishing/catches/old_tire.webp';
+import catch21 from '@shared/assets/game-fishing/catches/phone_case.webp';
+import catch22 from '@shared/assets/game-fishing/catches/plastic_bag.webp';
+import catch23 from '@shared/assets/game-fishing/catches/rainbow_trout.webp';
+import catch24 from '@shared/assets/game-fishing/catches/seaweed.webp';
+import catch25 from '@shared/assets/game-fishing/catches/shell.webp';
+import catch26 from '@shared/assets/game-fishing/catches/silver_carp.webp';
+import catch27 from '@shared/assets/game-fishing/catches/smelt.webp';
+import catch28 from '@shared/assets/game-fishing/catches/snakehead.webp';
+import catch29 from '@shared/assets/game-fishing/catches/stream_carp.webp';
+import catch30 from '@shared/assets/game-fishing/catches/taimen.webp';
+import catch31 from '@shared/assets/game-fishing/catches/tilapia.webp';
+import catch32 from '@shared/assets/game-fishing/catches/unknown.webp';
+import catch33 from '@shared/assets/game-fishing/catches/whitebait.webp';
+import catch34 from '@shared/assets/game-fishing/catches/yellow_catfish.webp';
+import catch35 from '@shared/assets/game-fishing/catches/yellowcheek.webp';
 
 export interface FishingArtworkProps {
   itemKey: string;
@@ -306,11 +381,15 @@ export function FishingArtwork({
   className,
 }: FishingArtworkProps) {
   const descriptor = resolveFishingArtwork(itemKey);
+  const rasterSource = catchSources[descriptor.key] ?? null;
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const showingRaster = rasterSource !== null && failedSource !== rasterSource;
   const captionId = useId();
   const classes = [
     'fishing-art',
     `fishing-art--${descriptor.kind}`,
     descriptor.kind === 'fish' ? `fishing-art--${descriptor.palette}` : '',
+    showingRaster ? '' : 'fishing-art--fallback',
     className ?? '',
   ]
     .filter(Boolean)
@@ -328,13 +407,28 @@ export function FishingArtwork({
       data-art-key={descriptor.key}
       data-art-kind={descriptor.kind}
       data-art-variant={descriptor.kind === 'fish' ? descriptor.family : descriptor.key}
+      data-art-source={showingRaster ? 'raster' : 'svg'}
       role={decorative ? undefined : 'img'}
       aria-hidden={decorative || undefined}
       aria-label={!decorative && !caption ? label : undefined}
       aria-labelledby={!decorative && caption ? captionId : undefined}
     >
+      {showingRaster ? (
+        <img
+          className="fishing-art__image"
+          src={rasterSource}
+          alt=""
+          aria-hidden="true"
+          width={480}
+          height={288}
+          loading="lazy"
+          decoding="async"
+          draggable="false"
+          onError={() => setFailedSource(rasterSource)}
+        />
+      ) : null}
       <svg
-        className="fishing-art__canvas"
+        className="fishing-art__canvas fishing-art__canvas--fallback"
         viewBox="0 0 160 96"
         preserveAspectRatio="xMidYMid meet"
         focusable="false"

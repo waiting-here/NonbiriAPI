@@ -58,7 +58,16 @@ Only successful casts show a character action illustration. Failed or
 cancelled casts show their reason. Stun is a buff and overload is a separate
 state, each with its own chibi illustration slot. The shared battery and
 overload receive extra visual emphasis. The character, action, outcome and
-harness illustrations currently reuse bundled images as placeholders.
+harness illustrations are bundled as transparent local images.
+
+Music and effects have separate switches, off by default, remembered per game
+in this browser. Likes music follows your own overload, speed and battle states;
+changes crossfade over one beat starting at the next beat on a shared timeline.
+Result music starts after the final settlement animation. Changing mode or
+loadout, or joining a queue, returns to lobby music. Defeat cuts the background
+and, when effects are enabled, plays a single short sting before silence.
+Account local preferences offers lightweight or lossless music for the next
+activation or game entry. Audio pauses in the background and releases on exit.
 
 The shared-energy check uses the battery after both players' purchases and
 each frozen plan's declared energy quote. An exact fit is allowed. If total
@@ -107,7 +116,9 @@ can resume from the last completed page, while the signed cursor is valid.
 
 点赞在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
-双方锁定或超时后，服务端立即结算，并同步播放 5 秒的方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图接口。当前图片为已有素材占位。
+双方锁定或超时后，服务端立即结算，并同步播放 5 秒的方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
+
+音乐和音效分别开关，默认关闭，按游戏记住当前浏览器的选择。点赞音乐按本人过载、倍速、普通对战的优先级播放，共用时间轴，下一拍开始、一拍完成交接。最后五秒演出完成后进入结果音乐；修改模式、配装或开始排队时回大厅音乐。失败切断背景，若音效开启则播放一次短片段后静音。账户页本机偏好提供轻量版和无损版音乐，下次开启或进入游戏时生效。页面进入后台暂停声音，离开游戏释放资源。
 
 共享电池以双方购物后的电量和冻结方案的声明报价判断，恰好耗尽不算过载。总需求超限时电池清零，只让正耗电方过载并取消其技能付款与效果，购物保留；零耗电方按自身资源正常执行，不被连带取消或清理状态。双方报价都为正仍沿用双方过载规则，Flash 连答另行检查。
 

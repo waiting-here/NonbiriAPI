@@ -29,10 +29,12 @@ export function BiddingControls({
   state,
   blocked,
   onAction,
+  onSelect,
 }: {
   readonly state: DuelState<BiddingView, never, never>;
   readonly blocked: boolean;
   readonly onAction: (action: BiddingAction) => void;
+  readonly onSelect?: () => void;
 }) {
   const t = useDuelText();
   const [draft, setDraft] = useState<number | null>(null);
@@ -93,7 +95,10 @@ export function BiddingControls({
             aria-label={`${t('出牌', 'Bid')} ${cardLabel(card)} (${card})`}
             aria-pressed={selection === card}
             disabled={blocked || locked}
-            onClick={() => setDraft(card)}
+            onClick={() => {
+              setDraft(card);
+              onSelect?.();
+            }}
           >
             <strong>{cardLabel(card)}</strong>
             <small>{card}</small>
