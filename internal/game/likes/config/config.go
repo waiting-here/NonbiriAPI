@@ -235,7 +235,7 @@ func (value compiled) UserWire(available func(mode, spec string) bool) json.RawM
 		PlanSeconds       int                 `json:"plan_seconds"`
 		SettlementSeconds int                 `json:"settlement_seconds"`
 		QueueCapacity     int                 `json:"queue_capacity"`
-	}{Enabled: value.Enabled(), Modes: make(map[string]userMode), QueueSeconds: QueueSeconds, PlanSeconds: 20, SettlementSeconds: 5, QueueCapacity: QueueCapacity}
+	}{Enabled: value.Enabled(), Modes: make(map[string]userMode), QueueSeconds: QueueSeconds, PlanSeconds: 20, SettlementSeconds: 0, QueueCapacity: QueueCapacity}
 	for key, item := range value.snapshot.Wire().Modes {
 		ready := available(key, "")
 		wire.Available = wire.Available || ready

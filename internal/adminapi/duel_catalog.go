@@ -50,7 +50,7 @@ func addDuelCatalogMetadata() {
 		modes       []string
 	}{
 		{"bidding", "竞标对决", "Bidding Duel", biddingconfig.Modes()},
-		{"likes", "点赞大战", "Likes Battle", likesconfig.Modes()},
+		{"likes", "回合制对战小游戏（测试）", "Turn-based Battle Minigame (Test)", likesconfig.Modes()},
 	} {
 		enabled := "game_" + duel.key + "_enabled"
 		add(enabled, duel.zh+"开关", duel.en+" switch", "控制新的排队，不改变在途对局。", "Controls new queues without changing accepted games.", unitNone, KeyGamesEnabled)

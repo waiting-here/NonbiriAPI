@@ -173,6 +173,12 @@ export interface Presentation {
   after: Frame;
   frames: Frame[];
   events: LikesEvent[];
+  timeline?: PresentationStep[];
+}
+export interface PresentationStep {
+  stage: string;
+  durationMS: number;
+  eventIDs: number[];
 }
 export interface RoundFacts extends Presentation {
   round: number;

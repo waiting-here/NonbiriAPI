@@ -96,6 +96,9 @@ export function BiddingPresentation({
   readonly onCue?: (cue: EffectCue) => void;
 }) {
   const t = useDuelText();
+  const reduced =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const latestHome = useRef<BiddingHome | undefined>(home);
   const previous = useRef<Snapshot | undefined>(undefined);
   const activeID = useRef<string | undefined>(undefined);
@@ -241,6 +244,7 @@ export function BiddingPresentation({
   return (
     <section
       className={`bid-presentation bid-presentation--${visibleStep}`}
+      data-reduced-motion={reduced}
       aria-live="polite"
       aria-atomic="true"
     >

@@ -147,6 +147,18 @@
   text-align: center;
   color: var(--bid-muted);
 }
+.bid-presentation:not(.bid-presentation--idle) {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 4;
+  background: var(--bid-paper);
+  box-shadow: 0 0.5rem 1.5rem #0003;
+}
+.bid-presentation[data-reduced-motion='true'] * {
+  animation: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
 .bid-presentation__stage {
   display: grid;
   grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem;

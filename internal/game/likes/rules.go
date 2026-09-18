@@ -85,7 +85,8 @@ func (r *Rules) Inspect(mode string, raw json.RawMessage) (duel.RuleInfo, error)
 		i.Result = &duel.RuleResult{Winner: s.Result.Winner, Reason: s.Result.Reason, Scores: s.Result.Scores}
 	} else if s.AwaitingNextRound {
 		i.Phase = "settlement"
-		i.Seconds = 5
+		// The persisted presentation supplies the duration for this phase.
+		i.Seconds = 0
 		i.Required = [2]bool{}
 	}
 	return i, nil

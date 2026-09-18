@@ -23,7 +23,7 @@ No source image from either reference repository is bundled here.
 Configured site logos remain operator-supplied public HTTPS URLs and are
 loaded with anonymous image requests; they are not part of this asset set.
 
-Likes Battle bundles 127 approved character, skill, harness, cast, ending, and
+Turn-based Battle Minigame (Test) bundles 127 approved character, skill, harness, cast, ending, and
 status slots as local WebP derivatives. Each derivative preserves the complete
 transparent silhouette and aspect ratio; slot metadata retains a logical source
 identifier and crop focus. Fishing artwork bundles 35 catch illustrations,

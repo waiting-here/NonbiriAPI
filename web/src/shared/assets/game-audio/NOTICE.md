@@ -1,6 +1,6 @@
 # Game audio
 
-The Likes Battle music and defeat sting are arrangements of
+The Turn-based Battle Minigame (Test) music and defeat sting are arrangements of
 [Elevate (+ instrument tracks)](https://opengameart.org/content/elevate-instrument-tracks),
 published under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/).
 The arrangements and the original synthesized game sound effects are distributed

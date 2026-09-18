@@ -3,8 +3,11 @@ import { homeValue } from '../common/duel/normalize';
 import { likesCodec } from './normalize';
 import { likesAudioFacts, likesMusicScene, type LikesHome } from './audioFacts';
 import wire from './testdata/authority.json';
+import timings from './testdata/timelines.json';
 
 function currentWire(summary: unknown = wire.rounds[1].summary) {
+  const presentation = likesCodec.presentation!(summary);
+  const duration = likesCodec.presentationDuration!(presentation);
   return {
     server_now: 100,
     queue: null,
@@ -19,7 +22,7 @@ function currentWire(summary: unknown = wire.rounds[1].summary) {
       phase_seq: '1',
       phase: 'settlement',
       round: 2,
-      deadline: 120,
+      deadline: 100 + duration,
       server_now: 100,
       you: 0,
       locked: [false, false],
@@ -30,7 +33,7 @@ function currentWire(summary: unknown = wire.rounds[1].summary) {
       resolution: {
         round: 2,
         started_at: 100,
-        ends_at: 105,
+        ends_at: 100 + duration,
         summary,
       },
       round_start: null,
@@ -73,6 +76,23 @@ function resultHome(outcome: 'win' | 'loss' | 'draw' | 'system_cancelled'): Like
 }
 
 describe('likes authoritative audio facts', () => {
+  it('times each follow-up sound to its actual step without collapsing a long sequence', () => {
+    const home = currentHome({
+      ...wire.scenarios.chain.summary,
+      timeline: timings.scenarios.chain.timeline,
+    });
+    const facts = likesAudioFacts(home);
+    const casts = facts.filter((fact) => fact.cue === 'likes_cast');
+    expect(casts.map((fact) => fact.at)).toEqual([103500, 105900, 108300, 110700, 113100]);
+    expect(new Set(casts.map((fact) => fact.key)).size).toBe(5);
+    const original = resultHome('win');
+    const result = {
+      ...original,
+      latestResult: { ...original.latestResult!, resolution: home.current!.resolution },
+    };
+    expect(likesMusicScene(result, 116)).not.toBe('win');
+    expect(likesMusicScene(result, 117)).toBe('win');
+  });
   it('maps presentation events to staged facts with stable keys', () => {
     const home = currentHome();
     const facts = likesAudioFacts(home);
@@ -149,6 +169,8 @@ describe('likes authoritative audio facts', () => {
       ...current,
       current: {
         ...current.current!,
+        phase: 'plan',
+        resolution: null,
         view: {
           ...current.current!.view,
           players: [{ ...player, effects: [speed] }, current.current!.view.players[1]],

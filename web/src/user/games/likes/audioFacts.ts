@@ -1,6 +1,8 @@
 import type { DuelHome, Resolution } from '../common/duel/types';
 import { STAGES } from './labels';
 import type { Cast, LikesEvent, LikesView, Presentation, Selection } from './types';
+import { eventTime, stageTime } from './timeline';
+import { settlementFrame } from './motion';
 
 export interface AudioFact {
   readonly key: string;
@@ -11,7 +13,7 @@ export interface AudioFact {
 export type LikesHome = DuelHome<LikesView, Presentation, LikesEvent[], Selection>;
 export type MusicScene = 'lobby' | 'battle' | 'accelerated' | 'danger' | 'win' | 'draw' | 'loss';
 
-function stageTime(startedAt: number, endsAt: number, stage: string) {
+function legacyStageTime(startedAt: number, endsAt: number, stage: string) {
   const index = STAGES.indexOf(stage as (typeof STAGES)[number]);
   const position = index < 0 ? 0 : index;
   return Math.round(
@@ -91,8 +93,11 @@ function eventFacts(
   event: LikesEvent,
   startedAt: number,
   endsAt: number,
+  presentation?: Presentation,
 ) {
-  const at = stageTime(startedAt, endsAt, event.stage);
+  const at = presentation
+    ? eventTime(presentation, startedAt, endsAt, event)
+    : legacyStageTime(startedAt, endsAt, event.stage);
   const base = String(event.id);
   if (event.kind === 'cast' && event.cast) {
     const cast = event.cast;
@@ -102,7 +107,11 @@ function eventFacts(
     if (cast.derived)
       pushFact(facts, seen, sessionID, event.round, `${base}:combo`, 'likes_combo', at);
     if (paymentCue(cast)) {
-      const paymentAt = cast.derived ? at : stageTime(startedAt, endsAt, 'payment');
+      const paymentAt = cast.derived
+        ? at
+        : presentation
+          ? stageTime(presentation, startedAt, endsAt, 'payment')
+          : legacyStageTime(startedAt, endsAt, 'payment');
       pushFact(facts, seen, sessionID, event.round, `${base}:pay`, 'likes_pay', paymentAt);
     }
   }
@@ -208,7 +217,7 @@ function frameFacts(
             round,
             `frame:${frame.stage}:${seat}:${effect.key}:${effect.active_from}`,
             cue,
-            stageTime(startedAt, endsAt, frame.stage),
+            stageTime(summary, startedAt, endsAt, frame.stage),
           );
       }
     });
@@ -230,7 +239,15 @@ function resolutionFacts(
 ) {
   const seen = new Set<string>();
   for (const event of resolution.summary.events)
-    eventFacts(facts, seen, sessionID, event, resolution.startedAt, resolution.endsAt);
+    eventFacts(
+      facts,
+      seen,
+      sessionID,
+      event,
+      resolution.startedAt,
+      resolution.endsAt,
+      resolution.summary,
+    );
   frameFacts(
     facts,
     seen,
@@ -332,18 +349,38 @@ function presentedScene(
   resolution: Resolution<Presentation> | null,
   now: number,
 ): MusicScene {
-  if (
-    resolution?.summary.events.some(
-      (event) =>
-        event.kind === 'overload' &&
-        (event.seat === seat ||
-          (event.seat === null &&
-            Array.isArray(event.data.overloaded) &&
-            event.data.overloaded[seat] === true)) &&
-        now * 1000 >= stageTime(resolution.startedAt, resolution.endsAt, event.stage),
+  if (resolution && now < resolution.endsAt) {
+    const motion = settlementFrame(
+      resolution.summary,
+      resolution.startedAt,
+      resolution.endsAt,
+      now,
+      false,
+    );
+    const effects = (motion.progress >= 0.35 ? motion.to : motion.from).players[seat].effects;
+    const carriedOverload =
+      effects.some((effect) => effect.kind === 'OVERLOAD' && effect.active_from <= round) &&
+      resolution.summary.before.players[seat].effects.some(
+        (effect) => effect.kind === 'OVERLOAD' && effect.active_from <= round,
+      );
+    if (
+      carriedOverload ||
+      motion.revealedEvents.some(
+        (event) =>
+          event.kind === 'overload' &&
+          (event.seat === seat ||
+            (event.seat === null &&
+              Array.isArray(event.data.overloaded) &&
+              event.data.overloaded[seat] === true)) &&
+          now * 1000 >=
+            eventTime(resolution.summary, resolution.startedAt, resolution.endsAt, event),
+      )
     )
-  )
-    return 'danger';
+      return 'danger';
+    if (effects.some((effect) => effect.kind === 'SPEED_MODE' && effect.active_from <= round))
+      return 'accelerated';
+    return 'battle';
+  }
   return viewScene(view, seat, round);
 }
 

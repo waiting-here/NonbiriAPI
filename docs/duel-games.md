@@ -2,7 +2,7 @@
 
 [简体中文](#双人游戏)
 
-Bidding Duel and Likes Battle use separate two-player queues. The game, mode,
+Bidding Duel and Turn-based Battle Minigame (Test) use separate two-player queues. The game, mode,
 entry price and three fee rates shown before joining are fixed for that entry.
 You can play one of each game at the same time, but cannot join two modes of the
 same game. Both new games start disabled and have no newcomer award.
@@ -33,7 +33,15 @@ The joker phase is skipped when unavailable and in round 13. Highest total
 points wins; equal totals draw. Unused reward-deck order is never disclosed to
 players, including in their history or personal export.
 
-## Likes Battle
+Reward draws, both bid reveals and collection of the whole pool play in order.
+The presentation stays in view while scrolling; reduced motion keeps the cards
+and outcome visible without movement. It never exposes unrevealed cards.
+
+## Turn-based Battle Minigame (Test)
+
+Your character's speed mode adds full-page energetic light trails; overload
+adds low-power warnings. Overload takes priority, and the opponent's status
+does not control your page effect. Reduced motion keeps a static indication.
 
 Choose one of five characters, an optional harness and a legal skill set before
 joining. Quick mode has a 60-like target and at most 25 rounds; standard mode
@@ -47,7 +55,8 @@ button is **Skip casting**. If those purchases remove stun, select a main cast
 and use **Lock in plan**. A timeout still follows the server's automatic rules.
 
 When both plans lock or time expires, the server commits the complete round
-and starts a five-second presentation. Both sides reveal together through
+and starts a step-by-step presentation. Every cast receives its own reading
+time, with no fixed total duration. Both sides reveal together through
 shopping and charging, payment and overload, cleansing and buffs, awarded
 likes, additional effects and round-end changes. Numbers and bounded resource
 bars animate from the server's before/after facts. API reserve, gold and trial
@@ -88,7 +97,7 @@ appears after the last round's remaining presentation time.
 ## History and privacy
 
 Players can read their own complete results for 30 days after settlement.
-Unused opposing Likes Battle equipment remains hidden during a match and is
+Unused opposing Turn-based Battle Minigame (Test) equipment remains hidden during a match and is
 revealed at its end. Current profile preferences control live player names;
 personal exports do not contain the opponent's identity or a saved name copy.
 
@@ -108,7 +117,7 @@ can resume from the last completed page, while the signed cursor is valid.
 
 ## 双人游戏
 
-《竞标对决》和《点赞大战》各自匹配两名玩家，可以同时进行，但同一款游戏只能排队或参加一局。入队时冻结模式、票价和三项抽成；两款新游戏初始关闭，不设新人奖励。
+《竞标对决》和《回合制对战小游戏（测试）》各自匹配两名玩家，可以同时进行，但同一款游戏只能排队或参加一局。入队时冻结模式、票价和三项抽成；两款新游戏初始关闭，不设新人奖励。
 
 门票优先使用游戏积分，不足部分用通用积分；一只钱包欠款不抵扣另一只钱包的正余额。取消排队、120 秒未匹配、平局或系统取消均按原币种退票。胜负局退还胜者原门票，再把败者门票扣除平台、福利池和星期四池各自向下取整的抽成后，以通用积分奖励胜者。认输算负，断线不停表；服务重启、封禁或删号取消未完成对局，删号后的钱包不会被迟到结算重建。局内分数不是可消费积分。
 
@@ -116,9 +125,11 @@ can resume from the last completed page, while the signed cursor is valid.
 
 点赞在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
-双方锁定或超时后，服务端立即结算，并同步播放 5 秒的方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
+竞标按顺序展示奖励抽取、双方亮牌、整个奖池的归属，滚动页面时演出仍保持可见；减少动态模式保留静态牌面和结果。回合制对战中，本人的倍速模式使用全页加速光线，过载使用低电量警示，过载优先；对手状态不影响本人的全页效果，减少动态模式保留静态提示。
 
-音乐和音效分别开关，默认关闭，按游戏记住当前浏览器的选择。点赞音乐按本人过载、倍速、普通对战的优先级播放，共用时间轴，下一拍开始、一拍完成交接。最后五秒演出完成后进入结果音乐；修改模式、配装或开始排队时回大厅音乐。失败切断背景，若音效开启则播放一次短片段后静音。账户页本机偏好提供轻量版和无损版音乐，下次开启或进入游戏时生效。页面进入后台暂停声音，离开游戏释放资源。
+双方锁定或超时后，服务端立即结算，并按内容依次展示方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。每一步单独确定时长，连续技能逐个展示，总时长不限；全部结束后才开始下一轮完整 20 秒。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
+
+音乐和音效分别开关，默认关闭，按游戏记住当前浏览器的选择。点赞音乐按本人过载、倍速、普通对战的优先级播放，共用时间轴，下一拍开始、一拍完成交接。最后一轮完整演出结束后进入结果音乐；修改模式、配装或开始排队时回大厅音乐。失败切断背景，若音效开启则播放一次短片段后静音。账户页本机偏好提供轻量版和无损版音乐，下次开启或进入游戏时生效。页面进入后台暂停声音，离开游戏释放资源。
 
 共享电池以双方购物后的电量和冻结方案的声明报价判断，恰好耗尽不算过载。总需求超限时电池清零，只让正耗电方过载并取消其技能付款与效果，购物保留；零耗电方按自身资源正常执行，不被连带取消或清理状态。双方报价都为正仍沿用双方过载规则，Flash 连答另行检查。
 

@@ -5,8 +5,8 @@ import type { ModeCatalog } from './catalog';
 import type { Frame, LikesEvent, LikesView, Presentation, Resources, Score } from './types';
 import { LikesArt } from './LikesArt';
 import { artRegistry, castSlot, characterSlot } from './art';
-import { buffName, reasonName, resourceName, skillName, stageName } from './labels';
-import { arenaMotion, interpolate, overloadCues } from './motion';
+import { buffName, reasonName, resourceName, skillName, stageName, shopName } from './labels';
+import { arenaMotion, interpolate, overloadCues, scoreMotion } from './motion';
 import { ResourceMeter } from './ResourceMeter';
 import { PlanSummary } from './PlanEditor';
 import { CastImpact } from './CastImpact';
@@ -29,6 +29,7 @@ export function CompactScores({
   const t = useDuelText(),
     { motion } = arenaMotion(view, resolution, roundStart, now, reduced);
   const other = (1 - you) as Seat;
+  const scores = [scoreMotion(motion, 0, reduced), scoreMotion(motion, 1, reduced)];
   return (
     <div
       className="likes-compact-scores"
@@ -36,13 +37,7 @@ export function CompactScores({
     >
       <span>
         {t('你', 'You')} ♥{' '}
-        <strong>
-          {interpolate(
-            motion.from.players[you].likes,
-            motion.to.players[you].likes,
-            motion.progress,
-          )}
-        </strong>
+        <strong>{interpolate(scores[you].from, scores[you].to, scores[you].progress)}</strong>
       </span>
       <span>
         {t('电能', 'Energy')} ϟ{' '}
@@ -50,13 +45,7 @@ export function CompactScores({
       </span>
       <span>
         {t('对手', 'Opponent')} ♥{' '}
-        <strong>
-          {interpolate(
-            motion.from.players[other].likes,
-            motion.to.players[other].likes,
-            motion.progress,
-          )}
-        </strong>
+        <strong>{interpolate(scores[other].from, scores[other].to, scores[other].progress)}</strong>
       </span>
     </div>
   );
@@ -125,6 +114,7 @@ function ResourcePanel({
   reduced,
   catalog,
   identity,
+  score = { from: from.likes, to: to.likes, progress },
 }: {
   readonly from: Resources;
   readonly to: Resources;
@@ -132,13 +122,14 @@ function ResourcePanel({
   readonly reduced: boolean;
   readonly catalog: ModeCatalog;
   readonly identity: string;
+  readonly score?: { from: number; to: number; progress: number };
 }) {
   const t = useDuelText();
   const meters = [
     {
       key: 'likes',
-      from: from.likes,
-      to: to.likes,
+      from: score.from,
+      to: score.to,
       cap: catalog.parameters.TARGET_LIKES,
       tone: 'likes-meter--likes',
       unit: '',
@@ -204,7 +195,7 @@ function ResourcePanel({
       from={m.from}
       to={m.to}
       cap={m.cap}
-      progress={progress}
+      progress={m.key === 'likes' ? score.progress : progress}
       reduced={reduced}
       tone={m.tone}
       unit={m.unit}
@@ -251,12 +242,9 @@ export function Arena({
   const visibleFrame = motion.progress >= 0.35 ? motion.to : motion.from;
   const overloadedNow =
     running && resolution
-      ? overloadCues(resolution.summary, motion.stage, reduced)
+      ? overloadCues({ ...resolution.summary, events: motion.revealedEvents }, motion.stage, false)
       : [false, false];
-  const events =
-    running && resolution
-      ? resolution.summary.events.filter((event) => reduced || event.stage === motion.stage)
-      : [];
+  const events = running && resolution ? motion.events : [];
   const impact = events.some((event) => event.kind === 'overload')
     ? 'overload'
     : events.some((event) => event.kind === 'charge' || event.kind === 'usage-reset')
@@ -267,8 +255,22 @@ export function Arena({
       className={`likes-arena ${impact ? `likes-impact--${impact}` : ''}`}
       aria-label={t('双侧对战', 'Both players')}
       data-stage={motion.stage}
+      data-step={motion.stepIndex}
       data-reduced-motion={reduced}
     >
+      {running && (
+        <div className="likes-presentation-progress">
+          <span>{stageName(motion.stage, t)}</span>
+          <span>
+            {motion.stepIndex + 1} / {motion.stepCount}
+          </span>
+          <progress
+            max={motion.stepCount}
+            value={motion.stepIndex + motion.stepProgress}
+            aria-label={t('演出进度', 'Presentation progress')}
+          />
+        </div>
+      )}
       <div className="likes-battery" key={`${round}:${motion.stage}:battery`}>
         <div className="likes-battery-heading">
           <span>
@@ -301,18 +303,7 @@ export function Arena({
           const overloaded = overloadedNow[seat] || effects.some((s) => s.kind === 'OVERLOAD'),
             stunned = effects.some((s) => s.kind === 'STUN' && s.active_from <= round);
           const casts = events.filter((e) => e.seat === seat && e.cast),
-            groups = [
-              ...new Set(
-                casts.map((e) => `${e.cast!.skillId}:${e.cast!.templateId}:${e.cast!.level ?? ''}`),
-              ),
-            ].map((key) =>
-              casts.filter(
-                (e) => `${e.cast!.skillId}:${e.cast!.templateId}:${e.cast!.level ?? ''}` === key,
-              ),
-            ),
-            group =
-              groups[Math.min(groups.length - 1, Math.floor(motion.progress * groups.length))] ??
-              [],
+            group = casts,
             lastCast = group.at(-1)?.cast,
             slot = lastCast ? castSlot(player.role, lastCast.skillId) : null;
           const failures = events.filter(
@@ -321,6 +312,19 @@ export function Arena({
               (e.kind === 'skill-cancelled' || e.kind === 'combo-skip' || e.kind === 'overload'),
           );
           const harness = catalog.harnesses.find((h) => h.id === player.harness);
+          const currentIDs = new Set(casts.map((event) => event.id));
+          const awardedBefore =
+            motion.from.players[seat].likes +
+            motion.revealedEvents
+              .filter(
+                (event) =>
+                  event.stage === motion.stage &&
+                  event.seat === seat &&
+                  event.cast &&
+                  !currentIDs.has(event.id),
+              )
+              .reduce((sum, event) => sum + event.cast!.likes, 0);
+          const awardedNow = casts.reduce((sum, event) => sum + event.cast!.likes, 0);
           return (
             <article
               className={`likes-player ${overloaded ? 'is-overloaded' : ''} ${stunned ? 'is-stunned' : ''}`}
@@ -386,15 +390,30 @@ export function Arena({
                 </div>
               </div>
               <CastImpact
-                key={`${round}:${motion.stage}`}
+                key={`${round}:${motion.stage}:${motion.stepIndex}`}
                 events={casts}
-                from={motion.from.players[seat].likes}
-                to={motion.to.players[seat].likes}
+                from={awardedBefore}
+                to={awardedBefore + awardedNow}
                 target={catalog.parameters.TARGET_LIKES}
-                progress={motion.progress}
+                progress={motion.stepProgress}
                 reduced={reduced}
                 overloaded={!!overloadedNow[seat] && impact === 'overload'}
               />
+              {events
+                .filter((event) => event.seat === seat && !event.cast && !failures.includes(event))
+                .map((event) => (
+                  <p className="likes-step-fact" key={event.id}>
+                    {event.kind === 'shop' && typeof event.data.item === 'string'
+                      ? shopName(event.data.item, t)
+                      : event.kind === 'cleanse'
+                        ? t('净化完成', 'Cleansing applied')
+                        : event.kind === 'resource-gain'
+                          ? t('资源补充', 'Resources replenished')
+                          : event.kind === 'usage-reset'
+                            ? t('订阅额度恢复', 'Subscription replenished')
+                            : stageName(event.stage, t)}
+                  </p>
+                ))}
               <ResourcePanel
                 from={motion.from.players[seat]}
                 to={motion.to.players[seat]}
@@ -402,6 +421,7 @@ export function Arena({
                 reduced={reduced}
                 catalog={catalog}
                 identity={`${round}:${motion.stage}`}
+                score={scoreMotion(motion, seat, reduced)}
               />
               {casts.length > 0 && (
                 <div className="likes-cast-facts">

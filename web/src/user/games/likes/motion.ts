@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { STAGES } from './labels';
 import type { Frame, LikesEvent, LikesView, Presentation, Resources } from './types';
 import type { Resolution, RoundStart } from '../common/duel/types';
+import { presentationSteps } from './timeline';
 
 function subscribeMotion(callback: () => void) {
   const query = matchMedia('(prefers-reduced-motion: reduce)');
@@ -84,20 +85,41 @@ export function settlementFrame(
   now: number,
   reduced: boolean,
 ) {
-  const progress = Math.max(0, Math.min(1, (now - started) / (ends - started)));
-  const index = Math.min(STAGES.length - 1, Math.floor(progress * STAGES.length));
-  const stage = STAGES[index];
-  if (reduced) return { stage, from: p.before, to: p.after, progress: 1, finished: now >= ends };
+  const steps = presentationSteps(p, started, ends);
+  const elapsed = Math.max(0, Math.round((now - started) * 1000));
+  const step =
+    steps.find((step) => elapsed < step.offsetMS + step.durationMS) ?? steps[steps.length - 1];
+  const stage = step.stage;
+  const index = STAGES.indexOf(stage as (typeof STAGES)[number]);
+  const stageSteps = steps.filter((item) => item.stage === stage);
+  const stageDuration = stageSteps.reduce((sum, item) => sum + item.durationMS, 0);
+  const progress = Math.max(0, Math.min(1, (elapsed - stageSteps[0].offsetMS) / stageDuration));
+  const stepProgress = Math.max(0, Math.min(1, (elapsed - step.offsetMS) / step.durationMS));
+  const eventIDs = new Set(step.eventIDs);
+  const revealed = new Set(
+    steps.filter((item) => item.index <= step.index).flatMap((item) => item.eventIDs),
+  );
+  const details = {
+    hasStageCasts: p.events.some((event) => event.stage === stage && event.cast),
+    stepIndex: step.index,
+    stepCount: steps.length,
+    stepProgress: reduced ? 1 : stepProgress,
+    events: p.events.filter((event) => eventIDs.has(event.id)),
+    revealedEvents: p.events.filter((event) => revealed.has(event.id)),
+  };
+  if (reduced)
+    return { ...details, stage, from: p.before, to: p.after, progress: 1, finished: now >= ends };
   const at = (last: number) => {
     let frame = p.before;
     for (let i = 0; i <= last; i++) frame = p.frames.find((f) => f.stage === STAGES[i]) ?? frame;
     return frame;
   };
   return {
+    ...details,
     stage,
     from: at(index - 1),
     to: now >= ends ? p.after : at(index),
-    progress: progress >= 1 ? 1 : progress * STAGES.length - index,
+    progress,
     finished: now >= ends,
   };
 }
@@ -118,11 +140,64 @@ export function arenaMotion(
     ? settlementFrame(resolution.summary, resolution.startedAt, resolution.endsAt, now, reduced)
     : starting
       ? {
+          stepIndex: 0,
+          hasStageCasts: false,
+          stepCount: 1,
+          stepProgress: reduced ? 1 : Math.max(0, (now - roundStart.startedAt) / 2),
+          events: roundStart.events,
+          revealedEvents: roundStart.events,
           from: transition.before,
           to: transition.after,
           stage: 'round-start',
           progress: reduced ? 1 : Math.max(0, (now - roundStart.startedAt) / 2),
         }
-      : { from: current, to: current, stage: 'current', progress: 1 };
+      : {
+          from: current,
+          to: current,
+          stage: 'current',
+          progress: 1,
+          stepIndex: 0,
+          stepCount: 0,
+          hasStageCasts: false,
+          stepProgress: 1,
+          events: [] as LikesEvent[],
+          revealedEvents: [] as LikesEvent[],
+        };
   return { running, starting, motion };
+}
+
+// Scores use awarded cast facts, so a later follow-up cannot appear early.
+export function scoreMotion(
+  motion: Pick<
+    ReturnType<typeof settlementFrame>,
+    | 'stage'
+    | 'from'
+    | 'to'
+    | 'events'
+    | 'revealedEvents'
+    | 'progress'
+    | 'stepProgress'
+    | 'hasStageCasts'
+  >,
+  seat: 0 | 1,
+  reduced: boolean,
+) {
+  if (reduced || !motion.hasStageCasts)
+    return {
+      from: motion.from.players[seat].likes,
+      to: motion.to.players[seat].likes,
+      progress: motion.progress,
+    };
+  const current = new Set(motion.events.map((event) => event.id));
+  const from =
+    motion.from.players[seat].likes +
+    motion.revealedEvents
+      .filter(
+        (event) => event.stage === motion.stage && event.seat === seat && !current.has(event.id),
+      )
+      .reduce((sum, event) => sum + (event.cast?.likes ?? 0), 0);
+  const gain = motion.events
+    .filter((event) => event.seat === seat)
+    .reduce((sum, event) => sum + (event.cast?.likes ?? 0), 0);
+  return { from, to: from + gain, progress: motion.stepProgress };
 }
