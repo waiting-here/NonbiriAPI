@@ -96,7 +96,7 @@ function Rules({ close }: { readonly close: () => void }) {
   const t = useDuelText();
   return (
     <DuelDialog title={t('二十一点 · 桌规', 'Blackjack · Table rules')} onClose={close}>
-      <h3>{t('每分钟一局，最多八人', 'One round a minute, up to eight seats')}</h3>
+      <h3>{t('每分钟一局，最多九人', 'One round a minute, up to nine seats')}</h3>
       <p>
         {t(
           '每分钟前15秒落座，随后30秒同时决策，最后15秒展示结果。全桌提前结束会提前展示，下一局仍在整分钟开始。无人不产生牌局。',
@@ -105,8 +105,8 @@ function Rules({ close }: { readonly close: () => void }) {
       </p>
       <p>
         {t(
-          '入队立即预留基础投入，游戏积分优先，通用积分补足。按服务器受理顺序落座前八人；候补跨轮保留，随时退出原币退款。落座后在发牌前仍可退出并递补。玩完后需主动重新加入队尾，不保座、不自动续投。',
-          'Joining reserves your stake, using game credits first and general credits for the remainder. The first eight accepted requests take seats. Waiting players keep their place across rounds and may leave for an original-asset refund. Seated players may leave before dealing. After playing, join the tail again explicitly; there is no automatic re-entry.',
+          '入队立即预留基础投入，游戏积分优先，通用积分补足。按服务器受理顺序落座前九人；候补跨轮保留，随时退出原币退款。落座后在发牌前仍可退出并递补。玩完后需主动重新加入队尾，不保座、不自动续投。',
+          'Joining reserves your stake, using game credits first and general credits for the remainder. The first nine accepted requests take seats. Waiting players keep their place across rounds and may leave for an original-asset refund. Seated players may leave before dealing. After playing, join the tail again explicitly; there is no automatic re-entry.',
         )}
       </p>
       <h3>{t('六副牌与庄家', 'Six decks and the dealer')}</h3>
@@ -424,8 +424,8 @@ export function BlackjackGame() {
                 <h2>{t('牌桌等待入席', 'The table is waiting')}</h2>
                 <p>
                   {t(
-                    '一人即可开局，最多八席。其余玩家旁观并保留队列。',
-                    'One player is enough; eight seats maximum. Others watch and keep their queue position.',
+                    '一人即可开局，最多九席。其余玩家旁观并保留队列。',
+                    'One player is enough; nine seats maximum. Others watch and keep their queue position.',
                   )}
                 </p>
               </div>
