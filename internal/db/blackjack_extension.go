@@ -11,6 +11,19 @@ import (
 
 const preBlackjackManifestHash = "2f0c6660a89ab28478c502f24e75a1bb1bbb9309bff904ca3ded24e29dab3fd9"
 
+// This is the previous complete schema checkpoint before the nine-seat upgrade.
+const preBlackjackNineSeatManifestHash = "211af67831b6276b215c20d891ca61c8308746e54e8bdae4c5482d3edb4a03a3"
+
+const blackjackEightSeatConstraint = "seat_no INTEGER CHECK(seat_no BETWEEN 0 AND 7)"
+const blackjackNineSeatConstraint = "seat_no INTEGER CHECK(seat_no BETWEEN 0 AND 8)"
+
+func blackjackNineSeatBootstrapSchema(previous string) string {
+	if strings.Count(previous, blackjackEightSeatConstraint) != 1 {
+		panic("blackjack bootstrap seat constraint changed")
+	}
+	return strings.Replace(previous, blackjackEightSeatConstraint, blackjackNineSeatConstraint, 1)
+}
+
 func blackjackConfigDefaults() map[string]string {
 	return map[string]string{"game_blackjack_enabled": "0", "game_blackjack_min_stake_milli": "1000000", "game_blackjack_max_stake_milli": "50000000", "game_blackjack_stake_step_milli": "1000000", "game_blackjack_default_stake_milli": "5000000", "game_blackjack_rake_platform_bp": "100", "game_blackjack_rake_welfare_bp": "100", "game_blackjack_rake_thursday_bp": "100"}
 }
@@ -141,5 +154,64 @@ func applyBlackjackExtension(ctx context.Context, tx *sql.Tx) (resultErr error) 
 			return err
 		}
 	}
+	return nil
+}
+
+// applyBlackjackNineSeatExtension widens only the blackjack seat constraint.
+// It is deliberately manifest-gated so modified or partial databases fail
+// before writable_schema is enabled; the caller's transaction makes retries
+// and failures atomic.
+func applyBlackjackNineSeatExtension(ctx context.Context, tx *sql.Tx) (resultErr error) {
+	manifest, err := readGenerationManifest(ctx, tx)
+	if err != nil {
+		return err
+	}
+	digest := generationManifestDigest(manifest)
+	if digest == PinnedGenerationTwoManifestHash {
+		return nil
+	}
+	if digest != preBlackjackNineSeatManifestHash {
+		return errors.New("unrecognized blackjack eight-seat manifest")
+	}
+	var previous string
+	if err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type='table' AND name='game_blackjack_entries'`).Scan(&previous); err != nil {
+		return err
+	}
+	old := blackjackEightSeatConstraint
+	if strings.Count(previous, old) != 1 {
+		return errors.New("unrecognized blackjack seat constraint")
+	}
+	target := strings.Replace(previous, old, blackjackNineSeatConstraint, 1)
+	var version int64
+	if err := tx.QueryRowContext(ctx, `PRAGMA schema_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version < 0 || version >= 2147483647 {
+		return errors.New("blackjack schema version cannot advance")
+	}
+	writable := false
+	defer func() {
+		if writable {
+			_, resetErr := tx.ExecContext(context.WithoutCancel(ctx), `PRAGMA writable_schema=RESET`)
+			if resultErr == nil {
+				resultErr = resetErr
+			}
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, `PRAGMA writable_schema=ON`); err != nil {
+		return err
+	}
+	writable = true
+	r, err := tx.ExecContext(ctx, `UPDATE sqlite_schema SET sql=? WHERE type='table' AND name='game_blackjack_entries' AND sql=?`, target, previous)
+	if err != nil {
+		return err
+	}
+	if count, err := r.RowsAffected(); err != nil || count != 1 {
+		return errors.New("blackjack seat constraint update failed")
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA schema_version=%d; PRAGMA writable_schema=RESET`, version+1)); err != nil {
+		return err
+	}
+	writable = false
 	return nil
 }

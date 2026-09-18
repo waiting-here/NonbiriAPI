@@ -53,3 +53,4 @@ bash scripts/check-duel-upgrade.sh
 bash scripts/check-blackjack-upgrade.sh
 bash scripts/check-randomness-upgrade.sh
 bash scripts/check-gateway-upgrade.sh
+bash scripts/check-nine-seat-upgrade.sh
