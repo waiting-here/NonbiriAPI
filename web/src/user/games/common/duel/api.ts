@@ -113,7 +113,7 @@ export async function sendDuelIntent(game: DuelGame, intent: DuelIntent, key: st
 
 export function useDuel<V, F, P, S, L, A>(
   codec: DuelCodec<V, F, P, S, L, A>,
-  refreshWallets?: () => void,
+  refreshWallets?: () => void | Promise<unknown>,
 ) {
   const visible = useGameVisibility();
   const client = useQueryClient();
@@ -139,7 +139,8 @@ export function useDuel<V, F, P, S, L, A>(
   const { refetch } = query;
   const refresh = useCallback(() => {
     void refetch();
-  }, [refetch]);
+    void refreshWallets?.();
+  }, [refetch, refreshWallets]);
   useEffect(() => {
     if (visible) refresh();
   }, [visible, refresh]);
@@ -148,6 +149,7 @@ export function useDuel<V, F, P, S, L, A>(
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [uncertain, setUncertain] = useState(false);
+  const [intentKind, setIntentKind] = useState<DuelIntent['kind'] | null>(null);
   const execute = async (intent: DuelIntent, retry = false) => {
     if (inFlight.current || (retained.current && !retry)) return;
     const operation = retained.current ?? { intent, key: createIdempotencyKey() };
@@ -155,6 +157,7 @@ export function useDuel<V, F, P, S, L, A>(
     inFlight.current = true;
     setPending(true);
     setError(null);
+    setIntentKind(operation.intent.kind);
     try {
       await sendDuelIntent(codec.game, operation.intent, operation.key);
       retained.current = null;
@@ -166,8 +169,7 @@ export function useDuel<V, F, P, S, L, A>(
       setUncertain(unknown);
       if (!unknown) retained.current = null;
     } finally {
-      await query.refetch();
-      refreshWallets?.();
+      await Promise.allSettled([query.refetch(), refreshWallets?.()]);
       inFlight.current = false;
       setPending(false);
     }
@@ -178,6 +180,7 @@ export function useDuel<V, F, P, S, L, A>(
     pending,
     error,
     uncertain,
+    intentKind,
     blocked: pending || uncertain || query.isError || !query.data,
     run: (intent: DuelIntent) => {
       void execute(intent);

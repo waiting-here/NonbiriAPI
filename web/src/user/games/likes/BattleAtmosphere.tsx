@@ -23,7 +23,7 @@ export function BattleAtmosphere({
       <span className={`likes-atmosphere-status is-${mode}`} role="status">
         <span aria-hidden="true">{mode === 'danger' ? '⚠' : 'ϟ'}</span>
         {mode === 'danger'
-          ? t('过载 · 电能不足', 'OVERLOAD · LOW POWER')
+          ? t('过载', 'OVERLOAD')
           : t('倍速模式 · 全力加速', 'SPEED MODE · FULL THROTTLE')}
       </span>
       {createPortal(

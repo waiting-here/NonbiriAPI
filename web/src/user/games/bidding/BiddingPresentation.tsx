@@ -342,7 +342,7 @@ export function BiddingPresentation({
           </span>
         )}
         {visibleStep === 'settle' && scene.rewards.some((r) => r.multiplier === 2) && (
-          <small>{t('王倍率 ×2 已计入奖励', 'Joker multiplier ×2 is included')}</small>
+          <small>{t('Joker 倍率 ×2 已计入奖励', 'Joker multiplier ×2 is included')}</small>
         )}
       </div>
     </section>

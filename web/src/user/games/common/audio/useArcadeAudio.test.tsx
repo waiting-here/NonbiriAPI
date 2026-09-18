@@ -6,6 +6,7 @@ import { MUSIC_QUALITY_KEY } from './preferences';
 
 vi.mock('./engine', () => ({
   createArcadeAudio: vi.fn(() => ({
+    stopEffect: vi.fn(),
     unlock: vi.fn(async () => {}),
     setMusic: vi.fn(),
     setEffectsEnabled: vi.fn(),

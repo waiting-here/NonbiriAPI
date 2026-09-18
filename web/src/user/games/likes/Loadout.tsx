@@ -5,6 +5,7 @@ import { LikesArt } from './LikesArt';
 import { artRegistry, characterSlot } from './art';
 import { kindName } from './labels';
 import { SkillCost } from './Glossary';
+import { EffectSummary } from './GuideText';
 import { selectionProblem } from './selection';
 export function LoadoutEditor({
   catalog,
@@ -34,6 +35,7 @@ export function LoadoutEditor({
           <button
             type="button"
             className="likes-role-option"
+            data-guide={`role:${role.id}`}
             key={role.id}
             aria-pressed={value.role === role.id}
             disabled={disabled}
@@ -72,6 +74,7 @@ export function LoadoutEditor({
             <button
               type="button"
               aria-pressed={value.harness === h.id}
+              data-guide={`harness:${h.id}`}
               disabled={disabled}
               onClick={() =>
                 onChange({
@@ -83,6 +86,7 @@ export function LoadoutEditor({
             >
               <LikesArt slot={artRegistry[`harness.${h.id}`]} label={h.name} />
               <strong>{h.name}</strong>
+              <EffectSummary catalog={catalog} id={h.id} />
               <small>
                 +{h.activeSlots} {t('主动槽', 'active')} · {h.passives.length}{' '}
                 {t('被动', 'passive')}
@@ -138,6 +142,7 @@ export function LoadoutEditor({
               <label>
                 <input
                   type="checkbox"
+                  data-guide={`equip:${skill.id}`}
                   checked={value.skills.includes(skill.id)}
                   disabled={
                     disabled || (!value.skills.includes(skill.id) && value.skills.length >= slots)
@@ -157,6 +162,7 @@ export function LoadoutEditor({
                     {kindName(skill.kind, t)} · {skill.owner}
                   </small>
                   <SkillCost skill={skill} />
+                  <EffectSummary catalog={catalog} id={skill.id} harness={value.harness} />
                 </span>
               </label>
               <button

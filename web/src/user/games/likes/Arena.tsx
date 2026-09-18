@@ -10,6 +10,8 @@ import { arenaMotion, interpolate, overloadCues, scoreMotion } from './motion';
 import { ResourceMeter } from './ResourceMeter';
 import { PlanSummary } from './PlanEditor';
 import { CastImpact } from './CastImpact';
+import { EffectSummary } from './GuideText';
+import { overloadResources, type ResourceShortage } from './shortage';
 
 export function CompactScores({
   view,
@@ -115,6 +117,8 @@ function ResourcePanel({
   catalog,
   identity,
   score = { from: from.likes, to: to.likes, progress },
+  shortages = [],
+  shortagePulse = false,
 }: {
   readonly from: Resources;
   readonly to: Resources;
@@ -123,6 +127,8 @@ function ResourcePanel({
   readonly catalog: ModeCatalog;
   readonly identity: string;
   readonly score?: { from: number; to: number; progress: number };
+  readonly shortages?: readonly ResourceShortage[];
+  readonly shortagePulse?: boolean;
 }) {
   const t = useDuelText();
   const meters = [
@@ -199,6 +205,8 @@ function ResourcePanel({
       reduced={reduced}
       tone={m.tone}
       unit={m.unit}
+      shortage={shortages.find((shortage) => shortage.resource === m.key)}
+      shortagePulse={shortagePulse}
     />
   );
   return (
@@ -283,7 +291,7 @@ export function Arena({
           </span>
           {impact && (
             <strong>
-              {impact === 'overload' ? t('电能过载', 'OVERLOAD') : t('资源补充', 'RECHARGING')}
+              {impact === 'overload' ? t('过载', 'OVERLOAD') : t('资源补充', 'RECHARGING')}
             </strong>
           )}
         </div>
@@ -295,6 +303,8 @@ export function Arena({
           progress={motion.progress}
           reduced={reduced}
           tone="likes-meter--energy"
+          shortage={running ? overloadResources(motion.revealedEvents, null)[0] : undefined}
+          shortagePulse={events.some((event) => event.kind === 'overload' && event.seat === null)}
         />
       </div>
       <div className="likes-combatants">
@@ -392,6 +402,11 @@ export function Arena({
                   )}
                 </div>
               </div>
+              {harness && (
+                <div className="likes-passive-summary">
+                  <EffectSummary catalog={catalog} id={harness.id} />
+                </div>
+              )}
               <CastImpact
                 key={`${round}:${motion.stage}:${motion.stepIndex}`}
                 events={casts}
@@ -425,6 +440,10 @@ export function Arena({
                 catalog={catalog}
                 identity={`${round}:${motion.stage}`}
                 score={scoreMotion(motion, seat, reduced)}
+                shortages={running ? overloadResources(motion.revealedEvents, seat) : []}
+                shortagePulse={events.some(
+                  (event) => event.kind === 'overload' && event.seat === seat,
+                )}
               />
               {casts.length > 0 && (
                 <div className="likes-cast-facts">
@@ -464,6 +483,7 @@ export function Arena({
                     onClick={() => onInspect(effect.buff_id)}
                   >
                     {buffName(catalog, effect.buff_id)}
+                    <EffectSummary catalog={catalog} id={effect.buff_id} />
                     {effect.layers > 1 ? ` ×${effect.layers}` : ''}
                     <small>
                       {effect.active_from > round

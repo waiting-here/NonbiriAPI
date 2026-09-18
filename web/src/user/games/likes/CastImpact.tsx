@@ -29,7 +29,7 @@ export function CastImpact({
       {count === 0 && overloaded && (
         <div className="likes-overload-signal">
           <span aria-hidden="true">ϟ</span>
-          <strong>{t('电能过载', 'OVERLOAD')}</strong>
+          <strong>{t('过载', 'OVERLOAD')}</strong>
           <small>{t('释放受阻', 'CAST INTERRUPTED')}</small>
         </div>
       )}

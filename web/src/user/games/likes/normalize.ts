@@ -9,6 +9,7 @@ import { list, nullable, pair, seatValue } from '../common/duel/normalize';
 import type { DuelCodec } from '../common/duel/types';
 import { roleID } from './catalog';
 import { STAGES } from './labels';
+import { shortageValue } from './shortage';
 import { amount, dictionary, label, prose, safeJSON, signedAmount, unique } from './value';
 import type {
   Cast,
@@ -374,6 +375,7 @@ export function eventValue(value: unknown): LikesEvent {
   const r = exactRecord(value, ['id', 'round', 'stage', 'kind', 'seat'], ['data', 'score']);
   const kind = label(r.kind),
     data = r.data === undefined ? {} : dictionary(r.data, (v) => safeJSON(v), 128);
+  if (data.shortage !== undefined) shortageValue(data.shortage);
   let transition: LikesEvent['transition'] = null;
   if (kind === 'round-start') {
     const p = exactRecord(data, ['before', 'after']);

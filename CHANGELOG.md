@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [1.0.0-rc.1] - Unreleased
+## [1.0.0-rc.1] - 2026-09-18
 
 ### Added
 
@@ -12,7 +12,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Native AI SDK Gateway v3 chat, true streaming, function tools, image input, text embeddings and model discovery/manual configuration, with strict compatibility checks before reservations or credential access.
 - Administrator-controlled Gateway cost attribution, disabled by default, and debug metadata showing only whether the tag was sent. Steward CallerKey automation can read and update failure policies with revision and idempotency protection.
 - Two-player Bidding Duel with 13 simultaneous card rounds, and Turn-based Battle Minigame (Test) with quick/standard modes, five characters, eight harnesses and the complete skill/buff catalog.
-- Bidding reward draws, paired card reveals and directional collection of the whole prize pool. Turn-based battles show full-page speed and low-power overload effects for your character, with static reduced-motion alternatives.
+- Bidding reward draws, paired card reveals and directional collection of the whole prize pool. Turn-based battles show full-page speed and overload effects for your character, with static reduced-motion alternatives.
 - Separate per-game queues, frozen entry terms, mixed-wallet admission, original-asset refunds and atomic winner/fee settlement. Both games start disabled and do not add newcomer awards.
 - Synchronized, event-paced turn resolution without a fixed total duration with score breakdowns, resource changes, round-start refills, independent stun/overload artwork, reduced-motion feedback and a paginated round log. All 127 character, skill and harness slots have dedicated illustrations.
 - Dedicated covers for the three new games, 35 Fishing catch illustrations with SVG fallback, synchronized Likes music and sampled effects for Likes, Bidding and Blackjack. Sound and music preferences are separate and off by default; browser-local music quality offers lightweight MP3 or lossless FLAC.
@@ -24,6 +24,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Closed games and modes consistently disable entry and matching. Configuration refreshes while visible and after rejected entry, with specific admission feedback; learning, history and ongoing matches remain available. Turn-based battles correctly list two modes and Chinese bidding labels consistently use Joker.
+- Skill, harness, passive and status cards show effect summaries. Linked details distinguish original/distilled versions, explain player mechanics and separate flavor quotes from rules. A skippable local tutorial walks through the fixed loadout and ten authoritative rounds to a 66–64 victory without matchmaking, wallet changes or match records.
+- Live turn warnings add visual and optional sound cues below five seconds. Overload events record the actual energy or token shortage and highlight the corresponding resources during settlement, without guessing from later balances or changing payment rules.
+- Banned Discord sign-ins redirect to the branded public 403 page; ordinary API denials retain JSON responses. The charity catalog removes the redundant provider/model line.
 - LinkLink match effects wait for valid layout measurements and ignore resize frames after their board is removed, preventing invalid SVG coordinates during transitions.
 - Browser clients can use the three public CallerKey model routes across origins. Valid OPTIONS preflights return 204 without authentication or model usage, and actual responses expose errors and streams through CORS. Cookie-authenticated APIs retain their same-origin boundary.
 - Administrator dashboard endpoint totals use the bounded numbered endpoint page, including addresses shared by more than 100 users.
@@ -34,8 +38,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Compatibility
 
-- Generation 2 now has 117 tables and accepts fifteen exact predecessor manifests, including populated beta.4 and the preceding release-candidate schema. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
-- This candidate has not been released or deployed.
+- Generation 2 now has 117 tables. The validated release upgrade is populated beta.4 → rc.1; unreleased intermediate schemas are outside the release upgrade guarantee. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
+- Source prerelease for Linux/amd64. Build from the tagged source; no official precompiled attachments. Overload shortage metadata is optional for compatibility with retained older records. The local tutorial adds no database migration or real-game write endpoint.
 
 ## [1.0.0-beta.4] - 2026-09-12
 

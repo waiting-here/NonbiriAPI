@@ -1,6 +1,6 @@
 # NonbiriAPI HTTP API Contract (`v1.0.0-rc.1`)
 
-- Status: **v1.0.0-rc.1 development candidate contract; not yet released**.
+- Status: **v1.0.0-rc.1 source prerelease contract**.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
 
@@ -185,7 +185,7 @@ Request-log and Debug `route_kind` values are `openai_chat_completions`, `charit
 | --- | --- |
 | `GET /api/config` | Anonymous safe bootstrap: site name/logo, donation notices, four legal overrides, authoritative locale, maintenance/registration state, announcement epoch. |
 | `GET /api/auth/discord/start` | Anonymous; optional server-issued return route; 302 to Discord after IP admission. |
-| `GET /api/auth/discord/callback` | OAuth `code,state`; atomically signs in or creates an allowed account, then redirects to the bound route. |
+| `GET /api/auth/discord/callback` | OAuth `code,state`; atomically signs in or creates an allowed account, then redirects to the bound route. A forbidden account instead receives a no-store redirect to `/access-denied`, without a new session; ordinary API authorization failures remain JSON 403 responses. |
 | `GET /api/session`, `GET /api/me` | Current `UserEnvelope`; the shapes are identical. |
 | `PATCH /api/me` | `{lang?,game_profile_public?}` with at least one field; returns `UserEnvelope`. |
 | `POST /api/auth/logout` | Clears the user session; 204. Available during maintenance. |
@@ -443,6 +443,10 @@ Both players submit against the same `phase_seq`; locking one side does not inva
 Likes has 20-second planning followed by an event-paced `settlement` phase. Public configuration uses `settlement_seconds:0` to mean variable duration. A round's state, events, draws, payment and terminal facts commit before presentation. `resolution:{round,started_at,ends_at,summary}` is shared by both viewers and retained in the final summary. The summary includes `timeline:[{stage,duration_ms,event_ids}]`, with individually timed steps grouped into seven ordered semantic stages. Each event appears exactly once; opposing actions can share a step while consecutive casts have separate steps. Summed step durations equal `(ends_at-started_at)*1000`, with no fixed overall duration cap. The existing event count and response-size limits still apply. Steps reference server-authored score parts, resource snapshots and success/failure reasons. Older persisted summaries without a timeline retain their original five-second duration. `round_start:{round,started_at,events}` supplies replenishment facts. Clients display those facts without recomputing rules. Final wallet settlement does not wait for animation or a client acknowledgement. Expired animations are not replayed after reconnect, and the next planning period starts with a full 20 seconds.
 
 Normal manual plans require a main skill. A still-stunned player can skip; a plan whose affordable purchases cleanse stun must select a main skill. Automatic timeout plans use the existing automatic rules. Shared-energy overload compares both frozen declared quotes after shopping: an exact fit succeeds; on excess demand the battery empties and only positive-quote players overload, lose their cast payment/effects and keep their shopping. A zero-quote opponent resolves normally without collateral status clearing. Flash checks energy independently. See [the game guide](duel-games.md) and the mode catalog for all rules and presentation behavior.
+
+An `overload` event may include `data.shortage:{payment,resources}`. Payment is `energy`, `mix`, `api` or `sub`; each bounded resource item contains `{resource,required,available}` with nonnegative integer quantities captured at the failed payment, before later restoration. Resource identifiers are `energy`, `burst`, `sub` and `api`; at most three unique items occur. Shared energy uses an unseated event and retains the existing affected-player flags. Personal shortages use that player's seat; mixed payment lists burst and API, adding total subscription quota when it is limiting. Subscription-only payment lists its actually insufficient quotas. Existing `reason` fields are unchanged. Older records may omit this object: clients show a generic overload instead of inferring a past shortage from present balances. No fees, legal-plan validation or result rules change.
+
+The optional browser-local teaching match uses bundled engine-generated fixtures. It does not call queue, action, payment, result or reward write endpoints and does not create server history. Copying its loadout only fills the lobby form. Live status continues polling; an actual queue or game takes precedence over teaching.
 
 During play, all states, round pages, errors and personal exports exclude unrevealed opposing skills. The final Likes result reveals both complete loadouts. Player cursors bind the user, game, scope and snapshot and expire after one hour. A record becomes unavailable exactly at 30 days, before physical cleanup if necessary.
 

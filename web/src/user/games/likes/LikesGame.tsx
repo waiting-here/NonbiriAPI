@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
@@ -9,6 +9,7 @@ import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuel } from '../common/duel/api';
 import { DuelDialog } from '../common/duel/Dialog';
 import { DuelFeedback } from '../common/duel/Feedback';
+import { entryMessage, entryProblem } from '../common/duel/availability';
 import { DuelFinance, DuelTerms } from '../common/duel/Finance';
 import { DuelHistory, DuelRoundLog } from '../common/duel/History';
 import type { DuelLobbyContext, DuelResult, Seat } from '../common/duel/types';
@@ -25,8 +26,10 @@ import { LikesRoundLog } from './Log';
 import { useReducedMotion, useServerClock } from './motion';
 import { likesCodec } from './normalize';
 import { PlanEditor } from './PlanEditor';
+import { useActionWarning } from './useActionWarning';
 import { skillName } from './labels';
-import { likesAudioFacts, likesMusicScene } from './audioFacts';
+import { likesAudioFacts, likesMusicScene, type MusicScene } from './audioFacts';
+import { tutorialStatus, saveTutorialStatus, tutorialStorageKey } from './tutorial/storage';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
 import { useSnapshotAudioFacts } from '../common/audio/useSnapshotAudioFacts';
 import { BattleAtmosphere } from './BattleAtmosphere';
@@ -37,6 +40,9 @@ import '../common/duel/duel.css';
 import './likes.css';
 import './effects.css';
 import './desktop.css';
+import './guidance.css';
+
+const Tutorial = lazy(() => import('./tutorial/Tutorial'));
 
 function Rules({
   catalog,
@@ -136,6 +142,7 @@ function Lobby({
   onQueue,
   onInspect,
   onEdit,
+  initialLoadout,
 }: {
   readonly catalog: ModeCatalog;
   readonly context: DuelLobbyContext;
@@ -143,14 +150,15 @@ function Lobby({
   readonly onQueue: (selection: Selection) => void;
   readonly onInspect: (id: string) => void;
   readonly onEdit: () => void;
+  readonly initialLoadout?: Selection;
 }) {
   const t = useDuelText();
-  const [selection, setSelection] = useState(() => initialSelection(catalog));
+  const [selection, setSelection] = useState(() => initialLoadout ?? initialSelection(catalog));
   const mode = context.config.modes[catalog.mode],
     enough =
       creditsToMilli(context.wallets.balance) + creditsToMilli(context.wallets.gameBalance) >=
-      creditsToMilli(mode.ticket);
-  const unavailable = !context.accepting || !context.config.available || !mode.available;
+      creditsToMilli(mode?.ticket ?? '0');
+  const unavailable = entryProblem(context, catalog.mode);
   return (
     <>
       <LoadoutEditor
@@ -163,7 +171,7 @@ function Lobby({
         disabled={blocked}
         onInspect={onInspect}
       />
-      <DuelTerms mode={mode} />
+      {mode && <DuelTerms mode={mode} />}
       <div className="likes-enqueue">
         <span>
           {catalog.mode === 'quick' ? t('快速模式', 'Quick mode') : t('标准模式', 'Standard mode')}{' '}
@@ -173,11 +181,11 @@ function Lobby({
         <button
           type="button"
           className="likes-primary"
-          disabled={blocked || unavailable || !enough || !!selectionProblem(catalog, selection)}
+          disabled={blocked || !!unavailable || !enough || !!selectionProblem(catalog, selection)}
           onClick={() => onQueue(selection)}
         >
           {unavailable
-            ? t('暂时无法入场', 'Entry unavailable')
+            ? entryMessage(unavailable, t)
             : !enough
               ? t('可用积分不足', 'Insufficient credits')
               : t('支付票价并匹配', 'Pay entry and find a match')}
@@ -209,6 +217,11 @@ export function LikesGame(context: DuelLobbyContext) {
     staleTime: Infinity,
   });
   const [mode, setMode] = useState<'quick' | 'standard'>('quick');
+  const [tutorial, setTutorial] = useState(false);
+  const [tutorialSeen, setTutorialSeen] = useState(() => !!tutorialStatus());
+  const [tutorialScene, setTutorialScene] = useState<MusicScene>('lobby');
+  const [teachingLoadout, setTeachingLoadout] = useState<Selection | undefined>();
+  const [loadoutRevision, setLoadoutRevision] = useState(0);
   const [lobbyForResult, setLobbyForResult] = useState<string | null>(null);
   const [rules, setRules] = useState(false),
     [guide, setGuide] = useState<string | null>(null),
@@ -232,8 +245,9 @@ export function LikesGame(context: DuelLobbyContext) {
       (!!result?.resolution && (home?.serverNow ?? 0) < result.resolution.endsAt),
   );
   const audioFacts = useSnapshotAudioFacts(home, likesAudioFacts);
-  const musicScene =
-    !home || (!current && !queue && result?.id === lobbyForResult)
+  const musicScene = tutorial
+    ? tutorialScene
+    : !home || (!current && !queue && result?.id === lobbyForResult)
       ? 'lobby'
       : likesMusicScene(home, now);
   const audio = useArcadeAudio('likes', {
@@ -253,10 +267,42 @@ export function LikesGame(context: DuelLobbyContext) {
     duel.refresh,
   );
   const activeMode = current?.mode ?? queue?.mode ?? mode;
+  const urgent = useActionWarning(
+    current ? `${current.id}:${current.phaseSeq}` : 'idle',
+    remaining,
+    !!current &&
+      current.phase === 'plan' &&
+      !current.locked[current.you] &&
+      !current.view.players[current.you].overloaded &&
+      !duel.blocked,
+    audio.sound.play,
+    audio.sound.stop,
+  );
   const c = catalogQuery.data?.modes[activeMode === 'standard' ? 'standard' : 'quick'];
   const compatible = !current || c?.contentHash === current.contentHash;
   const terminalPresentation =
     !current && !queue && result?.resolution && now < result.resolution.endsAt && result.view;
+  const canTeach =
+    !!catalogQuery.data && !duel.blocked && !current && !queue && !terminalPresentation;
+  if (tutorial && (current || queue || duel.uncertain)) setTutorial(false);
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key === tutorialStorageKey) setTutorialSeen(!!tutorialStatus());
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
+  const exitTutorial = (status: 'completed' | 'skipped', selection?: Selection) => {
+    saveTutorialStatus(status);
+    setTutorialSeen(true);
+    setTutorial(false);
+    if (selection && !current && !queue && !duel.blocked) {
+      setMode('quick');
+      setTeachingLoadout(selection);
+      setLoadoutRevision((n) => n + 1);
+      setLobbyForResult(result?.id ?? null);
+    }
+  };
   const logSession = current?.id ?? result?.id,
     logSeat = current?.you ?? result?.you ?? 0;
   return (
@@ -296,15 +342,39 @@ export function LikesGame(context: DuelLobbyContext) {
           <button type="button" disabled={!c} onClick={() => setHistory(true)}>
             {t('对局记录', 'Game history')}
           </button>
+          <button type="button" disabled={!canTeach} onClick={() => setTutorial(true)}>
+            {t('新手引导', 'Tutorial')}
+          </button>
         </div>
       </header>
       <GameWallets wallets={context.wallets} />
+      {!tutorialSeen && canTeach && (
+        <section className="likes-tutorial-invite">
+          <h2>{t('第一次来？一起练习一局', 'New here? Try a guided match')}</h2>
+          <p>
+            {t(
+              '从配装到险胜，跟随提示熟悉玩法。只在此浏览器练习，不扣积分，随时可跳过。',
+              'Learn the game from loadout to a narrow victory. Practice only in this browser, with no credit cost, and skip at any time.',
+            )}
+          </p>
+          <div className="duel-actions">
+            <button type="button" className="likes-primary" onClick={() => setTutorial(true)}>
+              {t('开始新手引导', 'Start tutorial')}
+            </button>
+            <button type="button" onClick={() => exitTutorial('skipped')}>
+              {t('暂时跳过', 'Skip for now')}
+            </button>
+          </div>
+        </section>
+      )}
       <RandomnessProof
         game="likes"
         id={current?.id ?? result?.id}
         terminal={!current && !!result}
       />
       <DuelFeedback
+        queueAttempt={duel.intentKind === 'queue'}
+        entryProblem={entryProblem(context, mode)}
         error={duel.error ?? duel.query.error ?? catalogQuery.error}
         uncertain={duel.uncertain}
         pending={duel.pending || duel.query.isPending || catalogQuery.isPending}
@@ -329,7 +399,7 @@ export function LikesGame(context: DuelLobbyContext) {
         <>
           {current ? (
             <>
-              <div className="likes-phase">
+              <div className={`likes-phase ${urgent ? 'likes-action-urgent' : ''}`}>
                 <strong>
                   {t('第', 'Round')} {current.round}/{c.parameters.MAX_ROUNDS} {t('轮', '')}
                 </strong>
@@ -338,9 +408,7 @@ export function LikesGame(context: DuelLobbyContext) {
                     ? t('共同结算', 'Settlement')
                     : t('共同选招', 'Choose skills')}
                 </span>
-                <strong className={(remaining ?? 0) <= 5 ? 'is-urgent' : ''}>
-                  {remaining ?? '—'}s
-                </strong>
+                <strong className={urgent ? 'is-urgent' : ''}>{remaining ?? '—'}s</strong>
                 <button type="button" onClick={() => setLog(true)}>
                   {t('结算日志', 'Round log')}
                 </button>
@@ -380,22 +448,29 @@ export function LikesGame(context: DuelLobbyContext) {
                 onInspect={setGuide}
               />
               {current.phase === 'plan' && (
-                <PlanEditor
-                  key={`${current.id}:${current.phaseSeq}`}
-                  catalog={c}
-                  state={current}
-                  blocked={duel.blocked || remaining === 0}
-                  onInspect={setGuide}
-                  onSelect={() => audio.sound.play('common_select')}
-                  onLock={(plan) =>
-                    duel.run({
-                      kind: 'action',
-                      id: current.id,
-                      phaseSeq: current.phaseSeq,
-                      action: { kind: 'plan', plan },
-                    })
-                  }
-                />
+                <div className={urgent ? 'likes-action-urgent' : ''}>
+                  {urgent && (
+                    <p className="likes-time-warning" role="status">
+                      {t('即将超时，请确认方案！', 'Time is almost up. Confirm your plan!')}
+                    </p>
+                  )}
+                  <PlanEditor
+                    key={`${current.id}:${current.phaseSeq}`}
+                    catalog={c}
+                    state={current}
+                    blocked={duel.blocked || remaining === 0}
+                    onInspect={setGuide}
+                    onSelect={() => audio.sound.play('common_select')}
+                    onLock={(plan) =>
+                      duel.run({
+                        kind: 'action',
+                        id: current.id,
+                        phaseSeq: current.phaseSeq,
+                        action: { kind: 'plan', plan },
+                      })
+                    }
+                  />
+                </div>
               )}
               <div className="duel-actions">
                 <button type="button" disabled={duel.blocked} onClick={() => setSurrender(true)}>
@@ -475,7 +550,7 @@ export function LikesGame(context: DuelLobbyContext) {
                     key={m}
                     type="button"
                     aria-pressed={mode === m}
-                    disabled={duel.pending || duel.uncertain}
+                    disabled={duel.pending || duel.uncertain || !!entryProblem(context, m)}
                     onClick={() => {
                       setMode(m);
                       editLobby();
@@ -490,7 +565,8 @@ export function LikesGame(context: DuelLobbyContext) {
                 ))}
               </div>
               <Lobby
-                key={mode}
+                key={`${mode}:${loadoutRevision}`}
+                initialLoadout={mode === 'quick' ? teachingLoadout : undefined}
                 catalog={c}
                 context={context}
                 blocked={duel.blocked}
@@ -511,6 +587,18 @@ export function LikesGame(context: DuelLobbyContext) {
         </>
       )}
       {rules && c && <Rules catalog={c} onClose={closeRules} />}
+      {tutorial && !current && !queue && !duel.uncertain && catalogQuery.data && (
+        <Suspense fallback={<p role="status">{t('正在准备教学…', 'Preparing the tutorial…')}</p>}>
+          <Tutorial
+            catalog={catalogQuery.data.modes.quick}
+            sound={audio.sound}
+            music={audio.music}
+            unavailable={audio.unavailable}
+            onScene={setTutorialScene}
+            onExit={exitTutorial}
+          />
+        </Suspense>
+      )}
       {guide !== null && c && (
         <Glossary key={guide} catalog={c} initial={guide || undefined} onClose={closeGuide} />
       )}

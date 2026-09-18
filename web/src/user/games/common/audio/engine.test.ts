@@ -160,6 +160,24 @@ describe('shared music clock', () => {
 });
 
 describe('sample effects', () => {
+  it('cancels a pending deadline cue and stops its voice without cutting other effects', async () => {
+    const { engine, context } = setup();
+    engine.setEffectsEnabled(true);
+    await engine.unlock();
+    await settle();
+    engine.play('likes_countdown');
+    engine.stopEffect('likes_countdown');
+    await settle();
+    expect(context.sources).toHaveLength(0);
+    context.currentTime += 1;
+    engine.play('likes_countdown');
+    engine.play('common_select');
+    await settle();
+    const [warning, selection] = context.sources;
+    engine.stopEffect('likes_countdown');
+    expect(warning.stop).toHaveBeenCalledOnce();
+    expect(selection.stop).not.toHaveBeenCalled();
+  });
   it('coalesces repeated bursts, bounds simultaneous voices, and respects mute', async () => {
     const { engine, context } = setup();
     engine.setEffectsEnabled(true);

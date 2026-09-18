@@ -182,12 +182,12 @@ func (r *roundRun) settle(plans [2]Plan) error {
 			}
 			s.Records = records
 			s.Grants = []Grant{}
-			r.log("overload", nil, map[string]any{"required": needed, "available": available, "quotes": [2]int64{quotes[0].Energy, quotes[1].Energy}, "overloaded": newOverload, "reason": "shared-energy"})
+			r.log("overload", nil, map[string]any{"required": needed, "available": available, "quotes": [2]int64{quotes[0].Energy, quotes[1].Energy}, "overloaded": newOverload, "reason": "shared-energy", "shortage": energyShortage(needed, available)})
 			r.end("double-overload", nil)
 			r.snapshot(r.stage)
 			return nil
 		}
-		r.log("overload", nil, map[string]any{"required": needed, "available": available, "quotes": [2]int64{quotes[0].Energy, quotes[1].Energy}, "overloaded": newOverload, "reason": "shared-energy"})
+		r.log("overload", nil, map[string]any{"required": needed, "available": available, "quotes": [2]int64{quotes[0].Energy, quotes[1].Energy}, "overloaded": newOverload, "reason": "shared-energy", "shortage": energyShortage(needed, available)})
 	}
 	for seat := range 2 {
 		if newOverload[seat] {
@@ -208,7 +208,7 @@ func (r *roundRun) settle(plans [2]Plan) error {
 			if !ok {
 				newOverload[seat] = true
 				records[seat].Stunned = true
-				r.log("overload", ptr(seat), map[string]any{"skillId": a.Choice.SkillID, "reason": "personal-resources", "success": false})
+				r.log("overload", ptr(seat), map[string]any{"skillId": a.Choice.SkillID, "reason": "personal-resources", "success": false, "shortage": e.tokenShortage(s.Players[seat], a)})
 				for _, cancelled := range quotes[seat].Actions {
 					if cancelled.Cancelled {
 						r.log("skill-cancelled", ptr(seat), map[string]any{"skillId": cancelled.Choice.SkillID, "success": false, "reason": "previous-failure"})

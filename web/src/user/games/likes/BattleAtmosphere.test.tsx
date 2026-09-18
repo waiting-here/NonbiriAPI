@@ -11,7 +11,8 @@ describe('page atmosphere lifecycle', () => {
     expect(screen.getByRole('status')).toHaveTextContent('SPEED MODE');
     rerender(<BattleAtmosphere mode="danger" reduced={false} />);
     expect(document.querySelector('.likes-atmosphere--accelerated')).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent('LOW POWER');
+    expect(screen.getByRole('status')).toHaveTextContent('OVERLOAD');
+    expect(screen.getByRole('status')).not.toHaveTextContent('LOW POWER');
     unmount();
     expect(document.querySelector('.likes-atmosphere')).toBeNull();
   });

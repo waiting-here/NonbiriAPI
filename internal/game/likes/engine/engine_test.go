@@ -87,6 +87,12 @@ func TestOnlyPositiveSharedEnergyQuoteOverloads(t *testing.T) {
 		}
 		casts := 0
 		for _, event := range record.Events {
+			if event.Kind == "overload" {
+				shortage := event.Data["shortage"].(Shortage)
+				if shortage.Payment != "energy" || len(shortage.Resources) != 1 || shortage.Resources[0] != (ResourceShortage{"energy", 10, 9}) {
+					t.Fatalf("wrong shared shortage: %+v", shortage)
+				}
+			}
 			if event.Kind == "cast" {
 				casts++
 				if optional(event.Seat, -1) != other(positive) {

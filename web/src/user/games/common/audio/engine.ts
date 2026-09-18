@@ -21,6 +21,7 @@ type Voice = {
   ramp: Ramp;
   starts: number;
   priority: number;
+  cue?: EffectCue;
 };
 
 export function gainAt(ramp: Ramp, time: number): number {
@@ -43,6 +44,7 @@ export interface ArcadeAudio {
   setMusic(scene: MusicScene | null): void;
   setEffectsEnabled(enabled: boolean): void;
   play(cue: EffectCue): void;
+  stopEffect(cue: EffectCue): void;
   pause(): void;
   resume(): Promise<void>;
   close(): void;
@@ -74,6 +76,7 @@ export function createArcadeAudio(options: {
   const musicVoices = new Set<Voice>(),
     effectVoices = new Set<Voice>();
   const recentEffects = new Map<EffectCue, number>();
+  const cancelledEffects = new Map<EffectCue, number>();
   let preloading = false;
 
   const fail = () => {
@@ -309,6 +312,7 @@ export function createArcadeAudio(options: {
       if (now - (recentEffects.get(cue) ?? -Infinity) < spacing) return;
       recentEffects.set(cue, now);
       const generation = effectGeneration;
+      const cueGeneration = cancelledEffects.get(cue) ?? 0;
       const priority =
         /_(win|loss|draw|natural)$/.test(cue) || cue === 'likes_loss_stinger'
           ? 3
@@ -326,6 +330,7 @@ export function createArcadeAudio(options: {
           paused ||
           !effectsEnabled ||
           generation !== effectGeneration ||
+          cueGeneration !== (cancelledEffects.get(cue) ?? 0) ||
           context?.state !== 'running' ||
           context.currentTime - now > 0.35
         )
@@ -339,8 +344,13 @@ export function createArcadeAudio(options: {
           stop(weakest, effectVoices);
         }
         const voice = voiceFor(buffer, effectVoices, priority);
+        voice.cue = cue;
         voice.source.start();
       });
+    },
+    stopEffect(cue) {
+      cancelledEffects.set(cue, (cancelledEffects.get(cue) ?? 0) + 1);
+      for (const voice of effectVoices) if (voice.cue === cue) stop(voice, effectVoices);
     },
     pause() {
       paused = true;
@@ -367,6 +377,7 @@ export function createArcadeAudio(options: {
       musicBuffers.clear();
       effectBuffers.clear();
       recentEffects.clear();
+      cancelledEffects.clear();
       master?.disconnect();
       limiter?.disconnect();
       if (context && context.state !== 'closed') void context.close().catch(() => {});

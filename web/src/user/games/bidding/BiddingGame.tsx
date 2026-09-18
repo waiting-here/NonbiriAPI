@@ -8,6 +8,7 @@ import { useDuel } from '../common/duel/api';
 import { useDuelText } from '../common/duel/copy';
 import { DuelDialog } from '../common/duel/Dialog';
 import { DuelFeedback, DuelProfile } from '../common/duel/Feedback';
+import { entryMessage, entryProblem } from '../common/duel/availability';
 import { DuelFinance, DuelTerms } from '../common/duel/Finance';
 import { DuelHistory } from '../common/duel/History';
 import type { DuelLobbyContext } from '../common/duel/types';
@@ -42,10 +43,10 @@ function BiddingRules({ onClose }: { readonly onClose: () => void }) {
           'A tied bid carries the rewards into the next round. A tie in round thirteen discards the remaining pool. The higher final total wins; equal totals draw.',
         )}
       </p>
-      <h3>{t('王的时机', 'When to use your joker')}</h3>
+      <h3>{t('Joker 的时机', 'When to use your joker')}</h3>
       <p>
         {t(
-          '前12轮轮流拥有王的决策权，每人6次机会。每人整局只能使用一次王，使本轮己方花色奖励翻倍。决策阶段10秒，超时视为保留；第13轮没有王阶段。出价阶段双方各有完整20秒，超时未锁定时自动使用剩余最小牌。',
+          '前12轮轮流拥有 Joker 的决策权，每人6次机会。每人整局只能使用一次 Joker，使本轮己方花色奖励翻倍。决策阶段10秒，超时视为保留；第13轮没有 Joker 阶段。出价阶段双方各有完整20秒，超时未锁定时自动使用剩余最小牌。',
           'During the first twelve rounds, joker decisions alternate, giving each player six opportunities. Each player may use their joker once to double their suit’s current reward. The decision lasts ten seconds; timeout saves the joker. Round thirteen has no joker decision. Each bidding phase lasts twenty seconds; an unlocked player times out with their lowest remaining card.',
         )}
       </p>
@@ -63,7 +64,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
   const t = useDuelText();
   const duel = useDuel(biddingCodec, refreshWallets);
   const [mode, setMode] = useState<string>(
-    BIDDING_MODES.find((key) => config.modes[key]?.available) ?? 'tier1',
+    BIDDING_MODES.find((key) => !entryProblem({ config, accepting }, key)) ?? 'tier1',
   );
   const [rules, setRules] = useState(false),
     [history, setHistory] = useState(false),
@@ -92,7 +93,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
     selected &&
     creditsToMilli(wallets.balance) + creditsToMilli(wallets.gameBalance) >=
       creditsToMilli(selected.ticket);
-  const unavailable = !accepting || !config.available || !selected?.available;
+  const unavailable = entryProblem({ config, accepting }, mode);
   return (
     <div className="bidding-game">
       <header className="bid-heading">
@@ -118,6 +119,8 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
         terminal={!current && !!home?.latestResult}
       />
       <DuelFeedback
+        queueAttempt={duel.intentKind === 'queue'}
+        entryProblem={unavailable}
         error={duel.error ?? duel.query.error}
         pending={duel.pending || duel.query.isPending}
         uncertain={duel.uncertain}
@@ -132,7 +135,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
             </strong>
             <span>
               {current.phase === 'joker'
-                ? t('王的选择', 'Joker decision')
+                ? t('Joker 的选择', 'Joker decision')
                 : t('共同暗选', 'Simultaneous bidding')}
             </span>
             <span
@@ -153,8 +156,8 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
                 </strong>
                 <span>
                   {current.view.jokers[seat]
-                    ? `♛ ${t('王可用', 'Joker available')}`
-                    : `♛ ${t('王已用', 'Joker used')}`}
+                    ? `♛ ${t('Joker 可用', 'Joker available')}`
+                    : `♛ ${t('Joker 已用', 'Joker used')}`}
                 </span>
                 <span className="bid-lock">
                   {current.locked[seat] ? t('已锁定', 'Locked') : t('选择中', 'Choosing')}
@@ -277,15 +280,19 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
                   key={key}
                   type="button"
                   aria-pressed={mode === key}
-                  disabled={duel.pending || duel.uncertain}
+                  disabled={
+                    duel.pending || duel.uncertain || !!entryProblem({ config, accepting }, key)
+                  }
                   onClick={() => setMode(key)}
                 >
                   <span>
                     {t('第', 'Tier ')} {index + 1} {t('档', '')}
                   </span>
-                  <strong>{formatCredits(config.modes[key].ticket)}</strong>
+                  <strong>{formatCredits(config.modes[key]?.ticket ?? '0')}</strong>
                   <small>
-                    {config.modes[key].available ? t('开放', 'Open') : t('暂未开放', 'Unavailable')}
+                    {!entryProblem({ config, accepting }, key)
+                      ? t('开放', 'Open')
+                      : t('暂未开放', 'Unavailable')}
                   </small>
                 </button>
               ))}
@@ -294,11 +301,11 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
             <button
               type="button"
               className="btn btn-primary"
-              disabled={duel.blocked || unavailable || !enough}
+              disabled={duel.blocked || !!unavailable || !enough}
               onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
             >
               {unavailable
-                ? t('暂时无法入场', 'Entry unavailable')
+                ? entryMessage(unavailable, t)
                 : !enough
                   ? t('可用积分不足', 'Insufficient credits')
                   : t('支付票价并匹配', 'Pay entry and find a match')}
