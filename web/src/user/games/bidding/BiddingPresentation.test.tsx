@@ -4,6 +4,7 @@ import { renderWithProviders } from '../../../../test/unit/support';
 import { homeValue } from '../common/duel/normalize';
 import { biddingCodec } from './normalize';
 import { BiddingPresentation } from './BiddingPresentation';
+import { RewardDeck } from './Cards';
 import { biddingHomeWire } from './testFixtures';
 
 type MutableWire = Omit<ReturnType<typeof biddingHomeWire>, 'current' | 'latest_result'> & {
@@ -75,8 +76,64 @@ describe('bidding presentation timing', () => {
       station: 'user',
     });
     view.rerender(<BiddingPresentation home={live} />);
-    expect(screen.getByLabelText(/Hearts 7/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Spades J/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Diamonds 7/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Clubs J/)).toBeInTheDocument();
+  });
+
+  it('measures each real reward deck to its matching drawn reward', async () => {
+    const queued = withQueue();
+    const live = homeValue(biddingHomeWire(), biddingCodec);
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains('bid-reward-deck--0') ||
+          this.parentElement?.classList.contains('bid-reward-deck--0')
+          ? ({
+              left: 10,
+              top: 20,
+              width: 52,
+              height: 72,
+              right: 62,
+              bottom: 92,
+              x: 10,
+              y: 20,
+              toJSON() {},
+            } as DOMRect)
+          : ({
+              left: 300,
+              top: 100,
+              width: 80,
+              height: 120,
+              right: 380,
+              bottom: 220,
+              x: 300,
+              y: 100,
+              toJSON() {},
+            } as DOMRect);
+      });
+    try {
+      const view = await renderWithProviders(
+        <>
+          <BiddingPresentation home={queued} />
+          <RewardDeck view={live.current!.view} side={0} round={1} you={0} />
+          <RewardDeck view={live.current!.view} side={1} round={1} you={0} />
+        </>,
+        { station: 'user' },
+      );
+      view.rerender(
+        <>
+          <BiddingPresentation home={live} />
+          <RewardDeck view={live.current!.view} side={0} round={1} you={0} />
+          <RewardDeck view={live.current!.view} side={1} round={1} you={0} />
+        </>,
+      );
+      const target = document.querySelector<HTMLElement>('.bid-presentation .bid-reward--0');
+      expect(target).toHaveClass('is-drawing-from-deck');
+      expect(target?.style.getPropertyValue('--draw-x')).toBe('-304px');
+      expect(target?.style.getPropertyValue('--draw-scale')).toBe('0.65');
+    } finally {
+      rect.mockRestore();
+    }
   });
 
   it('shows the complete carried pool and the local owner after settlement', async () => {
@@ -205,7 +262,7 @@ describe('bidding presentation timing', () => {
         vi.advanceTimersByTime(1399);
       });
       expect(screen.getByText(/Round 3: draw rewards from both decks/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Hearts 6/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Diamonds 6/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
