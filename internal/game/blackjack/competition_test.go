@@ -205,8 +205,8 @@ func TestEmoteVisibilityExpiryAndSpectatorOwnership(t *testing.T) {
 }
 
 func TestConcurrentWorkersCommitOnlyOneSettlementAndQueueOrder(t *testing.T) {
-	f := newFixture(t, 9)
-	for i := range 9 {
+	f := newFixture(t, 10)
+	for i := range 10 {
 		f.join(i)
 	}
 	f.clock.Store(135)
@@ -224,14 +224,14 @@ func TestConcurrentWorkersCommitOnlyOneSettlementAndQueueOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if h := f.read(8); h.Phase != "result" || h.You.State != "waiting" || h.You.Position != "1" {
+	if h := f.read(9); h.Phase != "result" || h.You.State != "waiting" || h.You.Position != "1" {
 		t.Fatal("worker altered queue/table", h)
 	}
 	var resolved, paid int
 	if err := f.db.QueryRow(`SELECT COUNT(*) FROM game_blackjack_payments WHERE state='settled'`).Scan(&paid); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.db.QueryRow(`SELECT COUNT(*) FROM game_blackjack_events WHERE kind='result'`).Scan(&resolved); err != nil || resolved != 1 || paid != 8 {
+	if err := f.db.QueryRow(`SELECT COUNT(*) FROM game_blackjack_events WHERE kind='result'`).Scan(&resolved); err != nil || resolved != 1 || paid != 9 {
 		t.Fatal("duplicate/missing terminal facts", resolved, paid, err)
 	}
 	f.recovery()

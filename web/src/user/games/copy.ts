@@ -96,8 +96,8 @@ const copy = {
   'center.likes.title': ['Turn-based Battle Minigame (Test)', '回合制对战小游戏（测试）'],
   'center.blackjack.title': ['Blackjack', '二十一点'],
   'center.blackjack.body': [
-    'One table, eight seats and a new hand every minute.',
-    '单桌八席，每分钟新一局。与同桌一起向庄家挑战。',
+    'One table, nine seats and a new hand every minute.',
+    '单桌九席，每分钟新一局。与同桌一起向庄家挑战。',
   ],
   'center.likes.body': [
     'Build your loadout and race for likes on shared power.',

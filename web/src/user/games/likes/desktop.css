@@ -1,0 +1,215 @@
+@media (min-width: 64rem) {
+  .likes-game {
+    width: 100%;
+    max-width: none;
+  }
+
+  .likes-phase {
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--l-line);
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1.5rem #0002;
+  }
+
+  .nb-user-shell__main .likes-phase {
+    top: 4.25rem;
+  }
+
+  .likes-compact-scores {
+    display: flex;
+    align-items: center;
+    gap: clamp(1rem, 3vw, 4rem);
+    padding-inline-start: 1rem;
+    border-inline-start: 1px solid var(--l-line);
+    font-variant-numeric: tabular-nums;
+    color: var(--l-muted);
+  }
+
+  .likes-compact-scores strong {
+    margin-inline-start: 0.25rem;
+    color: var(--l-ink);
+    font-size: 1.25rem;
+  }
+
+  .likes-player {
+    padding: 1rem clamp(1rem, 2vw, 2rem);
+  }
+
+  .likes-player > header {
+    min-height: 2.8rem;
+    font-size: 1rem;
+  }
+
+  .likes-lock {
+    font-size: 0.85rem;
+  }
+
+  .likes-character {
+    height: 11rem;
+    gap: 2rem;
+  }
+
+  .likes-chibi {
+    width: 10rem;
+  }
+
+  .likes-character-label > strong {
+    font-size: 1.4rem;
+  }
+
+  .likes-arena[data-presenting='true'] .likes-character {
+    height: clamp(22rem, 52vh, 42rem);
+    margin-block: 1rem;
+    border-radius: 0.6rem;
+    background:
+      radial-gradient(
+        ellipse at center,
+        color-mix(in srgb, var(--strike) 12%, transparent),
+        transparent 70%
+      ),
+      linear-gradient(
+        135deg,
+        transparent 47%,
+        color-mix(in srgb, var(--strike) 5%, transparent) 47% 53%,
+        transparent 53%
+      );
+  }
+
+  .likes-arena[data-presenting='true'] .likes-chibi {
+    width: min(54%, 20rem);
+  }
+
+  .likes-player--casting .likes-chibi {
+    visibility: hidden;
+  }
+
+  .likes-player--casting .likes-character-label {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 3;
+    align-items: flex-end;
+    padding: 0.35rem 0.6rem;
+    border-radius: 0.3rem;
+    background: color-mix(in srgb, var(--l-panel) 92%, transparent);
+  }
+
+  .likes-player--casting .likes-character-label > strong {
+    font-size: 1rem;
+  }
+
+  .likes-cast {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding-bottom: 3.25rem;
+    animation: likes-desktop-cast-in 0.45s cubic-bezier(0.12, 0.85, 0.2, 1);
+    --cast-travel: -2.5rem;
+  }
+
+  .likes-player[data-side='opponent'] .likes-cast {
+    --cast-travel: 2.5rem;
+  }
+
+  .likes-cast .likes-art {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    clip-path: none;
+  }
+
+  .likes-cast .likes-art img {
+    object-fit: contain;
+    filter: drop-shadow(0 0.4rem 1.2rem color-mix(in srgb, var(--strike) 25%, transparent));
+  }
+
+  .likes-cast > strong {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.55rem 1rem;
+    font-size: clamp(1.15rem, 1.7vw, 2rem);
+    text-align: center;
+    letter-spacing: 0.08em;
+    background: linear-gradient(90deg, #102338dd, #102338f5, #102338dd);
+    border-block: 1px solid var(--strike);
+  }
+
+  .likes-cast > small {
+    bottom: 3.6rem;
+    left: 1rem;
+    right: auto;
+    max-width: calc(100% - 2rem);
+    font-size: 0.85rem;
+  }
+
+  .likes-cast::before {
+    inset: 0 -10%;
+  }
+
+  .likes-cast::after {
+    width: 55%;
+    left: 22.5%;
+    top: 10%;
+  }
+
+  .likes-resource-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.8rem 1.2rem;
+  }
+
+  .likes-subscription {
+    grid-column: 1 / -1;
+  }
+
+  .likes-meter-label {
+    font-size: 0.85rem;
+  }
+
+  .likes-meter-label > strong {
+    font-size: 1.2rem;
+  }
+
+  .likes-meter-track {
+    height: 0.55rem;
+  }
+
+  .likes-cast-facts {
+    padding: 0.65rem 0.9rem;
+    font-size: 0.95rem;
+  }
+
+  .likes-skill-grid {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+
+  .likes-outcome-art > div {
+    width: min(45%, 24rem);
+  }
+
+  .likes-arena[data-reduced-motion='true'] .likes-cast,
+  .likes-arena[data-reduced-motion='true'] .likes-cast::before,
+  .likes-arena[data-reduced-motion='true'] .likes-cast::after {
+    animation: none;
+    transform: none;
+  }
+}
+
+@keyframes likes-desktop-cast-in {
+  from {
+    opacity: 0.3;
+    transform: translateX(var(--cast-travel)) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .likes-cast {
+    animation: none;
+  }
+}

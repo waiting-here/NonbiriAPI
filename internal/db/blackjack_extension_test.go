@@ -144,3 +144,32 @@ func TestBlackjackPartialSourceRejectedWithoutWriting(t *testing.T) {
 		t.Fatal("rejection modified source", err)
 	}
 }
+
+func TestBlackjackNineSeatFreshConstraintAndRepeatedOpenNoOp(t *testing.T) {
+	path, vault := bootstrapTestPath(t, "nine-seat.sqlite"), bootstrapTestVault(t)
+	store, err := Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ddl string
+	if err := store.DB().QueryRow(`SELECT sql FROM sqlite_schema WHERE type='table' AND name='game_blackjack_entries'`).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ddl, "seat_no INTEGER CHECK(seat_no BETWEEN 0 AND 8)") {
+		t.Fatalf("fresh schema is not nine-seat: %s", ddl)
+	}
+	assertRetainedManifest(t, store.DB(), PinnedGenerationTwoManifestHash)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	assertRetainedManifest(t, store.DB(), PinnedGenerationTwoManifestHash)
+	var count int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM game_blackjack_entries`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("reopen changed entries: %d %v", count, err)
+	}
+}

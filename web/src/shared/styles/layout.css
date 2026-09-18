@@ -76,7 +76,6 @@
 
 .user-main {
   width: 100%;
-  max-width: 112rem;
   min-width: 0;
   margin-inline: auto;
   padding: clamp(1.4rem, 4vw, 3.25rem) clamp(1rem, 4vw, 2rem) 4rem;

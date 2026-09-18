@@ -143,9 +143,14 @@
 }
 .bid-presentation--idle {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
+  min-height: 0;
   text-align: center;
   color: var(--bid-muted);
+}
+.bid-presentation--draw {
+  overflow: visible;
 }
 .bid-presentation:not(.bid-presentation--idle) {
   position: sticky;
@@ -153,6 +158,9 @@
   z-index: 4;
   background: var(--bid-paper);
   box-shadow: 0 0.5rem 1.5rem #0003;
+}
+.nb-user-shell__main .bid-presentation:not(.bid-presentation--idle) {
+  top: 4.25rem;
 }
 .bid-presentation[data-reduced-motion='true'] * {
   animation: none !important;
@@ -192,6 +200,9 @@
 }
 .bid-presentation__side.is-you .bid-presentation__deck {
   color: var(--bid-red);
+}
+.bid-presentation__side.is-opponent .bid-presentation__deck {
+  color: var(--bid-ink);
 }
 .bid-presentation__center {
   display: grid;
@@ -233,11 +244,11 @@
   font-size: 0.75rem;
   white-space: nowrap;
 }
-.bid-presentation--draw .bid-reward--0 {
-  animation: bid-presentation-draw-left 0.8s ease-out both;
+.bid-presentation--draw .bid-reward--0.is-drawing-from-deck {
+  animation: bid-presentation-draw-from-deck 0.8s ease-out both;
 }
-.bid-presentation--draw .bid-reward--1 {
-  animation: bid-presentation-draw-right 0.8s ease-out both;
+.bid-presentation--draw .bid-reward--1.is-drawing-from-deck {
+  animation: bid-presentation-draw-from-deck 0.8s ease-out both;
 }
 .bid-presentation--reveal .bid-presentation__bid {
   animation: bid-presentation-flip 0.8s ease-out both;
@@ -274,6 +285,16 @@
   from {
     opacity: 0;
     transform: translateX(-3.5rem) rotate(-12deg) scale(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bid-presentation-draw-from-deck {
+  from {
+    opacity: 0.25;
+    transform: translate(var(--draw-x, 0), var(--draw-y, 0)) scale(var(--draw-scale, 1));
   }
   to {
     opacity: 1;
@@ -339,6 +360,66 @@
   gap: 1rem;
   flex-shrink: 0;
 }
+.bid-reward-deck {
+  position: relative;
+  flex: 0 0 auto;
+}
+.bid-reward-deck > summary {
+  display: grid;
+  place-items: center;
+  width: 3.2rem;
+  height: 4.6rem;
+  border: 1px solid var(--bid-line);
+  border-radius: 0.35rem;
+  background: repeating-linear-gradient(45deg, var(--bid-paper) 0 5px, #a8965d30 5px 7px);
+  cursor: pointer;
+  list-style: none;
+  font-size: 1.5rem;
+  box-shadow: 2px 4px 0 #796c3e25;
+}
+.bid-reward-deck > summary::-webkit-details-marker {
+  display: none;
+}
+.bid-reward-deck--0 > summary {
+  color: var(--bid-red);
+}
+.bid-reward-deck--1 > summary {
+  color: var(--bid-ink);
+}
+.bid-reward-deck > summary small {
+  font-size: 0.75rem;
+  color: var(--bid-muted);
+}
+.bid-reward-deck__dialog {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.4rem);
+  left: 50%;
+  width: min(14rem, calc(100vw - 1rem));
+  transform: translateX(-50%);
+  padding: 0.7rem;
+  border: 1px solid var(--bid-line);
+  border-radius: 0.35rem;
+  background: var(--bid-paper);
+  box-shadow: 0 0.5rem 1.2rem #0003;
+  font-size: 0.78rem;
+}
+.bid-reward-deck.is-you .bid-reward-deck__dialog {
+  left: 0;
+  transform: none;
+}
+.bid-reward-deck.is-opponent .bid-reward-deck__dialog {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+.bid-reward-deck__dialog p {
+  margin: 0.4rem 0;
+  font-weight: 700;
+}
+.bid-reward-deck__dialog small {
+  color: var(--bid-muted);
+}
 .bid-reward {
   position: relative;
   display: flex;
@@ -355,6 +436,9 @@
 }
 .bid-reward--0 {
   color: var(--bid-red);
+}
+.bid-reward--1 {
+  color: var(--bid-ink);
 }
 .bid-reward__corner {
   position: absolute;
@@ -439,9 +523,15 @@
 }
 .bid-hand {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  grid-template-columns: repeat(13, minmax(44px, 1fr));
   gap: 0.5rem;
   padding-top: 0.4rem;
+  min-width: 640px;
+}
+.bid-hand-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
 }
 .bid-card {
   display: flex;
@@ -464,6 +554,34 @@
 .bid-card strong {
   font-size: 1.25rem;
   font-weight: 600;
+}
+.bid-card__corner {
+  align-self: flex-start;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.bid-card__corner--bottom {
+  align-self: flex-end;
+  transform: rotate(180deg);
+}
+.bid-card__center {
+  color: var(--bid-red);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.bid-card {
+  aspect-ratio: 2 / 3;
+  min-height: 5rem;
+  justify-content: space-between;
+}
+.bid-card .bid-card__corner {
+  font-size: clamp(0.85rem, 1.15vw, 1.25rem);
+}
+.bid-card .bid-card__center {
+  font-size: clamp(1.2rem, 2vw, 2.2rem);
+}
+.bid-public .bid-card:not(.is-played) {
+  opacity: 1;
 }
 .bid-card small {
   color: var(--bid-muted);
@@ -488,6 +606,16 @@
   cursor: default;
   opacity: 0.72;
 }
+.bid-card.is-played {
+  color: #777;
+  background: #e5e3df;
+  border-color: #aaa;
+  filter: grayscale(1);
+  opacity: 0.62;
+}
+.bid-card.is-played small {
+  color: #666;
+}
 .bid-confirm {
   display: flex;
   justify-content: space-between;
@@ -501,6 +629,13 @@
   padding: 0.5rem 0;
   margin-top: 1rem;
   font-size: 0.85rem;
+}
+.bid-public__seat h2 {
+  font-size: 1rem;
+  margin: 0.5rem 0;
+}
+.bid-public__seat + .bid-public__seat {
+  margin-top: 1rem;
 }
 .bid-public summary {
   min-height: 44px;
@@ -607,25 +742,34 @@
 }
 @media (max-width: 600px) {
   .bid-table {
-    gap: 1rem;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.8rem 0.35rem;
+    padding-inline: 0.4rem;
+  }
+  .bid-reward-deck > summary {
+    width: 2.2rem;
+    height: 3.4rem;
+  }
+  .bid-reward-deck.is-opponent {
+    justify-self: end;
   }
   .bid-pool {
-    flex: 1;
-    min-width: 5rem;
+    grid-column: 1 / -1;
+    text-align: center;
   }
   .bid-rewards {
-    gap: 0.65rem;
+    gap: 0.35rem;
   }
   .bid-reward {
-    width: 5rem;
+    width: 4.1rem;
   }
   .bid-pool > strong {
     font-size: 2.7rem;
   }
   .bid-hand {
     gap: 0.45rem;
-    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+    grid-template-columns: repeat(13, minmax(44px, 1fr));
   }
   .bid-modes {
     gap: 0.4rem;

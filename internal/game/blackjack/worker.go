@@ -54,7 +54,7 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(list) < 1 || len(list) > 8 {
+	if len(list) < 1 || len(list) > engine.MaxSeats {
 		return ErrInvariant
 	}
 	if v.Phase == "decision" {

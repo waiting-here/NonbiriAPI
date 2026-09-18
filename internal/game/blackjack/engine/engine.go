@@ -12,7 +12,7 @@ import (
 
 const (
 	DeckSize        = 312
-	MaxSeats        = 8
+	MaxSeats        = 9
 	MaxHands        = 2
 	SeatingSeconds  = 15
 	DecisionSeconds = 30

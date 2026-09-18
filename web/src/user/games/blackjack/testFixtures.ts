@@ -72,7 +72,7 @@ export function blackjackWire(
           phase === 'seating'
             ? null
             : {
-                seats: Array.from({ length: 8 }, (_, number) => ({ number, hands: hands(number) })),
+                seats: Array.from({ length: 9 }, (_, number) => ({ number, hands: hands(number) })),
                 dealer: finished
                   ? [
                       { rank: 10, suit: 0 },
@@ -84,14 +84,14 @@ export function blackjackWire(
                 hole_hidden: !finished,
                 finished,
               },
-        seats: Array.from({ length: 8 }, (_, seat) => ({
+        seats: Array.from({ length: 9 }, (_, seat) => ({
           seat,
           stake: '5000',
           rake_bp: config.rake_bp,
           stopped: false,
         })),
         settlements: finished
-          ? Array.from({ length: 8 }, (_, seat) => ({
+          ? Array.from({ length: 9 }, (_, seat) => ({
               seat,
               hands: [
                 {

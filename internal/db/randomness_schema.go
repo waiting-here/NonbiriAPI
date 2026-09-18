@@ -6,7 +6,7 @@ import (
 	"errors"
 )
 
-const preRandomnessManifestHash = "639040c75ac740c81988c3f10da423b8f5161ab1dcf8e53cf9641eada28c755a"
+const preRandomnessManifestHash = "0cb213e554d8954f499bcbe427ec21b2be10d1ac1c87957ede5aa74d4ef5ad9f"
 
 const gameRandomnessSchema = `
 CREATE TABLE game_random_proofs (

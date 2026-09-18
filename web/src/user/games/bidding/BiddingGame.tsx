@@ -13,7 +13,7 @@ import { DuelHistory } from '../common/duel/History';
 import type { DuelLobbyContext } from '../common/duel/types';
 import { creditsToMilli, formatCredits } from '../common/strict';
 import { BIDDING_MODES, biddingCodec } from './normalize';
-import { BiddingControls, PublicCards, RewardCard } from './Cards';
+import { BiddingControls, PublicCards, RewardCard, RewardDeck } from './Cards';
 import { BiddingRoundView, PlayedHistory } from './HistoryView';
 import { biddingAudioFacts } from './audioFacts';
 import { useArcadeAudio } from '../common/audio/useArcadeAudio';
@@ -171,13 +171,26 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
             </p>
           )}
           <section className="bid-table" aria-label={t('本轮奖励与奖池', 'Round rewards and pool')}>
+            <RewardDeck
+              view={current.view}
+              side={current.you}
+              round={current.round}
+              you={current.you}
+            />
             <div className="bid-rewards">
               {current.view.rewards
                 .filter((card) => card.round === current.round)
+                .sort((a, b) => (a.side === current.you ? -1 : b.side === current.you ? 1 : 0))
                 .map((card) => (
                   <RewardCard key={`${card.round}:${card.side}`} card={card} />
                 ))}
             </div>
+            <RewardDeck
+              view={current.view}
+              side={(1 - current.you) as 0 | 1}
+              round={current.round}
+              you={current.you}
+            />
             <div className="bid-pool">
               <span>{t('当前奖池', 'CURRENT POOL')}</span>
               <strong key={`${current.round}:${current.view.pool}`}>{current.view.pool}</strong>

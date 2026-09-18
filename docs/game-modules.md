@@ -71,7 +71,7 @@ into ordinary user exports.
 
 Blackjack uses a separate multi-seat module, not the two-player service. A single
 table follows server minutes with 15 seconds for seating, 30 for decisions and 15
-for results. Up to eight players are admitted from a persistent FIFO queue, with
+for results. Up to nine players are admitted from a persistent FIFO queue, with
 at most 4,096 waiters. Queue entry and each split or double reserve actual payment
 sources atomically; normal per-hand returns become General Credits after the
 frozen fees, while cancellation refunds the original sources. The game starts

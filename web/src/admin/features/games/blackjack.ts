@@ -31,7 +31,7 @@ function summary(v: unknown, dataset: BlackjackDataset) {
     id: ref(r.id, dataset),
     phase: phase(r.phase),
     reason: reason(r.reason),
-    seats: integer(r.seats, 'seat count', 1, 8),
+    seats: integer(r.seats, 'seat count', 1, 9),
     total_stake: amount(r.total_stake, 'total stake', false),
     net: amount(r.net, 'net paid', false),
     started_at: nullableUnixSecond(r.started_at ?? null, 'start'),
@@ -69,11 +69,11 @@ export function blackjackAdminDetail(v: unknown) {
           return {
             started_at: unixSecond(v.started_at, 'start'),
             terminal_at: unixSecond(v.terminal_at, 'finish'),
-            participants: array(v.participants, 'participants', 8).map((v) => {
+            participants: array(v.participants, 'participants', 9).map((v) => {
               const p = record(v, ['seat', 'user_id', 'payment', 'operations'], 'participant');
               const paid = record(p.payment, ['general', 'game'], 'payment');
               return {
-                seat: integer(p.seat, 'seat', 0, 7),
+                seat: integer(p.seat, 'seat', 0, 8),
                 user_id:
                   p.user_id === null ? null : decimal(p.user_id, 'user id', { positive: true }),
                 payment: {

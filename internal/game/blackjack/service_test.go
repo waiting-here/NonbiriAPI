@@ -221,18 +221,18 @@ func (f *fixture) recovery() {
 }
 
 func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
-	f := newFixture(t, 11)
-	receipts := make([]blackjack.QueueReceipt, 10)
+	f := newFixture(t, 12)
+	receipts := make([]blackjack.QueueReceipt, 11)
 	for i := range receipts {
 		receipts[i] = f.join(i)
 	}
-	h := f.read(10)
-	if h.Table == nil || len(h.Table.Fact.Seats) != 8 || h.QueueCount != "2" || h.Deadline != 135 {
+	h := f.read(11)
+	if h.Table == nil || len(h.Table.Fact.Seats) != 9 || h.QueueCount != "2" || h.Deadline != 135 {
 		t.Fatalf("table admission: %+v", h)
 	}
-	for i := 8; i < 10; i++ {
+	for i := 9; i < 11; i++ {
 		v := f.read(i)
-		if v.You == nil || v.You.Position != strconv.Itoa(i-7) {
+		if v.You == nil || v.You.Position != strconv.Itoa(i-8) {
 			t.Fatal("FIFO rank")
 		}
 	}
@@ -240,23 +240,23 @@ func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
 	if _, err := f.s.Leave(f.ctx, f.users[2], f.id("op_"), receipts[2].ID); err != nil {
 		t.Fatal(err)
 	}
-	if v := f.read(8); v.You == nil || v.You.State != "seated" || *v.You.Seat != 2 {
+	if v := f.read(9); v.You == nil || v.You.State != "seated" || *v.You.Seat != 2 {
 		t.Fatal("replacement missing")
 	}
 	f.clock.Store(135)
 	h = f.read(0)
-	if h.Table == nil || h.Table.Fact.Cards == nil || len(h.Table.Fact.Cards.Seats) != 8 {
+	if h.Table == nil || h.Table.Fact.Cards == nil || len(h.Table.Fact.Cards.Seats) != 9 {
 		t.Fatal("table did not deal")
 	}
 	if r, err := f.s.Leave(f.ctx, f.users[0], f.id("op_"), receipts[0].ID); err != nil || r.Status != 409 {
 		t.Fatal("late departure should not refund", r.Status, err)
 	}
 	f.clock.Store(165)
-	h = f.read(10)
-	if h.Phase != "result" || h.NextRoundAt != 180 || h.Table == nil || len(h.Table.Fact.Settlements) != 8 {
+	h = f.read(11)
+	if h.Phase != "result" || h.NextRoundAt != 180 || h.Table == nil || len(h.Table.Fact.Settlements) != 9 {
 		t.Fatalf("deadline result: %+v", h)
 	}
-	if v := f.read(9); v.You == nil || v.You.State != "waiting" || v.You.Position != "1" {
+	if v := f.read(10); v.You == nil || v.You.State != "waiting" || v.You.Position != "1" {
 		t.Fatal("waiter lost position")
 	}
 	f.join(0)
@@ -264,7 +264,7 @@ func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
 		t.Fatal("former player did not join tail")
 	}
 	f.clock.Store(180)
-	h = f.read(9)
+	h = f.read(10)
 	if h.You.State != "seated" || *h.You.Seat != 0 || len(h.Table.Fact.Seats) != 2 || h.Deadline != 195 {
 		t.Fatal("next minute seat order")
 	}
@@ -275,8 +275,8 @@ func TestConcurrentQueueAcceptanceAndDuplicateKeys(t *testing.T) {
 	f := newFixture(t, 10)
 	cfg := f.read(9).ConfigHash
 	var wg sync.WaitGroup
-	failures := make(chan error, 9)
-	for i := range 9 {
+	failures := make(chan error, 10)
+	for i := range 10 {
 		key := f.id("op_")
 		wg.Add(1)
 		go func(user int) {
@@ -293,8 +293,8 @@ func TestConcurrentQueueAcceptanceAndDuplicateKeys(t *testing.T) {
 		}
 	}
 	h := f.read(9)
-	if len(h.Table.Fact.Seats) != 8 || h.QueueCount != "1" {
-		t.Fatal("ninth seat raced through capacity")
+	if len(h.Table.Fact.Seats) != 9 || h.QueueCount != "1" {
+		t.Fatal("tenth player raced through table capacity")
 	}
 	before := f.read(0).You.ID
 	key := f.id("op_")
@@ -315,10 +315,10 @@ func TestConcurrentQueueAcceptanceAndDuplicateKeys(t *testing.T) {
 
 func TestRestartCancelsDealtTableButPreservesWaiter(t *testing.T) {
 	f := newFixture(t, 10)
-	for i := range 9 {
+	for i := range 10 {
 		f.join(i)
 	}
-	waiter := f.read(8).You.ID
+	waiter := f.read(9).You.ID
 	f.clock.Store(136)
 	h := f.read(0)
 	if h.Phase != "decision" {
@@ -327,7 +327,7 @@ func TestRestartCancelsDealtTableButPreservesWaiter(t *testing.T) {
 	session := h.Table.ID
 	f.s.Close()
 	f.s = f.service()
-	h = f.read(8)
+	h = f.read(9)
 	if h.You == nil || h.You.ID != waiter || h.You.State != "waiting" {
 		t.Fatal("restart removed candidate")
 	}
@@ -335,7 +335,7 @@ func TestRestartCancelsDealtTableButPreservesWaiter(t *testing.T) {
 	if err := f.db.QueryRow(`SELECT phase FROM game_blackjack_sessions WHERE id=?`, session).Scan(&phase); err != nil || phase != "cancelled" {
 		t.Fatal("restart did not cancel current table", err)
 	}
-	for _, identity := range f.users[:8] {
+	for _, identity := range f.users[:9] {
 		tx, err := f.db.Begin()
 		if err != nil {
 			t.Fatal(err)

@@ -36,6 +36,7 @@ import '../games.css';
 import '../common/duel/duel.css';
 import './likes.css';
 import './effects.css';
+import './desktop.css';
 
 function Rules({
   catalog,

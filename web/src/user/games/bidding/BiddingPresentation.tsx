@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDuelText } from '../common/duel/copy';
 import type { DuelHome, Seat } from '../common/duel/types';
 import type { BiddingView, Reward } from './normalize';
@@ -210,6 +210,46 @@ export function BiddingPresentation({
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
+  useLayoutEffect(() => {
+    const visibleStep = stepKey === scene?.key ? step : scene?.bids ? 'reveal' : 'draw';
+    if (!scene || visibleStep !== 'draw') return;
+    const decks = [0, 1].map((side) =>
+      document.querySelector<HTMLElement>(`.bid-reward-deck--${side} > summary`),
+    );
+    const targets = [0, 1].map((side) =>
+      document.querySelector<HTMLElement>(
+        `.bid-presentation .bid-reward[data-reward-key="${scene.nextRewards.find((reward) => reward.side === side)?.round ?? scene.round}:${side}"]`,
+      ),
+    );
+    const changed: HTMLElement[] = [];
+    decks.forEach((source, side) => {
+      const target = targets[side];
+      if (!source || !target) return;
+      const sourceRect = source.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (sourceRect.width <= 0 || targetRect.width <= 0) return;
+      target.style.setProperty(
+        '--draw-x',
+        `${sourceRect.left + sourceRect.width / 2 - targetRect.left - targetRect.width / 2}px`,
+      );
+      target.style.setProperty(
+        '--draw-y',
+        `${sourceRect.top + sourceRect.height / 2 - targetRect.top - targetRect.height / 2}px`,
+      );
+      target.style.setProperty('--draw-scale', `${sourceRect.width / targetRect.width}`);
+      target.classList.add('is-drawing-from-deck');
+      changed.push(target);
+    });
+    return () => {
+      changed.forEach((target) => {
+        target.classList.remove('is-drawing-from-deck');
+        target.style.removeProperty('--draw-x');
+        target.style.removeProperty('--draw-y');
+        target.style.removeProperty('--draw-scale');
+      });
+    };
+  }, [scene, step, stepKey]);
+
   if (!scene)
     return home?.current ? (
       <section className="bid-presentation bid-presentation--idle">
@@ -250,20 +290,19 @@ export function BiddingPresentation({
     >
       <div className={`bid-presentation__stage ${ownerClass}`}>
         <div className="bid-presentation__side is-you">
-          <span>{visibleStep === 'draw' ? t('红桃牌堆', 'Hearts deck') : t('你', 'You')}</span>
-          {visibleStep === 'draw' ? (
-            <div className="bid-presentation__deck" aria-hidden="true">
-              ♥
-            </div>
-          ) : (
-            scene.bids && <BidCard value={scene.bids[scene.you]} className="is-left" />
+          <span>{t('你', 'You')}</span>
+          {visibleStep !== 'draw' && scene.bids && (
+            <BidCard value={scene.bids[scene.you]} className="is-left" />
           )}
         </div>
         <div className="bid-presentation__center">
           <div className="bid-presentation__cards">
-            {shownRewards.slice(0, 2).map((reward) => (
-              <RewardCard key={`${reward.round}:${reward.side}`} card={reward} />
-            ))}
+            {shownRewards
+              .slice(0, 2)
+              .sort((a, b) => (a.side === scene.you ? -1 : b.side === scene.you ? 1 : 0))
+              .map((reward) => (
+                <RewardCard key={`${reward.round}:${reward.side}`} card={reward} />
+              ))}
           </div>
           {visibleStep !== 'draw' && (
             <strong className="bid-presentation__pot">
@@ -272,17 +311,9 @@ export function BiddingPresentation({
           )}
         </div>
         <div className="bid-presentation__side is-opponent">
-          <span>
-            {visibleStep === 'draw' ? t('黑桃牌堆', 'Spades deck') : t('对手', 'Opponent')}
-          </span>
-          {visibleStep === 'draw' ? (
-            <div className="bid-presentation__deck" aria-hidden="true">
-              ♠
-            </div>
-          ) : (
-            scene.bids && (
-              <BidCard value={scene.bids[(1 - scene.you) as Seat]} className="is-right" />
-            )
+          <span>{t('对手', 'Opponent')}</span>
+          {visibleStep !== 'draw' && scene.bids && (
+            <BidCard value={scene.bids[(1 - scene.you) as Seat]} className="is-right" />
           )}
         </div>
       </div>

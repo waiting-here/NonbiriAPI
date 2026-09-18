@@ -6,10 +6,12 @@ export function LikesArt({
   slot,
   label,
   className = '',
+  eager = false,
 }: {
   readonly slot: ArtSlot;
   readonly label: string;
   readonly className?: string;
+  readonly eager?: boolean;
 }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const showingFallback = failedSource === slot.source;
@@ -24,7 +26,7 @@ export function LikesArt({
       <img
         src={showingFallback ? mark : slot.source}
         alt={label}
-        loading="lazy"
+        loading={eager ? 'eager' : 'lazy'}
         decoding="async"
         onError={showingFallback ? undefined : () => setFailedSource(slot.source)}
         style={{ objectPosition: `${slot.focus[0] * 100}% ${slot.focus[1] * 100}%` }}
