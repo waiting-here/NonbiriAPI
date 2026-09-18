@@ -25,6 +25,7 @@ export type MainstreamChannelListState = MainstreamChannelState | 'all';
 export const MAINSTREAM_CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
+  'ai-sdk-gateway-v3',
 ] as const;
 export type MainstreamConnectorType = (typeof MAINSTREAM_CONNECTOR_TYPES)[number];
 
@@ -106,7 +107,8 @@ export function normalizeAdminMainstreamChannel(value: unknown): AdminMainstream
   const state = oneOf(root.state, MAINSTREAM_CHANNEL_STATES, 'mainstream channel state');
   const enabled = boolean(root.enabled, 'mainstream channel enabled state');
   const retiredAt = nullableUnixSecond(root.retired_at, 'mainstream channel retirement time');
-  if (state === 'active' && retiredAt !== null) invalidResponse('active mainstream channel retirement state');
+  if (state === 'active' && retiredAt !== null)
+    invalidResponse('active mainstream channel retirement state');
   if (state === 'retired' && (retiredAt === null || enabled)) {
     invalidResponse('retired mainstream channel state');
   }
@@ -239,7 +241,8 @@ export function getAdminMainstreamChannel(
 }
 
 function createBody(input: AdminMainstreamChannelCreate): AdminMainstreamChannelCreate {
-  if (input === null || typeof input !== 'object') return requestError('Invalid mainstream channel.');
+  if (input === null || typeof input !== 'object')
+    return requestError('Invalid mainstream channel.');
   return {
     name: requestName(input.name),
     category: requestCategory(input.category),
@@ -261,7 +264,8 @@ export function createAdminMainstreamChannel(
 }
 
 function patchBody(input: AdminMainstreamChannelPatch): AdminMainstreamChannelPatch {
-  if (input === null || typeof input !== 'object') return requestError('Invalid mainstream channel patch.');
+  if (input === null || typeof input !== 'object')
+    return requestError('Invalid mainstream channel patch.');
   const body: AdminMainstreamChannelPatch = {
     expected_revision: requestRevision(input.expected_revision),
   };

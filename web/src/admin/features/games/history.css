@@ -1,0 +1,72 @@
+.admin-duel-history-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: 1rem;
+}
+.admin-duel-history-list h3 {
+  margin-top: 0;
+}
+.admin-duel-history-list p,
+.admin-duel-export p {
+  overflow-wrap: anywhere;
+}
+.admin-duel-id {
+  font-family: var(--nb-font-mono, monospace);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.admin-duel-page .ops-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 1rem;
+}
+.admin-duel-dialog {
+  width: min(68rem, calc(100vw - 1.5rem));
+}
+.admin-duel-dialog summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0.6rem 0.25rem;
+  overflow-wrap: anywhere;
+}
+.admin-duel-dialog details {
+  min-width: 0;
+}
+.admin-duel-facts {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+.admin-duel-facts > div {
+  display: grid;
+  grid-template-columns: minmax(5rem, 1fr) minmax(0, 3fr);
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.admin-duel-facts dt {
+  overflow-wrap: anywhere;
+  color: var(--nb-color-text-muted);
+}
+.admin-duel-facts dd {
+  min-width: 0;
+  margin: 0;
+}
+.admin-duel-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.admin-duel-round {
+  border-top: 1px solid var(--nb-color-border);
+  margin-top: 0.5rem;
+}
+@media (max-width: 600px) {
+  .admin-duel-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+  .admin-duel-page input,
+  .admin-duel-page select {
+    min-width: 0;
+    max-width: 100%;
+  }
+}

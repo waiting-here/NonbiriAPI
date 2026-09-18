@@ -144,6 +144,27 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'game-bidding',
+    path: '/games/bidding',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
+    id: 'game-likes',
+    path: '/games/likes',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
+    id: 'game-blackjack',
+    path: '/games/blackjack',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'logs',
     path: '/logs',
     access: 'user',
@@ -197,6 +218,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     labelKey: 'user.steward.nav',
   }),
   user({ id: 'privacy', path: '/privacy', access: 'public', layout: 'readable', registered: true }),
+  user({
+    id: 'access-denied',
+    path: '/access-denied',
+    access: 'public',
+    layout: 'notice',
+    registered: true,
+  }),
   user({ id: 'terms', path: '/terms', access: 'public', layout: 'readable', registered: true }),
   user({
     id: 'maintenance',
@@ -328,6 +356,20 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'content',
     icon: 'games',
     labelKey: 'admin.games.nav',
+  }),
+  admin({
+    id: 'admin-game-history',
+    path: '/games/history',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
+  }),
+  admin({
+    id: 'admin-blackjack-history',
+    path: '/games/blackjack/history',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
   }),
   admin({
     id: 'admin-reports',

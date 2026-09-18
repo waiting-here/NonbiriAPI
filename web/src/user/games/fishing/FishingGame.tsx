@@ -11,6 +11,7 @@ import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
 import { GamePayment } from '../common/GamePayment';
 import { GameWallets } from '../common/GameWallets';
+import { RandomnessProof } from '../common/RandomnessProof';
 import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
@@ -204,9 +205,19 @@ function RakeDetails({ gross, rake }: { readonly gross: string; readonly rake: F
     <details className="fishing-rake-details">
       <summary>{text('fishing.rake.details')}</summary>
       <dl>
-        <div><dt>{text('fishing.rake.gross')}</dt><dd><GameMoney value={gross} /></dd></div>
+        <div>
+          <dt>{text('fishing.rake.gross')}</dt>
+          <dd>
+            <GameMoney value={gross} />
+          </dd>
+        </div>
         {(['platform', 'welfare', 'thursday'] as const).map((kind) => (
-          <div key={kind}><dt>{text(`fishing.rake.${kind}`)}</dt><dd><GameMoney value={rake[kind]} /></dd></div>
+          <div key={kind}>
+            <dt>{text(`fishing.rake.${kind}`)}</dt>
+            <dd>
+              <GameMoney value={rake[kind]} />
+            </dd>
+          </div>
         ))}
       </dl>
     </details>
@@ -269,6 +280,8 @@ function ResultPanel({
                     ? text('fishing.size', { size: outcomeDisplayLength(outcome)! })
                     : text(`fishing.tier.${outcome.tier}`)}
                 </span>
+              </div>
+              <div className="fishing-outcome__payout">
                 <span>{text('fishing.reward', { amount: formatCredits(outcome.netReward) })}</span>
                 <RakeDetails gross={outcome.reward} rake={outcome.rake} />
               </div>
@@ -287,14 +300,21 @@ function ResultPanel({
               <div key={label}>
                 <dt>{text(`fishing.result.${label}`)}</dt>
                 <dd>
-                  {label === 'entry' ? <GamePayment payment={result.payment} /> :
-                    label === 'balance' ? <GameWallets wallets={result} /> : <GameMoney value={value} />}
+                  {label === 'entry' ? (
+                    <GamePayment payment={result.payment} />
+                  ) : label === 'balance' ? (
+                    <GameWallets wallets={result} />
+                  ) : (
+                    <GameMoney value={value} />
+                  )}
                 </dd>
               </div>
             ))}
           </dl>
         ) : null}
-        {revealed === result.outcomes.length ? <RakeDetails gross={result.payoutTotal} rake={result.rake} /> : null}
+        {revealed === result.outcomes.length ? (
+          <RakeDetails gross={result.payoutTotal} rake={result.rake} />
+        ) : null}
         {hasMore && revealed === result.outcomes.length ? (
           <p className="game-inline-notice">{text('fishing.result.more')}</p>
         ) : null}
@@ -549,8 +569,11 @@ export function FishingGame() {
   useEffect(() => {
     if (result && notifyBatch.current === result.batchID) {
       notifyBatch.current = null;
-      pushToast?.({ tone: 'success', title: text('fishing.result.title'),
-        message: text('fishing.netReceived', { amount: formatCredits(result.netPayoutTotal) }) });
+      pushToast?.({
+        tone: 'success',
+        title: text('fishing.result.title'),
+        message: text('fishing.netReceived', { amount: formatCredits(result.netPayoutTotal) }),
+      });
     }
   }, [result, pushToast, text]);
   const pending = authoritative?.settlementPending ?? null;
@@ -815,6 +838,11 @@ export function FishingGame() {
       {header}
       <div className="fishing-layout">
         <div className="fishing-main">
+          <RandomnessProof
+            game="fishing"
+            id={pending?.batchID ?? shownResult?.batchID}
+            terminal={!!shownResult && !pending}
+          />
           <FishingStage
             phase={shownResult && shownRevealed === shownResult.outcomes.length ? 'result' : phase}
             level4={(session.data?.user.effective_level ?? 0) >= 4}

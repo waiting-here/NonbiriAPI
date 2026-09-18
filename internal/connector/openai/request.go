@@ -235,7 +235,7 @@ func projectCapabilities(fields []jsonField, stream bool) CapabilityRequirements
 			if stream {
 				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityStream)
 			}
-		case "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop":
+		case "max_tokens", "max_completion_tokens", "temperature", "top_p", "top_k", "stop", "presence_penalty", "frequency_penalty", "seed", "n", "logprobs", "logit_bias", "response_format":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilitySampling)
 		case "tools":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityTools)

@@ -143,8 +143,9 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		// Fresh is deliberately fail-closed even though the inherited effective
 		// defaults remain maintenance=false and registration=true in the admin
 		// catalog when a row is absent.
-		"maintenance_mode":  boolSpec("1"),
-		"registration_open": boolSpec("0"),
+		"maintenance_mode":                 boolSpec("1"),
+		"registration_open":                boolSpec("0"),
+		"gateway_user_attribution_enabled": boolSpec("0"),
 		// These three inherited keys have a real raw-null state. They are known,
 		// but intentionally have no required seed row.
 		"site_timezone_offset_minutes":  {kind: generationTwoConfigTimezone},
@@ -231,6 +232,26 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		catalog["game_rps_"+mode+"_gesture_seconds"] = uintSpec("20", 5, 20)
 		catalog["game_rps_"+mode+"_dealer_seconds"] = uintSpec("15", 5, 15)
 		catalog["game_rps_"+mode+"_follower_seconds"] = uintSpec("15", 5, 15)
+	}
+	for key, value := range duelConfigDefaults() {
+		switch {
+		case strings.HasSuffix(key, "_enabled"):
+			catalog[key] = boolSpec(value)
+		case strings.HasSuffix(key, "_ticket_milli"):
+			catalog[key] = amountSpec(value, 1)
+		default:
+			catalog[key] = uintSpec(value, 0, 9999)
+		}
+	}
+	for key, value := range blackjackConfigDefaults() {
+		switch {
+		case strings.HasSuffix(key, "_enabled"):
+			catalog[key] = boolSpec(value)
+		case strings.HasSuffix(key, "_milli"):
+			catalog[key] = amountSpec(value, 1)
+		default:
+			catalog[key] = uintSpec(value, 0, 9999)
+		}
 	}
 	return catalog
 }

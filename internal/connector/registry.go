@@ -92,6 +92,7 @@ type AnthropicPolicyDriver interface {
 }
 
 type Dependencies struct {
+	GatewayAttribution        GatewayAttributionProvider
 	Backend                   backend.Backend
 	OpenAI                    OpenAIDriver
 	Anthropic                 AnthropicDriver
@@ -101,11 +102,12 @@ type Dependencies struct {
 type Constructor func(Dependencies) Connector
 
 type Descriptor struct {
-	Type         connectorcontract.Type
-	Capabilities connectorcontract.CapabilitySet
-	New          Constructor
-	Discoverer   ModelDiscoverer
-	Supports     func(*openai.ChatRequest) bool
+	Type              connectorcontract.Type
+	Capabilities      connectorcontract.CapabilitySet
+	New               Constructor
+	Discoverer        ModelDiscoverer
+	Supports          func(*openai.ChatRequest) bool
+	SupportsEmbedding func(*openai.EmbeddingRequest) bool
 }
 
 type Registry struct {
@@ -144,7 +146,7 @@ func NewRegistry(descriptors ...Descriptor) (*Registry, error) {
 }
 
 func NewDefaultRegistry() *Registry {
-	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor())
+	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptor())
 	if err != nil {
 		panic(err)
 	}
@@ -177,7 +179,7 @@ func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation 
 		return r.SupportsRequest(t, chat)
 	}
 	descriptor, ok := r.Descriptor(t)
-	return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)
+	return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings) && (descriptor.SupportsEmbedding == nil || descriptor.SupportsEmbedding(embedding))
 }
 
 func (r *Registry) Supported(t connectorcontract.Type) bool {

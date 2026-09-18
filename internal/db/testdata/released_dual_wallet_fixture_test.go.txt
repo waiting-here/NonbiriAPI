@@ -1,0 +1,115 @@
+package ledger
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"os"
+	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+)
+
+// This fixture is compiled with the pinned released source.
+func TestWriteReleasedDualWalletFixture(t *testing.T) {
+	if db.GenerationTwoSchemaHash() != "346a89c664c68eb4c566118c4f0b4f4ba6f3ae2f5584ede333fb6f88070e83bb" {
+		t.Fatal("wrong released schema")
+	}
+	path := os.Getenv("NONBIRI_DUAL_WALLET_FIXTURE")
+	if path == "" {
+		t.Fatal("missing fixture destination")
+	}
+	dbfixture.Materialize(t, path)
+	vault, err := secret.New(bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	store, err := db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	tx := beginLedgerTestTx(t, store.DB())
+	for i, amount := range []int64{37000, -7000} {
+		user, general := seedLedgerUser(t, tx, []string{"dual-positive", "dual-negative"}[i])
+		game, err := CreateUserAssetAccount(ctx, tx, user, Game, ledgerTestNow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		external, err := CodedAccount(ctx, tx, "external")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gameExternal, err := CodedAssetAccount(ctx, tx, "external", Game)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := NewAdminUserAdjustment(Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: user, CreatedAt: ledgerTestNow}, general.ID, external.ID, AmountFromMilli(amount), 0, Amount{}, "synthetic balance")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Apply(ctx, tx, plan); err != nil {
+			t.Fatal(err)
+		}
+		meta := Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: user, CreatedAt: ledgerTestNow}
+		award, err := NewGameCheckinAward(meta, game.ID, gameExternal.ID, AmountFromMilli(12000))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Apply(ctx, tx, award); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(`INSERT INTO game_checkins(user_id,site_day,award_milli,operation_id,created_at) VALUES(?,'2023-11-14',12000,?,?)`, user, meta.OperationID, ledgerTestNow); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for key, value := range map[string]string{"site_name": "Synthetic dual wallet fixture", "legal_privacy_override_en": "Synthetic privacy.\nPreserve this text.", "game_fishing_rtp": "90", "game_fishing_rtp_premium": "88"} {
+		if _, err := tx.Exec(`UPDATE site_config SET value=?,updated_at=? WHERE key=?`, value, ledgerTestNow, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ValidateRecovery(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB().Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReleasedRejectsDuelUpgrade(t *testing.T) {
+	path := os.Getenv("NONBIRI_DUAL_UPGRADED_FIXTURE")
+	if path == "" {
+		t.Fatal("missing upgraded fixture")
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault, err := secret.New(bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	store, err := db.Open(path, vault)
+	if store != nil {
+		store.Close()
+		t.Fatal("released binary accepted the new schema")
+	}
+	if err == nil {
+		t.Fatal("released binary did not reject the new schema")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
+		t.Fatal("rejection modified the database", err)
+	}
+}

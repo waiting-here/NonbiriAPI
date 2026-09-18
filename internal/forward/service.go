@@ -1019,6 +1019,7 @@ func debugUpstreamResult(result connectorcontract.AttemptResult, route claim.Rou
 	}
 	projection := debug.DebugUpstreamResult{
 		ResultKind: kind, StatusCode: status,
+		GatewayUserAttributionSent: result.GatewayUserAttributionSent,
 		Usage: debug.LogUsage{
 			UncachedInputTokens:   strconv.FormatInt(usage.UncachedInputTokens, 10),
 			CacheWriteInputTokens: strconv.FormatInt(usage.CacheWriteInputTokens, 10),

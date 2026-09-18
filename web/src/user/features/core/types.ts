@@ -1,4 +1,8 @@
-export const CONNECTOR_TYPES = ['openai-compatible', 'anthropic-compatible'] as const;
+export const CONNECTOR_TYPES = [
+  'openai-compatible',
+  'anthropic-compatible',
+  'ai-sdk-gateway-v3',
+] as const;
 
 export type ConnectorType = (typeof CONNECTOR_TYPES)[number];
 export type CreditAsset = 'general' | 'game';
@@ -374,6 +378,27 @@ export type HomeCheckinCapability =
 
 export type HomeGameSummary =
   | {
+      game: 'blackjack';
+      route_id: 'game-blackjack';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
+  | {
+      game: 'bidding';
+      route_id: 'game-bidding';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
+  | {
+      game: 'likes';
+      route_id: 'game-likes';
+      kind: 'continue';
+      resource_id: string;
+      state: 'waiting' | 'active';
+    }
+  | {
       game: 'fishing';
       route_id: 'game-fishing';
       kind: 'continue';
@@ -437,15 +462,15 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 6;
+  schemaVersion: 8;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV6: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportV8: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV6(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportV8(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

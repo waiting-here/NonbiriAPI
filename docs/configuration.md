@@ -2,6 +2,10 @@
 
 NonbiriAPI separates **startup security roots** from **runtime site settings**. Startup values are read only when the process starts; `site_config` values are administrator-controlled and applied without rebuilding the binary.
 
+## Gateway cost attribution
+
+The runtime administrator setting `gateway_user_attribution_enabled` is a boolean, off by default (site-config JSON `false|true`). Enabling it includes a server-generated user-and-gateway-origin pseudonym in subsequent Gateway v3 chat and embedding requests for cost attribution. Disabling it omits the tag. It can correlate requests from the same user; it is not anonymous and does not claim upstream safety processing. The caller cannot override it. Existing OpenAI and Anthropic settings remain independent. It uses the ordinary configuration catalog, administrator authorization, revision and audit rules; no startup environment variable or rebuild is required.
+
 ## Startup environment
 
 Copy [admin.env.example](../admin.env.example) to a private path outside the checkout and replace every placeholder. The example uses production-style `/etc` and `/var` paths; change them for local builds.
@@ -32,10 +36,14 @@ The database directory and file hold encrypted upstream credentials and private 
 
 Embeddings add no startup variable, model-purpose field, or separate price configuration. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Other shared limits remain active.
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-beta.4` release. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-rc.1` prerelease. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
+| `game_bidding_enabled`, `game_likes_enabled` | boolean | `false`; gates new queues, with the shared `games_enabled` master switch |
+| `game_bidding_{tier1,tier2,tier3}_enabled`, `game_likes_{quick,standard}_enabled` | boolean | `false`; each mode gates new admission |
+| `game_{game}_{mode}_ticket_milli` | positive integer millicredits | Bidding defaults: 5000/10000/50000 credits; Likes quick/standard: 5000/25000 credits. Frozen entry price; use the dedicated game configuration form; wire prices are canonical credit strings |
+| `game_{game}_{mode}_rake_{platform,welfare,thursday}_bp` | integer `[0,9999]` | each `0`; the three rates must sum below 10000 and apply only to the losing entry |
 | `site_name` | non-empty text, ≤256 bytes | display name; frontend falls back when unset |
 | `site_logo_url` | text, ≤2048 bytes, blank allowed | display image URL; blank uses the default mark |
 | `announcement_epoch` | read-only opaque ID | generated for each fresh database and used to isolate announcement caches |

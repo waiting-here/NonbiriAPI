@@ -141,6 +141,7 @@ function endpointKey(
           ? 1_800_000_000
           : 1_800_003_600
         : options.expiresAt,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason:
       options.endedReason === undefined ? (terminal ? 'expired' : null) : options.endedReason,
@@ -904,7 +905,7 @@ test('user charity overview fails closed on an invalid numbered page and privacy
   await page.goto(`${USER_ORIGIN}/privacy`);
   await expect(page.getByRole('heading', { name: 'Privacy policy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Retention and deletion' })).toBeVisible();
-  await expect(page.locator('body')).toContainText('Export version 6');
+  await expect(page.locator('body')).toContainText('Export version 8');
   await expect(page.locator('body')).toContainText('up to 90 days');
   await assertClean(page, guard);
 });
@@ -952,6 +953,7 @@ test('administrator charity provenance grouping and report lineage expose safe d
     token_reserve: 32,
     authorized_expires_at: 1_800_003_600,
     expires_at: 1_800_003_600,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     safe_note: 'Safe administrative note',

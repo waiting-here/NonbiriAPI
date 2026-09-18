@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createGameSound, type GameSound, type GameSoundCue } from './sound';
 
-type SoundGame = 'linklink' | 'fishing' | 'rps';
+type SoundGame = 'linklink' | 'fishing' | 'rps' | 'blackjack';
 
 export interface GameSoundControl {
   readonly enabled: boolean;

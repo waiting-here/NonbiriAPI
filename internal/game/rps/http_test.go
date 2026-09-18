@@ -55,7 +55,7 @@ func TestActionHTTPMissingOrNullPayloadIsInvalidAndValidRequestRuns(t *testing.T
 	if err := RegisterRoutes(ordinary, continuation, fixture.service); err != nil {
 		t.Fatal(err)
 	}
-	if len(ordinary.handlers) != 4 || len(continuation.handlers) != 4 {
+	if len(ordinary.handlers) != 4 || len(continuation.handlers) != 5 || continuation.handlers["GET /api/games/rps/randomness/{id}"] == nil {
 		t.Fatalf("registered ordinary=%d continuation=%d", len(ordinary.handlers), len(continuation.handlers))
 	}
 	handler := continuation.handlers[http.MethodPost+" "+RouteActions]

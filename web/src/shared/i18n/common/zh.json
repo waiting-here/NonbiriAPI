@@ -14,6 +14,22 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "gatewayName": "AI SDK Gateway v3",
+    "gatewayAttribution": {
+      "label": "Gateway 费用归因标签",
+      "sent": "已发送",
+      "notSent": "未发送"
+    },
+    "failurePolicy": {
+      "label": "连续失败下架阈值",
+      "help": "默认 10。请输入 0 至 340282366920938463463374607431768211455 的整数，不带前导零。",
+      "zeroWarning": "永不因报错自动下架：这把密钥发生连续错误时仍可能被调用。手动禁用、到期、封禁及配额限制仍然有效。",
+      "saved": "当前下架阈值：{{value}}",
+      "recalculate": "保存后保留已有失败次数并立即重算报错下架状态。此操作不会启用密钥或重置失败次数。",
+      "save": "保存失败策略",
+      "done": "失败策略已保存并重新计算。",
+      "invalid": "请填写有效的连续失败阈值。"
+    },
     "refresh": "刷新",
     "donationHandling": {
       "title": "公共待办",

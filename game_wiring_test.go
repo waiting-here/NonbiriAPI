@@ -29,6 +29,10 @@ type gameWireFixture struct {
 }
 
 func newGameWireFixture(t *testing.T) gameWireFixture {
+	return newGameWireFixtureWithClock(t, nil)
+}
+
+func newGameWireFixtureWithClock(t *testing.T, nowFunc func() time.Time) gameWireFixture {
 	t.Helper()
 	vault, err := secret.New(bytes.Repeat([]byte{0x53}, secret.MasterKeyBytes))
 	if err != nil {
@@ -42,7 +46,7 @@ func newGameWireFixture(t *testing.T) gameWireFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	app, err := buildApplication(auditConfig(), store, vault)
+	app, err := buildApplicationWithGameClock(auditConfig(), store, vault, nowFunc)
 	if err != nil {
 		t.Fatal(err)
 	}

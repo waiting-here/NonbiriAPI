@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
@@ -161,10 +162,26 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 	if err = ledger.CheckImmediateCapacity(ctx, tx, one); err != nil {
 		return nil, nil, mapLedger(err)
 	}
+	batchID, err := service.generateID("fb_")
+	if err != nil {
+		return nil, nil, ErrServiceUnavailable
+	}
+	source := service.random
+	var proof *randomness.Secret
+	if service.proofs {
+		proof, err = randomness.New("fishing", batchID, strconv.Itoa(rulesVersion)+"/"+string(bait)+"/"+strconv.Itoa(input.Count), nil)
+		if err != nil {
+			return nil, nil, ErrServiceUnavailable
+		}
+		source, err = proof.Stream("catch")
+		if err != nil {
+			return nil, nil, ErrServiceUnavailable
+		}
+	}
 	service.rngMu.Lock()
-	draws, drawErr := snapshot.Rules.RollBatch(bait, input.Count, service.random)
+	draws, drawErr := snapshot.Rules.RollBatch(bait, input.Count, source)
 	if drawErr == nil {
-		draws, drawErr = fishing.DecorateBatch(ctx, draws, service.random)
+		draws, drawErr = fishing.DecorateBatch(ctx, draws, source)
 	}
 	service.rngMu.Unlock()
 	if drawErr != nil {
@@ -191,10 +208,6 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 			return nil, nil, ErrInvariant
 		}
 	}
-	batchID, err := service.generateID("fb_")
-	if err != nil {
-		return nil, nil, ErrServiceUnavailable
-	}
 	reserveOperationID, err := service.generateID("op_")
 	if err != nil {
 		return nil, nil, ErrServiceUnavailable
@@ -208,6 +221,9 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 		_, insertErr := tx.ExecContext(ctx, `INSERT INTO game_fishing_batches(id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,request_hash,state,ledger_rows_remaining,attempt_count,next_attempt_at,last_error_class,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli,net_payout_total_milli,platform_bp,welfare_bp,thursday_bp,platform_cut_total_milli,welfare_cut_total_milli,thursday_cut_total_milli) VALUES(?,?,?,?,?,?,?,?,?,'reserved',?,0,?,NULL,0,?,NULL,NULL,?,?,?,?,?,?,?,?,?)`, batchID, input.UserID, string(bait), input.Count, entry, entryTotal, payoutTotal, terminalOperationID, requestHash[:], db.EncodeU128(one), nextAttempt, decisionNow, rulesVersion, gamePaid, netTotal, rakeBP.Platform, rakeBP.Welfare, rakeBP.Thursday, platformTotal, welfareTotal, thursdayTotal)
 		if insertErr != nil {
 			return classifyDB(insertErr)
+		}
+		if err := randomness.Insert(ctx, tx, proof); err != nil {
+			return err
 		}
 		for ordinal, draw := range draws {
 			if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli,net_payout_milli,platform_cut_milli,welfare_cut_milli,thursday_cut_milli) VALUES(?,?,?,?,?,?,?,?,?,?)`, batchID, ordinal, draw.Outcome.Key, string(draw.Outcome.Tier), draw.Outcome.SizeCentimetre, draw.Settlement.PayoutMilli, draw.Settlement.NetMilli, draw.Settlement.PlatformMilli, draw.Settlement.WelfareMilli, draw.Settlement.ThursdayMilli); insertErr != nil {

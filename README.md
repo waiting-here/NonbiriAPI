@@ -4,22 +4,26 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Current release:** [1.0.0-beta.4](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.4), a source prerelease for Linux/amd64. Review the deployment, privacy and security documentation before exposing an instance to users.
+> **Current release:** [1.0.0-rc.1](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.1), a source prerelease for Linux/amd64. Build from the tagged source; no official precompiled binaries are provided. Review the deployment, privacy and security documentation before exposing an instance to users.
 >
-> **Compatibility boundary:** Generation 2 (`application_id=0x4E425249`, `user_version=2`), targeting Linux/amd64. Complete beta.3 and ten exact earlier manifests support atomic upgrades that preserve existing data and configuration and create zero game-credit wallets. Alpha/Generation 1 still requires an explicit fresh cutover. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes).
+> **Compatibility boundary:** Generation 2 (`application_id=0x4E425249`, `user_version=2`), targeting Linux/amd64. The validated release upgrade is complete beta.4 → rc.1, ending at 117 tables while preserving existing data and configuration. Unreleased intermediate schemas are outside the release upgrade guarantee. The three new games start disabled. Alpha/Generation 1 still requires an explicit fresh cutover. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes).
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## Highlights
 
-- OpenAI-compatible `/v1/models`, `/v1/chat/completions`, and `/v1/embeddings` ingress. Chat supports OpenAI-compatible and Anthropic-compatible upstream connectors; embeddings require an OpenAI-compatible upstream.
+- Turn-based battles offer an optional browser-local tutorial, ten scripted rounds ending in a narrow win, concise effect cards and linked player rules. Live turns warn below five seconds; overload highlights the actual depleted resources. Closed games and modes disable matching while keeping learning and history available.
+- Banned Discord sign-ins open the site's branded 403 page. The charity catalog avoids repeating provider/model details already included in the complete model name.
+- Donors, administrators and stewards can set each donated key's failure threshold (default 10). Zero prevents error-triggered disablement and displays a persistent warning; saving keeps the count and immediately recalculates that state. Steward CallerKeys can read and edit the policy through the [automation API](docs/steward-automation.md).
+- Gateway cost attribution is an administrator setting, off by default. Enabling it sends a server-generated user-and-origin pseudonym; Debug shows only whether it was sent. See the [Gateway compatibility matrix](docs/api-contract.md#24-native-ai-sdk-gateway-v3-compatibility), including the tested Runable embedding limitation.
+- OpenAI-compatible `/v1/models`, `/v1/chat/completions`, and `/v1/embeddings` ingress. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset.
 - Discord OAuth user sign-in and a separate administrator station.
 - Per-user endpoints, mainstream channel templates, encrypted upstream credentials, automatic/manual model catalogs, platform model names, and a guided endpoint → key → model connection workflow.
 - Ordered/random personal routing, ordered/uniform-random/expiry-weighted charity routing, opt-in pre-commit retry, user concurrency limits, and owner-configured per-key concurrency/RPM shared by personal, charity, and live diagnostic calls.
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
-- Account export schema 6 includes both wallets, asset-tagged entries, independent check-ins, game payment sources and lifetime newcomer completions while excluding secrets, other users and internal capacity, scheduling and audit data.
+- Account export schema 8 includes game-randomness proofs, both wallets, asset-tagged entries, independent check-ins, game payment sources and lifetime newcomer completions while excluding secrets, other users and internal capacity, scheduling and audit data.
 - Separate general and game wallets with independent check-ins. Games spend game credits first, then general credits; eligible refunds return their original assets. API calls and Thursday contributions use general credits. Daily welfare pays game credits, and nine once-only newcomer tasks award 17,000 general credits in total.
 - Shared user-limit, effective-level filtering and announcement management for administrators and L5 stewards. Stewards can modify only other current L1–L4 users, cannot delete accounts or change cumulative donor credit, and can reset donated-key failure streaks in bounded batches across a complete selected result set. Donors can reset their own eligible keys.
 - Fishing defaults to 100% gross RTP on fresh databases, preserving existing settings on upgrade. Each catch contributes separately rounded platform, welfare and Thursday cuts, defaulting to 1% each, with gross and net rewards displayed.
@@ -32,11 +36,19 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - Experimental OpenAI-only chat policies for per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
 - A memory-only Debug Hub that starts in dry-run mode and requires explicit confirmation to send requests upstream. Live results are captured in the Debug page; the API caller receives a dedicated HTTP 422 debug response.
 - LinkLink shares 2/3/5 hint or refresh opportunities per new board, adds 100 score points per unused opportunity on completion, and provides six per-user-best boards by size and 7/30-day window. Equal scores rank by earliest achievement. Ordinary matches avoid extra wallet/game-center reloads, and connection animations allow the next selection. Saved old games keep their original rules.
-- A server-authoritative game center with Pond Fishing, LinkLink, and three-player Rock Paper Scissors, including idempotent accounting, recovery, privacy-aware leaderboards, and bundled local artwork. Fishing opens on the rolling 30-day largest-length board, with the lifetime largest-length and rolling 30-day payout boards still available. Its transparent-background white-rice-themed blue fat fish Easter egg preserves the original legendary species and payout; length-board rows use a compact original species name while result details retain the original-species explanation.
+- A server-authoritative game center with Pond Fishing, LinkLink, three-player Rock Paper Scissors, Bidding Duel and Turn-based Battle Minigame (Test), including idempotent accounting, recovery, privacy-aware leaderboards, and bundled local artwork. Fishing opens on the rolling 30-day largest-length board, with the lifetime largest-length and rolling 30-day payout boards still available. Its transparent-background white-rice-themed blue fat fish Easter egg preserves the original legendary species and payout; length-board rows use a compact original species name while result details retain the original-species explanation.
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#22-post-v1chatcompletions) for their rotation and privacy boundary.
 - Redesigned bilingual React user/admin stations with responsive navigation, continuous resource workflows, safe Markdown guidance, and configurable site branding, embedded into a single Go binary.
 
-The current source exposes the three OpenAI-compatible ingress routes listed above. Embeddings support text and Token ID inputs, single items and batches, float/base64 encoding, and optional output dimensions for personal and charity models. Models have no purpose classification: the request path selects the operation, and the upstream decides whether its model supports it. Rerank remains unsupported. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
+The current source exposes the three OpenAI-compatible ingress routes listed above. OpenAI-compatible embeddings support text and Token ID inputs, single items and batches, float/base64 encoding, and optional output dimensions for personal and charity models. Models have no purpose classification: the request path selects the operation, and the upstream decides whether its model supports it. Rerank remains unsupported. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. The `ai-sdk-gateway-v3` connector uses native Gateway routes; its strict subset includes text, tools, image input and text embeddings. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
+
+Bidding Duel offers 13 simultaneous hidden-card rounds. Turn-based Battle Minigame (Test) combines five characters, eight harnesses and full skill/buff rules with a shared battery, server-authored event-paced settlement and dynamic resource feedback. The server commits the complete round before the client plays every step, without a fixed presentation duration cap. Uncapped API reserve and gold use numeric counters. Dedicated character, skill and harness illustrations are bundled locally. Both games support original-asset refunds, safe 30-day player history and administrator-only anonymous archives and resumable exports. See [the bilingual game guide](docs/duel-games.md).
+
+The six games have dedicated covers; Fishing includes illustrated catches with an SVG fallback. Bidding Duel, Turn-based Battle Minigame (Test) and Blackjack include short sound effects. Turn-based Battle Minigame (Test) also has synchronized scene music. Sound and music start off and remember each game's choice in the browser. Account → Local preferences offers lightweight or lossless music, applied on the next music activation or game entry. Media sources and formats are documented in the [audio notice](web/src/shared/assets/game-audio/NOTICE.md).
+
+Blackjack shares one nine-seat table with a persistent waiting queue and a 15/30/15-second minute cadence. Six-deck rules include splitting and doubling; each hand pays all net returns in general credits after frozen fees. The game starts disabled. See [Blackjack rules](docs/blackjack.md).
+
+All six games provide private per-game seeds, opening commitments and terminal verification. See [randomness and phased disclosure](docs/game-randomness.md) for the protocol, independent verifier and its limits.
 
 ## Architecture
 
@@ -99,7 +111,7 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-Beta.4 uses a 102-table Generation 2 schema. Upgrade validates an exact supported source, applies one atomic extension and checks the manifest, foreign keys and both asset ledgers. Historical general credits, settled fees, saved game rules, runtime configuration and custom legal text remain intact. Old games drain under version 1 and new games use version 2. Downgrade requires a complete matching stopped snapshot. Fresh databases still start with maintenance enabled and registration, activities, charity, donation intake and games disabled.
+The database remains Generation 2 with 117 tables. The validated release upgrade is complete populated beta.4 → rc.1. Source validation, atomic extension, foreign keys and both asset ledgers are checked before startup; unknown or partial structures are rejected. Existing identities, wallets, settled charges, saved game rules, configuration, site branding and legal overrides are preserved. The three new games start disabled on sources without their settings. Unreleased intermediate schemas are outside the release upgrade guarantee. Older binaries reject the new manifest; rollback requires the matching complete stopped snapshot. Alpha/Generation 1 requires a fresh cutover.
 
 The project is source-first and supports Linux/amd64 as its production target. Operators compile the exact release source commit on that target or use an equivalent controlled build pipeline. This source release provides no official precompiled binaries, container images, or installers; other production platforms are not supported.
 
@@ -137,6 +149,21 @@ curl https://api.example.com/v1/embeddings \
 ```
 
 Use a versioned upstream base such as `https://provider.example/v1`; the connector appends `/embeddings` without inserting `/v1`. A successful batch counts as one request. Token-priced charity embeddings charge all input tokens at the input rate; vector dimensions are not output tokens. See the [embedding contract](docs/api-contract.md#23-post-v1embeddings) for limits, unknown-usage settlement, and Debug behavior.
+
+Browser clients can call all three public model routes across origins with an explicit Bearer CallerKey. Use the default fetch credentials mode or `credentials: 'omit'`; do not use `credentials: 'include'`. For example, with a CallerKey supplied by the user at runtime:
+
+```js
+const response = await fetch('https://api.example.com/v1/embeddings', {
+  method: 'POST',
+  credentials: 'omit',
+  headers: { Authorization: `Bearer ${callerKey}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ model: 'provider/model', input: 'Hello' }),
+});
+const result = await response.json();
+if (!response.ok) throw new Error(result.error.message);
+```
+
+The browser's OPTIONS preflight needs no key and incurs no model call or charge. Authentication remains required for the actual request. Session and administrator APIs retain their same-origin protection. See [CORS rules and limits](docs/api-contract.md#browser-cross-origin-access); if a preflight fails, the browser does not send the model request and no call log is created.
 
 The complete CallerKey is shown only once after creation or replacement. Save it immediately; if it was not saved, replace it to receive a new value.
 
@@ -178,7 +205,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and require
 
 The application includes English and Chinese privacy and terms pages. Operators must review and customize them for the actual operator identity, contact channel, jurisdiction, deployment, and data-processing practices before accepting real users.
 
-Requests can be sent to account-selected OpenAI-compatible or Anthropic-compatible providers, including donor-provided charity resources. Those independent providers may process or retain content under their own policies; the experimental `store:false` option is a best-effort request and cannot guarantee zero retention. NonbiriAPI itself keeps ordinary request/response content out of persistent logs; Debug capture is redacted, bounded, and memory-only. General and game credits have separate signed balances and asset-tagged histories. `donation_credit` remains a cumulative donor-reward statistic that ordinary spending never reduces.
+Requests can be sent to account-selected OpenAI-compatible, Anthropic-compatible or AI SDK Gateway v3 providers, including donor-provided charity resources. Those independent providers may process or retain content under their own policies; the experimental `store:false` option is a best-effort request and cannot guarantee zero retention. NonbiriAPI itself keeps ordinary request/response content out of persistent logs; Debug capture is redacted, bounded, and memory-only. General and game credits have separate signed balances and asset-tagged histories. `donation_credit` remains a cumulative donor-reward statistic that ordinary spending never reduces.
 
 See [docs/data-lifecycle-checklist.md](docs/data-lifecycle-checklist.md) for the data export, deletion, retention, and privacy invariants.
 

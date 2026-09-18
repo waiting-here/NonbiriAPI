@@ -71,7 +71,7 @@
 
 .economy-catalog-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
   gap: var(--nb-space-4);
   margin: 0;
   padding: 0;
@@ -116,11 +116,6 @@
 .economy-catalog-item__name .nb-copy-value code {
   min-width: 0;
   max-width: 100%;
-  overflow-wrap: anywhere;
-}
-
-.economy-catalog-item__provider {
-  color: var(--nb-color-text-muted);
   overflow-wrap: anywhere;
 }
 

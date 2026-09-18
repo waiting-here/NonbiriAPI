@@ -1,0 +1,1405 @@
+{
+  "format": "duel-history-v1",
+  "dataset": "recent",
+  "items": [
+    {
+      "kind": "match",
+      "match_ref": "lik_--LRQhNQ1GkVMKjCXIuOKQ",
+      "facts": {
+        "game": "likes",
+        "mode": "quick",
+        "rules_version": 1,
+        "content_hash": "5c61b949ccdc825aae4d3a13cd20b612e5e4963cf325f0a7fdf242a34da8d18a",
+        "initial": {
+          "energy": 200,
+          "players": [
+            {
+              "role": "ChatGPT",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 0,
+              "burstCap": 400,
+              "burst": 400,
+              "sub": 800,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {
+                "R_IMAGE": 2
+              },
+              "resourceCaps": {
+                "R_IMAGE": 2
+              },
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": null,
+                "totalResetAt": null
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [],
+              "revealed": [],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 0
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            },
+            {
+              "role": "Claude",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 0,
+              "burstCap": 400,
+              "burst": 400,
+              "sub": 800,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {},
+              "resourceCaps": {},
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": null,
+                "totalResetAt": null
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [],
+              "revealed": [],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 0
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            }
+          ],
+          "records": [
+            null,
+            null
+          ],
+          "locked_plan": null
+        },
+        "final": {
+          "energy": 190,
+          "players": [
+            {
+              "role": "ChatGPT",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 3,
+              "burstCap": 400,
+              "burst": 300,
+              "sub": 700,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {
+                "R_IMAGE": 2
+              },
+              "resourceCaps": {
+                "R_IMAGE": 2
+              },
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": 3,
+                "totalResetAt": 6
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [
+                {
+                  "key": "B01:原版",
+                  "kind": "CACHE",
+                  "name": "短效缓存·普攻",
+                  "positive": true,
+                  "p": 30,
+                  "q": 3,
+                  "remaining": 0,
+                  "layers": 1,
+                  "refreshedTurn": 1,
+                  "buffId": "B01:原版",
+                  "appliedBy": "PUB01",
+                  "activeFrom": 2,
+                  "persistentLayers": 0
+                }
+              ],
+              "revealed": [
+                "PUB01"
+              ],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 1
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            },
+            {
+              "role": "Claude",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 3,
+              "burstCap": 400,
+              "burst": 300,
+              "sub": 700,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {},
+              "resourceCaps": {},
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": 3,
+                "totalResetAt": 6
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [
+                {
+                  "key": "B01:原版",
+                  "kind": "CACHE",
+                  "name": "短效缓存·普攻",
+                  "positive": true,
+                  "p": 30,
+                  "q": 3,
+                  "remaining": 0,
+                  "layers": 1,
+                  "refreshedTurn": 1,
+                  "buffId": "B01:原版",
+                  "appliedBy": "PUB01",
+                  "activeFrom": 2,
+                  "persistentLayers": 0
+                }
+              ],
+              "revealed": [
+                "PUB01"
+              ],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 1
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            }
+          ],
+          "records": [
+            {
+              "skipped": false,
+              "stunned": false,
+              "last": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastMain": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastSuccess": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastCopyable": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              }
+            },
+            {
+              "skipped": false,
+              "stunned": false,
+              "last": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastMain": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastSuccess": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastCopyable": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              }
+            }
+          ],
+          "locked_plan": null
+        },
+        "terminal_actions": [
+          null,
+          null
+        ],
+        "round_start_events": null,
+        "outcome": "normal",
+        "reason": "surrender",
+        "winner": 1,
+        "scores": [
+          3,
+          3
+        ],
+        "ticket": "5",
+        "rake_bp": {
+          "platform": 0,
+          "welfare": 0,
+          "thursday": 0
+        },
+        "prize": "5",
+        "cuts": {
+          "platform": "0",
+          "welfare": "0",
+          "thursday": "0"
+        }
+      },
+      "recent": {
+        "started_at": 100,
+        "terminal_at": 100,
+        "operation_id": "op_bIoqt6PTkQsxdlO0OUp_LA",
+        "ledger_seq": "8",
+        "participants": [
+          {
+            "user_id": "1",
+            "display_name": "player",
+            "general_paid": "2",
+            "game_paid": "3"
+          },
+          {
+            "user_id": "2",
+            "display_name": "player",
+            "general_paid": "1",
+            "game_paid": "4"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "round",
+      "match_ref": "lik_--LRQhNQ1GkVMKjCXIuOKQ",
+      "round_no": 1,
+      "record": {
+        "round": 1,
+        "before": {
+          "energy": 200,
+          "players": [
+            {
+              "role": "ChatGPT",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 0,
+              "burstCap": 400,
+              "burst": 400,
+              "sub": 800,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {
+                "R_IMAGE": 2
+              },
+              "resourceCaps": {
+                "R_IMAGE": 2
+              },
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": null,
+                "totalResetAt": null
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [],
+              "revealed": [],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 0
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            },
+            {
+              "role": "Claude",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 0,
+              "burstCap": 400,
+              "burst": 400,
+              "sub": 800,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {},
+              "resourceCaps": {},
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": null,
+                "totalResetAt": null
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [],
+              "revealed": [],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 0
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            }
+          ],
+          "records": [
+            null,
+            null
+          ],
+          "locked_plan": null
+        },
+        "after": {
+          "energy": 190,
+          "players": [
+            {
+              "role": "ChatGPT",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 3,
+              "burstCap": 400,
+              "burst": 300,
+              "sub": 700,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {
+                "R_IMAGE": 2
+              },
+              "resourceCaps": {
+                "R_IMAGE": 2
+              },
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": 3,
+                "totalResetAt": 6
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [
+                {
+                  "key": "B01:原版",
+                  "kind": "CACHE",
+                  "name": "短效缓存·普攻",
+                  "positive": true,
+                  "p": 30,
+                  "q": 3,
+                  "remaining": 0,
+                  "layers": 1,
+                  "refreshedTurn": 1,
+                  "buffId": "B01:原版",
+                  "appliedBy": "PUB01",
+                  "activeFrom": 2,
+                  "persistentLayers": 0
+                }
+              ],
+              "revealed": [
+                "PUB01"
+              ],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 1
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            },
+            {
+              "role": "Claude",
+              "harness": null,
+              "activeSlots": 4,
+              "gold": 120,
+              "likes": 3,
+              "burstCap": 400,
+              "burst": 300,
+              "sub": 700,
+              "api": 400,
+              "images": 0,
+              "apiPack": 300,
+              "resources": {},
+              "resourceCaps": {},
+              "subscription": {
+                "burstInitial": 400,
+                "totalInitial": 800,
+                "totalCap": 800,
+                "burstResetAt": 3,
+                "totalResetAt": 6
+              },
+              "normalTurns": 1,
+              "stunned": false,
+              "overloaded": false,
+              "effects": [
+                {
+                  "key": "B01:原版",
+                  "kind": "CACHE",
+                  "name": "短效缓存·普攻",
+                  "positive": true,
+                  "p": 30,
+                  "q": 3,
+                  "remaining": 0,
+                  "layers": 1,
+                  "refreshedTurn": 1,
+                  "buffId": "B01:原版",
+                  "appliedBy": "PUB01",
+                  "activeFrom": 2,
+                  "persistentLayers": 0
+                }
+              ],
+              "revealed": [
+                "PUB01"
+              ],
+              "slots": [
+                "PUB01",
+                null,
+                null,
+                null
+              ],
+              "fog": false,
+              "loadout": [
+                "PUB01"
+              ],
+              "used": {
+                "PUB01": 1
+              },
+              "skillDecay": {},
+              "distill": {
+                "template": null,
+                "level": null,
+                "learning": 5,
+                "usedSamples": []
+              }
+            }
+          ],
+          "records": [
+            {
+              "skipped": false,
+              "stunned": false,
+              "last": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastMain": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastSuccess": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastCopyable": {
+                "id": 1,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              }
+            },
+            {
+              "skipped": false,
+              "stunned": false,
+              "last": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastMain": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastSuccess": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              },
+              "lastCopyable": {
+                "id": 2,
+                "skillId": "PUB01",
+                "success": true,
+                "kind": "basic",
+                "derived": false
+              }
+            }
+          ],
+          "locked_plan": null
+        },
+        "facts": {
+          "round": 1,
+          "plans": [
+            {
+              "purchases": [],
+              "main": {
+                "skillId": "PUB01"
+              },
+              "extra": []
+            },
+            {
+              "purchases": [],
+              "main": {
+                "skillId": "PUB01"
+              },
+              "extra": []
+            }
+          ],
+          "before": {
+            "stage": "before",
+            "players": [
+              {
+                "gold": 120,
+                "likes": 0,
+                "burst": 400,
+                "burst_cap": 400,
+                "sub": 800,
+                "sub_cap": 800,
+                "api": 400,
+                "trial": 0,
+                "resources": {
+                  "R_IMAGE": 2
+                },
+                "resource_caps": {
+                  "R_IMAGE": 2
+                },
+                "subscription": {
+                  "burstInitial": 400,
+                  "totalInitial": 800,
+                  "totalCap": 800,
+                  "burstResetAt": null,
+                  "totalResetAt": null
+                },
+                "effects": []
+              },
+              {
+                "gold": 120,
+                "likes": 0,
+                "burst": 400,
+                "burst_cap": 400,
+                "sub": 800,
+                "sub_cap": 800,
+                "api": 400,
+                "trial": 0,
+                "resources": {},
+                "resource_caps": {},
+                "subscription": {
+                  "burstInitial": 400,
+                  "totalInitial": 800,
+                  "totalCap": 800,
+                  "burstResetAt": null,
+                  "totalResetAt": null
+                },
+                "effects": []
+              }
+            ],
+            "energy": 200,
+            "event_end": 0
+          },
+          "after": {
+            "stage": "after",
+            "players": [
+              {
+                "gold": 120,
+                "likes": 3,
+                "burst": 300,
+                "burst_cap": 400,
+                "sub": 700,
+                "sub_cap": 800,
+                "api": 400,
+                "trial": 0,
+                "resources": {
+                  "R_IMAGE": 2
+                },
+                "resource_caps": {
+                  "R_IMAGE": 2
+                },
+                "subscription": {
+                  "burstInitial": 400,
+                  "totalInitial": 800,
+                  "totalCap": 800,
+                  "burstResetAt": 3,
+                  "totalResetAt": 6
+                },
+                "effects": [
+                  {
+                    "key": "B01:原版",
+                    "kind": "CACHE",
+                    "name": "短效缓存·普攻",
+                    "positive": true,
+                    "p": 30,
+                    "q": 3,
+                    "remaining": 0,
+                    "layers": 1,
+                    "refreshedTurn": 1,
+                    "buffId": "B01:原版",
+                    "appliedBy": "PUB01",
+                    "activeFrom": 2,
+                    "persistentLayers": 0
+                  }
+                ]
+              },
+              {
+                "gold": 120,
+                "likes": 3,
+                "burst": 300,
+                "burst_cap": 400,
+                "sub": 700,
+                "sub_cap": 800,
+                "api": 400,
+                "trial": 0,
+                "resources": {},
+                "resource_caps": {},
+                "subscription": {
+                  "burstInitial": 400,
+                  "totalInitial": 800,
+                  "totalCap": 800,
+                  "burstResetAt": 3,
+                  "totalResetAt": 6
+                },
+                "effects": [
+                  {
+                    "key": "B01:原版",
+                    "kind": "CACHE",
+                    "name": "短效缓存·普攻",
+                    "positive": true,
+                    "p": 30,
+                    "q": 3,
+                    "remaining": 0,
+                    "layers": 1,
+                    "refreshedTurn": 1,
+                    "buffId": "B01:原版",
+                    "appliedBy": "PUB01",
+                    "activeFrom": 2,
+                    "persistentLayers": 0
+                  }
+                ]
+              }
+            ],
+            "energy": 190,
+            "event_end": 6
+          },
+          "frames": [
+            {
+              "stage": "reveal",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 400,
+                  "burst_cap": 400,
+                  "sub": 800,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": null,
+                    "totalResetAt": null
+                  },
+                  "effects": []
+                },
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 400,
+                  "burst_cap": 400,
+                  "sub": 800,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": null,
+                    "totalResetAt": null
+                  },
+                  "effects": []
+                }
+              ],
+              "energy": 200,
+              "event_end": 1
+            },
+            {
+              "stage": "shopping",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 400,
+                  "burst_cap": 400,
+                  "sub": 800,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": null,
+                    "totalResetAt": null
+                  },
+                  "effects": []
+                },
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 400,
+                  "burst_cap": 400,
+                  "sub": 800,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": null,
+                    "totalResetAt": null
+                  },
+                  "effects": []
+                }
+              ],
+              "energy": 200,
+              "event_end": 1
+            },
+            {
+              "stage": "payment",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                },
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                }
+              ],
+              "energy": 180,
+              "event_end": 1
+            },
+            {
+              "stage": "cleansing",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                },
+                {
+                  "gold": 120,
+                  "likes": 0,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                }
+              ],
+              "energy": 180,
+              "event_end": 1
+            },
+            {
+              "stage": "score",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 3,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                },
+                {
+                  "gold": 120,
+                  "likes": 3,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                }
+              ],
+              "energy": 180,
+              "event_end": 3
+            },
+            {
+              "stage": "aftereffects",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 3,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                },
+                {
+                  "gold": 120,
+                  "likes": 3,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": []
+                }
+              ],
+              "energy": 180,
+              "event_end": 3
+            },
+            {
+              "stage": "round-end",
+              "players": [
+                {
+                  "gold": 120,
+                  "likes": 3,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {
+                    "R_IMAGE": 2
+                  },
+                  "resource_caps": {
+                    "R_IMAGE": 2
+                  },
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": [
+                    {
+                      "key": "B01:原版",
+                      "kind": "CACHE",
+                      "name": "短效缓存·普攻",
+                      "positive": true,
+                      "p": 30,
+                      "q": 3,
+                      "remaining": 0,
+                      "layers": 1,
+                      "refreshedTurn": 1,
+                      "buffId": "B01:原版",
+                      "appliedBy": "PUB01",
+                      "activeFrom": 2,
+                      "persistentLayers": 0
+                    }
+                  ]
+                },
+                {
+                  "gold": 120,
+                  "likes": 3,
+                  "burst": 300,
+                  "burst_cap": 400,
+                  "sub": 700,
+                  "sub_cap": 800,
+                  "api": 400,
+                  "trial": 0,
+                  "resources": {},
+                  "resource_caps": {},
+                  "subscription": {
+                    "burstInitial": 400,
+                    "totalInitial": 800,
+                    "totalCap": 800,
+                    "burstResetAt": 3,
+                    "totalResetAt": 6
+                  },
+                  "effects": [
+                    {
+                      "key": "B01:原版",
+                      "kind": "CACHE",
+                      "name": "短效缓存·普攻",
+                      "positive": true,
+                      "p": 30,
+                      "q": 3,
+                      "remaining": 0,
+                      "layers": 1,
+                      "refreshedTurn": 1,
+                      "buffId": "B01:原版",
+                      "appliedBy": "PUB01",
+                      "activeFrom": 2,
+                      "persistentLayers": 0
+                    }
+                  ]
+                }
+              ],
+              "energy": 190,
+              "event_end": 6
+            }
+          ],
+          "events": [
+            {
+              "id": 1,
+              "round": 1,
+              "stage": "reveal",
+              "kind": "reveal",
+              "seat": null,
+              "data": {
+                "plans": [
+                  {
+                    "extra": [],
+                    "main": {
+                      "skillId": "PUB01"
+                    },
+                    "purchases": []
+                  },
+                  {
+                    "extra": [],
+                    "main": {
+                      "skillId": "PUB01"
+                    },
+                    "purchases": []
+                  }
+                ]
+              }
+            },
+            {
+              "id": 2,
+              "round": 1,
+              "stage": "score",
+              "kind": "cast",
+              "seat": 0,
+              "data": {
+                "apiPayment": 0,
+                "derived": false,
+                "energy": 10,
+                "gold": 0,
+                "likes": 3,
+                "main": true,
+                "passiveLikes": 0,
+                "resourceCosts": {},
+                "skillId": "PUB01",
+                "subPayment": 100,
+                "success": true,
+                "templateId": "PUB01",
+                "token": 100,
+                "trialPayment": 0
+              },
+              "score": {
+                "original": 3,
+                "parts": [],
+                "intrinsic": 3,
+                "conditional": 0,
+                "before_multiplier": 3,
+                "multiplier": 1,
+                "passive": 0,
+                "final": 3
+              }
+            },
+            {
+              "id": 3,
+              "round": 1,
+              "stage": "score",
+              "kind": "cast",
+              "seat": 1,
+              "data": {
+                "apiPayment": 0,
+                "derived": false,
+                "energy": 10,
+                "gold": 0,
+                "likes": 3,
+                "main": true,
+                "passiveLikes": 0,
+                "resourceCosts": {},
+                "skillId": "PUB01",
+                "subPayment": 100,
+                "success": true,
+                "templateId": "PUB01",
+                "token": 100,
+                "trialPayment": 0
+              },
+              "score": {
+                "original": 3,
+                "parts": [],
+                "intrinsic": 3,
+                "conditional": 0,
+                "before_multiplier": 3,
+                "multiplier": 1,
+                "passive": 0,
+                "final": 3
+              }
+            },
+            {
+              "id": 4,
+              "round": 1,
+              "stage": "round-end",
+              "kind": "effect",
+              "seat": 0,
+              "data": {
+                "owner": 0,
+                "status": {
+                  "activeFrom": 2,
+                  "appliedBy": "PUB01",
+                  "buffId": "B01:原版",
+                  "key": "B01:原版",
+                  "kind": "CACHE",
+                  "layers": 1,
+                  "name": "短效缓存·普攻",
+                  "p": 30,
+                  "persistentLayers": 0,
+                  "positive": true,
+                  "q": 3,
+                  "refreshedTurn": 1,
+                  "remaining": 0
+                }
+              }
+            },
+            {
+              "id": 5,
+              "round": 1,
+              "stage": "round-end",
+              "kind": "effect",
+              "seat": 1,
+              "data": {
+                "owner": 1,
+                "status": {
+                  "activeFrom": 2,
+                  "appliedBy": "PUB01",
+                  "buffId": "B01:原版",
+                  "key": "B01:原版",
+                  "kind": "CACHE",
+                  "layers": 1,
+                  "name": "短效缓存·普攻",
+                  "p": 30,
+                  "persistentLayers": 0,
+                  "positive": true,
+                  "q": 3,
+                  "refreshedTurn": 1,
+                  "remaining": 0
+                }
+              }
+            },
+            {
+              "id": 6,
+              "round": 1,
+              "stage": "round-end",
+              "kind": "power",
+              "seat": null,
+              "data": {
+                "after": 190,
+                "amount": 10,
+                "before": 180,
+                "requested": 10
+              }
+            }
+          ],
+          "draws": [],
+          "result": null
+        },
+        "start_events": null,
+        "timeouts": [
+          false,
+          false
+        ]
+      }
+    }
+  ],
+  "next_cursor": null,
+  "expired_skipped": 0
+}

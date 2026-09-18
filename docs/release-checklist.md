@@ -10,14 +10,15 @@ own checks. This checklist does not itself assert a pass.
 
 - Freeze scope and synchronize README, changelog, package metadata, HTTP contract,
   configuration, game-module and lifecycle documentation.
-- Verify Generation 2 identity, eleven exact predecessor paths, atomic rollback on
-  injected failure, unknown/partial schema zero-write rejection and second-start
-  no-op. Build the exact beta.3 source to create a populated synthetic fixture;
-  exercise the target on Linux, with old API reservations and all three games.
+- Verify Generation 2 identity, atomic rollback on injected failure,
+  unknown/partial schema zero-write rejection and second-start no-op.
+  The deployed beta.4 source is the upgrade baseline for this target. Build that
+  exact source to generate populated fixtures, then exercise the target on Linux
+  with existing API reservations, wallets and games. Validate the final 117-table
+  manifest; unreleased intermediate schemas are outside this upgrade gate.
 - Preserve original account/entry IDs, settled charges, saved game rules, configured
-  RTP, security roots and custom legal text. New game wallets start at zero.
-- Verify that old version-1 games drain while new admissions always select version
-  2; never infer unrecorded historical payment sources.
+  RTP, security roots and custom legal text. Existing game wallets remain unchanged; only older sources without them receive zero game wallets. Bidding, Likes and Blackjack start disabled on sources without their configuration.
+- Verify that saved old games retain their rules, new Fishing/LinkLink/RPS admissions use version 2 and Bidding/Likes/Blackjack use their own version 1; never infer unrecorded historical payment sources or fabricate proofs for old games.
 - Verify matching complete-snapshot restore and old-binary rejection of the new
   schema. Do not open an online production database with external SQLite.
 
@@ -39,8 +40,21 @@ own checks. This checklist does not itself assert a pass.
   replay. Do not introduce persistent background jobs for browser batching.
 - Verify multiline Thursday text/preview and complete validation before model-ID
   deduplication.
-- Verify export v6 and synchronous deletion across both assets, holds, game state,
+- Verify export v8 and synchronous deletion across both assets, holds, game state,
   rankings and permanent newcomer completions, including both late-write orders.
+- Verify Blackjack's single nine-seat table, fixed-minute stages, persistent FIFO,
+  withdrawal/replacement cutoff and requeue behavior. Cover all 50 default stakes,
+  game/general/mixed payment, atomic split/double additions, independently rounded
+  per-hand fees, normal General Credit returns and original-source cancellation.
+  Check maintenance, bans, deletion, restart before/after settlement and welfare
+  asset accounting without restoring deleted accounts or cancelling other seats.
+- Verify every table rule and fixed-seed strategy simulations over at least one
+  million tables, including one/nine players and each seat. Report confidence
+  bounds and actual rounding; do not infer negative expectation from random play.
+- Verify six-game commitments, whole-game disclosure, deterministic replay and
+  source/proof tamper rejection. Active status, logs, history, errors and export
+  must omit unrevealed seeds, plans and future draws. Verify parent cleanup,
+  owner-only history and removal of proof fingerprints from anonymous archives.
 - Synchronize bilingual embedded privacy/terms and administrator/steward calling
   instructions. Keep instance custom legal overrides intact unless their
   replacement is explicitly authorized.
@@ -79,8 +93,19 @@ needed. Daily affected-package race defaults to one shuffled round.
   dispositions; an unavailable scan is not a pass.
 - Confirm pinned Actions and real embedded bundles. Build Windows/amd64 and the
   final Linux/amd64 pure-Go artifact, record VCS/tree/toolchain and SHA256.
-- Compare complete first-party JS/CSS gzip totals with an exact beta.3 clean build
-  using the same tools; each station may grow by at most 64 KiB.
+- Compare complete first-party JS/CSS gzip totals with an exact beta.4 clean build
+  using the same tools; the user station may grow by at most 256 KiB and the
+  administrator station by 96 KiB.
+- Verify all three new games with real participant sessions, full match results and
+  sealed per-asset accounting. Exercise 4096 queues, large history datasets and
+  bounded export/worker transactions. Check the 127 art slots, simultaneous
+  settlement, resource refill feedback, uncapped numeric counters and reduced
+  motion at phone and desktop sizes. Unfinished final presentation must not
+  delay or repeat wallet settlement.
+- Include nine Blackjack players and spectators, public-card privacy, split-hand
+  controls, reconnect de-duplication, and proof verification/download in all six
+  games. Verify the dashboard endpoint total with 101 shared users and the large
+  existing numbered-page fixture while retaining the legacy response limit.
 - Cover actual HTTP financial/control flows and representative Chinese/English,
   light/dark, desktop/mobile combinations. Play LinkLink through ordinary UI,
   including a 10×10 board at 320 px; measure latency without extra anticheat.
@@ -90,6 +115,14 @@ needed. Daily affected-package race defaults to one shuffled round.
 
 ## Candidate and deployment
 
+- For this source prerelease, merge through the protected master PR after required
+  checks. Bind an annotated `v1.0.0-rc.1` tag and GitHub prerelease to that exact
+  master commit, without adding public precompiled attachments. Deploy it only
+  after verifying that the tag, release, CI tree and final binary agree.
+- Preserve the latest production legal text, site name and administrator settings.
+  Check local teaching without real paid-game writes. Cover disabled/partial
+  admission, all ten tutorial rounds, linked explanations, countdown sound cleanup,
+  authoritative overload highlights and forbidden OAuth navigation.
 - Verify origin and protected master, integrate any master advance, audit the
   cumulative diff and push one candidate PR. Require exact-candidate CI success.
 - Prepare one trusted final Linux artifact. Production reuses validated evidence

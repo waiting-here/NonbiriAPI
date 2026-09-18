@@ -37,6 +37,9 @@ const (
 	ScopeGameFishing            Scope = "game_fishing"
 	ScopeGameLinkLink           Scope = "game_linklink"
 	ScopeGameRPS                Scope = "game_rps"
+	ScopeGameBidding            Scope = "game_bidding"
+	ScopeGameLikes              Scope = "game_likes"
+	ScopeGameBlackjack          Scope = "game_blackjack"
 	ScopeDonation               Scope = "donation"
 )
 
@@ -58,6 +61,9 @@ var validScopes = map[Scope]struct{}{
 	ScopeGameFishing:            {},
 	ScopeGameLinkLink:           {},
 	ScopeGameRPS:                {},
+	ScopeGameBidding:            {},
+	ScopeGameLikes:              {},
+	ScopeGameBlackjack:          {},
 	ScopeDonation:               {},
 }
 

@@ -135,6 +135,7 @@ function keyBase(id: string, note: string): JSONRecord {
     token_reserve: 7,
     authorized_expires_at: null,
     expires_at: null,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     safe_note: note,

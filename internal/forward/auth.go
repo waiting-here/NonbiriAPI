@@ -38,17 +38,31 @@ func (middleware *CallerKeyMiddleware) Wrap(next http.Handler) http.Handler {
 // extending the public model ingress or any browser-session route. The route
 // table is copied so it cannot be changed after the handler is constructed.
 func (middleware *CallerKeyMiddleware) WrapExact(next http.Handler, routes map[string]string) http.Handler {
-	allowed := make(map[string]string, len(routes))
+	methods := make(map[string][]string, len(routes))
 	for path, method := range routes {
-		allowed[path] = method
+		methods[path] = []string{method}
+	}
+	return middleware.WrapExactMethods(next, methods)
+}
+
+// WrapExactMethods permits only the listed methods at each exact control path.
+func (middleware *CallerKeyMiddleware) WrapExactMethods(next http.Handler, routes map[string][]string) http.Handler {
+	allowed := make(map[string]map[string]bool, len(routes))
+	for path, methods := range routes {
+		allowed[path] = make(map[string]bool, len(methods))
+		for _, method := range methods {
+			if method != "" {
+				allowed[path][method] = true
+			}
+		}
 	}
 	return middleware.wrap(next, func(method, path, escapedPath string) *wireFailure {
 		want, exists := allowed[path]
-		if !exists || path == "" || escapedPath != path || want == "" {
+		if !exists || path == "" || escapedPath != path || len(want) == 0 {
 			failure := platformFailure(httperr.CodeNotFound, "not found")
 			return &failure
 		}
-		if method != want {
+		if !want[method] {
 			failure := platformFailure(httperr.CodeMethodNotAllowed, "method not allowed")
 			return &failure
 		}
@@ -166,17 +180,8 @@ func bearerCallerKey(request *http.Request) (string, bool) {
 }
 
 func exactIngressFailure(method, path, escapedPath string) *wireFailure {
-	if path == "" || escapedPath != path {
-		failure := platformFailure(httperr.CodeNotFound, "not found")
-		return &failure
-	}
-	want := ""
-	switch path {
-	case "/v1/models":
-		want = http.MethodGet
-	case "/v1/chat/completions", "/v1/embeddings":
-		want = http.MethodPost
-	default:
+	want := exactIngressMethod(path, escapedPath)
+	if want == "" {
 		failure := platformFailure(httperr.CodeNotFound, "not found")
 		return &failure
 	}
@@ -185,4 +190,19 @@ func exactIngressFailure(method, path, escapedPath string) *wireFailure {
 		return &failure
 	}
 	return nil
+}
+
+// Authentication and browser preflights share the same exact route table.
+func exactIngressMethod(path, escapedPath string) string {
+	if path == "" || escapedPath != path {
+		return ""
+	}
+	switch path {
+	case "/v1/models":
+		return http.MethodGet
+	case "/v1/chat/completions", "/v1/embeddings":
+		return http.MethodPost
+	default:
+		return ""
+	}
 }

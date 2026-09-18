@@ -308,6 +308,7 @@ const managedKeyFixture = {
   token_reserve: 32,
   authorized_expires_at: null,
   expires_at: null,
+  failure_disable_threshold: '10',
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
   safe_note: 'reviewer-safe',
@@ -1322,6 +1323,7 @@ describe('experimental policy and charity controls', () => {
           },
           token_reserve: 0,
           expires_at: null,
+          failure_disable_threshold: '10',
           streak: { generation: '1', count: '0', failure_disabled: false },
           ended_reason: null,
         },
@@ -1441,7 +1443,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/donations')).toEqual({
         description: 'fixture donation',
-        keys: [{ endpoint_key_id: '2', expires_at: null }],
+        keys: [{ endpoint_key_id: '2', expires_at: null, failure_disable_threshold: '10' }],
         ownership_authorized: true,
       }),
     );
@@ -2754,11 +2756,11 @@ describe('experimental policy and charity controls', () => {
   test('does not download an export returned for the previous account', async () => {
     const marker = 'account-a-export-marker-123456';
     const completion = deferred<AccountExportAttachment>();
-    const exportV6 = vi.fn(() => completion.promise);
+    const exportV8 = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV6: true, deleteAccount: false },
+      capabilities: { exportV8: true, deleteAccount: false },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV6,
+      exportV8,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -2776,7 +2778,7 @@ describe('experimental policy and charity controls', () => {
       rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
       const dialog = await screen.findByRole('alertdialog');
       await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportV6).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(exportV8).toHaveBeenCalledTimes(1));
 
       rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
       const currentSession = { user: { id: '2' } };
@@ -2784,7 +2786,7 @@ describe('experimental policy and charity controls', () => {
       await act(async () => {
         completion.resolve({
           blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 6,
+          schemaVersion: 8,
         });
         await completion.promise;
       });

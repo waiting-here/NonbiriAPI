@@ -2,7 +2,7 @@
 
 `nonbiri-mark.svg`, `state-empty.svg`, `state-error.svg`,
 `state-maintenance.svg`, the inline SVG paths in
-`web/src/shared/components/Icon.tsx`, and the three WebP illustrations in
+`web/src/shared/components/Icon.tsx`, and the six WebP illustrations in
 `game-heroes/` are original, project-created visual assets for NonbiriAPI.
 The game illustrations were generated with assistance from ChatGPT, then
 selected and prepared for this project. They contain no embedded third-party
@@ -22,3 +22,10 @@ No source image from either reference repository is bundled here.
 
 Configured site logos remain operator-supplied public HTTPS URLs and are
 loaded with anonymous image requests; they are not part of this asset set.
+
+Turn-based Battle Minigame (Test) bundles 127 approved character, skill, harness, cast, ending, and
+status slots as local WebP derivatives. Each derivative preserves the complete
+transparent silhouette and aspect ratio; slot metadata retains a logical source
+identifier and crop focus. Fishing artwork bundles 35 catch illustrations,
+including the unknown catch, as local WebP derivatives and keeps a code-native
+SVG fallback for image load failures and high-contrast display.

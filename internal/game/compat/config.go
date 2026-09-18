@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	biddingconfig "github.com/waiting-here/NonbiriAPI/internal/game/bidding/config"
+	blackjackconfig "github.com/waiting-here/NonbiriAPI/internal/game/blackjack/config"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
+	likesconfig "github.com/waiting-here/NonbiriAPI/internal/game/likes/config"
 	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
@@ -16,6 +19,9 @@ type GamesConfig struct {
 	Fishing       fishingconfig.FishingWireConfig   `json:"fishing"`
 	LinkLink      linklinkconfig.LinkLinkWireConfig `json:"linklink"`
 	RPS           rpsconfig.RPSWireConfig           `json:"rps"`
+	Bidding       biddingconfig.Wire                `json:"bidding"`
+	Likes         likesconfig.Wire                  `json:"likes"`
+	Blackjack     blackjackconfig.Wire              `json:"blackjack"`
 }
 
 // GamesSnapshot is the exact user-facing configuration/readiness projection.
@@ -29,6 +35,51 @@ type GamesSnapshot struct {
 	Fishing         FishingSnapshotModule              `json:"fishing"`
 	LinkLink        LinkLinkSnapshotModule             `json:"linklink"`
 	RPS             RPSSnapshotModule                  `json:"rps"`
+	Bidding         BiddingSnapshotModule              `json:"bidding"`
+	Likes           LikesSnapshotModule                `json:"likes"`
+	Blackjack       BlackjackSnapshotModule            `json:"blackjack"`
+}
+
+type BlackjackSnapshotModule struct {
+	blackjackconfig.Wire
+	Available       bool   `json:"available"`
+	ConfigHash      string `json:"config_hash"`
+	QueueCapacity   int    `json:"queue_capacity"`
+	Seats           int    `json:"seats"`
+	SeatingSeconds  int    `json:"seating_seconds"`
+	DecisionSeconds int    `json:"decision_seconds"`
+	RoundSeconds    int    `json:"round_seconds"`
+}
+
+type DuelSnapshotMode struct {
+	Enabled   bool   `json:"enabled"`
+	Available bool   `json:"available"`
+	Ticket    string `json:"ticket"`
+	RakeBP    struct {
+		Platform int `json:"platform"`
+		Welfare  int `json:"welfare"`
+		Thursday int `json:"thursday"`
+	} `json:"rake_bp"`
+	TermsHash   string `json:"terms_hash"`
+	ContentHash string `json:"content_hash"`
+}
+type BiddingSnapshotModule struct {
+	Enabled       bool                        `json:"enabled"`
+	Available     bool                        `json:"available"`
+	Modes         map[string]DuelSnapshotMode `json:"modes"`
+	QueueSeconds  int                         `json:"queue_seconds"`
+	JokerSeconds  int                         `json:"joker_seconds"`
+	BidSeconds    int                         `json:"bid_seconds"`
+	QueueCapacity int                         `json:"queue_capacity"`
+}
+type LikesSnapshotModule struct {
+	Enabled           bool                        `json:"enabled"`
+	Available         bool                        `json:"available"`
+	Modes             map[string]DuelSnapshotMode `json:"modes"`
+	QueueSeconds      int                         `json:"queue_seconds"`
+	PlanSeconds       int                         `json:"plan_seconds"`
+	SettlementSeconds int                         `json:"settlement_seconds"`
+	QueueCapacity     int                         `json:"queue_capacity"`
 }
 
 type FishingSnapshotModule struct {
@@ -50,6 +101,9 @@ type GamesConfigPatch struct {
 	Fishing          *fishingconfig.FishingConfigPatch   `json:"fishing,omitempty"`
 	LinkLink         *linklinkconfig.LinkLinkConfigPatch `json:"linklink,omitempty"`
 	RPS              *rpsconfig.RPSConfigPatch           `json:"rps,omitempty"`
+	Bidding          *biddingconfig.Patch                `json:"bidding,omitempty"`
+	Likes            *likesconfig.Patch                  `json:"likes,omitempty"`
+	Blackjack        *blackjackconfig.Patch              `json:"blackjack,omitempty"`
 }
 
 // Merge assembles validated partial DTO fragments. Each module codec still

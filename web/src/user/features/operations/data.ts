@@ -452,7 +452,9 @@ export function useAnnouncementsPage(
     queryFn: ({ signal }) => getAnnouncementsPage(pageNumber, pageSize, signal),
     enabled: enabled && Boolean(accountID),
     placeholderData: (previous, previousQuery) =>
-      previousQuery && previousQuery.queryKey[3] === accountID && previousQuery.queryKey[6] === language
+      previousQuery &&
+      previousQuery.queryKey[3] === accountID &&
+      previousQuery.queryKey[6] === language
         ? previous
         : undefined,
     retry: false,
@@ -474,7 +476,7 @@ export function useAnnouncement(id: string | undefined, enabled = true) {
 }
 
 export interface CredentialReportInput {
-  connector_type: 'openai-compatible' | 'anthropic-compatible';
+  connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
   base_url: string;
   secret: string;
   note: string;

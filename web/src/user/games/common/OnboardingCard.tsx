@@ -3,7 +3,7 @@ import { Card } from '@shared/components/States';
 import { useOptionalToast } from '@shared/components/Toast';
 import { useGameCopy } from '../copy';
 import { formatCredits, sumCredits } from './strict';
-import type { GameID, OnboardingProgress, OnboardingTaskKey } from './types';
+import type { OnboardingGameID, OnboardingProgress, OnboardingTaskKey } from './types';
 
 const taskCopy = {
   worm: 'fishing.bait.worm',
@@ -21,7 +21,7 @@ export function OnboardingCard({
   game,
   progress,
 }: {
-  readonly game: GameID;
+  readonly game: OnboardingGameID;
   readonly progress: OnboardingProgress;
 }) {
   const { text } = useGameCopy();

@@ -93,7 +93,7 @@ interface LogAttemptCommon {
   result_kind: 'response' | 'synthetic';
   endpoint_key_id: string | null;
   endpoint_base_url: string;
-  connector_type: 'openai-compatible' | 'anthropic-compatible';
+  connector_type: 'openai-compatible' | 'anthropic-compatible' | 'ai-sdk-gateway-v3';
   upstream_model_id: string;
   status_code: number | null;
   upstream_code: string | null;
@@ -378,7 +378,7 @@ function commonAttempt(root: WireRecord): LogAttemptCommon {
     endpoint_base_url: endpointBaseURL,
     connector_type: oneOf(
       root.connector_type,
-      ['openai-compatible', 'anthropic-compatible'] as const,
+      ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
       'connector type',
     ),
     upstream_model_id: string(root.upstream_model_id, 'upstream model id', {

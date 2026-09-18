@@ -1,5 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { useGameVisibility } from './visibility';
+import { blackjackSnapshot } from '@shared/games/blackjack';
 import { gameRequest } from './request';
+import { configValue } from './duel/normalize';
 import {
   booleanValue,
   creditsValue,
@@ -75,11 +78,14 @@ function normalizeOnboarding(
   field: string,
 ): OnboardingProgress {
   const record = exactRecord(value, ['items', 'all_completed'], [], field);
-  if (!Array.isArray(record.items) || record.items.length !== tasks.length)
-    invalidResponse(field);
+  if (!Array.isArray(record.items) || record.items.length !== tasks.length) invalidResponse(field);
   const items = record.items.map((value, index) => {
     const item = exactRecord(value, ['key', 'reward', 'asset_type', 'completed'], [], field);
-    if (item.key !== tasks[index] || item.reward !== rewards[index] || item.asset_type !== 'general')
+    if (
+      item.key !== tasks[index] ||
+      item.reward !== rewards[index] ||
+      item.asset_type !== 'general'
+    )
       invalidResponse(field);
     return {
       key: tasks[index],
@@ -106,6 +112,9 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
       'fishing',
       'linklink',
       'rps',
+      'bidding',
+      'likes',
+      'blackjack',
     ],
     [],
     'games snapshot',
@@ -157,7 +166,12 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     enumValue(mode, RPS_MODES, 'RPS mode key');
     normalizedModes[mode] = normalizeMode(modes[mode], `${mode} mode`);
   }
-  const onboarding = exactRecord(record.onboarding, ['fishing', 'linklink', 'rps'], [], 'onboarding');
+  const onboarding = exactRecord(
+    record.onboarding,
+    ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'],
+    [],
+    'onboarding',
+  );
   const gamesEnabled = booleanValue(record.games_enabled, 'games enabled');
   const fishingEnabled = booleanValue(fishing.enabled, 'fishing enabled');
   const linkLinkEnabled = booleanValue(linklink.enabled, 'LinkLink enabled');
@@ -168,11 +182,32 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     gameBalance: creditsValue(record.game_balance, { signed: true }, 'snapshot game balance'),
     tutorialRPSSeen: booleanValue(record.tutorial_rps_seen, 'tutorial flag'),
     onboarding: {
-      fishing: normalizeOnboarding(onboarding.fishing, BAITS, ['1000', '1000', '1000'], 'fishing onboarding'),
-      linklink: normalizeOnboarding(onboarding.linklink, LINKLINK_SPECS, ['1000', '2000', '3000'], 'LinkLink onboarding'),
-      rps: normalizeOnboarding(onboarding.rps, RPS_MODES, ['1000', '2000', '5000'], 'RPS onboarding'),
+      bidding: normalizeOnboarding(onboarding.bidding, [], [], 'bidding onboarding'),
+      likes: normalizeOnboarding(onboarding.likes, [], [], 'likes onboarding'),
+      blackjack: normalizeOnboarding(onboarding.blackjack, [], [], 'blackjack onboarding'),
+      fishing: normalizeOnboarding(
+        onboarding.fishing,
+        BAITS,
+        ['1000', '1000', '1000'],
+        'fishing onboarding',
+      ),
+      linklink: normalizeOnboarding(
+        onboarding.linklink,
+        LINKLINK_SPECS,
+        ['1000', '2000', '3000'],
+        'LinkLink onboarding',
+      ),
+      rps: normalizeOnboarding(
+        onboarding.rps,
+        RPS_MODES,
+        ['1000', '2000', '5000'],
+        'RPS onboarding',
+      ),
     },
     gamesEnabled,
+    blackjack: blackjackSnapshot(record.blackjack),
+    bidding: configValue(record.bidding, 'bidding', ['tier1', 'tier2', 'tier3']),
+    likes: configValue(record.likes, 'likes', ['quick', 'standard']),
     fishing: {
       enabled: fishingEnabled,
       available: booleanValue(fishing.available, 'fishing runtime availability'),
@@ -191,6 +226,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
 }
 
 export function useGamesSnapshot() {
+  const visible = useGameVisibility();
   return useQuery({
     queryKey: gameKeys.snapshot,
     queryFn: async ({ signal }) =>
@@ -203,6 +239,9 @@ export function useGamesSnapshot() {
         ).data,
       ),
     staleTime: 10_000,
+    refetchInterval: visible ? 10_000 : false,
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
     retry: false,
   });
 }

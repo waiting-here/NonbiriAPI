@@ -3,6 +3,7 @@ import { NotFoundPage } from '@shared/components/NotFoundPage';
 import { LoadingState, NoticePage } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
 import { relativeRoutePath } from '@shared/routing/routeRegistry';
+import { ApiError } from '@shared/query/http';
 import { UserLayout } from './layouts/UserLayout';
 
 const pathFor = (id: string) => relativeRoutePath('user', id);
@@ -14,6 +15,10 @@ export const router = createBrowserRouter([
     hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage station="user" />,
     children: [
+      {
+        path: pathFor('access-denied'),
+        loader: () => { throw new ApiError('forbidden', 'Access forbidden.', 403); },
+      },
       {
         index: true,
         lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }),
@@ -44,6 +49,18 @@ export const router = createBrowserRouter([
       },
       {
         path: pathFor('game-rps'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('game-bidding'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('game-blackjack'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('game-likes'),
         lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
       },
       {
@@ -80,15 +97,21 @@ export const router = createBrowserRouter([
       },
       {
         path: pathFor('credential-report'),
-        lazy: async () => ({ Component: (await import('./pages/CredentialReportPage')).CredentialReportPage }),
+        lazy: async () => ({
+          Component: (await import('./pages/CredentialReportPage')).CredentialReportPage,
+        }),
       },
       {
         path: pathFor('announcements'),
-        lazy: async () => ({ Component: (await import('./pages/AnnouncementsPage')).AnnouncementsPage }),
+        lazy: async () => ({
+          Component: (await import('./pages/AnnouncementsPage')).AnnouncementsPage,
+        }),
       },
       {
         path: pathFor('announcement-detail'),
-        lazy: async () => ({ Component: (await import('./pages/AnnouncementDetailPage')).AnnouncementDetailPage }),
+        lazy: async () => ({
+          Component: (await import('./pages/AnnouncementDetailPage')).AnnouncementDetailPage,
+        }),
       },
       {
         path: pathFor('account'),

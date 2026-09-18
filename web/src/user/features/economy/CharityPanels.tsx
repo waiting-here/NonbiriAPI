@@ -17,6 +17,11 @@ import { isDimensionExhausted } from './normalize';
 import { DonationResourcePicker } from './DonationResourcePicker';
 import { OwnerFailureReset } from './OwnerFailureReset';
 import {
+  FailurePolicyControl,
+  FailureThresholdInput,
+} from '@shared/components/FailurePolicyControl';
+import { validFailureThreshold } from '@shared/operations/failurePolicy';
+import {
   useCreateDonation,
   useEditDonation,
   useTerminateDonation,
@@ -268,6 +273,7 @@ export function DonationComposer({
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
+  const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
   const [readBlocked, setReadBlocked] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
@@ -317,11 +323,23 @@ export function DonationComposer({
       setValidation(t('user.charity.splitDonationSources'));
       return;
     }
+    if (
+      selectedChoices.some(
+        (choice) => !validFailureThreshold(thresholdByKey[choice.key.id] ?? '10'),
+      )
+    ) {
+      setValidation(t('common.failurePolicy.invalid'));
+      return;
+    }
     const keys = selectedChoices.map((choice) => {
+      const failureDisableThreshold = thresholdByKey[choice.key.id] ?? '10';
+      if (!validFailureThreshold(failureDisableThreshold)) return undefined;
       const expiresAt = expiryByKey[choice.key.id]
         ? timeDraftValue(expiryByKey[choice.key.id])
         : null;
-      return expiresAt === undefined ? undefined : { endpointKeyId: choice.key.id, expiresAt };
+      return expiresAt === undefined
+        ? undefined
+        : { endpointKeyId: choice.key.id, expiresAt, failureDisableThreshold };
     });
     if (keys.some((key) => key === undefined)) {
       setValidation(t('user.charity.expiryInvalid'));
@@ -329,7 +347,7 @@ export function DonationComposer({
     }
     const input: CreateDonationInput = {
       description,
-      keys: keys as { endpointKeyId: string; expiresAt: number | null }[],
+      keys: keys as CreateDonationInput['keys'],
       ownershipAuthorized: true,
     };
     const baselineGeneration = mutation.reconcileGeneration;
@@ -338,6 +356,7 @@ export function DonationComposer({
       setDescription('');
       setSelectedChoices([]);
       setExpiryByKey({});
+      setThresholdByKey({});
       setAuthorized(false);
       storeDraft(draftNamespace, '');
       setSuccess(true);
@@ -403,6 +422,13 @@ export function DonationComposer({
                 })}
               />
               <small className="muted">{t('user.charity.expiryHint')}</small>
+              <FailureThresholdInput
+                value={thresholdByKey[choice.key.id] ?? '10'}
+                disabled={locked}
+                onChange={(value) =>
+                  setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
+                }
+              />
             </div>
           )}
         />
@@ -703,6 +729,16 @@ export function DonationKeyPanel({
         </dl>
       </details>
       {ruleSummary}
+      {accountID && donationId && donationRevision ? (
+        <FailurePolicyControl
+          key={`policy:${accountID}:${donationId}:${donationKey.id}`}
+          role="owner"
+          donationID={donationId}
+          keyID={donationKey.id}
+          revision={donationRevision}
+          threshold={donationKey.failureDisableThreshold}
+        />
+      ) : null}
       {accountID && donationId && donationRevision ? (
         <OwnerFailureReset
           key={`${accountID}:${donationId}:${donationKey.id}`}

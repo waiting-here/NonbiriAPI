@@ -117,9 +117,6 @@ function CatalogModelCard({
       <div className="economy-catalog-item__heading">
         <div className="economy-catalog-item__name">
           <CopyValue value={model.fullName} label={t('user.charity.modelName')} />
-          <span className="economy-catalog-item__provider">
-            {model.provider} / {model.model}
-          </span>
         </div>
         <div className="economy-catalog-item__statuses">
           <StatusBadge

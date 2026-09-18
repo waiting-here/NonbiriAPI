@@ -41,6 +41,19 @@ func validateAssetSourceConfig(ctx context.Context, q generationTwoConfigQueryer
 		return err
 	}
 	if prior {
+		if _, exists := values["gateway_user_attribution_enabled"]; !exists {
+			values["gateway_user_attribution_enabled"] = "0"
+		}
+		for key, value := range duelConfigDefaults() {
+			if _, exists := values[key]; !exists {
+				values[key] = value
+			}
+		}
+		for key, value := range blackjackConfigDefaults() {
+			if _, exists := values[key]; !exists {
+				values[key] = value
+			}
+		}
 		for key, value := range dualAssetConfigDefaults() {
 			if _, exists := values[key]; !exists {
 				values[key] = value

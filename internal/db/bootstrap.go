@@ -578,7 +578,15 @@ func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Generat
 	if err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
-	if err := validateAssetSeedManifest(ctx, d, prior); err != nil {
+	priorAssets := false
+	if prior {
+		var columns int
+		if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&columns); err != nil {
+			return startupError(StartupSchemaMismatch)
+		}
+		priorAssets = columns == 0
+	}
+	if err := validateVersionSeedManifest(ctx, d, priorAssets, prior); err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
@@ -661,7 +669,7 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 			return err
 		}
 		validRow := id > 0 && len(contextID) == 16 && utf8.ValidString(canonicalBaseURL) &&
-			(connector == "openai-compatible" || connector == "anthropic-compatible") &&
+			(connector == "openai-compatible" || connector == "anthropic-compatible" || connector == "ai-sdk-gateway-v3") &&
 			ciphertextType == "text" && ciphertextBytes >= 1 && ciphertextBytes <= maxEndpointCredentialEnvelopeBytes &&
 			ciphertext.Valid && int64(len([]byte(ciphertext.String))) == ciphertextBytes && utf8.ValidString(ciphertext.String) &&
 			(!orphanedAt.Valid || (orphanedAt.Int64 >= 0 && orphanedAt.Int64 <= generationTwoMaxUnixSeconds))
@@ -733,7 +741,7 @@ ORDER BY ek.id`, maxStoredEndpointBaseURLBytes)
 		}
 		if keyID <= 0 || secretRefID <= 0 || baseType != "text" || baseBytes < 1 || baseBytes > maxStoredEndpointBaseURLBytes ||
 			!baseURL.Valid || int64(len([]byte(baseURL.String))) != baseBytes || !utf8.ValidString(baseURL.String) ||
-			(endpointConnector != "openai-compatible" && endpointConnector != "anthropic-compatible") ||
+			(endpointConnector != "openai-compatible" && endpointConnector != "anthropic-compatible" && endpointConnector != "ai-sdk-gateway-v3") ||
 			secretConnector != endpointConnector || orphanedAt.Valid {
 			baseURL.String = ""
 			return errors.New("invalid endpoint credential link")

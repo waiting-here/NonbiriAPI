@@ -9,7 +9,7 @@ Content-Type: application/json
 
 The caller must remain an active level-5 steward. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog.
 
-Both routes accept only POST, with no query parameters. JSON rejects unknown and duplicate fields. Each request is limited to 256 KiB, 100 keys, 16 recurring rules per key and 16,384 total object fields; responses are limited to 64 KiB. The two controls share a maximum of four concurrent requests, with one per steward and no queue. A busy control returns HTTP 429. Maintenance admission and the existing resource, credential, discovery and outbound protections still apply. These management operations do not consume model-call credits or charity usage quotas.
+Creation and model binding accept only POST without query parameters. Failure-policy reads use GET with the two specified IDs; edits use PATCH without query parameters. Other methods, suffixes and path variants are rejected. JSON rejects unknown and duplicate fields. Each request is limited to 256 KiB, 100 keys, 16 recurring rules per key and 16,384 total object fields; responses are limited to 64 KiB. All controls share a maximum of four concurrent requests, with one per steward and no queue. A busy control returns HTTP 429. Maintenance admission and the existing resource, credential, discovery and outbound protections still apply. These management operations do not consume model-call credits or charity usage quotas.
 
 ## Create and approve one donation
 
@@ -49,7 +49,7 @@ Provide a fresh, unpredictable `Idempotency-Key` containing 22–128 ASCII lette
 }
 ```
 
-Required fields are `endpoint.connector_type`, `endpoint.base_url`, a nonblank `description`, and one or more `keys` with a nonempty `secret`. Connector type must explicitly be `openai-compatible` or `anthropic-compatible`. All sources use the custom-URL form; channel IDs and the browser forms' ownership-confirmation fields are not accepted. Submitting the operation creates and donates resources owned by the caller.
+Required fields are `endpoint.connector_type`, `endpoint.base_url`, a nonblank `description`, and one or more `keys` with a nonempty `secret`. Connector type must explicitly be `openai-compatible`, `anthropic-compatible` or `ai-sdk-gateway-v3`. All sources use the custom-URL form; channel IDs and the browser forms' ownership-confirmation fields are not accepted. Submitting the operation creates and donates resources owned by the caller.
 
 The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 
@@ -64,6 +64,7 @@ The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 | `price_limit`, `calls_limit`, `tokens_limit` | `null`, meaning no cumulative limit. Credits use canonical decimal strings with up to three fractional digits; calls and Tokens use canonical nonnegative integer strings. Zero is a real limit. |
 | `token_reserve` | `0`; unknown-usage Token reserve, as a whole number through 2147483647. |
 | `charity_enabled` | `true`; the donation-key switch, separate from physical-key `enabled`. |
+| `failure_disable_threshold` | `"10"`; canonical unsigned 128-bit decimal string. `"0"` never disables this key for errors; failures are still counted. The maximum is `"340282366920938463463374607431768211455"`. |
 | `safe_note` | Empty management note, at most 256 Unicode code points. It is separate from the private owner note. |
 | `recurring_limits` | `[]`; zero to sixteen rules with the existing [recurring-limit semantics](api-contract.md#75-recurring-donation-key-limits). New rule `id` is omitted or `null`. Nullable alignment and week-start fields may be omitted when their mode does not need them. |
 
@@ -126,4 +127,43 @@ Unlike creation, this endpoint has no whole-request replay receipt and does not 
 
 The result order always matches the input. At least one success gives HTTP 200. If none succeeds, the response is 504 when any item is incomplete, otherwise 422. Invalid whole requests return 400; a missing target model returns 404; entry authorization failures return 401 or 403. Per-item `discovery_failed` includes a safe authentication, rate-limit, timeout, protocol, transport or interruption reason; raw upstream diagnostics are never exposed. If authority is lost during processing, subsequent items fail without further upstream requests.
 
-Creation and discovery use existing account, donation, catalog, quota, review and replay records. Existing account export, deletion, anonymization and retention rules apply; no new category of persisted request content is introduced.
+## Read or edit one donation key's failure policy
+
+`GET /api/steward/automation/donation-key-failure-policy?donation_id=34&donation_key_id=78` accepts exactly these two positive decimal-string IDs and no body. A current steward may manage any donation visible in the steward management pages; this does not grant access to its owner's private resources or model catalog.
+
+GET and a successful PATCH return HTTP 200 with the same safe shape:
+
+```json
+{
+  "donation_id": "34",
+  "donation_key_id": "78",
+  "failure_disable_threshold": "10",
+  "failure_streak": "12",
+  "failure_disabled": true,
+  "revision": "3"
+}
+```
+
+`revision` belongs to the donation. Fetch it before an edit, then send:
+
+```http
+PATCH /api/steward/automation/donation-key-failure-policy
+Idempotency-Key: REPLACE_WITH_A_UNIQUE_RANDOM_KEY
+```
+
+```json
+{
+  "donation_id": "34",
+  "donation_key_id": "78",
+  "expected_revision": "3",
+  "failure_disable_threshold": "0"
+}
+```
+
+All four body fields are required strings. The threshold has the same U128 range as creation; no signs, leading zeros, fractions, exponents or `null`. IDs and revisions fit positive signed 64-bit integers. Never convert these strings through JavaScript `Number`.
+
+Saving keeps the count and generation, immediately sets error-disablement when a positive threshold is reached, and clears that flag otherwise. Zero keeps counting errors but never disables for them. Success still clears the count. Manual disabling, expiry, withdrawal, bans and quotas are unchanged. An in-flight result uses the threshold saved when its result is folded; results from an older generation remain isolated. No second confirmation is required; browser pages display a persistent warning for zero.
+
+PATCH uses the same 24-hour idempotency rules as creation, with a 30-second operation limit. Repeating the original key and body returns the original policy snapshot without another revision, audit or alert. Current permission and visibility are checked before replay. A stale revision or a reused key with a different request returns 409; re-read after a definite revision conflict and use a new key for the newly intended edit. An unknown result must first be resolved by retrying the original request. Invalid input returns 400, missing or no-longer-visible records 404, oversized input 413, and authentication or authority failures 401/403. Capacity and maintenance failures follow the shared controls.
+
+Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion, anonymization and retention rules apply; no new category of persisted request content is introduced.

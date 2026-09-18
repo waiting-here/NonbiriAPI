@@ -35,6 +35,7 @@ type GameCount struct {
 }
 
 type QueueCount struct {
+	Game  string `json:"game"`
 	Mode  string `json:"mode"`
 	Count string `json:"count"`
 }

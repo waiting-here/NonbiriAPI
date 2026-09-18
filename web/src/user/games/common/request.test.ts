@@ -25,4 +25,19 @@ describe('bounded game transport', () => {
       status: 200,
     });
   });
+
+  it('accepts an explicitly bounded catalog while preserving the smaller default and error limits',async()=>{
+    const body=JSON.stringify({value:'x'.repeat(300*1024)});
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(body,{status:200})));
+    await expect(gameRequest('/api/games/likes/catalog',{maxResponseBytes:1024*1024})).resolves.toMatchObject({status:200});
+    await expect(gameRequest('/api/games/likes/catalog')).rejects.toMatchObject({code:'invalid_response'});
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(body,{status:500})));
+    await expect(gameRequest('/api/games/likes/catalog',{maxResponseBytes:1024*1024})).rejects.toMatchObject({code:'invalid_response'});
+  });
+
+  it('rejects unsafe or unbounded response-budget options before fetching',async()=>{
+    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
+    for(const maxResponseBytes of [0,Infinity,NaN,8*1024*1024+1]) await expect(gameRequest('/api/games/test',{maxResponseBytes})).rejects.toMatchObject({code:'invalid_request'});
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

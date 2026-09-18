@@ -1,4 +1,5 @@
 import { ApiError, apiFetch, isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { validFailureThreshold } from '@shared/operations/failurePolicy';
 import {
   normalizeActivitiesSnapshot,
   normalizeCharityCapability,
@@ -273,7 +274,7 @@ export async function getEndpointChoices(
 
 export interface CreateDonationInput {
   description: string;
-  keys: { endpointKeyId: string; expiresAt: number | null }[];
+  keys: { endpointKeyId: string; expiresAt: number | null; failureDisableThreshold?: string }[];
   ownershipAuthorized: true;
 }
 
@@ -292,6 +293,11 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
     if (key === null || typeof key !== 'object') invalidRequest('Invalid donation key.');
     requireDecimalID(key.endpointKeyId, 'endpoint key id');
     requireDonationExpiry(key.expiresAt);
+    if (
+      key.failureDisableThreshold !== undefined &&
+      !validFailureThreshold(key.failureDisableThreshold)
+    )
+      invalidRequest('Invalid failure threshold.');
   });
   return normalizeDonation(
     await apiFetch<unknown>('/api/donations', {
@@ -302,6 +308,9 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
         keys: input.keys.map((key) => ({
           endpoint_key_id: key.endpointKeyId,
           expires_at: key.expiresAt,
+          ...(key.failureDisableThreshold === undefined
+            ? {}
+            : { failure_disable_threshold: key.failureDisableThreshold }),
         })),
         ownership_authorized: input.ownershipAuthorized,
       },

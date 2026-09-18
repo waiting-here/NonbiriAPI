@@ -314,6 +314,21 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	if caller.Code != http.StatusServiceUnavailable || !strings.Contains(caller.Body.String(), `"code":"maintenance"`) {
 		t.Fatalf("caller route during maintenance status=%d body=%s", caller.Code, caller.Body.String())
 	}
+	if caller.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatal("browser cannot read maintenance response")
+	}
+	for _, path := range []string{"/v1/models", "/v1/chat/completions", "/v1/embeddings"} {
+		method := http.MethodPost
+		if path == "/v1/models" {
+			method = http.MethodGet
+		}
+		preflight := testApplicationRequest(t, app.handler, http.MethodOptions, auditUserHost, path, "", nil, map[string]string{
+			"Origin": "https://browser.example", "Access-Control-Request-Method": method, "Access-Control-Request-Headers": "authorization,content-type",
+		})
+		if preflight.Code != http.StatusNoContent || preflight.Body.Len() != 0 || preflight.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Fatalf("preflight during maintenance: %d headers=%v", preflight.Code, preflight.Header())
+		}
+	}
 
 	wrongLogin := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/login",
 		`{"username":"operator","password":"wrong password"}`, nil, map[string]string{"Content-Type": "application/json"})

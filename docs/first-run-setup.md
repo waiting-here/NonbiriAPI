@@ -184,9 +184,9 @@ The loader collects the validation problems below and reports them together. Res
 The error message names each offending variable; it never prints secret
 material.
 
-## 6. Prepare a beta.4 Generation 2 database path
+## 6. Prepare a rc.1 Generation 2 database path
 
-For a fresh beta.4 start, the configured database and its exact `-wal` and `-shm` paths must all be absent. An update accepts complete beta.3 and ten exact earlier Generation 2 manifests documented in [deployment.md](deployment.md#database-compatibility-and-version-changes). The atomic extension preserves existing general balances, fees, configuration, legal settings and saved game rules while adding zero game wallets. Alpha/Generation 1 cannot be migrated in place. An empty file is not a fresh database and is rejected.
+For a fresh rc.1 start, the configured database and its exact `-wal` and `-shm` paths must all be absent. The validated release upgrade is complete populated beta.4 → rc.1, ending at 117 Generation 2 tables; see [deployment.md](deployment.md#database-compatibility-and-version-changes). Unreleased intermediate schemas are outside the release upgrade guarantee. The atomic extension preserves existing balances, fees, configuration, legal settings and saved game rules. Missing game wallets start at zero; Bidding, Likes and Blackjack start disabled on sources without their configuration. Existing donated keys receive failure threshold `"10"` without changing their counters or disablement, and Gateway cost attribution starts off. Alpha/Generation 1 cannot be migrated in place. An empty file is not a fresh database and is rejected.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 
@@ -195,7 +195,7 @@ On a true fresh start the process creates a Generation 2 SQLite database with `a
 - activities, charity, and donation intake off;
 - the game master switch and every game-specific switch off.
 
-If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point beta.4 at an unverified or unsupported earlier database.
+If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point rc.1 at an unverified or unsupported earlier database.
 
 For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#database-compatibility-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
 
@@ -252,4 +252,4 @@ minimum acceptance bar.
 
 ## Embedding smoke check
 
-For embeddings, select an OpenAI-compatible upstream and use its documented versioned base; the connector appends `/embeddings` without inserting `/v1`. Bind a model that the upstream supports, then call `POST /v1/embeddings` with a short text and with a batch. Check the platform model name, vector indexes, configured encoding and reported usage. Personal and charity models share this entry point. Verify charity input pricing, one-call batch accounting and existing limits before opening a donated resource. Do not enter a model-purpose classification or expect Anthropic and rerank support. The [API contract](api-contract.md#23-post-v1embeddings) lists accepted inputs and limits.
+For embeddings, select an OpenAI-compatible upstream and use its documented versioned base; the connector appends `/embeddings` without inserting `/v1`. Alternatively, use `ai-sdk-gateway-v3` with its full native base and a working `/embedding-model` endpoint; this connector accepts only text input and float output. Bind a model that the upstream supports, then call `POST /v1/embeddings` with a short text and with a batch. Check the platform model name, vector indexes, configured encoding and reported usage. Personal and charity models share this entry point. Verify charity input pricing, one-call batch accounting and existing limits before opening a donated resource. Do not enter a model-purpose classification or expect Anthropic and rerank support. The [API contract](api-contract.md#24-native-ai-sdk-gateway-v3-compatibility) lists the strict Gateway subset and the tested Runable embedding limitation.

@@ -4,6 +4,43 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-rc.1] - 2026-09-18
+
+### Added
+
+- Per-donation-key consecutive failure thresholds, default 10. Zero records errors without automatically disabling the key; donor, administrator and steward pages warn persistently. Saving preserves counts and immediately recalculates the error-disabled state, independently of enablement and reset.
+- Native AI SDK Gateway v3 chat, true streaming, function tools, image input, text embeddings and model discovery/manual configuration, with strict compatibility checks before reservations or credential access.
+- Administrator-controlled Gateway cost attribution, disabled by default, and debug metadata showing only whether the tag was sent. Steward CallerKey automation can read and update failure policies with revision and idempotency protection.
+- Two-player Bidding Duel with 13 simultaneous card rounds, and Turn-based Battle Minigame (Test) with quick/standard modes, five characters, eight harnesses and the complete skill/buff catalog.
+- Bidding reward draws, paired card reveals and directional collection of the whole prize pool. Turn-based battles show full-page speed and overload effects for your character, with static reduced-motion alternatives.
+- Separate per-game queues, frozen entry terms, mixed-wallet admission, original-asset refunds and atomic winner/fee settlement. Both games start disabled and do not add newcomer awards.
+- Synchronized, event-paced turn resolution without a fixed total duration with score breakdowns, resource changes, round-start refills, independent stun/overload artwork, reduced-motion feedback and a paginated round log. All 127 character, skill and harness slots have dedicated illustrations.
+- Dedicated covers for the three new games, 35 Fishing catch illustrations with SVG fallback, synchronized Likes music and sampled effects for Likes, Bidding and Blackjack. Sound and music preferences are separate and off by default; browser-local music quality offers lightweight MP3 or lossless FLAC.
+- Thirty-day player and administrator match history, long-term anonymous traces and resumable bounded administrator NDJSON export. Account export v8 includes safe new-game records.
+- Private per-game randomness for all six games, with opening SHA-256 commitments, HMAC-SHA256 rejection sampling, terminal seed disclosure, bounded proofs, independent browser/Node verification and safe account export. Active responses never disclose seeds or future draws; retained legacy games explicitly lack proofs.
+- One shared nine-seat Blackjack table with minute-aligned seating/decisions/results, persistent FIFO waiting, simultaneous batched actions, six-deck rules, splitting and doubling. Frozen mixed-wallet stakes settle per hand into general credits after fees; the game starts disabled.
+- The user station supports wide desktop layouts while preserving the mobile layout. Turn-based Battle Minigame (Test) uses server-authored event-paced settlement steps without a fixed total-duration promise.
+- Bidding uses fixed 13-card slots and public remaining reward-card sets without exposing future order. Blackjack documents the nine-seat table, and bundled music provenance distinguishes CC0 source material from project arrangements and original effects.
+
+### Fixed
+
+- Closed games and modes consistently disable entry and matching. Configuration refreshes while visible and after rejected entry, with specific admission feedback; learning, history and ongoing matches remain available. Turn-based battles correctly list two modes and Chinese bidding labels consistently use Joker.
+- Skill, harness, passive and status cards show effect summaries. Linked details distinguish original/distilled versions, explain player mechanics and separate flavor quotes from rules. A skippable local tutorial walks through the fixed loadout and ten authoritative rounds to a 66–64 victory without matchmaking, wallet changes or match records.
+- Live turn warnings add visual and optional sound cues below five seconds. Overload events record the actual energy or token shortage and highlight the corresponding resources during settlement, without guessing from later balances or changing payment rules.
+- Banned Discord sign-ins redirect to the branded public 403 page; ordinary API denials retain JSON responses. The charity catalog removes the redundant provider/model line.
+- LinkLink match effects wait for valid layout measurements and ignore resize frames after their board is removed, preventing invalid SVG coordinates during transitions.
+- Browser clients can use the three public CallerKey model routes across origins. Valid OPTIONS preflights return 204 without authentication or model usage, and actual responses expose errors and streams through CORS. Cookie-authenticated APIs retain their same-origin boundary.
+- Administrator dashboard endpoint totals use the bounded numbered endpoint page, including addresses shared by more than 100 users.
+- Shared battery overload affects only positive-energy plans when the other plan costs zero; exact remaining energy is allowed and Flash keeps its independent check.
+- Uncapped API reserve and gold use numeric displays. Still-stunned plans show only skip; cleansing plans require a cast and restore confirmation.
+- Game availability badges reflect partial mode availability, ten-catch results keep long names and amounts readable, and welfare-pool labels avoid the wrong currency.
+- Periodic recovery preserves live duels while a real restart cancels and refunds unfinished matches.
+
+### Compatibility
+
+- Generation 2 now has 117 tables. The validated release upgrade is populated beta.4 → rc.1; unreleased intermediate schemas are outside the release upgrade guarantee. Existing wallets, old games, configuration and legal overrides are preserved; failed upgrades roll back and older binaries reject the new manifest.
+- Source prerelease for Linux/amd64. Build from the tagged source; no official precompiled attachments. Overload shortage metadata is optional for compatibility with retained older records. The local tutorial adds no database migration or real-game write endpoint.
+
 ## [1.0.0-beta.4] - 2026-09-12
 
 This source prerelease supports Linux/amd64 and atomic upgrades from complete beta.3 and ten exact earlier Generation 2 schemas. Existing general balances, settled fees, configuration, custom legal text and saved game rules remain intact. New game wallets start at zero; rollback requires a matching complete snapshot. Build from the tagged source; no official precompiled binaries, container images, or installers are provided.

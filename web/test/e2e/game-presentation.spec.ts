@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
-import { onboardingWire } from '../../src/user/games/common/testFixtures';
+import { gamesSnapshotWire, onboardingWire } from '../../src/user/games/common/testFixtures';
 
 const NOW = 1_800_000_000;
 const SESSION_ID = 'rps_AAAAAAAAAAAAAAAAAAAAAA';
@@ -28,6 +28,7 @@ function gameMode(base: string) {
 
 function gamesSnapshot() {
   return {
+    ...gamesSnapshotWire(),
     server_now: NOW,
     balance: '12345678901234567890.125',
     game_balance: '0',

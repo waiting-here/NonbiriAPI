@@ -780,6 +780,8 @@ describe('admin per-user limit explanations', () => {
 });
 
 const initialGameConfig: GamesConfig = {
+  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 } },
+  bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -841,9 +843,9 @@ const activeGameCounts: ActiveCounts = {
     { game: 'rps', mode: 'deathmatch', spec: null, phase: 'gesture', count: '3' },
   ],
   queues: [
-    { mode: 'quick', count: '5' },
-    { mode: 'standard', count: '0' },
-    { mode: 'deathmatch', count: '7' },
+    { game: 'rps', mode: 'quick', count: '5' },
+    { game: 'rps', mode: 'standard', count: '0' },
+    { game: 'rps', mode: 'deathmatch', count: '7' },
   ],
 };
 
@@ -880,6 +882,7 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
       );
     }
     const mutable = patch as {
+      blackjack: GamesConfig['blackjack'];
       expected_revision: string;
       master_enabled: boolean;
       fishing: GamesConfig['fishing'];
@@ -894,6 +897,8 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
     };
     const previous = state;
     state = {
+      blackjack: structuredClone(mutable.blackjack),
+      bidding: structuredClone(previous.bidding), likes: structuredClone(previous.likes),
       revision: String(BigInt(state.revision) + 1n),
       master_enabled: mutable.master_enabled,
       fishing: structuredClone(mutable.fishing),
@@ -963,7 +968,7 @@ describe('standalone Admin Games feature', () => {
       screen.getByText(/Specification: 10×10 · Phase: Unknown value \(playing\) · 2/),
     ).toBeVisible();
     expect(screen.getByText(/Mode: Deathmatch · Phase: Gesture selection · 3/)).toBeVisible();
-    const queues = screen.getByRole('heading', { name: 'RPS queues' }).closest('section');
+    const queues = screen.getByRole('heading', { name: 'Matchmaking queues' }).closest('section');
     expect(queues).toHaveTextContent('Quick: 5');
     expect(queues).toHaveTextContent('Standard: 0');
     expect(queues).toHaveTextContent('Deathmatch: 7');
@@ -975,6 +980,9 @@ describe('standalone Admin Games feature', () => {
     expect(server.patches[0]).toEqual({
       expected_revision: '7',
       master_enabled: true,
+      bidding: initialGameConfig.bidding,
+      likes: initialGameConfig.likes,
+      blackjack: initialGameConfig.blackjack,
       fishing: {
         ...initialGameConfig.fishing,
         bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '3' },
@@ -1523,3 +1531,4 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toBe('9007199254740991');
   });
 });
+import { duelConfigFixture } from '../duelConfigFixture';

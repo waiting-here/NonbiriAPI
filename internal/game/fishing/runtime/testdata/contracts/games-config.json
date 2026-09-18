@@ -1,6 +1,14 @@
 {
   "revision": "1",
   "master_enabled": false,
+  "blackjack": {
+    "enabled": false,
+    "min_stake": "1000",
+    "max_stake": "50000",
+    "stake_step": "1000",
+    "default_stake": "5000",
+    "rake_bp": {"platform": 100, "welfare": 100, "thursday": 100}
+  },
   "fishing": {
     "enabled": false,
     "bait_prices": {
@@ -84,6 +92,61 @@
         "dealer_seconds": 15,
         "follower_seconds": 15,
         "queue_capacity": 4096
+      }
+    }
+  },
+  "bidding": {
+    "enabled": false,
+    "modes": {
+      "tier1": {
+        "enabled": false,
+        "ticket": "5000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
+      },
+      "tier2": {
+        "enabled": false,
+        "ticket": "10000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
+      },
+      "tier3": {
+        "enabled": false,
+        "ticket": "50000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
+      }
+    }
+  },
+  "likes": {
+    "enabled": false,
+    "modes": {
+      "quick": {
+        "enabled": false,
+        "ticket": "5000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
+      },
+      "standard": {
+        "enabled": false,
+        "ticket": "25000",
+        "rake_bp": {
+          "platform": 100,
+          "welfare": 100,
+          "thursday": 100
+        }
       }
     }
   }

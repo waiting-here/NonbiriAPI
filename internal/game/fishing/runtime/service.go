@@ -68,6 +68,7 @@ type Service struct {
 	limiter           *game.StartLimiter
 	ownsLimiter       bool
 	random            fishing.IntSource
+	proofs            bool
 	now               func() time.Time
 	generateID        func(string) (string, error)
 	leaderboardTieKey []byte
@@ -100,6 +101,7 @@ func New(options Options) (*Service, error) {
 	if options.GenerateID == nil {
 		options.GenerateID = db.GenerateOpaqueID
 	}
+	proofs := options.Random == nil
 	if options.Random == nil {
 		options.Random = fishing.CryptoSource{}
 	}
@@ -128,7 +130,7 @@ func New(options Options) (*Service, error) {
 		pools: options.Pools, activityEvents: options.ActivityEvents,
 		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		limiter: options.Limiter, ownsLimiter: ownsLimiter,
-		random: options.Random, now: options.Now, generateID: options.GenerateID,
+		random: options.Random, proofs: proofs, now: options.Now, generateID: options.GenerateID,
 		leaderboardTieKey: key, capability: options.Capability,
 		workerInterval: options.WorkerInterval, budgetNow: options.BudgetNow,
 		wake: make(chan struct{}, 1),

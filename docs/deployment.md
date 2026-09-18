@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for the `1.0.0-beta.4` release: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Alpha deployments require a fresh cutover; validated current and explicitly supported earlier Generation 2 schemas can be updated normally with existing data preserved. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for the `1.0.0-rc.1` source prerelease: one Linux/amd64 binary built from the exact tagged source, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. The validated release upgrade is complete beta.4 → rc.1 with existing data preserved. Alpha deployments require a fresh cutover. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -71,7 +71,7 @@ The `dist` build tag is required for the real frontend. An untagged binary conta
 Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-version=1.0.0-beta.4
+version=1.0.0-rc.1
 release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
@@ -155,9 +155,9 @@ Model calls allow up to 900 seconds for upstream response headers and 1200 secon
 
 ## Database compatibility and version changes
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Fresh creation requires the main/WAL/SHM set to be absent. Eleven exact predecessor manifests are accepted: before charity routing, before per-key limits, before successful-response checkpoints, complete beta.1, and `preBrowse`, `preQuotaCleanup`, `preStewardHoldRead`, `preModelTokenReserve`, `preHourlyQuota`, complete beta.2 and complete beta.3. Other existing structures are rejected before source writes. One atomic upgrade applies missing predecessor extensions and the dual-asset schema, then validates the complete manifest, foreign keys, asset ledgers and reward capacity. The result has 102 tables; a second startup adds nothing. Existing account and entry IDs, general balances, settled fees, configuration, custom legal text and saved game rules remain intact. New game wallets start at zero. Existing games retain rules version 1 and original funding; new games use version 2. No historical newcomer completion or unrecorded payment source is invented. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. Alpha/Generation 1 and arbitrary schema repair remain unsupported.
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Fresh creation requires the main/WAL/SHM set to be absent. The release upgrade gate covers complete populated beta.4 → rc.1, ending at 117 tables. Missing extensions are applied atomically before the complete manifest, foreign keys, both asset ledgers and reward capacity are validated. Unknown or partial structures are rejected before source writes; a second startup adds nothing. Existing identities, both wallets, settled charges, game rules, configuration, site branding and custom legal text remain intact. Existing Fishing, LinkLink and RPS games retain their saved version-1 or version-2 rules. The three new games use independent rules version 1 and start disabled on sources without their settings; configured candidate instances retain their current settings. No historical payment source or newcomer completion is invented. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. Alpha/Generation 1 and arbitrary schema repair remain unsupported.
 
-Before a writable source open, existing files are copied through no-follow read-only handles to a private validation directory. Header, manifest, foreign keys, indexes, sidecars and contextual credential envelopes are validated there. Unsupported sources are rejected without repair or new source-side WAL/SHM files. The eleven source classes include `preRouting`, `preKeyLimits`, `preResponseStarts`, `preBetaTwo`, `preBrowse`, `preQuotaCleanup`, `preStewardHoldRead`, `preModelTokenReserve`, `preHourlyQuota`, `preEmbedding` and `preBetaFour`. These are exact manifests, not permission to accept arbitrary intermediate schemas.
+Before a writable source open, existing files are copied through no-follow read-only handles to a private validation directory. Header, manifest, foreign keys, indexes, sidecars and contextual credential envelopes are validated there. Unsupported sources are rejected without repair or new source-side WAL/SHM files. Exact older manifest recognizers are implementation safeguards, not a release guarantee for unreleased intermediate schemas. Updating an already deployed rc.1 candidate requires its exact source, schema and runtime changes to be checked separately; sharing Generation 2 is insufficient evidence.
 
 Therefore:
 
@@ -167,7 +167,7 @@ Therefore:
 - a cutover from an alpha release deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
 - a fresh Generation 2 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
 
-Beta.4 adds no startup environment-variable names relative to beta.3. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
+This release adds no startup environment-variable names relative to beta.4. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
 
 The companion deployment helper is maintained separately and is **not shipped by this repository**. Any helper used for this cutover must expose exactly four operator entry classes:
 

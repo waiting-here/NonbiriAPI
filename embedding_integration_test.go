@@ -40,10 +40,14 @@ type embeddingHTTPFixture struct {
 
 // This uses the production CallerKey verifier, routing repositories, claim
 // rail, ledger and LocalBackend. Only the upstream HTTP server is simulated.
-func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
+func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(custom) != 0 {
+			custom[0](w, r)
+			return
+		}
 		var body map[string]json.RawMessage
 		if r.Method != "POST" || (r.URL.Path != "/v1/embeddings" && r.URL.Path != "/v1/chat/completions") || r.Header.Get("Authorization") != "Bearer embedding-fixture-secret" || json.NewDecoder(r.Body).Decode(&body) != nil {
 			w.WriteHeader(400)
@@ -129,7 +133,11 @@ func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
 	if err := f.store.DB().QueryRow(`SELECT user_id FROM caller_keys WHERE generation=1`).Scan(&f.userID); err != nil {
 		t.Fatal(err)
 	}
-	f.seedModels(t, vault, upstream.URL+"/v1")
+	connectorType := "openai-compatible"
+	if len(custom) != 0 {
+		connectorType = "ai-sdk-gateway-v3"
+	}
+	f.seedModels(t, vault, upstream.URL+"/v1", connectorType)
 	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +150,7 @@ func newEmbeddingHTTPFixture(t *testing.T) *embeddingHTTPFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600})
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +177,7 @@ func (f *embeddingHTTPFixture) exec(t *testing.T, statement string, args ...any)
 	return id
 }
 
-func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, base string) {
+func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, base, connectorType string) {
 	t.Helper()
 	now := time.Now().Unix()
 	zero := make([]byte, 16)
@@ -209,7 +217,7 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 	f.exec(t, `UPDATE site_config SET value='1000' WHERE key='charity_min_chars'`)
 	f.exec(t, `INSERT INTO site_config(key,value,updated_at) VALUES('charity_token_reserve_milli','100',?) ON CONFLICT(key) DO UPDATE SET value='100',updated_at=excluded.updated_at`, now)
 	for index, user := range []int64{f.userID, f.donorID} {
-		endpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible',?,'fixture endpoint',1,1,?,?)`, user, base, now, now)
+		endpoint := f.exec(t, `INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'`+connectorType+`',?,'fixture endpoint',1,1,?,?)`, user, base, now, now)
 		contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 		contextID[15] = byte(index + 1)
 		fingerprint[31] = byte(index + 1)
@@ -221,7 +229,7 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 		if err != nil {
 			t.Fatal(err)
 		}
-		secretID := f.exec(t, `INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'openai-compatible',?,?)`, contextID, base, envelope, now)
+		secretID := f.exec(t, `INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'`+connectorType+`',?,?)`, contextID, base, envelope, now)
 		key := f.exec(t, `INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at) VALUES(?,?,?,'head','tail','fixture key',1,1,1,?,?)`, endpoint, secretID, fingerprint, now, now)
 		f.exec(t, `INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count) VALUES(?,'unknown',1,'none','',0)`, key)
 		f.exec(t, `INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'private-model',0,1,0,1,?)`, key, now)
@@ -232,7 +240,7 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 		}
 		f.keyID = key
 		donation := f.exec(t, `INSERT INTO donations(user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at) VALUES(?,'approved',1,'fixture donation','','admin',?,?)`, user, now, now)
-		donationKey := f.exec(t, `INSERT INTO donation_keys(donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,source_endpoint_key_id,report_fingerprint) VALUES(?,?,'head','tail',?,'openai-compatible',?,?,?,?,?,?,5,1,?,?,?,?,'fixture',?,?,?,?)`, donation, key, base, zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now, key, fingerprint)
+		donationKey := f.exec(t, `INSERT INTO donation_keys(donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,source_endpoint_key_id,report_fingerprint) VALUES(?,?,'head','tail',?,'`+connectorType+`',?,?,?,?,?,?,5,1,?,?,?,?,'fixture',?,?,?,?)`, donation, key, base, zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now, key, fingerprint)
 		f.exec(t, `INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, key, donationKey, donation, now)
 		for _, mode := range []string{"per_request", "per_token"} {
 			model := f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,uncached_user_price,uncached_donor_reward,discount_percent,discount_enabled,flatten_tool_calls,revision,binding_revision,created_at,updated_at) VALUES('provider',?,?,1,?,3000,1250,4000000,2000000,80,1,1,1,1,?,?)`, mode, "[公益]provider/"+mode, mode, now, now)

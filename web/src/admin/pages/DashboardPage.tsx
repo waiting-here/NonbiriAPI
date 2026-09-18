@@ -6,11 +6,12 @@ import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/
 import {
   adminCoreKeys,
   getAdminActivity,
-  getAdminEndpoints,
   getAdminSiteTimezoneOffset,
   getAdminUsage,
 } from '../features/operations/core';
+import { adminPageKeys, getAdminEndpointsPage } from '../features/operations/adminPages';
 import { adminReportKeys, getReportBadge } from '../features/operations/reports';
+import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
 
 function QueryCard({
@@ -46,6 +47,8 @@ function formatSiteDay(day: number | undefined, offsetMinutes: number | undefine
 
 export function DashboardPage() {
   const { t } = useTranslation();
+  const session = useAdminSession();
+  const account = session.data?.admin.username ?? '';
   const usage = useQuery({ queryKey: adminCoreKeys.usage, queryFn: getAdminUsage, retry: false });
   const activity = useQuery({
     queryKey: adminCoreKeys.activity(null),
@@ -58,8 +61,9 @@ export function DashboardPage() {
     retry: false,
   });
   const endpoints = useQuery({
-    queryKey: adminCoreKeys.endpoints('', null),
-    queryFn: () => getAdminEndpoints('', null),
+    queryKey: adminPageKeys.endpoints(account, '', '1', 20),
+    queryFn: ({ signal }) => getAdminEndpointsPage('', '1', 20, signal),
+    enabled: Boolean(account) && !session.error,
     retry: false,
   });
   const reports = useQuery({
@@ -126,12 +130,20 @@ export function DashboardPage() {
             />
           )}
         </QueryCard>
-        <QueryCard title={t('admin.dashboard.endpointsTitle')} query={endpoints}>
+        <QueryCard
+          title={t('admin.dashboard.endpointsTitle')}
+          query={{
+            ...endpoints,
+            isPending: !session.error && endpoints.isPending,
+            error: session.error ?? endpoints.error,
+            refetch: session.error ? session.refetch : endpoints.refetch,
+          }}
+        >
           {endpoints.data?.data.length ? (
             <>
               <p>
-                {t('admin.dashboard.endpointGroupsFirstPage', {
-                  groupCount: endpoints.data.data.length,
+                {t('admin.dashboard.endpointGroups', {
+                  groupCount: endpoints.data.pagination.total_items,
                 })}
               </p>
               <Link className="btn btn-secondary" to="/endpoints">

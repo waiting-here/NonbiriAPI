@@ -25,9 +25,8 @@ import (
 )
 
 const (
-	maxUnixSecond       = int64(253402300799)
-	terminalRetention   = int64(400 * 24 * 60 * 60)
-	failureDisableCount = int64(10)
+	maxUnixSecond     = int64(253402300799)
+	terminalRetention = int64(400 * 24 * 60 * 60)
 )
 
 // EndpointKeyDeletionOwner is the donation-side transaction primitive. The
@@ -884,9 +883,10 @@ WHERE logical_request_id=? AND state IN ('reserved','dispatched') AND donor_rewa
 
 func foldStreak(ctx context.Context, tx *sql.Tx, keyID int64, generation db.U128, at int64) error {
 	var currentGenerationBlob, nextFoldBlob, streakBlob []byte
+	var thresholdText string
 	var failureDisabled int
-	if err := tx.QueryRowContext(ctx, `SELECT streak_generation,next_fold_seq,failure_streak,failure_disabled
-FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlob, &streakBlob, &failureDisabled); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT streak_generation,next_fold_seq,failure_streak,failure_disabled,failure_disable_threshold
+FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlob, &streakBlob, &failureDisabled, &thresholdText); err != nil {
 		return fmt.Errorf("charity: read streak cursor: %w", err)
 	}
 	currentGeneration, err := decodeU128(currentGenerationBlob)
@@ -901,6 +901,10 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 		return err
 	}
 	streak, err := decodeU128(streakBlob)
+	if err != nil {
+		return err
+	}
+	threshold, err := db.ParseU128Decimal(thresholdText)
 	if err != nil {
 		return err
 	}
@@ -928,7 +932,7 @@ WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
 				if err != nil {
 					return err
 				}
-				if failureDisabled == 0 && streak.Big().Cmp(big.NewInt(failureDisableCount)) >= 0 {
+				if failureDisabled == 0 && threshold != (db.U128{}) && streak.Big().Cmp(threshold.Big()) >= 0 {
 					failureDisabled = 1
 					disabledNow = true
 				}
@@ -952,7 +956,7 @@ WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`,
 		return err
 	}
 	if disabledNow {
-		ref := fmt.Sprintf("donation-key:%d:generation:%s", keyID, generation.Decimal())
+		ref := fmt.Sprintf("donation-key:%d:generation:%s:fold:%s", keyID, generation.Decimal(), next.Decimal())
 		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved)
 SELECT 'donation_failure_disabled','charity donation key disabled after consecutive protocol failures',?,?,0
 WHERE NOT EXISTS(SELECT 1 FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?)`, ref, at, ref); err != nil {

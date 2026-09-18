@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
@@ -23,6 +25,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	gamebuiltin "github.com/waiting-here/NonbiriAPI/internal/game/builtin"
+	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
 	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
@@ -56,9 +59,10 @@ func newStewardAutomationHandler(service *stewardautomation.Service, repository 
 		ctx := authz.WithStewardCaller(r.Context(), authz.StewardCaller{UserID: identity.UserID, Generation: identity.Generation})
 		service.ServeHTTP(w, r.WithContext(ctx))
 	})
-	return maintenance.GateMiddleware(gate, callerKey.WrapExact(inner, map[string]string{
-		stewardautomation.DonationsPath: http.MethodPost,
-		stewardautomation.BindingsPath:  http.MethodPost,
+	return maintenance.GateMiddleware(gate, callerKey.WrapExactMethods(inner, map[string][]string{
+		stewardautomation.DonationsPath:     {http.MethodPost},
+		stewardautomation.BindingsPath:      {http.MethodPost},
+		stewardautomation.FailurePolicyPath: {http.MethodGet, http.MethodPatch},
 	})), nil
 }
 
@@ -74,10 +78,11 @@ func newPublicForwardRuntime(
 	debugHub *debug.Hub,
 	maintenanceGate *maintenance.Gate,
 	rpm ratelimit.RPMConfig,
+	cancelUserDuelsTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error),
 	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
 	if store == nil || vault == nil || claims == nil || charityService == nil || charityRoutes == nil ||
-		resourcesRepository == nil || registry == nil || outboundBackend == nil || debugHub == nil || maintenanceGate == nil {
+		resourcesRepository == nil || registry == nil || outboundBackend == nil || debugHub == nil || maintenanceGate == nil || cancelUserDuelsTx == nil {
 		return nil, errors.New("public forward runtime dependencies are required")
 	}
 	lifecycle, err := lifecyclegate.New(lifecyclegate.Config{})
@@ -105,6 +110,7 @@ func newPublicForwardRuntime(
 		invalidate = onBan[0]
 	}
 	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: claims, OnBan: invalidate,
+		CancelUserDuelsTx: cancelUserDuelsTx,
 		BeginUserRetirement: func(ctx context.Context, userID int64) (antiabuse.Retirement, error) {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -140,6 +146,7 @@ func newPublicForwardRuntime(
 	for _, connectorType := range registry.Types() {
 		instance, createErr := registry.NewConnector(connectorType, connector.Dependencies{
 			Backend: outboundBackend, AnthropicDefaultMaxTokens: provider,
+			GatewayAttribution: gatewayAttributionProvider{store: store},
 		})
 		if createErr != nil {
 			_ = safety.Close()
@@ -165,8 +172,8 @@ func newPublicForwardRuntime(
 		_ = service.Close()
 		return fail(fmt.Errorf("create CallerKey middleware: %w", err))
 	}
-	handler := maintenance.GateMiddleware(maintenanceGate,
-		callerKey.Wrap(flowHandler))
+	handler := forward.BrowserCORS(maintenance.GateMiddleware(maintenanceGate,
+		callerKey.Wrap(flowHandler)))
 	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
 }
 
@@ -251,6 +258,7 @@ func newGameRuntimeBundle(
 	activityEvents *activities.AccountstreamPublisher,
 	accountEvents *accountstream.Hub,
 	sources *accountEventSources,
+	now func() time.Time,
 ) (*gameRuntimeBundle, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil || continuation == nil ||
 		pools == nil || activityEvents == nil || accountEvents == nil || sources == nil {
@@ -264,8 +272,13 @@ func newGameRuntimeBundle(
 		return roleAuthorizer.AuthorizeAdminMutation(ctx, tx, actor.UserID)
 	})
 	return gamebuiltin.New(gamebuiltin.Options{
+		Now:   now,
 		Store: store, Vault: vault, UserAuthorizer: authRuntime, AdminAuthorizer: adminAuthorization,
 		Continuation: continuation, Pools: pools, AccountEvents: accountEvents, ActivityEvents: activityEvents,
+		DuelAdminAudit: func(event duel.AdminAudit) {
+			slog.Info("game history export", "actor_id", event.Actor, "role", event.Role, "game", event.Game,
+				"dataset", event.Dataset, "filter_fields", event.Filters, "records", event.Records, "result", event.Result)
+		},
 		PublishErrors: rpsPublishReporter{}, BindAccountSource: func(source gamebuiltin.AccountEventSource) error {
 			return sources.BindRPS(source)
 		},

@@ -35,6 +35,7 @@ function key(
     token_reserve: 0,
     authorized_expires_at: 2_000,
     expires_at: 1_000,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     safe_note: 'reviewer-only text must not cross the feature boundary',

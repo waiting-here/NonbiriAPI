@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"unicode/utf8"
 
+	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -22,6 +23,9 @@ func RegisterRoutes(user resources.UserRouteRegistrar, continuation resources.Co
 		return errors.New("linklink: user registrars and service are required")
 	}
 	api := &httpAPI{service: service}
+	if err := randomhttp.RegisterContinuation(continuation, service.database, service.userAuthorizer, "linklink", service.now, service.authorizeRandomness); err != nil {
+		return err
+	}
 	if err := user.RegisterUserRoute(http.MethodPost, RouteSessions, api.start); err != nil {
 		return fmt.Errorf("linklink: register start: %w", err)
 	}

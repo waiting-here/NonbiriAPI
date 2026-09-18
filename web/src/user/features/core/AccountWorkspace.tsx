@@ -12,6 +12,7 @@ import { disabledAccountLifecycleAdapter } from './adapters';
 import { patchLanguage } from './api';
 import { CoreErrorPanel, CoreLoading, CoreTime, MutationNotice, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
+import { MusicQualityPreference } from './MusicQualityPreference';
 import {
   clearCoreUserSession,
   coreKeys,
@@ -292,6 +293,7 @@ function LocalPreferences() {
         <h2>{t('account.localTitle')}</h2>
       </div>
       <p className="core-muted">{t('account.localBody')}</p>
+      <MusicQualityPreference />
       <fieldset>
         <legend>{t('account.theme')}</legend>
         <div className="core-radio-group">
@@ -387,7 +389,7 @@ export function AccountLifecyclePanel({
     if (
       intent &&
       token &&
-      (intent === 'export' ? adapter.capabilities.exportV6 : adapter.capabilities.deleteAccount)
+      (intent === 'export' ? adapter.capabilities.exportV8 : adapter.capabilities.deleteAccount)
     ) {
       tokenRef.current = token;
       dispatch({ type: 'confirm', accountId, intent });
@@ -515,7 +517,7 @@ export function AccountLifecyclePanel({
     try {
       const attachment =
         intent === 'export'
-          ? await adapter.exportV6({ accountId, elevatedToken })
+          ? await adapter.exportV8({ accountId, elevatedToken })
           : await adapter
               .deleteAccount({ accountId, elevatedToken, confirmation: 'DELETE' })
               .then(() => null);
@@ -586,7 +588,7 @@ export function AccountLifecyclePanel({
           <h2>{t('account.exportTitle')}</h2>
         </div>
         <p>{t('account.exportBody')}</p>
-        {!adapter.capabilities.exportV6 ? (
+        {!adapter.capabilities.exportV8 ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
         {state.intent === 'export' && state.status === 'error' ? (
@@ -600,7 +602,7 @@ export function AccountLifecyclePanel({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!adapter.capabilities.exportV6 || busy}
+            disabled={!adapter.capabilities.exportV8 || busy}
             onClick={() => void begin('export')}
           >
             {state.intent === 'export' && state.status === 'elevating'

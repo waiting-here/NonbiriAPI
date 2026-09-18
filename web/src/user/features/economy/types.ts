@@ -103,6 +103,7 @@ export interface EndpointOriginMainstream {
 export type EndpointOrigin = EndpointOriginCustom | EndpointOriginMainstream;
 
 export interface DonationKey {
+  failureDisableThreshold: string;
   id: string;
   endpointKeyId: string | null;
   displayHead: string;

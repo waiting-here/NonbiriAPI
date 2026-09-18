@@ -4,6 +4,13 @@ import { useTranslation } from 'react-i18next';
 type CoreCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
+  'account.musicQuality': ['Game music quality', '游戏音乐音质'],
+  'account.musicLight': ['Lightweight', '轻量版'],
+  'account.musicLossless': ['Lossless', '无损版'],
+  'account.musicQualityBody': [
+    'Saved only in this browser. Lossless uses more data. Applies the next time you enable music or enter a game; sound effects are unchanged.',
+    '仅保存在当前浏览器。无损版使用更多流量，下次开启音乐或进入游戏时生效，不影响短音效。',
+  ],
   'common.loading': ['Loading…', '正在加载…'],
   'common.retry': ['Retry', '重试'],
   'common.errorTitle': ['Could not load this section', '无法加载此区域'],
@@ -63,6 +70,7 @@ const copy = {
   ],
   'connector.openai': ['OpenAI-compatible', 'OpenAI 兼容'],
   'connector.anthropic': ['Anthropic-compatible', 'Anthropic 兼容'],
+  'connector.gateway': ['AI SDK Gateway v3', 'AI SDK Gateway v3'],
   'home.title': ['Welcome back, {{name}}', '欢迎回来，{{name}}'],
   'home.signedOutTitle': ['Your AI routing workspace', '你的 AI 路由工作台'],
   'home.signedOutBody': [
@@ -144,6 +152,9 @@ const copy = {
   'home.gameFishing': ['Fishing', '钓鱼'],
   'home.gameLinklink': ['Link Link', '连连看'],
   'home.gameRps': ['Three-player rock paper scissors', '三人猜拳'],
+  'home.gameBidding': ['Bidding Duel', '竞标对决'],
+  'home.gameBlackjack': ['Blackjack', '二十一点'],
+  'home.gameLikes': ['Turn-based Battle Minigame (Test)', '回合制对战小游戏（测试）'],
   'home.capabilityUnavailable': ['This summary is not available yet.', '此摘要暂不可用。'],
   'endpoints.title': ['Resources', '资源'],
   'endpoints.description': [

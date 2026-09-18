@@ -21,6 +21,8 @@ export function MatchEffect({
     const board = svg?.parentElement;
     if (!svg || !board) return;
     const position = () => {
+      // A resize frame can outlive the board until passive effects are cleaned up.
+      if (!svg.isConnected || !board.isConnected) return;
       const tile = board.querySelector<HTMLButtonElement>('[aria-rowindex="1"][aria-colindex="1"]');
       if (!tile) return;
       // Vanishing tiles scale and rotate; anchor effects to the unchanged grid layout.
@@ -33,6 +35,16 @@ export function MatchEffect({
       const pitchX = width + parseFloat(boardStyle.columnGap);
       const pitchY = height + parseFloat(boardStyle.rowGap);
       const bounds = board.getBoundingClientRect();
+      if (
+        ![width, height, originX, originY, pitchX, pitchY, bounds.width, bounds.height].every(
+          Number.isFinite,
+        ) ||
+        width <= 0 ||
+        height <= 0 ||
+        bounds.width <= 0 ||
+        bounds.height <= 0
+      )
+        return;
       svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
       const sparkStart = -(width * 18) / 68;
       const sparkLength = -(width * 7) / 68;

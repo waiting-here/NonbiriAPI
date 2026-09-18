@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 
+	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
+
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -21,6 +23,9 @@ func RegisterUserRoutes(registrar resources.UserRouteRegistrar, service *Service
 		return errors.New("game runtime: user registrar and service are required")
 	}
 	api := &httpAPI{service: service}
+	if err := randomhttp.Register(registrar, service.database, service.userAuthorizer, "fishing", service.now); err != nil {
+		return err
+	}
 	routes := []struct {
 		method, path string
 		handler      resources.AuthorizedUserHandler

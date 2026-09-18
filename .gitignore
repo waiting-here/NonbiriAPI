@@ -81,6 +81,9 @@ i18n.json
 
 # ===== User-supplied site assets (not part of the open-source repo) =====
 
+# Local source media, working files, references, and private audio imports.
+/local-assets/
+
 *.ico
 *.png
 *.jpg
@@ -95,6 +98,14 @@ i18n.json
 !web/src/shared/assets/game-heroes/fishing.webp
 !web/src/shared/assets/game-heroes/linklink.webp
 !web/src/shared/assets/game-heroes/rps.webp
+!web/src/shared/assets/game-heroes/blackjack.webp
+!web/src/shared/assets/game-heroes/bidding.webp
+!web/src/shared/assets/game-heroes/likes.webp
+!web/src/shared/assets/game-likes/
+!web/src/shared/assets/game-likes/**/*.webp
+!web/src/shared/assets/game-fishing/
+!web/src/shared/assets/game-fishing/catches/
+!web/src/shared/assets/game-fishing/catches/*.webp
 
 # ===== Go =====
 

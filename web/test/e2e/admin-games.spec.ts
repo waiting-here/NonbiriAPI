@@ -19,6 +19,8 @@ type Route = Parameters<RouteHandler>[0];
 const EPHEMERAL_MARKER = 'admin-games-ephemeral-marker';
 
 const INITIAL_CONFIG: GamesConfig = {
+  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 } },
+  bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -83,6 +85,7 @@ async function fulfillJSON(route: Route, value: unknown) {
 
 type MutableRPSMode = Omit<GamesConfig['rps']['modes']['quick'], 'queue_capacity'>;
 type GamesPatch = {
+  blackjack: GamesConfig['blackjack'];
   expected_revision: string;
   master_enabled: boolean;
   fishing: GamesConfig['fishing'];
@@ -96,6 +99,8 @@ type GamesPatch = {
 function applyPatch(config: GamesConfig, rawPatch: Record<string, unknown>): GamesConfig {
   const patch = rawPatch as GamesPatch;
   return {
+    blackjack: structuredClone(patch.blackjack),
+    bidding: structuredClone(config.bidding), likes: structuredClone(config.likes),
     revision: String(BigInt(config.revision) + 1n),
     master_enabled: patch.master_enabled,
     fishing: structuredClone(patch.fishing),
@@ -200,6 +205,9 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   expect(config.patches[0]).toEqual({
     expected_revision: '7',
     master_enabled: true,
+    blackjack: INITIAL_CONFIG.blackjack,
+    bidding: INITIAL_CONFIG.bidding,
+    likes: INITIAL_CONFIG.likes,
     fishing: {
       ...INITIAL_CONFIG.fishing,
       bait_prices: { ...INITIAL_CONFIG.fishing.bait_prices, worm: '3' },
@@ -257,3 +265,4 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();
 });
+import { duelConfigFixture } from '../duelConfigFixture';

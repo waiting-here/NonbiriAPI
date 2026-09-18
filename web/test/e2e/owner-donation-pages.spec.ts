@@ -61,6 +61,7 @@ function key(index: number) {
     },
     token_reserve: 0,
     expires_at: null,
+    failure_disable_threshold: '10',
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     rule_count: '0',

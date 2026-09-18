@@ -5,15 +5,33 @@ type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
   'onboarding.title': ['Newcomer rewards', '新人奖励'],
-  'onboarding.remaining': ['{{count}} tasks left · {{reward}} general credits available', '待完成 {{count}} 项 · 共可获 {{reward}} 通用积分'],
-  'onboarding.awarded': ['Newcomer reward: +{{reward}} general credits', '新人奖励：+{{reward}} 通用积分'],
-  'onboarding.fishingHelp': ['Finish one cast or a ten-catch batch with each bait to receive its one-time reward automatically.', '分别使用三种鱼饵完成单次或十连垂钓，即可自动获得对应的一次性奖励。'],
-  'onboarding.linklinkHelp': ['Clear each board size once to receive its one-time reward automatically.', '分别成功消除三种规格的棋盘，即可自动获得对应的一次性奖励。'],
-  'onboarding.rpsHelp': ['Finish each mode once to receive its one-time reward automatically. Automatic timeout moves count too; leaving a queue does not.', '分别完成三种模式，即可自动获得对应的一次性奖励。超时自动操作完成的对局也计入；取消排队不计入。'],
+  'onboarding.remaining': [
+    '{{count}} tasks left · {{reward}} general credits available',
+    '待完成 {{count}} 项 · 共可获 {{reward}} 通用积分',
+  ],
+  'onboarding.awarded': [
+    'Newcomer reward: +{{reward}} general credits',
+    '新人奖励：+{{reward}} 通用积分',
+  ],
+  'onboarding.fishingHelp': [
+    'Finish one cast or a ten-catch batch with each bait to receive its one-time reward automatically.',
+    '分别使用三种鱼饵完成单次或十连垂钓，即可自动获得对应的一次性奖励。',
+  ],
+  'onboarding.linklinkHelp': [
+    'Clear each board size once to receive its one-time reward automatically.',
+    '分别成功消除三种规格的棋盘，即可自动获得对应的一次性奖励。',
+  ],
+  'onboarding.rpsHelp': [
+    'Finish each mode once to receive its one-time reward automatically. Automatic timeout moves count too; leaving a queue does not.',
+    '分别完成三种模式，即可自动获得对应的一次性奖励。超时自动操作完成的对局也计入；取消排队不计入。',
+  ],
   'onboarding.board6x8': ['6×8 board', '6×8 棋盘'],
   'onboarding.board8x8': ['8×8 board', '8×8 棋盘'],
   'onboarding.board10x10': ['10×10 board', '10×10 棋盘'],
-  'common.gamePaymentOrder': ['Game credits are spent first, then general credits. Normal game payouts go to general credits.', '优先使用游戏积分，不足部分使用通用积分。正常游戏结算所得进入通用钱包。'],
+  'common.gamePaymentOrder': [
+    'Game credits are spent first, then general credits. Normal game payouts go to general credits.',
+    '优先使用游戏积分，不足部分使用通用积分。正常游戏结算所得进入通用钱包。',
+  ],
   'common.generalBalance': ['General credits', '通用积分'],
   'common.entryPayment': ['Entry payment', '入场付款'],
 
@@ -56,8 +74,8 @@ const copy = {
   'center.eyebrow': ['Game lounge', '游戏小馆'],
   'center.title': ['Choose your pace', '挑一种轻松节奏'],
   'center.description': [
-    'Unwind with fishing, tile matching, or a round of rock-paper-scissors.',
-    '垂钓、连连看、三人猜拳，换种方式放松一下。',
+    'Relax by the pond, clear a board, or challenge another player.',
+    '池塘小憩、消除棋盘，或与其他玩家一决高下。',
   ],
   'center.fishing.title': ['Pond fishing', '池塘垂钓'],
   'center.fishing.body': [
@@ -70,6 +88,21 @@ const copy = {
     '在时间结束前消除棋盘，离开后也可继续。',
   ],
   'center.rps.title': ['Three-player RPS', '三人猜拳'],
+  'center.bidding.title': ['Bidding Duel', '竞标对决'],
+  'center.bidding.body': [
+    'Plan your bids across thirteen simultaneous rounds.',
+    '十三轮共同暗选，安排每张牌的出场时机。',
+  ],
+  'center.likes.title': ['Turn-based Battle Minigame (Test)', '回合制对战小游戏（测试）'],
+  'center.blackjack.title': ['Blackjack', '二十一点'],
+  'center.blackjack.body': [
+    'One table, nine seats and a new hand every minute.',
+    '单桌九席，每分钟新一局。与同桌一起向庄家挑战。',
+  ],
+  'center.likes.body': [
+    'Build your loadout and race for likes on shared power.',
+    '搭配角色与技能，在共享电池下争取得赞。',
+  ],
   'center.rps.body': [
     'Take a seat, read your opponents, and reveal your next move.',
     '三人同桌，揣摩对手，亮出你的下一手。',
@@ -78,7 +111,8 @@ const copy = {
   'center.details': ['View availability', '查看开放状态'],
   'center.from': ['From {{amount}} credits', '{{amount}} 积分起'],
   'center.specs': ['{{count}} of 3 board sizes open', '3 种棋盘开放 {{count}} 种'],
-  'center.modes': ['{{count}} of 3 modes open', '3 种模式开放 {{count}} 种'],
+  'center.modes': ['{{count}} of {{total}} modes open', '{{total}} 种模式开放 {{count}} 种'],
+  'center.learn': ['Learn, history and ongoing games', '学习、记录与进行中的对局'],
   'fishing.eyebrow': ['Pond fishing', '池塘垂钓'],
   'fishing.title': ['A quiet cast, a surprise catch', '悠闲抛竿，看看收获'],
   'fishing.description': ['Choose your bait and cast a line.', '选好鱼饵，抛竿试试今天的运气。'],
@@ -137,7 +171,10 @@ const copy = {
   'fishing.rake.platform': ['Platform deduction', '平台抽水'],
   'fishing.rake.welfare': ['Welfare pool deduction', '低保池抽水'],
   'fishing.rake.thursday': ['Thursday pool deduction', '星期四池抽水'],
-  'fishing.netReceived': ['Net catch: +{{amount}} general credits', '净渔获到账：+{{amount}} 通用积分'],
+  'fishing.netReceived': [
+    'Net catch: +{{amount}} general credits',
+    '净渔获到账：+{{amount}} 通用积分',
+  ],
   'fishing.result.balance': ['Resulting balance', '结算后余额'],
   'fishing.result.more': [
     'More catches are waiting to be shown next.',
@@ -242,16 +279,37 @@ const copy = {
   ],
   'linklink.hintButton': ['Hint / Refresh ({{count}} left)', '提示 / 刷新（剩余 {{count}} 次）'],
   'linklink.hintTile': ['Hint', '提示'],
-  'linklink.hintHelp': ['Follow the dashed line between the marked tiles. Select them yourself to remove the pair.', '沿虚线查看标记的配对，再自行选择两个图块消除。'],
-  'linklink.refreshed': ['The occupied tiles were shuffled once. A refresh may still leave no legal pair.', '剩余图块已洗牌一次，刷新后仍可能没有可消除的配对。'],
-  'linklink.rules.scoreBody': ['A cleared board scores 100 per pair, plus the whole seconds left and 100 for each unused hint. A timeout scores only removed pairs; abandoning has no score. Scores enter the performance boards and do not pay credits.', '成功通关的表现分 = 配对数 × 100 + 剩余完整秒数 + 剩余提示次数 × 100。超时只计算已消除配对，放弃不计分。表现分用于排行榜，不兑换积分。'],
-  'linklink.rules.shuffleBody': ['The 6×8, 8×8 and 10×10 boards begin with 2, 3 and 5 opportunities. The Hint / Refresh button shows a legal pair when one exists; otherwise it shuffles occupied tiles once. Each use costs one opportunity. Refreshing does not guarantee a move. With none left, keep playing, wait for the timer or abandon.', '6×8、8×8、10×10 棋盘分别有 2、3、5 次机会。“提示 / 刷新”在有可消除配对时显示提示，否则只洗牌一次剩余图块。每次使用扣 1 次机会，刷新不保证有解。次数用尽后可继续操作、等待超时或放弃。'],
-  'linklink.leaderboard.title': ['Best single-game score in the past {{days}} days', '过去 {{days}} 天单局最高表现分'],
-  'linklink.leaderboard.help': ['Cleared boards only, one best score per player. Equal scores rank by achievement time, earliest first.', '仅计成功通关，每人取单局最高分。同分先达成者靠前。'],
+  'linklink.hintHelp': [
+    'Follow the dashed line between the marked tiles. Select them yourself to remove the pair.',
+    '沿虚线查看标记的配对，再自行选择两个图块消除。',
+  ],
+  'linklink.refreshed': [
+    'The occupied tiles were shuffled once. A refresh may still leave no legal pair.',
+    '剩余图块已洗牌一次，刷新后仍可能没有可消除的配对。',
+  ],
+  'linklink.rules.scoreBody': [
+    'A cleared board scores 100 per pair, plus the whole seconds left and 100 for each unused hint. A timeout scores only removed pairs; abandoning has no score. Scores enter the performance boards and do not pay credits.',
+    '成功通关的表现分 = 配对数 × 100 + 剩余完整秒数 + 剩余提示次数 × 100。超时只计算已消除配对，放弃不计分。表现分用于排行榜，不兑换积分。',
+  ],
+  'linklink.rules.shuffleBody': [
+    'The 6×8, 8×8 and 10×10 boards begin with 2, 3 and 5 opportunities. The Hint / Refresh button shows a legal pair when one exists; otherwise it shuffles occupied tiles once. Each use costs one opportunity. Refreshing does not guarantee a move. With none left, keep playing, wait for the timer or abandon.',
+    '6×8、8×8、10×10 棋盘分别有 2、3、5 次机会。“提示 / 刷新”在有可消除配对时显示提示，否则只洗牌一次剩余图块。每次使用扣 1 次机会，刷新不保证有解。次数用尽后可继续操作、等待超时或放弃。',
+  ],
+  'linklink.leaderboard.title': [
+    'Best single-game score in the past {{days}} days',
+    '过去 {{days}} 天单局最高表现分',
+  ],
+  'linklink.leaderboard.help': [
+    'Cleared boards only, one best score per player. Equal scores rank by achievement time, earliest first.',
+    '仅计成功通关，每人取单局最高分。同分先达成者靠前。',
+  ],
   'linklink.leaderboard.spec': ['Board size', '棋盘模式'],
   'linklink.leaderboard.window': ['Time window', '统计窗口'],
   'linklink.leaderboard.days': ['Past {{days}} days', '过去 {{days}} 天'],
-  'linklink.leaderboard.empty': ['No qualifying scores in this window yet.', '这个窗口还没有符合条件的成绩。'],
+  'linklink.leaderboard.empty': [
+    'No qualifying scores in this window yet.',
+    '这个窗口还没有符合条件的成绩。',
+  ],
   'linklink.leaderboard.rank': ['Rank', '名次'],
   'linklink.leaderboard.player': ['Player', '玩家'],
   'linklink.leaderboard.achieved': ['Achieved', '达成时间'],
@@ -454,7 +512,10 @@ const copy = {
   'rps.seat.deleted': ['Deleted participant', '已删除参与者'],
   'rps.seat.balance': ['Table balance', '场内余额'],
   'rps.seat.currentFunding': ['Your remaining table funds', '本人的场内资金分项'],
-  'rps.queuePayment': ['Entry payment · refunded in the original assets if cancelled', '入场付款 · 取消匹配时按原币种退回'],
+  'rps.queuePayment': [
+    'Entry payment · refunded in the original assets if cancelled',
+    '入场付款 · 取消匹配时按原币种退回',
+  ],
   'rps.seat.input': ['This round', '本轮投入'],
   'rps.seat.allIn': ['All in', '全押'],
   'rps.seat.managed': ['Automatic actions: {{count}}', '自动操作：{{count}} 次'],
