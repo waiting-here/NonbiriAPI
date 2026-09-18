@@ -260,6 +260,9 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 		}
 		token, expiry, err := r.refreshExistingUser(req.Context(), userID, login.Identity, member)
 		if err != nil {
+			if r.redirectForbiddenLogin(w, req, err) {
+				return
+			}
 			r.writeSessionFailure(w, err)
 			return
 		}
@@ -298,12 +301,27 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 		token, expiry, err = r.refreshExistingUser(req.Context(), userID, login.Identity, &member)
 	}
 	if err != nil {
+		if r.redirectForbiddenLogin(w, req, err) {
+			return
+		}
 		writeAuthFailure(w, err)
 		return
 	}
 	setUserSessionCookie(w, token, timeFromUnix(expiry), r.now(), secureCookieForRequest(req, r.siteOrigin))
 	clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
 	noStoreRedirect(w, req, target)
+}
+
+func (r *Runtime) redirectForbiddenLogin(w http.ResponseWriter, req *http.Request, err error) bool {
+	if !errors.Is(err, errSessionForbidden) {
+		return false
+	}
+	secure := secureCookieForRequest(req, r.siteOrigin)
+	clearUserSessionCookie(w, secure)
+	clearElevatedCookie(w, secure)
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	noStoreRedirect(w, req, "/access-denied")
+	return true
 }
 
 func (r *Runtime) completeUserElevation(w http.ResponseWriter, req *http.Request, login DiscordLogin, claims StateClaims, target string) {
@@ -313,6 +331,9 @@ func (r *Runtime) completeUserElevation(w http.ResponseWriter, req *http.Request
 		return
 	}
 	principal, err := r.authenticate(req.Context(), raw, authz.ActorUserSession, "")
+	if r.redirectForbiddenLogin(w, req, err) {
+		return
+	}
 	if err != nil || !hmacStringEqual(principal.actor.SessionTokenHash, claims.Binding) {
 		writeAuthFailure(w, ErrStateInvalid)
 		return
