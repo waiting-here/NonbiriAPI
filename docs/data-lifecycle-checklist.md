@@ -134,7 +134,7 @@ historical snapshots.
 
 Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
 existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. The fifteen exact predecessor manifests, including complete beta.4 and the preceding release-candidate schema, receive a validated atomic upgrade to 117 tables. Existing economic facts, saved version-1/version-2 games and custom legal settings are preserved; only missing game wallets are initialized to zero. Bidding, Likes and Blackjack start disabled on sources without their configuration. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
+envelope/config, or an unsafe path fails closed. The validated release upgrade is complete populated beta.4 → rc.1, ending at 117 tables; unreleased intermediate schemas are outside the release upgrade guarantee. Existing economic facts, saved version-1/version-2 games and custom legal settings are preserved; only missing game wallets are initialized to zero. Bidding, Likes and Blackjack start disabled on sources without their configuration. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
 data import are unsupported. Current and supported predecessor databases are validated
 before any source write and before writable open. Destructive fresh starts with
 maintenance on and registration/game/activity off, and does not merge a source
