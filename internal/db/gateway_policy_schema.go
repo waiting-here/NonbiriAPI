@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const preGatewayPolicyManifestHash = "28040ddeec3df70ea34dc950e91c8e0266bf24bf1d868c1a14e314e491959b20"
+const preGatewayPolicyManifestHash = "d91855671a11b795662ce9619aed66238b1db17cad260b10fb041b3b13026f9a"
 
 const gatewayFailurePolicySchema = `
 ALTER TABLE donation_keys ADD COLUMN failure_disable_threshold TEXT NOT NULL DEFAULT '10' CHECK(typeof(failure_disable_threshold)='text' AND instr(failure_disable_threshold,char(0))=0 AND (failure_disable_threshold='0' OR (length(failure_disable_threshold) BETWEEN 1 AND 39 AND failure_disable_threshold NOT GLOB '*[^0-9]*' AND substr(failure_disable_threshold,1,1) BETWEEN '1' AND '9' AND (length(failure_disable_threshold)<39 OR failure_disable_threshold<='340282366920938463463374607431768211455'))));

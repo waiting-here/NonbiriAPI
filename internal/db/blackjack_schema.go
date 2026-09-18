@@ -37,7 +37,7 @@ CREATE TABLE game_blackjack_entries (
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253399708739),
  resolved_at INTEGER CHECK(resolved_at BETWEEN created_at AND 253399708739),
  session_id TEXT REFERENCES game_blackjack_sessions(id) ON DELETE RESTRICT,
- seat_no INTEGER CHECK(seat_no BETWEEN 0 AND 7),
+ seat_no INTEGER CHECK(seat_no BETWEEN 0 AND 8),
  pending_json TEXT CHECK(pending_json IS NULL OR (json_valid(pending_json) AND length(CAST(pending_json AS BLOB))<=512)),
  pending_batch INTEGER CHECK(pending_batch BETWEEN 0 AND 253399708739),
  stopped INTEGER NOT NULL DEFAULT 0 CHECK(stopped IN (0,1)),
