@@ -45,7 +45,7 @@ and outcome visible without movement. It never exposes unrevealed cards.
 ## Turn-based Battle Minigame (Test)
 
 Your character's speed mode adds full-page energetic light trails; overload
-adds low-power warnings. Overload takes priority, and the opponent's status
+adds overload warnings. Overload takes priority, and the opponent's status
 does not control your page effect. Reduced motion keeps a static indication.
 
 Choose one of five characters, an optional harness and a legal skill set before
@@ -99,6 +99,37 @@ Reduced-motion mode retains every final number, before/after change and reason.
 Final results and wallet settlement commit immediately; the outcome illustration
 appears after the last round's remaining presentation time.
 
+## Learning, availability and reminders
+
+Closed games and modes disable matching. Learning, the field guide, history and
+already-started matches remain reachable. Visible pages refresh admission settings
+periodically, on focus and after a rejected entry; the message distinguishes a
+closed game, a closed mode and changed matching conditions.
+
+Effect summaries appear on equipment, action and status cards. The field guide
+separates original and distilled versions, links relevant terms and keeps flavor
+quotes apart from mechanics. Desktop readers can see related explanations side by
+side; phone readers can follow links and return to the previous entry.
+
+An optional local tutorial equips ChatGPT with Codex, Usage reset, Hello, world!,
+Regenerate, Pedal faster and Words and pictures. A scripted Claude opponent with
+Codex plays ten quick-mode rounds ending 66–64. Teaching waits for your actions,
+can be skipped at any time, and never queues, spends credits, awards prizes or
+creates a real match. The browser remembers completion or skipping; replay starts
+from the beginning. Applying the loadout only fills the normal form. A real queue
+or match discovered from another tab immediately takes precedence.
+
+An unconfirmed live plan receives extra visual emphasis below five seconds, with
+at most one short sound per second when effects are enabled. Locking, timeout and
+automatic overload recovery stop the warning. Hidden pages do not play or replay
+missed ticks. Reduced motion retains the static emphasis.
+
+Overload highlights the resource shortage recorded at the failed payment: shared
+battery, mixed burst/API, API-only, or the deficient subscription quotas. A total
+quota bottleneck is also marked. API remains a numeric balance. Highlights follow
+the settlement timeline; old records without details use a generic explanation.
+Gold and image shortages remain invalid plans, rather than becoming overload.
+
 ## History and privacy
 
 Players can read their own complete results for 30 days after settlement.
@@ -126,11 +157,11 @@ can resume from the last completed page, while the signed cursor is valid.
 
 门票优先使用游戏积分，不足部分用通用积分；一只钱包欠款不抵扣另一只钱包的正余额。取消排队、120 秒未匹配、平局或系统取消均按原币种退票。胜负局退还胜者原门票，再把败者门票扣除平台、福利池和星期四池各自向下取整的抽成后，以通用积分奖励胜者。认输算负，断线不停表；服务重启、封禁或删号取消未完成对局，删号后的钱包不会被迟到结算重建。局内分数不是可消费积分。
 
-竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持王的庄家有 10 秒决定使用或保留；王只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。奖励使用红方块 ♦ 与黑梅花 ♣，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
+竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持有 Joker 的庄家有 10 秒决定使用或保留；Joker 只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。奖励使用红方块 ♦ 与黑梅花 ♣，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
 
 回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
-竞标按顺序展示奖励抽取、双方亮牌、整个奖池的归属，滚动页面时演出仍保持可见；减少动态模式保留静态牌面和结果。回合制对战中，本人的倍速模式使用全页加速光线，过载使用低电量警示，过载优先；对手状态不影响本人的全页效果，减少动态模式保留静态提示。
+竞标按顺序展示奖励抽取、双方亮牌、整个奖池的归属，滚动页面时演出仍保持可见；减少动态模式保留静态牌面和结果。回合制对战中，本人的倍速模式使用全页加速光线，过载使用独立警示，过载优先；对手状态不影响本人的全页效果，减少动态模式保留静态提示。
 
 双方锁定或超时后，服务端立即结算，并按内容依次展示方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。每一步单独确定时长，连续技能逐个展示，总时长不限；全部结束后才开始下一轮完整 20 秒。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
 
@@ -139,5 +170,15 @@ can resume from the last completed page, while the signed cursor is valid.
 共享电池以双方购物后的电量和冻结方案的声明报价判断，恰好耗尽不算过载。总需求超限时电池清零，只让正耗电方过载并取消其技能付款与效果，购物保留；零耗电方按自身资源正常执行，不被连带取消或清理状态。双方报价都为正仍沿用双方过载规则，Flash 连答另行检查。
 
 对战中的“结算日志”可分页查看已结算轮次，不暂停计时。重连按服务端时间继续，不补播过期动画；减少动态效果模式保留完整数值和原因。最终胜负与账务立即提交，界面播完本轮剩余演出再显示胜负图。
+
+关闭的游戏和模式禁用匹配，学习、词条、历史及已开始的对局仍可访问。页面可见时定期刷新配置，重新聚焦及入队失败后立即同步，并区分游戏关闭、模式关闭与匹配条件变化。
+
+配装、选招和状态卡片直接显示效果摘要。词条详情区分原版／蒸馏版本，相关术语可以点击，桌面并排阅读关联解释，手机支持跳转与返回；玩梗独立作为引用展示。
+
+新手引导在浏览器本地运行，可随时跳过并重看，浏览器记住完成或跳过状态。引导配装为 ChatGPT＋Codex＋用量重置＋Hello, world!＋重新生成＋加速猛蹬＋图文并茂，对手为携带 Codex 的 Claude，完整十轮快速对战以 66∶64 险胜结束。讲解及操作等待玩家，不真实匹配、不扣积分、不发奖励、不创建真实记录。“使用教学配装”只填写大厅表单，中途刷新后从头开始；其他标签页出现真实排队或对局时立即恢复真实状态。
+
+正式对局本人仍需确认时，不足五秒会强调倒计时和操作区；开启音效后每秒最多一次短提示。提交、锁定、超时或自动过载跳过后停止；后台不播放，返回不补播，减少动态模式保留静态强调。
+
+过载按失败付款时记录的事实高亮共享电能、混合支付的瞬发与 API、仅 API 或实际不足的订阅额度；总量构成瓶颈时也标出总量。API 保持数值显示，提示随结算时间轴出现并保留到本次演出结束。旧记录缺少细分信息时只显示通用说明；金币和图像不足仍是非法方案，不改为过载。
 
 本人和管理员可查看近 30 天完整结果；回合制对战小游戏（测试）局中对手未用配装保持隐藏，终局开放。到期后仅管理员可访问去身份的长期存档，保留完整规则与过程，移除用户、原始局／账务标识、绝对时间、付款来源和跨局身份关联。协管没有该管理权限。管理员下载可跨页继续，页面到期记录会计入跳过数，只有完整结束才显示成功。

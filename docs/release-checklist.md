@@ -115,6 +115,14 @@ needed. Daily affected-package race defaults to one shuffled round.
 
 ## Candidate and deployment
 
+- For this source prerelease, merge through the protected master PR after required
+  checks. Bind an annotated `v1.0.0-rc.1` tag and GitHub prerelease to that exact
+  master commit, without adding public precompiled attachments. Deploy it only
+  after verifying that the tag, release, CI tree and final binary agree.
+- Preserve the latest production legal text, site name and administrator settings.
+  Check local teaching without real paid-game writes. Cover disabled/partial
+  admission, all ten tutorial rounds, linked explanations, countdown sound cleanup,
+  authoritative overload highlights and forbidden OAuth navigation.
 - Verify origin and protected master, integrate any master advance, audit the
   cumulative diff and push one candidate PR. Require exact-candidate CI success.
 - Prepare one trusted final Linux artifact. Production reuses validated evidence

@@ -1,5 +1,10 @@
 # Game audio
 
+The live-turn countdown cue reuses the original `common_lock.wav` synthesized
+effect, at most once per second below five seconds while confirmation is needed.
+It follows the same off-by-default sound preference and background suspension.
+The local tutorial reuses existing effects and music; it adds no media source.
+
 The Turn-based Battle Minigame (Test) music and defeat sting are arrangements of
 [Elevate (+ instrument tracks)](https://opengameart.org/content/elevate-instrument-tracks)
 by Fupi, published under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/).

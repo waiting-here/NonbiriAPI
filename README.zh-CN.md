@@ -2,14 +2,16 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **当前源码：** 1.0.0-rc.1 开发候选，尚未正式发布。最新已发布版本为 [1.0.0-beta.4](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.4)。向用户开放前，请阅读部署、隐私和安全文档。
+> **当前版本：** [1.0.0-rc.1](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.1)，面向 Linux/amd64 的源码预发行版。请从标签源码构建；不提供官方预编译二进制。向用户开放前，请阅读部署、隐私和安全文档。
 >
-> **兼容边界：** 继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。支持包括完整 beta.4 和前序发布候选结构在内的十五种精确前驱原子升级至 117 张表，保留现有钱包、数据和配置，三款新游戏初始关闭。Alpha/Generation 1 仍须显式全新切换；具体来源见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
+> **兼容边界：** 继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。已验证的发布升级路径为完整 beta.4 → rc.1，最终为 117 张表，保留现有钱包、数据和配置。未发布的中间结构不在本版升级保证内，三款新游戏初始关闭。Alpha/Generation 1 仍须显式全新切换；具体来源见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## 主要功能
 
+- 回合制对战新增可随时跳过的浏览器本地教学，十轮固定剧本以险胜结束；技能卡直接显示效果，并可阅读关联词条。正式操作不足五秒时提醒，过载高亮实际不足的资源。关闭的游戏与模式禁用匹配，学习和历史仍可访问。
+- 被封禁账号通过 Discord 登录后显示本站自定义 403 页面；公益目录不再重复显示完整模型名已包含的提供方与模型信息。
 - 捐赠者、管理员和协管可逐密钥配置连续失败阈值，默认 10；0 表示永不因报错下架，页面持续显示醒目警示。保存保留计数并立即重算报错下架状态；协管 CallerKey 可通过[自动化接口](docs/steward-automation.md)读写。
 - Gateway 费用归因由管理员配置，默认不发送；开启后发送按用户及最终网关 origin 生成的伪名，调试只显示是否发送。严格兼容矩阵及已验证的 Runable 向量接口限制见 [API 契约](docs/api-contract.md#24-native-ai-sdk-gateway-v3-compatibility)。
 - OpenAI-compatible `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings` 入站接口。聊天支持 OpenAI-compatible、Anthropic-compatible 和原生 AI SDK Gateway v3 上游连接器；向量嵌入支持 OpenAI-compatible 和 Gateway 的严格文本子集。
@@ -108,7 +110,7 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-当前候选使用 117 张表的 Generation 2 结构，接受包括完整 beta.4 和前序发布候选结构在内的十五种精确前序结构。升级先验证来源，再原子扩展并检查结构、外键和两种资产的账务。现有双钱包、已结算费用、旧三款游戏已保存的版本 1／2 规则、运营配置和自定义法律正文保持。只有尚无游戏钱包的更早来源新增零余额钱包；三款新游戏使用独立版本 1 规则且默认关闭。不能只换旧二进制降级，须恢复相匹配的完整停服快照。全新数据库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+本版使用 117 张表的 Generation 2 结构，已验证完整 beta.4 → rc.1 的带数据升级。升级先验证来源，再原子扩展并检查结构、外键和两种资产的账务。现有双钱包、已结算费用、旧游戏已保存的规则、站名、运营配置和自定义法律正文保持。三款新游戏使用独立版本 1 规则，在尚无对应配置的来源上默认关闭。未发布中间结构不在本版升级保证内。不能只换旧二进制降级，须恢复相匹配的完整停服快照。全新数据库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
 Beta.3 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
 
