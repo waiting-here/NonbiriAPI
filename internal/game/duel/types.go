@@ -70,6 +70,7 @@ type State struct {
 	RoundStart   *RoundStart     `json:"round_start"`
 }
 type ResultSummary struct {
+	ContentHash  string          `json:"content_hash"`
 	Profiles     *[2]Profile     `json:"profiles,omitempty"`
 	ID           string          `json:"id"`
 	Game         string          `json:"game"`
@@ -157,6 +158,7 @@ type roundRecord struct {
 	Timeouts    [2]bool         `json:"timeouts"`
 }
 type queueRecord struct {
+	rules                       Rules
 	ID, Mode                    string
 	User                        int64
 	Revision                    db.U128
@@ -177,6 +179,7 @@ type seatRecord struct {
 	TimeoutCount          int
 }
 type sessionRecord struct {
+	rules                              Rules
 	ID, Mode, State, Phase             string
 	Terms                              Terms
 	TermsHash                          string

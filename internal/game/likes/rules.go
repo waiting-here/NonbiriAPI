@@ -8,27 +8,70 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/likes/engine"
 )
 
-type Rules struct{ engines map[string]*engine.Engine }
+type Rules struct {
+	engines   map[string]*engine.Engine
+	legacy    bool
+	supported map[string]*Rules
+}
 
 var _ duel.Rules = (*Rules)(nil)
 
 func NewRules() (*Rules, error) {
-	r := &Rules{engines: map[string]*engine.Engine{}}
+	r := &Rules{engines: map[string]*engine.Engine{}, supported: map[string]*Rules{}}
 	for _, mode := range []string{"quick", "standard"} {
 		e, err := engine.New(mode)
 		if err != nil {
 			return nil, err
 		}
 		r.engines[mode] = e
+		r.supported[e.ContentHash()] = r
+		old, err := engine.NewLegacy(mode)
+		if err != nil {
+			return nil, err
+		}
+		r.supported[old.ContentHash()] = &Rules{engines: map[string]*engine.Engine{mode: old}, legacy: true}
 	}
 	return r, nil
 }
 func (*Rules) ID() string { return "likes" }
+
+func (r *Rules) CompatibleCatalogs() ([]duel.Catalog, error) {
+	result := []duel.Catalog{}
+	for _, mode := range []string{"quick", "standard"} {
+		old, err := catalog.PublicLegacy(mode)
+		if err != nil {
+			return nil, err
+		}
+		body, err := duel.Encode(old)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, duel.Catalog{Hash: old.ContentHash, DesignVersion: old.DesignVersion, SchemaVersion: old.SchemaVersion, JSON: body})
+	}
+	return result, nil
+}
+
+// ResolveCatalog selects only embedded, supported content. The service also
+// compares the saved public JSON and metadata with the selected snapshot.
+func (r *Rules) ResolveCatalog(mode, hash string) (duel.Rules, error) {
+	if own := r.engines[mode]; own != nil && own.ContentHash() == hash {
+		return r, nil
+	}
+	selected := r.supported[hash]
+	if selected == nil || selected.engines[mode] == nil || selected.engines[mode].ContentHash() != hash {
+		return nil, duel.ErrInvariant
+	}
+	return selected, nil
+}
 func (r *Rules) Catalog(mode string) (duel.Catalog, error) {
 	if r.engines[mode] == nil {
 		return duel.Catalog{}, duel.ErrInvalidRequest
 	}
-	c, err := catalog.Public(mode)
+	public := catalog.Public
+	if r.legacy {
+		public = catalog.PublicLegacy
+	}
+	c, err := public(mode)
 	if err != nil {
 		return duel.Catalog{}, duel.ErrInvariant
 	}

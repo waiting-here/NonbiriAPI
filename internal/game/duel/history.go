@@ -204,7 +204,7 @@ func (s *Service) detail(v sessionRecord, seat int) (HistoryDetail, error) {
 	if err != nil {
 		return HistoryDetail{}, err
 	}
-	initial, err := s.rules.View(v.Mode, v.Initial, seat, true, nil)
+	initial, err := v.rules.View(v.Mode, v.Initial, seat, true, nil)
 	if err != nil {
 		return HistoryDetail{}, err
 	}
@@ -233,20 +233,20 @@ func (s *Service) HistoryDetail(ctx context.Context, identity Identity, id strin
 	detail.Result.Profiles, err = profiles(ctx, tx, v)
 	return detail, err
 }
-func (s *Service) roundView(mode string, raw []byte, seat int, terminal bool) (RoundView, error) {
+func (s *Service) roundView(rules Rules, mode string, raw []byte, seat int, terminal bool) (RoundView, error) {
 	var record roundRecord
 	if Decode(raw, &record) != nil {
 		return RoundView{}, ErrInvariant
 	}
-	before, err := s.rules.View(mode, record.Before, seat, terminal, nil)
+	before, err := rules.View(mode, record.Before, seat, terminal, nil)
 	if err != nil {
 		return RoundView{}, err
 	}
-	after, err := s.rules.View(mode, record.After, seat, terminal, nil)
+	after, err := rules.View(mode, record.After, seat, terminal, nil)
 	if err != nil {
 		return RoundView{}, err
 	}
-	facts, err := s.rules.RoundView(mode, record.Facts, seat, terminal)
+	facts, err := rules.RoundView(mode, record.Facts, seat, terminal)
 	if err != nil {
 		return RoundView{}, err
 	}
@@ -306,7 +306,7 @@ func (s *Service) Rounds(ctx context.Context, identity Identity, id string, in P
 	}
 	size := 0
 	for _, body := range records {
-		item, err := s.roundView(v.Mode, body, seat, v.State == "terminal")
+		item, err := s.roundView(v.rules, v.Mode, body, seat, v.State == "terminal")
 		if err != nil {
 			return page, err
 		}

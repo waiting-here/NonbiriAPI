@@ -56,6 +56,9 @@ func (e *Engine) Resolve(previous State, plans [2]Plan, pick func(int) (int, err
 	if err := run.settle(plans); err != nil {
 		return State{}, RoundRecord{}, err
 	}
+	if e.characterPassives && (len(record.Draws) > MaxRoundDraws || len(record.Events) > MaxRoundEvents) {
+		return State{}, RoundRecord{}, ErrInvariant
+	}
 	record.After = frame(&s, "after", len(record.Events))
 	record.Result = clone(s.Result)
 	if err := e.Validate(s); err != nil {
@@ -297,22 +300,33 @@ func (r *roundRun) settle(plans [2]Plan) error {
 		}
 	}
 	gains, drains := rewards, [2]int64{}
-	for seat := range 2 {
-		for _, a := range successful[seat] {
-			effect, sk := a.Preview.Effect, e.skills[a.Choice.SkillID]
-			reduction := int64(0)
-			if a.Main {
-				reduction = reductions[seat]
+	if e.characterPassives {
+		var err error
+		drains, err = r.scoreSteps(successful, reductions, rewards)
+		if err != nil {
+			return err
+		}
+		gains = [2]int64{}
+	} else {
+		for seat := range 2 {
+			for _, a := range successful[seat] {
+				effect, sk := a.Preview.Effect, e.skills[a.Choice.SkillID]
+				reduction := int64(0)
+				if a.Main {
+					reduction = reductions[seat]
+				}
+				score := e.score(s, seat, sk, effect, a.Preview.TemplateID, a.Preview.ConditionalLikes, a.Derived, reduction)
+				consumeDecay(&s.Players[seat], sk.ID, a.Preview.TemplateID, effect)
+				consumeDegradation(s, seat)
+				gains[seat] += score.Final
+				if effect.Kind == "BURST_DRAIN" {
+					drains[other(seat)] += effect.P
+				}
+				r.castEvent(seat, a, score)
+				if _, err := r.actionEffect(seat, a); err != nil {
+					return err
+				}
 			}
-			score := e.score(s, seat, sk, effect, a.Preview.TemplateID, a.Preview.ConditionalLikes, a.Derived, reduction)
-			consumeDecay(&s.Players[seat], sk.ID, a.Preview.TemplateID, effect)
-			consumeDegradation(s, seat)
-			gains[seat] += score.Final
-			if effect.Kind == "BURST_DRAIN" {
-				drains[other(seat)] += effect.P
-			}
-			r.castEvent(seat, a, score)
-			r.actionEffect(seat, a)
 		}
 	}
 	scoreFrame := frame(s, r.stage, len(r.record.Events))

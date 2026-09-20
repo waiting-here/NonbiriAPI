@@ -102,7 +102,11 @@ func escrow(ctx context.Context, tx *sql.Tx, generalID, gameID int64, code strin
 	return nil
 }
 func (s *Service) validateCatalog(ctx context.Context, tx *sql.Tx, mode, hash string) error {
-	c, err := s.rules.Catalog(mode)
+	selected, err := s.rulesFor(mode, hash)
+	if err != nil {
+		return err
+	}
+	c, err := selected.Catalog(mode)
 	if err != nil || c.Hash != hash {
 		return fmt.Errorf("duel rule identity: %w", ErrInvariant)
 	}
@@ -145,12 +149,12 @@ func (s *Service) validateSession(ctx context.Context, tx *sql.Tx, v sessionReco
 		return err
 	}
 	general, game := int64(0), int64(0)
-	info, err := s.rules.Inspect(v.Mode, v.Payload.Rules)
+	info, err := v.rules.Inspect(v.Mode, v.Payload.Rules)
 	if err != nil {
 		return err
 	}
 	for seat, p := range v.Seats {
-		if _, err := s.rules.Loadout(v.Mode, p.Loadout); err != nil {
+		if _, err := v.rules.Loadout(v.Mode, p.Loadout); err != nil {
 			return fmt.Errorf("duel seat loadout: %w", ErrInvariant)
 		}
 		if v.State == "active" {
@@ -167,12 +171,12 @@ func (s *Service) validateSession(ctx context.Context, tx *sql.Tx, v sessionReco
 			continue
 		}
 		if !info.Required[seat] {
-			expected, err := s.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+			expected, err := v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
 			if err != nil || !p.Locked || string(p.Action) != string(expected) {
 				return fmt.Errorf("duel automatic lock: %w", ErrInvariant)
 			}
 		} else if p.Locked {
-			accepted, err := s.rules.Accept(v.Mode, v.Payload.Rules, seat, p.Action)
+			accepted, err := v.rules.Accept(v.Mode, v.Payload.Rules, seat, p.Action)
 			if err != nil || string(accepted) != string(p.Action) {
 				return fmt.Errorf("duel accepted action: %w", ErrInvariant)
 			}
@@ -213,15 +217,15 @@ func (s *Service) validateSession(ctx context.Context, tx *sql.Tx, v sessionReco
 		if Decode(body, &r) != nil || r.Round != n {
 			return ErrInvariant
 		}
-		before, err := s.rules.Inspect(v.Mode, r.Before)
+		before, err := v.rules.Inspect(v.Mode, r.Before)
 		if err != nil || before.Round != n || before.Result != nil {
 			return ErrInvariant
 		}
-		after, err := s.rules.Inspect(v.Mode, r.After)
+		after, err := v.rules.Inspect(v.Mode, r.After)
 		if err != nil || after.Round < n || after.Round > n+1 {
 			return ErrInvariant
 		}
-		if _, err := s.roundView(v.Mode, body, 0, true); err != nil {
+		if _, err := s.roundView(v.rules, v.Mode, body, 0, true); err != nil {
 			return err
 		}
 		var facts struct {
@@ -256,8 +260,7 @@ func (s *Service) validateArchives(ctx context.Context, tx *sql.Tx) error {
 			if !db.ValidateOpaqueID(id, "dah_") || Decode([]byte(body), &h) != nil || h.Game != s.rules.ID() || h.Mode != mode || h.ContentHash != hash || h.RulesVersion != 1 || !validRates(h.Rake) {
 				return ErrInvariant
 			}
-			c, err := s.rules.Catalog(mode)
-			if err != nil || c.Hash != hash {
+			if err := s.validateCatalog(ctx, tx, mode, hash); err != nil {
 				return ErrInvariant
 			}
 			previous, round = id, 0
@@ -268,7 +271,11 @@ func (s *Service) validateArchives(ctx context.Context, tx *sql.Tx) error {
 			if int(n.Int64) != round || !record.Valid || Decode([]byte(record.String), &r) != nil || r.Round != round {
 				return ErrInvariant
 			}
-			if _, err := s.rules.RoundView(mode, r.Facts, 0, true); err != nil {
+			selected, err := s.rulesFor(mode, hash)
+			if err != nil {
+				return err
+			}
+			if _, err := selected.RoundView(mode, r.Facts, 0, true); err != nil {
 				return err
 			}
 		}

@@ -79,7 +79,7 @@ func TestWinnerUsesCompletedRoundAndResultPriority(t *testing.T) {
 	s.Players[0].Likes, s.Players[1].Likes = 58, 59
 	s.LikesAtStart = [2]int64{58, 59}
 	next, record, err := e.Resolve(s, [2]Plan{plan("PUB01"), plan("PUB01")}, nil)
-	if err != nil || next.Result == nil || optional(next.Result.Winner, -1) != 1 || next.Result.Scores != ([2]int64{61, 62}) || next.Result.Reason != "target" || next.AwaitingNextRound || record.Result == nil {
+	if err != nil || next.Result == nil || optional(next.Result.Winner, -1) != 1 || next.Result.Scores != ([2]int64{61, 63}) || next.Result.Reason != "target" || next.AwaitingNextRound || record.Result == nil {
 		t.Fatalf("first scorer incorrectly won: %v %+v", err, next.Result)
 	}
 	s.Players[0].Likes = 59

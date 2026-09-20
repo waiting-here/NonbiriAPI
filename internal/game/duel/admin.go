@@ -332,8 +332,11 @@ func (s *Service) nextAdminRound(ctx context.Context, tx *sql.Tx, dataset, id, m
 			return item, ErrInvariant
 		}
 	} else {
-		var err error
-		item.Record, err = s.roundView(mode, raw, 0, true)
+		v, err := s.session(ctx, tx, id)
+		if err != nil {
+			return item, err
+		}
+		item.Record, err = s.roundView(v.rules, mode, raw, 0, true)
 		if err != nil {
 			return item, err
 		}

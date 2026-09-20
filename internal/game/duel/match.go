@@ -65,6 +65,10 @@ func (s *Service) match(ctx context.Context, tx *sql.Tx, now int64) (bool, error
 	return false, nil
 }
 func (s *Service) startSession(ctx context.Context, tx *sql.Tx, queues [2]queueRecord, now int64) error {
+	selected, err := s.rulesFor(queues[0].Mode, queues[0].Terms.ContentHash)
+	if err != nil {
+		return err
+	}
 	id, err := s.generate(s.sessionPrefix)
 	if err != nil {
 		return err
@@ -90,7 +94,7 @@ func (s *Service) startSession(ctx context.Context, tx *sql.Tx, queues [2]queueR
 	}
 	loadouts := [2]json.RawMessage{queues[0].Loadout, queues[1].Loadout}
 	var state json.RawMessage
-	if rules, ok := s.rules.(interface {
+	if rules, ok := selected.(interface {
 		CreateWithRandom(string, [2]json.RawMessage, io.Reader) (json.RawMessage, error)
 	}); ok {
 		stream, streamErr := secret.Stream("initial")
@@ -99,12 +103,13 @@ func (s *Service) startSession(ctx context.Context, tx *sql.Tx, queues [2]queueR
 		}
 		state, err = rules.CreateWithRandom(queues[0].Mode, loadouts, stream)
 	} else {
-		state, err = s.rules.Create(queues[0].Mode, loadouts)
+		state, err = selected.Create(queues[0].Mode, loadouts)
 	}
 	if err != nil {
 		return err
 	}
 	v := sessionRecord{ID: id, Mode: queues[0].Mode, State: "active", Terms: queues[0].Terms, TermsHash: queues[0].TermsHash, Ticket: queues[0].Ticket, Revision: one(), PhaseSeq: one(), Started: now, Initial: state, Payload: storedPayload{Rules: state}}
+	v.rules = selected
 	var inputs [2]finance.QueueInput
 	for seat, q := range queues {
 		user := q.User

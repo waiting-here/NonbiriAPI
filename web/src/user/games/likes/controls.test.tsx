@@ -23,15 +23,15 @@ config.paramMeta = (config.paramMeta as { id: string }[]).filter(
 );
 const mode = {
   rules_version: 1,
-  design_version: '0.17.0',
-  schema_version: 15,
+  design_version: '0.18.0',
+  schema_version: 16,
   content_hash: 'a'.repeat(64),
   config,
 };
 const catalog = likesCatalog({
   rules_version: 1,
-  design_version: '0.17.0',
-  schema_version: 15,
+  design_version: '0.18.0',
+  schema_version: 16,
   content_hash: 'a'.repeat(64),
   modes: { quick: mode, standard: { ...mode, config: { ...config, mode: 'standard' } } },
 }).modes.quick;

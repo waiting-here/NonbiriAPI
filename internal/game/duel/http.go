@@ -176,13 +176,24 @@ func (s *Service) PublicCatalog() (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
+	compatible := []json.RawMessage{}
+	if provider, ok := s.rules.(interface{ CompatibleCatalogs() ([]Catalog, error) }); ok {
+		items, err := provider.CompatibleCatalogs()
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			compatible = append(compatible, item.JSON)
+		}
+	}
 	return Encode(struct {
-		RulesVersion  int                        `json:"rules_version"`
-		DesignVersion string                     `json:"design_version"`
-		SchemaVersion int                        `json:"schema_version"`
-		ContentHash   string                     `json:"content_hash"`
-		Modes         map[string]json.RawMessage `json:"modes"`
-	}{1, design, schema, digest(body), modes})
+		RulesVersion    int                        `json:"rules_version"`
+		DesignVersion   string                     `json:"design_version"`
+		SchemaVersion   int                        `json:"schema_version"`
+		ContentHash     string                     `json:"content_hash"`
+		Modes           map[string]json.RawMessage `json:"modes"`
+		CompatibleModes []json.RawMessage          `json:"compatible_modes,omitempty"`
+	}{1, design, schema, digest(body), modes, compatible})
 }
 func readJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 	if r.Body == nil {

@@ -155,6 +155,15 @@ export interface Cast {
   templateId: string;
   success: true;
   level: 'I' | 'II' | null;
+  step?: { kind: 'main' | 'extra' | 'flash'; index: number; likes: Pair<number> };
+  characterPassive?: string;
+  applications?: {
+    buffID: string;
+    target: Seat;
+    success: number;
+    resisted: number;
+    derived: boolean;
+  }[];
 }
 export interface LikesEvent {
   id: number;

@@ -84,7 +84,7 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 	}
 	var action json.RawMessage
 	if !surrender {
-		action, err = s.rules.Accept(v.Mode, v.Payload.Rules, seat, in.Action)
+		action, err = v.rules.Accept(v.Mode, v.Payload.Rules, seat, in.Action)
 		if err != nil {
 			return MutationResult{}, err
 		}

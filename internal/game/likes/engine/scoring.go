@@ -64,7 +64,7 @@ func (e *Engine) castPassive(s *State, seat int, sk catalog.Skill) int64 {
 	}
 	return e.finalLikes(s, seat, n)
 }
-func (e *Engine) basis(s *State, seat int, sk catalog.Skill, effect catalog.Effect, template string) (ScoreBreakdown, int64) {
+func (e *Engine) basis(s *State, seat int, sk catalog.Skill, effect catalog.Effect, template string, character ...int64) (ScoreBreakdown, int64) {
 	p := s.Players[seat]
 	b := ScoreBreakdown{Original: effect.Likes, Parts: []ScorePart{}}
 	raw := effect.Likes
@@ -77,6 +77,10 @@ func (e *Engine) basis(s *State, seat int, sk catalog.Skill, effect catalog.Effe
 	bonus := e.baseBonus(s, seat, sk, sk.Cost(), effect.Likes)
 	if bonus != 0 {
 		b.Parts = append(b.Parts, ScorePart{Key: "harness", Amount: bonus})
+	}
+	if len(character) > 0 && character[0] != 0 {
+		bonus += character[0]
+		b.Parts = append(b.Parts, ScorePart{Key: "character", Amount: character[0]})
 	}
 	penalty := int64(0)
 	for _, st := range p.Effects {
@@ -110,8 +114,8 @@ func (e *Engine) basis(s *State, seat int, sk catalog.Skill, effect catalog.Effe
 	}
 	return b, bonus
 }
-func (e *Engine) score(s *State, seat int, sk catalog.Skill, effect catalog.Effect, template string, conditional int64, derived bool, reduction int64) ScoreBreakdown {
-	b, _ := e.basis(s, seat, sk, effect, template)
+func (e *Engine) score(s *State, seat int, sk catalog.Skill, effect catalog.Effect, template string, conditional int64, derived bool, reduction int64, character ...int64) ScoreBreakdown {
+	b, _ := e.basis(s, seat, sk, effect, template, character...)
 	b.Conditional = conditional
 	if conditional != 0 {
 		b.Parts = append(b.Parts, ScorePart{Key: "condition", Amount: conditional})

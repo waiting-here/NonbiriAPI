@@ -76,6 +76,7 @@ export interface DuelState<V, P, S> {
   readonly roundStart: RoundStart<S> | null;
 }
 export interface DuelResult<V, P> {
+  readonly contentHash?: string;
   readonly id: string;
   readonly game: DuelGame;
   readonly mode: string;

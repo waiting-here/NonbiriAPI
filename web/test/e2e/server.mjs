@@ -299,6 +299,26 @@ async function serveStation(request, response, station) {
   }
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (isAPIPath(url.pathname)) {
+    // Layout fixtures can omit ranking rows; ranking tests supply their own
+    // ordered records, windows and privacy cases.
+    if (
+      request.method === 'GET' &&
+      /^\/api\/games\/(bidding|blackjack)\/leaderboard$/.test(url.pathname)
+    ) {
+      send(
+        response,
+        200,
+        'application/json',
+        JSON.stringify({
+          as_of: 1800000000,
+          statistics_start: 1800000000,
+          window: url.searchParams.get('window') ?? '7d',
+          rows: [],
+          me: null,
+        }),
+      );
+      return;
+    }
     // Existing game fixtures predate seed commitments. Proof-specific browser
     // tests override this with a complete opening or terminal response.
     if (

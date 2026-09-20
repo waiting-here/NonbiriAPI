@@ -12,11 +12,12 @@ import (
 	"slices"
 )
 
-const DesignVersion = "0.17.0"
-const SchemaVersion = 15
+const DesignVersion = "0.18.0"
+const SchemaVersion = 16
 const RulesVersion = 1
+const BehaviorVersion = 2
 
-//go:embed quick.json standard.json
+//go:embed quick.json standard.json legacy/quick.json legacy/standard.json
 var presets embed.FS
 
 var ErrCatalog = errors.New("likes: invalid catalog")
@@ -117,6 +118,12 @@ type Role struct {
 	Weakness   string                `json:"weakness"`
 	Overrides  map[string]int64      `json:"overrides"`
 	Resources  map[string]Allocation `json:"resources"`
+	Passive    *RolePassive          `json:"passive,omitempty"`
+}
+type RolePassive struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 type Loadout struct {
 	ID     string   `json:"id"`
@@ -173,10 +180,24 @@ type Config struct {
 
 // Load returns a fresh snapshot; caller mutations never change another game.
 func Load(mode string) (Config, string, error) {
+	return load(mode, false)
+}
+
+// LoadLegacy loads the exact supported catalog before character passives.
+// Saved JSON is compared with these trusted bytes, never executed as rules.
+func LoadLegacy(mode string) (Config, string, error) {
+	return load(mode, true)
+}
+
+func load(mode string, legacy bool) (Config, string, error) {
 	if mode != "quick" && mode != "standard" {
 		return Config{}, "", ErrCatalog
 	}
-	body, err := presets.ReadFile(mode + ".json")
+	path := mode + ".json"
+	if legacy {
+		path = "legacy/" + path
+	}
+	body, err := presets.ReadFile(path)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -194,7 +215,11 @@ func Load(mode string) (Config, string, error) {
 	}
 	// Pin the shared-energy exception, settlement split and manual casting rule.
 	hash := sha256.New()
-	hash.Write([]byte("likes@1;positive-energy-overload;separate-round-start;manual-main-unless-stunned;overload-state\n"))
+	prefix := "likes@1;positive-energy-overload;separate-round-start;manual-main-unless-stunned;overload-state\n"
+	if !legacy {
+		prefix = "likes@2;step-likes;role-passives;layer-resistance;stable-sota\n"
+	}
+	hash.Write([]byte(prefix))
 	hash.Write(body)
 	return config, hex.EncodeToString(hash.Sum(nil)), nil
 }
@@ -204,7 +229,7 @@ var timedKinds = []string{"AMPLIFY", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "S
 // Validate checks the fixed content's references and the termination assumptions
 // that keep a complete round and its event history within the service bounds.
 func (c Config) Validate() error {
-	if c.SchemaVersion != SchemaVersion || len(c.Roles) != 5 || len(c.Skills) != 48 || len(c.Buffs) != 46 || len(c.Resources) != 1 || len(c.Harnesses) != 8 || len(c.Passives) != 8 {
+	if (c.SchemaVersion != SchemaVersion && c.SchemaVersion != 15) || len(c.Roles) != 5 || len(c.Skills) != 48 || len(c.Buffs) != 46 || len(c.Resources) != 1 || len(c.Harnesses) != 8 || len(c.Passives) != 8 {
 		return ErrCatalog
 	}
 	if c.Mode != "quick" && c.Mode != "standard" || c.Rules != (Rules{CacheWindow: "round", UniqueSamples: true, StrictSamples: true, ImageShortage: "illegal"}) {
@@ -230,6 +255,14 @@ func (c Config) Validate() error {
 			return ErrCatalog
 		}
 		roles[role.ID] = role
+		if c.SchemaVersion == SchemaVersion {
+			expected := map[string]string{"ChatGPT": "MULTIMODAL", "Claude": "SOTA_PRESSURE", "Gemini": "WORLD_KNOWLEDGE", "GLM": "SECURITY_SHIELD", "DeepSeek": "BLUE_FISH"}
+			if role.Passive == nil || role.Passive.ID != expected[role.ID] || role.Passive.Name == "" || role.Passive.Description == "" {
+				return ErrCatalog
+			}
+		} else if role.Passive != nil {
+			return ErrCatalog
+		}
 	}
 	states := 0
 	for _, buff := range c.Buffs {
@@ -237,6 +270,19 @@ func (c Config) Validate() error {
 			return ErrCatalog
 		}
 		buffs[buff.ID] = buff
+		if c.SchemaVersion == SchemaVersion {
+			category := "buff"
+			if slices.Contains([]string{"STUN", "STOP", "SUBSCRIPTION_BAN", "SUPPRESS", "TOKEN_TAX", "NONBASIC_TAX", "SOTA_FANATICISM", "BASE_SUPPRESS", "MODEL_DEGRADATION"}, buff.Kind) {
+				category = "debuff"
+			} else if buff.Kind == "OVERLOAD" || buff.Kind == "SPEED_MODE" {
+				category = "state"
+			}
+			if buff.Category != category {
+				return ErrCatalog
+			}
+		} else if buff.Category != "" && buff.Category != "state" {
+			return ErrCatalog
+		}
 		for _, value := range []int64{buff.P, buff.Q, buff.N, buff.Cap} {
 			if value < 0 || value > 1_000 {
 				return ErrCatalog
@@ -293,6 +339,9 @@ func (c Config) Validate() error {
 			variants += 2
 		}
 		for _, effect := range []Effect{sk.Effects.Base, sk.Effects.I, sk.Effects.II} {
+			if c.SchemaVersion == SchemaVersion && (effect.Kind == "DEGRADE" && effect.P+effect.Q > 4 || effect.Kind == "APOLOGY" && max(effect.P, effect.Q) > 4 || effect.RandomTargets && effect.P > 4) {
+				return ErrCatalog
+			}
 			for _, value := range []int64{effect.Likes, effect.P, effect.Q, effect.N, effect.Combo} {
 				if value < 0 || value > 1_000 {
 					return ErrCatalog
@@ -340,6 +389,9 @@ func (c Config) Validate() error {
 		}
 	}
 	for _, item := range c.Passives {
+		if c.SchemaVersion == SchemaVersion && item.Kind == "SOTA_ONLY" && (item.P < 1 || item.P > 4 || buffs[item.BuffID].Kind != "SOTA_FANATICISM") {
+			return ErrCatalog
+		}
 		if _, exists := passives[item.ID]; exists {
 			return ErrCatalog
 		}

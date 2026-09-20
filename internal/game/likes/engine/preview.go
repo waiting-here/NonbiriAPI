@@ -186,8 +186,9 @@ func (e *Engine) usage(s *State, seat int, choice Choice, derived bool) Preview 
 	if effectMode(effect, choice) == "self" {
 		scores.Players[seat].Effects = slices.DeleteFunc(scores.Players[seat].Effects, func(st Status) bool { return slices.Contains(choice.Targets, st.Key) })
 	}
-	b, bonus := e.basis(&scores, seat, sk, effect, template)
-	score := e.score(&scores, seat, sk, effect, template, b.Conditional, derived, 0)
+	character := e.characterBonus(&scores, seat, sk, effect, !derived, stepLikes(&scores, "main", 0))
+	b, bonus := e.basis(&scores, seat, sk, effect, template, character)
+	score := e.score(&scores, seat, sk, effect, template, b.Conditional, derived, 0, character)
 	v.BaseLikes, v.IntrinsicLikes, v.ConditionalLikes = b.Intrinsic+b.Conditional, b.Intrinsic, b.Conditional
 	v.BaseLikeBonus, v.PassiveLikes, v.Likes = bonus, score.Passive, score.Final
 	v.Legal = len(v.Errors) == 0
