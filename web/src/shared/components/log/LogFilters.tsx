@@ -20,6 +20,7 @@ export interface LogFilterField {
   maxLength?: number;
   /** Optional bounded candidate list rendered as a datalist. */
   suggestions?: readonly string[];
+  options?: readonly { value: string; label: string }[];
 }
 
 /** One quick range preset: the label key plus its window in seconds. */
@@ -114,18 +115,34 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
       {fields.map((field) => (
         <label key={field.name}>
           <span>{field.label}</span>
-          <input
-            type={field.inputType ?? 'text'}
-            value={drafts[field.name] ?? ''}
-            maxLength={field.maxLength ?? 512}
-            inputMode={field.inputType === 'number' ? 'numeric' : undefined}
-            list={field.suggestions?.length ? `log-filter-${field.name}-options` : undefined}
-            onChange={(event) =>
-              setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
-            }
-            aria-label={field.ariaLabel}
-            placeholder={field.placeholder}
-          />
+          {field.options ? (
+            <select
+              value={drafts[field.name] ?? ''}
+              aria-label={field.ariaLabel}
+              onChange={(event) =>
+                setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
+              }
+            >
+              {field.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={field.inputType ?? 'text'}
+              value={drafts[field.name] ?? ''}
+              maxLength={field.maxLength ?? 512}
+              inputMode={field.inputType === 'number' ? 'numeric' : undefined}
+              list={field.suggestions?.length ? `log-filter-${field.name}-options` : undefined}
+              onChange={(event) =>
+                setDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))
+              }
+              aria-label={field.ariaLabel}
+              placeholder={field.placeholder}
+            />
+          )}
           {field.suggestions?.length ? (
             <datalist id={`log-filter-${field.name}-options`}>
               {field.suggestions.map((option) => (

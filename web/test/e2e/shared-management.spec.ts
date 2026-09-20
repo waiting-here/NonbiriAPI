@@ -24,7 +24,14 @@ for (const scenario of [
     await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level5');
     const fields = Object.fromEntries(
       Object.entries(userSession('user').user).filter(
-        ([key]) => !['avatar', 'effective_level', 'level_display_name'].includes(key),
+        ([key]) =>
+          ![
+            'avatar',
+            'effective_level',
+            'level_display_name',
+            'charity_profile_public',
+            'automatic_restrictions',
+          ].includes(key),
       ),
     );
     const target = {

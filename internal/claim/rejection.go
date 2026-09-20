@@ -3,11 +3,93 @@ package claim
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
+
+// RecordRejection commits a zero-cost authenticated attempt. Current account
+// existence is checked in the transaction, including after caller cancellation.
+func (s *Service) RecordRejection(ctx context.Context, user int64, fact requestattempt.Fact) error {
+	if s == nil || ctx == nil {
+		return ErrInvalidInput
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = s.RecordRejectionTx(ctx, tx, user, fact, s.now().Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Service) RecordRejectionTx(ctx context.Context, tx *sql.Tx, user int64, fact requestattempt.Fact, at int64) error {
+	if s == nil || ctx == nil || tx == nil || user <= 0 || !db.ValidateOpaqueID(fact.ID, "req_") || !requestattempt.ValidRoute(fact.Method, fact.Path) ||
+		at < 0 || at > maxUnixSecond || fact.Status < 400 || fact.Status > 599 || !httperr.IsStableCode(fact.Code) ||
+		(fact.Stage != "authorization" && fact.Stage != "flow" && fact.Stage != "preflight") {
+		return ErrInvalidInput
+	}
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=?)`, user).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return ErrNotFound
+	}
+	var owner sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT user_id FROM logical_requests WHERE id=?`, fact.ID).Scan(&owner)
+	if err == nil {
+		if !owner.Valid || owner.Int64 != user {
+			return ErrInvariant
+		}
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	model := fact.Model
+	if !utf8.ValidString(model) || len(model) > MaxModelSnapshotBytes {
+		model = ""
+	}
+	for _, r := range model {
+		if unicode.IsControl(r) {
+			model = ""
+			break
+		}
+	}
+	route := "openai_chat_completions"
+	if fact.Path == "/v1/models" {
+		route = "model_discovery"
+		model = ""
+	} else if fact.Path == "/v1/embeddings" {
+		route = "openai_embeddings"
+	}
+	if strings.HasPrefix(model, "[公益]") {
+		route = strings.Replace(route, "openai_", "charity_", 1)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO logical_requests
+(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,caller_error_code,accounting_state,account_reserved_milli,settlement_destination,ledger_rows_remaining,created_at,terminal_at,rejection_stage,rejection_reason,request_method,request_path)
+VALUES(?,?,?,?,'terminal',1,'failed',?,?,'none',0,'user',?,?,?,?,?,?,?)`, fact.ID, user, route, model, fact.Status, fact.Code, u128Small(0), at, at, fact.Stage, fact.Reason, fact.Method, fact.Path); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO request_logs
+(logical_request_id,user_id,model,route_kind,caller_result_class,caller_status,caller_error_code,status_code,error_code,started_at,completed_at,rejection_stage,rejection_reason,request_method,request_path)
+VALUES(?,?,?,?,'failed',?,?,?,?,?,?,?,?,?,?)`, fact.ID, user, model, route, fact.Status, fact.Code, fact.Status, fact.Code, at, at, fact.Stage, fact.Reason, fact.Method, fact.Path); err != nil {
+		return err
+	}
+	return addRequestUsageTx(ctx, tx, fact.ID, &user, at)
+}
 
 // RecordCharityRejectionTx records a policy rejection without accepting work,
 // reserving funds, or creating a dispatch claim. The caller commits it together
@@ -23,19 +105,10 @@ func (s *Service) RecordCharityRejectionTx(ctx context.Context, tx *sql.Tx, user
 	if err := s.acceptance.AuthorizeChatAcceptance(ctx, tx, userID, at); err != nil {
 		return err
 	}
-	model = diagnostic.BoundTo(model, MaxModelSnapshotBytes)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO logical_requests
-(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,caller_error_code,
-accounting_state,account_reserved_milli,settlement_destination,ledger_rows_remaining,created_at,terminal_at)
-VALUES(?,?,'charity_chat_completions',?,'terminal',1,'failed',400,'content_too_short','released',0,'user',?,?,?)`,
-		requestID, userID, model, u128Small(0), at, at); err != nil {
+	f := requestattempt.Snapshot(ctx, requestID, model, "preflight", "content_too_short", 400, "content_too_short")
+	if err := s.RecordRejectionTx(ctx, tx, userID, f, at); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO request_logs
-(logical_request_id,user_id,model,route_kind,caller_result_class,caller_status,caller_error_code,status_code,error_code,started_at,completed_at,error_diag)
-VALUES(?, ?, ?, 'charity_chat_completions','failed',400,'content_too_short',400,'content_too_short',?,?,?)`,
-		requestID, userID, model, at, at, fmt.Sprintf("content has %d characters; minimum is %d", actual, minimum)); err != nil {
-		return err
-	}
-	return addRequestUsageTx(ctx, tx, requestID, &userID, at)
+	_, err := tx.ExecContext(ctx, `UPDATE request_logs SET error_diag=? WHERE logical_request_id=? AND user_id=? AND rejection_reason='content_too_short'`, fmt.Sprintf("content has %d characters; minimum is %d", actual, minimum), requestID, userID)
+	return err
 }

@@ -501,6 +501,18 @@
     }
   },
   "logs": {
+    "phase": "Request stage",
+    "phaseAll": "All stages",
+    "phasePreHandler": "Rejected before a call",
+    "phaseHandler": "Call processing",
+    "rejectionStage": "Rejected at",
+    "rejectionReason": "Reason code",
+    "requestRoute": "Requested route",
+    "rejectionStages": {
+      "authorization": "Access check",
+      "flow": "Rate or capacity check",
+      "preflight": "Request validation"
+    },
     "details": "Details",
     "drawerTitle": "Log details",
     "caller": "Caller identity",

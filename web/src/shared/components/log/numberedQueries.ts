@@ -78,9 +78,27 @@ const ROLE_PATHS: Record<LogRole, string> = {
 };
 
 const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
-  user: ['model', 'error_code', 'status', 'from', 'to'],
-  steward: ['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status', 'from', 'to'],
-  admin: ['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status', 'from', 'to'],
+  user: ['model', 'error_code', 'status', 'from', 'to', 'phase'],
+  steward: [
+    'user_id',
+    'endpoint_base_url',
+    'upstream_model',
+    'error_code',
+    'status',
+    'from',
+    'to',
+    'phase',
+  ],
+  admin: [
+    'user_id',
+    'endpoint_base_url',
+    'upstream_model',
+    'error_code',
+    'status',
+    'from',
+    'to',
+    'phase',
+  ],
 };
 const MAX_LOG_UNIX_SECOND = 253_402_300_799;
 const MAX_LOG_USER_ID = 9_223_372_036_854_775_807n;
@@ -123,6 +141,8 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
     }
     const text = requestString(raw, `log ${key} filter`, key === 'status' ? 3 : 512);
     if (text === '') continue;
+    if (key === 'phase' && text !== 'handler' && text !== 'pre_handler')
+      invalidRequest('log phase filter');
     if (key === 'status' && !/^[1-5][0-9]{2}$/.test(text)) invalidRequest('log status filter');
     if (key === 'user_id' && (!/^[1-9][0-9]*$/.test(text) || BigInt(text) > MAX_LOG_USER_ID))
       invalidRequest('log user id filter');

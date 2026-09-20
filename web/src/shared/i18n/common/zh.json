@@ -501,6 +501,18 @@
     }
   },
   "logs": {
+    "phase": "请求阶段",
+    "phaseAll": "全部阶段",
+    "phasePreHandler": "调用前拒绝",
+    "phaseHandler": "调用处理",
+    "rejectionStage": "拒绝环节",
+    "rejectionReason": "原因代码",
+    "requestRoute": "请求路径",
+    "rejectionStages": {
+      "authorization": "访问权限检查",
+      "flow": "频率或容量检查",
+      "preflight": "请求校验"
+    },
     "details": "详情",
     "drawerTitle": "日志详情",
     "caller": "调用者身份",

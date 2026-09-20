@@ -25,6 +25,11 @@ function row(role: LogRole) {
   return {
     id: requestID,
     route_kind: 'openai_chat_completions',
+    phase: 'handler' as const,
+    rejection_stage: null,
+    rejection_reason: null,
+    request_method: null,
+    request_path: null,
     caller_result_class: 'success',
     caller_status: 200,
     caller_error_code: null,

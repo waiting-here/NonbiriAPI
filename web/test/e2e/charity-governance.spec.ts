@@ -659,6 +659,11 @@ test('level-five stewardship shows the shared owner projection and caller identi
   const logRow: JSONRecord = {
     id: REQUEST_ID,
     route_kind: 'charity_chat_completions',
+    phase: 'handler' as const,
+    rejection_stage: null,
+    rejection_reason: null,
+    request_method: null,
+    request_path: null,
     caller_result_class: 'success',
     caller_status: 200,
     caller_error_code: null,

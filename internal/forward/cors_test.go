@@ -133,7 +133,7 @@ func TestBrowserCORSActualResponsesAndStationBoundary(t *testing.T) {
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(status)
 		})).ServeHTTP(rec, r)
-		if rec.Code != status || rec.Header().Get("Access-Control-Allow-Origin") != "*" || rec.Header().Get("Access-Control-Expose-Headers") != "Retry-After" {
+		if rec.Code != status || rec.Header().Get("Access-Control-Allow-Origin") != "*" || rec.Header().Get("Access-Control-Expose-Headers") != "Retry-After, X-Request-ID" {
 			t.Fatalf("status=%d headers=%v", rec.Code, rec.Header())
 		}
 	}

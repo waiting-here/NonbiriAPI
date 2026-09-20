@@ -278,8 +278,15 @@ function ScopedRoleLogPanel({
   const textParams = useMemo(
     () =>
       role === 'user'
-        ? (['model', 'error_code', 'status'] as const)
-        : (['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status'] as const),
+        ? (['model', 'error_code', 'status', 'phase'] as const)
+        : ([
+            'user_id',
+            'endpoint_base_url',
+            'upstream_model',
+            'error_code',
+            'status',
+            'phase',
+          ] as const),
     [role],
   );
   const { state: urlState, patch: patchUrlState } = useLogUrlState(
@@ -376,7 +383,18 @@ function ScopedRoleLogPanel({
   }, [authorityError, onAuthorityLoss, patchUrlState, queryClient, role]);
 
   const fields = useMemo<readonly LogFilterField[]>(() => {
-    const values: LogFilterField[] = [];
+    const values: LogFilterField[] = [
+      {
+        name: 'phase',
+        label: t('logs.phase'),
+        ariaLabel: t('logs.phase'),
+        options: [
+          { value: '', label: t('logs.phaseAll') },
+          { value: 'pre_handler', label: t('logs.phasePreHandler') },
+          { value: 'handler', label: t('logs.phaseHandler') },
+        ],
+      },
+    ];
     if (role === 'user')
       values.push({
         name: 'model',
@@ -471,6 +489,12 @@ function ScopedRoleLogPanel({
 
   const columns: LogColumn<RoleLogRow>[] = [
     { key: 'time', header: t('logs.time'), render: (row) => formatDateTime(row.started_at) },
+    {
+      key: 'phase',
+      header: t('logs.phase'),
+      render: (row) =>
+        t(row.phase === 'pre_handler' ? 'logs.phasePreHandler' : 'logs.phaseHandler'),
+    },
     { key: 'route', header: t('logs.routeKind'), render: (row) => routeLabel(row.route_kind) },
     ...(role === 'user'
       ? [
@@ -552,6 +576,34 @@ function ScopedRoleLogPanel({
               ]
             : []),
           { label: t('logs.routeKind'), value: routeLabel(detailRequest.route_kind) },
+          {
+            label: t('logs.phase'),
+            value: t(
+              detailRequest.phase === 'pre_handler' ? 'logs.phasePreHandler' : 'logs.phaseHandler',
+            ),
+          },
+          ...(detailRequest.phase === 'pre_handler'
+            ? [
+                {
+                  label: t('logs.rejectionStage'),
+                  value:
+                    detailRequest.rejection_stage === null
+                      ? '—'
+                      : t(
+                          {
+                            authorization: 'logs.rejectionStages.authorization',
+                            flow: 'logs.rejectionStages.flow',
+                            preflight: 'logs.rejectionStages.preflight',
+                          }[detailRequest.rejection_stage],
+                        ),
+                },
+                { label: t('logs.rejectionReason'), value: detailRequest.rejection_reason },
+                {
+                  label: t('logs.requestRoute'),
+                  value: `${detailRequest.request_method} ${detailRequest.request_path}`,
+                },
+              ]
+            : []),
           {
             label: t('common.operations.logs.callerResult'),
             value: `${resultLabel(detailRequest)} / ${detailRequest.caller_status ?? '—'}`,
@@ -635,7 +687,7 @@ function ScopedRoleLogPanel({
     <Card className="ops-stack">
       <div className="card-title-row">
         <h2>{title}</h2>
-        {role !== 'user' ? (
+        {
           <div className="ops-actions">
             <a className="btn btn-secondary" href={roleLogExportPath(role, filter, 'csv')} download>
               {t('common.operations.logs.exportCsv')}
@@ -648,7 +700,7 @@ function ScopedRoleLogPanel({
               {t('common.operations.logs.exportJson')}
             </a>
           </div>
-        ) : null}
+        }
       </div>
       <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
       {logs.error && !pageData ? (

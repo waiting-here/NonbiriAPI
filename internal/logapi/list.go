@@ -16,7 +16,7 @@ COALESCE((SELECT ce.delta_mag
  WHERE co.source_type='logical_request' AND co.source_id=l.logical_request_id
    AND co.kind IN ('forward_settle','charity_settle')
    AND ce.account_kind_snapshot='platform' AND ce.delta_sign=1
- ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16))`
+ ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path`
 
 func (repository *Repository) ListUser(ctx context.Context, userID int64, filter ListFilter) (Page[UserLogRow], error) {
 	if repository == nil || ctx == nil || userID <= 0 {
@@ -51,6 +51,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	query := `SELECT ` + commonListColumns + `,l.model FROM request_logs l
 WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 	args := []any{userID, now - requestLogRetentionSeconds}
+	query += phaseFilter(filter.Phase)
 	if filter.Model != nil {
 		query += ` AND l.model=?`
 		args = append(args, *filter.Model)
@@ -105,7 +106,8 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 			switch RouteKind(record.routeKind) {
 			case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteDiscovery:
 				page.Data = append(page.Data, UserSelfLogRow{
-					ID: record.id, RouteKind: RouteKind(record.routeKind),
+					RejectionFields: rejectionFields(record),
+					ID:              record.id, RouteKind: RouteKind(record.routeKind),
 					CallerResultClass: resultClassPointer(record.callerResultClass),
 					CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
@@ -113,7 +115,8 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 				})
 			case RouteCharityChat, RouteCharityEmbeddings:
 				page.Data = append(page.Data, UserCharityLogRow{
-					ID: record.id, RouteKind: RouteKind(record.routeKind),
+					RejectionFields: rejectionFields(record),
+					ID:              record.id, RouteKind: RouteKind(record.routeKind),
 					CallerResultClass: resultClassPointer(record.callerResultClass),
 					CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,
@@ -179,6 +182,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	query += phaseFilter(filter.Phase)
 	if filter.UserID != nil {
 		query += ` AND l.user_id=?`
 		args = append(args, *filter.UserID)
@@ -238,7 +242,8 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		}
 		if len(page.Data) < filter.Limit {
 			page.Data = append(page.Data, AdminLogRow{
-				ID: record.id, RouteKind: RouteKind(record.routeKind),
+				RejectionFields: rejectionFields(record),
+				ID:              record.id, RouteKind: RouteKind(record.routeKind),
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
@@ -305,6 +310,7 @@ func (repository *Repository) ListSteward(
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	query += phaseFilter(filter.Phase)
 	if filter.UserID != nil {
 		query += ` AND l.user_id=?`
 		args = append(args, *filter.UserID)
@@ -367,7 +373,8 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			// Construct directly into the independent Steward type. No Admin DTO
 			// exists on this path, including transiently.
 			page.Data = append(page.Data, StewardLogRow{
-				ID: record.id, RouteKind: RouteKind(record.routeKind),
+				RejectionFields: rejectionFields(record),
+				ID:              record.id, RouteKind: RouteKind(record.routeKind),
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,

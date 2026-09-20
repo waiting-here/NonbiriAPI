@@ -73,13 +73,20 @@ func (s *Service) prepareRequestDeletionTx(
 		return err
 	}
 	if request.State == RequestTerminal {
+		var rejected bool
+		if err := tx.QueryRowContext(ctx, `SELECT rejection_stage IS NOT NULL FROM logical_requests WHERE id=?`, request.ID).Scan(&rejected); err != nil {
+			return err
+		}
+		if rejected && (request.AccountingDisposition != AccountingNone || len(claimIDs) != 0) {
+			return ErrInvariant
+		}
 		remaining, err := readRequestCapacityTx(ctx, tx, request.ID)
 		if err != nil {
 			return err
 		}
 		if remaining != 0 || request.ReservedMilli != 0 ||
 			request.Route == RouteDiscovery && request.AccountingDisposition != AccountingNone ||
-			request.Route != RouteDiscovery && request.AccountingDisposition != AccountingCommit && request.AccountingDisposition != AccountingRelease {
+			!rejected && request.Route != RouteDiscovery && request.AccountingDisposition != AccountingCommit && request.AccountingDisposition != AccountingRelease {
 			return ErrInvariant
 		}
 		for _, claimID := range claimIDs {

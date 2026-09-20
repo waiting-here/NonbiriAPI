@@ -28,6 +28,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
@@ -314,6 +315,7 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
 	}
+	requestattempt.Handled(parent)
 
 	run := service.runAttempts(parent, executionContext, writer, suppressor, decision.Trace, userID, attemptRequest, plan, accepted)
 	disposition := claim.AccountingRelease

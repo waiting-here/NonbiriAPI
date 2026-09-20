@@ -480,12 +480,20 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 	var revision []byte
 	var banned int
 	var bannedUntil sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT revision,is_banned,banned_until FROM users WHERE id=? AND is_admin=0`, userID).Scan(&revision, &banned, &bannedUntil)
+	var language string
+	err = tx.QueryRowContext(ctx, `SELECT revision,is_banned,banned_until,lang FROM users WHERE id=? AND is_admin=0`, userID).Scan(&revision, &banned, &bannedUntil, &language)
 	if err != nil {
 		return "", 0, err
 	}
 	now := r.now().Unix()
 	if banned == 1 && (!bannedUntil.Valid || bannedUntil.Int64 > now) {
+		restrictions, err := readAutomaticRestrictions(ctx, tx, userID, now, language)
+		if err != nil {
+			return "", 0, err
+		}
+		if len(restrictions) > 0 {
+			return "", 0, &verifiedLoginDenial{restrictions: restrictions}
+		}
 		return "", 0, errSessionForbidden
 	}
 	next, err := incrementU128(revision)

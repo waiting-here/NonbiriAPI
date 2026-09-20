@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
@@ -33,6 +34,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	if request.URL.RawQuery != "" || request.URL.ForceQuery {
+		requestattempt.Stage(request.Context(), "preflight", "")
 		writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
 		return
 	}
@@ -44,11 +46,13 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	case "/v1/models":
 		handler.models(writer, request, userID)
 	case "/v1/chat/completions", "/v1/embeddings":
+		requestattempt.Stage(request.Context(), "preflight", "")
 		handler.chat(writer, request, userID)
 	}
 }
 
 func (handler *Handler) models(writer http.ResponseWriter, request *http.Request, userID int64) {
+	requestattempt.Stage(request.Context(), "preflight", "")
 	if hasRequestBody(request) {
 		writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
 		return
@@ -94,6 +98,7 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	defer decoded.Clear()
+	requestattempt.Model(request.Context(), decoded.Model)
 	handler.service.execute(request.Context(), writer, userID, decoded, body, mediaType, request.Header.Get("Accept-Language"))
 }
 

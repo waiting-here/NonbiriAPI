@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
@@ -73,6 +74,7 @@ func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request
 		return
 	}
 
+	requestattempt.Stage(request.Context(), "flow", "")
 	reservation, retryAfter, err := m.controller.Admit(request.Context(), userID)
 	if err != nil {
 		if request.Context().Err() != nil {
@@ -83,13 +85,21 @@ func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request
 			return
 		}
 		if errors.Is(err, ErrConcurrencyLimited) {
+			requestattempt.Stage(request.Context(), "flow", "concurrency")
 			writeConcurrencyLimited(writer)
 			return
 		}
 		if errors.Is(err, ErrInvalidUser) {
+			requestattempt.Stage(request.Context(), "authorization", "unauthorized")
 			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
 			return
 		}
+		if errors.Is(err, ErrResourceLimit) {
+			requestattempt.Stage(request.Context(), "flow", "resource_limit_exceeded")
+			httperr.WriteError(writer, httperr.New(httperr.CodeResourceLimitExceeded, "resource limit exceeded"))
+			return
+		}
+		requestattempt.Stage(request.Context(), "flow", "service_unavailable")
 		writeUnavailable(writer, request)
 		return
 	}

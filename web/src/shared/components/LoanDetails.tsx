@@ -49,7 +49,7 @@ export function LoanFacts({ loan }: { loan: LoanQuote | LoanReceipt }) {
   );
 }
 
-function LoanDialog({
+export function HistoryDialog({
   title,
   onClose,
   children,
@@ -198,9 +198,9 @@ export function LoanHistory({
         {text('借款明细', 'Loan history')}
       </button>
       {open ? (
-        <LoanDialog title={text('借款明细', 'Loan history')} onClose={() => setOpen(false)}>
+        <HistoryDialog title={text('借款明细', 'Loan history')} onClose={() => setOpen(false)}>
           <LoanHistoryContent role={role} account={account} userID={userID} />
-        </LoanDialog>
+        </HistoryDialog>
       ) : null}
     </>
   );

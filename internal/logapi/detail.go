@@ -50,7 +50,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 	switch RouteKind(record.routeKind) {
 	case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteDiscovery:
 		row := UserSelfLogRow{
-			ID: record.id, RouteKind: RouteKind(record.routeKind),
+			RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 			CallerResultClass: resultClassPointer(record.callerResultClass),
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
@@ -71,7 +71,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 			return nil, ErrConflict
 		}
 		row := UserCharityLogRow{
-			ID: record.id, RouteKind: RouteKind(record.routeKind),
+			RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 			CallerResultClass: resultClassPointer(record.callerResultClass),
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,
@@ -136,7 +136,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		return AdminLogDetail{}, err
 	}
 	row := AdminLogRow{
-		ID: record.id, RouteKind: RouteKind(record.routeKind),
+		RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
@@ -208,7 +208,7 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	row := StewardLogRow{
-		ID: record.id, RouteKind: RouteKind(record.routeKind),
+		RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,

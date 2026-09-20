@@ -5,6 +5,13 @@ import (
 	"database/sql"
 )
 
+// verifiedLoginDenial carries only the same safe owner projection, after
+// Discord identity verification. It grants no session or other authority.
+type verifiedLoginDenial struct{ restrictions []AutomaticRestriction }
+
+func (*verifiedLoginDenial) Error() string { return "account access restricted" }
+func (*verifiedLoginDenial) Unwrap() error { return errSessionForbidden }
+
 func readAutomaticRestrictions(ctx context.Context, tx *sql.Tx, userID, now int64, lang string) ([]AutomaticRestriction, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT c.kind,c.reason_code,c.started_at,c.ends_at FROM abuse_cases c JOIN users u ON u.id=c.user_id
 WHERE c.user_id=? AND c.state='active' AND (c.ends_at IS NULL OR c.ends_at>?)

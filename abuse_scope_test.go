@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -30,7 +31,10 @@ func (s scopeCaller) ResolveCallerKey(context.Context, string) (resources.Caller
 	return resources.CallerIdentity{UserID: s.id, Generation: 1}, nil
 }
 
-type noShortRejection struct{ t *testing.T }
+type noShortRejection struct {
+	*claim.Service
+	t *testing.T
+}
 
 func (s noShortRejection) RecordCharityRejectionTx(context.Context, *sql.Tx, int64, string, string, int, int, int64) error {
 	s.t.Fatal("RPM denial unexpectedly reached short-request accounting")
@@ -78,14 +82,21 @@ VALUES('Test account',?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero,
 		}
 	}
 	var abuse *antiabuse.Service
-	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store), OnDenied: func(ctx context.Context, id int64, reason ratelimit.RPMReason) {
-		applyPublicRPMDenial(ctx, id, reason, abuse)
+	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store), OnDenied: func(ctx context.Context, id int64, reason ratelimit.RPMReason) error {
+		return applyPublicRPMDenial(ctx, id, reason, abuse)
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = flow.Close() })
-	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: noShortRejection{t}, BeginUserRetirement: func(_ context.Context, id int64) (antiabuse.Retirement, error) { return flow.BeginUserRetirement(id) }})
+	claims, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := claims.InitializeUsageTotals(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: noShortRejection{claims, t}, BeginUserRetirement: func(_ context.Context, id int64) (antiabuse.Retirement, error) { return flow.BeginUserRetirement(id) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +106,7 @@ VALUES('Test account',?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero,
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lifecycle.Close() })
-	caller, err := forward.NewCallerKeyMiddleware(scopeCaller{userID}, lifecycle)
+	caller, err := forward.NewCallerKeyMiddleware(scopeCaller{userID}, lifecycle, claims.RecordRejection)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,8 +224,12 @@ func TestPublicRPMBanCountsOnlyDecodedCharityAndUserLimit(t *testing.T) {
 			if err := f.store.DB().QueryRow(`SELECT (SELECT COUNT(*) FROM credit_operations),(SELECT COUNT(*) FROM request_logs)`).Scan(&ledgerRows, &logs); err != nil {
 				t.Fatal(err)
 			}
-			if ledgerRows != 0 || logs != 0 {
-				t.Fatal("RPM denial wrote accounting or request logs")
+			wantLogs := 2
+			if tc.downstream == 429 {
+				wantLogs = 0
+			}
+			if ledgerRows != 0 || logs != wantLogs {
+				t.Fatalf("RPM denial accounting=%d logs=%d want=%d", ledgerRows, logs, wantLogs)
 			}
 		})
 	}
@@ -285,7 +300,7 @@ func TestPublicRPMDenialRechecksAccountAndCancellation(t *testing.T) {
 			r.Header.Set("Authorization", "Bearer nbk_test")
 			w := httptest.NewRecorder()
 			f.handler.ServeHTTP(&scopeRecorder{w}, r)
-			if state == "banned" && w.Code != 401 || state == "deleted during body read" && w.Code != 429 {
+			if state == "banned" && w.Code != 401 || state == "deleted during body read" && w.Code != 503 {
 				t.Fatalf("status=%d", w.Code)
 			}
 			if state != "deleted during body read" && body.reads != 0 {
@@ -295,7 +310,11 @@ func TestPublicRPMDenialRechecksAccountAndCancellation(t *testing.T) {
 			if err := f.store.DB().QueryRow(`SELECT (SELECT COUNT(*) FROM users WHERE auto_banned=1),(SELECT COUNT(*) FROM credit_operations)+(SELECT COUNT(*) FROM request_logs)`).Scan(&users, &events); err != nil {
 				t.Fatal(err)
 			}
-			if users != 0 || events != 0 || f.forwardCalls.Load() != 1 {
+			wantEvents := 0
+			if state == "banned" {
+				wantEvents = 1
+			}
+			if users != 0 || events != wantEvents || f.forwardCalls.Load() != 1 {
 				t.Fatal("retired or cancelled caller acquired new effects")
 			}
 		})
