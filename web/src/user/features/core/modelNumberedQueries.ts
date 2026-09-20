@@ -1,3 +1,4 @@
+import { resourceFilterIdentity, type ResourceFilters } from './resourceFilters';
 import { useQuery, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
 import { getBindingCandidatesPage, listModelsPage } from './pageApi';
 import { coreKeys } from './queries';
@@ -49,11 +50,16 @@ export function useNumberedModels(
   accountId: string,
   window: PageWindow,
   enabled = true,
+  filters: ResourceFilters = {},
 ): UseQueryResult<NumberedPage<Model>, Error> {
-  const root = coreKeys.modelsRoot(accountId);
+  const root = [
+    ...coreKeys.modelsRoot(accountId),
+    'filters',
+    resourceFilterIdentity('models', filters),
+  ];
   return useQuery<NumberedPage<Model>, Error, NumberedPage<Model>>({
     queryKey: [...root, 'numbered', ...pageWindowKey(window)],
-    queryFn: ({ signal }) => listModelsPage(window, signal),
+    queryFn: ({ signal }) => listModelsPage(window, signal, filters),
     enabled: enabled && Boolean(accountId),
     placeholderData: sameScopePlaceholder<NumberedPage<Model>>(root),
   });

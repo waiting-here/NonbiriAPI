@@ -537,6 +537,10 @@ describe('donation composer recovery', () => {
       { station: 'user', role: 'user' },
     );
     const user = rendered.user;
+    await user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Shared resource',
+    );
     await user.click(screen.getByRole('checkbox', { name: 'Select resource key 61' }));
     await user.click(screen.getAllByRole('checkbox')[1]);
     const submit = screen.getByRole('button', { name: /submit for review/i });
@@ -602,6 +606,10 @@ describe('donation composer recovery', () => {
       { station: 'user', role: 'user' },
     );
     const user = rendered.user;
+    await user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Shared resource',
+    );
     const keyCheckbox = screen.getByRole('checkbox', { name: 'Select resource key 61' });
     await user.click(keyCheckbox);
     await user.click(screen.getAllByRole('checkbox')[1]);
@@ -632,7 +640,7 @@ describe('donation composer recovery', () => {
     expect(mutation.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('allows the canonical empty description and never offers a second endpoint or secret form', async () => {
+  it('requires a nonblank description without losing selected keys or authorization', async () => {
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
     const rendered = await renderWithProviders(
@@ -643,9 +651,22 @@ describe('donation composer recovery', () => {
     await rendered.user.click(checkboxes[0]);
     await rendered.user.click(checkboxes[1]);
     await rendered.user.click(screen.getByRole('button'));
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/description is required/i);
+    await rendered.user.type(screen.getByRole('textbox', { name: /donation description/i }), '   ');
+    await rendered.user.click(screen.getByRole('button'));
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+    await rendered.user.clear(screen.getByRole('textbox', { name: /donation description/i }));
+    await rendered.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'A shared endpoint',
+    );
+    await rendered.user.click(screen.getByRole('button'));
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
-        description: '',
+        description: 'A shared endpoint',
         keys: [{ endpointKeyId: '61', expiresAt: null, failureDisableThreshold: '10' }],
         ownershipAuthorized: true,
       }),
@@ -739,6 +760,10 @@ describe('donation composer recovery', () => {
       withPickerChoices(<DonationComposer draftNamespace="account-key-expiry" />, [choices[0]]),
       { station: 'user', role: 'user' },
     );
+    await rendered.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Shared resource',
+    );
     const checkboxes = screen.getAllByRole('checkbox');
     await rendered.user.click(checkboxes[0]);
     const expiry = rendered.container.querySelector('input[type="datetime-local"]');
@@ -752,7 +777,7 @@ describe('donation composer recovery', () => {
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
-        description: '',
+        description: 'Shared resource',
         keys: [{ endpointKeyId: '61', expiresAt: instant, failureDisableThreshold: '10' }],
         ownershipAuthorized: true,
       }),

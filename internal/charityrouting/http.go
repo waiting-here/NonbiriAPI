@@ -30,6 +30,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		handler         http.HandlerFunc
 	}{
 		{http.MethodGet, routeAdminModels, api.listAdminModels},
+		{http.MethodGet, routeAdminKeyModels, api.adminKeyModels},
+		{http.MethodGet, routeAdminKeyModelBindings, api.adminKeyModelBindings},
 		{http.MethodPost, routeAdminModels, api.createAdminModel},
 		{http.MethodGet, routeAdminModel, api.getAdminModel},
 		{http.MethodPatch, routeAdminModel, api.patchAdminModel},
@@ -60,6 +62,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
+		{http.MethodGet, routeStewardKeyModels, api.stewardKeyModels},
+		{http.MethodGet, routeStewardKeyModelBindings, api.stewardKeyModelBindings},
 		{http.MethodPost, routeStewardModels, api.createStewardModel},
 		{http.MethodGet, routeStewardModel, api.getStewardModel},
 		{http.MethodPatch, routeStewardModel, api.patchStewardModel},

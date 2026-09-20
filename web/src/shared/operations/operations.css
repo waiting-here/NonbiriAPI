@@ -500,3 +500,5 @@ fieldset.ops-field-grid {
 .ops-row-action {
   overflow-wrap: normal;
 }
+
+.ops-break { overflow-wrap: anywhere; }

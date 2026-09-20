@@ -1,4 +1,9 @@
 import {
+  canonicalResourceFilters,
+  type ResourceFilters,
+  type ResourceListKind,
+} from './resourceFilters';
+import {
   isPageNumber,
   normalizePageMetadata,
   PAGE_SIZES,
@@ -106,10 +111,17 @@ function pageQuery(window: PageWindow): string {
   return new URLSearchParams({ page: window.page, page_size: String(window.pageSize) }).toString();
 }
 
-function resourceSearchQuery(window: PageWindow, search: unknown): string {
-  const query = validateScalarInput(search, 128, 'resource search', true);
+function resourceSearchQuery(
+  window: PageWindow,
+  kind: ResourceListKind,
+  filters: string | ResourceFilters,
+): string {
+  const normalized = canonicalResourceFilters(
+    kind,
+    typeof filters === 'string' ? { q: filters } : filters,
+  );
   const params = new URLSearchParams(pageQuery(window));
-  if (query !== '') params.set('q', query);
+  for (const [name, value] of Object.entries(normalized)) params.set(name, value);
   return params.toString();
 }
 
@@ -215,11 +227,11 @@ function numberedCatalog(
 export async function listEndpointsPage(
   window: PageWindow,
   signal?: AbortSignal,
-  search = '',
+  search: string | ResourceFilters = '',
 ): Promise<NumberedPage<Endpoint>> {
   const normalizedWindow = pageWindowInput(window);
   const response = await coreRequest(
-    `/api/endpoints?${resourceSearchQuery(normalizedWindow, search)}`,
+    `/api/endpoints?${resourceSearchQuery(normalizedWindow, 'endpoints', search)}`,
     { signal },
   );
   if (response.status !== 200) invalidResponse('endpoint list status');
@@ -230,12 +242,12 @@ export async function listEndpointKeysPage(
   endpointId: string,
   window: PageWindow,
   signal?: AbortSignal,
-  search = '',
+  search: string | ResourceFilters = '',
 ): Promise<NumberedPage<EndpointKey>> {
   const normalizedWindow = pageWindowInput(window);
   const normalizedEndpointID = resourceID(endpointId, 'endpoint id');
   const response = await coreRequest(
-    `/api/endpoints/${encodeURIComponent(normalizedEndpointID)}/keys?${resourceSearchQuery(normalizedWindow, search)}`,
+    `/api/endpoints/${encodeURIComponent(normalizedEndpointID)}/keys?${resourceSearchQuery(normalizedWindow, 'keys', search)}`,
     { signal },
   );
   if (response.status !== 200) invalidResponse('endpoint key list status');
@@ -254,9 +266,13 @@ export async function listEndpointKeysPage(
 export async function listModelsPage(
   window: PageWindow,
   signal?: AbortSignal,
+  filters: ResourceFilters = {},
 ): Promise<NumberedPage<Model>> {
   const normalizedWindow = pageWindowInput(window);
-  const response = await coreRequest(`/api/models?${pageQuery(normalizedWindow)}`, { signal });
+  const response = await coreRequest(
+    `/api/models?${resourceSearchQuery(normalizedWindow, 'models', filters)}`,
+    { signal },
+  );
   if (response.status !== 200) invalidResponse('logical model list status');
   return numberedPage(response.payload, normalizedWindow, 'logical model list', normalizeModelPage);
 }

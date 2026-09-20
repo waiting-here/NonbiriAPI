@@ -539,7 +539,7 @@
       "mutationConflictRefreshed": "操作完成前资源已发生变化。",
       "mutationReconciled": "已载入最新状态；请检查后再决定是否继续操作。",
       "submitted": "捐赠已提交审核。",
-      "descriptionInvalid": "说明最多 1,024 个字符，且不能包含控制字符。",
+      "descriptionInvalid": "请填写捐赠说明，最多 1,024 个字符，且不能包含控制字符。",
       "chooseExistingKeys": "请至少选择一把符合条件的已有密钥。",
       "authorizationRequired": "请确认你拥有并获准共享所有已选资源。",
       "splitDonationSources": "请将自定义资源与主流渠道资源分开提交；每条捐赠只能包含同一个主流渠道。",

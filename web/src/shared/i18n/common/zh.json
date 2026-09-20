@@ -498,6 +498,30 @@
       "notFound": "不存在",
       "item": "捐赠 {{donation}} · 密钥 {{key}}",
       "singleDone": "失败计数已重置。"
+    },
+    "keyModels": {
+      "title": "关联公益模型",
+      "help": "展示当前仍然关联的模型，包括停用模型和不可用连接。",
+      "empty": "暂无关联模型",
+      "emptyBody": "该捐赠密钥当前没有关联的公益模型连接。",
+      "available": "已启用 · 有可用连接",
+      "unavailable": "已启用 · 暂无可用连接",
+      "disabled": "模型已停用",
+      "count": "{{count}} 个连接 · {{available}} 个可用",
+      "connections": "展开连接",
+      "manage": "管理模型",
+      "returnToKey": "返回捐赠密钥",
+      "states": {
+        "available": "可用",
+        "unavailable": "不可用",
+        "ended": "已结束",
+        "expired": "已到期",
+        "pending": "未获批准",
+        "feature_disabled": "公益服务已关闭",
+        "model_disabled": "模型已停用",
+        "disabled": "资源已停用",
+        "suspended": "安全或失败暂停"
+      }
     }
   },
   "logs": {

@@ -402,7 +402,7 @@ async function installManagementRoutes(
     );
     if (donationKeysMatch) {
       const index = Number(donationKeysMatch[1]) - 1;
-      await fulfillJSON(route, numberedPage([keyForDonation(index)], url.searchParams));
+      await fulfillJSON(route, numberedPage([keyFor(index)], url.searchParams));
       return;
     }
     if (path === config.root + '/charity-models') {
@@ -967,6 +967,88 @@ function initialState(overrides: Partial<FixtureState> = {}): FixtureState {
     modelReads: [],
     ...overrides,
   };
+}
+
+for (const station of ['admin', 'user'] as const) {
+  test(
+    station + ' inverse key models preserve pages, expansion, and return position',
+    async ({ context, page }) => {
+      const setup = await prepareStation(context, page, station, station === 'admin' ? 1280 : 375);
+      const state = initialState();
+      await installManagementRoutes(page, station, state);
+      let removed = false;
+      const inverse = Array.from({ length: 23 }, (_, i) => ({
+        model_id: String(i + 1),
+        full_name: `[公益]DetailProvider/detail-model-${i + 1}`,
+        enabled: i % 2 === 0,
+        binding_count: '2',
+        available_binding_count: i % 2 === 0 ? '1' : '0',
+      }));
+      await page.route(
+        setup.origin + setup.root + '/donations/20/keys/1019/models**',
+        async (route) => {
+          const url = new URL(route.request().url());
+          const bindings = [
+            { binding_id: '71', upstream_model_id: 'first-upstream', ord: 0, state: 'available' },
+            { binding_id: '72', upstream_model_id: 'second-upstream', ord: 1, state: 'suspended' },
+          ];
+          await fulfillJSON(
+            route,
+            numberedPage<JSONRecord>(
+              url.pathname.endsWith('/bindings') ? bindings : removed ? [] : inverse,
+              url.searchParams,
+            ),
+          );
+        },
+      );
+      const root = station === 'admin' ? '/charity?' : '/steward?tab=charity&';
+      await page.goto(
+        setup.origin +
+          root +
+          'charity_section=donations&donation_id=20&donations_page=2&donations_page_size=10',
+      );
+      await page.getByRole('button', { name: 'Related charity models', exact: true }).click();
+      const list = page.getByRole('region', { name: 'Related charity models' });
+      await expect(
+        list.getByRole('heading', { name: '[公益]DetailProvider/detail-model-1', exact: true }),
+      ).toBeVisible();
+      await list.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
+      await list.getByRole('button', { name: 'Next', exact: true }).click();
+      const card = list.locator('section.ops-subcard').filter({
+        has: page.getByRole('heading', {
+          name: '[公益]DetailProvider/detail-model-19',
+          exact: true,
+        }),
+      });
+      await card.getByRole('button', { name: 'Show connections', exact: true }).click();
+      await expect(card.getByText('first-upstream', { exact: false })).toBeVisible();
+      await expect(card.getByText('second-upstream', { exact: false })).toBeVisible();
+      await card
+        .getByRole('button', { name: 'Manage model', exact: true })
+        .scrollIntoViewIfNeeded();
+      const position = await page.evaluate(() => scrollY);
+      await card.getByRole('button', { name: 'Manage model', exact: true }).click();
+      await expect(
+        page.getByRole('heading', { name: '[公益]DetailProvider/detail-model-19', exact: true }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Return to donated key', exact: true }).click();
+      await expect(card.getByText('second-upstream', { exact: false })).toBeVisible();
+      expect(new URL(page.url()).searchParams.get('key_models_1019_page')).toBe('2');
+      expect(new URL(page.url()).searchParams.get('key_models_1019_expanded')).toBe('19');
+      await expect
+        .poll(async () => Math.abs((await page.evaluate(() => scrollY)) - position))
+        .toBeLessThan(120);
+      await saveScreenshot(page, station + '-inverse-key-models');
+      removed = true;
+      await list.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await expect(list.getByText('No related models', { exact: true })).toBeVisible();
+      await expect(list.getByText('second-upstream', { exact: false })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await assertStationClean(page, setup);
+    },
+  );
 }
 
 for (const station of ['admin', 'user'] as const) {
