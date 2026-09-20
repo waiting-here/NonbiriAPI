@@ -32,10 +32,36 @@
   },
   "test_seconds": {
     "github.com/waiting-here/NonbiriAPI/internal/db": {
-      "TestBrowseExtensionPreservesPopulatedStateFromPreBrowse": 449.590,
-      "TestBrowseExtensionPreservesPopulatedStateFromPreQuotaCleanup": 443.060,
+      "TestBrowseExtensionPreservesPopulatedStateFromPreBrowse": 553.66,
+      "TestBrowseExtensionPreservesPopulatedStateFromPreQuotaCleanup": 549.74,
       "TestBrowseExtensionPreservesPopulatedStateFromPreStewardHoldRead": 444.670,
-      "TestBrowseExtensionPreservesPopulatedStateFromPreHourlyQuota": 441.230
+      "TestBrowseExtensionPreservesPopulatedStateFromPreHourlyQuota": 555.09,
+      "TestGenerationTwoUserDeleteRequiresEconomicHandoff": 289.37,
+      "TestQuotaRejectsInvalidStateCombinations": 1156.04,
+      "TestEmbeddingExtensionRollsBackAndResetsConnection": 351.01,
+      "TestResponseStartsExtensionPreservesExistingGenerationTwoData": 298.26,
+      "TestModelTokenReserveExtensionPreservesDeployedData": 298.96,
+      "TestEmbeddingExtensionPreservesReleasedDataAndStorage": 300.24,
+      "TestHourlyQuotaExtensionPreservesStorageAndEnforcesChecks": 537.86,
+      "TestProgressionQuickStakeMigrationUsesSourceLimits": 335.69,
+      "TestHourlyQuotaExtensionRollsBackAfterValidationFailure": 609.77,
+      "TestModelTokenReserveConstraintsAndCascade": 322.34,
+      "TestFishingLengthUpgradeUsesOnlyProvenCompleteSettlements": 392.36,
+      "TestGenerationTwoFreshConfigSeedUsesIndependentGolden": 265.57,
+      "TestGenerationTwoUserDeleteRequiresGameReservationHandoff": 206.67,
+      "TestBlackjackPartialSourceRejectedWithoutWriting": 202.03,
+      "TestKeyLimitsExtensionPreservesExistingGenerationTwoData": 555.03,
+      "TestGenerationTwoHostileManifestDynamicRPSAccountIdentity": 904.76,
+      "TestBetaTwoExtensionSeedsSidecarDefaultsFromBeta1": 549.75,
+      "TestGenerationTwoCurrentRejectsExternallyMutatedValidDatabaseWithoutSourceWrite": 555.54,
+      "TestRetainedExtensionRollsBackWhenStorageFills": 1117.73,
+      "TestModelTokenReserveExtensionRollsBackAndRetries": 544.83,
+      "TestCredentialRestartValidatesStoredURLsAndLiveTargets": 1044.1,
+      "TestGenerationTwoCurrentRecoveryFailurePreservesStableClassification": 244.33,
+      "TestRetainedExtensionRejectsMixedSourcesWithoutWriting": 492.82,
+      "TestDuelBootstrapRollbackAndPartialSourceRejection": 561.23,
+      "TestRoutingExtensionPreservesExistingGenerationTwoData": 552.18,
+      "TestRetainedBusinessDataAcrossEverySupportedSource": 1500
     },
     "github.com/waiting-here/NonbiriAPI/internal/activities": {
       "TestAcceptedPeriodFinalizesAtCapacityMaximum": 3.260,
@@ -43,16 +69,22 @@
       "TestActivityExportAndDeleteDeidentifiesWithoutRecomputing": 4.012,
       "TestAmountIdempotencyDigestBindsOriginalPointsString": 8.998,
       "TestExportUserTxUsesCallerSnapshotAndWrapper": 3.370,
-      "TestPoolNumberedPagesCountWindowAndStableOrder": 627.635,
+      "TestPoolNumberedPagesCountWindowAndStableOrder": 930.25,
       "TestPoolProjectionFormatsAggregateBeyondInt64": 44.173,
       "TestSettlementCheckpointRollbackReplaysExactlyOnce": 3.756,
       "TestThursdayDestinationUsesExclusiveCloseAndRejectsConflictingDuplicate": 3.190,
       "TestThursdayPeriodCapacityFailureLeavesNoDomainRows": 3.077,
       "TestWelfareLogicalHoldConversionCountsExactlyOnce": 3.370
+    },
+    "github.com/waiting-here/NonbiriAPI/internal/game/linklink": {
+      "TestLeaderboardHundredThousandSummariesUseWindowIndex": 374.61
+    },
+    "github.com/waiting-here/NonbiriAPI/internal/adminapi": {
+      "TestSiteConfigPatchScalarBoundariesAndOptionalNull": 394.23
     }
   },
   "package_seconds": {
-    "github.com/waiting-here/NonbiriAPI": 35.827,
+    "github.com/waiting-here/NonbiriAPI": 1333.935,
     "github.com/waiting-here/NonbiriAPI/internal/accountstream": 2.120,
     "github.com/waiting-here/NonbiriAPI/internal/activities": 719.198,
     "github.com/waiting-here/NonbiriAPI/internal/adminalerts": 75.044,
@@ -65,7 +97,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/authz": 201.674,
     "github.com/waiting-here/NonbiriAPI/internal/backend": 2.272,
     "github.com/waiting-here/NonbiriAPI/internal/charity": 120.481,
-    "github.com/waiting-here/NonbiriAPI/internal/charityrouting": 220.833,
+    "github.com/waiting-here/NonbiriAPI/internal/charityrouting": 535.11,
     "github.com/waiting-here/NonbiriAPI/internal/checkin": 315.340,
     "github.com/waiting-here/NonbiriAPI/internal/claim": 523.096,
     "github.com/waiting-here/NonbiriAPI/internal/config": 1.044,
@@ -78,7 +110,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/dbtest": 1,
     "github.com/waiting-here/NonbiriAPI/internal/debug": 3.161,
     "github.com/waiting-here/NonbiriAPI/internal/diagnostic": 1.993,
-    "github.com/waiting-here/NonbiriAPI/internal/donation": 365.821,
+    "github.com/waiting-here/NonbiriAPI/internal/donation": 1099.686,
     "github.com/waiting-here/NonbiriAPI/internal/egress": 3.581,
     "github.com/waiting-here/NonbiriAPI/internal/elevation": 1.299,
     "github.com/waiting-here/NonbiriAPI/internal/flowcontrol": 2.669,
@@ -94,7 +126,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/idempotency": 110.634,
     "github.com/waiting-here/NonbiriAPI/internal/issues": 157.460,
     "github.com/waiting-here/NonbiriAPI/internal/ledger": 186.676,
-    "github.com/waiting-here/NonbiriAPI/internal/lifecycle": 186.376,
+    "github.com/waiting-here/NonbiriAPI/internal/lifecycle": 662.176,
     "github.com/waiting-here/NonbiriAPI/internal/lifecycle/adapters": 68.234,
     "github.com/waiting-here/NonbiriAPI/internal/lifecyclegate": 1.012,
     "github.com/waiting-here/NonbiriAPI/internal/logapi": 62.958,
@@ -107,6 +139,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/secret": 1.016,
     "github.com/waiting-here/NonbiriAPI/internal/strictjson": 1.254,
     "github.com/waiting-here/NonbiriAPI/internal/worker": 10.525,
-    "github.com/waiting-here/NonbiriAPI/internal/web": 1.033
+    "github.com/waiting-here/NonbiriAPI/internal/web": 1.033,
+    "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance": 618.673
   }
 }
