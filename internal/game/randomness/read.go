@@ -28,7 +28,7 @@ func ReadForUser(ctx context.Context, tx *sql.Tx, game, resource string, user, n
 		query = `SELECT s.state='terminal' FROM game_duel_sessions s JOIN game_duel_seats p ON p.session_id=s.id WHERE s.game_key=? AND s.id=? AND p.user_id=? AND (s.state='active' OR s.terminal_at>?)`
 		args = []any{game, resource, user, cutoff}
 	case "blackjack":
-		query = `SELECT s.phase IN ('result','cancelled') FROM game_blackjack_sessions s WHERE s.id=? AND (s.terminal_at IS NULL OR s.terminal_at>?) AND ((s.started_at<=? AND s.started_at+60>?) OR EXISTS(SELECT 1 FROM game_blackjack_entries e WHERE e.session_id=s.id AND e.user_id=? AND (e.state IN ('seated','playing','settled') OR s.phase='cancelled')))`
+		query = `SELECT s.phase IN ('result','cancelled') FROM game_blackjack_sessions s WHERE s.id=? AND (s.terminal_at IS NULL OR s.terminal_at>?) AND ((s.started_at<=? AND s.started_at+30>?) OR EXISTS(SELECT 1 FROM game_blackjack_entries e WHERE e.session_id=s.id AND e.user_id=? AND (e.state IN ('seated','playing','settled') OR s.phase='cancelled')))`
 		args = []any{resource, cutoff, now, now, user}
 	default:
 		return nil, ErrInvalid

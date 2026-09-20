@@ -36,10 +36,10 @@ func TestHistoryOwnershipPaginationExportAndAnonymousRetention(t *testing.T) {
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		f.clock.Store(start + 15)
+		f.clock.Store(start + 5)
 		home := f.read(0)
 		ids = append(ids, home.Table.ID)
-		f.clock.Store(start + 45)
+		f.clock.Store(start + 25)
 		f.read(0)
 	}
 	page, err := f.s.History(f.ctx, f.users[0], blackjack.PageInput{Limit: 2})
@@ -126,10 +126,10 @@ func TestClosingGameDrainsQueueAndLetsDealtTableSettle(t *testing.T) {
 	for i := range 10 {
 		f.join(i)
 	}
-	f.clock.Store(135)
+	f.clock.Store(125)
 	home := f.read(0)
 	f.exec(`UPDATE site_config SET value='0' WHERE key='game_blackjack_enabled'`)
-	f.clock.Store(136)
+	f.clock.Store(126)
 	home = f.read(0)
 	if home.Table.Phase != "decision" || home.QueueCount != "0" {
 		t.Fatalf("closed prematurely: %+v", home)
@@ -137,7 +137,7 @@ func TestClosingGameDrainsQueueAndLetsDealtTableSettle(t *testing.T) {
 	if f.read(9).You != nil {
 		t.Fatal("waiting entry retained while closed")
 	}
-	f.clock.Store(165)
+	f.clock.Store(145)
 	home = f.read(0)
 	if home.Table.Phase != "result" {
 		t.Fatal("closed game did not settle")

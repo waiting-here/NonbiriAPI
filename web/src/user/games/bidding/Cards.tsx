@@ -2,7 +2,7 @@ import type { Reward, BiddingView, BiddingAction } from './normalize';
 import type { DuelState, Seat } from '../common/duel/types';
 import { useState } from 'react';
 import { useDuelText } from '../common/duel/copy';
-import { cardLabel } from './labels';
+import { cardLabel, handSuit } from './labels';
 export function RewardCard({ card }: { readonly card: Reward }) {
   const t = useDuelText();
   return (
@@ -97,6 +97,7 @@ export function BiddingControls({
 }) {
   const t = useDuelText();
   const [draft, setDraft] = useState<number | null>(null);
+  const suit = handSuit(state.you, t);
   const locked = state.locked[state.you];
   const selection = locked ? state.view.selected : draft;
   if (state.phase === 'joker')
@@ -136,6 +137,7 @@ export function BiddingControls({
         <div className="bid-hand-scroll">
           <PokerHand
             played={state.view.played[state.you]}
+            seat={state.you}
             label={t('你的十三张牌', 'Your thirteen cards')}
           />
         </div>
@@ -160,8 +162,8 @@ export function BiddingControls({
               <button
                 key={card}
                 type="button"
-                className={`bid-card ${selection === card ? 'is-selected' : ''} ${played ? 'is-played' : ''}`}
-                aria-label={`${t('出牌', 'Bid')} ${cardLabel(card)} (${card})`}
+                className={`bid-card bid-suit--${state.you} ${selection === card ? 'is-selected' : ''} ${played ? 'is-played' : ''}`}
+                aria-label={`${t('出牌', 'Bid')} ${suit.name} ${cardLabel(card)} (${card})`}
                 aria-pressed={selection === card}
                 disabled={blocked || locked || !available}
                 onClick={() => {
@@ -170,7 +172,9 @@ export function BiddingControls({
                 }}
               >
                 <span className="bid-card__corner">{cardLabel(card)}</span>
-                <strong className="bid-card__center">◆</strong>
+                <strong className="bid-card__center" aria-hidden="true">
+                  {suit.symbol}
+                </strong>
                 <small className="bid-card__corner bid-card__corner--bottom">
                   {cardLabel(card)}
                 </small>
@@ -183,7 +187,7 @@ export function BiddingControls({
         <span aria-live="polite">
           {selection === null
             ? t('尚未选牌', 'No card selected')
-            : `${t('已选', 'Selected')} ${cardLabel(selection)} · ${selection}`}
+            : `${t('已选', 'Selected')} ${suit.name} ${cardLabel(selection)} · ${selection}`}
         </span>
         <button
           type="button"
@@ -211,13 +215,16 @@ export function BiddingControls({
   );
 }
 function PokerHand({
+  seat,
   played,
   label,
 }: {
+  readonly seat: Seat;
   readonly played: readonly number[];
   readonly label: string;
 }) {
   const t = useDuelText();
+  const suit = handSuit(seat, t);
   return (
     <div className="bid-hand" role="group" aria-label={label}>
       {Array.from({ length: 13 }, (_, index) => index + 1).map((card) => {
@@ -226,12 +233,14 @@ function PokerHand({
           <button
             key={card}
             type="button"
-            className={`bid-card ${isPlayed ? 'is-played' : ''}`}
-            aria-label={`${label} ${cardLabel(card)} (${card})${isPlayed ? ` · ${t('已出牌', 'Played')}` : ''}`}
+            className={`bid-card bid-suit--${seat} ${isPlayed ? 'is-played' : ''}`}
+            aria-label={`${label} ${suit.name} ${cardLabel(card)} (${card})${isPlayed ? ` · ${t('已出牌', 'Played')}` : ''}`}
             disabled
           >
             <span className="bid-card__corner">{cardLabel(card)}</span>
-            <strong className="bid-card__center">◆</strong>
+            <strong className="bid-card__center" aria-hidden="true">
+              {suit.symbol}
+            </strong>
             <small className="bid-card__corner bid-card__corner--bottom">{cardLabel(card)}</small>
           </button>
         );
@@ -250,6 +259,7 @@ export function PublicCards({ view, you }: { readonly view: BiddingView; readonl
         <div className="bid-hand-scroll">
           <PokerHand
             played={view.played[opponent]}
+            seat={opponent}
             label={t('对手的十三张牌', 'Opponent’s thirteen cards')}
           />
         </div>

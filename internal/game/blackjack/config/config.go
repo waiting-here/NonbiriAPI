@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
 )
 
 const (
@@ -219,7 +220,7 @@ func (c compiled) UserWire(available func(string, string) bool) json.RawMessage 
 		SeatingSeconds  int  `json:"seating_seconds"`
 		DecisionSeconds int  `json:"decision_seconds"`
 		RoundSeconds    int  `json:"round_seconds"`
-	}{c.snapshot.Wire(), available("table", ""), QueueCapacity, 9, 15, 30, 60}
+	}{c.snapshot.Wire(), available("table", ""), QueueCapacity, engine.MaxSeats, engine.SeatingSeconds, engine.DecisionSeconds, engine.RoundSeconds}
 	w.Enabled = w.Enabled && w.Available
 	return game.ConfigJSON(w)
 }
