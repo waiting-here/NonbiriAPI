@@ -1,6 +1,7 @@
 package duel_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ func TestSavedLegacyCatalogSupportsRecoveryHistoryAndArchival(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := newFixture(t, "likes", legacy)
+	f := adminFixture(t, "likes", legacy)
 	state := f.matched()
 	f.action(0, state, basicPlan)
 	f.action(1, state, basicPlan)
@@ -49,6 +50,30 @@ func TestSavedLegacyCatalogSupportsRecoveryHistoryAndArchival(t *testing.T) {
 	page, err := f.s.Rounds(f.ctx, f.identity(0), state.ID, duel.PageInput{}, false)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal("legacy round unreadable", err)
+	}
+	f.clock.Add(6)
+	currentID := f.terminalMatch(true, 0)
+	currentCatalog, err := current.Catalog("quick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, err := f.s.AdminExport(adminContext(), duel.AdminExportInput{Dataset: "recent"})
+	if err != nil || len(exported.Items) != 4 || exported.NextCursor != nil {
+		t.Fatal("mixed catalog export", len(exported.Items), err)
+	}
+	for i, id := range []string{state.ID, currentID} {
+		var match duel.AdminMatch
+		var round duel.AdminRound
+		if json.Unmarshal(exported.Items[i*2], &match) != nil || json.Unmarshal(exported.Items[i*2+1], &round) != nil {
+			t.Fatal("invalid mixed catalog export")
+		}
+		wantHash := snapshot.ContentHash
+		if i == 1 {
+			wantHash = currentCatalog.Hash
+		}
+		if match.MatchRef != id || round.MatchRef != id || match.Facts.ContentHash != wantHash || round.RoundNo != 1 {
+			t.Fatal("export crossed match or catalog identity", i, match.MatchRef, round.MatchRef, match.Facts.ContentHash)
+		}
 	}
 	f.ledger()
 	// A supported hash does not authorize arbitrary saved catalog contents.
