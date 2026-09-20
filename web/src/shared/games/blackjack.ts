@@ -28,6 +28,7 @@ const configFields = [
   'stake_step',
   'default_stake',
   'rake_bp',
+  'quick_stakes',
 ];
 const snapshotFields = [
   'available',
@@ -45,6 +46,7 @@ export interface BlackjackConfig {
   stake_step: string;
   default_stake: string;
   rake_bp: { platform: number; welfare: number; thursday: number };
+  quick_stakes: string[];
 }
 const money = (v: unknown) => amount(v, 'blackjack amount', false);
 const wide = (v: unknown) => decimal(v, 'blackjack integer');
@@ -62,6 +64,21 @@ function rates(v: unknown) {
 }
 export function blackjackConfig(v: unknown): BlackjackConfig {
   const r = record(v, configFields, 'blackjack configuration');
+  const quickStakes = array(r.quick_stakes, 'quick stakes', 8).map(money);
+  const milli = (v: string) => {
+    const [whole, fraction = ''] = v.split('.');
+    return BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'));
+  };
+  const minimum = milli(money(r.min_stake));
+  const maximum = milli(money(r.max_stake));
+  const step = milli(money(r.stake_step));
+  let previous = 0n;
+  for (const value of quickStakes) {
+    const stake = milli(value);
+    if (step <= 0n || stake < minimum || stake > maximum || stake <= previous || (stake - minimum) % step !== 0n)
+      invalidResponse('quick stakes');
+    previous = stake;
+  }
   return {
     enabled: boolean(r.enabled, 'blackjack enabled'),
     min_stake: money(r.min_stake),
@@ -69,6 +86,7 @@ export function blackjackConfig(v: unknown): BlackjackConfig {
     stake_step: money(r.stake_step),
     default_stake: money(r.default_stake),
     rake_bp: rates(r.rake_bp),
+    quick_stakes: quickStakes,
   };
 }
 function hash(v: unknown) {

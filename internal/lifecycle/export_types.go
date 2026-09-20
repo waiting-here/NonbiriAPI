@@ -58,6 +58,7 @@ type UserExport struct {
 	EffectiveLevel            int     `json:"effective_level"`
 	LevelDisplayName          string  `json:"level_display_name"`
 	GameProfilePublic         bool    `json:"game_profile_public"`
+	CharityProfilePublic      bool    `json:"charity_profile_public"`
 	CreatedAt                 int64   `json:"created_at"`
 	UpdatedAt                 int64   `json:"updated_at"`
 }

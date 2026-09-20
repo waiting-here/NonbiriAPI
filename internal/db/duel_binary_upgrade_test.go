@@ -26,7 +26,7 @@ func TestDuelUpgradeFromReleasedBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertRetainedManifest(t, prior, preRCOneManifestHash)
+	assertRetainedManifest(t, prior, preProgressionManifestHash)
 	before := retainedTableImages(t, prior, nil)
 	var wallets, awards int
 	if err := prior.QueryRow(`SELECT COUNT(*) FROM credit_accounts WHERE kind='user' AND balance_sign<>0`).Scan(&wallets); err != nil || wallets != 4 {
@@ -50,6 +50,19 @@ func TestDuelUpgradeFromReleasedBinary(t *testing.T) {
 		}
 		assertRetainedManifest(t, store.DB(), PinnedGenerationTwoManifestHash)
 		assertRetainedImages(t, store.DB(), before)
+		var total, achievedSeq []byte
+		var achievedAt, ledgerSeq int64
+		if err := store.DB().QueryRow(`SELECT u.donation_credit_mag,u.donation_credit_achieved_at,u.donation_credit_achieved_seq,o.ledger_seq FROM users u JOIN credit_operations o ON o.ledger_seq=(SELECT max(ledger_seq) FROM credit_operations WHERE donation_credit_user_id=u.id AND donation_credit_delta_sign<>0) WHERE u.donation_credit_mag>X'00000000000000000000000000000000'`).Scan(&total, &achievedAt, &achievedSeq, &ledgerSeq); err != nil {
+			t.Fatal(err)
+		}
+		amount, err := DecodeU128(total)
+		if err != nil || amount.Decimal() != "100000" || achievedAt != 1700000000 {
+			t.Fatal("donation achievement", amount, achievedAt, err)
+		}
+		sequence, err := DecodeU128(achievedSeq)
+		if err != nil || sequence.Big().Int64() != ledgerSeq {
+			t.Fatal("same-second donation order", sequence, ledgerSeq, err)
+		}
 		for key, want := range duelConfigDefaults() {
 			var value string
 			if err := store.DB().QueryRow(`SELECT value FROM site_config WHERE key=?`, key).Scan(&value); err != nil || value != want {

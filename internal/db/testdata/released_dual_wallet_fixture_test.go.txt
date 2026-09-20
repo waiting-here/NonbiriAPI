@@ -14,7 +14,7 @@ import (
 
 // This fixture is compiled with the pinned released source.
 func TestWriteReleasedDualWalletFixture(t *testing.T) {
-	if db.GenerationTwoSchemaHash() != "346a89c664c68eb4c566118c4f0b4f4ba6f3ae2f5584ede333fb6f88070e83bb" {
+	if db.GenerationTwoSchemaHash() != "5e443ca3f99ad1903ed03af718c0c6a1b93b06499740dba201006d132396bc37" || db.PinnedGenerationTwoManifestHash != "f9b40aca86364622c27d73c31f59d53965adaf1c814882662d965e721f30a1f6" || db.PinnedGenerationTwoFreshConfigSeedHash != "444c87711e0bf47f48346d7487eafe5ab365035a4fca043670cf7f90dea6ed22" {
 		t.Fatal("wrong released schema")
 	}
 	path := os.Getenv("NONBIRI_DUAL_WALLET_FIXTURE")
@@ -34,6 +34,7 @@ func TestWriteReleasedDualWalletFixture(t *testing.T) {
 	defer store.Close()
 	ctx := context.Background()
 	tx := beginLedgerTestTx(t, store.DB())
+	defer tx.Rollback()
 	for i, amount := range []int64{37000, -7000} {
 		user, general := seedLedgerUser(t, tx, []string{"dual-positive", "dual-negative"}[i])
 		game, err := CreateUserAssetAccount(ctx, tx, user, Game, ledgerTestNow)
@@ -65,6 +66,14 @@ func TestWriteReleasedDualWalletFixture(t *testing.T) {
 		}
 		if _, err := tx.Exec(`INSERT INTO game_checkins(user_id,site_day,award_milli,operation_id,created_at) VALUES(?,'2023-11-14',12000,?,?)`, user, meta.OperationID, ledgerTestNow); err != nil {
 			t.Fatal(err)
+		}
+		if i == 0 {
+			for _, delta := range []int64{100000, 100000, -100000, 0} {
+				change, err := NewAdminUserAdjustment(Meta{OperationID: mustLedgerID(t,"op_"), ActorUserID: user, CreatedAt: ledgerTestNow}, general.ID, external.ID, Amount{}, user, AmountFromMilli(delta), "synthetic donation adjustment")
+				if err != nil { t.Fatal(err) }
+				if _, err := Apply(ctx,tx,change); err != nil { t.Fatal(err) }
+			}
+			if _, err := tx.Exec(`UPDATE users SET game_profile_public=1 WHERE id=?`,user); err != nil {t.Fatal(err)}
 		}
 	}
 	for key, value := range map[string]string{"site_name": "Synthetic dual wallet fixture", "legal_privacy_override_en": "Synthetic privacy.\nPreserve this text.", "game_fishing_rtp": "90", "game_fishing_rtp_premium": "88"} {

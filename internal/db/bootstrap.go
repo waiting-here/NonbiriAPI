@@ -1089,6 +1089,17 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if err := insertGenerationTwoConfig(ctx, tx, announcementEpoch); err != nil {
 		return err
 	}
+	progressionPresent, err := ProgressionStoragePresent(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !progressionPresent {
+		for key := range progressionConfigDefaults() {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM site_config WHERE key=?`, key); err != nil {
+				return err
+			}
+		}
+	}
 	for _, domain := range []string{"site", "activities", "games"} {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO config_revisions(domain,revision,updated_at) VALUES(?,?,0)`, domain, 1); err != nil {
 			return err
@@ -1144,7 +1155,7 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_capacity(id,rows_used,rows_held) VALUES(1,0,0)`); err != nil {
 		return err
 	}
-	return nil
+	return seedProgressionState(ctx, tx, time.Now().Unix())
 }
 
 func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {

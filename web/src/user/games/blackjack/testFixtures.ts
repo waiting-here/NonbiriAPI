@@ -14,6 +14,7 @@ export function blackjackWire(
     default_stake: snapshot.default_stake,
     stake_step: snapshot.stake_step,
     rake_bp: snapshot.rake_bp,
+    quick_stakes: snapshot.quick_stakes,
   };
   const start = 1_800_000_000;
   const finished = phase === 'result';

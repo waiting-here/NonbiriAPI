@@ -132,31 +132,43 @@ type UserEnvelope struct {
 }
 
 type User struct {
-	ID                        string       `json:"id"`
-	Username                  string       `json:"username"`
-	Avatar                    *string      `json:"avatar"`
-	AvatarURL                 *string      `json:"avatar_url"`
-	GuildNick                 *string      `json:"guild_nick"`
-	GuildAvatarURL            *string      `json:"guild_avatar_url"`
-	Lang                      string       `json:"lang"`
-	IsBanned                  bool         `json:"is_banned"`
-	BannedUntil               *int64       `json:"banned_until"`
-	CharitySuspendedUntil     *int64       `json:"charity_suspended_until"`
-	EndpointLimit             *string      `json:"endpoint_limit"`
-	EffectiveEndpointLimit    string       `json:"effective_endpoint_limit"`
-	RPMLimit                  *string      `json:"rpm_limit"`
-	EffectiveRPMLimit         string       `json:"effective_rpm_limit"`
-	ConcurrencyLimit          *string      `json:"concurrency_limit"`
-	EffectiveConcurrencyLimit string       `json:"effective_concurrency_limit"`
-	GameBalance               string       `json:"game_balance"`
-	Balance                   string       `json:"balance"`
-	DonationCredit            string       `json:"donation_credit"`
-	EffectiveLevel            int          `json:"effective_level"`
-	LevelDisplayName          string       `json:"level_display_name"`
-	GameProfilePublic         bool         `json:"game_profile_public"`
-	CreatedAt                 int64        `json:"created_at"`
-	UpdatedAt                 int64        `json:"updated_at"`
-	Usage                     UsageSummary `json:"usage"`
+	ID                        string                 `json:"id"`
+	Username                  string                 `json:"username"`
+	Avatar                    *string                `json:"avatar"`
+	AvatarURL                 *string                `json:"avatar_url"`
+	GuildNick                 *string                `json:"guild_nick"`
+	GuildAvatarURL            *string                `json:"guild_avatar_url"`
+	Lang                      string                 `json:"lang"`
+	IsBanned                  bool                   `json:"is_banned"`
+	BannedUntil               *int64                 `json:"banned_until"`
+	CharitySuspendedUntil     *int64                 `json:"charity_suspended_until"`
+	EndpointLimit             *string                `json:"endpoint_limit"`
+	EffectiveEndpointLimit    string                 `json:"effective_endpoint_limit"`
+	RPMLimit                  *string                `json:"rpm_limit"`
+	EffectiveRPMLimit         string                 `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *string                `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit string                 `json:"effective_concurrency_limit"`
+	GameBalance               string                 `json:"game_balance"`
+	Balance                   string                 `json:"balance"`
+	DonationCredit            string                 `json:"donation_credit"`
+	EffectiveLevel            int                    `json:"effective_level"`
+	LevelDisplayName          string                 `json:"level_display_name"`
+	GameProfilePublic         bool                   `json:"game_profile_public"`
+	CharityProfilePublic      bool                   `json:"charity_profile_public"`
+	AutomaticRestrictions     []AutomaticRestriction `json:"automatic_restrictions"`
+	CreatedAt                 int64                  `json:"created_at"`
+	UpdatedAt                 int64                  `json:"updated_at"`
+	Usage                     UsageSummary           `json:"usage"`
+}
+
+// AutomaticRestriction is the account owner's safe current-state projection.
+// Internal thresholds, counted requests and administrator evidence stay private.
+type AutomaticRestriction struct {
+	Kind       string `json:"kind"`
+	ReasonCode string `json:"reason_code"`
+	Reason     string `json:"reason"`
+	StartedAt  int64  `json:"started_at"`
+	EndsAt     *int64 `json:"ends_at"`
 }
 
 type UsageSummary struct {

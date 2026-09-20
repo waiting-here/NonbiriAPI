@@ -30,6 +30,19 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it('keeps charity visibility independent and rejects private restriction details', () => {
+    const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as { user: Record<string, unknown> };
+    const restriction = { kind: 'ban', reason_code: 'charity_rpm', reason: 'Rate limit exceeded.', started_at: 1_700_000_000, ends_at: null };
+    const user = { ...raw.user, charity_profile_public: true, automatic_restrictions: [restriction] };
+    const parsed = normalizeUserEnvelope({ user }).user;
+    expect(parsed.charity_profile_public).toBe(true);
+    expect(parsed.game_profile_public).toBe(false);
+    expect(parsed.automatic_restrictions).toEqual([restriction]);
+    for (const automatic_restrictions of [[{ ...restriction, evidence: [] }], [restriction, restriction], [{ ...restriction, kind: 'deduction' }]]) {
+      expect(() => normalizeUserEnvelope({ user: { ...user, automatic_restrictions } })).toThrow(/restriction/i);
+    }
+  });
+
   it.each(Array.from({ length: 16 }, (_, value) => value))(
     'accepts a 32-byte CallerKey with final data nibble %i',
     (value) => {

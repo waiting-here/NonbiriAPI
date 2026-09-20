@@ -34,6 +34,7 @@ const (
 	ScopeMaintenance            Scope = "maintenance"
 	ScopeAnnouncement           Scope = "announcement"
 	ScopeActivity               Scope = "activity"
+	ScopeActivityLoan           Scope = "activity_loan"
 	ScopeGameFishing            Scope = "game_fishing"
 	ScopeGameLinkLink           Scope = "game_linklink"
 	ScopeGameRPS                Scope = "game_rps"
@@ -58,6 +59,7 @@ var validScopes = map[Scope]struct{}{
 	ScopeMaintenance:            {},
 	ScopeAnnouncement:           {},
 	ScopeActivity:               {},
+	ScopeActivityLoan:           {},
 	ScopeGameFishing:            {},
 	ScopeGameLinkLink:           {},
 	ScopeGameRPS:                {},

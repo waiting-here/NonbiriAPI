@@ -22,6 +22,8 @@
     "effective_level": 5,
     "level_display_name": "Steward",
     "game_profile_public": false,
+    "charity_profile_public": false,
+    "automatic_restrictions": [],
     "created_at": 1700000000,
     "updated_at": 1700000001,
     "usage": {

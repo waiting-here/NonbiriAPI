@@ -224,6 +224,7 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 	projectPriorDuels := false
 	projectPriorBlackjack := prior != nil && prior["game_blackjack_entries"].Columns == nil
 	projectPriorGateway := prior != nil
+	projectPriorProgression := prior != nil && prior["game_statistics_epoch"].Columns == nil
 	for _, column := range prior["donation_keys"].Columns {
 		if column == "failure_disable_threshold" {
 			projectPriorGateway = false
@@ -288,7 +289,7 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 		if projectPriorAssets && table == "credit_accounts" {
 			query += " WHERE asset_type='general'"
 		}
-		if (projectPriorAssets || projectPriorDuels || projectPriorBlackjack || projectPriorGateway) && table == "site_config" {
+		if (projectPriorAssets || projectPriorDuels || projectPriorBlackjack || projectPriorGateway || projectPriorProgression) && table == "site_config" {
 			var marks []string
 			for _, key := range prior[table].Keys {
 				marks = append(marks, "?")

@@ -1,5 +1,6 @@
 import { normalizeAnnouncementSummary } from '../operations/data';
 import { oneOf } from '@shared/operations/wire';
+import { automaticRestrictions } from '@shared/operations/restrictions';
 import { ApiError } from '@shared/query/http';
 import {
   CONNECTOR_TYPES,
@@ -492,6 +493,8 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     'effective_level',
     'level_display_name',
     'game_profile_public',
+    'charity_profile_public',
+    'automatic_restrictions',
     'created_at',
     'updated_at',
     'usage',
@@ -543,6 +546,8 @@ export function normalizeUserProfile(value: unknown): UserProfile {
       allowEmpty: true,
     }),
     game_profile_public: exactBoolean(record.game_profile_public, 'game profile setting'),
+    charity_profile_public: exactBoolean(record.charity_profile_public, 'charity profile setting'),
+    automatic_restrictions: automaticRestrictions(record.automatic_restrictions),
     created_at: createdAt,
     updated_at: updatedAt,
     usage: normalizeUsageSummary(record.usage),

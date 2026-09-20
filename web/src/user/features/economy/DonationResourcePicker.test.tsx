@@ -40,6 +40,8 @@ function sessionFixture(id: string, username = `fixture-${id}`) {
       effective_level: 5,
       level_display_name: 'Lv5',
       game_profile_public: false,
+      charity_profile_public: false,
+      automatic_restrictions: [],
       created_at: 1_700_000_000,
       updated_at: 1_700_000_001,
       usage: {

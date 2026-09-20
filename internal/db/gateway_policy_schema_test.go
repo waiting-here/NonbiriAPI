@@ -10,6 +10,7 @@ import (
 
 func makePreGatewayPolicyFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreProgressionFixture(t, database)
 	var count int
 	if err := database.QueryRow(`SELECT count(*) FROM pragma_table_info('donation_keys') WHERE name='failure_disable_threshold'`).Scan(&count); err != nil {
 		t.Fatal(err)

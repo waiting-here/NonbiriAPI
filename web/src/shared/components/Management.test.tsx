@@ -60,7 +60,7 @@ function session(level = 5) {
     ),
   );
   return {
-    user: { ...fields, avatar: null, effective_level: level, level_display_name: 'Lv' + level },
+    user: { ...fields, avatar: null, effective_level: level, level_display_name: 'Lv' + level, charity_profile_public: false, automatic_restrictions: [] },
   };
 }
 const page = (data: unknown[]) => ({

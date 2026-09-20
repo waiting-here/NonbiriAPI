@@ -3,17 +3,19 @@ package config
 import (
 	"encoding/json"
 	"maps"
+	"slices"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 )
 
 const (
-	ID            = "blackjack"
-	Version       = 1
-	EnabledKey    = "game_blackjack_enabled"
-	QueueCapacity = 4096
-	MaxStakeMilli = game.MaxMoneyMilli / 64
+	ID             = "blackjack"
+	Version        = 1
+	EnabledKey     = "game_blackjack_enabled"
+	QuickStakesKey = "game_blackjack_quick_stakes"
+	QueueCapacity  = 4096
+	MaxStakeMilli  = game.MaxMoneyMilli / 64
 )
 
 type Rates struct {
@@ -30,6 +32,7 @@ type Snapshot struct {
 	Enabled                                     bool
 	MinStake, MaxStake, StakeStep, DefaultStake int64
 	Rake                                        Rates
+	QuickStakes                                 []int64
 }
 
 func (s Snapshot) Accepts(stake int64) bool {
@@ -37,24 +40,30 @@ func (s Snapshot) Accepts(stake int64) bool {
 }
 
 type Wire struct {
-	Enabled      bool   `json:"enabled"`
-	MinStake     string `json:"min_stake"`
-	MaxStake     string `json:"max_stake"`
-	StakeStep    string `json:"stake_step"`
-	DefaultStake string `json:"default_stake"`
-	Rake         Rates  `json:"rake_bp"`
+	Enabled      bool     `json:"enabled"`
+	MinStake     string   `json:"min_stake"`
+	MaxStake     string   `json:"max_stake"`
+	StakeStep    string   `json:"stake_step"`
+	DefaultStake string   `json:"default_stake"`
+	Rake         Rates    `json:"rake_bp"`
+	QuickStakes  []string `json:"quick_stakes"`
 }
 
 func (s Snapshot) Wire() Wire {
-	return Wire{s.Enabled, game.FormatAmount(s.MinStake), game.FormatAmount(s.MaxStake), game.FormatAmount(s.StakeStep), game.FormatAmount(s.DefaultStake), s.Rake}
+	quick := make([]string, 0, len(s.QuickStakes))
+	for _, stake := range s.QuickStakes {
+		quick = append(quick, game.FormatAmount(stake))
+	}
+	return Wire{s.Enabled, game.FormatAmount(s.MinStake), game.FormatAmount(s.MaxStake), game.FormatAmount(s.StakeStep), game.FormatAmount(s.DefaultStake), s.Rake, quick}
 }
 
 type Patch struct {
-	Enabled      *bool   `json:"enabled,omitempty"`
-	MinStake     *string `json:"min_stake,omitempty"`
-	MaxStake     *string `json:"max_stake,omitempty"`
-	StakeStep    *string `json:"stake_step,omitempty"`
-	DefaultStake *string `json:"default_stake,omitempty"`
+	Enabled      *bool     `json:"enabled,omitempty"`
+	MinStake     *string   `json:"min_stake,omitempty"`
+	MaxStake     *string   `json:"max_stake,omitempty"`
+	StakeStep    *string   `json:"stake_step,omitempty"`
+	DefaultStake *string   `json:"default_stake,omitempty"`
+	QuickStakes  *[]string `json:"quick_stakes,omitempty"`
 	Rake         *struct {
 		Platform *int `json:"platform,omitempty"`
 		Welfare  *int `json:"welfare,omitempty"`
@@ -97,11 +106,43 @@ func CompileConfig(raw map[string]string) (Snapshot, error) {
 	if !s.Rake.Valid() || s.MinStake > s.MaxStake || !s.Accepts(s.DefaultStake) || (s.MaxStake-s.MinStake)%s.StakeStep != 0 {
 		return Snapshot{}, game.ErrInvalidConfig
 	}
+	if rawQuick, exists := raw[QuickStakesKey]; exists {
+		var values []string
+		if json.Unmarshal([]byte(rawQuick), &values) != nil || values == nil || len(values) > 8 {
+			return Snapshot{}, game.ErrInvalidConfig
+		}
+		s.QuickStakes = make([]int64, 0, len(values))
+		for _, value := range values {
+			stake, err := game.ParseAmount(value)
+			if err != nil || !s.Accepts(stake) || slices.Contains(s.QuickStakes, stake) {
+				return Snapshot{}, game.ErrInvalidConfig
+			}
+			s.QuickStakes = append(s.QuickStakes, stake)
+		}
+		slices.Sort(s.QuickStakes)
+	} else {
+		for _, stake := range []int64{1000000, 5000000, 10000000, 50000000} {
+			if s.Accepts(stake) {
+				s.QuickStakes = append(s.QuickStakes, stake)
+			}
+		}
+		if len(s.QuickStakes) == 0 {
+			s.QuickStakes = []int64{s.DefaultStake}
+		}
+	}
 	return s, nil
 }
 
 func wireRaw(w Wire) (map[string]string, error) {
 	raw := map[string]string{EnabledKey: game.BoolRaw(w.Enabled)}
+	if w.QuickStakes == nil {
+		return nil, game.ErrInvalidConfig
+	}
+	quick, err := json.Marshal(w.QuickStakes)
+	if err != nil {
+		return nil, game.ErrInvalidConfig
+	}
+	raw[QuickStakesKey] = string(quick)
 	for name, value := range map[string]string{"min_stake": w.MinStake, "max_stake": w.MaxStake, "stake_step": w.StakeStep, "default_stake": w.DefaultStake} {
 		amount, err := game.ParseAmount(value)
 		if err != nil {
@@ -122,7 +163,7 @@ type compiled struct {
 }
 
 func (Codec) Keys() []string {
-	return []string{EnabledKey, AmountKey("min_stake"), AmountKey("max_stake"), AmountKey("stake_step"), AmountKey("default_stake"), RakeKey("platform"), RakeKey("welfare"), RakeKey("thursday")}
+	return []string{EnabledKey, AmountKey("min_stake"), AmountKey("max_stake"), AmountKey("stake_step"), AmountKey("default_stake"), RakeKey("platform"), RakeKey("welfare"), RakeKey("thursday"), QuickStakesKey}
 }
 func (Codec) ValidatePatch(body json.RawMessage) error {
 	var p Patch
