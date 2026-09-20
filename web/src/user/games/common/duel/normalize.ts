@@ -169,27 +169,32 @@ export function resultValue<V, F, P, S, L, A>(
   value: unknown,
   c: DuelCodec<V, F, P, S, L, A>,
 ): DuelResult<V, P> {
-  const r = exactRecord(value, [
-    'id',
-    'game',
-    'mode',
-    'terminal_at',
-    'outcome',
-    'reason',
-    'scores',
-    'own_payment',
-    'own_refund',
-    'prize_general',
-    'rake',
-    'resolution',
-    'you',
-    'view',
-    'profiles',
-  ]);
+  const r = exactRecord(
+    value,
+    [
+      'id',
+      'game',
+      'mode',
+      'terminal_at',
+      'outcome',
+      'reason',
+      'scores',
+      'own_payment',
+      'own_refund',
+      'prize_general',
+      'rake',
+      'resolution',
+      'you',
+      'view',
+      'profiles',
+    ],
+    ['content_hash'],
+  );
   enumValue(r.game, [c.game], 'game');
   const rake = exactRecord(r.rake, ['platform', 'welfare', 'thursday']);
   return {
     id: opaqueID(r.id, prefix(c.game), 'result'),
+    contentHash: r.content_hash === undefined ? undefined : hashValue(r.content_hash),
     game: c.game,
     mode: enumValue(r.mode, c.modes, 'mode'),
     terminalAt: unixTime(r.terminal_at, 'terminal time'),

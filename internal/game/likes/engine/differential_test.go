@@ -62,7 +62,7 @@ func TestDifferentialCatalogVariantsAndRounds(t *testing.T) {
 	}
 	for _, item := range fixture.Cases {
 		t.Run(item.Name, func(t *testing.T) {
-			e, err := New(item.Mode)
+			e, err := NewLegacy(item.Mode)
 			if err != nil {
 				t.Fatal(err)
 			}

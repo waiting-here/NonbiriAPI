@@ -7,6 +7,7 @@ import { kindName } from './labels';
 import { SkillCost } from './Glossary';
 import { EffectSummary } from './GuideText';
 import { selectionProblem } from './selection';
+import { CharacterPassive } from './CharacterPassive';
 export function LoadoutEditor({
   catalog,
   value,
@@ -58,6 +59,7 @@ export function LoadoutEditor({
         <br />
         {t('弱点', 'Weakness')}: {role.weakness}
       </p>
+      <CharacterPassive role={role} onInspect={onInspect} />
       <h3>Harness</h3>
       <div className="likes-harness-grid">
         <button

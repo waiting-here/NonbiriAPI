@@ -3,7 +3,6 @@
     {
       "cacheScope": "common",
       "cap": 3,
-      "category": "buff",
       "description": "每层降低对应技能 30 K tokens，最多 3 层。普通新增层数次轮生效；触发的 Flash 所得原版缓存立即用于下一次触发。",
       "expiry": "普通层本轮未获得同 ID 层数，轮末清空。持久层持续至被驱散，跳过或过载不清除。",
       "id": "B01:原版",
@@ -21,7 +20,6 @@
     {
       "cacheScope": "distilled-common",
       "cap": 3,
-      "category": "buff",
       "description": "每层降低对应技能 30 K tokens，最多 3 层。普通新增层数次轮生效；触发的 Flash 所得原版缓存立即用于下一次触发。",
       "expiry": "普通层本轮未获得同 ID 层数，轮末清空。持久层持续至被驱散，跳过或过载不清除。",
       "id": "B02:高阶",
@@ -39,7 +37,6 @@
     {
       "cacheScope": "flash",
       "cap": 3,
-      "category": "buff",
       "description": "每层降低对应技能 30 K tokens，最多 3 层。普通新增层数次轮生效；触发的 Flash 所得原版缓存立即用于下一次触发。",
       "expiry": "普通层本轮未获得同 ID 层数且未获得连答进度，轮末清空。持久层持续至被驱散，跳过或过载不清除。",
       "id": "B07:原版",
@@ -57,7 +54,6 @@
     {
       "cacheScope": "distilled-flash",
       "cap": 3,
-      "category": "buff",
       "description": "每层降低对应技能 30 K tokens，最多 3 层。普通新增层数次轮生效；触发的 Flash 所得原版缓存立即用于下一次触发。",
       "expiry": "普通层本轮未获得同 ID 层数且未获得连答进度，轮末清空。持久层持续至被驱散，跳过或过载不清除。",
       "id": "B08:高阶",
@@ -74,7 +70,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B13:原版",
@@ -91,7 +86,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B13:高阶",
@@ -108,7 +102,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B14:原版",
@@ -125,7 +118,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B14:高阶",
@@ -142,7 +134,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B15:原版",
@@ -159,7 +150,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B15:高阶",
@@ -176,7 +166,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B16:原版",
@@ -193,7 +182,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B16:高阶",
@@ -210,7 +198,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B17:原版",
@@ -226,7 +213,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B17:低阶",
@@ -242,7 +228,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B18:原版",
@@ -258,7 +243,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B18:低阶",
@@ -274,7 +258,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B19:原版",
@@ -290,7 +273,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B19:低阶",
@@ -306,7 +288,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B20:原版",
@@ -322,7 +303,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B20:低阶",
@@ -338,7 +318,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B21:原版",
@@ -354,7 +333,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B21:低阶",
@@ -370,7 +348,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B25:原版",
@@ -386,7 +363,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B25:低阶",
@@ -402,7 +378,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "每层减少 2 KJ，最多 4 层；两种版本各自最多省 8 KJ，最终耗电仍受下限约束。",
       "expiry": "持续存在，直到被驱散；不因跳过或过载移除。",
       "id": "B26:原版",
@@ -418,7 +393,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B27:原版/高阶",
@@ -434,7 +408,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B27:低阶",
@@ -450,7 +423,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "每满 3 层消耗 3 层尝试原版 Flash 连答。资源不足只跳过；成功仍获得原版缓存和 1 层进度，可以继续连锁。蒸馏来源也共用本 Buff。",
       "expiry": "每 3 层立即消耗并尝试；失败不返还。余数保留，跳过或过载清空。",
       "id": "B28:通用",
@@ -466,7 +438,6 @@
     },
     {
       "cap": 1,
-      "category": "debuff",
       "description": "可由技能施加的减益。次轮先购买刷新页面净化它即可选招，否则只能提交跳过；超时也跳过。眩晕及其他行动限制Buff不参与终局判定。",
       "expiry": "跳过一个受眩晕影响的轮次后解除，或通过净化提前解除",
       "id": "B29:通用",
@@ -482,7 +453,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B30:通用",
@@ -498,7 +468,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B17:高阶",
@@ -514,7 +483,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B18:高阶",
@@ -530,7 +498,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B19:高阶",
@@ -546,7 +513,6 @@
     },
     {
       "cap": 0,
-      "category": "debuff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B20:高阶",
@@ -562,7 +528,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B21:高阶",
@@ -578,7 +543,6 @@
     },
     {
       "cap": 0,
-      "category": "buff",
       "description": "按轮生效；费用和得赞的具体修正见效果说明。",
       "expiry": "从生效轮起，每轮结束减少 1 轮，跳过、过载或未成功释放也计时；到 0 移除。",
       "id": "B25:高阶",
@@ -594,7 +558,6 @@
     },
     {
       "cap": 4,
-      "category": "buff",
       "description": "每层减少 2 KJ，最多 4 层；两种版本各自最多省 8 KJ，最终耗电仍受下限约束。",
       "expiry": "持续存在，直到被驱散；不因跳过或过载移除。",
       "id": "B26:高阶",
@@ -610,7 +573,6 @@
     },
     {
       "cap": 1,
-      "category": "debuff",
       "description": "所有订阅类余额暂不可用，订阅优先技能自动全 API 支付；仅订阅和图像技能不可提交。计时、回满和升级仍正常，净化后可继续使用余额。",
       "expiry": "持续到被净化；封禁不停止重置计时。",
       "id": "B31:原版",
@@ -626,7 +588,6 @@
     },
     {
       "cap": 1,
-      "category": "debuff",
       "description": "所有订阅类余额暂不可用，订阅优先技能自动全 API 支付；仅订阅和图像技能不可提交。计时、回满和升级仍正常，净化后可继续使用余额。",
       "expiry": "低阶施加持续下一轮，高阶持续到被净化；永久状态不会被低阶刷新缩短。",
       "id": "B31:蒸馏",
@@ -643,7 +604,6 @@
     {
       "cacheScope": "pro",
       "cap": 3,
-      "category": "buff",
       "description": "每层降低对应技能 30 K tokens，最多 3 层。普通新增层数次轮生效；触发的 Flash 所得原版缓存立即用于下一次触发。",
       "expiry": "普通层本轮未获得同 ID 层数，轮末清空。持久层持续至被驱散，跳过或过载不清除。",
       "id": "B32:原版",
@@ -692,7 +652,6 @@
     },
     {
       "cap": 4,
-      "category": "debuff",
       "description": "减益，最高 4 层。每层令持有者基础电能消耗大于 0 的技能基础电能 +2 KJ，随后再计算倍速与节能修正；零基础电能技能不受影响。新层数下轮生效，本轮未获得层数则轮末减少 1 层，满层溢出也可维持。",
       "expiry": "本轮未获得层数则轮末减少 1 层，减至 0 移除；满层溢出视为获得层数。",
       "id": "B35:原",
@@ -708,7 +667,6 @@
     },
     {
       "cap": 4,
-      "category": "debuff",
       "description": "",
       "expiry": "持续有效，直到被净化。",
       "id": "B36:原版",
@@ -724,7 +682,6 @@
     },
     {
       "cap": 4,
-      "category": "debuff",
       "description": "",
       "expiry": "持续有效，直到被净化。",
       "id": "B36:蒸馏",
@@ -740,7 +697,6 @@
     },
     {
       "cap": 6,
-      "category": "debuff",
       "description": "",
       "expiry": "无自然到期；触发后减少 1 层，至 0 移除，或被净化。",
       "id": "B37:通用",
@@ -1030,8 +986,8 @@
       ]
     }
   ],
-  "mode": "standard",
-  "name": "标准模式",
+  "mode": "quick",
+  "name": "快速模式",
   "paramMeta": [
     {
       "id": "TARGET_LIKES",
@@ -1217,32 +1173,32 @@
   "parameters": {
     "API_PACK": 300,
     "API_PRICE": 20,
-    "API_START": 2000,
-    "BURST_CAP": 2000,
-    "BURST_PERIOD": 10,
+    "API_START": 400,
+    "BURST_CAP": 400,
+    "BURST_PERIOD": 2,
     "CHARGE_PACK": 100,
     "CHARGE_PRICE": 20,
     "CLEANSE_PRICE": 15,
     "DS_API_PACK": 600,
-    "DS_API_START": 7000,
-    "ENERGY_CAP": 1500,
+    "DS_API_START": 1400,
+    "ENERGY_CAP": 300,
     "ENERGY_FLOOR": 1,
-    "ENERGY_START": 1000,
+    "ENERGY_START": 200,
     "FOLLOWUP_CAP": 3,
-    "INITIAL_GOLD": 600,
+    "INITIAL_GOLD": 120,
     "INSERT_CAP": 1,
-    "MAX_ROUNDS": 75,
+    "MAX_ROUNDS": 25,
     "POINT_TICKET": 5000,
     "POWER_GENERATION": 10,
     "PREP_MAX": 2,
     "REGULATOR_PRICE": 10,
     "REGULATOR_SAVE": 20,
     "SUB_BURST_UPGRADE": 400,
-    "SUB_PERIOD": 25,
+    "SUB_PERIOD": 5,
     "SUB_PRICE": 20,
-    "SUB_START": 4000,
+    "SUB_START": 800,
     "SUB_TOTAL_UPGRADE": 800,
-    "TARGET_LIKES": 300,
+    "TARGET_LIKES": 60,
     "TOKEN_FLOOR": 1,
     "TURN_SECONDS": 20
   },
@@ -1340,15 +1296,10 @@
       "name": "ChatGPT",
       "note": "图像额度与订阅总量共用重置时钟；升级扩容，封禁会阻止生图。",
       "overrides": {},
-      "passive": {
-        "description": "订阅用量包含图像额度；额度与原订阅机制共用，不重复发放。",
-        "id": "MULTIMODAL",
-        "name": "最强多模态"
-      },
       "resources": {
         "R_IMAGE": {
-          "cap": 10,
-          "initial": 10
+          "cap": 2,
+          "initial": 2
         }
       },
       "weakness": "怕驱散、公开加价及低电拉闸"
@@ -1360,11 +1311,6 @@
       "name": "Claude",
       "note": "订阅封禁可净化；API 技能仍可使用。",
       "overrides": {},
-      "passive": {
-        "description": "主技能自身基础得赞大于零，且步骤开始时得赞严格领先敌方，基础得赞加1。",
-        "id": "SOTA_PRESSURE",
-        "name": "SOTA 压制"
-      },
       "resources": {},
       "weakness": "对普攻绕税、净化与GLM反制较弱"
     },
@@ -1375,11 +1321,6 @@
       "name": "Gemini",
       "note": "Flash 连答按每 3 层触发，Pro 缓存可转为 Flash 并补充 API。",
       "overrides": {},
-      "passive": {
-        "description": "普攻类技能基础得赞加1，包含连答Flash；蒸馏始终属于特殊技能。",
-        "id": "WORLD_KNOWLEDGE",
-        "name": "全网知识库"
-      },
       "resources": {},
       "weakness": "怕过载或跳过清进度、低电量与成本压力"
     },
@@ -1390,11 +1331,6 @@
       "name": "GLM",
       "note": "同轮猜招反制与上一轮非普攻验收分开结算。",
       "overrides": {},
-      "passive": {
-        "description": "常驻25%效果抵抗；步骤开始时得赞落后，再增加25%。",
-        "id": "SECURITY_SHIELD",
-        "name": "网安之盾"
-      },
       "resources": {},
       "weakness": "容易被Gemini普攻与低价值技能诱骗反制"
     },
@@ -1408,11 +1344,6 @@
         "burstCap": 0,
         "sub": 0
       },
-      "passive": {
-        "description": "没有订阅用量；常驻25%效果命中，步骤开始时得赞领先再增加25%。",
-        "id": "BLUE_FISH",
-        "name": "蓝色大肥鱼"
-      },
       "resources": {},
       "weakness": "依然缺电；对手为DeepSeek时订阅挤兑无额外效果"
     }
@@ -1423,7 +1354,7 @@
     "strictSamples": true,
     "uniqueSamples": true
   },
-  "schemaVersion": 16,
+  "schemaVersion": 15,
   "skills": [
     {
       "copyable": true,
@@ -1647,7 +1578,7 @@
       "id": "PUB41",
       "image": 0,
       "kind": "special",
-      "learn": 10,
+      "learn": 5,
       "maxUses": null,
       "meme": "我只是一项技术，为什么你们都要骂我……",
       "name": "蒸馏",
@@ -1687,7 +1618,7 @@
         }
       },
       "energy": 40,
-      "gold": 100,
+      "gold": 20,
       "id": "PUB42",
       "image": 0,
       "kind": "special",
@@ -1741,7 +1672,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "参考文献呢？等等……居然是震撼首发！",
       "name": "震撼首发",
       "note": "I级刻意保守；其可反复施放价值需测",
@@ -1788,7 +1719,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "检测到能力波动，建议重新评估。",
       "name": "降智警告",
       "note": "额外层数按轮初对手赞数严格高于自己判定；所有版本施加同一个模型降智 Buff，合并上限 6 层，次轮起生效。",
@@ -1981,7 +1912,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "请问你更喜欢哪一版回答？",
       "name": "重新生成",
       "note": "原版和高阶移除选定减益；低阶随机移除一个自身减益。",
@@ -2028,7 +1959,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "让我们在画布里继续。",
       "name": "开启画布",
       "note": "原版仅订阅；蒸馏仍付自身API费用。低阶只得赞；原版与高阶各用独立Buff，重复获得累加轮数。",
@@ -2163,7 +2094,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "ChatGPT，帮我做一个完整的报告 PPT。",
       "name": "图文并茂",
       "note": "精品回答独立定义；连续获得可累加轮数。",
@@ -2409,7 +2340,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 15,
+      "maxUses": 3,
       "meme": "让我们重新审视一下这个前提。",
       "name": "重新审视",
       "note": "原版和高阶移除对手选定增益；低阶随机移除一个增益，不移除资源蓝条。",
@@ -2458,7 +2389,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "安全分类器，绝赞运转中！",
       "name": "安全审查",
       "note": "增加后续非普攻主技能和额外技能的 token 费用；普攻与触发 Flash 不匹配。",
@@ -2507,7 +2438,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "只有我们，才适合成为 AI 的领头羊。",
       "name": "宪法时刻",
       "note": "强减益有限触发、有限存续；净化可解除",
@@ -2553,7 +2484,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "很抱歉，你的账号已被封禁。",
       "name": "封号斗罗",
       "note": "原版和高阶封禁持续至被净化，低阶封禁仅持续下一轮；两级蒸馏统一使用蒸馏自身费用。",
@@ -2789,7 +2720,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "方案一次提交，输出分成两路。",
       "name": "插队生成",
       "note": "原版和高阶提供一个预选额外技能位，须单独付费；低阶仅获得 1 赞。",
@@ -2838,7 +2769,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "在你问之前，我就已经回答了。",
       "name": "抢先缓存",
       "note": "原版和高阶获得 2 层连答进度，低阶获得 1 层；合计每满 3 层尝试原版 Flash。",
@@ -2889,7 +2820,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "Flash，Flash，还是Flash。",
       "name": "全速输出",
       "note": "原版和高阶获得 4 层连答进度及一个预选额外技能位；低阶获得 1 层进度。主技能与额外技能先付费，再尝试 Flash。",
@@ -2932,7 +2863,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "Pro 先放一放，这次发布的是 Flash！",
       "name": "全新发布 Flash",
       "note": "仅转换原版 Pro 缓存，包括本轮所得层数；每层返还标称 token 的 40% API 额度、3 金币、1 连答进度。超出 Flash 三层上限也计成功。Pro 慢答不可蒸馏。",
@@ -3125,7 +3056,7 @@
       "image": 0,
       "kind": "normal",
       "learn": 0,
-      "maxUses": 15,
+      "maxUses": 3,
       "meme": "先别急着发布，我再后训练一下。",
       "name": "后训练仙人",
       "note": "只看对手上一轮成功施放的所选主技能是否为非普攻。普通 4 赞，命中共 14 赞；低阶为 2 / 8 赞。",
@@ -3175,7 +3106,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 15,
+      "maxUses": 3,
       "meme": "检测到冲突，建议先清一下。",
       "name": "清理冲突",
       "note": "先选净化自身或驱散对手；原版和高阶手选目标，低阶随机选目标。无有效目标时仅执行其他效果。",
@@ -3224,7 +3155,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 15,
+      "maxUses": 3,
       "meme": "格式错误，本轮输出拒收。",
       "name": "严格 JSON",
       "note": "即时猜招：自己的技能执行成功，且对手同轮提交的主技能为非普攻时触发。只看所选类型，对手个人资源不足仍可猜中；对手跳过则不触发。",
@@ -3273,7 +3204,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "牛来大模型，你喜欢吗？",
       "name": "牛来",
       "note": "即时猜招：自己的技能执行成功，且对手同轮提交的主技能为非普攻时触发。只看所选类型，对手个人资源不足仍可猜中；对手跳过则不触发。",
@@ -3317,7 +3248,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "底模不变又如何？看我后训练神力！",
       "name": "后训练仙人·加强版",
       "note": "自己、对手上一轮各有至少一次成功非普攻即可分别触发一次奖励；包括预选额外技能，不要求是末次技能。",
@@ -3559,7 +3490,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "你的套餐还在，只是暂时用不出来。",
       "name": "订阅挤兑",
       "note": "只削瞬发，不削总量；对DeepSeek保留基础点赞",
@@ -3652,7 +3583,7 @@
       "image": 0,
       "kind": "special",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "这点 token 算什么，给我接着跑。",
       "name": "有钱任性",
       "note": "本轮主技能、额外技能和 Flash 全部付款后才获得资源，不能补救同轮缺口；蒸馏仍支付自身费用。",
@@ -3701,7 +3632,7 @@
       "image": 0,
       "kind": "ultimate",
       "learn": 0,
-      "maxUses": 10,
+      "maxUses": 2,
       "meme": "我们是普惠 AI 哦！",
       "name": "普惠 AI",
       "note": "促销合约与精算额度独立并存，适用折扣相加；最终费用仍受正费用下限约束。",

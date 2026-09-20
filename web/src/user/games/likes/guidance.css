@@ -231,3 +231,22 @@
     animation: none;
   }
 }
+.likes-character-passive {
+  display: grid;
+  gap: 0.35rem;
+  margin-block: 0.65rem;
+  padding: 0.65rem;
+  border-inline-start: 3px solid currentColor;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+.likes-inline-flavor {
+  display: block;
+  margin-top: 0.3rem;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+.likes-application-result {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

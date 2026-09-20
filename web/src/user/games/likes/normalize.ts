@@ -328,6 +328,66 @@ function score(value: unknown): Score {
     final: amount(r.final),
   };
 }
+function stepValue(value: unknown): NonNullable<Cast['step']> {
+  const r = exactRecord(value, ['kind', 'index', 'likes']);
+  const kind = enumValue(r.kind, ['main', 'extra', 'flash'], 'settlement step');
+  return {
+    kind,
+    index: safeInteger(r.index, 0, kind === 'flash' ? 4 : 0, 'step index'),
+    likes: pair(r.likes, amount),
+  };
+}
+function applicationValue(value: unknown): NonNullable<Cast['applications']>[number] {
+  const r = exactRecord(value, ['buff_id', 'target', 'success', 'resisted', 'derived']);
+  const success = safeInteger(r.success, 0, 4, 'successful layers'),
+    resisted = safeInteger(r.resisted, 0, 4, 'resisted layers');
+  if (success + resisted < 1 || success + resisted > 4) invalidResponse('attempted layers');
+  return {
+    buffID: label(r.buff_id),
+    target: seatValue(r.target),
+    success,
+    resisted,
+    derived: bool(r.derived),
+  };
+}
+function validateAttempt(value: unknown) {
+  const r = exactRecord(value, [
+    'rules_version',
+    'step',
+    'source',
+    'target',
+    'skill_id',
+    'buff_id',
+    'layer',
+    'hit',
+    'resist',
+    'numerator',
+    'denominator',
+    'success',
+    'draw',
+    'derived',
+  ]);
+  safeInteger(r.rules_version, 2, 2, 'application rules');
+  stepValue(r.step);
+  if (seatValue(r.source) === seatValue(r.target)) invalidResponse('hostile effect target');
+  label(r.skill_id);
+  label(r.buff_id);
+  safeInteger(r.layer, 1, 4, 'effect layer');
+  const hit = safeInteger(r.hit, 0, 50, 'hit'),
+    resist = safeInteger(r.resist, 0, 50, 'resistance');
+  if (
+    ![0, 25, 50].includes(hit) ||
+    ![0, 25, 50].includes(resist) ||
+    r.numerator !== 100 + hit ||
+    r.denominator !== 100 + resist
+  )
+    invalidResponse('effect probability');
+  const success = bool(r.success);
+  bool(r.derived);
+  if (hit >= resist ? r.draw !== null || !success : r.draw === null)
+    invalidResponse('application draw');
+  if (r.draw !== null) safeInteger(r.draw, 1, 10000, 'draw ordinal');
+}
 function cast(value: unknown): Cast {
   const r = exactRecord(
     value,
@@ -347,7 +407,7 @@ function cast(value: unknown): Cast {
       'templateId',
       'success',
     ],
-    ['level'],
+    ['level', 'step', 'characterPassive', 'applications'],
   );
   if (!bool(r.success)) invalidResponse('successful cast');
   return {
@@ -365,6 +425,17 @@ function cast(value: unknown): Cast {
     resourceCosts: dictionary(r.resourceCosts, amount, 16),
     templateId: prose(r.templateId, 160),
     success: true,
+    step: r.step === undefined ? undefined : stepValue(r.step),
+    characterPassive:
+      r.characterPassive === undefined
+        ? undefined
+        : enumValue(
+            r.characterPassive,
+            ['MULTIMODAL', 'SOTA_PRESSURE', 'WORLD_KNOWLEDGE', 'SECURITY_SHIELD', 'BLUE_FISH'],
+            'character passive',
+          ),
+    applications:
+      r.applications === undefined ? undefined : list(r.applications, 4, applicationValue),
     level:
       r.level === undefined
         ? null
@@ -376,6 +447,7 @@ export function eventValue(value: unknown): LikesEvent {
   const kind = label(r.kind),
     data = r.data === undefined ? {} : dictionary(r.data, (v) => safeJSON(v), 128);
   if (data.shortage !== undefined) shortageValue(data.shortage);
+  if (kind === 'effect-attempt') validateAttempt(data);
   let transition: LikesEvent['transition'] = null;
   if (kind === 'round-start') {
     const p = exactRecord(data, ['before', 'after']);

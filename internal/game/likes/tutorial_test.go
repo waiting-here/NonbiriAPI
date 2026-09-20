@@ -12,7 +12,7 @@ import (
 
 // The browser tutorial is an offline replay of the same rules and presentation
 // used by live games. A catalog change must regenerate and review this route.
-func TestTutorialCompletesWithNarrowVictory(t *testing.T) {
+func TestTutorialCompletesWithVictory(t *testing.T) {
 	e, err := engine.New("quick")
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestTutorialCompletesWithNarrowVictory(t *testing.T) {
 	harness := "H01"
 	selections := [2]engine.Selection{
 		{Role: "ChatGPT", Harness: &harness, Skills: []string{"PUB42", "GPT01", "GPT41", "GPT44", "GPT61"}},
-		{Role: "Claude", Harness: &harness, Skills: []string{"CLA01", "CLA22", "CLA61", "PUB21"}},
+		{Role: "Claude", Skills: []string{"CLA01", "CLA22", "CLA61", "PUB21"}},
 	}
 	s, err := e.Create(selections)
 	if err != nil {
@@ -45,7 +45,7 @@ func TestTutorialCompletesWithNarrowVictory(t *testing.T) {
 	}{c.ContentHash, selections[0], []tutorialRound{}}
 	playerSkills := []string{"GPT01", "GPT41", "GPT01", "GPT41", "GPT61", "PUB42", "GPT44", "GPT01", "GPT01", "GPT01"}
 	botSkills := []string{"CLA22", "PUB21", "CLA61", "CLA01", "CLA22", "CLA01", "PUB21", "CLA01", "CLA01", "CLA22"}
-	scores := [][2]int64{{4, 6}, {8, 14}, {12, 28}, {16, 32}, {34, 38}, {42, 42}, {42, 50}, {50, 54}, {58, 58}, {66, 64}}
+	scores := [][2]int64{{4, 5}, {8, 13}, {12, 27}, {16, 31}, {34, 37}, {42, 41}, {42, 48}, {50, 52}, {58, 56}, {66, 61}}
 	energy := []int64{178, 151, 86, 271, 194, 154, 142, 112, 82, 30}
 	api := []int64{300, 160, 160, 20, 20, 20, 20, 20, 20, 20}
 	gold := []int64{120, 120, 100, 80, 80, 60, 60, 60, 60, 60}

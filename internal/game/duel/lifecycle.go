@@ -168,11 +168,11 @@ type anonymousHeader struct {
 }
 
 func (s *Service) anonymousHeader(v sessionRecord) (anonymousHeader, error) {
-	initial, err := s.rules.Archive(v.Mode, v.Initial)
+	initial, err := v.rules.Archive(v.Mode, v.Initial)
 	if err != nil {
 		return anonymousHeader{}, err
 	}
-	final, err := s.rules.Archive(v.Mode, v.Payload.Rules)
+	final, err := v.rules.Archive(v.Mode, v.Payload.Rules)
 	if err != nil {
 		return anonymousHeader{}, err
 	}
@@ -224,7 +224,7 @@ func (s *Service) anonymize(ctx context.Context, tx *sql.Tx, v sessionRecord) er
 		return err
 	}
 	for _, record := range records {
-		view, err := s.roundView(v.Mode, record.body, 0, true)
+		view, err := s.roundView(v.rules, v.Mode, record.body, 0, true)
 		if err != nil {
 			return err
 		}
@@ -372,7 +372,7 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 			if err := rows.Scan(&body); err != nil {
 				return nil, err
 			}
-			item, err := s.roundView(v.Mode, body, seat, v.State == "terminal")
+			item, err := s.roundView(v.rules, v.Mode, body, seat, v.State == "terminal")
 			if err != nil {
 				return nil, err
 			}

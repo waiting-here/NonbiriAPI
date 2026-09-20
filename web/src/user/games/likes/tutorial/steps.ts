@@ -33,8 +33,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
     'role:ChatGPT',
     t('第一步：选择 ChatGPT', 'First: choose ChatGPT'),
     t(
-      '点击高亮角色。她能使用订阅、API 和图像额度，这次会体验净化、重置和倍速。',
-      'Select the highlighted character. She uses subscriptions, API and image quota. We’ll try cleansing, resets and speed mode.',
+      '点击高亮角色。她的固有被动「最强多模态」提供图像额度，也能使用订阅和 API。这次会体验净化、重置和倍速。',
+      'Select the highlighted character. Her Multimodal passive provides image quota alongside subscriptions and API. We’ll try cleansing, resets and speed mode.',
     ),
   );
   add(
@@ -99,8 +99,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
     'continue',
     t('匹配演示：找到教学机器人', 'Match demo: teaching bot found'),
     t(
-      '正式匹配会预留入场积分，最多等待 120 秒，成功前可以取消并退款。这里没有真实排队或付款。对手是携带 Codex 的 Claude，点击继续入场。',
-      'Live matching reserves your entry credits and waits up to 120 seconds; cancel before matching for a refund. No queue or payment exists here. Your opponent is Claude with Codex. Continue to enter.',
+      '正式匹配会预留入场积分，最多等待 120 秒，成功前可以取消并退款。这里没有真实排队或付款。对手是未携带 Harness 的 Claude；她领先时，固有被动会为原本得赞的主技能增加 1 点基础得赞。点击继续入场。',
+      'Live matching reserves your entry credits and waits up to 120 seconds; cancel before matching for a refund. No queue or payment exists here. Your opponent is Claude without a harness. When ahead, her character passive adds one base like to a main skill with positive original likes. Continue to enter.',
     ),
   );
   const lessons = [
@@ -137,8 +137,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
     [
       '重置有代价，也有回报',
       'A reset has tradeoffs',
-      '我们的用量已经明显下降。用量重置消耗金币与电能，恢复双方订阅和图像，不能挽救同轮已失败的付款。挑选时机，借助剩余的加赞效果追平。',
-      'Your quotas have fallen. Usage reset costs gold and energy and restores both players’ subscriptions and images, without rescuing failed payments this round. Time it with your remaining likes buff to draw level.',
+      '我们的用量已经明显下降。用量重置消耗金币与电能，恢复双方订阅和图像，不能挽救同轮已失败的付款。挑选时机，借助剩余的加赞效果争取小幅领先。',
+      'Your quotas have fallen. Usage reset costs gold and energy and restores both players’ subscriptions and images, without rescuing failed payments this round. Time it with your remaining likes buff to gain a narrow lead.',
     ],
     [
       '暂时落后，换取爆发',
@@ -161,8 +161,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
     [
       '最后一轮，抓住机会',
       'One last push',
-      '双方已经追平。资源仍足够支撑这次普攻，确认方案，看看能否险胜。',
-      'The scores are tied. You still have enough resources for this basic attack. Lock in your plan for the final push.',
+      '我们已经小幅领先。资源仍足够支撑这次普攻，确认方案，争取守住优势。',
+      'You have a narrow lead and enough resources for this basic attack. Lock in your plan for the final push.',
     ],
   ];
   for (let i = 0; i < tutorialData.rounds.length; i++) {
@@ -262,7 +262,10 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
       i === 9 ? 'finish' : 'review',
       'continue',
       i === 9
-        ? t('66∶64，艰难取胜！', '66–64: a hard-fought victory!')
+        ? t(
+            `${scores[0]}∶${scores[1]}，艰难取胜！`,
+            `${scores[0]}–${scores[1]}: a hard-fought victory!`,
+          )
         : t(`本轮结束：${scores[0]}∶${scores[1]}`, `Round complete: ${scores[0]}–${scores[1]}`),
       i === 9
         ? t(

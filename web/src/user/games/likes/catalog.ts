@@ -75,6 +75,7 @@ export interface Role {
   weakness: string;
   overrides: Record<string, number>;
   resources: Record<string, { initial: number; cap: number }>;
+  passive?: { id: string; name: string; description: string };
 }
 export interface Harness {
   id: string;
@@ -133,6 +134,7 @@ export interface ModeCatalog {
 export interface LikesCatalog {
   contentHash: string;
   modes: { quick: ModeCatalog; standard: ModeCatalog };
+  compatibleModes: ModeCatalog[];
 }
 const optionalText = (r: Record<string, unknown>, key: string) =>
   r[key] === undefined ? undefined : prose(r[key]);
@@ -229,7 +231,10 @@ function buff(value: unknown): Buff {
     expiry: prose(r.expiry),
     overwrite: prose(r.overwrite),
     target: prose(r.target),
-    category: optionalText(r, 'category'),
+    category:
+      r.category === undefined
+        ? undefined
+        : enumValue(r.category, ['buff', 'debuff', 'state'], 'effect category'),
     source: optionalText(r, 'source'),
     description: optionalText(r, 'description'),
     meme: optionalText(r, 'meme'),
@@ -250,8 +255,10 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     'config',
   ]);
   safeInteger(outer.rules_version, 1, 1, 'rules');
-  enumValue(outer.design_version, ['0.17.0'], 'design');
-  safeInteger(outer.schema_version, 15, 15, 'schema');
+  enumValue(outer.design_version, ['0.17.0', '0.18.0'], 'design');
+  const schema = safeInteger(outer.schema_version, 15, 16, 'schema');
+  if (outer.design_version !== (schema === 16 ? '0.18.0' : '0.17.0'))
+    invalidResponse('catalog identity');
   const r = exactRecord(outer.config, [
     'schemaVersion',
     'mode',
@@ -268,7 +275,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     'passives',
   ]);
   enumValue(r.mode, [mode], 'mode');
-  safeInteger(r.schemaVersion, 15, 15, 'config schema');
+  safeInteger(r.schemaVersion, schema, schema, 'config schema');
   const rules = exactRecord(r.rules, [
     'cacheWindow',
     'uniqueSamples',
@@ -327,16 +334,22 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     r.roles,
     5,
     (v) => {
-      const q = exactRecord(v, [
-        'id',
-        'name',
-        'focus',
-        'difficulty',
-        'note',
-        'weakness',
-        'overrides',
-        'resources',
-      ]);
+      const q = exactRecord(
+        v,
+        ['id', 'name', 'focus', 'difficulty', 'note', 'weakness', 'overrides', 'resources'],
+        ['passive'],
+      );
+      const passive =
+        q.passive === undefined ? undefined : exactRecord(q.passive, ['id', 'name', 'description']);
+      const ids = {
+        ChatGPT: 'MULTIMODAL',
+        Claude: 'SOTA_PRESSURE',
+        Gemini: 'WORLD_KNOWLEDGE',
+        GLM: 'SECURITY_SHIELD',
+        DeepSeek: 'BLUE_FISH',
+      };
+      if (schema === 16 ? !passive || passive.id !== ids[roleID(q.id)] : !!passive)
+        invalidResponse('character passive');
       return {
         id: roleID(q.id),
         name: label(q.name),
@@ -344,6 +357,13 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
         difficulty: label(q.difficulty),
         note: prose(q.note),
         weakness: prose(q.weakness),
+        passive: passive
+          ? {
+              id: label(passive.id),
+              name: label(passive.name),
+              description: prose(passive.description),
+            }
+          : undefined,
         overrides: dictionary(q.overrides, amount),
         resources: dictionary(q.resources, (v) => {
           const a = exactRecord(v, ['initial', 'cap']);
@@ -355,6 +375,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
   );
   const skills = unique(r.skills, 48, skill, byID),
     buffs = unique(r.buffs, 46, buff, byID);
+  if (schema === 16 && buffs.some((b) => !b.category)) invalidResponse('effect classification');
   const harnesses = unique(
     r.harnesses,
     8,
@@ -488,22 +509,50 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
   };
 }
 export function likesCatalog(value: unknown): LikesCatalog {
-  const r = exactRecord(value, [
-    'rules_version',
-    'design_version',
-    'schema_version',
-    'content_hash',
-    'modes',
-  ]);
+  const r = exactRecord(
+    value,
+    ['rules_version', 'design_version', 'schema_version', 'content_hash', 'modes'],
+    ['compatible_modes'],
+  );
   safeInteger(r.rules_version, 1, 1, 'catalog rules');
-  enumValue(r.design_version, ['0.17.0'], 'catalog design');
-  safeInteger(r.schema_version, 15, 15, 'catalog schema');
+  enumValue(r.design_version, ['0.17.0', '0.18.0'], 'catalog design');
+  safeInteger(r.schema_version, 15, 16, 'catalog schema');
   const modes = exactRecord(r.modes, ['quick', 'standard']);
   return {
     contentHash: hashValue(r.content_hash),
+    compatibleModes:
+      r.compatible_modes === undefined
+        ? []
+        : unique(
+            r.compatible_modes,
+            2,
+            (value) => {
+              const snapshot = exactRecord(value, [
+                'rules_version',
+                'design_version',
+                'schema_version',
+                'content_hash',
+                'config',
+              ]);
+              const config = snapshot.config as Record<string, unknown>;
+              const mode = enumValue(config?.mode, ['quick', 'standard'], 'compatible mode');
+              return modeCatalog(value, mode);
+            },
+            (c) => c.contentHash,
+          ),
     modes: {
       quick: modeCatalog(modes.quick, 'quick'),
       standard: modeCatalog(modes.standard, 'standard'),
     },
   };
+}
+
+export function matchingCatalog(
+  catalog: LikesCatalog,
+  mode: string,
+  hash: string,
+): ModeCatalog | undefined {
+  return [...Object.values(catalog.modes), ...catalog.compatibleModes].find(
+    (c) => c.mode === mode && c.contentHash === hash,
+  );
 }

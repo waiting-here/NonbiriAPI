@@ -166,9 +166,11 @@ func (e *Engine) quote(prepared *State, seat int, plan Plan) (PlanPreview, error
 	for i := range result.Actions {
 		a := &result.Actions[i]
 		v := &a.Preview
-		basis, _ := e.basis(&scores, seat, e.skills[a.Choice.SkillID], v.Effect, v.TemplateID)
+		character := e.characterBonus(&scores, seat, e.skills[a.Choice.SkillID], v.Effect, a.Main, stepLikes(&scores, "main", 0))
+		basis, bonus := e.basis(&scores, seat, e.skills[a.Choice.SkillID], v.Effect, v.TemplateID, character)
+		v.BaseLikeBonus = bonus
 		v.BaseLikes, v.IntrinsicLikes = basis.Intrinsic+v.ConditionalLikes, basis.Intrinsic
-		v.Likes = e.score(&scores, seat, e.skills[a.Choice.SkillID], v.Effect, v.TemplateID, v.ConditionalLikes, false, 0).Final
+		v.Likes = e.score(&scores, seat, e.skills[a.Choice.SkillID], v.Effect, v.TemplateID, v.ConditionalLikes, false, 0, character).Final
 		if !a.Cancelled && !slices.Contains(v.Shortages, "token") {
 			consumeDecay(&scores.Players[seat], a.Choice.SkillID, v.TemplateID, v.Effect)
 			consumeDegradation(&scores, seat)

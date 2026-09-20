@@ -28,10 +28,10 @@ export function catalogFixture() {
         mode,
         {
           rules_version: 1,
-          design_version: '0.17.0',
-          schema_version: 15,
+          design_version: '0.18.0',
+          schema_version: 16,
           content_hash: createHash('sha256')
-            .update('likes@1;positive-energy-overload;separate-round-start\n' + source)
+            .update('likes@2;step-likes;role-passives;layer-resistance;stable-sota\n' + source)
             .digest('hex'),
           config,
         },
@@ -40,8 +40,8 @@ export function catalogFixture() {
   );
   return {
     rules_version: 1,
-    design_version: '0.17.0',
-    schema_version: 15,
+    design_version: '0.18.0',
+    schema_version: 16,
     content_hash: 'a'.repeat(64),
     modes,
   };

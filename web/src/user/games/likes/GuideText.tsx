@@ -2,6 +2,7 @@ import type { ModeCatalog } from './catalog';
 import type { GuideLevel } from './knowledge';
 import { entryTitle, knowledge } from './knowledge';
 import { useDuelText } from '../common/duel/copy';
+import { effectCategory } from './characterPassives';
 
 export function GuideText({
   text,
@@ -45,9 +46,10 @@ export function EffectSummary({
   readonly harness?: string | null;
 }) {
   const t = useDuelText();
-  const text = knowledge(catalog, id, level, t).summary.replace(
-    /\[\[([^\]]+)\]\]/g,
-    (_, ref: string) => entryTitle(catalog, ref, t),
+  const entry = knowledge(catalog, id, level, t);
+  const buff = catalog.buffs.find((b) => b.id === id);
+  const text = entry.summary.replace(/\[\[([^\]]+)\]\]/g, (_, ref: string) =>
+    entryTitle(catalog, ref, t),
   );
   const skill = catalog.skills.find((s) => s.id === id);
   const strength = catalog.harnesses
@@ -60,12 +62,14 @@ export function EffectSummary({
       : 0;
   return (
     <span className="likes-effect-summary">
+      {buff && <strong className="likes-effect-category">{effectCategory(buff, t)} · </strong>}
       {text}
       {bonus > 0 && (
         <span className="likes-base-bonus">
           {t(` 当前 Harness 基础加成 +${bonus} 赞。`, ` Current harness adds ${bonus} base likes.`)}
         </span>
       )}
+      {entry.meme && <q className="likes-inline-flavor">{entry.meme}</q>}
     </span>
   );
 }

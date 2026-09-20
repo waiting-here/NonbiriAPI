@@ -20,6 +20,7 @@ describe.each(['quick', 'standard'] as const)('%s player explanations', (mode) =
       ...catalog.buffs,
       ...catalog.harnesses,
       ...catalog.passives,
+      ...catalog.roles.flatMap((role) => (role.passive ? [role.passive] : [])),
     ];
     for (const item of entries)
       for (const level of guideLevels) {

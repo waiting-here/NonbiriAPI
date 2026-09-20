@@ -46,7 +46,11 @@ func (s *Service) scanQueue(row scanner) (queueRecord, error) {
 	if loadout.Valid {
 		q.Loadout = json.RawMessage(loadout.String)
 	}
-	if _, err := s.rules.Loadout(q.Mode, q.Loadout); err != nil {
+	q.rules, err = s.rulesFor(q.Mode, q.Terms.ContentHash)
+	if err != nil {
+		return q, err
+	}
+	if _, err := q.rules.Loadout(q.Mode, q.Loadout); err != nil {
 		return q, ErrInvariant
 	}
 	return q, nil
@@ -102,11 +106,15 @@ func (s *Service) scanSession(row scanner) (sessionRecord, error) {
 	} else if len(v.Payload.RoundStartEvents) != 0 && string(v.Payload.RoundStartEvents) != "null" {
 		return v, ErrInvariant
 	}
-	info, err := s.rules.Inspect(v.Mode, v.Payload.Rules)
+	v.rules, err = s.rulesFor(v.Mode, v.Terms.ContentHash)
+	if err != nil {
+		return v, err
+	}
+	info, err := v.rules.Inspect(v.Mode, v.Payload.Rules)
 	if err != nil || info.Round != v.Round {
 		return v, ErrInvariant
 	}
-	if _, err := s.rules.Inspect(v.Mode, v.Initial); err != nil {
+	if _, err := v.rules.Inspect(v.Mode, v.Initial); err != nil {
 		return v, ErrInvariant
 	}
 	hold, err := db.DecodeU128(remaining)

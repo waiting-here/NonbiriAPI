@@ -80,9 +80,10 @@ type fixture struct {
 	loadouts [2]json.RawMessage
 	admin    *adminAuthorization
 	audit    func(duel.AdminAudit)
+	options  duel.Options
 }
 
-func newFixture(t *testing.T, kind string) *fixture {
+func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 	t.Helper()
 	f := &fixture{t: t, ctx: context.Background(), admin: &adminAuthorization{}}
 	f.clock.Store(100)
@@ -107,6 +108,9 @@ func newFixture(t *testing.T, kind string) *fixture {
 		f.rules, err = likes.NewRules()
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(override) == 1 {
+			f.rules = override[0]
 		}
 		f.mode = "quick"
 		e, _ := likeengine.New(f.mode)
@@ -181,11 +185,12 @@ func newFixture(t *testing.T, kind string) *fixture {
 		t.Fatal(err)
 	}
 	registry := maintenance.NewRegistry()
-	f.s, err = duel.New(duel.Options{Database: f.db, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
+	f.options = duel.Options{Database: f.db, Descriptor: descriptor, Rules: f.rules, Finance: finance.Duel, UserAuthorizer: deps{}, AdminAuthorizer: f.admin, AdminAudit: func(a duel.AdminAudit) {
 		if f.audit != nil {
 			f.audit(a)
 		}
-	}, Continuation: registryAuthorizer{registry}, Limiter: limiter, Pools: deps{}, Publisher: deps{}, Keys: deps{}, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }})
+	}, Continuation: registryAuthorizer{registry}, Limiter: limiter, Pools: deps{}, Publisher: deps{}, Keys: deps{}, Now: func() time.Time { return time.Unix(f.clock.Load(), 0) }}
+	f.s, err = duel.New(f.options)
 	if err != nil {
 		t.Fatal(err)
 	}

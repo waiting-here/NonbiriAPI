@@ -6,6 +6,7 @@ import type { JSONValue } from './value';
 import { buffName, reasonName, resourceName, shopName, skillName, stageName } from './labels';
 import { FrameChanges } from './Arena';
 import { PlanSummary } from './PlanEditor';
+import { characterPassive } from './characterPassives';
 
 function EventData({
   data,
@@ -15,6 +16,10 @@ function EventData({
   readonly catalog: ModeCatalog;
 }) {
   const t = useDuelText();
+  const passiveName = (id: string) => {
+    const role = catalog.roles.find((r) => r.passive?.id === id);
+    return role ? (characterPassive(role, t)?.name ?? id) : id;
+  };
   const labels: Record<string, string> = {
     skillId: t('技能', 'Skill'),
     derived: t('连答', 'Follow-up'),
@@ -64,30 +69,53 @@ function EventData({
     shortage: t('过载原因', 'Overload cause'),
     payment: t('支付方式', 'Payment'),
     resources: t('相关资源', 'Affected resources'),
+    characterPassive: t('角色被动', 'Character passive'),
+    applications: t('施加结果', 'Applications'),
+    step: t('结算步', 'Resolution step'),
+    kind: t('类型', 'Kind'),
+    index: t('序号（从零开始）', 'Index (zero based)'),
+    rules_version: t('规则版本', 'Rule version'),
+    source: t('施放席位', 'Source seat'),
+    skill_id: t('技能', 'Skill'),
+    buff_id: t('效果', 'Effect'),
+    layer: t('尝试层', 'Attempted layer'),
+    resist: t('抵抗', 'Resistance'),
+    resisted: t('抵抗层数', 'Resisted layers'),
+    numerator: t('成功区间', 'Successful values'),
+    denominator: t('候选数量', 'Candidate count'),
+    draw: t('随机抽样序号；空表示必中', 'Draw ordinal; empty means guaranteed'),
   };
   const render = (value: JSONValue, key: string): string => {
     if (value === null) return '—';
     if (typeof value === 'boolean') return value ? t('是', 'Yes') : t('否', 'No');
     if (typeof value === 'number') return String(value);
     if (typeof value === 'string')
-      return key === 'skillId' || key === 'templateId' || key === 'template'
-        ? skillName(catalog, value)
-        : key === 'buffId'
-          ? buffName(catalog, value)
-          : key === 'reason'
-            ? reasonName(value, t)
-            : key === 'item'
-              ? shopName(value, t)
-              : key === 'resource'
-                ? resourceName(value, t)
-                : key === 'payment'
-                  ? ({
-                      energy: t('共享电能不足', 'Shared energy shortage'),
-                      api: t('API 余量不足', 'API reserve shortage'),
-                      sub: t('订阅额度不足', 'Subscription shortage'),
-                      mix: t('Token 不足', 'Token shortage'),
-                    }[value] ?? value)
-                  : value;
+      return key === 'characterPassive'
+        ? passiveName(value)
+        : key === 'kind' && ['main', 'extra', 'flash'].includes(value)
+          ? ({
+              main: t('主技能', 'Main skill'),
+              extra: t('额外技能', 'Extra skill'),
+              flash: t('Flash 连答', 'Flash follow-up'),
+            }[value] ?? value)
+          : key === 'skillId' || key === 'skill_id' || key === 'templateId' || key === 'template'
+            ? skillName(catalog, value)
+            : key === 'buffId' || key === 'buff_id'
+              ? buffName(catalog, value)
+              : key === 'reason'
+                ? reasonName(value, t)
+                : key === 'item'
+                  ? shopName(value, t)
+                  : key === 'resource'
+                    ? resourceName(value, t)
+                    : key === 'payment'
+                      ? ({
+                          energy: t('共享电能不足', 'Shared energy shortage'),
+                          api: t('API 余量不足', 'API reserve shortage'),
+                          sub: t('订阅额度不足', 'Subscription shortage'),
+                          mix: t('Token 不足', 'Token shortage'),
+                        }[value] ?? value)
+                      : value;
     if (Array.isArray(value)) return value.map((v) => render(v, key)).join(' / ');
     return Object.entries(value)
       .map(([k, v]) => `${labels[k] ?? k}: ${render(v, k)}`)
@@ -142,6 +170,7 @@ function EventLine({
     conversion: t('缓存转换', 'Cache conversion'),
     'combo-skip': t('连答未施放', 'Follow-up skipped'),
     effect: t('Buff获得', 'Buff applied'),
+    'effect-attempt': t('减益命中与抵抗', 'Debuff hit and resistance'),
     persist: t('持久缓存', 'Persistent cache'),
     mode: t('模式变化', 'Mode change'),
     end: t('终局', 'Game ended'),
@@ -168,8 +197,12 @@ function EventLine({
           </p>
           {event.score.parts.map((part, index) => (
             <p key={index}>
-              {part.buff_id ? buffName(catalog, part.buff_id) : part.key}:{' '}
-              {part.amount >= 0 ? '+' : ''}
+              {part.buff_id
+                ? buffName(catalog, part.buff_id)
+                : part.key === 'character'
+                  ? t('角色被动', 'Character passive')
+                  : part.key}
+              : {part.amount >= 0 ? '+' : ''}
               {part.amount}
             </p>
           ))}

@@ -96,7 +96,7 @@ for (const mobile of [false, true])
       if (step.value) await target.selectOption(step.value);
       else await target.click();
     }
-    await expect(dialog.locator('.likes-tutorial-tip h3')).toContainText('66–64');
+    await expect(dialog.locator('.likes-tutorial-tip h3')).toContainText('66–61');
     expect(await page.evaluate((key) => localStorage.getItem(key), tutorialStorageKey)).toBe(
       'completed',
     );

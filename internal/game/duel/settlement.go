@@ -15,7 +15,7 @@ import (
 )
 
 func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
-	info, err := s.rules.Inspect(v.Mode, v.Payload.Rules)
+	info, err := v.rules.Inspect(v.Mode, v.Payload.Rules)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
 		if required {
 			continue
 		}
-		action, err := s.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+		action, err := v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
 		if err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 	}
 	actions := [2]json.RawMessage{v.Seats[0].Action, v.Seats[1].Action}
 	var next Transition
-	if rules, ok := s.rules.(interface {
+	if rules, ok := v.rules.(interface {
 		ResolveWithRandom(string, json.RawMessage, [2]json.RawMessage, func(int) (int, error)) (Transition, error)
 	}); ok && secret != nil {
 		stream, streamErr := secret.Stream("round/" + strconv.Itoa(v.Round))
@@ -97,7 +97,7 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 			return int(value), err
 		})
 	} else {
-		next, err = s.rules.Resolve(v.Mode, v.Payload.Rules, actions)
+		next, err = v.rules.Resolve(v.Mode, v.Payload.Rules, actions)
 	}
 	if err != nil {
 		return activities.PublishFacts{}, err
@@ -129,7 +129,7 @@ func (s *Service) resolve(ctx context.Context, tx *sql.Tx, v *sessionRecord, exp
 	if err := s.enterPhase(v, now, true); err != nil {
 		return activities.PublishFacts{}, err
 	}
-	info, err := s.rules.Inspect(v.Mode, v.Payload.Rules)
+	info, err := v.rules.Inspect(v.Mode, v.Payload.Rules)
 	if err != nil {
 		return activities.PublishFacts{}, err
 	}
@@ -159,7 +159,7 @@ func (s *Service) advance(ctx context.Context, tx *sql.Tx, v *sessionRecord, now
 		return activities.PublishFacts{}, false, err
 	}
 	if v.Phase == "settlement" {
-		state, events, err := s.rules.Begin(v.Mode, v.Payload.Rules)
+		state, events, err := v.rules.Begin(v.Mode, v.Payload.Rules)
 		if err != nil {
 			return activities.PublishFacts{}, false, err
 		}
@@ -179,7 +179,7 @@ func (s *Service) advance(ctx context.Context, tx *sql.Tx, v *sessionRecord, now
 		if v.Seats[seat].Locked {
 			continue
 		}
-		action, err := s.rules.Automatic(v.Mode, v.Payload.Rules, seat)
+		action, err := v.rules.Automatic(v.Mode, v.Payload.Rules, seat)
 		if err != nil {
 			return activities.PublishFacts{}, false, err
 		}
@@ -199,7 +199,7 @@ func (s *Service) terminal(ctx context.Context, tx *sql.Tx, v *sessionRecord, ex
 	if err != nil {
 		return activities.PublishFacts{}, err
 	}
-	info, err := s.rules.Inspect(v.Mode, v.Payload.Rules)
+	info, err := v.rules.Inspect(v.Mode, v.Payload.Rules)
 	if err != nil {
 		return activities.PublishFacts{}, err
 	}

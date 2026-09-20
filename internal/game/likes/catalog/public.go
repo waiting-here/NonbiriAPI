@@ -13,7 +13,20 @@ type Snapshot struct {
 }
 
 func Public(mode string) (Snapshot, error) {
-	c, hash, err := Load(mode)
+	return public(mode, false)
+}
+
+func PublicLegacy(mode string) (Snapshot, error) {
+	return public(mode, true)
+}
+
+func public(mode string, legacy bool) (Snapshot, error) {
+	load := Load
+	design := DesignVersion
+	if legacy {
+		load, design = LoadLegacy, "0.17.0"
+	}
+	c, hash, err := load(mode)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -28,5 +41,5 @@ func Public(mode string) (Snapshot, error) {
 			c.Buffs[i].Target = "自身；共享电能不足时仅本轮报价大于零的席位过载"
 		}
 	}
-	return Snapshot{RulesVersion: RulesVersion, DesignVersion: DesignVersion, SchemaVersion: SchemaVersion, ContentHash: hash, Config: c}, nil
+	return Snapshot{RulesVersion: RulesVersion, DesignVersion: design, SchemaVersion: c.SchemaVersion, ContentHash: hash, Config: c}, nil
 }

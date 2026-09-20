@@ -13,7 +13,7 @@ func projectQueue(q queueRecord) *Queue {
 	return &Queue{ID: q.ID, Revision: q.Revision.Decimal(), Mode: q.Mode, Deadline: q.Deadline, Ticket: q.Terms.Ticket, Payment: game.PaymentFromMilli(q.Ticket, q.GamePaid), TermsHash: q.TermsHash, RulesVersion: 1, Loadout: q.Loadout}
 }
 func (s *Service) projectState(v sessionRecord, seat int, now int64) (*State, error) {
-	view, err := s.rules.View(v.Mode, v.Payload.Rules, seat, v.State == "terminal", v.Seats[seat].Action)
+	view, err := v.rules.View(v.Mode, v.Payload.Rules, seat, v.State == "terminal", v.Seats[seat].Action)
 	if err != nil {
 		return nil, err
 	}
@@ -40,11 +40,11 @@ func (s *Service) projectResult(v sessionRecord, seat int) (*ResultSummary, erro
 	} else {
 		refund = game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid)
 	}
-	view, err := s.rules.View(v.Mode, v.Payload.Rules, seat, true, nil)
+	view, err := v.rules.View(v.Mode, v.Payload.Rules, seat, true, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &ResultSummary{ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, TerminalAt: *v.TerminalAt, Outcome: outcome, Reason: v.Reason, Scores: v.Scores, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), OwnRefund: refund, PrizeGeneral: prize, Rake: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}, Resolution: v.Payload.Resolution, You: seat, View: view}, nil
+	return &ResultSummary{ContentHash: v.Terms.ContentHash, ID: v.ID, Game: s.rules.ID(), Mode: v.Mode, TerminalAt: *v.TerminalAt, Outcome: outcome, Reason: v.Reason, Scores: v.Scores, OwnPayment: game.PaymentFromMilli(v.Ticket, v.Seats[seat].GamePaid), OwnRefund: refund, PrizeGeneral: prize, Rake: RakeAmounts{Platform: game.FormatAmount(v.Platform), Welfare: game.FormatAmount(v.Welfare), Thursday: game.FormatAmount(v.Thursday)}, Resolution: v.Payload.Resolution, You: seat, View: view}, nil
 }
 func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	tx, now, err := s.begin(ctx)
