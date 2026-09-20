@@ -210,6 +210,7 @@ function UserAuthority({
         </dl>
       </Card>
       <LoanHistory role={role} account={account} userID={user.id} />
+      <PenaltyHistory role={role} account={account} userID={user.id} />
       {editable ? (
         <>
           <Card>
@@ -769,3 +770,4 @@ export function UserManagement({
   );
 }
 import { LoanHistory } from './LoanDetails';
+import { PenaltyHistory } from './PenaltyHistory';

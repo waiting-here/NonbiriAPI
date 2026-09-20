@@ -74,6 +74,7 @@ type UserLogRow interface {
 }
 
 type UserSelfLogRow struct {
+	RejectionFields
 	ID                string       `json:"id"`
 	RouteKind         RouteKind    `json:"route_kind"`
 	CallerResultClass *ResultClass `json:"caller_result_class"`
@@ -89,6 +90,7 @@ type UserSelfLogRow struct {
 func (UserSelfLogRow) userLogRow() {}
 
 type UserCharityLogRow struct {
+	RejectionFields
 	ID                string       `json:"id"`
 	RouteKind         RouteKind    `json:"route_kind"`
 	CallerResultClass *ResultClass `json:"caller_result_class"`
@@ -142,6 +144,7 @@ func (UserSelfLogDetail) userLogDetail()    {}
 func (UserCharityLogDetail) userLogDetail() {}
 
 type AdminLogRow struct {
+	RejectionFields
 	ID                string          `json:"id"`
 	RouteKind         RouteKind       `json:"route_kind"`
 	CallerResultClass *ResultClass    `json:"caller_result_class"`
@@ -179,6 +182,7 @@ type AdminLogDetail struct {
 // Management projections expose the same facts to administrators and stewards.
 // Separate DTOs retain explicit role boundaries and independently bound cursors.
 type StewardLogRow struct {
+	RejectionFields
 	ID                string          `json:"id"`
 	RouteKind         RouteKind       `json:"route_kind"`
 	CallerResultClass *ResultClass    `json:"caller_result_class"`
@@ -219,6 +223,7 @@ type StewardLogDetail struct {
 }
 
 type ListFilter struct {
+	Phase           string
 	UserID          *int64
 	EndpointBaseURL *string
 	UpstreamModel   *string

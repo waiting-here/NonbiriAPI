@@ -22,6 +22,11 @@ const usage = {
 const row = {
   id: requestID,
   route_kind: 'openai_chat_completions',
+  phase: 'handler' as const,
+  rejection_stage: null,
+  rejection_reason: null,
+  request_method: null,
+  request_path: null,
   caller_result_class: 'success',
   caller_status: 200,
   caller_error_code: null,
@@ -35,6 +40,11 @@ const row = {
 const adminRow = {
   id: row.id,
   route_kind: row.route_kind,
+  phase: 'handler' as const,
+  rejection_stage: null,
+  rejection_reason: null,
+  request_method: null,
+  request_path: null,
   caller_result_class: row.caller_result_class,
   caller_status: row.caller_status,
   caller_error_code: row.caller_error_code,
@@ -107,6 +117,23 @@ afterEach(() => {
 });
 
 describe('numbered log wire', () => {
+  it.each(['user', 'admin', 'steward'] as const)(
+    'sends the selected phase for %s numbered pages',
+    async (role) => {
+      const root = role === 'admin' ? '/admin/api' : role === 'steward' ? '/api/steward' : '/api';
+      const fetchMock = installJsonFetchFixtures([
+        {
+          method: 'GET',
+          path: `${root}/logs?phase=pre_handler&page=1&page_size=20`,
+          body: list([], pagination('1', 20, 0)),
+        },
+      ]);
+      expect((await getRoleLogsPage(role, '1', 20, { phase: 'pre_handler' })).data).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await expect(getRoleLogsPage(role, '1', 20, { phase: 'unknown' as never })).rejects.toThrow();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
   it('normalizes a page and keeps the legacy cursor field null', () => {
     expect(normalizeRoleLogPage(list(), 'user', '1', 20)).toMatchObject({
       data: [row],
@@ -134,6 +161,11 @@ describe('numbered log wire', () => {
     const charityRow = {
       id: row.id,
       route_kind: 'charity_chat_completions',
+      phase: 'handler' as const,
+      rejection_stage: null,
+      rejection_reason: null,
+      request_method: null,
+      request_path: null,
       caller_result_class: row.caller_result_class,
       caller_status: row.caller_status,
       caller_error_code: row.caller_error_code,

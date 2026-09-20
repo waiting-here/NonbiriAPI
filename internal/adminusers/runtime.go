@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -1004,6 +1005,13 @@ WHERE user_id=? AND (key_hash IS NULL OR generation<?)`, now, userID, int64(math
 		if err != nil || keys != 1 {
 			return MutationResult[struct{}]{}, fmt.Errorf("%w: caller key generation", ErrInvariant)
 		}
+	}
+	var replacementEnd *int64
+	if banned && duration != nil {
+		replacementEnd = new(now + *duration)
+	}
+	if err := antiabuse.EndAutomaticTx(ctx, tx, userID, "ban", adminID, now, banned, replacementEnd); err != nil {
+		return MutationResult[struct{}]{}, classifyDatabaseError("record automatic ban disposition", err)
 	}
 	if err := idempotency.Complete(ctx, tx, decision, http.StatusNoContent, []byte{}); err != nil {
 		return MutationResult[struct{}]{}, classifyDatabaseError("complete ban mutation", err)

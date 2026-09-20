@@ -25,6 +25,11 @@ const usage = {
 const commonRow = {
   id: `req_${'A'.repeat(22)}`,
   route_kind: 'openai_chat_completions',
+  phase: 'handler' as const,
+  rejection_stage: null,
+  rejection_reason: null,
+  request_method: null,
+  request_path: null,
   caller_result_class: 'success',
   caller_status: 200,
   caller_error_code: null,
@@ -74,6 +79,37 @@ const attempt = {
 };
 
 describe('role log wire', () => {
+  it('rejects inconsistent pre-handler accounting and validates every role', () => {
+    const refusal = {
+      ...commonRow,
+      phase: 'pre_handler',
+      rejection_stage: 'preflight',
+      rejection_reason: 'invalid_request',
+      request_method: 'POST',
+      request_path: '/v1/chat/completions',
+      caller_result_class: 'failed',
+      caller_status: 400,
+      caller_error_code: 'invalid_request',
+      attempt_count: '0',
+    };
+    expect(normalizeUserLogRow({ ...refusal, model: '' }).phase).toBe('pre_handler');
+    for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
+      const managed = { ...refusal, user_id: '1', caller_identity: null };
+      expect(normalize(managed).phase).toBe('pre_handler');
+      for (const patch of [
+        { attempt_count: '1' },
+        { usage: { ...usage, charge: '1' } },
+        { rejection_reason: 'raw_secret' },
+        { request_path: '/unknown' },
+        { request_method: 'GET' },
+        { phase: 'handler' },
+      ])
+        expect(() => normalize({ ...managed, ...patch })).toThrow();
+    }
+    expect(roleLogExportPath('user', { phase: 'pre_handler', model: 'm' }, 'json')).toBe(
+      '/api/logs/export.json?phase=pre_handler&model=m',
+    );
+  });
   it.each(['openai_embeddings', 'charity_embeddings'] as const)(
     'keeps the ownership and privacy projection for %s',
     (route) => {
@@ -152,6 +188,11 @@ describe('role log wire', () => {
     expect(() =>
       normalizeAdminLogRow({
         ...row,
+        phase: 'handler' as const,
+        rejection_stage: null,
+        rejection_reason: null,
+        request_method: null,
+        request_path: null,
         caller_result_class: 'cancelled',
         caller_status: null,
         completed_at: null,

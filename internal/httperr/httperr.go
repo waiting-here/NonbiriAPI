@@ -236,6 +236,23 @@ func writeError(w http.ResponseWriter, e Error, statusOverride *int, allowUpstre
 	if e.Code == CodeUpstream && statusOverride != nil && validUpstreamStatusOverride(*statusOverride) {
 		status = *statusOverride
 	}
+	// Authenticated ingress may require a durable rejection before emitting
+	// its result. Walk wrappers without coupling this shared sink to a domain.
+	for target := w; target != nil; {
+		if recorder, ok := target.(interface{ BeforeHTTPError(int, string) error }); ok {
+			if err := recorder.BeforeHTTPError(status, e.Code); err != nil {
+				e = sanitizeError(New(CodeServiceUnavailable, "service unavailable"), false)
+				status = http.StatusServiceUnavailable
+				w.Header().Del("Retry-After")
+			}
+			break
+		}
+		if wrapper, ok := target.(interface{ Unwrap() http.ResponseWriter }); ok {
+			target = wrapper.Unwrap()
+		} else {
+			break
+		}
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)

@@ -114,7 +114,7 @@ func TestLogRouteRegistrationClosedSetsAndFailures(t *testing.T) {
 	if err := RegisterUserRoutes(user, fixture.repo); err != nil {
 		t.Fatalf("RegisterUserRoutes: %v", err)
 	}
-	wantUser := []string{"GET /api/logs", "GET /api/logs/{id}"}
+	wantUser := []string{"GET /api/logs", "GET /api/logs/export.csv", "GET /api/logs/export.json", "GET /api/logs/{id}"}
 	if len(user.handlers) != len(wantUser) {
 		t.Fatalf("user route count = %d", len(user.handlers))
 	}

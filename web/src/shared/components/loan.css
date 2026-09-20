@@ -65,3 +65,9 @@
 .loan-card select {
   max-width: 100%;
 }
+.penalty-reference {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}

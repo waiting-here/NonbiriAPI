@@ -45,6 +45,11 @@ export interface CallerIdentity {
 }
 
 interface LogRowCommon {
+  phase: 'handler' | 'pre_handler';
+  rejection_stage: 'authorization' | 'flow' | 'preflight' | null;
+  rejection_reason: string | null;
+  request_method: 'GET' | 'POST' | null;
+  request_path: '/v1/models' | '/v1/chat/completions' | '/v1/embeddings' | null;
   id: string;
   route_kind: LogRouteKind;
   caller_result_class: LogResultClass | null;
@@ -131,6 +136,7 @@ export interface StewardLogDetail {
 export type RoleLogDetail = UserLogDetail | AdminLogDetail | StewardLogDetail;
 
 export interface LogFiltersValue {
+  phase?: 'handler' | 'pre_handler';
   model?: string;
   user_id?: string;
   endpoint_base_url?: string;
@@ -144,6 +150,11 @@ export interface LogFiltersValue {
 const ROUTE_KINDS = [...MODEL_CALL_ROUTES, 'model_discovery'] as const;
 const RESULT_CLASSES = ['success', 'failed', 'cancelled'] as const;
 const COMMON_ROW_FIELDS = [
+  'phase',
+  'rejection_stage',
+  'rejection_reason',
+  'request_method',
+  'request_path',
   'id',
   'route_kind',
   'caller_result_class',
@@ -200,6 +211,76 @@ export function normalizeLogUsage(value: unknown): LogUsage {
   return result;
 }
 
+function rejection(root: WireRecord) {
+  const phase = oneOf(root.phase, ['handler', 'pre_handler'] as const, 'request phase');
+  if (phase === 'handler') {
+    if (
+      ['rejection_stage', 'rejection_reason', 'request_method', 'request_path'].some(
+        (k) => root[k] !== null,
+      )
+    )
+      invalidResponse('handler rejection');
+    return {
+      phase,
+      rejection_stage: null,
+      rejection_reason: null,
+      request_method: null,
+      request_path: null,
+    };
+  }
+  const stage = oneOf(
+    root.rejection_stage,
+    ['authorization', 'flow', 'preflight'] as const,
+    'rejection stage',
+  );
+  const reason = oneOf(
+    root.rejection_reason,
+    [
+      'unauthorized',
+      'forbidden',
+      'charity_suspended',
+      'feature_disabled',
+      'maintenance',
+      'invalid_request',
+      'not_found',
+      'unbound_model',
+      'insufficient_credits',
+      'user_rpm',
+      'global_rpm',
+      'shared_rpm',
+      'concurrency',
+      'content_too_short',
+      'payload_too_large',
+      'resource_limit_exceeded',
+      'service_unavailable',
+    ] as const,
+    'rejection reason',
+  );
+  const method = oneOf(root.request_method, ['GET', 'POST'] as const, 'request method');
+  const path = oneOf(
+    root.request_path,
+    ['/v1/models', '/v1/chat/completions', '/v1/embeddings'] as const,
+    'request path',
+  );
+  if ((method === 'GET') !== (path === '/v1/models') || root.caller_result_class !== 'failed')
+    invalidResponse('rejected request');
+  const usage = normalizeLogUsage(root.usage);
+  if (
+    usage.charge !== '0' ||
+    usage.total_tokens !== '0' ||
+    usage.usage_unknown ||
+    ('attempt_count' in root && root.attempt_count !== '0')
+  )
+    invalidResponse('rejected request usage');
+  return {
+    phase,
+    rejection_stage: stage,
+    rejection_reason: reason,
+    request_method: method,
+    request_path: path,
+  };
+}
+
 function commonRow(root: WireRecord): LogRowCommon {
   const resultClass =
     root.caller_result_class === null
@@ -241,6 +322,7 @@ function commonRow(root: WireRecord): LogRowCommon {
     invalidResponse('cancelled log result');
   }
   return {
+    ...rejection(root),
     id: opaqueID(root.id, 'req_', 'request log id'),
     route_kind: oneOf(root.route_kind, ROUTE_KINDS, 'log route kind'),
     caller_result_class: resultClass,
@@ -528,11 +610,12 @@ export function useRoleLogDetail(
 }
 
 export function roleLogExportPath(
-  role: Extract<LogRole, 'admin' | 'steward'>,
+  role: LogRole,
   filter: LogFiltersValue,
   format: 'csv' | 'json',
 ): string {
   const managementFilter = { ...filter };
+  if (role === 'user') return queryPath(`/api/logs/export.${format}`, managementFilter);
   delete managementFilter.model;
   const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
   return queryPath(`${root}/export.${format}`, managementFilter);
@@ -544,6 +627,7 @@ export function adminLogExportPath(filter: LogFiltersValue, format: 'csv' | 'jso
 
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
   const result: LogFiltersValue = {};
+  if (raw.phase === 'handler' || raw.phase === 'pre_handler') result.phase = raw.phase;
   const assign = (key: keyof LogFiltersValue, max: number) => {
     const value = raw[key]?.trim();
     if (value) result[key] = Array.from(value).slice(0, max).join('') as never;

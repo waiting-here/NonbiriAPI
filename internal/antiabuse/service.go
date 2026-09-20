@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log/slog"
+	"fmt"
 	"math"
 	"math/big"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 type Retirement interface {
@@ -21,6 +22,7 @@ type Retirement interface {
 }
 type RejectionRecorder interface {
 	RecordCharityRejectionTx(context.Context, *sql.Tx, int64, string, string, int, int, int64) error
+	RecordRejectionTx(context.Context, *sql.Tx, int64, requestattempt.Fact, int64) error
 }
 type ServiceConfig struct {
 	Database            *sql.DB
@@ -31,7 +33,7 @@ type ServiceConfig struct {
 	Now                 func() time.Time
 }
 
-// Service serializes bounded process-local windows with their durable effects.
+// Service serializes bounded durable windows with their transactional effects.
 // Lock order is flow admission, window gate, then SQLite. Failed transactions
 // never consume an event; ordinary account deletion drains admitted calls first.
 type Service struct {
@@ -40,6 +42,8 @@ type Service struct {
 	windows map[windowKey]violationWindow
 	events  int
 	closed  bool
+	cancel  context.CancelFunc
+	done    <-chan struct{}
 }
 type windowKey struct {
 	userID  int64
@@ -47,6 +51,8 @@ type windowKey struct {
 }
 type violationWindow struct {
 	events               []int64
+	facts                []windowEvent
+	next                 int64
 	banDone, suspendDone bool
 }
 
@@ -57,7 +63,15 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	return &Service{config: config, gate: make(chan struct{}, 1), windows: make(map[windowKey]violationWindow)}, nil
+	s := &Service{config: config, gate: make(chan struct{}, 1), windows: make(map[windowKey]violationWindow)}
+	if err := s.restore(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	s.cancel, s.done = cancel, done
+	go func() { defer close(done); s.runCleanup(ctx) }()
+	return s, nil
 }
 
 // RecordShort rechecks the current account and policy in the effects transaction.
@@ -71,13 +85,12 @@ func (s *Service) RecordShort(ctx context.Context, userID int64, model string, a
 
 // RPMDenied records an already classified charity request. The ingress observer
 // must establish its resource scope; downstream or shared-key 429s are not events.
-func (s *Service) RPMDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
+func (s *Service) RPMDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
 	if reason != ratelimit.RPMUserLimit {
-		return
+		return nil
 	}
-	if _, err := s.record(ctx, userID, false, "", 0); err != nil && !errors.Is(err, charityrouting.ErrUnauthorized) && !errors.Is(err, context.Canceled) {
-		slog.Error("automatic rate-limit policy could not be applied", "error", err)
-	}
+	_, err := s.record(ctx, userID, false, "", 0)
+	return err
 }
 
 func (s *Service) record(parent context.Context, userID int64, charity bool, model string, actual int) (*charityrouting.ContentTooShortError, error) {
@@ -122,6 +135,32 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 	if reader.err != nil {
 		return nil, reader.err
 	}
+	requestID, err := requestattempt.Identity(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	// Internal reentry of a committed attempt never repeats its window or
+	// financial effects, including after that attempt revoked the CallerKey.
+	var priorOwner sql.NullInt64
+	var priorCode, priorDiag string
+	err = tx.QueryRowContext(ctx, `SELECT user_id,error_code,error_diag FROM request_logs WHERE logical_request_id=?`, requestID).Scan(&priorOwner, &priorCode, &priorDiag)
+	if err == nil {
+		if !priorOwner.Valid || priorOwner.Int64 != userID {
+			return nil, charityrouting.ErrInvariant
+		}
+		requestattempt.Handled(ctx)
+		if priorCode == "content_too_short" {
+			var measured, minimum int
+			if _, err := fmt.Sscanf(priorDiag, "content has %d characters; minimum is %d", &measured, &minimum); err != nil {
+				return nil, err
+			}
+			return &charityrouting.ContentTooShortError{Actual: measured, Minimum: minimum, RequestID: requestID}, nil
+		}
+		return nil, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	var isAdmin, banned int
 	var until, suspended sql.NullInt64
 	var revision []byte
@@ -143,23 +182,47 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 		if suspended.Valid && suspended.Int64 > now {
 			return nil, charityrouting.ErrCharitySuspended
 		}
-		if actual >= cfg.CharityMinChars {
-			return nil, nil
+	}
+	key := windowKey{userID: userID, charity: charity}
+	windows, eventCount, err := s.cleanupCopy(ctx, tx, now, cfg, key)
+	if err != nil {
+		return nil, err
+	}
+	if charity && actual >= cfg.CharityMinChars || !charity && cfg.RPMBanThreshold == 0 {
+		if err := tx.Commit(); err != nil {
+			return nil, err
 		}
-	} else if cfg.RPMBanThreshold == 0 {
+		s.windows, s.events = windows, eventCount
 		return nil, nil
 	}
-
-	s.cleanup(now, cfg)
-	key := windowKey{userID: userID, charity: charity}
-	old, exists := s.windows[key]
+	old, exists := windows[key]
 	// Per-user capacity reaches every supported threshold; the separate global
 	// event ceiling keeps many busy accounts from multiplying that allocation.
-	if !exists && len(s.windows) >= MaxWindowUsers || len(old.events) >= MaxViolationThreshold || s.events >= MaxWindowUsers*MaxEventsPerUser {
+	if !exists && len(windows) >= MaxWindowUsers || len(old.events) >= MaxViolationThreshold || eventCount >= MaxWindowUsers*MaxEventsPerUser {
+		stage := "flow"
+		if charity {
+			stage = "preflight"
+		}
+		fact := requestattempt.Snapshot(ctx, requestID, model, stage, "resource_limit_exceeded", 422, "resource_limit_exceeded")
+		if err := s.config.Rejections.RecordRejectionTx(ctx, tx, userID, fact, now); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		s.windows, s.events = windows, eventCount
+		requestattempt.Handled(ctx)
 		return nil, charityrouting.ErrResourceLimit
 	}
-	window := violationWindow{events: append(append([]int64(nil), old.events...), now), banDone: old.banDone, suspendDone: old.suspendDone}
+	window := old
+	window.events = append(append([]int64(nil), window.events...), now)
+	event := windowEvent{At: now, RequestID: requestID}
+	if charity {
+		event.Chars = new(actual)
+	}
+	window.facts = append(append([]windowEvent(nil), window.facts...), event)
 	banSeconds, suspendSeconds := int64(0), int64(0)
+	windowBan := false
 	if charity {
 		banSeconds = cfg.CharityViolationBanSeconds
 		count := countEvents(window.events, now, cfg.CharityViolationWindowSeconds)
@@ -169,6 +232,7 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 		if cfg.CharityViolationBanThreshold > 0 && count >= cfg.CharityViolationBanThreshold && !window.banDone && cfg.CharityViolationWindowBanSeconds > 0 {
 			banSeconds = max(banSeconds, cfg.CharityViolationWindowBanSeconds)
 			window.banDone = true
+			windowBan = true
 		}
 		count = countEvents(window.events, now, cfg.CharitySuspendWindowSeconds)
 		if cfg.CharitySuspendThreshold == 0 || count < cfg.CharitySuspendThreshold {
@@ -189,15 +253,13 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 		}
 	}
 	var rejection *charityrouting.ContentTooShortError
+	operationID := ""
 	if charity {
-		requestID, err := db.GenerateOpaqueID("req_")
-		if err != nil {
-			return nil, err
-		}
 		if err := s.config.Rejections.RecordCharityRejectionTx(ctx, tx, userID, requestID, model, actual, cfg.CharityMinChars, now); err != nil {
 			return nil, err
 		}
 		if cfg.CharityViolationDeductMilli > 0 {
+			operationID = "op_" + requestID[4:]
 			wallet, err := ledger.UserAccount(ctx, tx, userID)
 			if err != nil {
 				return nil, err
@@ -206,7 +268,7 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 			if err != nil {
 				return nil, err
 			}
-			plan, err := ledger.NewAntiAbusePenalty(ledger.Meta{OperationID: "op_" + requestID[4:], ActorUserID: userID, CreatedAt: now}, wallet.ID, external.ID, ledger.AmountFromMilli(cfg.CharityViolationDeductMilli), "Short charity request")
+			plan, err := ledger.NewAntiAbusePenalty(ledger.Meta{OperationID: operationID, ActorUserID: userID, CreatedAt: now}, wallet.ID, external.ID, ledger.AmountFromMilli(cfg.CharityViolationDeductMilli), "Short charity request")
 			if err != nil {
 				return nil, err
 			}
@@ -215,6 +277,11 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 			}
 		}
 		rejection = &charityrouting.ContentTooShortError{Actual: actual, Minimum: cfg.CharityMinChars, RequestID: requestID}
+	} else {
+		fact := requestattempt.Snapshot(ctx, requestID, model, "flow", "user_rpm", 429, "rate_limited")
+		if err := s.config.Rejections.RecordRejectionTx(ctx, tx, userID, fact, now); err != nil {
+			return nil, err
+		}
 	}
 	var finalizeDuels func(bool)
 	duelsCommitted := false
@@ -233,12 +300,62 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 			return nil, err
 		}
 	}
+	if err := expireUserTx(ctx, tx, userID, now); err != nil {
+		return nil, err
+	}
+	reason := "charity_rpm"
+	if charity {
+		reason = "charity_short_content"
+	}
+	if operationID != "" {
+		stats := evidenceStatistics{Rule: "short_content_deduction", WindowStart: now, WindowEnd: now, Count: 1, Actual: new(actual), Minimum: new(cfg.CharityMinChars)}
+		if err := recordCase(ctx, tx, userID, now, "deduction", reason, requestID, operationID, now, cfg, stats, []windowEvent{event}); err != nil {
+			return nil, err
+		}
+	}
+	if banSeconds > 0 {
+		stats := evidenceStatistics{Rule: "rpm_window", WindowStart: now - cfg.RPMBanWindowSeconds, WindowEnd: now, Threshold: cfg.RPMBanThreshold}
+		facts := matchingFacts(window, now, cfg.RPMBanWindowSeconds)
+		if charity {
+			stats = evidenceStatistics{Rule: "short_content_direct", WindowStart: now, WindowEnd: now, Actual: new(actual), Minimum: new(cfg.CharityMinChars), DirectSeconds: cfg.CharityViolationBanSeconds}
+			facts = []windowEvent{event}
+			if windowBan {
+				stats.Rule = "short_content_window"
+				stats.WindowStart = now - cfg.CharityViolationWindowSeconds
+				stats.Threshold = cfg.CharityViolationBanThreshold
+				facts = matchingFacts(window, now, cfg.CharityViolationWindowSeconds)
+			}
+		}
+		stats.Count = len(facts)
+		var ends int64
+		if err := tx.QueryRowContext(ctx, `SELECT banned_until FROM users WHERE id=?`, userID).Scan(&ends); err != nil {
+			return nil, err
+		}
+		if err := recordCase(ctx, tx, userID, now, "ban", reason, requestID, "", ends, cfg, stats, facts); err != nil {
+			return nil, err
+		}
+	}
+	if suspendSeconds > 0 {
+		facts := matchingFacts(window, now, cfg.CharitySuspendWindowSeconds)
+		stats := evidenceStatistics{Rule: "short_content_suspend_window", WindowStart: now - cfg.CharitySuspendWindowSeconds, WindowEnd: now, Threshold: cfg.CharitySuspendThreshold, Count: len(facts), Actual: new(actual), Minimum: new(cfg.CharityMinChars)}
+		var ends int64
+		if err := tx.QueryRowContext(ctx, `SELECT charity_suspended_until FROM users WHERE id=?`, userID).Scan(&ends); err != nil {
+			return nil, err
+		}
+		if err := recordCase(ctx, tx, userID, now, "charity_suspend", reason, requestID, "", ends, cfg, stats, facts); err != nil {
+			return nil, err
+		}
+	}
+	if err := persistWindow(ctx, tx, key, &window, now); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	duelsCommitted = true
-	s.events += len(window.events) - len(old.events)
-	s.windows[key] = window
+	windows[key] = window
+	s.windows, s.events = windows, eventCount+1
+	requestattempt.Handled(ctx)
 	<-s.gate
 	locked = false
 	if banSeconds > 0 {
@@ -314,28 +431,6 @@ func countEvents(events []int64, now, duration int64) int {
 	}
 	return count
 }
-func (s *Service) cleanup(now int64, cfg Config) {
-	for key, window := range s.windows {
-		duration := cfg.RPMBanWindowSeconds
-		if key.charity {
-			duration = max(cfg.CharityViolationWindowSeconds, cfg.CharitySuspendWindowSeconds)
-		}
-		kept := window.events[:0]
-		for _, at := range window.events {
-			if at > now-duration {
-				kept = append(kept, at)
-			}
-		}
-		s.events -= len(window.events) - len(kept)
-		clear(window.events[len(kept):])
-		window.events = kept
-		if len(kept) == 0 {
-			delete(s.windows, key)
-		} else {
-			s.windows[key] = window
-		}
-	}
-}
 
 // ForgetUser runs after the caller lifecycle gate and deletion transaction drain.
 func (s *Service) ForgetUser(userID int64) {
@@ -353,6 +448,12 @@ func (s *Service) ForgetUser(userID int64) {
 func (s *Service) Close() error {
 	if s == nil {
 		return nil
+	}
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.done != nil {
+		<-s.done
 	}
 	s.gate <- struct{}{}
 	defer func() { <-s.gate }()

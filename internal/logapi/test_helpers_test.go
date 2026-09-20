@@ -97,7 +97,8 @@ func newLogFixture(t *testing.T) *logFixture {
  started_at INTEGER NOT NULL, completed_at INTEGER, uncached_input_tokens INTEGER NOT NULL,
  cache_write_input_tokens INTEGER NOT NULL, cache_read_input_tokens INTEGER NOT NULL,
  output_tokens INTEGER NOT NULL, usage_unknown INTEGER NOT NULL, attempt_count INTEGER NOT NULL,
- raw_body TEXT, authorization TEXT, cookie TEXT, discord_id TEXT, private_note TEXT, ciphertext TEXT)`,
+ raw_body TEXT, authorization TEXT, cookie TEXT, discord_id TEXT, private_note TEXT, ciphertext TEXT,
+ rejection_stage TEXT,rejection_reason TEXT,request_method TEXT,request_path TEXT)`,
 		`CREATE TABLE request_attempts(
  claim_id TEXT PRIMARY KEY, request_log_id INTEGER NOT NULL, attempt_seq INTEGER NOT NULL,
  endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, canonical_base_url TEXT NOT NULL,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -19,19 +20,34 @@ type callerIdentityContextKey struct{}
 // repeats the same key verification inside a lifecycle lease, and installs
 // only the safe user/generation identity in context. It must wrap flowcontrol.
 type CallerKeyMiddleware struct {
-	resolver  CallerKeyResolver
-	lifecycle *lifecyclegate.Gate
+	resolver   CallerKeyResolver
+	lifecycle  *lifecyclegate.Gate
+	rejections requestattempt.Recorder
 }
 
-func NewCallerKeyMiddleware(resolver CallerKeyResolver, lifecycle *lifecyclegate.Gate) (*CallerKeyMiddleware, error) {
+func NewCallerKeyMiddleware(resolver CallerKeyResolver, lifecycle *lifecyclegate.Gate, record ...requestattempt.Recorder) (*CallerKeyMiddleware, error) {
 	if resolver == nil || lifecycle == nil {
 		return nil, ErrInvalidConfiguration
 	}
-	return &CallerKeyMiddleware{resolver: resolver, lifecycle: lifecycle}, nil
+	if len(record) > 1 {
+		return nil, ErrInvalidConfiguration
+	}
+	var recorder requestattempt.Recorder
+	if len(record) == 1 {
+		recorder = record[0]
+	}
+	return &CallerKeyMiddleware{resolver: resolver, lifecycle: lifecycle, rejections: recorder}, nil
 }
 
 func (middleware *CallerKeyMiddleware) Wrap(next http.Handler) http.Handler {
-	return middleware.wrap(next, exactIngressFailure)
+	return middleware.wrap(next, exactIngressFailure, nil)
+}
+
+// WrapWithUnavailable preserves the site's unavailable response for requests
+// that cannot establish an identity. Valid identities still reach the inner
+// gate, where a durable authenticated refusal can be recorded.
+func (middleware *CallerKeyMiddleware) WrapWithUnavailable(next http.Handler, unavailable func(http.ResponseWriter, *http.Request) bool) http.Handler {
+	return middleware.wrap(next, exactIngressFailure, unavailable)
 }
 
 // WrapExact authenticates an explicitly mounted set of control routes without
@@ -67,30 +83,36 @@ func (middleware *CallerKeyMiddleware) WrapExactMethods(next http.Handler, route
 			return &failure
 		}
 		return nil
-	})
+	}, nil)
 }
 
-func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(string, string, string) *wireFailure) http.Handler {
+func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(string, string, string) *wireFailure, unavailable func(http.ResponseWriter, *http.Request) bool) http.Handler {
 	if next == nil {
 		next = http.NotFoundHandler()
 	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		deny := func(failure wireFailure) {
+			if unavailable != nil && unavailable(writer, request) {
+				return
+			}
+			writeFailure(writer, failure)
+		}
 		writer.Header().Set("Cache-Control", "no-store")
 		if request == nil || request.URL == nil {
-			writeFailure(writer, platformFailure(httperr.CodeNotFound, "not found"))
+			deny(platformFailure(httperr.CodeNotFound, "not found"))
 			return
 		}
 		if failure := checkRoute(request.Method, request.URL.Path, request.URL.EscapedPath()); failure != nil {
-			writeFailure(writer, *failure)
+			deny(*failure)
 			return
 		}
 		if middleware == nil || middleware.resolver == nil || middleware.lifecycle == nil {
-			writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "authentication service unavailable"))
+			deny(platformFailure(httperr.CodeServiceUnavailable, "authentication service unavailable"))
 			return
 		}
 		presented, ok := bearerCallerKey(request)
 		if !ok {
-			writeFailure(writer, platformFailure(httperr.CodeUnauthorized, "authentication required"))
+			deny(platformFailure(httperr.CodeUnauthorized, "authentication required"))
 			return
 		}
 		identity, err := middleware.resolver.ResolveCallerKey(request.Context(), presented)
@@ -99,13 +121,23 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 				return
 			}
 			if errors.Is(err, resources.ErrNotFound) || err == nil {
-				writeFailure(writer, platformFailure(httperr.CodeUnauthorized, "authentication required"))
+				deny(platformFailure(httperr.CodeUnauthorized, "authentication required"))
 			} else {
-				writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "authentication service unavailable"))
+				deny(platformFailure(httperr.CodeServiceUnavailable, "authentication service unavailable"))
 			}
 			return
 		}
 
+		if middleware.rejections != nil && requestattempt.ValidRoute(request.Method, request.URL.Path) {
+			ctx, id, err := requestattempt.New(request.Context(), identity.UserID, request.Method, request.URL.Path)
+			if err != nil {
+				writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "service unavailable"))
+				return
+			}
+			request = request.WithContext(ctx)
+			writer.Header().Set("X-Request-ID", id)
+			writer = requestattempt.Wrap(writer, ctx, middleware.rejections)
+		}
 		leaseContext, release, err := middleware.lifecycle.Admit(
 			request.Context(), identity.UserID, presented,
 			func(ctx context.Context, expectedUserID int64, key string) (bool, error) {
@@ -128,9 +160,9 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 				return
 			}
 			if errors.Is(err, lifecyclegate.ErrInvalid) || errors.Is(err, lifecyclegate.ErrRetiring) {
-				writeFailure(writer, platformFailure(httperr.CodeUnauthorized, "authentication required"))
+				deny(platformFailure(httperr.CodeUnauthorized, "authentication required"))
 			} else {
-				writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "authentication service unavailable"))
+				deny(platformFailure(httperr.CodeServiceUnavailable, "authentication service unavailable"))
 			}
 			return
 		}

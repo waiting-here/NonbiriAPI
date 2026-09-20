@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -320,7 +321,16 @@ func (r *Runtime) redirectForbiddenLogin(w http.ResponseWriter, req *http.Reques
 	clearUserSessionCookie(w, secure)
 	clearElevatedCookie(w, secure)
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	noStoreRedirect(w, req, "/access-denied")
+	target := "/access-denied"
+	var verified *verifiedLoginDenial
+	if errors.As(err, &verified) && len(verified.restrictions) > 0 {
+		// A fragment is display data, not a credential or user lookup key. It
+		// stays out of server requests and is cleared by the receiving page.
+		if body, encodeErr := json.Marshal(verified.restrictions); encodeErr == nil && len(body) <= 4096 {
+			target += "#restrictions=" + base64.RawURLEncoding.EncodeToString(body)
+		}
+	}
+	noStoreRedirect(w, req, target)
 	return true
 }
 

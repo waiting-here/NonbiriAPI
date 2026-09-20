@@ -21,7 +21,7 @@ func TestSharedKeyLimitResponsesDoNotNotifyIngressRPMPolicy(t *testing.T) {
 	denials := 0
 	flow, err := flowcontrol.New(flowcontrol.Config{
 		RPM:      ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 100},
-		OnDenied: func(context.Context, int64, ratelimit.RPMReason) { denials++ },
+		OnDenied: func(context.Context, int64, ratelimit.RPMReason) error { denials++; return nil },
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -13,6 +13,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -59,7 +60,7 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 	if s.accounting == nil || s.acceptance == nil || (input.Route.IsCharity() && s.charity == nil) {
 		return Request{}, ErrDependencyUnavailable
 	}
-	requestID, err := db.GenerateOpaqueID("req_")
+	requestID, err := requestattempt.Identity(ctx, input.UserID)
 	if err != nil {
 		return Request{}, fmt.Errorf("claim: generate request identity: %w", err)
 	}
@@ -138,6 +139,7 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 	if err := tx.Commit(); err != nil {
 		return Request{}, fmt.Errorf("claim: commit request acceptance: %w", err)
 	}
+	requestattempt.Handled(ctx)
 	userID := input.UserID
 	return Request{
 		ID:                    requestID,

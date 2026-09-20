@@ -28,7 +28,14 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   const user = {
     ...Object.fromEntries(
       Object.entries(userSession('user').user).filter(
-        ([key]) => !['avatar', 'effective_level', 'level_display_name'].includes(key),
+        ([key]) =>
+          ![
+            'avatar',
+            'effective_level',
+            'level_display_name',
+            'charity_profile_public',
+            'automatic_restrictions',
+          ].includes(key),
       ),
     ),
     id: '7',
