@@ -240,6 +240,15 @@ export async function patchGameProfile(
 }
 
 const MAX_ACCOUNT_EXPORT_BYTES = 16 * 1024 * 1024;
+export async function patchCharityProfile(isPublic: boolean, operation: OperationIdentity): Promise<UserEnvelope> {
+  const response = await coreRequest('/api/me', {
+    method: 'PATCH', headers: operationHeaders(operation),
+    json: { charity_profile_public: exactBooleanInput(isPublic, 'charity profile visibility') },
+  });
+  expectedStatus(response.status, 200, 'profile update');
+  return normalizeUserEnvelope(response.payload);
+}
+
 const ACCOUNT_EXPORT_KEYS = [
   'schema_version',
   'generated_at',

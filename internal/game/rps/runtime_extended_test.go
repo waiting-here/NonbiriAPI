@@ -1050,7 +1050,7 @@ VALUES(?,0,1,?)`, publicUser, fixture.clock.Load()); err != nil {
 		t.Fatal(err)
 	}
 	activeBan, err := fixture.service.Leaderboard(context.Background(), privateUser, game.RPSModeQuick, "profit_rate")
-	if err != nil || len(activeBan.Rows) != 1 || activeBan.Rows[0].Identity.Kind != "anonymous" {
+	if err != nil || len(activeBan.Rows) != 2 || activeBan.Rows[0].Identity.Kind != "anonymous" || activeBan.Rows[0].Identity.AvatarURL != nil {
 		t.Fatalf("active temporary ban projection=(%+v,%v)", activeBan, err)
 	}
 	if _, err := fixture.database.Exec(`UPDATE users SET is_banned=0,banned_until=NULL WHERE id=?`, publicUser); err != nil {

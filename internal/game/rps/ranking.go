@@ -229,15 +229,14 @@ a.net_profit_achieved_at ASC,a.net_public_tie_key ASC`
 	rows, err := tx.QueryContext(ctx, `WITH ranked AS (
 SELECT a.user_id,a.session_count,a.profitable_count,a.net_profit_sign,a.net_profit_mag,a.profit_rate_bp,
 ROW_NUMBER() OVER(ORDER BY `+order+`) AS rank,
-COALESCE(p.game_profile_public,u.game_profile_public) AS game_profile_public,
+CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,
 u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM game_rps_rank_aggregates a JOIN users u ON u.id=a.user_id
 LEFT JOIN game_user_preferences p ON p.user_id=u.id
-WHERE a.mode=? AND a.eligible=1 AND u.is_admin=0
-AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?)))
+WHERE a.mode=? AND a.eligible=1 AND u.is_admin=0)
 SELECT user_id,session_count,profitable_count,net_profit_sign,net_profit_mag,profit_rate_bp,rank,
 game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url
-FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, mode, queryNow, userID)
+FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, queryNow, mode, userID)
 	if err != nil {
 		return Leaderboard{}, classifyDB(err)
 	}

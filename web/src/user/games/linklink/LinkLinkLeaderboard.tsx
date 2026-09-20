@@ -71,7 +71,7 @@ export function LinkLinkLeaderboard({
                   <td>
                     {row.identity.kind === 'public'
                       ? row.identity.displayName
-                      : text('fishing.leaderboard.anonymous')}
+                      : text('linklink.leaderboard.anonymous')}
                     {row.isMe ? ` · ${text('fishing.leaderboard.me')}` : ''}
                   </td>
                   <td>{formatCredits(row.score)}</td>

@@ -104,9 +104,8 @@ WITH candidates AS (
 	FROM candidates c JOIN users u ON u.id=c.user_id
 	JOIN game_user_preferences p ON p.user_id=c.user_id
 	WHERE c.personal_rank=1 AND u.is_admin=0
-		AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?))
 )
-SELECT r.user_id,r.score,r.terminal_at,r.rank,COALESCE(p.game_profile_public,u.game_profile_public),
+SELECT r.user_id,r.score,r.terminal_at,r.rank,CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END,
 	u.username,u.guild_nick,COALESCE(u.discord_id,''),u.avatar,u.guild_avatar_url
 FROM ranked r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences p ON p.user_id=r.user_id
 WHERE r.rank<=20 OR r.user_id=? ORDER BY r.rank`

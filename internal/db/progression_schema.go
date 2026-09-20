@@ -59,6 +59,18 @@ CREATE TABLE game_rank_totals (
  CHECK((amount_sign=0 AND amount_mag=X'00000000000000000000000000000000') OR (amount_sign<>0 AND amount_mag>X'00000000000000000000000000000000'))
 ) STRICT;
 CREATE INDEX idx_rank_totals_board ON game_rank_totals(board,window,amount_sign,amount_mag DESC,achieved_at,achieved_phase,achieved_seq);
+CREATE TABLE game_rank_expiry_work (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ board TEXT NOT NULL CHECK(board IN ('game_charity','bidding','blackjack')),
+ window TEXT NOT NULL CHECK(window IN ('7d','30d')),
+ expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799),
+ delta_sign INTEGER NOT NULL CHECK(delta_sign IN (-1,0,1)),
+ delta_mag BLOB NOT NULL CHECK(length(delta_mag)=32),
+ last_seq BLOB NOT NULL CHECK(length(last_seq)=16),
+ CHECK(board<>'game_charity' OR window='7d'),
+ CHECK((delta_sign=0)=(delta_mag=zeroblob(32)))
+) STRICT;
 CREATE TABLE activity_loans (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=27 AND substr(id,1,5)='loan_' AND substr(id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
