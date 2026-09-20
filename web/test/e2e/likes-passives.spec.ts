@@ -7,7 +7,14 @@ import wire from '../../src/user/games/likes/testdata/passives.json' with { type
 
 const now = 1_800_000_000,
   id = 'lik_AAAAAAAAAAAAAAAAAAAAAA';
-async function setup(page: Page, name: keyof typeof wire, offset = 0) {
+async function pausePresentationClock(page: Page) {
+  // Install before rendering so the application and test share one monotonic
+  // clock and all presentation intervals are controlled by runFor.
+  const pausedAt = new Date();
+  await page.clock.install({ time: new Date(pausedAt.getTime() - 1000) });
+  await page.clock.pauseAt(pausedAt);
+}
+async function setup(page: Page, name: keyof typeof wire, offset = 0, manualClock = false) {
   await mockRoleSession(page, 'user', 'user');
   await mockPublicConfig(page, 'user');
   const source = wire[name];
@@ -74,6 +81,19 @@ async function setup(page: Page, name: keyof typeof wire, offset = 0) {
     return route.fallback();
   });
   await page.goto(`${USER_ORIGIN}/games/likes`);
+  if (manualClock) {
+    // Let asynchronous query notifications render while presentation time
+    // advances only by controlled milliseconds, independent of machine speed.
+    await expect
+      .poll(
+        async () => {
+          await page.clock.runFor(50);
+          return page.locator('.likes-arena').count();
+        },
+        { intervals: [10, 25, 50] },
+      )
+      .toBe(1);
+  }
   await expect(page.locator('.likes-arena')).toBeVisible();
 }
 
@@ -90,9 +110,8 @@ for (const mobile of [false, true]) {
     const steps = wire.partial.summary.timeline,
       at = steps.findIndex((s) => s.stage === 'score');
     const offset = Math.ceil(steps.slice(0, at).reduce((n, s) => n + s.duration_ms, 0) / 1000);
-    await setup(page, 'partial', offset);
-    await page.clock.install();
-    await page.clock.pauseAt(new Date(Date.now() + 1000));
+    await pausePresentationClock(page);
+    await setup(page, 'partial', offset, true);
     await expect(page.locator('.likes-application-result').first()).toContainText(
       'Applied 1 / Resisted 1',
     );
@@ -130,12 +149,11 @@ for (const mobile of [false, true]) {
 test('long Flash chain reveals each authoritative cast pair once', async ({ page }) => {
   const errors = collectConsoleViolations(page);
   await page.setViewportSize({ width: 390, height: 1000 });
-  await setup(page, 'chain');
-  await page.clock.install();
-  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await pausePresentationClock(page);
+  await setup(page, 'chain', 0, true);
   const steps = wire.chain.summary.timeline;
   let elapsed = 0,
-    seen = 1000;
+    seen = 0;
   let followups = 0;
   for (const step of steps) {
     const pair = wire.chain.summary.events.filter(
