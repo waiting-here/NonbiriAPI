@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
+import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
 import { useAuthoritativeCountdown } from '../common/countdown';
@@ -60,7 +61,7 @@ function BiddingRules({ onClose }: { readonly onClose: () => void }) {
     </DuelDialog>
   );
 }
-export function BiddingGame({ config, wallets, accepting, refreshWallets }: DuelLobbyContext) {
+export function BiddingGame({ config, wallets, onboarding, accepting, refreshWallets }: DuelLobbyContext) {
   const t = useDuelText();
   const duel = useDuel(biddingCodec, refreshWallets);
   const [mode, setMode] = useState<string>(
@@ -113,6 +114,7 @@ export function BiddingGame({ config, wallets, accepting, refreshWallets }: Duel
         </div>
       </header>
       <GameWallets wallets={wallets} />
+      {onboarding && <OnboardingCard game="bidding" progress={onboarding} />}
       <RandomnessProof
         game="bidding"
         id={current?.id ?? home?.latestResult?.id}

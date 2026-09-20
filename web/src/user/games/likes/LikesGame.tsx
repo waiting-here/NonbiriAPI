@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
+import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
 import { gameRequest } from '../common/request';
@@ -348,6 +349,7 @@ export function LikesGame(context: DuelLobbyContext) {
         </div>
       </header>
       <GameWallets wallets={context.wallets} />
+      {context.onboarding && <OnboardingCard game="likes" progress={context.onboarding} />}
       {!tutorialSeen && canTeach && (
         <section className="likes-tutorial-invite">
           <h2>{t('第一次来？一起练习一局', 'New here? Try a guided match')}</h2>

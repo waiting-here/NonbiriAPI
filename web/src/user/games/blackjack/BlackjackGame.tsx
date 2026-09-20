@@ -9,6 +9,7 @@ import {
 } from '@shared/games/blackjack';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { GameWallets } from '../common/GameWallets';
+import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuelText } from '../common/duel/copy';
@@ -370,6 +371,7 @@ export function BlackjackGame() {
           </div>
         </header>
         {snapshot.data && <GameWallets wallets={snapshot.data} />}
+        {snapshot.data && <OnboardingCard game="blackjack" progress={snapshot.data.onboarding.blackjack} />}
         <RandomnessProof
           game="blackjack"
           id={home?.table?.id}

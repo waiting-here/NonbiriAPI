@@ -218,7 +218,7 @@ func (port fishingPort) Release(ctx context.Context, tx *sql.Tx, input ports.Ent
 		return err
 	}
 	if funding.version == 2 {
-		if err := port.release(ctx, tx, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}); err != nil {
+		if err := port.release(ctx, tx, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}, input.UserID); err != nil {
 			return err
 		}
 	}

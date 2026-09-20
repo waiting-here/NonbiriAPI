@@ -38,6 +38,8 @@ type BlackjackSettlement struct {
 	WelfareAccountID, ThursdayAccountID int64
 }
 type Blackjack interface {
+	RestoreOnboarding(context.Context, *sql.Tx, int, int64) (int, bool, error)
+	ReleaseOnboarding(context.Context, *sql.Tx, int64) error
 	Reserve(context.Context, *sql.Tx, Entry, BlackjackAccountMutation) error
 	Settle(context.Context, *sql.Tx, BlackjackSettlement, Mutation) error
 	Release(context.Context, *sql.Tx, Entry, Mutation) error
@@ -111,6 +113,7 @@ type DuelFinish struct {
 
 // Duel is bound to one compiled game key by the adapter constructor.
 type Duel interface {
+	TransferOnboarding(context.Context, *sql.Tx, QueueOnboardingTransfer) error
 	QueueReserve(context.Context, *sql.Tx, Entry, DuelAccountMutation) error
 	QueueRelease(context.Context, *sql.Tx, Entry, Mutation) error
 	SessionStart(context.Context, *sql.Tx, DuelStart, DuelAccountMutation) error

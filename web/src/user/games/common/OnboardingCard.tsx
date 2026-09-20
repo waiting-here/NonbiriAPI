@@ -15,6 +15,18 @@ const taskCopy = {
   quick: 'rps.mode.quick',
   standard: 'rps.mode.standard',
   deathmatch: 'rps.mode.deathmatch',
+  complete_tier_1: 'onboarding.tier1',
+  complete_tier_2: 'onboarding.tier2',
+  complete_tier_3: 'onboarding.tier3',
+  first_win: 'onboarding.firstWin',
+  quick_complete: 'onboarding.quickComplete',
+  quick_win: 'onboarding.quickWin',
+  standard_complete: 'onboarding.standardComplete',
+  standard_win: 'onboarding.standardWin',
+  complete: 'onboarding.complete',
+  first_bust: 'onboarding.firstBust',
+  first_21: 'onboarding.first21',
+  first_natural_21: 'onboarding.firstNatural21',
 } as const satisfies Record<OnboardingTaskKey, string>;
 
 export function OnboardingCard({

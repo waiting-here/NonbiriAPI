@@ -123,7 +123,10 @@ func (s *Service) startSession(ctx context.Context, tx *sql.Tx, queues [2]queueR
 		if err := randomness.Insert(ctx, tx, secret); err != nil {
 			return err
 		}
-		for _, q := range queues {
+		for seat, q := range queues {
+			if err := s.finance.TransferOnboarding(ctx, tx, finance.QueueOnboardingTransfer{QueueID: q.ID, SessionID: id, UserID: q.User, SeatNo: seat}); err != nil {
+				return err
+			}
 			result, err := tx.ExecContext(ctx, `UPDATE game_duel_user_slots SET queue_id=NULL,session_id=? WHERE user_id=? AND game_key=? AND queue_id=?`, id, q.User, s.rules.ID(), q.ID)
 			if err != nil {
 				return err

@@ -1,4 +1,4 @@
-import type { GamePayment } from '../types';
+import type { GamePayment, OnboardingProgress } from '../types';
 
 export type DuelGame = 'bidding' | 'likes';
 export type Seat = 0 | 1;
@@ -29,6 +29,7 @@ export interface DuelConfig {
 export interface DuelLobbyContext {
   readonly config: DuelConfig;
   readonly wallets: { readonly balance: string; readonly gameBalance: string };
+  readonly onboarding?: OnboardingProgress;
   readonly accepting: boolean;
   readonly refreshWallets?: () => void | Promise<unknown>;
 }

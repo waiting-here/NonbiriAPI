@@ -131,7 +131,18 @@ func (p duelPort) QueueReserve(ctx context.Context, tx *sql.Tx, input ports.Entr
 		return err
 	}
 	_, err = ledger.Apply(ctx, tx, plan)
-	return err
+	if err != nil {
+		return err
+	}
+	f, err := p.queue(ctx, tx, input)
+	if err != nil {
+		return err
+	}
+	tasks, err := p.onboardingTasks(f.mode)
+	if err != nil {
+		return err
+	}
+	return p.onboardingPort().reserveTasks(ctx, tx, input.UserID, tasks, onboardingParent{column: "duel_queue_id", id: input.ResourceID}, input.Meta.CreatedAt)
 }
 
 func (p duelPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
@@ -156,6 +167,9 @@ func (p duelPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.Entr
 	}
 	ref, err := ledger.DuelQueueReservation(input.ResourceID)
 	if err != nil {
+		return err
+	}
+	if err := p.onboardingPort().release(ctx, tx, onboardingParent{column: "duel_queue_id", id: input.ResourceID}, input.UserID); err != nil {
 		return err
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
@@ -306,5 +320,8 @@ func (p duelPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.DuelFini
 		}
 		return nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return p.finishOnboarding(ctx, tx, input)
 }
