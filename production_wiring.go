@@ -91,8 +91,8 @@ func newPublicForwardRuntime(
 	}
 	var abuse *antiabuse.Service
 	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store),
-		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
-			applyPublicRPMDenial(ctx, userID, reason, abuse)
+		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
+			return applyPublicRPMDenial(ctx, userID, reason, abuse)
 		},
 	})
 	if err != nil {
@@ -167,13 +167,22 @@ func newPublicForwardRuntime(
 		_ = service.Close()
 		return fail(fmt.Errorf("create forward flow middleware: %w", err))
 	}
-	callerKey, err := forward.NewCallerKeyMiddleware(resourcesRepository, lifecycle)
+	callerKey, err := forward.NewCallerKeyMiddleware(resourcesRepository, lifecycle, claims.RecordRejection)
 	if err != nil {
 		_ = service.Close()
 		return fail(fmt.Errorf("create CallerKey middleware: %w", err))
 	}
-	handler := forward.BrowserCORS(maintenance.GateMiddleware(maintenanceGate,
-		callerKey.Wrap(flowHandler)))
+	closed := maintenance.GateMiddleware(maintenanceGate, http.NotFoundHandler())
+	handler := forward.BrowserCORS(callerKey.WrapWithUnavailable(maintenance.GateMiddleware(maintenanceGate, flowHandler), func(w http.ResponseWriter, r *http.Request) bool {
+		if r == nil || r.URL == nil {
+			return false
+		}
+		if maintenanceGate.Ready() && !maintenanceGate.Enabled() {
+			return false
+		}
+		closed.ServeHTTP(w, r)
+		return true
+	}))
 	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
 }
 
@@ -182,10 +191,18 @@ type charityPolicyRouter struct {
 	abuse *antiabuse.Service
 }
 
-func applyPublicRPMDenial(ctx context.Context, userID int64, reason ratelimit.RPMReason, abuse *antiabuse.Service) {
+func applyPublicRPMDenial(ctx context.Context, userID int64, reason ratelimit.RPMReason, abuse *antiabuse.Service) error {
 	if abuse != nil && reason == ratelimit.RPMUserLimit && forward.CharityRPMDenial(ctx, userID) {
-		abuse.RPMDenied(ctx, userID, reason)
+		err := abuse.RPMDenied(ctx, userID, reason)
+		if errors.Is(err, charityrouting.ErrUnauthorized) {
+			return flowcontrol.ErrInvalidUser
+		}
+		if errors.Is(err, charityrouting.ErrResourceLimit) {
+			return flowcontrol.ErrResourceLimit
+		}
+		return err
 	}
+	return nil
 }
 
 func publicFlowHandler(flow *flowcontrol.Controller, next http.Handler) (http.Handler, error) {

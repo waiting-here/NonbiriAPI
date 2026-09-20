@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
@@ -85,6 +86,7 @@ func CharityRPMDenial(ctx context.Context, userID int64) bool {
 		}
 		defer request.Clear()
 		if ctx.Err() == nil {
+			requestattempt.Model(ctx, request.Model)
 			scope.charity = strings.HasPrefix(request.Model, charityModelPrefix)
 		}
 	})

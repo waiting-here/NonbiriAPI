@@ -238,7 +238,7 @@ func (s *Service) Act(ctx context.Context, in ActionInput) (MutationResult, erro
 	if err != nil {
 		return MutationResult{}, classify(err)
 	}
-	if v.Phase != "decision" || now >= v.StartedAt+45 || e.State != "playing" {
+	if v.Phase != "decision" || now >= v.StartedAt+engine.DecisionEnd || e.State != "playing" {
 		return s.finishConflict(ctx, tx, d, facts)
 	}
 	if e.Pending.Valid || e.Stopped {
@@ -303,7 +303,7 @@ func (s *Service) Emote(ctx context.Context, identity Identity, key, id, emote s
 	if err != nil {
 		return MutationResult{}, classify(err)
 	}
-	if now >= v.StartedAt+60 || v.Phase == "cancelled" || e.Stopped || e.State == "released" {
+	if now >= v.StartedAt+engine.RoundSeconds || v.Phase == "cancelled" || e.Stopped || e.State == "released" {
 		return MutationResult{}, ErrConflict
 	}
 	if e.EmoteAt.Valid && now < e.EmoteAt.Int64+2 {

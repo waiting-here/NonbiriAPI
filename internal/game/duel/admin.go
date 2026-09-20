@@ -203,7 +203,7 @@ type adminMatchPosition struct {
 }
 
 // Positions are small. Game JSON is loaded only for the next bounded record.
-func (s *Service) nextAdminMatch(ctx context.Context, tx *sql.Tx, c adminCursor) (adminMatchPosition, error) {
+func (s *Service) nextAdminMatch(ctx context.Context, reader *adminRead, c adminCursor) (adminMatchPosition, error) {
 	var p adminMatchPosition
 	args := []any{s.rules.ID(), c.High}
 	query := `SELECT g.id,g.mode,o.ledger_seq,g.delete_at FROM credit_operations o CROSS JOIN game_duel_sessions g ON g.terminal_operation_id=o.id WHERE g.game_key=? AND o.ledger_seq<=? AND o.kind='duel_terminal' AND o.source_type='duel_session' AND substr(o.source_id,1,4)=? AND g.state='terminal' AND g.terminal_at<=? AND g.delete_at>? AND o.ledger_seq>=? AND (o.ledger_seq>? OR (o.ledger_seq=? AND g.id>?))`
@@ -246,17 +246,35 @@ func (s *Service) nextAdminMatch(ctx context.Context, tx *sql.Tx, c adminCursor)
 	} else {
 		query += ` ORDER BY g.archive_id LIMIT 1`
 	}
-	err := tx.QueryRowContext(ctx, query, args...).Scan(&p.id, &p.mode, &p.seq, &p.expiry)
+	err := reader.row(ctx, query, args...).Scan(&p.id, &p.mode, &p.seq, &p.expiry)
 	return p, err
 }
-func (s *Service) adminMatch(ctx context.Context, tx *sql.Tx, dataset, id string, now int64) (AdminMatch, error) {
+
+// Reuse only the current fully validated session within one read transaction.
+// Advancing to another match replaces it; later requests always read afresh.
+func (s *Service) adminSession(ctx context.Context, reader *adminRead, id string, last *sessionRecord) (sessionRecord, error) {
+	if last.ID == id {
+		return *last, nil
+	}
+	v, err := s.scanSession(reader.row(ctx, `SELECT `+sessionColumns+` FROM game_duel_sessions WHERE game_key=? AND id=?`, s.rules.ID(), id))
+	if err != nil {
+		return v, err
+	}
+	v, err = s.sessionSeats(ctx, reader, v)
+	if err == nil {
+		*last = v
+	}
+	return v, err
+}
+
+func (s *Service) adminMatch(ctx context.Context, reader *adminRead, dataset, id string, now int64, last *sessionRecord) (AdminMatch, error) {
 	item := AdminMatch{Kind: "match", MatchRef: id}
 	if dataset == "anonymous" {
 		if !db.ValidateOpaqueID(id, "dah_") {
 			return item, ErrNotFound
 		}
 		var raw []byte
-		err := tx.QueryRowContext(ctx, `SELECT header_json FROM game_duel_anonymous WHERE game_key=? AND archive_id=?`, s.rules.ID(), id).Scan(&raw)
+		err := reader.row(ctx, `SELECT header_json FROM game_duel_anonymous WHERE game_key=? AND archive_id=?`, s.rules.ID(), id).Scan(&raw)
 		if errors.Is(err, sql.ErrNoRows) {
 			return item, ErrNotFound
 		}
@@ -271,7 +289,7 @@ func (s *Service) adminMatch(ctx context.Context, tx *sql.Tx, dataset, id string
 	if !db.ValidateOpaqueID(id, s.sessionPrefix) {
 		return item, ErrNotFound
 	}
-	v, err := s.session(ctx, tx, id)
+	v, err := s.adminSession(ctx, reader, id, last)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, ErrNotFound
 	}
@@ -287,7 +305,7 @@ func (s *Service) adminMatch(ctx context.Context, tx *sql.Tx, dataset, id string
 	}
 	r := &AdminRecent{StartedAt: v.Started, TerminalAt: *v.TerminalAt, OperationID: v.Operation}
 	var seq int64
-	if err := tx.QueryRowContext(ctx, `SELECT ledger_seq FROM credit_operations WHERE id=?`, v.Operation).Scan(&seq); err != nil {
+	if err := reader.row(ctx, `SELECT ledger_seq FROM credit_operations WHERE id=?`, v.Operation).Scan(&seq); err != nil {
 		return item, err
 	}
 	r.LedgerSeq = strconv.FormatInt(seq, 10)
@@ -299,7 +317,7 @@ func (s *Service) adminMatch(ctx context.Context, tx *sql.Tx, dataset, id string
 		id := strconv.FormatInt(*p.User, 10)
 		r.Participants[i].UserID = &id
 		var name string
-		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN guild_nick<>'' THEN guild_nick ELSE username END FROM users WHERE id=?`, *p.User).Scan(&name); err != nil {
+		if err := reader.row(ctx, `SELECT CASE WHEN guild_nick<>'' THEN guild_nick ELSE username END FROM users WHERE id=?`, *p.User).Scan(&name); err != nil {
 			return item, err
 		}
 		name = strings.Map(func(r rune) rune {
@@ -317,14 +335,14 @@ func (s *Service) adminMatch(ctx context.Context, tx *sql.Tx, dataset, id string
 	item.Recent = r
 	return item, nil
 }
-func (s *Service) nextAdminRound(ctx context.Context, tx *sql.Tx, dataset, id, mode string, after int) (AdminRound, error) {
+func (s *Service) nextAdminRound(ctx context.Context, reader *adminRead, dataset, id, mode string, after int, last *sessionRecord) (AdminRound, error) {
 	item := AdminRound{Kind: "round", MatchRef: id}
 	query := `SELECT round_no,record_json FROM game_duel_rounds WHERE session_id=? AND round_no>? ORDER BY round_no LIMIT 1`
 	if dataset == "anonymous" {
 		query = `SELECT round_no,record_json FROM game_duel_anonymous_rounds WHERE archive_id=? AND round_no>? ORDER BY round_no LIMIT 1`
 	}
 	var raw []byte
-	if err := tx.QueryRowContext(ctx, query, id, after).Scan(&item.RoundNo, &raw); err != nil {
+	if err := reader.row(ctx, query, id, after).Scan(&item.RoundNo, &raw); err != nil {
 		return item, err
 	}
 	if dataset == "anonymous" {
@@ -332,8 +350,11 @@ func (s *Service) nextAdminRound(ctx context.Context, tx *sql.Tx, dataset, id, m
 			return item, ErrInvariant
 		}
 	} else {
-		var err error
-		item.Record, err = s.roundView(mode, raw, 0, true)
+		v, err := s.adminSession(ctx, reader, id, last)
+		if err != nil {
+			return item, err
+		}
+		item.Record, err = s.roundView(v.rules, mode, raw, 0, true)
 		if err != nil {
 			return item, err
 		}
@@ -341,7 +362,7 @@ func (s *Service) nextAdminRound(ctx context.Context, tx *sql.Tx, dataset, id, m
 	return item, nil
 }
 
-func (s *Service) adminMode(ctx context.Context, tx *sql.Tx, dataset, id string, now int64) (string, error) {
+func (s *Service) adminMode(ctx context.Context, reader *adminRead, dataset, id string, now int64) (string, error) {
 	query := `SELECT mode FROM game_duel_sessions WHERE game_key=? AND id=? AND state='terminal' AND delete_at>?`
 	args := []any{s.rules.ID(), id, now}
 	if dataset == "anonymous" {
@@ -349,7 +370,7 @@ func (s *Service) adminMode(ctx context.Context, tx *sql.Tx, dataset, id string,
 		args = args[:2]
 	}
 	var mode string
-	err := tx.QueryRowContext(ctx, query, args...).Scan(&mode)
+	err := reader.row(ctx, query, args...).Scan(&mode)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -419,6 +440,9 @@ func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page Ad
 		return page, err
 	}
 	size := 8192 // Reserved for the envelope and the maximum signed cursor.
+	reader := &adminRead{tx: tx}
+	defer reader.close()
+	var lastSession sessionRecord
 	for visited := 0; visited < 200; visited++ {
 		if err = ctx.Err(); err != nil {
 			return page, err
@@ -431,7 +455,11 @@ func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page Ad
 				c.AfterRecord = 76
 				continue
 			}
-			mode, readErr := s.adminMode(ctx, tx, c.Dataset, c.AfterID, now)
+			mode := lastSession.Mode
+			var readErr error
+			if c.Dataset != "recent" || lastSession.ID != c.AfterID {
+				mode, readErr = s.adminMode(ctx, reader, c.Dataset, c.AfterID, now)
+			}
 			if errors.Is(readErr, ErrNotFound) {
 				page.ExpiredSkipped++
 				c.AfterRecord = 76
@@ -440,7 +468,7 @@ func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page Ad
 			if readErr != nil {
 				return page, readErr
 			}
-			round, readErr := s.nextAdminRound(ctx, tx, c.Dataset, c.AfterID, mode, c.AfterRecord)
+			round, readErr := s.nextAdminRound(ctx, reader, c.Dataset, c.AfterID, mode, c.AfterRecord, &lastSession)
 			if errors.Is(readErr, sql.ErrNoRows) {
 				c.AfterRecord = 76
 				continue
@@ -451,7 +479,7 @@ func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page Ad
 			item = round
 			c.AfterRecord = round.RoundNo
 		} else {
-			p, readErr := s.nextAdminMatch(ctx, tx, c)
+			p, readErr := s.nextAdminMatch(ctx, reader, c)
 			if errors.Is(readErr, sql.ErrNoRows) {
 				return page, nil
 			}
@@ -463,7 +491,7 @@ func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page Ad
 				page.ExpiredSkipped++
 				continue
 			}
-			match, readErr := s.adminMatch(ctx, tx, c.Dataset, p.id, now)
+			match, readErr := s.adminMatch(ctx, reader, c.Dataset, p.id, now, &lastSession)
 			if readErr != nil {
 				return page, readErr
 			}
@@ -510,8 +538,10 @@ func (s *Service) AdminHistory(ctx context.Context, in AdminPageInput) (AdminHis
 	if err != nil {
 		return page, err
 	}
+	reader := &adminRead{tx: tx}
+	defer reader.close()
 	for scanned := 0; scanned < 200; scanned++ {
-		p, err := s.nextAdminMatch(ctx, tx, c)
+		p, err := s.nextAdminMatch(ctx, reader, c)
 		if errors.Is(err, sql.ErrNoRows) {
 			return page, nil
 		}
@@ -525,7 +555,7 @@ func (s *Service) AdminHistory(ctx context.Context, in AdminPageInput) (AdminHis
 		if in.Dataset == "recent" && p.expiry <= now {
 			continue
 		}
-		match, err := s.adminMatch(ctx, tx, in.Dataset, p.id, now)
+		match, err := s.adminMatch(ctx, reader, in.Dataset, p.id, now, &sessionRecord{})
 		if err != nil {
 			return page, err
 		}
@@ -550,7 +580,9 @@ func (s *Service) AdminDetail(ctx context.Context, dataset, id string) (AdminMat
 	if _, err := s.authorizeAdmin(ctx, tx); err != nil {
 		return AdminMatch{}, err
 	}
-	return s.adminMatch(ctx, tx, dataset, id, now)
+	reader := &adminRead{tx: tx}
+	defer reader.close()
+	return s.adminMatch(ctx, reader, dataset, id, now, &sessionRecord{})
 }
 func (s *Service) AdminRounds(ctx context.Context, id string, in AdminPageInput) (RoundPage, error) {
 	page := RoundPage{Items: []RoundView{}}
@@ -570,7 +602,10 @@ func (s *Service) AdminRounds(ctx context.Context, id string, in AdminPageInput)
 	if err != nil {
 		return page, err
 	}
-	match, err := s.adminMatch(ctx, tx, in.Dataset, id, now)
+	reader := &adminRead{tx: tx}
+	defer reader.close()
+	var lastSession sessionRecord
+	match, err := s.adminMatch(ctx, reader, in.Dataset, id, now, &lastSession)
 	if err != nil {
 		return page, err
 	}
@@ -583,7 +618,7 @@ func (s *Service) AdminRounds(ctx context.Context, id string, in AdminPageInput)
 	}
 	size := 8192
 	for {
-		round, err := s.nextAdminRound(ctx, tx, in.Dataset, id, match.Facts.Mode, c.AfterRecord)
+		round, err := s.nextAdminRound(ctx, reader, in.Dataset, id, match.Facts.Mode, c.AfterRecord, &lastSession)
 		if errors.Is(err, sql.ErrNoRows) {
 			return page, nil
 		}

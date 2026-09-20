@@ -100,6 +100,54 @@ afterEach(() => {
 });
 
 describe('numbered core query hooks', () => {
+  it('cancels superseded filters without retaining another filter or account as placeholder', async () => {
+    const pending: Array<{
+      resolve: (value: Response) => void;
+      signal?: AbortSignal | null;
+      path: string;
+    }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (input: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((resolve) => {
+            pending.push({ resolve, signal: init?.signal, path: String(input) });
+          }),
+      ),
+    );
+    const client = createClient();
+    const rendered = renderHook(
+      ({ account, search }) =>
+        useNumberedEndpoints(account, { page: '1', pageSize: 20 }, true, {
+          q: search,
+          source: 'custom',
+        }),
+      {
+        initialProps: { account: 'a', search: 'first' },
+        wrapper: wrapper(client),
+      },
+    );
+    await waitFor(() => expect(pending).toHaveLength(1));
+    act(() => pending[0].resolve(jsonResponse(numbered([endpoint]))));
+    await waitFor(() => expect(rendered.result.current.data?.data).toHaveLength(1));
+    rendered.rerender({ account: 'a', search: 'second' });
+    expect(rendered.result.current.data).toBeUndefined();
+    await waitFor(() => expect(pending).toHaveLength(2));
+    rendered.rerender({ account: 'a', search: 'third' });
+    await waitFor(() => expect(pending).toHaveLength(3));
+    expect(pending[1].signal?.aborted).toBe(true);
+    act(() => pending[1].resolve(jsonResponse(numbered([endpoint]))));
+    expect(rendered.result.current.data).toBeUndefined();
+    act(() => pending[2].resolve(jsonResponse(numbered([]))));
+    await waitFor(() => expect(rendered.result.current.data?.data).toEqual([]));
+    rendered.rerender({ account: 'b', search: 'third' });
+    expect(rendered.result.current.data).toBeUndefined();
+    await waitFor(() => expect(pending).toHaveLength(4));
+    expect(pending[3].path).toContain('q=third&source=custom');
+    rendered.unmount();
+    expect(pending[3].signal?.aborted).toBe(true);
+  });
+
   it('keeps every page query disabled when the account scope is empty', () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);

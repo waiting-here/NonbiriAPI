@@ -3,6 +3,16 @@ import { normalizeGamesSnapshot } from './snapshot';
 import { gamesSnapshotWire } from './testFixtures';
 
 describe('games snapshot normalizer', () => {
+  it('accepts disabled quick buttons and rejects invalid configured amounts', () => {
+    const wire = gamesSnapshotWire();
+    wire.blackjack.quick_stakes = [];
+    expect(normalizeGamesSnapshot(wire).blackjack.quick_stakes).toEqual([]);
+    for (const stakes of [['1000', '1000'], ['5000', '1000'], ['1500'], ['51000'], Array(9).fill('1000')]) {
+      wire.blackjack.quick_stakes = stakes;
+      expect(() => normalizeGamesSnapshot(wire)).toThrow(/quick stakes/i);
+    }
+  });
+
   it('keeps closed sub-capabilities and large exact balances distinct from empty data', () => {
     const value = normalizeGamesSnapshot(gamesSnapshotWire());
     expect(value.balance).toBe('12345678901234567890.125');
@@ -51,9 +61,10 @@ describe('games snapshot normalizer', () => {
     expect(() => normalizeGamesSnapshot(boundary)).toThrow(/snapshot balance/i);
   });
 
-  it('requires all nine ordered reward facts and a consistent completion summary', () => {
+  it('requires every ordered reward fact and a consistent completion summary', () => {
     const wire = gamesSnapshotWire();
     expect(normalizeGamesSnapshot(wire).onboarding.linklink.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000']);
+    expect(normalizeGamesSnapshot(wire).onboarding.blackjack.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000', '4000', '5000']);
     wire.onboarding.rps.items[0].completed = true;
     expect(normalizeGamesSnapshot(wire).onboarding.rps.items[0].completed).toBe(true);
     const wrongReward = structuredClone(wire);

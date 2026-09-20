@@ -16,6 +16,8 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { amount } from '@shared/operations/wire';
+import { validLoanConfig } from '@shared/operations/loans';
+import { useLoanText } from '@shared/components/loanCopy';
 import { formatBeijingTime, nextThursdaySchedule } from '../features/operations/thursdaySchedule';
 import {
   adjustPool,
@@ -36,6 +38,25 @@ import {
 import { useAdminSession } from '../data';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
+
+function LoanConfiguration({ config, disabled, onChange }: { config: ActivitiesConfig; disabled: boolean; onChange: (value: ActivitiesConfig) => void }) {
+  const text = useLoanText();
+  return <fieldset disabled={disabled}>
+    <legend>{text('赛博网贷', 'Cyber loan')}</legend>
+    <div className="ops-field-grid">
+      <label className="checkbox-label"><input type="checkbox" checked={config.loan_enabled} onChange={(event) => onChange({ ...config, loan_enabled: event.target.checked })} /><span>{text('启用借款', 'Enable loans')}</span></label>
+      {config.loan_tiers.map((value, index) => <label key={index}><span>{text('额度', 'Tier')} {index + 1}</span><input inputMode="numeric" maxLength={13} value={value} onChange={(event) => {
+        const loan_tiers: [string, string, string] = [...config.loan_tiers];
+        loan_tiers[index] = event.target.value;
+        onChange({ ...config, loan_tiers });
+      }} /></label>)}
+      <label><span>{text('到账系数 A（0 ＜ A ＜ 1）', 'Disbursement coefficient A (0 < A < 1)')}</span><input inputMode="decimal" maxLength={17} value={config.loan_a} onChange={(event) => onChange({ ...config, loan_a: event.target.value })} /></label>
+      <label><span>{text('本息系数 B（B ＞ 1）', 'Repayment coefficient B (B > 1)')}</span><input inputMode="decimal" maxLength={17} value={config.loan_b} onChange={(event) => onChange({ ...config, loan_b: event.target.value })} /></label>
+    </div>
+    <p>{text('三档额度为递增正整数；系数最多三位小数。游戏积分到账为额度 × A，通用积分扣除为额度 × B。', 'Use three increasing positive whole-number amounts. Coefficients allow up to three decimal places. Game credits received equal the amount × A; general credits deducted equal the amount × B.')}</p>
+    {!validLoanConfig(config) ? <p className="field-error" role="alert">{text('请检查三档额度和系数；各项金额不得超过 9000000000000 积分。', 'Check the three amounts and coefficients. No resulting amount may exceed 9000000000000 credits.')}</p> : null}
+  </fieldset>;
+}
 
 function validPositiveAmount(value: string): boolean {
   try {
@@ -188,6 +209,10 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
           master_enabled: input.master_enabled,
           welfare: input.welfare,
           thursday: input.thursday,
+          loan_enabled: input.loan_enabled,
+          loan_tiers: input.loan_tiers,
+          loan_a: input.loan_a,
+          loan_b: input.loan_b,
         },
         key,
       ),
@@ -406,6 +431,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               </label>
             </div>
             {saveConfig.error ? <ErrorState error={saveConfig.error} /> : null}
+            <LoanConfiguration config={configDraft} disabled={!scopeReady || saveConfig.isPending} onChange={editConfig} />
             {configDependency ? (
               <p role="alert" className="field-error">
                 {configDependency}
@@ -424,6 +450,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 saveConfig.isPending ||
                 configUnchanged ||
                 configStale ||
+                !validLoanConfig(configDraft) ||
                 Boolean(configDependency)
               }
               onClick={() =>

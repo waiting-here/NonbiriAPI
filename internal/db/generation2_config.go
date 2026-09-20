@@ -253,6 +253,18 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 			catalog[key] = uintSpec(value, 0, 9999)
 		}
 	}
+	for key, value := range progressionConfigDefaults() {
+		switch key {
+		case "activity_loan_enabled":
+			catalog[key] = boolSpec(value)
+		case "activity_loan_a_milli":
+			catalog[key] = uintSpec(value, 1, 999)
+		case "activity_loan_b_milli":
+			catalog[key] = uintSpec(value, 1001, uint64(MaxMoneyMilli))
+		default:
+			catalog[key] = textSpec(value, 256, false)
+		}
+	}
 	return catalog
 }
 
@@ -652,7 +664,10 @@ func ValidateGenerationTwoConfigSnapshot(values map[string]string) error {
 			return fmt.Errorf("missing required site configuration key: %s", key)
 		}
 	}
-	return validateGenerationTwoConfigCombinations(values)
+	if err := validateGenerationTwoConfigCombinations(values); err != nil {
+		return err
+	}
+	return validateProgressionConfig(values)
 }
 
 func validateGenerationTwoConfig(ctx context.Context, q generationTwoConfigQueryer) error {

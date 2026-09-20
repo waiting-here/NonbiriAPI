@@ -498,9 +498,45 @@
       "notFound": "不存在",
       "item": "捐赠 {{donation}} · 密钥 {{key}}",
       "singleDone": "失败计数已重置。"
+    },
+    "keyModels": {
+      "title": "关联公益模型",
+      "help": "展示当前仍然关联的模型，包括停用模型和不可用连接。",
+      "empty": "暂无关联模型",
+      "emptyBody": "该捐赠密钥当前没有关联的公益模型连接。",
+      "available": "已启用 · 有可用连接",
+      "unavailable": "已启用 · 暂无可用连接",
+      "disabled": "模型已停用",
+      "count": "{{count}} 个连接 · {{available}} 个可用",
+      "connections": "展开连接",
+      "manage": "管理模型",
+      "returnToKey": "返回捐赠密钥",
+      "states": {
+        "available": "可用",
+        "unavailable": "不可用",
+        "ended": "已结束",
+        "expired": "已到期",
+        "pending": "未获批准",
+        "feature_disabled": "公益服务已关闭",
+        "model_disabled": "模型已停用",
+        "disabled": "资源已停用",
+        "suspended": "安全或失败暂停"
+      }
     }
   },
   "logs": {
+    "phase": "请求阶段",
+    "phaseAll": "全部阶段",
+    "phasePreHandler": "调用前拒绝",
+    "phaseHandler": "调用处理",
+    "rejectionStage": "拒绝环节",
+    "rejectionReason": "原因代码",
+    "requestRoute": "请求路径",
+    "rejectionStages": {
+      "authorization": "访问权限检查",
+      "flow": "频率或容量检查",
+      "preflight": "请求校验"
+    },
     "details": "详情",
     "drawerTitle": "日志详情",
     "caller": "调用者身份",

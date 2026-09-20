@@ -69,14 +69,20 @@ func (port linkLinkPort) Terminal(ctx context.Context, tx *sql.Tx, sessionID str
 	}
 	var spec, reason string
 	var version int
-	var terminalAt int64
-	if err := tx.QueryRowContext(ctx, `SELECT a.spec,a.rules_version,s.terminal_reason,s.terminal_at
+	var terminalAt, price int64
+	if err := tx.QueryRowContext(ctx, `SELECT a.spec,a.rules_version,s.terminal_reason,s.terminal_at,a.price_milli
 FROM game_linklink_sessions a JOIN game_linklink_summaries s ON s.session_id=a.id AND s.user_id=a.user_id
-WHERE a.id=? AND a.user_id=? AND a.rules_version=s.rules_version AND a.spec=s.spec`, sessionID, userID).Scan(&spec, &version, &reason, &terminalAt); err != nil {
+WHERE a.id=? AND a.user_id=? AND a.rules_version=s.rules_version AND a.spec=s.spec`, sessionID, userID).Scan(&spec, &version, &reason, &terminalAt, &price); err != nil {
 		return err
 	}
 	if terminalAt != now {
 		return ledger.ErrInvalidPlan
+	}
+	if reason != "completed" && reason != "timed_out" && reason != "abandoned" {
+		return ledger.ErrInvalidPlan
+	}
+	if err := recordRank(ctx, tx, userID, "linklink", sessionID, now, big.NewInt(price), new(big.Int)); err != nil {
+		return err
 	}
 	if version == 1 {
 		return nil
@@ -86,7 +92,7 @@ WHERE a.id=? AND a.user_id=? AND a.rules_version=s.rules_version AND a.spec=s.sp
 	case "completed":
 		return port.complete(ctx, tx, userID, spec, parent, now)
 	case "timed_out", "abandoned":
-		return port.release(ctx, tx, parent)
+		return port.release(ctx, tx, parent, userID)
 	default:
 		return ledger.ErrInvalidPlan
 	}

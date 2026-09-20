@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
 )
 
 func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
@@ -52,15 +53,15 @@ func (s *Service) homeTx(ctx context.Context, tx *sql.Tx, identity Identity, now
 	if err != nil {
 		return Home{}, err
 	}
-	start := now - now%60
-	result := Home{ServerNow: now, Phase: "seating", Deadline: start + 15, NextRoundAt: start + 60, Config: cfg.Wire(), ConfigHash: configurationHash(cfg)}
-	if now >= start+15 {
+	start := now - now%engine.RoundSeconds
+	result := Home{ServerNow: now, Phase: "seating", Deadline: start + engine.SeatingSeconds, NextRoundAt: start + engine.RoundSeconds, Config: cfg.Wire(), ConfigHash: configurationHash(cfg)}
+	if now >= start+engine.SeatingSeconds {
 		result.Phase = "decision"
-		result.Deadline = start + 45
+		result.Deadline = start + engine.DecisionEnd
 	}
-	if now >= start+45 {
+	if now >= start+engine.DecisionEnd {
 		result.Phase = "result"
-		result.Deadline = start + 60
+		result.Deadline = start + engine.RoundSeconds
 	}
 	var count int64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_blackjack_entries WHERE state='waiting'`).Scan(&count); err != nil {

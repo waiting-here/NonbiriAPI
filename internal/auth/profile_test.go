@@ -88,3 +88,34 @@ func TestPatchMeReplayRejectsReplacedSession(t *testing.T) {
 		t.Fatalf("old replay=%d %s", replay.Code, replay.Body.String())
 	}
 }
+
+func TestCharityPreferenceIsIndependentAndIdempotent(t *testing.T) {
+	f := newRuntimeFixture(t, nil)
+	cookie := loginUser(t, f, "charity-profile", "")
+	patch := func(body, key string) *httptest.ResponseRecorder {
+		return request(t, f.runtime.UserHandler(), host.StationUser, http.MethodPatch, "https://user.example/api/me", body, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Idempotency-Key": key})
+	}
+	for _, body := range []string{`{"charity_profile_public":null}`, `{"charity_profile_public":"true"}`, `{"charity_profile_public":true,"charity_profile_public":false}`} {
+		if rec := patch(body, profileIdempotencyKey); rec.Code != http.StatusBadRequest {
+			t.Fatal(rec.Code, rec.Body.String())
+		}
+	}
+	first := patch(`{"charity_profile_public":true}`, profileIdempotencyKey)
+	if first.Code != http.StatusOK {
+		t.Fatal(first.Code, first.Body.String())
+	}
+	var got UserEnvelope
+	if err := json.Unmarshal(first.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.User.CharityProfilePublic || got.User.GameProfilePublic || got.User.AutomaticRestrictions == nil {
+		t.Fatal(got.User)
+	}
+	replay := patch(`{"charity_profile_public":true}`, profileIdempotencyKey)
+	if replay.Code != http.StatusOK || replay.Body.String() != first.Body.String() {
+		t.Fatal("replay differs", replay.Code, replay.Body.String())
+	}
+	if conflict := patch(`{"charity_profile_public":false}`, profileIdempotencyKey); conflict.Code != http.StatusConflict {
+		t.Fatal("changed replay accepted", conflict.Code)
+	}
+}

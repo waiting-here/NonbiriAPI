@@ -34,9 +34,36 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
+### Loans, quick stakes and ranking privacy
+
+`PATCH /admin/api/activities/config` extends the existing revision-controlled
+configuration with `loan_enabled` (false), `loan_tiers` (three increasing integer
+credit strings, default `["10000","100000","1000000"]`), `loan_a` (`"0.9"`)
+and `loan_b` (`"1.3"`). The activity master switch must also be on. Stewards
+cannot edit these settings. Coefficients have at most three decimals:
+`0.001 <= a <= 0.999` and `b >= 1.001`. For every tier X, the nominal amount,
+disbursement aX, fee (1−a)X, repayment bX and interest (b−1)X must fit the
+9,000,000,000,000-credit per-operation bound. Changes validate together and
+invalidate unaccepted quotes; saved receipts and balances are unchanged.
+
+`PATCH /admin/api/games/config` accepts `blackjack.quick_stakes`, an array of
+0–8 distinct canonical credit strings. Each must lie within min/max and satisfy
+`(stake-min_stake) % stake_step == 0`; the response sorts them ascending.
+Defaults are `["1000","5000","10000","50000"]`. An empty array disables the
+buttons. Changes to limits and buttons validate atomically under the same
+revision. During formal rc.1 upgrade, invalid default buttons are filtered;
+if none fit, the saved default stake supplies one button. Repeated startup
+preserves explicit empty arrays and existing queue terms.
+
+The user profile's `charity_profile_public` is separate from `game_profile_public`
+and defaults to false. A current ban forces anonymous display on both sets of
+boards. Ranking windows and retention are fixed behavior, not new site settings.
+Current effective abuse windows persist across restarts; changing their settings
+keeps the existing bounded trimming and one-penalty-per-window behavior.
+
 Embeddings add no startup variable, model-purpose field, or separate price configuration. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Other shared limits remain active.
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-rc.1` prerelease. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-rc.2` prerelease. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |

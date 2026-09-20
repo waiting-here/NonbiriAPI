@@ -1,5 +1,6 @@
 import type { Buff, Effect, ModeCatalog, Passive, Skill } from './catalog';
 import type { Translate } from './labels';
+import { characterPassive, effectCategory } from './characterPassives';
 
 export type GuideLevel = 'base' | 'I' | 'II';
 export interface GuideEntry {
@@ -19,6 +20,8 @@ export function levelName(level: GuideLevel, t: Translate) {
 }
 
 export function entryTitle(c: ModeCatalog, id: string, t: Translate): string {
+  const character = c.roles.find((r) => r.passive?.id === id);
+  if (character) return characterPassive(character, t)!.name;
   const entry = [...c.skills, ...c.buffs, ...c.harnesses, ...c.passives].find(
     (item) => item.id === id,
   );
@@ -568,6 +571,24 @@ function effectText(c: ModeCatalog, s: Skill, level: GuideLevel, t: Translate): 
 }
 
 export function knowledge(c: ModeCatalog, id: string, level: GuideLevel, t: Translate): GuideEntry {
+  const role = c.roles.find((r) => r.passive?.id === id);
+  if (role) {
+    const content = characterPassive(role, t)!;
+    return {
+      id,
+      title: content.name,
+      summary: content.description,
+      paragraphs: [
+        content.description,
+        t(
+          '随角色持续生效，无需选装，与 Harness 被动并存。同一步双方共用得赞快照；主技能、各额外槽和各批连答依次更新。',
+          'Always active without equipment, alongside harness passives. Both players share a likes snapshot in each main, extra-slot and Flash batch step.',
+        ),
+      ],
+      meme: '',
+      refs: [],
+    };
+  }
   const skill = c.skills.find((s) => s.id === id),
     buff = c.buffs.find((b) => b.id === id),
     harness = c.harnesses.find((h) => h.id === id),
@@ -576,12 +597,32 @@ export function knowledge(c: ModeCatalog, id: string, level: GuideLevel, t: Tran
     meme = '';
   if (skill) {
     paragraphs = effectText(c, skill, level, t);
+    const owner = c.roles.find((r) => r.id === skill.owner);
+    if (owner?.passive)
+      paragraphs.push(`${link(owner.passive.id)}：${characterPassive(owner, t)!.description}`);
     meme = skill.effects[level].meme ?? skill.meme;
   } else if (buff) {
-    paragraphs = buffText(c, buff, t);
+    paragraphs = [
+      ...buffText(c, buff, t),
+      `${t('分类：', 'Classification: ')}${effectCategory(buff, t)}`,
+    ];
+    if (buff.category === 'debuff' && c.roles.some((r) => r.passive))
+      paragraphs.push(
+        t(
+          '向敌方施加时逐层判定命中；自身副作用不判定。成功率为 min(1, (100＋效果命中)/(100＋效果抵抗))。抵抗只取消失败层，不取消技能得赞；全部失败不刷新，成功溢出仍可刷新。',
+          'Each hostile layer checks hit independently; self-inflicted effects do not. Success chance is min(1, (100 + hit)/(100 + resistance)). Resistance removes failed layers, not skill likes. Full resistance does not refresh; a successful overflow still can.',
+        ),
+      );
     meme = buff.meme ?? '';
   } else if (passive) {
     paragraphs = passiveText(passive, t);
+    if (passive.kind === 'SOTA_ONLY' && c.roles.some((r) => r.passive))
+      paragraphs.push(
+        t(
+          '一种减益至少一层命中才追加一次狂热；全部抵抗不追加。追加狂热自身也判定抵抗，且不再递归。',
+          'At least one successful layer of a debuff triggers one fanaticism grant; full resistance triggers none. Derived fanaticism checks resistance too and never recurses.',
+        ),
+      );
     meme = passive.meme;
   } else if (harness) {
     paragraphs = [

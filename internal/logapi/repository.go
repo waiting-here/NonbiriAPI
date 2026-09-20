@@ -105,6 +105,9 @@ type listCursor struct {
 }
 
 func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
+	if filter.Phase != "" && filter.Phase != "handler" && filter.Phase != "pre_handler" {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.Page != nil {
 		if !filter.Page.Valid() || filter.Cursor != "" || filter.Limit != 0 {
 			return ListFilter{}, ErrInvalid
@@ -304,6 +307,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	writePart(optionalInt(filter.Status))
 	writePart(optionalInt64(filter.From))
 	writePart(optionalInt64(filter.To))
+	if filter.Phase != "" {
+		writePart(filter.Phase)
+	}
 	return role + ":" + hex.EncodeToString(hash.Sum(nil))
 }
 
@@ -334,21 +340,22 @@ func optionalInt64(value *int64) string {
 }
 
 type commonLogRecord struct {
-	rowID             int64
-	id                string
-	routeKind         string
-	callerResultClass sql.NullString
-	callerStatus      sql.NullInt64
-	callerErrorCode   sql.NullString
-	startedAt         int64
-	completedAt       sql.NullInt64
-	uncached          int64
-	cacheWrite        int64
-	cacheRead         int64
-	output            int64
-	usageUnknown      int
-	attemptCount      int64
-	chargeMagnitude   []byte
+	rejectionStage, rejectionReason, requestMethod, requestPath sql.NullString
+	rowID                                                       int64
+	id                                                          string
+	routeKind                                                   string
+	callerResultClass                                           sql.NullString
+	callerStatus                                                sql.NullInt64
+	callerErrorCode                                             sql.NullString
+	startedAt                                                   int64
+	completedAt                                                 sql.NullInt64
+	uncached                                                    int64
+	cacheWrite                                                  int64
+	cacheRead                                                   int64
+	output                                                      int64
+	usageUnknown                                                int
+	attemptCount                                                int64
+	chargeMagnitude                                             []byte
 }
 
 type rowScanner interface{ Scan(...any) error }
@@ -360,6 +367,7 @@ func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 		&record.callerStatus, &record.callerErrorCode, &record.startedAt, &record.completedAt,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
 		&record.usageUnknown, &record.attemptCount, &record.chargeMagnitude,
+		&record.rejectionStage, &record.rejectionReason, &record.requestMethod, &record.requestPath,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {

@@ -115,14 +115,14 @@ func factFor(s *engine.State, list []entryRecord, now int64) (TableFact, error) 
 	return f, nil
 }
 func projectTable(ctx context.Context, tx *sql.Tx, v sessionRecord, now int64) (TableView, error) {
-	result := TableView{ID: v.ID, Revision: strconv.FormatInt(v.Revision, 10), StartedAt: v.StartedAt, Phase: v.Phase, NextRoundAt: v.StartedAt + 60, Reason: v.Reason.String}
+	result := TableView{ID: v.ID, Revision: strconv.FormatInt(v.Revision, 10), StartedAt: v.StartedAt, Phase: v.Phase, NextRoundAt: v.StartedAt + engine.RoundSeconds, Reason: v.Reason.String}
 	switch v.Phase {
 	case "seating":
-		result.Deadline = v.StartedAt + 15
+		result.Deadline = v.StartedAt + engine.SeatingSeconds
 	case "decision":
-		result.Deadline = v.StartedAt + 45
+		result.Deadline = v.StartedAt + engine.DecisionEnd
 	default:
-		result.Deadline = v.StartedAt + 60
+		result.Deadline = v.StartedAt + engine.RoundSeconds
 	}
 	if v.TerminalAt.Valid {
 		at := v.TerminalAt.Int64
@@ -135,7 +135,7 @@ func projectTable(ctx context.Context, tx *sql.Tx, v sessionRecord, now int64) (
 		for i := range result.Fact.Seats {
 			result.Fact.Seats[i].Emote, result.Fact.Seats[i].EmoteAt = "", nil
 		}
-		if now < v.StartedAt+60 {
+		if now < v.StartedAt+engine.RoundSeconds {
 			list, err := sessionEntries(ctx, tx, v.ID)
 			if err != nil {
 				return result, err

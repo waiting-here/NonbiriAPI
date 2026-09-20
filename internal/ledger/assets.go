@@ -10,6 +10,22 @@ type AccountPair struct {
 
 func (p AccountPair) valid() bool { return p.General > 0 && p.Game > 0 && p.General != p.Game }
 
+// NewActivityLoan moves the two assets independently. The posting path checks
+// the general wallet before borrowing; its resulting balance may be negative.
+func NewActivityLoan(meta Meta, wallets, external AccountPair, disbursed, repayment Amount) (Plan, error) {
+	if !wallets.valid() || !external.valid() || !positive(disbursed) || !positive(repayment) || !validPrimitive(disbursed) || !validPrimitive(repayment) || repayment.Big().Cmp(disbursed.Big()) <= 0 {
+		return Plan{}, ErrInvalidPlan
+	}
+	plan, err := newPlan(meta, KindActivityLoan, sourceOperation, meta.OperationID, db.U128{})
+	if err != nil {
+		return Plan{}, err
+	}
+	return plan.add(userRole(wallets.General), negate(repayment)).
+		add(externalRole(external.General), repayment).
+		add(roleForAsset(userRole(wallets.Game), Game), disbursed).
+		add(roleForAsset(externalRole(external.Game), Game), negate(disbursed)), nil
+}
+
 // Payment records the original funding split; refunds use these amounts.
 type Payment struct {
 	General Amount

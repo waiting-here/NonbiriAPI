@@ -534,7 +534,7 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		if err := store.DB().QueryRow(`SELECT COUNT(*) FROM request_logs WHERE user_id=?`, userID).Scan(&logs); err != nil {
 			t.Fatal(err)
 		}
-		if banned != 1 || logs != 1 {
+		if banned != 1 || logs != 5 {
 			t.Fatalf("ban=%d logs=%d", banned, logs)
 		}
 		staleKey := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, headers)

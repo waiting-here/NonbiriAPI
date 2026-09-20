@@ -1,6 +1,11 @@
 {
   "user_self": {
     "request": {
+      "phase": "handler",
+      "rejection_stage": null,
+      "rejection_reason": null,
+      "request_method": null,
+      "request_path": null,
       "id": "req_bG9nLXdpcmUAAAAAAAAAAQ",
       "route_kind": "openai_chat_completions",
       "caller_result_class": "failed",
@@ -76,6 +81,11 @@
   },
   "user_charity": {
     "request": {
+      "phase": "handler",
+      "rejection_stage": null,
+      "rejection_reason": null,
+      "request_method": null,
+      "request_path": null,
       "id": "req_bG9nLXdpcmUAAAAAAAAAAg",
       "route_kind": "charity_chat_completions",
       "caller_result_class": "success",
@@ -100,6 +110,11 @@
   },
   "admin": {
     "request": {
+      "phase": "handler",
+      "rejection_stage": null,
+      "rejection_reason": null,
+      "request_method": null,
+      "request_path": null,
       "id": "req_bG9nLXdpcmUAAAAAAAAAAQ",
       "route_kind": "openai_chat_completions",
       "caller_result_class": "failed",
@@ -172,6 +187,11 @@
   },
   "steward": {
     "request": {
+      "phase": "handler",
+      "rejection_stage": null,
+      "rejection_reason": null,
+      "request_method": null,
+      "request_path": null,
       "id": "req_bG9nLXdpcmUAAAAAAAAAAQ",
       "route_kind": "openai_chat_completions",
       "caller_result_class": "failed",

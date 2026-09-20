@@ -10,6 +10,7 @@ import { arenaMotion, interpolate, overloadCues, scoreMotion } from './motion';
 import { ResourceMeter } from './ResourceMeter';
 import { PlanSummary } from './PlanEditor';
 import { CastImpact } from './CastImpact';
+import { CharacterPassive } from './CharacterPassive';
 import { EffectSummary } from './GuideText';
 import { overloadResources, type ResourceShortage } from './shortage';
 
@@ -80,13 +81,15 @@ function ScoreParts({
             ? buffName(catalog, part.buff_id)
             : part.key === 'harness'
               ? 'Harness'
-              : part.key === 'skill-decay'
-                ? t('技能衰减', 'Skill decay')
-                : part.key === 'counter'
-                  ? t('反制', 'Counter')
-                  : part.key === 'condition'
-                    ? t('条件修正', 'Conditional')
-                    : t('得赞修正', 'Likes adjustment')}{' '}
+              : part.key === 'character'
+                ? t('角色被动', 'Character passive')
+                : part.key === 'skill-decay'
+                  ? t('技能衰减', 'Skill decay')
+                  : part.key === 'counter'
+                    ? t('反制', 'Counter')
+                    : part.key === 'condition'
+                      ? t('条件修正', 'Conditional')
+                      : t('得赞修正', 'Likes adjustment')}{' '}
           {part.amount >= 0 ? '+' : ''}
           {part.amount}
         </button>
@@ -336,6 +339,19 @@ export function Arena({
               )
               .reduce((sum, event) => sum + event.cast!.likes, 0);
           const awardedNow = casts.reduce((sum, event) => sum + event.cast!.likes, 0);
+          const received = events.flatMap(
+            (event) =>
+              event.cast?.applications?.filter(
+                (effect) => effect.target === seat && event.seat !== seat,
+              ) ?? [],
+          );
+          const applied = received.reduce((sum, effect) => sum + effect.success, 0);
+          const resisted = received.reduce((sum, effect) => sum + effect.resisted, 0);
+          const followUpCount = casts.some((event) => event.cast?.derived)
+            ? motion.revealedEvents.filter(
+                (event) => event.round === round && event.seat === seat && event.cast?.derived,
+              ).length
+            : 0;
           return (
             <article
               className={`likes-player ${slot ? 'likes-player--casting' : ''} ${overloaded ? 'is-overloaded' : ''} ${stunned ? 'is-stunned' : ''}`}
@@ -402,6 +418,10 @@ export function Arena({
                   )}
                 </div>
               </div>
+              <CharacterPassive
+                role={catalog.roles.find((r) => r.id === player.role)!}
+                onInspect={onInspect}
+              />
               {harness && (
                 <div className="likes-passive-summary">
                   <EffectSummary catalog={catalog} id={harness.id} />
@@ -415,8 +435,28 @@ export function Arena({
                 target={catalog.parameters.TARGET_LIKES}
                 progress={motion.stepProgress}
                 reduced={reduced}
+                followUpCount={followUpCount}
                 overloaded={!!overloadedNow[seat] && impact === 'overload'}
               />
+              {received.length > 0 && (
+                <div
+                  className="likes-reaction"
+                  data-result={resisted === 0 ? 'applied' : applied ? 'partial' : 'resisted'}
+                  key={`reaction:${events.map((event) => event.id).join(':')}`}
+                  role="status"
+                >
+                  <strong>
+                    {resisted === 0
+                      ? t('效果施加', 'EFFECT APPLIED')
+                      : applied
+                        ? t('部分抵抗', 'PARTLY RESISTED')
+                        : t('全部抵抗', 'FULLY RESISTED')}
+                  </strong>
+                  <span>
+                    {t('施加', 'Applied')} {applied} · {t('抵抗', 'Resisted')} {resisted}
+                  </span>
+                </div>
+              )}
               {events
                 .filter((event) => event.seat === seat && !event.cast && !failures.includes(event))
                 .map((event) => (
@@ -456,6 +496,13 @@ export function Arena({
                       {event.score && (
                         <ScoreParts score={event.score} catalog={catalog} onInspect={onInspect} />
                       )}
+                      {event.cast?.applications?.map((effect, index) => (
+                        <p className="likes-application-result" key={index}>
+                          {buffName(catalog, effect.buffID)} · {t('成功', 'Applied')}{' '}
+                          {effect.success} / {t('抵抗', 'Resisted')} {effect.resisted}
+                          {effect.derived ? ` · ${t('追加效果', 'Derived effect')}` : ''}
+                        </p>
+                      ))}
                     </div>
                   ))}
                 </div>

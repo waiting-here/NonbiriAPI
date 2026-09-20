@@ -52,8 +52,8 @@ func saveAdminWireFixture(t *testing.T, page duel.AdminExportPage, name string) 
 		t.Fatal(err)
 	}
 }
-func adminFixture(t *testing.T, kind string) *fixture {
-	f := newFixture(t, kind)
+func adminFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
+	f := newFixture(t, kind, override...)
 	zero := make([]byte, 16)
 	_, err := f.db.Exec(`INSERT INTO users(username,is_admin,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES('operator',1,?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero, zero, zero, 100, 100)
 	if err != nil {

@@ -284,11 +284,11 @@ func querySingleLeaderboard(ctx context.Context, tx *sql.Tx, userID, queryNow in
 SELECT b.user_id,b.species_key,b.size_cm,l.length_cm AS blue_length,ROW_NUMBER() OVER(
 ORDER BY length(COALESCE(l.length_cm,CAST(b.size_cm AS TEXT))) DESC,
 COALESCE(l.length_cm,CAST(b.size_cm AS TEXT)) COLLATE BINARY DESC,b.caught_at ASC,b.public_tie_key ASC) AS rank,
-COALESCE(p.game_profile_public,u.game_profile_public) AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
+CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM game_fishing_best b JOIN users u ON u.id=b.user_id LEFT JOIN game_user_preferences p ON p.user_id=u.id
 LEFT JOIN game_fishing_best_lengths l ON l.user_id=b.user_id
-WHERE u.is_admin=0 AND u.is_banned=0)
-SELECT user_id,species_key,size_cm,blue_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, userID)
+WHERE u.is_admin=0)
+SELECT user_id,species_key,size_cm,blue_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, queryNow, userID)
 	return scanLengthLeaderboard(rows, err, userID, "single", nil)
 }
 
@@ -306,10 +306,10 @@ WHERE f.aggregate_applied=1 AND f.settled_at>?), ranked AS (
 SELECT c.user_id,c.species_key,c.size_cm,c.blue_length,ROW_NUMBER() OVER(ORDER BY
 length(COALESCE(c.blue_length,CAST(c.size_cm AS TEXT))) DESC,
 COALESCE(c.blue_length,CAST(c.size_cm AS TEXT)) COLLATE BINARY DESC,c.caught_at ASC,c.public_tie_key ASC) AS rank,
-COALESCE(p.game_profile_public,u.game_profile_public) AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
+CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM candidates c JOIN users u ON u.id=c.user_id LEFT JOIN game_user_preferences p ON p.user_id=u.id
-WHERE c.pick=1 AND u.is_admin=0 AND u.is_banned=0)
-SELECT user_id,species_key,size_cm,blue_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, window, userID)
+WHERE c.pick=1 AND u.is_admin=0)
+SELECT user_id,species_key,size_cm,blue_length,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, window, queryNow, userID)
 	return scanLengthLeaderboard(rows, err, userID, "recent_single", &window)
 }
 
@@ -345,10 +345,10 @@ func scanLengthLeaderboard(rows *sql.Rows, err error, userID int64, board string
 func queryTotalLeaderboard(ctx context.Context, tx *sql.Tx, userID, queryNow int64) (FishingLeaderboard, error) {
 	rows, err := tx.QueryContext(ctx, `WITH ranked AS (
 SELECT a.user_id,a.total_payout,ROW_NUMBER() OVER(ORDER BY a.total_payout DESC,a.score_achieved_at ASC,a.public_tie_key ASC) AS rank,
-COALESCE(p.game_profile_public,u.game_profile_public) AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
+CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END AS game_profile_public,u.username,u.guild_nick,COALESCE(u.discord_id,'') AS discord_id,u.avatar,u.guild_avatar_url
 FROM game_fishing_rank_aggregates a JOIN users u ON u.id=a.user_id LEFT JOIN game_user_preferences p ON p.user_id=u.id
-WHERE u.is_admin=0 AND u.is_banned=0)
-SELECT user_id,total_payout,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, userID)
+WHERE u.is_admin=0)
+SELECT user_id,total_payout,rank,game_profile_public,username,guild_nick,discord_id,avatar,guild_avatar_url FROM ranked WHERE rank<=20 OR user_id=? ORDER BY rank`, queryNow, userID)
 	if err != nil {
 		return FishingLeaderboard{}, classifyDB(err)
 	}

@@ -11,6 +11,7 @@ import {
 } from './normalize';
 
 export const ACTIVITY_FIXTURE = {
+  loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
     asset_type: 'game',
@@ -112,6 +113,7 @@ describe('economy closed-wire normalizers', () => {
     expect(
       normalizeActivitiesSnapshot({
         master: { enabled: false, available: false, reason: 'disabled' },
+        loan: ACTIVITY_FIXTURE.loan,
         welfare: {
           asset_type: 'game',
           pool_asset_type: 'general',

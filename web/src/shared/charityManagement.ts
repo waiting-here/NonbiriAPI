@@ -1,3 +1,4 @@
+import { clearResourceNavigation } from '@shared/operations/resourceNavigation';
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -284,6 +285,7 @@ export function clearStationSession(
   frame: CharityManagementFrame,
   preserveSession = true,
 ): void {
+  clearResourceNavigation(client);
   const authority = sessionAuthority(client, frame);
   authority.generation += 1;
   authority.subject = undefined;
@@ -382,6 +384,7 @@ export function noteManagementSessionSuccess(
   // from the previous login. The same subject is allowed to recover only from
   // a later, successful generation that is still elevated.
   if (previousSubject !== identity.subject) {
+    if (previousSubject !== undefined) clearResourceNavigation(client);
     clearRevoked(client, frame);
     client.setQueryData(charityManagementKeys.capability(frame), identity.elevated ? false : true);
     // The observer that owns the current session query will write the fresh

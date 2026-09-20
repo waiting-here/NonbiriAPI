@@ -1,0 +1,73 @@
+.loan-dialog {
+  color: var(--nb-color-text);
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+.loan-dialog::backdrop {
+  background: #0008;
+}
+.loan-dialog header,
+.loan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+.loan-facts {
+  display: grid;
+  gap: 0.6rem;
+  margin-block: 1rem;
+}
+.loan-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--nb-color-border);
+  padding-block: 0.35rem;
+}
+.loan-facts dt {
+  flex: 1 1 12rem;
+}
+.loan-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.loan-record + .loan-record {
+  border-top: 2px solid var(--nb-color-border);
+  margin-top: 1.5rem;
+  padding-top: 0.5rem;
+}
+.loan-asterisk {
+  font-size: 0.7rem;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  vertical-align: super;
+}
+.loan-details {
+  padding: 0.8rem;
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border);
+  border-radius: 0.6rem;
+}
+.loan-card .loan-actions {
+  justify-content: flex-start;
+  margin-block: 0.75rem;
+}
+.loan-card select {
+  max-width: 100%;
+}
+.penalty-reference {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}

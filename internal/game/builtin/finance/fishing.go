@@ -170,7 +170,14 @@ func (port fishingPort) Settle(ctx context.Context, tx *sql.Tx, input ports.Fish
 		}
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
-	return err
+	if err != nil {
+		return err
+	}
+	returned := input.Payout.Big()
+	if funding.version == 2 {
+		returned = input.Net.Big()
+	}
+	return recordRank(ctx, tx, input.UserID, "fishing", input.ResourceID, input.Meta.CreatedAt, new(big.Int).Sub(input.Amount.Big(), returned), new(big.Int))
 }
 
 func (port fishingPort) Release(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
@@ -218,7 +225,7 @@ func (port fishingPort) Release(ctx context.Context, tx *sql.Tx, input ports.Ent
 		return err
 	}
 	if funding.version == 2 {
-		if err := port.release(ctx, tx, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}); err != nil {
+		if err := port.release(ctx, tx, onboardingParent{column: "fishing_batch_id", id: input.ResourceID}, input.UserID); err != nil {
 			return err
 		}
 	}

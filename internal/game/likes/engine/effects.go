@@ -8,6 +8,7 @@ type roundRun struct {
 	record *RoundRecord
 	stage  string
 	pick   func(int) (int, error)
+	step   StepLikesSnapshot
 }
 
 func (r *roundRun) log(kind string, seat *int, data map[string]any) *Event {
@@ -52,9 +53,7 @@ func (r *roundRun) materialize(g Grant, starts int64) {
 			st.Remaining = min(b.Cap, st.Remaining)
 		}
 	}
-	if b.Category == "state" {
-		st.Category = "state"
-	}
+	st.Category = b.Category
 	switch b.Kind {
 	case "SPEED_MODE":
 		st.Remaining = 0
@@ -91,7 +90,7 @@ func (r *roundRun) materialize(g Grant, starts int64) {
 func (r *roundRun) overload(seat int) {
 	r.materialize(Grant{BuffID: r.e.buffKind("OVERLOAD").ID, Owner: seat, Duration: ptr(r.e.overloadDuration(r.s, seat)), SourceSkill: "resource-limit"}, r.s.Round+1)
 }
-func (r *roundRun) actionEffect(seat int, a Action) {
+func (r *roundRun) actionEffect(seat int, a Action) ([]Application, error) {
 	e, s := r.e, r.s
 	effect, source := a.Preview.Effect, a.Choice.SkillID
 	recipient := seat
@@ -99,8 +98,13 @@ func (r *roundRun) actionEffect(seat int, a Action) {
 		recipient = other(seat)
 	}
 	enemy := map[string]bool{}
+	pending := []Grant{}
 	grant := func(g Grant) {
 		g.SourceSkill = source
+		if e.characterPassives {
+			pending = append(pending, g)
+			return
+		}
 		s.Grants = append(s.Grants, g)
 		if g.Owner != seat {
 			enemy[g.BuffID] = true
@@ -155,11 +159,15 @@ func (r *roundRun) actionEffect(seat int, a Action) {
 		}
 		grant(Grant{BuffID: b.ID, Owner: owner})
 	}
+	if e.characterPassives {
+		return r.applyGrants(seat, source, pending)
+	}
 	if sota := e.passive(s.Players[seat], "SOTA_ONLY"); sota != nil && sota.P > 0 {
 		for range len(enemy) {
 			s.Grants = append(s.Grants, Grant{BuffID: sota.BuffID, Owner: other(seat), SourceSkill: source, Amount: ptr(sota.P)})
 		}
 	}
+	return nil, nil
 }
 func (r *roundRun) gainProgress(seat int, n int64) {
 	r.materialize(Grant{BuffID: r.e.buffKind("COMBO").ID, Owner: seat, Amount: ptr(n)}, r.s.Round)

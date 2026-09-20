@@ -36,6 +36,12 @@ func RegisterUserRoutes(registrar UserRouteRegistrar, repository *Repository) er
 	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/logs", api.userList); err != nil {
 		return err
 	}
+	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/logs/export.csv", api.userExportCSV); err != nil {
+		return err
+	}
+	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/logs/export.json", api.userExportJSON); err != nil {
+		return err
+	}
 	return registrar.RegisterUserRoute(http.MethodGet, "/api/logs/{id}", api.userDetail)
 }
 
@@ -276,6 +282,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	}
 	filter := ListFilter{}
 	allowed := map[string]bool{
+		"phase":      true,
 		"error_code": true, "status": true, "from": true, "to": true,
 	}
 	switch role {
@@ -304,6 +311,11 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		}
 		value := entries[0]
 		switch name {
+		case "phase":
+			if value != "pre_handler" && value != "handler" {
+				return ListFilter{}, ErrInvalid
+			}
+			filter.Phase = value
 		case "user_id":
 			parsed, ok := parseCanonicalInt64(value, 1, int64(^uint64(0)>>1))
 			if !ok {

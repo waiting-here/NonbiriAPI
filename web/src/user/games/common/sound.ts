@@ -6,6 +6,7 @@ export type GameSoundCue =
   | 'fishing_rare'
   | 'fishing_epic'
   | 'phase'
+  | 'reveal'
   | 'follow'
   | 'win'
   | 'loss'
@@ -14,7 +15,7 @@ export type GameSoundCue =
 
 export interface GameSound {
   unlock(): Promise<void>;
-  play(cue: GameSoundCue): void;
+  play(cue: GameSoundCue, variation?: { readonly chain: number }): void;
   silence(): void;
   close(): void;
 }
@@ -48,7 +49,7 @@ interface ActiveVoice {
 type AudioContextConstructor = new () => AudioContext;
 
 const MAX_VOICES = 6;
-const MASTER_GAIN = 0.18;
+const MASTER_GAIN = 0.24;
 const MIN_RELEASE = 0.006;
 const TERMINAL_PRIORITY = 70;
 
@@ -125,6 +126,12 @@ const CUES: Readonly<Record<GameSoundCue, CueSpec>> = {
       tone(440, 0, 0.1, 'square', 0.25),
       tone(660, 0.1, 0.08, 'triangle', 0.32),
     ],
+  },
+  reveal: {
+    duration: 0.24,
+    priority: 45,
+    group: 'stage',
+    tones: [tone(174.61, 0, 0.1, 'triangle', 0.45), tone(523.25, 0.025, 0.18, 'triangle', 0.52)],
   },
   follow: {
     duration: 0.2,
@@ -437,10 +444,25 @@ export function createGameSound(): GameSound {
     }
   };
 
-  const play = (cue: GameSoundCue): void => {
+  const play = (cue: GameSoundCue, variation?: { readonly chain: number }): void => {
     if (closed || failed || !unlocked || !context || !mix || !master || !isRunning(context)) return;
     if (typeof cue !== 'string' || !Object.prototype.hasOwnProperty.call(CUES, cue)) return;
-    const spec = CUES[cue];
+    const base = CUES[cue];
+    const chain =
+      cue === 'link_match' && Number.isFinite(variation?.chain)
+        ? Math.max(1, Math.min(3, variation!.chain))
+        : 1;
+    const spec =
+      chain > 1
+        ? {
+            ...base,
+            tones: base.tones.map((note) => ({
+              ...note,
+              frequency: note.frequency * 2 ** ((chain - 1) / 12),
+              level: note.level * (1 + (chain - 1) * 0.08),
+            })),
+          }
+        : base;
     const now = currentTimeOf(context);
     pruneVoices(now);
 

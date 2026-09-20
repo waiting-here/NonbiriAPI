@@ -29,9 +29,12 @@ export interface GamePayment {
   readonly game: string;
 }
 
-export type OnboardingGameID = 'fishing' | 'linklink' | 'rps';
-export type GameID = OnboardingGameID | 'bidding' | 'likes' | 'blackjack';
-export type OnboardingTaskKey = Bait | LinkLinkSpec | RPSMode;
+export type GameID = 'fishing' | 'linklink' | 'rps' | 'bidding' | 'likes' | 'blackjack';
+export type OnboardingGameID = GameID;
+export type OnboardingTaskKey = Bait | LinkLinkSpec | RPSMode |
+  'complete_tier_1' | 'complete_tier_2' | 'complete_tier_3' | 'first_win' |
+  'quick_complete' | 'quick_win' | 'standard_complete' | 'standard_win' |
+  'complete' | 'first_bust' | 'first_21' | 'first_natural_21';
 
 export interface OnboardingItem {
   readonly key: OnboardingTaskKey;

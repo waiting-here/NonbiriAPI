@@ -37,9 +37,11 @@ type LifecycleIdentity struct {
 	GameBalance               string
 	Balance                   string
 	DonationCredit            string
+	DonationCreditAchievedAt  *int64
 	EffectiveLevel            int
 	LevelDisplayName          string
 	GameProfilePublic         bool
+	CharityProfilePublic      bool
 	CreatedAt                 int64
 	UpdatedAt                 int64
 }
@@ -95,7 +97,10 @@ func (r *Runtime) ExportLifecycleIdentity(
 		EffectiveConcurrencyLimit: user.EffectiveConcurrencyLimit,
 		GameBalance:               user.GameBalance, Balance: user.Balance, DonationCredit: user.DonationCredit,
 		EffectiveLevel: user.EffectiveLevel, LevelDisplayName: user.LevelDisplayName,
-		GameProfilePublic: user.GameProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+		GameProfilePublic: user.GameProfilePublic, CharityProfilePublic: user.CharityProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT donation_credit_achieved_at FROM users WHERE id=?`, userID).Scan(&identity.DonationCreditAchievedAt); err != nil {
+		return LifecycleIdentity{}, LifecycleUsage{}, fmt.Errorf("auth: export donation achievement: %w", err)
 	}
 	usage := LifecycleUsage{
 		TotalRequests:              user.Usage.TotalRequests,

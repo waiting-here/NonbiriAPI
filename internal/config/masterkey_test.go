@@ -94,7 +94,9 @@ func TestConfigFormattingDoesNotExposeMasterKey(t *testing.T) {
 		}
 	}()
 	formatted := fmt.Sprintf("%+v %#v", c, c)
-	if strings.Contains(formatted, encoded) || strings.Contains(formatted, "0xce") || strings.Contains(formatted, "206 206 206") {
+	// Match byte sequences: a single hexadecimal byte can also be the prefix
+	// of an opaque pointer address printed for an unexported field.
+	if strings.Contains(formatted, encoded) || strings.Contains(formatted, "0xce, 0xce, 0xce") || strings.Contains(formatted, "206 206 206") {
 		t.Fatal("Config formatting exposed master-key bytes")
 	}
 }

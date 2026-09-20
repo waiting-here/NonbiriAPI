@@ -45,12 +45,17 @@ func (r *roundRun) conversions(actions [2][]Action) {
 	}
 }
 
-func (r *roundRun) castEvent(seat int, a Action, score ScoreBreakdown) {
+func (r *roundRun) castEvent(seat int, a Action, score ScoreBreakdown) int {
 	data := map[string]any{"skillId": a.Choice.SkillID, "derived": a.Derived, "main": a.Main, "energy": a.Preview.Energy, "token": a.Preview.Token, "likes": score.Final, "passiveLikes": score.Passive, "trialPayment": a.Preview.TrialPayment, "subPayment": a.Preview.SubPayment, "apiPayment": a.Preview.APIPayment, "gold": a.Preview.Gold, "resourceCosts": a.Preview.ResourceCosts, "templateId": a.Preview.TemplateID, "success": true}
 	if a.Choice.SkillID == "PUB41" {
 		data["level"] = clone(r.s.Players[seat].Distill.Level)
 	}
+	if r.e.characterPassives {
+		data["step"] = r.step
+		data["characterPassive"] = r.e.roles[r.s.Players[seat].Role].Passive.ID
+	}
 	r.log("cast", ptr(seat), data).Score = ptr(score)
+	return len(r.record.Events) - 1
 }
 
 // Each batch freezes both sides' quotes before either payment. A failed attempt
@@ -71,7 +76,10 @@ func (r *roundRun) combos(plans [2]Plan, overloaded [2]bool) error {
 	}
 	combo := e.buffKind("COMBO")
 	queued, attempts := [2]int64{}, [2]int{}
-	for {
+	for batch := 0; ; batch++ {
+		if e.characterPassives {
+			r.step = stepLikes(s, "flash", batch)
+		}
 		type candidate struct {
 			seat   int
 			action Action
@@ -117,12 +125,18 @@ func (r *roundRun) combos(plans [2]Plan, overloaded [2]bool) error {
 				r.log("combo-skip", ptr(c.seat), map[string]any{"required": energy, "available": s.Energy, "reason": "shared-energy", "success": false})
 			}
 		} else {
+			gains := [2]int64{}
 			for _, c := range candidates {
 				seat, a := c.seat, c.action
 				e.pay(s, seat, a)
 				s.Energy -= a.Preview.Energy
-				score := e.score(s, seat, e.skills["GEM01"], a.Preview.Effect, a.Preview.TemplateID, a.Preview.ConditionalLikes, true, 0)
-				s.Players[seat].Likes += score.Final
+				character := e.characterBonus(s, seat, e.skills["GEM01"], a.Preview.Effect, false, r.step)
+				score := e.score(s, seat, e.skills["GEM01"], a.Preview.Effect, a.Preview.TemplateID, a.Preview.ConditionalLikes, true, 0, character)
+				if e.characterPassives {
+					gains[seat] += score.Final
+				} else {
+					s.Players[seat].Likes += score.Final
+				}
 				consumeDegradation(s, seat)
 				r.castEvent(seat, a, score)
 				effect := a.Preview.Effect
@@ -136,6 +150,9 @@ func (r *roundRun) combos(plans [2]Plan, overloaded [2]bool) error {
 					}
 					r.gainProgress(seat, 1)
 				}
+			}
+			for seat := range 2 {
+				s.Players[seat].Likes += gains[seat]
 			}
 		}
 		more := false

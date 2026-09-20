@@ -14,13 +14,15 @@ import (
 )
 
 type profilePatchWire struct {
-	Lang              json.RawMessage `json:"lang"`
-	GameProfilePublic json.RawMessage `json:"game_profile_public"`
+	Lang                 json.RawMessage `json:"lang"`
+	GameProfilePublic    json.RawMessage `json:"game_profile_public"`
+	CharityProfilePublic json.RawMessage `json:"charity_profile_public"`
 }
 
 type profilePatchCanonical struct {
-	Lang              *string `json:"lang,omitempty"`
-	GameProfilePublic *bool   `json:"game_profile_public,omitempty"`
+	Lang                 *string `json:"lang,omitempty"`
+	GameProfilePublic    *bool   `json:"game_profile_public,omitempty"`
+	CharityProfilePublic *bool   `json:"charity_profile_public,omitempty"`
 }
 
 func decodeProfilePatch(w http.ResponseWriter, req *http.Request) (profilePatchCanonical, []byte, bool) {
@@ -41,7 +43,13 @@ func decodeProfilePatch(w http.ResponseWriter, req *http.Request) (profilePatchC
 			return profilePatchCanonical{}, nil, false
 		}
 	}
-	if patch.Lang == nil && patch.GameProfilePublic == nil {
+	if wire.CharityProfilePublic != nil {
+		if bytes.Equal(bytes.TrimSpace(wire.CharityProfilePublic), []byte("null")) || json.Unmarshal(wire.CharityProfilePublic, &patch.CharityProfilePublic) != nil || patch.CharityProfilePublic == nil {
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+			return profilePatchCanonical{}, nil, false
+		}
+	}
+	if patch.Lang == nil && patch.GameProfilePublic == nil && patch.CharityProfilePublic == nil {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return profilePatchCanonical{}, nil, false
 	}
@@ -146,7 +154,14 @@ func (r *Runtime) patchMe(w http.ResponseWriter, req *http.Request) {
 			public = 1
 		}
 	}
-	result, err := tx.ExecContext(req.Context(), `UPDATE users SET lang=CASE WHEN ?=1 THEN ? ELSE lang END,game_profile_public=CASE WHEN ?=1 THEN ? ELSE game_profile_public END,revision=?,updated_at=? WHERE id=? AND revision=? AND is_admin=0`, langSet, lang, publicSet, public, next, r.now().Unix(), actor.UserID, revision)
+	charitySet, charityPublic := 0, 0
+	if patch.CharityProfilePublic != nil {
+		charitySet = 1
+		if *patch.CharityProfilePublic {
+			charityPublic = 1
+		}
+	}
+	result, err := tx.ExecContext(req.Context(), `UPDATE users SET lang=CASE WHEN ?=1 THEN ? ELSE lang END,game_profile_public=CASE WHEN ?=1 THEN ? ELSE game_profile_public END,charity_profile_public=CASE WHEN ?=1 THEN ? ELSE charity_profile_public END,revision=?,updated_at=? WHERE id=? AND revision=? AND is_admin=0`, langSet, lang, publicSet, public, charitySet, charityPublic, next, r.now().Unix(), actor.UserID, revision)
 	if err != nil {
 		writeStableError(w, httperr.CodeInternal, "profile update failed")
 		return

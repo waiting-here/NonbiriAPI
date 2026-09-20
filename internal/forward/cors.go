@@ -25,7 +25,7 @@ func BrowserCORS(next http.Handler) http.Handler {
 		// browser credentials mode "include". Do not reflect Origin or enable
 		// Allow-Credentials: the session APIs have a separate same-origin policy.
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Expose-Headers", "Retry-After")
+		w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID")
 		if r.Method != http.MethodOptions || len(r.Header.Values("Access-Control-Request-Method")) == 0 {
 			next.ServeHTTP(w, r)
 			return

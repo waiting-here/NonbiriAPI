@@ -94,6 +94,15 @@ async function installEndpointRoutes(page: Parameters<typeof mockJson>[0]): Prom
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
+    path: '/api/endpoint-create-options',
+    body: {
+      base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+      mainstream_channels: [],
+    },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
     path: '/api/endpoints?page=2&page_size=10',
     body: numberedResponse(endpointPageTwo, '2', 10, 21, 3),
   });

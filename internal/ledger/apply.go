@@ -266,6 +266,14 @@ func applyAtSequence(ctx context.Context, tx *sql.Tx, plan Plan, sequence int64)
 	if err != nil {
 		return Result{}, err
 	}
+	if plan.spec.kind == KindActivityLoan {
+		if len(roles) != 4 || accounts[roles[0].id].UserID <= 0 || accounts[roles[0].id].UserID != accounts[roles[2].id].UserID {
+			return Result{}, ErrInvalidPlan
+		}
+		if accounts[roles[0].id].Balance.Sign() < 0 {
+			return Result{}, ErrInsufficientBalance
+		}
+	}
 	entries, err := materializeEntries(plan, accounts)
 	if err != nil {
 		return Result{}, err
@@ -292,7 +300,7 @@ func applyAtSequence(ctx context.Context, tx *sql.Tx, plan Plan, sequence int64)
 		newBalances[account.ID] = updated
 	}
 
-	donationAfter, err := applyDonationChange(ctx, tx, plan)
+	donationAfter, err := applyDonationChange(ctx, tx, plan, sequence)
 	if err != nil {
 		return Result{}, err
 	}
@@ -390,7 +398,7 @@ func validateConservation(kind Kind, entries []entrySpec) error {
 	return nil
 }
 
-func applyDonationChange(ctx context.Context, tx *sql.Tx, plan Plan) (*db.U128, error) {
+func applyDonationChange(ctx context.Context, tx *sql.Tx, plan Plan, sequence int64) (*db.U128, error) {
 	change := plan.spec.donation
 	if change == nil {
 		return nil, nil
@@ -427,10 +435,17 @@ WHERE u.id=? AND a.id=?`, change.userID, change.accountID).Scan(&raw, &revisionR
 	if err != nil {
 		return nil, ErrInvariant
 	}
+	seq, err := db.U128FromBig(big.NewInt(sequence))
+	if err != nil || sequence < 1 {
+		return nil, ErrInvariant
+	}
 	result, err := tx.ExecContext(ctx, `
-UPDATE users SET donation_credit_mag=?,revision=?,updated_at=?
+UPDATE users SET donation_credit_mag=?,revision=?,updated_at=?,
+ donation_credit_achieved_at=CASE WHEN ?<>0 THEN ? ELSE donation_credit_achieved_at END,
+ donation_credit_achieved_seq=CASE WHEN ?<>0 THEN ? ELSE donation_credit_achieved_seq END
 WHERE id=? AND donation_credit_mag=? AND revision=?`,
-		db.EncodeU128(after), db.EncodeU128(nextRevision), plan.spec.meta.CreatedAt, change.userID, raw, revisionRaw)
+		db.EncodeU128(after), db.EncodeU128(nextRevision), plan.spec.meta.CreatedAt,
+		change.delta.Sign(), plan.spec.meta.CreatedAt, change.delta.Sign(), db.EncodeU128(seq), change.userID, raw, revisionRaw)
 	if err != nil {
 		return nil, classifySQLError("update donation credit", err)
 	}

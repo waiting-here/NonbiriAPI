@@ -9,6 +9,8 @@ import {
 } from '@shared/games/blackjack';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { GameWallets } from '../common/GameWallets';
+import { Leaderboard } from '../ranking/Leaderboard';
+import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuelText } from '../common/duel/copy';
@@ -96,11 +98,11 @@ function Rules({ close }: { readonly close: () => void }) {
   const t = useDuelText();
   return (
     <DuelDialog title={t('二十一点 · 桌规', 'Blackjack · Table rules')} onClose={close}>
-      <h3>{t('每分钟一局，最多九人', 'One round a minute, up to nine seats')}</h3>
+      <h3>{t('每30秒一局，最多九人', 'One round every 30 seconds, up to nine seats')}</h3>
       <p>
         {t(
-          '每分钟前15秒落座，随后30秒同时决策，最后15秒展示结果。全桌提前结束会提前展示，下一局仍在整分钟开始。无人不产生牌局。',
-          'Each minute has 15 seconds for seating, 30 for simultaneous decisions and 15 for results. An early finish gives a longer result display; the next round still starts on the minute. An empty table creates no game.',
+          '每30秒开始一局，前5秒落座，随后20秒同时决策，最后5秒展示结果。全桌提前结束会延长展示，下一局仍按原定时间开始。无人不产生牌局。',
+          'Every 30 seconds: 5 seconds for seating, 20 for simultaneous decisions and 5 for results. An early finish extends the result display; the next round keeps its scheduled start. An empty table creates no game.',
         )}
       </p>
       <p>
@@ -243,6 +245,92 @@ function History({ close }: { readonly close: () => void }) {
   );
 }
 
+function QueueForm({
+  config,
+  blocked,
+  accepting,
+  onQueue,
+}: {
+  readonly config: BlackjackState['config'];
+  readonly blocked: boolean;
+  readonly accepting: boolean;
+  readonly onQueue: (stake: string) => void;
+}) {
+  const t = useDuelText();
+  const [stake, setStake] = useState(config.default_stake);
+  let selected: bigint | null = null;
+  let valid = false;
+  try {
+    selected = creditsToMilli(stake);
+    const min = creditsToMilli(config.min_stake),
+      step = creditsToMilli(config.stake_step);
+    valid =
+      step > 0n &&
+      selected >= min &&
+      selected <= creditsToMilli(config.max_stake) &&
+      (selected - min) % step === 0n;
+  } catch {
+    /* Invalid input remains editable. */
+  }
+  const current = config.quick_stakes !== undefined;
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!blocked && valid && accepting && current) onQueue(stake);
+      }}
+    >
+      <label>
+        {t('基础投入', 'Base stake')}
+        <input
+          type="number"
+          inputMode="decimal"
+          min={config.min_stake}
+          max={config.max_stake}
+          step={config.stake_step}
+          value={stake}
+          onChange={(e) => setStake(e.target.value)}
+          disabled={blocked}
+          aria-invalid={!valid}
+        />
+      </label>
+      <button
+        className="btn btn-primary"
+        type="submit"
+        disabled={blocked || !accepting || !valid || !current}
+      >
+        {accepting ? t('加入队列', 'Join queue') : t('游戏未开放', 'Game closed')}
+      </button>
+      {!!config.quick_stakes?.length && (
+        <div
+          className="bj-quick-stakes"
+          role="group"
+          aria-label={t('快捷选择投入', 'Quick stake selection')}
+        >
+          {config.quick_stakes.map((amount) => (
+            <button
+              key={amount}
+              type="button"
+              className="btn btn-secondary"
+              disabled={blocked}
+              aria-pressed={selected === creditsToMilli(amount)}
+              onClick={() => setStake(amount)}
+            >
+              {formatCredits(amount)}
+            </button>
+          ))}
+        </div>
+      )}
+      {!current && <p role="status">{t('正在刷新投入配置…', 'Refreshing stake configuration…')}</p>}
+      {!valid && (
+        <p role="status">
+          {t('请按当前限额和步长选择投入。', 'Choose a stake within the current limits and step.')}
+        </p>
+      )}
+    </form>
+  );
+}
+
 export function BlackjackGame() {
   const t = useDuelText();
   const game = useBlackjack();
@@ -256,7 +344,6 @@ export function BlackjackGame() {
   });
   const sound = audio.sound;
   const surface = useTableMotion(home);
-  const [stakeDraft, setStakeDraft] = useState<string | null>(null);
   const [panel, setPanel] = useState<'rules' | 'history' | null>(null);
   const close = useCallback(() => setPanel(null), []);
   const remaining = useAuthoritativeCountdown(
@@ -265,22 +352,6 @@ export function BlackjackGame() {
     home?.server_now ?? 0,
     game.refresh,
   );
-  const stake = stakeDraft ?? home?.config.default_stake ?? '5000';
-  let validStake = false;
-  try {
-    if (home) {
-      const n = creditsToMilli(stake),
-        min = creditsToMilli(home.config.min_stake),
-        step = creditsToMilli(home.config.stake_step);
-      validStake =
-        step > 0n &&
-        n >= min &&
-        n <= creditsToMilli(home.config.max_stake) &&
-        (n - min) % step === 0n;
-    }
-  } catch {
-    /* Invalid input remains editable. */
-  }
   const accepting = !!home?.config.enabled && !!snapshot.data?.gamesEnabled && !snapshot.error;
   const own = home?.you;
   const actions =
@@ -352,7 +423,7 @@ export function BlackjackGame() {
       <div ref={surface} className="bidding-game blackjack-game">
         <header className="bid-heading">
           <div>
-            <span className="bid-eyebrow">BLACKJACK · ONE TABLE · 60s</span>
+            <span className="bid-eyebrow">BLACKJACK · ONE TABLE · 30s</span>
             <h1>{t('二十一点', 'Blackjack')}</h1>
             <p>{t('同桌决策，各自与庄家比点。', 'One table. Your own hand against the dealer.')}</p>
           </div>
@@ -370,6 +441,9 @@ export function BlackjackGame() {
           </div>
         </header>
         {snapshot.data && <GameWallets wallets={snapshot.data} />}
+        {snapshot.data && (
+          <OnboardingCard game="blackjack" progress={snapshot.data.onboarding.blackjack} />
+        )}
         <RandomnessProof
           game="blackjack"
           id={home?.table?.id}
@@ -399,7 +473,7 @@ export function BlackjackGame() {
                         i
                       ]
                     }
-                    <small>{[15, 30, 15][i]}s</small>
+                    <small>{[5, 20, 5][i]}s</small>
                   </li>
                 ))}
               </ol>
@@ -490,34 +564,14 @@ export function BlackjackGame() {
               ) : (
                 <>
                   <h2>{t('下一手，由你决定', 'Your next hand is your choice')}</h2>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!game.blocked && validStake && accepting)
-                        game.run({ kind: 'queue', stake, config_hash: home.config_hash });
-                    }}
-                  >
-                    <label>
-                      {t('基础投入', 'Base stake')}
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min={home.config.min_stake}
-                        max={home.config.max_stake}
-                        step={home.config.stake_step}
-                        value={stake}
-                        onChange={(e) => setStakeDraft(e.target.value)}
-                        disabled={game.pending}
-                      />
-                    </label>
-                    <button
-                      className="btn btn-primary"
-                      type="submit"
-                      disabled={game.blocked || !accepting || !validStake}
-                    >
-                      {accepting ? t('加入队列', 'Join queue') : t('游戏未开放', 'Game closed')}
-                    </button>
-                  </form>
+                  <QueueForm
+                    config={home.config}
+                    blocked={game.blocked}
+                    accepting={accepting}
+                    onQueue={(stake) =>
+                      game.run({ kind: 'queue', stake, config_hash: home.config_hash })
+                    }
+                  />
                   <p>
                     {formatCredits(home.config.min_stake)}–{formatCredits(home.config.max_stake)} ·{' '}
                     {t('步长', 'Step')} {formatCredits(home.config.stake_step)} ·{' '}
@@ -563,6 +617,7 @@ export function BlackjackGame() {
         )}
         {panel === 'rules' && <Rules close={close} />}
         {panel === 'history' && <History close={close} />}
+        <Leaderboard board="blackjack" />
       </div>
     </main>
   );

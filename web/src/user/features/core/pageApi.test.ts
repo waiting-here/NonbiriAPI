@@ -128,7 +128,7 @@ describe('numbered core resource API', () => {
     await listEndpointKeysPage('11', { page: '1', pageSize: 20 }, undefined, search);
     for (const [input] of fetchMock.mock.calls) {
       const params = new URL(String(input), 'https://example.test').searchParams;
-      expect(params.get('q')).toBe(search);
+      expect(params.get('q')).toBe(search.trim());
       expect(params.has('cursor')).toBe(false);
     }
     await listEndpointsPage({ page: '1', pageSize: 20 }, undefined, '😀'.repeat(128));

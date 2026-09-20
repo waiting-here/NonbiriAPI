@@ -277,6 +277,19 @@ VALUES(?,zeroblob(32),'openai-compatible','https://example.com/v1','pending_revi
 	if err != nil || keys.Data[0].Browse.DonationEligibility != "security_processing" {
 		t.Fatalf("suspension takes precedence over membership: %+v %v", keys, err)
 	}
+	for _, tc := range []struct {
+		donated, suspended, want string
+	}{
+		{"true", "security_processing", "1"},
+		{"false", "security_processing", "0"},
+		{"true", "none", "0"},
+	} {
+		filtered, err := env.repository.FilterEndpointKeysPage(context.Background(), owner, eid,
+			EndpointKeyPageFilters{Donated: tc.donated, SuspensionState: tc.suspended}, pagination.Default())
+		if err != nil || filtered.Pagination.TotalItems != tc.want {
+			t.Fatalf("independent membership/security filters %+v: %+v %v", tc, filtered, err)
+		}
+	}
 }
 
 func TestDonationSelectionBrowseUsesSubmissionOccupancyAndLiteralSearch(t *testing.T) {

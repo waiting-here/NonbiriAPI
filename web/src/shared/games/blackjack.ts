@@ -28,6 +28,7 @@ const configFields = [
   'stake_step',
   'default_stake',
   'rake_bp',
+  'quick_stakes',
 ];
 const snapshotFields = [
   'available',
@@ -45,6 +46,7 @@ export interface BlackjackConfig {
   stake_step: string;
   default_stake: string;
   rake_bp: { platform: number; welfare: number; thursday: number };
+  quick_stakes: string[];
 }
 const money = (v: unknown) => amount(v, 'blackjack amount', false);
 const wide = (v: unknown) => decimal(v, 'blackjack integer');
@@ -62,6 +64,27 @@ function rates(v: unknown) {
 }
 export function blackjackConfig(v: unknown): BlackjackConfig {
   const r = record(v, configFields, 'blackjack configuration');
+  const quickStakes = array(r.quick_stakes, 'quick stakes', 8).map(money);
+  const milli = (v: string) => {
+    const [whole, fraction = ''] = v.split('.');
+    return BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'));
+  };
+  const minimum = milli(money(r.min_stake));
+  const maximum = milli(money(r.max_stake));
+  const step = milli(money(r.stake_step));
+  let previous = 0n;
+  for (const value of quickStakes) {
+    const stake = milli(value);
+    if (
+      step <= 0n ||
+      stake < minimum ||
+      stake > maximum ||
+      stake <= previous ||
+      (stake - minimum) % step !== 0n
+    )
+      invalidResponse('quick stakes');
+    previous = stake;
+  }
   return {
     enabled: boolean(r.enabled, 'blackjack enabled'),
     min_stake: money(r.min_stake),
@@ -69,6 +92,7 @@ export function blackjackConfig(v: unknown): BlackjackConfig {
     stake_step: money(r.stake_step),
     default_stake: money(r.default_stake),
     rake_bp: rates(r.rake_bp),
+    quick_stakes: quickStakes,
   };
 }
 function hash(v: unknown) {
@@ -81,9 +105,9 @@ export function blackjackSnapshot(v: unknown) {
   const cfg = blackjackConfig(Object.fromEntries(configFields.map((k) => [k, r[k]])));
   integer(r.queue_capacity, 'queue capacity', 4096, 4096);
   integer(r.seats, 'seats', 9, 9);
-  integer(r.seating_seconds, 'seating seconds', 15, 15);
-  integer(r.decision_seconds, 'decision seconds', 30, 30);
-  integer(r.round_seconds, 'round seconds', 60, 60);
+  integer(r.seating_seconds, 'seating seconds', 5, 5);
+  integer(r.decision_seconds, 'decision seconds', 20, 20);
+  integer(r.round_seconds, 'round seconds', 30, 30);
   return {
     ...cfg,
     available: boolean(r.available, 'availability'),
@@ -266,6 +290,17 @@ function own(v: unknown) {
     legal_actions: actions,
   };
 }
+function legacyHomeConfig(v: unknown) {
+  const r = record(
+    v,
+    configFields,
+    'blackjack configuration',
+    configFields.filter((field) => field !== 'quick_stakes'),
+  );
+  const missing = r.quick_stakes === undefined;
+  const config = blackjackConfig(missing ? { ...r, quick_stakes: [] } : r);
+  return { ...config, quick_stakes: missing ? undefined : config.quick_stakes };
+}
 export function blackjackState(v: unknown) {
   const r = record(
     v,
@@ -288,7 +323,7 @@ export function blackjackState(v: unknown) {
     phase: oneOf(r.phase, phases, 'phase'),
     deadline: unixSecond(r.deadline, 'deadline'),
     next_round_at: unixSecond(r.next_round_at, 'next round'),
-    config: blackjackConfig(r.config),
+    config: legacyHomeConfig(r.config),
     config_hash: hash(r.config_hash),
     queue_count: wide(r.queue_count),
     you: r.you === null ? null : own(r.you),

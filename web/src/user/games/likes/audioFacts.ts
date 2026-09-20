@@ -3,12 +3,10 @@ import { STAGES } from './labels';
 import type { Cast, LikesEvent, LikesView, Presentation, Selection } from './types';
 import { eventTime, stageTime } from './timeline';
 import { settlementFrame } from './motion';
+import { applicationVoices, followUpVoices, type EffectVoice } from '../common/audio/phrases';
+import type { AudioFact } from '../common/audio/useArcadeAudio';
 
-export interface AudioFact {
-  readonly key: string;
-  readonly cue: string;
-  readonly at: number;
-}
+export type { AudioFact } from '../common/audio/useArcadeAudio';
 
 export type LikesHome = DuelHome<LikesView, Presentation, LikesEvent[], Selection>;
 export type MusicScene = 'lobby' | 'battle' | 'accelerated' | 'danger' | 'win' | 'draw' | 'loss';
@@ -55,12 +53,18 @@ function pushFact(
   eventID: string,
   cue: string,
   at: number,
+  voices?: readonly EffectVoice[],
 ) {
   if (!Number.isFinite(at) || at < 0) return;
   const key = `likes:${sessionID}:${round}:${eventID}`;
   if (seen.has(`${key}:${cue}`)) return;
   seen.add(`${key}:${cue}`);
-  facts.push({ key, cue, at });
+  facts.push({
+    key,
+    cue,
+    at,
+    ...(voices ? { playback: voices[0], accents: voices.slice(1) } : {}),
+  });
 }
 
 function refillTransition(event: LikesEvent) {
@@ -94,6 +98,7 @@ function eventFacts(
   startedAt: number,
   endsAt: number,
   presentation?: Presentation,
+  followups = new Map<string, number>(),
 ) {
   const at = presentation
     ? eventTime(presentation, startedAt, endsAt, event)
@@ -101,18 +106,33 @@ function eventFacts(
   const base = String(event.id);
   if (event.kind === 'cast' && event.cast) {
     const cast = event.cast;
-    pushFact(facts, seen, sessionID, event.round, `${base}:cast`, 'likes_cast', at);
-    if (cast.likes > 0 || (event.score?.final ?? 0) > 0)
-      pushFact(facts, seen, sessionID, event.round, `${base}:score`, 'likes_score_burst', at);
-    if (cast.derived)
-      pushFact(facts, seen, sessionID, event.round, `${base}:combo`, 'likes_combo', at);
-    if (paymentCue(cast)) {
-      const paymentAt = cast.derived
-        ? at
-        : presentation
-          ? stageTime(presentation, startedAt, endsAt, 'payment')
-          : legacyStageTime(startedAt, endsAt, 'payment');
-      pushFact(facts, seen, sessionID, event.round, `${base}:pay`, 'likes_pay', paymentAt);
+    const counter = `${event.round}:${event.seat}`;
+    const count = (followups.get(counter) ?? 0) + (cast.derived ? 1 : 0);
+    if (cast.derived) followups.set(counter, count);
+    let voices: readonly EffectVoice[] = cast.derived
+      ? followUpVoices(count)
+      : [
+          {
+            cue:
+              cast.likes > 0 || (event.score?.final ?? 0) > 0 ? 'likes_score_burst' : 'likes_cast',
+          },
+        ];
+    const applications = cast.applications?.filter((effect) => effect.target !== event.seat) ?? [];
+    if (applications.length) {
+      const success = applications.reduce((sum, effect) => sum + effect.success, 0);
+      const resisted = applications.reduce((sum, effect) => sum + effect.resisted, 0);
+      voices = [
+        ...(cast.derived ? voices.slice(0, 1) : []),
+        ...applicationVoices(success, resisted),
+      ];
+    }
+    pushFact(facts, seen, sessionID, event.round, `${base}:impact`, voices[0].cue, at, voices);
+    if (paymentCue(cast) && !cast.derived) {
+      const paymentAt = presentation
+        ? stageTime(presentation, startedAt, endsAt, 'payment')
+        : legacyStageTime(startedAt, endsAt, 'payment');
+      if (paymentAt !== at)
+        pushFact(facts, seen, sessionID, event.round, `${base}:pay`, 'likes_pay', paymentAt);
     }
   }
 
@@ -238,6 +258,7 @@ function resolutionFacts(
   },
 ) {
   const seen = new Set<string>();
+  const followups = new Map<string, number>();
   for (const event of resolution.summary.events)
     eventFacts(
       facts,
@@ -247,16 +268,18 @@ function resolutionFacts(
       resolution.startedAt,
       resolution.endsAt,
       resolution.summary,
+      followups,
     );
-  frameFacts(
-    facts,
-    seen,
-    sessionID,
-    resolution.round,
-    resolution.summary,
-    resolution.startedAt,
-    resolution.endsAt,
-  );
+  if (!resolution.summary.timeline)
+    frameFacts(
+      facts,
+      seen,
+      sessionID,
+      resolution.round,
+      resolution.summary,
+      resolution.startedAt,
+      resolution.endsAt,
+    );
 }
 
 function eventListFacts(
@@ -267,7 +290,9 @@ function eventListFacts(
   endsAt: number,
 ) {
   const seen = new Set<string>();
-  for (const event of events) eventFacts(facts, seen, sessionID, event, startedAt, endsAt);
+  const followups = new Map<string, number>();
+  for (const event of events)
+    eventFacts(facts, seen, sessionID, event, startedAt, endsAt, undefined, followups);
 }
 
 function resultFact(home: LikesHome, facts: AudioFact[]) {

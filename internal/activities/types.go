@@ -165,6 +165,7 @@ type ActivitiesSnapshot struct {
 	Master   MasterView   `json:"master"`
 	Welfare  WelfareView  `json:"welfare"`
 	Thursday ThursdayView `json:"thursday"`
+	Loan     LoanView     `json:"loan"`
 }
 
 type WelfareConfig struct {
@@ -178,6 +179,7 @@ type ThursdayConfig struct {
 }
 
 type ActivitiesConfig struct {
+	LoanConfig
 	Revision      string         `json:"revision"`
 	MasterEnabled bool           `json:"master_enabled"`
 	Welfare       WelfareConfig  `json:"welfare"`
@@ -199,6 +201,10 @@ type ActivitiesConfigPatch struct {
 	MasterEnabled    *bool
 	Welfare          *WelfareConfigPatch
 	Thursday         *ThursdayConfigPatch
+	LoanEnabled      *bool
+	LoanTiers        *[]string
+	LoanA            *string
+	LoanB            *string
 }
 
 type ThursdayNextMutation struct {
@@ -292,10 +298,11 @@ type PoolDestination struct {
 }
 
 type UserExport struct {
-	Checkins       []CheckinExport             `json:"checkins"`
-	GameOnboarding []OnboardingExport          `json:"game_onboarding"`
-	WelfareClaims  []WelfareClaimExport        `json:"welfare_claims"`
-	Thursday       []ThursdayParticipantExport `json:"thursday"`
+	Checkins            []CheckinExport             `json:"checkins"`
+	GameOnboarding      []OnboardingExport          `json:"game_onboarding"`
+	GameOnboardingHolds []OnboardingHoldExport      `json:"game_onboarding_holds"`
+	WelfareClaims       []WelfareClaimExport        `json:"welfare_claims"`
+	Thursday            []ThursdayParticipantExport `json:"thursday"`
 }
 
 type WelfareClaimExport struct {
@@ -339,4 +346,12 @@ type OnboardingExport struct {
 	TaskKey     string `json:"task_key"`
 	Award       string `json:"award"`
 	CompletedAt int64  `json:"completed_at"`
+	OperationID string `json:"operation_id"`
+}
+
+type OnboardingHoldExport struct {
+	ID        string `json:"id"`
+	GameKey   string `json:"game_key"`
+	TaskKey   string `json:"task_key"`
+	CreatedAt int64  `json:"created_at"`
 }

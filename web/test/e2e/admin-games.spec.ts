@@ -19,8 +19,17 @@ type Route = Parameters<RouteHandler>[0];
 const EPHEMERAL_MARKER = 'admin-games-ephemeral-marker';
 
 const INITIAL_CONFIG: GamesConfig = {
-  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 } },
-  bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
+  blackjack: {
+    enabled: false,
+    min_stake: '1000',
+    max_stake: '50000',
+    stake_step: '1000',
+    default_stake: '5000',
+    rake_bp: { platform: 100, welfare: 100, thursday: 100 },
+    quick_stakes: ['1000', '5000', '10000', '50000'],
+  },
+  bidding: duelConfigFixture('bidding'),
+  likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -100,7 +109,8 @@ function applyPatch(config: GamesConfig, rawPatch: Record<string, unknown>): Gam
   const patch = rawPatch as GamesPatch;
   return {
     blackjack: structuredClone(patch.blackjack),
-    bidding: structuredClone(config.bidding), likes: structuredClone(config.likes),
+    bidding: structuredClone(config.bidding),
+    likes: structuredClone(config.likes),
     revision: String(BigInt(config.revision) + 1n),
     master_enabled: patch.master_enabled,
     fishing: structuredClone(patch.fishing),
@@ -154,6 +164,14 @@ async function prepare(
   await page.route('**/*', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (
+      url.origin === ADMIN_ORIGIN &&
+      request.method() === 'GET' &&
+      url.pathname === '/admin/api/games/config'
+    ) {
+      await fulfillJSON(route, config.current);
+      return;
+    }
     if (
       url.origin !== ADMIN_ORIGIN ||
       request.method() !== 'PATCH' ||
@@ -266,3 +284,59 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   consoleGuard.assertNone();
 });
 import { duelConfigFixture } from '../duelConfigFixture';
+
+test('admin validates quick amount count, duplicates and limits before saving the complete list', async ({
+  context,
+  page,
+}) => {
+  const config = {
+    current: structuredClone(INITIAL_CONFIG),
+    patches: [] as Record<string, unknown>[],
+  };
+  const errors = await prepare(context, page, config);
+  await page.goto(`${ADMIN_ORIGIN}/games`);
+  const group = page.getByRole('group', { name: 'Quick stake amounts (0–8)' });
+  const save = page.getByRole('button', { name: 'Save game configuration' });
+  await expect(group.getByRole('textbox')).toHaveCount(4);
+  for (let i = 0; i < 4; i++)
+    await group
+      .getByRole('button', { name: /^Remove quick amount/ })
+      .first()
+      .click();
+  for (let i = 0; i < 8; i++) {
+    await group.getByRole('button', { name: 'Add quick amount' }).click();
+    await group
+      .getByRole('textbox')
+      .nth(i)
+      .fill(String((i + 1) * 1000));
+  }
+  await expect(group.getByRole('button', { name: 'Add quick amount' })).toBeDisabled();
+  await group.getByRole('textbox').nth(1).fill('1000');
+  await expect(save).toBeDisabled();
+  expect(config.patches).toHaveLength(0);
+  await group.getByRole('textbox').nth(1).fill('2000');
+  await page.getByLabel('Minimum base stake', { exact: true }).fill('2000');
+  await expect(save).toBeDisabled();
+  await group.getByRole('button', { name: 'Remove quick amount 1', exact: true }).click();
+  await save.click();
+  await expect.poll(() => config.patches.length).toBe(1);
+  expect(config.current.blackjack.min_stake).toBe('2000');
+  expect(config.current.blackjack.quick_stakes).toEqual([
+    '2000',
+    '3000',
+    '4000',
+    '5000',
+    '6000',
+    '7000',
+    '8000',
+  ]);
+  for (let i = 0; i < 7; i++)
+    await group
+      .getByRole('button', { name: /^Remove quick amount/ })
+      .first()
+      .click();
+  await save.click();
+  await expect.poll(() => config.patches.length).toBe(2);
+  expect(config.current.blackjack.quick_stakes).toEqual([]);
+  errors.assertNone();
+});

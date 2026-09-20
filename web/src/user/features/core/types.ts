@@ -1,3 +1,5 @@
+import type { AutomaticRestriction } from '@shared/operations/restrictions';
+
 export const CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
@@ -51,6 +53,8 @@ export interface UserProfile {
   effective_level: 1 | 2 | 3 | 4 | 5;
   level_display_name: string;
   game_profile_public: boolean;
+  charity_profile_public: boolean;
+  automatic_restrictions: AutomaticRestriction[];
   created_at: number;
   updated_at: number;
   usage: UsageSummary;
@@ -462,15 +466,15 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 8;
+  schemaVersion: 9;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV8: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportV9: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV8(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportV9(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

@@ -62,6 +62,7 @@ interface EventHandlers {
 }
 
 const OLD_SNAPSHOT: ActivitiesSnapshot = {
+  loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
     asset: 'game',

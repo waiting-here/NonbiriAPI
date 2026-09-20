@@ -78,17 +78,15 @@ func (r *Repository) ListEndpointsPage(ctx context.Context, userID int64, page p
 }
 
 func (r *Repository) SearchEndpointsPage(ctx context.Context, userID int64, search string, page pagination.Request) (Page[Endpoint], error) {
-	if !validateFreeText(search, 0, 128) {
+	return r.FilterEndpointsPage(ctx, userID, EndpointPageFilters{Query: search}, page)
+}
+
+func (r *Repository) FilterEndpointsPage(ctx context.Context, userID int64, filters EndpointPageFilters, page pagination.Request) (Page[Endpoint], error) {
+	if !r.validEndpointPageFilters(filters) {
 		return Page[Endpoint]{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[Endpoint], error) {
-		query := endpointPageSelect
-		args := []any{userID}
-		if search != "" {
-			query += ` AND (instr(lower(e.base_url),lower(?))>0 OR instr(lower(e.note),lower(?))>0
-OR instr(lower(COALESCE(e.mainstream_channel_name,'')),lower(?))>0)`
-			args = append(args, search, search, search)
-		}
+		query, args := endpointPageQuery(userID, filters)
 		result, err := readNumberedPage(ctx, tx, page, query, "e.updated_at DESC,e.id DESC", args, func(s pageScanner) (Endpoint, error) { return scanEndpoint(s) })
 		if err != nil {
 			return result, err
@@ -108,7 +106,13 @@ func (r *Repository) ListEndpointKeysPage(ctx context.Context, userID, endpointI
 }
 
 func (r *Repository) SearchEndpointKeysPage(ctx context.Context, userID, endpointID int64, search string, page pagination.Request) (Page[EndpointKey], error) {
-	if endpointID <= 0 || !validateFreeText(search, 0, 128) {
+	return r.FilterEndpointKeysPage(ctx, userID, endpointID, EndpointKeyPageFilters{Query: search}, page)
+}
+
+func (r *Repository) FilterEndpointKeysPage(ctx context.Context, userID, endpointID int64, filters EndpointKeyPageFilters, page pagination.Request) (Page[EndpointKey], error) {
+	if endpointID <= 0 || !validateFreeText(filters.Query, 0, 128) ||
+		!optionalChoice(filters.Enabled, "true", "false") || !optionalChoice(filters.Donated, "true", "false") ||
+		!optionalChoice(filters.SuspensionState, "none", "security_processing") {
 		return Page[EndpointKey]{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[EndpointKey], error) {
@@ -119,13 +123,7 @@ func (r *Repository) SearchEndpointKeysPage(ctx context.Context, userID, endpoin
 		if !exists {
 			return Page[EndpointKey]{}, ErrNotFound
 		}
-		query := endpointKeySelect + ` WHERE e.user_id=? AND e.id=?`
-		args := []any{userID, endpointID}
-		if search != "" {
-			query += ` AND (instr(lower(k.note),lower(?))>0 OR instr(lower(k.display_head),lower(?))>0
-OR instr(lower(k.display_tail),lower(?))>0)`
-			args = append(args, search, search, search)
-		}
+		query, args := endpointKeyPageQuery(userID, endpointID, filters)
 		result, err := readNumberedPage(ctx, tx, page, query, "k.updated_at DESC,k.id DESC", args, func(s pageScanner) (EndpointKey, error) { return scanEndpointKey(s) })
 		if err != nil {
 			return result, err
@@ -141,8 +139,18 @@ OR instr(lower(k.display_tail),lower(?))>0)`
 }
 
 func (r *Repository) ListModelsPage(ctx context.Context, userID int64, page pagination.Request) (Page[Model], error) {
+	return r.FilterModelsPage(ctx, userID, ModelPageFilters{}, page)
+}
+
+func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters ModelPageFilters, page pagination.Request) (Page[Model], error) {
+	if !validateFreeText(filters.Query, 0, 512) || (filters.Provider != "" && !validPersonalModelProvider(filters.Provider)) ||
+		!optionalChoice(filters.RouteStrategy, "ordered", "random") ||
+		!optionalChoice(filters.ConnectionState, "available", "unavailable", "unconfigured") {
+		return Page[Model]{}, ErrInvalidRequest
+	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[Model], error) {
-		result, err := readNumberedPage(ctx, tx, page, modelSelect+` WHERE m.user_id=?`, "m.updated_at DESC,m.id DESC", []any{userID}, func(s pageScanner) (Model, error) { return scanModel(s) })
+		query, args := modelPageQuery(userID, filters)
+		result, err := readNumberedPage(ctx, tx, page, query, "m.updated_at DESC,m.id DESC", args, func(s pageScanner) (Model, error) { return scanModel(s) })
 		if err != nil {
 			return result, err
 		}

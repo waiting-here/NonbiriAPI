@@ -114,6 +114,7 @@ function ancillaryResponse(url: URL): unknown {
     return {
       revision: '1',
       master_enabled: true,
+      loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
       welfare: { enabled: false, threshold: '1', cap: '2' },
       thursday: { enabled: false },
     };
@@ -282,6 +283,7 @@ describe('administrator paged operation pages', () => {
         return {
           revision: '1',
           master_enabled: true,
+          loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
           welfare: { enabled: false, threshold: '1', cap: '2' },
           thursday: { enabled: false },
         };

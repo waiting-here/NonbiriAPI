@@ -29,6 +29,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 var (
@@ -48,6 +49,7 @@ var (
 	// RPM denials it has no safely predictable Retry-After and never triggers
 	// the RPM denial callback.
 	ErrConcurrencyLimited = errors.New("flowcontrol: user concurrency limited")
+	ErrResourceLimit      = errors.New("flowcontrol: denial policy resource limit")
 )
 
 const (
@@ -111,11 +113,11 @@ type Config struct {
 	// 100000 ceiling; smaller non-zero values are a test/deployment seam only.
 	MaxConcurrentUsers int
 	// OnDenied is called only after an atomic admission denial has been
-	// classified. It is deliberately advisory: the callback must never make
-	// the forwarding path proceed without a metered admission. In particular,
+	// classified. Its synchronous error replaces the denial with an unavailable
+	// response; a policy whose transaction failed cannot claim success. In particular,
 	// callers must only attribute RPMUserLimit to the user; global, capacity,
 	// and other shared-resource denials are not user violations.
-	OnDenied func(context.Context, int64, ratelimit.RPMReason)
+	OnDenied func(context.Context, int64, ratelimit.RPMReason) error
 }
 
 // Controller is the shared, process-wide concurrency and RPM admission
@@ -126,7 +128,7 @@ type Controller struct {
 	userConcurrency *userConcurrencyLimiter
 	userAdmissions  *userAdmissionGate
 	userLimits      UserLimitResolver
-	onDenied        func(context.Context, int64, ratelimit.RPMReason)
+	onDenied        func(context.Context, int64, ratelimit.RPMReason) error
 }
 
 // New constructs one shared Controller.
@@ -253,7 +255,9 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 		case errors.Is(err, ratelimit.ErrClosed):
 			return nil, 0, ErrClosed
 		case errors.Is(err, ratelimit.ErrCapacity):
-			c.notifyDenied(ctx, userID, decision.Reason)
+			if err := c.notifyDenied(ctx, userID, decision.Reason); err != nil {
+				return nil, 0, err
+			}
 			// Bounded-store capacity has no time window whose release can be
 			// predicted safely; the HTTP layer omits Retry-After.
 			return nil, 0, ErrRateLimited
@@ -263,17 +267,26 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 	}
 	if reservation == nil || !decision.Allowed {
 		permit.Release()
-		c.notifyDenied(ctx, userID, decision.Reason)
+		if err := c.notifyDenied(ctx, userID, decision.Reason); err != nil {
+			return nil, 0, err
+		}
 		return nil, boundedRetryAfter(decision.RetryAfter), ErrRateLimited
 	}
 	return &Reservation{inner: reservation, concurrency: permit}, 0, nil
 }
 
-func (c *Controller) notifyDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
-	if c == nil || c.onDenied == nil || reason == ratelimit.RPMAllowed {
-		return
+func (c *Controller) notifyDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
+	safeReason := "resource_limit_exceeded"
+	if reason == ratelimit.RPMUserLimit {
+		safeReason = "user_rpm"
+	} else if reason == ratelimit.RPMGlobalLimit {
+		safeReason = "global_rpm"
 	}
-	c.onDenied(ctx, userID, reason)
+	requestattempt.Stage(ctx, "flow", safeReason)
+	if c == nil || c.onDenied == nil || reason == ratelimit.RPMAllowed {
+		return nil
+	}
+	return c.onDenied(ctx, userID, reason)
 }
 
 // ForgetUser retires an active user's exact counter without splitting it. It

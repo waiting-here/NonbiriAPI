@@ -12,8 +12,7 @@ import (
 const maxActivityExportRows = 10_000
 
 // ExportUser returns only the account's own claim/contribution/result facts.
-// It excludes shared pool history, operation IDs, checkpoints and participant
-// references.
+// It excludes shared pool history, checkpoints and other participants.
 func (r *Repository) ExportUser(ctx context.Context, userID int64) (UserExport, error) {
 	if r == nil || r.db == nil || ctx == nil || userID <= 0 {
 		return UserExport{}, ErrInvalidRequest
@@ -53,6 +52,9 @@ func (r *Repository) ExportUserTx(ctx context.Context, tx *sql.Tx, userID int64,
 		return UserExport{}, err
 	}
 	if export.GameOnboarding, err = exportOnboardingTx(ctx, tx, userID, limit); err != nil {
+		return UserExport{}, err
+	}
+	if export.GameOnboardingHolds, err = exportOnboardingHoldsTx(ctx, tx, userID, limit); err != nil {
 		return UserExport{}, err
 	}
 	claimRows, err := tx.QueryContext(ctx, `
@@ -219,6 +221,9 @@ WHERE period_id=? AND participant_ref=? AND user_id=? AND settled=0 AND ledger_r
 	if _, err := tx.ExecContext(ctx, `DELETE FROM welfare_claims WHERE user_id=?`, userID); err != nil {
 		return classifyDatabaseError("delete welfare claim facts", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM activity_loans WHERE user_id=?`, userID); err != nil {
+		return classifyDatabaseError("delete loan receipts", err)
+	}
 	return nil
 }
 
@@ -250,7 +255,7 @@ ORDER BY created_at,1 LIMIT ?`, userID, userID, limit+1)
 }
 
 func exportOnboardingTx(ctx context.Context, tx *sql.Tx, userID int64, limit int) ([]OnboardingExport, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT game_key,task_key,award_milli,completed_at FROM game_onboarding_completions WHERE user_id=? ORDER BY completed_at,game_key,task_key LIMIT ?`, userID, min(limit, 9)+1)
+	rows, err := tx.QueryContext(ctx, `SELECT game_key,task_key,award_milli,completed_at,operation_id FROM game_onboarding_completions WHERE user_id=? ORDER BY completed_at,game_key,task_key LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return nil, classifyDatabaseError("read onboarding export", err)
 	}
@@ -259,17 +264,40 @@ func exportOnboardingTx(ctx context.Context, tx *sql.Tx, userID int64, limit int
 	for rows.Next() {
 		var item OnboardingExport
 		var award int64
-		if err := rows.Scan(&item.GameKey, &item.TaskKey, &award, &item.CompletedAt); err != nil {
+		if err := rows.Scan(&item.GameKey, &item.TaskKey, &award, &item.CompletedAt, &item.OperationID); err != nil {
 			return nil, classifyDatabaseError("scan onboarding export", err)
 		}
 		item.Award = formatMilliPointsInt64(award)
 		items = append(items, item)
-		if len(items) > limit || len(items) > 9 {
+		if len(items) > limit {
 			return nil, ErrResourceLimit
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, classifyDatabaseError("iterate onboarding export", err)
+	}
+	return items, nil
+}
+
+func exportOnboardingHoldsTx(ctx context.Context, tx *sql.Tx, userID int64, limit int) ([]OnboardingHoldExport, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id,game_key,task_key,created_at FROM game_onboarding_holds WHERE user_id=? ORDER BY created_at,id LIMIT ?`, userID, limit+1)
+	if err != nil {
+		return nil, classifyDatabaseError("read onboarding holds export", err)
+	}
+	defer rows.Close()
+	items := []OnboardingHoldExport{}
+	for rows.Next() {
+		var item OnboardingHoldExport
+		if err := rows.Scan(&item.ID, &item.GameKey, &item.TaskKey, &item.CreatedAt); err != nil {
+			return nil, classifyDatabaseError("scan onboarding holds export", err)
+		}
+		items = append(items, item)
+		if len(items) > limit {
+			return nil, ErrResourceLimit
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, classifyDatabaseError("iterate onboarding holds export", err)
 	}
 	return items, nil
 }

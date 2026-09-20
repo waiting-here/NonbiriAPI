@@ -14,6 +14,7 @@ export function blackjackWire(
     default_stake: snapshot.default_stake,
     stake_step: snapshot.stake_step,
     rake_bp: snapshot.rake_bp,
+    quick_stakes: snapshot.quick_stakes,
   };
   const start = 1_800_000_000;
   const finished = phase === 'result';
@@ -32,12 +33,12 @@ export function blackjackWire(
       ...(finished ? { outcome: 'win' } : {}),
     },
   ];
-  const deadline = start + (phase === 'seating' ? 15 : finished ? 60 : 45);
+  const deadline = start + (phase === 'seating' ? 5 : finished ? 30 : 25);
   return {
-    server_now: start + (phase === 'seating' ? 2 : finished ? 45 : 15),
+    server_now: start + (phase === 'seating' ? 2 : finished ? 25 : 5),
     phase,
     deadline,
-    next_round_at: start + 60,
+    next_round_at: start + 30,
     config,
     config_hash: 'c'.repeat(64),
     queue_count: '1',
@@ -56,7 +57,9 @@ export function blackjackWire(
             session_id: tableID,
             pending: false,
             legal_actions:
-              phase === 'seating' ? {} : { '0': ['hit', 'stand', 'double', 'split'], '1': [] as string[] },
+              phase === 'seating'
+                ? {}
+                : { '0': ['hit', 'stand', 'double', 'split'], '1': [] as string[] },
           },
     table: {
       id: tableID,
@@ -64,8 +67,8 @@ export function blackjackWire(
       started_at: start,
       phase,
       deadline,
-      next_round_at: start + 60,
-      terminal_at: finished ? start + 45 : null,
+      next_round_at: start + 30,
+      terminal_at: finished ? start + 25 : null,
       ...(finished ? { reason: 'completed' } : {}),
       fact: {
         cards:

@@ -4,6 +4,30 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-rc.2] - 2026-09-20
+
+### Added
+
+- Thirteen once-only newcomer tasks for Bidding, Turn-based Battle Minigame (Test) and Blackjack, bringing six-game rewards to 22 tasks and 60,000 general credits. Multiple qualifications settle atomically with the game and never repeat on retries or restart.
+- Optional game-credit loans with exact terms, owner-bound expiring quotes, immediate general-credit repayment, immutable receipts and replay protection. Loans default to disabled and can leave general credits negative while game credits remain usable.
+- Cumulative charity, seven-day game-spending, Bidding profit and Blackjack profit leaderboards. Charity visibility is independent and defaults to anonymous; banned users retain rank with anonymous identity on every board.
+- Persistent abuse windows, safe account restriction summaries, authorized penalty history and evidence, and zero-usage logs for authenticated pre-handler refusals. Current windows recover across restart without repeating penalties.
+- Character passives, step-snapshot scoring and independent per-layer debuff resistance, with compatible saved catalogs and a refreshed ten-round 66–61 tutorial.
+- Complete-page resource filters, owner model search across all connections and authorized donated-key-to-model reverse lookup. New and pending donation descriptions must be nonblank; historical blank descriptions remain usable.
+
+### Changed
+
+- Blackjack starts at :00 and :30 with 5/20/5-second stages, a 3×3 seating grid and 0–8 configurable quick-stake buttons. Selecting a button does not join or charge; early completion extends the result display without advancing the next start.
+- Bidding uses consistent red hearts/diamonds and black spades/clubs. Six games have synchronized, deduplicated feedback; turn-based follow-ups build across the round and normal, partial and full resistance have distinct cues. Mute and reduced-motion choices preserve the same facts.
+- Account export v9 includes safe loan receipts, ranking contributions, penalty actions and pending newcomer qualifications, with a correct v9 download filename. All collection and total-size limits fail without truncation, and lazy game settlement agrees with exported balances.
+- Bilingual API, configuration, lifecycle, deployment and built-in legal texts describe the new data and behavior. Existing instance legal overrides remain unchanged during upgrade.
+
+### Compatibility
+
+- Validated data-preserving upgrade from formal rc.1, retaining wallets, ledger, credentials, saved game catalogs, configuration and legal overrides. Charity achievement order comes from the original ledger; new game statistics start once at upgrade, without fabricated historical rewards or penalties.
+- Generation 2 remains unchanged. Fresh and upgraded schemas converge; failed upgrades roll back, repeat startup is stable, and the old rc.1 binary rejects the new manifest without modifying it. Downgrade requires a complete matching stopped snapshot.
+- Source prerelease for Linux/amd64 with no official precompiled attachments.
+
 ## [1.0.0-rc.1] - 2026-09-18
 
 ### Added

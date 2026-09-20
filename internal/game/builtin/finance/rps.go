@@ -142,7 +142,7 @@ func (port rpsPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.En
 		return err
 	}
 	if funding.version == 2 {
-		if err := port.release(ctx, tx, onboardingParent{column: "rps_queue_id", id: input.ResourceID}); err != nil {
+		if err := port.release(ctx, tx, onboardingParent{column: "rps_queue_id", id: input.ResourceID}, input.UserID); err != nil {
 			return err
 		}
 	}
@@ -490,7 +490,10 @@ func (port rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Termin
 		}
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
-	return err
+	if err != nil {
+		return err
+	}
+	return rpsFinishRanking(ctx, tx, input)
 }
 
 func (port rpsPort) TransferOnboarding(ctx context.Context, tx *sql.Tx, input ports.QueueOnboardingTransfer) error {

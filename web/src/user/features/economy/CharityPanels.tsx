@@ -60,7 +60,7 @@ function classifyDonationSelection(choices: readonly EndpointKeyChoice[]): Donat
 }
 
 function validDonationDescription(value: string): boolean {
-  if (Array.from(value).length > 1024) return false;
+  if (!value.trim() || Array.from(value).length > 1024) return false;
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
     if (codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f)) return false;
@@ -392,8 +392,19 @@ export function DonationComposer({
               value={description}
               disabled={locked}
               onChange={(event) => setDescription(event.target.value)}
-              aria-invalid={Boolean(validation)}
+              required
+              aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+              aria-describedby={
+                validation && !validDonationDescription(description)
+                  ? formID + '-description-error'
+                  : undefined
+              }
             />
+            {validation && !validDonationDescription(description) ? (
+              <p id={formID + '-description-error'} className="field-error" role="alert">
+                {validation}
+              </p>
+            ) : null}
           </label>
         </form>
         <DonationResourcePicker
@@ -463,7 +474,7 @@ export function DonationComposer({
           />
           <span>{t('user.charity.ownershipAuthorization')}</span>
         </label>
-        {validation ? (
+        {validation && validDonationDescription(description) ? (
           <p className="field-error" role="alert">
             {validation}
           </p>
@@ -889,13 +900,20 @@ export function DonationCard({
       </div>
 
       {showEditor ? (
-        <form onSubmit={save} className="economy-description-editor">
+        <form onSubmit={save} className="economy-description-editor" noValidate>
           <label>
             <span>{t('user.charity.donationDescription')}</span>
             <textarea
               value={description}
+              required
+              aria-invalid={Boolean(validation) && !validDonationDescription(description)}
               onChange={(event) => setDescription(event.target.value)}
             />
+            {validation && !validDonationDescription(description) ? (
+              <p className="field-error" role="alert">
+                {validation}
+              </p>
+            ) : null}
           </label>
           <p className="muted">{t('user.charity.pendingDescriptionOnly')}</p>
           <div className="form-actions">
@@ -979,7 +997,7 @@ export function DonationCard({
           onRetry={() => void blockedMutation.retryReconcile()}
         />
       ) : null}
-      {validation ? (
+      {validation && validDonationDescription(description) ? (
         <p className="field-error" role="alert">
           {validation}
         </p>

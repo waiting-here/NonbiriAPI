@@ -41,8 +41,8 @@ function catalog() {
   );
   const mode = {
     rules_version: 1,
-    design_version: '0.17.0',
-    schema_version: 15,
+    design_version: '0.18.0',
+    schema_version: 16,
     content_hash: 'a'.repeat(64),
     config,
   };

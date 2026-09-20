@@ -72,10 +72,10 @@ function catalogFixture() {
         mode,
         {
           rules_version: 1,
-          design_version: '0.17.0',
-          schema_version: 15,
+          design_version: '0.18.0',
+          schema_version: 16,
           content_hash: createHash('sha256')
-            .update('likes@1;positive-energy-overload;separate-round-start\n' + source)
+            .update('likes@2;step-likes;role-passives;layer-resistance;stable-sota\n' + source)
             .digest('hex'),
           config,
         },
@@ -84,8 +84,8 @@ function catalogFixture() {
   );
   return {
     rules_version: 1,
-    design_version: '0.17.0',
-    schema_version: 15,
+    design_version: '0.18.0',
+    schema_version: 16,
     content_hash: 'a'.repeat(64),
     modes,
   };
@@ -204,7 +204,7 @@ test('bidding keeps thirteen hand positions and reward decks usable at every wid
   await expect(page.locator('.bid-hand')).toHaveCount(2);
   await expect(page.locator('.bid-decision .bid-card')).toHaveCount(13);
   await expect(page.locator('.bid-public .bid-card')).toHaveCount(13);
-  await expect(page.getByRole('button', { name: 'Bid 2 (2)', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Bid Spades 2 (2)', exact: true })).toBeDisabled();
   await expect(page.locator('.bid-public .is-played')).toHaveCount(1);
   for (const width of [1920, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });

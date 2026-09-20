@@ -56,7 +56,13 @@ export function Glossary({
   const skill = catalog.skills.find((s) => s.id === selected.id);
   const harness = catalog.harnesses.find((h) => h.id === selected.id);
   const cost = selected.level === 'base' ? skill : catalog.skills.find((s) => s.id === 'PUB41');
-  const entries = [...catalog.skills, ...catalog.buffs, ...catalog.harnesses, ...catalog.passives];
+  const entries = [
+    ...catalog.roles.flatMap((r) => (r.passive ? [r.passive] : [])),
+    ...catalog.skills,
+    ...catalog.buffs,
+    ...catalog.harnesses,
+    ...catalog.passives,
+  ];
   const focus = () =>
     requestAnimationFrame(() => {
       heading.current?.focus();

@@ -82,7 +82,7 @@ func TestPublicAPICORSHTTP(t *testing.T) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if logs != 1 || len(f.upstreamRequests) != 1 {
+	if logs != 2 || len(f.upstreamRequests) != 1 {
 		t.Fatalf("logs=%d upstream requests=%d; only authenticated embedding should dispatch", logs, len(f.upstreamRequests))
 	}
 }

@@ -33,7 +33,7 @@ func newBlackjackHTTPFixture(t *testing.T) *duelWireFixture {
 		t.Fatal("new game must default closed")
 	}
 	f.admin("PATCH", "/admin/api/games/config", map[string]any{"expected_revision": "3", "blackjack": map[string]any{"enabled": true}}, 200)
-	f.clock.Store((f.clock.Load()/60 + 1) * 60)
+	f.clock.Store((f.clock.Load()/30 + 1) * 30)
 	tx, err := f.store.DB().Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func dealBlackjackHTTP(f *duelWireFixture) string {
 	for i := range deck {
 		deck[i] = engine.Card(i)
 	}
-	state, err := engine.Deal(deck, []int{0, 1}, int(h.Table.StartedAt/60%8))
+	state, err := engine.Deal(deck, []int{0, 1}, int(h.Table.StartedAt/30%9))
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -105,13 +105,13 @@ func dealBlackjackHTTP(f *duelWireFixture) string {
 	if _, err := tx.Exec(`UPDATE game_blackjack_entries SET state='playing' WHERE session_id=?`, h.Table.ID); err != nil {
 		f.t.Fatal(err)
 	}
-	if _, err := tx.Exec(`UPDATE game_blackjack_sessions SET phase='decision',revision=revision+1,last_batch=?,state_json=?,view_json=? WHERE id=?`, h.Table.StartedAt+15, string(body), string(fact), h.Table.ID); err != nil {
+	if _, err := tx.Exec(`UPDATE game_blackjack_sessions SET phase='decision',revision=revision+1,last_batch=?,state_json=?,view_json=? WHERE id=?`, h.Table.StartedAt+5, string(body), string(fact), h.Table.ID); err != nil {
 		f.t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		f.t.Fatal(err)
 	}
-	f.clock.Store(h.Table.StartedAt + 15)
+	f.clock.Store(h.Table.StartedAt + 5)
 	return h.Table.ID
 }
 
@@ -142,7 +142,7 @@ func TestBlackjackHTTPRoutesPrivacyHistoryAndExport(t *testing.T) {
 	}
 	f.clock.Add(1)
 	h = readBlackjackHTTP(f, 0)
-	if h.Phase != "result" || h.NextRoundAt-h.Table.StartedAt != 60 || len(h.Table.Fact.Settlements) != 2 {
+	if h.Phase != "result" || h.NextRoundAt-h.Table.StartedAt != 30 || len(h.Table.Fact.Settlements) != 2 {
 		t.Fatal("early result or fixed cadence missing")
 	}
 	for seat := range 2 {
@@ -157,7 +157,7 @@ func TestBlackjackHTTPRoutesPrivacyHistoryAndExport(t *testing.T) {
 		}
 		r = f.call(seat, "POST", "/api/account/export", nil, true)
 		var exported lifecycle.ExportDocument
-		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &exported) != nil || exported.SchemaVersion != 8 || len(exported.Blackjack.History) != 1 {
+		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &exported) != nil || exported.SchemaVersion != 9 || len(exported.Blackjack.History) != 1 {
 			t.Fatalf("export %d %s", r.Code, r.Body.String())
 		}
 	}

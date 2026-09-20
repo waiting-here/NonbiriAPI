@@ -144,6 +144,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 func init() {
 	addDuelCatalogMetadata()
 	addBlackjackCatalogMetadata()
+	addLoanCatalogMetadata()
 	add := func(key, group, titleZh, titleEn, descriptionZh, descriptionEn string, unit localizedCatalogText, gates ...string) {
 		catalogMetadataByKey[key] = catalogMetadata{
 			group: group, title: catalogText(titleZh, titleEn),
@@ -227,6 +228,12 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 	case kindOptionalAmount:
 		return nil, nil, formatAdminWireAmount(1), formatAdminWireAmount(db.MaxMoneyMilli), true
 	case kindAmount:
+		if key == KeyActivityLoanA {
+			return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), "0.001", "0.999", false
+		}
+		if key == KeyActivityLoanB {
+			return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), "1.001", formatAdminWireAmount(db.MaxMoneyMilli), false
+		}
 		if isBlackjackAmountKey(key) {
 			return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), formatAdminWireAmount(1), blackjackAmountMaximum(), false
 		}
@@ -349,7 +356,7 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("0 使对应规格保持 fail closed；开启该规格要求正数价格。", "Zero keeps the specification fail-closed; enabling it requires a positive price.")
 	case KeyGameRPSQuickB, KeyGameRPSStandardB, KeyGameRPSDeathmatchB:
 		zero = catalogTextPtr("0 使对应模式保持 fail closed；开启该模式要求正数 B。", "Zero keeps the mode fail-closed; enabling it requires a positive B.")
-	case KeyActivitiesEnabled, KeyActivityWelfareEnabled, KeyActivityThursdayEnabled,
+	case KeyActivitiesEnabled, KeyActivityWelfareEnabled, KeyActivityThursdayEnabled, KeyActivityLoanEnabled,
 		KeyGameLinkLinkEnabled, KeyGameLinkLink6x8Enabled, KeyGameLinkLink8x8Enabled, KeyGameLinkLink10x10Enabled,
 		KeyGameRPSEnabled, KeyGameRPSQuickEnabled, KeyGameRPSStandardEnabled, KeyGameRPSDeathmatchEnabled:
 		zero = catalogTextPtr("关闭对应功能，不改变已经接受的在途工作。", "Disables the feature without changing already accepted work.")

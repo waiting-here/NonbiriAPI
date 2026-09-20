@@ -48,6 +48,7 @@ const (
 	KindRPSRoundCut          Kind = "rps_round_cut"
 	KindRPSTerminal          Kind = "rps_terminal"
 	KindGameOnboardingReward Kind = "game_onboarding_reward"
+	KindActivityLoan         Kind = "activity_loan"
 	KindDuelQueueReserve     Kind = "duel_queue_reserve"
 	KindDuelQueueRelease     Kind = "duel_queue_release"
 	KindDuelSessionStart     Kind = "duel_session_start"

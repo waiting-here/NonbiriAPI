@@ -7,6 +7,7 @@ import { usePublicConfig } from '@shared/query/publicConfig';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
+import { Leaderboard } from '../games/ranking/Leaderboard';
 import { CharityCatalogPanel } from '../features/economy/CharityCatalogPanel';
 import {
   CharitySafetyNotice,
@@ -166,6 +167,7 @@ function CharityContent() {
       >
         <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} />
         <CharitySafetyNotice />
+        <Leaderboard board="charity" enabled={tab === 'models'} />
       </section>
       <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
         {accountID ? (

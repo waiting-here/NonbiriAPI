@@ -281,7 +281,7 @@ func TestRPMOnlyCountsPerUserLimitAndRevokesAtThreshold(t *testing.T) {
 		t.Fatal("premature ban")
 	}
 	f.service.RPMDenied(context.Background(), user, ratelimit.RPMUserLimit)
-	if f.scalar(`SELECT banned_until FROM users WHERE id=?`, user) != f.clock.Load()+90 || f.bans.Load() != 1 || f.scalar(`SELECT COUNT(*) FROM request_logs`) != 0 {
+	if f.scalar(`SELECT banned_until FROM users WHERE id=?`, user) != f.clock.Load()+90 || f.bans.Load() != 1 || f.scalar(`SELECT COUNT(*) FROM request_logs`) != 2 {
 		t.Fatal("RPM consequence mismatch")
 	}
 }

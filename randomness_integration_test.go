@@ -72,7 +72,7 @@ func TestRandomnessBlackjackDisclosureAndShoeReplay(t *testing.T) {
 			t.Fatal("client-controlled disclosure accepted", path, r.Code)
 		}
 	}
-	f.clock.Store(start + 15)
+	f.clock.Store(start + 5)
 	h = readBlackjackHTTP(f, 0)
 	if h.Phase == "decision" {
 		assertPrivateProof(f, "blackjack", id, readRandomProof(f, 0, "blackjack", id))
@@ -106,7 +106,7 @@ func TestRandomnessBlackjackDisclosureAndShoeReplay(t *testing.T) {
 			t.Fatal("dealer hole leaked")
 		}
 	}
-	f.clock.Store(start + 45)
+	f.clock.Store(start + 25)
 	h = readBlackjackHTTP(f, 0)
 	if h.Phase != "result" {
 		t.Fatal("table did not settle")
@@ -123,7 +123,7 @@ func TestRandomnessBlackjackDisclosureAndShoeReplay(t *testing.T) {
 		}
 	}
 	assertRandomnessExport(f, id, true)
-	f.clock.Store(start + 61)
+	f.clock.Store(start + 31)
 	if r := f.call(1, "GET", "/api/games/blackjack/randomness/"+id, nil, false); r.Code != 404 {
 		t.Fatal("spectator accessed private history", r.Code)
 	}

@@ -8,6 +8,7 @@ import errorStateURL from '@shared/assets/state-error.svg';
 import emptyStateURL from '@shared/assets/state-empty.svg';
 import maintenanceStateURL from '@shared/assets/state-maintenance.svg';
 import { PublicShell } from './PublicShell';
+import { LoginRestrictions } from './AutomaticRestrictions';
 
 export type RouteErrorKind = '403' | '404' | '500' | 'network' | 'render' | 'maintenance';
 
@@ -83,6 +84,7 @@ export function RouteErrorPage({ station = 'user', authenticated = false }: { st
         <div>
           <h1>{t(titleKey)}</h1>
           <p>{t(bodyKey)}</p>
+          {kind === '403' && station === 'user' && <LoginRestrictions />}
           {recovery}
         </div>
       </div>

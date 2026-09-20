@@ -8,6 +8,13 @@ import {
   type MusicQuality,
   type MusicScene,
 } from './assets';
+import {
+  duckLevel,
+  effectMix,
+  effectPlayback,
+  type DuckEnvelope,
+  type EffectPlayback,
+} from './mix';
 
 const LEAD = 0.028;
 const RELEASE = 0.012;
@@ -43,7 +50,7 @@ export interface ArcadeAudio {
   unlock(): Promise<void>;
   setMusic(scene: MusicScene | null): void;
   setEffectsEnabled(enabled: boolean): void;
-  play(cue: EffectCue): void;
+  play(cue: EffectCue, variation?: EffectPlayback): void;
   stopEffect(cue: EffectCue): void;
   pause(): void;
   resume(): Promise<void>;
@@ -58,6 +65,8 @@ export function createArcadeAudio(options: {
 }): ArcadeAudio {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
+  let musicBus: GainNode | null = null;
+  let duck: DuckEnvelope | null = null;
   let limiter: DynamicsCompressorNode | null = null;
   let closed = false,
     paused = false,
@@ -114,7 +123,7 @@ export function createArcadeAudio(options: {
       gain = ctx.createGain();
     source.buffer = buffer;
     source.connect(gain);
-    gain.connect(master!);
+    gain.connect(collection === musicVoices ? musicBus! : master!);
     const voice: Voice = {
       source,
       gain,
@@ -125,6 +134,32 @@ export function createArcadeAudio(options: {
     collection.add(voice);
     source.onended = () => detach(voice, collection);
     return voice;
+  };
+  const resetDuck = () => {
+    duck = null;
+    if (!context || !musicBus) return;
+    musicBus.gain.cancelScheduledValues(context.currentTime);
+    musicBus.gain.setValueAtTime(1, context.currentTime);
+  };
+  const duckMusic = (mix: ReturnType<typeof effectMix>) => {
+    if (!mix.duck || !context || !musicBus || !target || target === 'loss') return;
+    const now = context.currentTime;
+    const active = duck && now < duck.end ? duck : null;
+    const holdEnd = Math.max(now + 0.035 + mix.duck.hold, active?.holdEnd ?? 0);
+    duck = {
+      start: now,
+      attackEnd: now + 0.035,
+      holdEnd,
+      end: Math.max(holdEnd + mix.duck.release, active?.end ?? 0),
+      from: duckLevel(active, now),
+      level: Math.min(mix.duck.level, active?.level ?? 1),
+    };
+    const param = musicBus.gain;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(duck.from, now);
+    param.linearRampToValueAtTime(duck.level, duck.attackEnd);
+    param.setValueAtTime(duck.level, duck.holdEnd);
+    param.linearRampToValueAtTime(1, duck.end);
   };
   const ramp = (voice: Voice, to: number, start: number, end: number) => {
     const now = context!.currentTime;
@@ -262,6 +297,9 @@ export function createArcadeAudio(options: {
         context = options.contextFactory ? options.contextFactory() : new AudioContext();
         master = context.createGain();
         master.gain.value = 0.8;
+        musicBus = context.createGain();
+        musicBus.gain.value = 1;
+        musicBus.connect(master);
         limiter = context.createDynamicsCompressor();
         limiter.threshold.value = -3;
         limiter.knee.value = 0;
@@ -288,6 +326,7 @@ export function createArcadeAudio(options: {
         scheduled = null;
         silence(musicVoices, true);
         if (!scene) {
+          resetDuck();
           musicAbort.abort();
           musicAbort = new AbortController();
           musicLoads.clear();
@@ -305,20 +344,18 @@ export function createArcadeAudio(options: {
         silence(effectVoices, true);
       } else if (context?.state === 'running') void warmEffects();
     },
-    play(cue) {
+    play(cue, variation) {
       if (closed || paused || !effectsEnabled || context?.state !== 'running') return;
       const now = context.currentTime;
+      const mix = effectMix(cue);
+      const playback = effectPlayback(mix, variation);
+      const planned = now + playback.delay;
       const spacing = cue === 'likes_score_burst' || cue === 'likes_combo' ? 0.18 : 0.06;
-      if (now - (recentEffects.get(cue) ?? -Infinity) < spacing) return;
-      recentEffects.set(cue, now);
+      if (planned - (recentEffects.get(cue) ?? -Infinity) < spacing) return;
+      recentEffects.set(cue, planned);
       const generation = effectGeneration;
       const cueGeneration = cancelledEffects.get(cue) ?? 0;
-      const priority =
-        /_(win|loss|draw|natural)$/.test(cue) || cue === 'likes_loss_stinger'
-          ? 3
-          : cue.startsWith('common_')
-            ? 1
-            : 2;
+      const priority = variation?.accent ? 1 : mix.priority;
       if (cue === 'likes_loss_stinger') {
         this.setMusic('loss');
         silence(effectVoices, true);
@@ -344,8 +381,13 @@ export function createArcadeAudio(options: {
           stop(weakest, effectVoices);
         }
         const voice = voiceFor(buffer, effectVoices, priority);
+        voice.starts = Math.max(planned, context.currentTime);
         voice.cue = cue;
-        voice.source.start();
+        voice.ramp = { start: 0, end: 0, from: playback.gain, to: playback.gain };
+        voice.gain.gain.setValueAtTime(playback.gain, context.currentTime);
+        voice.source.playbackRate.setValueAtTime(playback.rate, context.currentTime);
+        if (!variation?.accent) duckMusic(mix);
+        voice.source.start(voice.starts);
       });
     },
     stopEffect(cue) {
@@ -354,6 +396,7 @@ export function createArcadeAudio(options: {
     },
     pause() {
       paused = true;
+      resetDuck();
       effectGeneration++;
       silence(musicVoices);
       silence(effectVoices);
@@ -379,10 +422,13 @@ export function createArcadeAudio(options: {
       recentEffects.clear();
       cancelledEffects.clear();
       master?.disconnect();
+      musicBus?.disconnect();
       limiter?.disconnect();
       if (context && context.state !== 'closed') void context.close().catch(() => {});
       context = null;
       master = null;
+      musicBus = null;
+      duck = null;
       limiter = null;
     },
   };

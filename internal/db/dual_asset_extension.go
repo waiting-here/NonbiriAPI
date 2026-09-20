@@ -40,6 +40,20 @@ func validateAssetSourceConfig(ctx context.Context, q generationTwoConfigQueryer
 	if err != nil {
 		return err
 	}
+	progressionPresent, err := ProgressionStoragePresent(ctx, q)
+	if err != nil {
+		return err
+	}
+	if !progressionPresent {
+		for key, value := range progressionConfigDefaults() {
+			if _, exists := values[key]; exists {
+				return errors.New("prior schema contains progression configuration")
+			}
+			values[key] = value
+		}
+		// Quick buttons are chosen from the source limits during migration.
+		values["game_blackjack_quick_stakes"] = "[]"
+	}
 	if prior {
 		if _, exists := values["gateway_user_attribution_enabled"]; !exists {
 			values["gateway_user_attribution_enabled"] = "0"

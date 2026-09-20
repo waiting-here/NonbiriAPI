@@ -32,6 +32,7 @@ type activityConfig struct {
 	thursdayEnabled  bool
 	timezoneSet      bool
 	timezoneMinutes  int
+	loan             loanConfig
 }
 
 func readActivityConfigTx(ctx context.Context, tx *sql.Tx) (activityConfig, error) {
@@ -44,6 +45,10 @@ func readActivityConfigTx(ctx context.Context, tx *sql.Tx) (activityConfig, erro
 	}
 	if config.revision < 1 {
 		return activityConfig{}, ErrInvariant
+	}
+	var err error
+	if config.loan, err = readLoanConfigTx(ctx, tx); err != nil {
+		return activityConfig{}, err
 	}
 	keys := []string{
 		configActivitiesEnabled, configWelfareEnabled, configWelfareThreshold,
@@ -122,7 +127,8 @@ func validActivityConfig(config activityConfig) bool {
 
 func projectActivitiesConfig(config activityConfig) ActivitiesConfig {
 	return ActivitiesConfig{
-		Revision: strconv.FormatInt(config.revision, 10), MasterEnabled: config.masterEnabled,
+		LoanConfig: config.loan.wire(),
+		Revision:   strconv.FormatInt(config.revision, 10), MasterEnabled: config.masterEnabled,
 		Welfare: WelfareConfig{
 			Enabled: config.welfareEnabled, Threshold: formatMilliPointsInt64(config.welfareThreshold),
 			Cap: formatMilliPointsInt64(config.welfareCap),
@@ -151,7 +157,7 @@ func (r *Repository) GetActivitiesConfig(ctx context.Context) (ActivitiesConfig,
 }
 
 func (r *Repository) PatchActivitiesConfig(ctx context.Context, adminID int64, mutation ControlMutation, patch ActivitiesConfigPatch) (MutationResult[ActivitiesConfig], PublishFacts, error) {
-	if patch.ExpectedRevision < 1 || patch.MasterEnabled == nil && patch.Welfare == nil && patch.Thursday == nil ||
+	if patch.ExpectedRevision < 1 || patch.MasterEnabled == nil && patch.Welfare == nil && patch.Thursday == nil && !patch.hasLoan() ||
 		patch.Welfare != nil && patch.Welfare.Enabled == nil && patch.Welfare.Threshold == nil && patch.Welfare.Cap == nil ||
 		patch.Thursday != nil && patch.Thursday.Enabled == nil {
 		return MutationResult[ActivitiesConfig]{}, PublishFacts{}, ErrInvalidRequest
@@ -188,6 +194,9 @@ func (r *Repository) PatchActivitiesConfig(ctx context.Context, adminID int64, m
 		return MutationResult[ActivitiesConfig]{}, PublishFacts{}, ErrConflict
 	}
 	next := current
+	if err := next.loan.patch(patch); err != nil {
+		return MutationResult[ActivitiesConfig]{}, PublishFacts{}, err
+	}
 	if patch.MasterEnabled != nil {
 		next.masterEnabled = *patch.MasterEnabled
 	}
@@ -249,6 +258,9 @@ func (r *Repository) PatchActivitiesConfig(ctx context.Context, adminID int64, m
 		}
 	}
 	next.revision++
+	if err := next.loan.save(ctx, tx, now); err != nil {
+		return MutationResult[ActivitiesConfig]{}, PublishFacts{}, err
+	}
 	response, err := finishJSONMutation(ctx, tx, decision, http.StatusOK, projectActivitiesConfig(next))
 	if err != nil {
 		return MutationResult[ActivitiesConfig]{}, PublishFacts{}, err

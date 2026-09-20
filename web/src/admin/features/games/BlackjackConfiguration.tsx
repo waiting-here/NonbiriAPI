@@ -37,6 +37,20 @@ export function validateBlackjackConfiguration(
       '二十一点：金额须为正数且最多三位小数；最大投入不超过140625000000，默认值和最大值须符合步长。',
       'Blackjack: positive amounts with at most three decimals; maximum stake 140625000000. Default and maximum stakes must align with the step from the minimum.',
     );
+  const quick = value.quick_stakes.map(parse);
+  if (
+    quick.length > 8 ||
+    new Set(quick).size !== quick.length ||
+    quick.some((n, i) => {
+      if (n === null || n < min || n > max || (n - min) % step !== 0n) return true;
+      const fraction = (n % 1000n).toString().padStart(3, '0').replace(/0+$/, '');
+      return `${n / 1000n}${fraction ? `.${fraction}` : ''}` !== value.quick_stakes[i];
+    })
+  )
+    return t(
+      '快捷金额最多8个，不得重复，须符合最小／最大投入及步长；金额不含空格或多余的零。留空列表可关闭快捷按钮。',
+      'Use up to eight distinct quick amounts within the stake limits and step, without spaces or redundant zeros. An empty list hides the buttons.',
+    );
   const rates = Object.values(value.rake_bp);
   if (
     rates.some((r) => !Number.isInteger(r) || r < 0 || r > 9999) ||
@@ -63,8 +77,8 @@ export function BlackjackConfiguration({
       <h2>{t('二十一点', 'Blackjack')}</h2>
       <p>
         {t(
-          '单桌九席，每分钟按15秒落座、30秒决策、15秒展示轮转。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
-          'One table with nine seats: 15 seconds for seating, 30 for decisions and 15 for results. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
+          '单桌九席，每30秒按5秒落座、20秒决策、5秒展示轮转。提前结束延长展示，下一局不提前。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
+          'Nine seats, every 30 seconds: 5 for seating, 20 for decisions and 5 for results. Early finishes extend the display without starting the next round early. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
         )}
       </p>
       <label className="checkbox-label">
@@ -127,6 +141,59 @@ export function BlackjackConfiguration({
           </label>
         ))}
       </div>
+      <fieldset disabled={disabled}>
+        <legend>{t('快捷投入金额（0–8个）', 'Quick stake amounts (0–8)')}</legend>
+        <p>
+          {t(
+            '按钮只选择金额，用户仍需点击加入队列。保存后按金额升序排列；修改限额或步长时请同时调整不再合法的金额。',
+            'Buttons select an amount; players still choose Join queue. Amounts are sorted on save. Update any invalid amounts when changing limits or the step.',
+          )}
+        </p>
+        <div className="ops-field-grid">
+          {value.quick_stakes.map((amount, index) => (
+            <div key={index}>
+              <label>
+                {t('快捷金额', 'Quick amount')} {index + 1}
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  maxLength={20}
+                  value={amount}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      quick_stakes: value.quick_stakes.map((v, i) =>
+                        i === index ? e.target.value : v,
+                      ),
+                    })
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
+                  })
+                }
+              >
+                {t('移除', 'Remove')}
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={disabled || value.quick_stakes.length >= 8}
+          onClick={() => onChange({ ...value, quick_stakes: [...value.quick_stakes, ''] })}
+        >
+          {t('添加快捷金额', 'Add quick amount')}
+        </button>
+      </fieldset>
       <p className="table-note">
         {t(
           '费用逐手从应返总额扣取；正常返还全部为通用积分，包含平局和本金。服务器重启取消则按实际原币种退款。',

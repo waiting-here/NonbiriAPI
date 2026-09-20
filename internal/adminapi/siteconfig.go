@@ -105,6 +105,10 @@ const (
 	KeyActivityWelfareThreshold      = "activity_welfare_threshold_milli"
 	KeyActivityWelfareCap            = "activity_welfare_cap_milli"
 	KeyActivityThursdayEnabled       = "activity_thursday_enabled"
+	KeyActivityLoanEnabled           = "activity_loan_enabled"
+	KeyActivityLoanTiers             = "activity_loan_tiers"
+	KeyActivityLoanA                 = "activity_loan_a_milli"
+	KeyActivityLoanB                 = "activity_loan_b_milli"
 	KeyGameLinkLinkEnabled           = "game_linklink_enabled"
 	KeyGameLinkLink6x8Enabled        = "game_linklink_6x8_enabled"
 	KeyGameLinkLink8x8Enabled        = "game_linklink_8x8_enabled"
@@ -303,6 +307,10 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyActivityWelfareThreshold:         {kind: kindAmount},
 		KeyActivityWelfareCap:               {kind: kindAmount},
 		KeyActivityThursdayEnabled:          {kind: kindBool},
+		KeyActivityLoanEnabled:              {kind: kindBool},
+		KeyActivityLoanTiers:                {kind: kindText, max: 256, defStr: `["10000","100000","1000000"]`},
+		KeyActivityLoanA:                    {kind: kindAmount, defAmount: 900},
+		KeyActivityLoanB:                    {kind: kindAmount, defAmount: 1300},
 		KeyGameLinkLinkEnabled:              {kind: kindBool},
 		KeyGameLinkLink6x8Enabled:           {kind: kindBool},
 		KeyGameLinkLink8x8Enabled:           {kind: kindBool},
@@ -737,6 +745,8 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			// display value to raw milli-credits exactly once at this boundary.
 			n, err := parseAdminWireAmount(value)
 			if err != nil || n < 0 || n > db.MaxMoneyMilli || !validBlackjackAmount(key, n) ||
+				(key == KeyActivityLoanA && (n < 1 || n > 999)) ||
+				(key == KeyActivityLoanB && n < 1001) ||
 				((isFishingBaitPriceKey(key) || isDuelTicketKey(key) || isBlackjackAmountKey(key)) && n < 1) {
 				return "", invalid
 			}

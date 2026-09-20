@@ -240,6 +240,15 @@ export async function patchGameProfile(
 }
 
 const MAX_ACCOUNT_EXPORT_BYTES = 16 * 1024 * 1024;
+export async function patchCharityProfile(isPublic: boolean, operation: OperationIdentity): Promise<UserEnvelope> {
+  const response = await coreRequest('/api/me', {
+    method: 'PATCH', headers: operationHeaders(operation),
+    json: { charity_profile_public: exactBooleanInput(isPublic, 'charity profile visibility') },
+  });
+  expectedStatus(response.status, 200, 'profile update');
+  return normalizeUserEnvelope(response.payload);
+}
+
 const ACCOUNT_EXPORT_KEYS = [
   'schema_version',
   'generated_at',
@@ -254,6 +263,10 @@ const ACCOUNT_EXPORT_KEYS = [
   'credit_ledger',
   'checkins',
   'game_onboarding',
+  'game_onboarding_holds',
+  'loans',
+  'game_rankings',
+  'penalties',
   'welfare_claims',
   'thursday',
   'donations',
@@ -327,7 +340,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   const record = value as Record<string, unknown>;
   const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
   if (
-    record.schema_version !== 8 ||
+    record.schema_version !== 9 ||
     Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
     Object.keys(record).some((key) => !expected.has(key))
   ) {
@@ -335,7 +348,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   }
 }
 
-export async function exportAccountV8(
+export async function exportAccountV9(
   accountId: string,
   elevatedToken: string,
   signal?: AbortSignal,
@@ -351,7 +364,7 @@ export async function exportAccountV8(
   const disposition = response.headers.get('Content-Disposition') ?? '';
   if (
     !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v8.json"'
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v9.json"'
   ) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
@@ -361,7 +374,7 @@ export async function exportAccountV8(
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 8,
+    schemaVersion: 9,
   };
 }
 

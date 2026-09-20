@@ -21,6 +21,7 @@ function DuelPage({ game }: { readonly game: DuelGame }) {
   const context: DuelLobbyContext = {
     config: snapshot.data?.[game] ?? unavailable,
     wallets: snapshot.data ?? { balance: '0', gameBalance: '0' },
+    onboarding: snapshot.data?.onboarding[game],
     accepting: !!snapshot.data?.gamesEnabled && !snapshot.error,
     refreshWallets,
   };

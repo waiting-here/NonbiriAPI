@@ -30,8 +30,9 @@ func TestConcurrencyLimitPrecedesAndDoesNotTouchRPM(t *testing.T) {
 	controller, err := newWithClock(Config{
 		RPM:        generousRPMConfig(),
 		UserLimits: fixedUserLimits(1),
-		OnDenied: func(context.Context, int64, ratelimit.RPMReason) {
+		OnDenied: func(context.Context, int64, ratelimit.RPMReason) error {
 			denied.Add(1)
+			return nil
 		},
 	}, newFakeClock())
 	if err != nil {

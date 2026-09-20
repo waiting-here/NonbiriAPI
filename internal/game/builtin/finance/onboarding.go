@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"math/big"
+	"slices"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -18,8 +19,8 @@ type onboardingParent struct {
 }
 
 func (parent onboardingParent) predicate() (string, []any) {
-	if parent.column == "rps_session_id" {
-		return "rps_session_id=? AND seat_no=?", []any{parent.id, parent.seat}
+	if parent.column == "rps_session_id" || parent.column == "duel_session_id" {
+		return parent.column + "=? AND seat_no=?", []any{parent.id, parent.seat}
 	}
 	return parent.column + "=?", []any{parent.id}
 }
@@ -35,6 +36,15 @@ func (port onboarding) reserve(ctx context.Context, tx *sql.Tx, userID int64, ta
 		return err
 	}
 	if completed {
+		return nil
+	}
+	where, args := parent.predicate()
+	args = append(args, userID, port.module.ID, task)
+	var held bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM game_onboarding_holds WHERE "+where+" AND user_id=? AND game_key=? AND task_key=?)", args...).Scan(&held); err != nil {
+		return err
+	}
+	if held {
 		return nil
 	}
 	id, err := db.GenerateOpaqueID("goh_")
@@ -106,22 +116,17 @@ WHERE u.kind='user' AND u.user_id=? AND u.asset_type='general' AND e.code='exter
 	return err
 }
 
-func (port onboarding) release(ctx context.Context, tx *sql.Tx, parent onboardingParent) error {
+func (port onboarding) release(ctx context.Context, tx *sql.Tx, parent onboardingParent, userID int64) error {
 	where, args := parent.predicate()
-	args = append(args, port.module.ID)
-	var id string
-	err := tx.QueryRowContext(ctx, "SELECT id FROM game_onboarding_holds WHERE "+where+" AND game_key=?", args...).Scan(&id)
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return releaseOnboardingHold(ctx, tx, id)
+	return port.releaseWhere(ctx, tx, where+" AND user_id=? AND game_key=?", append(args, userID, port.module.ID)...)
 }
 
 func (port onboarding) releaseUser(ctx context.Context, tx *sql.Tx, userID int64) error {
-	rows, err := tx.QueryContext(ctx, "SELECT id FROM game_onboarding_holds WHERE user_id=? AND game_key=? ORDER BY id", userID, port.module.ID)
+	return port.releaseWhere(ctx, tx, "user_id=? AND game_key=?", userID, port.module.ID)
+}
+
+func (port onboarding) releaseWhere(ctx context.Context, tx *sql.Tx, where string, args ...any) error {
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM game_onboarding_holds WHERE "+where+" ORDER BY task_key,id", args...)
 	if err != nil {
 		return err
 	}
@@ -147,6 +152,44 @@ func (port onboarding) releaseUser(ctx context.Context, tx *sql.Tx, userID int64
 		}
 	}
 	return nil
+}
+
+func progressionStarted(ctx context.Context, tx *sql.Tx, now int64) (bool, error) {
+	var started int64
+	err := tx.QueryRowContext(ctx, `SELECT started_at FROM game_statistics_epoch WHERE id=1`).Scan(&started)
+	return now >= started, err
+}
+
+func (port onboarding) reserveTasks(ctx context.Context, tx *sql.Tx, userID int64, tasks []string, parent onboardingParent, now int64) error {
+	started, err := progressionStarted(ctx, tx, now)
+	if err != nil || !started {
+		return err
+	}
+	tasks = slices.Clone(tasks)
+	slices.Sort(tasks)
+	for _, task := range tasks {
+		if err := port.reserve(ctx, tx, userID, task, parent, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (port onboarding) completeTasks(ctx context.Context, tx *sql.Tx, userID int64, tasks []string, parent onboardingParent, now int64) error {
+	started, err := progressionStarted(ctx, tx, now)
+	if err != nil {
+		return err
+	}
+	if started {
+		tasks = slices.Clone(tasks)
+		slices.Sort(tasks)
+		for _, task := range tasks {
+			if err := port.complete(ctx, tx, userID, task, parent, now); err != nil {
+				return err
+			}
+		}
+	}
+	return port.release(ctx, tx, parent, userID)
 }
 
 func releaseOnboardingHold(ctx context.Context, tx *sql.Tx, id string) error {

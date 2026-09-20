@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
+import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
 import { gameRequest } from '../common/request';
@@ -15,7 +16,9 @@ import { DuelHistory, DuelRoundLog } from '../common/duel/History';
 import type { DuelLobbyContext, DuelResult, Seat } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
 import { creditsToMilli } from '../common/strict';
-import { likesCatalog, type ModeCatalog } from './catalog';
+import { spendableGameCredits } from '../common/spendable';
+import { likesCatalog, matchingCatalog, type ModeCatalog } from './catalog';
+import { CharacterPassive } from './CharacterPassive';
 import { assertArtCoverage, characterSlot } from './art';
 import { LikesArt } from './LikesArt';
 import { Arena, CompactScores } from './Arena';
@@ -96,6 +99,20 @@ function Rules({
           'Each character has their own skills and public skills. Start with four slots; harnesses add slots or fixed passives. Empty slots are allowed, but include a sustainable stable scoring skill. Unused opponent skills stay concealed until the game ends. Characters, models, APIs, tokens and resources here are game mechanics.',
         )}
       </p>
+      {catalog.roles.some((role) => role.passive) && (
+        <h3>{t('角色常驻被动', 'Always-active character passives')}</h3>
+      )}
+      {catalog.roles.map((role) => (
+        <CharacterPassive key={role.id} role={role} />
+      ))}
+      {catalog.roles.some((role) => role.passive) && (
+        <p>
+          {t(
+            '角色加赞在基础阶段生效，继续参与减益和倍率。效果命中与抵抗只影响向敌方施加的减益，逐层独立判断；状态和自身副作用不判定。成功率 min(1, (100＋命中)/(100＋抵抗))，必中不抽样。抵抗不取消技能得赞。',
+            'Character bonuses enter the base stage before debuffs and multipliers. Hit and resistance check each hostile debuff layer separately; states and self-inflicted effects are excluded. Success chance is min(1, (100 + hit)/(100 + resistance)); guaranteed hits consume no draw. Resistance does not cancel skill likes.',
+          )}
+        </p>
+      )}
       <h3>{t('订阅、图像与API', 'Subscriptions, images and API reserve')}</h3>
       <p>
         {t(
@@ -156,7 +173,7 @@ function Lobby({
   const [selection, setSelection] = useState(() => initialLoadout ?? initialSelection(catalog));
   const mode = context.config.modes[catalog.mode],
     enough =
-      creditsToMilli(context.wallets.balance) + creditsToMilli(context.wallets.gameBalance) >=
+      creditsToMilli(spendableGameCredits(context.wallets).total) >=
       creditsToMilli(mode?.ticket ?? '0');
   const unavailable = entryProblem(context, catalog.mode);
   return (
@@ -278,8 +295,16 @@ export function LikesGame(context: DuelLobbyContext) {
     audio.sound.play,
     audio.sound.stop,
   );
-  const c = catalogQuery.data?.modes[activeMode === 'standard' ? 'standard' : 'quick'];
-  const compatible = !current || c?.contentHash === current.contentHash;
+  const displayed =
+    current ??
+    (!queue && result && (log || (!!result.resolution && now < result.resolution.endsAt))
+      ? result
+      : null);
+  const c =
+    catalogQuery.data && displayed?.contentHash
+      ? matchingCatalog(catalogQuery.data, displayed.mode, displayed.contentHash)
+      : catalogQuery.data?.modes[activeMode === 'standard' ? 'standard' : 'quick'];
+  const compatible = !displayed?.contentHash || c?.contentHash === displayed.contentHash;
   const terminalPresentation =
     !current && !queue && result?.resolution && now < result.resolution.endsAt && result.view;
   const canTeach =
@@ -348,6 +373,7 @@ export function LikesGame(context: DuelLobbyContext) {
         </div>
       </header>
       <GameWallets wallets={context.wallets} />
+      {context.onboarding && <OnboardingCard game="likes" progress={context.onboarding} />}
       {!tutorialSeen && canTeach && (
         <section className="likes-tutorial-invite">
           <h2>{t('第一次来？一起练习一局', 'New here? Try a guided match')}</h2>
@@ -519,9 +545,7 @@ export function LikesGame(context: DuelLobbyContext) {
                 <span>{Math.max(0, Math.ceil(result.resolution.endsAt - now))}s</span>
               </div>
               <Arena
-                catalog={
-                  catalogQuery.data!.modes[result.mode === 'standard' ? 'standard' : 'quick']
-                }
+                catalog={c}
                 view={result.view}
                 profiles={result.profiles}
                 you={result.you}
@@ -607,9 +631,8 @@ export function LikesGame(context: DuelLobbyContext) {
           codec={likesCodec}
           onClose={closeHistory}
           renderRound={(round, you, meta) => {
-            const catalog =
-              catalogQuery.data.modes[meta.mode === 'standard' ? 'standard' : 'quick'];
-            return catalog.contentHash === meta.contentHash ? (
+            const catalog = matchingCatalog(catalogQuery.data, meta.mode, meta.contentHash);
+            return catalog ? (
               <LikesRoundLog round={round} you={you} catalog={catalog} />
             ) : (
               <p>
@@ -617,9 +640,13 @@ export function LikesGame(context: DuelLobbyContext) {
               </p>
             );
           }}
-          renderDetail={(detail) =>
-            catalogQuery.data.modes[detail.result.mode === 'standard' ? 'standard' : 'quick']
-              .contentHash !== detail.contentHash ? (
+          renderDetail={(detail) => {
+            const catalog = matchingCatalog(
+              catalogQuery.data,
+              detail.result.mode,
+              detail.contentHash,
+            );
+            return !catalog ? (
               <p>
                 {t('无法取得匹配版本的规则词条。', 'The matching rule catalog is unavailable.')}
               </p>
@@ -628,23 +655,13 @@ export function LikesGame(context: DuelLobbyContext) {
                 {detail.result.view?.players.map((player, seat) => (
                   <section key={seat}>
                     <h3>{player.role}</h3>
-                    <p>
-                      {player.loadout
-                        ?.map((id) =>
-                          skillName(
-                            catalogQuery.data.modes[
-                              detail.result.mode === 'standard' ? 'standard' : 'quick'
-                            ],
-                            id,
-                          ),
-                        )
-                        .join(' · ')}
-                    </p>
+                    <CharacterPassive role={catalog.roles.find((r) => r.id === player.role)!} />
+                    <p>{player.loadout?.map((id) => skillName(catalog, id)).join(' · ')}</p>
                   </section>
                 ))}
               </div>
-            )
-          }
+            );
+          }}
         />
       )}
       {log && logSession && c && (
@@ -668,17 +685,7 @@ export function LikesGame(context: DuelLobbyContext) {
             id={logSession}
             active={!!current}
             you={logSeat as Seat}
-            renderRound={(round, you) => (
-              <LikesRoundLog
-                round={round}
-                you={you}
-                catalog={
-                  current
-                    ? c
-                    : catalogQuery.data!.modes[result?.mode === 'standard' ? 'standard' : 'quick']
-                }
-              />
-            )}
+            renderRound={(round, you) => <LikesRoundLog round={round} you={you} catalog={c} />}
           />
         </DuelDialog>
       )}

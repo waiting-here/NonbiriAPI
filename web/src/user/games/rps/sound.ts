@@ -40,6 +40,11 @@ export function rpsReplacementCue(
     )
   )
     return 'tie';
-  if (BigInt(next.session.phaseSeq) <= BigInt(previous.session.phaseSeq)) return null;
-  return next.session.currentActorOptions[0] === 'follower_decision' ? 'follow' : 'phase';
+  if (BigInt(next.session.phaseSeq) <= BigInt(previous.session.phaseSeq))
+    return reveal ? 'reveal' : null;
+  return next.session.currentActorOptions[0] === 'follower_decision'
+    ? 'follow'
+    : reveal
+      ? 'reveal'
+      : 'phase';
 }

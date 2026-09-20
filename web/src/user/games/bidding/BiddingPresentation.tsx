@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDuelText } from '../common/duel/copy';
 import type { DuelHome, Seat } from '../common/duel/types';
 import type { BiddingView, Reward } from './normalize';
-import { cardLabel } from './labels';
+import { cardLabel, handSuit } from './labels';
 import { RewardCard } from './Cards';
 import type { EffectCue } from '../common/audio/assets';
 
@@ -80,10 +80,20 @@ function resultText(scene: Scene, t: ReturnType<typeof useDuelText>) {
   const owner = scene.awardedTo === scene.you ? t('你', 'You') : t('对手', 'Opponent');
   return t(`${owner} 收走整个奖池`, `${owner} collects the whole pool`);
 }
-function BidCard({ value, className }: { readonly value: number; readonly className: string }) {
+function BidCard({
+  value,
+  seat,
+  className,
+}: {
+  readonly value: number;
+  readonly seat: Seat;
+  readonly className: string;
+}) {
+  const t = useDuelText();
   return (
-    <span className={`bid-presentation__bid ${className}`} aria-hidden="true">
+    <span className={`bid-presentation__bid bid-suit--${seat} ${className}`} aria-hidden="true">
       {cardLabel(value)}
+      <small>{handSuit(seat, t).symbol}</small>
     </span>
   );
 }
@@ -173,8 +183,9 @@ export function BiddingPresentation({
       if (!cancelled && scene.bids) {
         setStep('settle');
         if (scene.awardedTo !== null) onCue?.('bidding_pot_collect');
+        else if (!scene.terminal) onCue?.('bidding_pot_add');
       }
-    }, 1200);
+    }, 160);
     const nextDraw = window.setTimeout(() => {
       if (!cancelled && scene.bids && scene.nextRewards.length) {
         setStep('draw');
@@ -292,7 +303,7 @@ export function BiddingPresentation({
         <div className="bid-presentation__side is-you">
           <span>{t('你', 'You')}</span>
           {visibleStep !== 'draw' && scene.bids && (
-            <BidCard value={scene.bids[scene.you]} className="is-left" />
+            <BidCard seat={scene.you} value={scene.bids[scene.you]} className="is-left" />
           )}
         </div>
         <div className="bid-presentation__center">
@@ -313,7 +324,11 @@ export function BiddingPresentation({
         <div className="bid-presentation__side is-opponent">
           <span>{t('对手', 'Opponent')}</span>
           {visibleStep !== 'draw' && scene.bids && (
-            <BidCard value={scene.bids[(1 - scene.you) as Seat]} className="is-right" />
+            <BidCard
+              seat={(1 - scene.you) as Seat}
+              value={scene.bids[(1 - scene.you) as Seat]}
+              className="is-right"
+            />
           )}
         </div>
       </div>
@@ -332,7 +347,8 @@ export function BiddingPresentation({
         </strong>
         {scene.bids && visibleStep !== 'draw' && (
           <span>
-            {t('你', 'You')} {cardLabel(scene.bids[scene.you])} · {t('对手', 'Opponent')}{' '}
+            {t('你', 'You')} {handSuit(scene.you, t).name} {cardLabel(scene.bids[scene.you])} ·{' '}
+            {t('对手', 'Opponent')} {handSuit(1 - scene.you, t).name}{' '}
             {cardLabel(scene.bids[(1 - scene.you) as Seat])}
           </span>
         )}

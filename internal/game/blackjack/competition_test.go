@@ -43,7 +43,7 @@ func orderedCards(t *testing.T, values ...int) [engine.DeckSize]engine.Card {
 }
 func (f *fixture) installPairTable() string {
 	f.t.Helper()
-	f.clock.Store(135)
+	f.clock.Store(125)
 	h := f.read(0)
 	if h.Phase != "decision" {
 		f.t.Fatal("fixture did not enter decision")
@@ -209,13 +209,13 @@ func TestConcurrentWorkersCommitOnlyOneSettlementAndQueueOrder(t *testing.T) {
 	for i := range 10 {
 		f.join(i)
 	}
-	f.clock.Store(135)
+	f.clock.Store(125)
 	f.read(0)
-	f.clock.Store(165)
+	f.clock.Store(145)
 	var wg sync.WaitGroup
 	errors := make(chan error, 12)
 	for range 12 {
-		wg.Go(func() { _, err := f.s.RecoverBeforeListen(f.ctx, 165, 128, time.Now().Add(time.Minute)); errors <- err })
+		wg.Go(func() { _, err := f.s.RecoverBeforeListen(f.ctx, 145, 128, time.Now().Add(time.Minute)); errors <- err })
 	}
 	wg.Wait()
 	close(errors)

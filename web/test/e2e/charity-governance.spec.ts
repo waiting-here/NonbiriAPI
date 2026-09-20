@@ -582,7 +582,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
   await saveScreenshot(page, 'catalog-expanded-320-dark-zh', '.economy-catalog-item');
 
-  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await page.getByRole('navigation', { name: '分页', exact: true }).getByRole('button', { name: '下一页', exact: true }).click();
   await expect(page.getByText('[公益]provider/page-two', { exact: true })).toBeVisible();
   const search = page.getByRole('searchbox');
   const requestCountBeforeTyping = catalogRequests.length;
@@ -659,6 +659,11 @@ test('level-five stewardship shows the shared owner projection and caller identi
   const logRow: JSONRecord = {
     id: REQUEST_ID,
     route_kind: 'charity_chat_completions',
+    phase: 'handler' as const,
+    rejection_stage: null,
+    rejection_reason: null,
+    request_method: null,
+    request_path: null,
     caller_result_class: 'success',
     caller_status: 200,
     caller_error_code: null,

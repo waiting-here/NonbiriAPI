@@ -64,6 +64,21 @@ type Rules interface {
 	Archive(mode string, state json.RawMessage) (json.RawMessage, error)
 }
 
+// rulesFor selects a trusted implementation by the persisted content identity.
+// The optional resolver cannot turn arbitrary stored JSON into executable rules.
+func (s *Service) rulesFor(mode, hash string) (Rules, error) {
+	if resolver, ok := s.rules.(interface {
+		ResolveCatalog(string, string) (Rules, error)
+	}); ok {
+		return resolver.ResolveCatalog(mode, hash)
+	}
+	c, err := s.rules.Catalog(mode)
+	if err != nil || c.Hash != hash {
+		return nil, ErrInvariant
+	}
+	return s.rules, nil
+}
+
 func Encode(value any) (json.RawMessage, error) {
 	body, err := json.Marshal(value)
 	if err != nil || len(body) > 1<<20 {

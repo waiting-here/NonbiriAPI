@@ -65,6 +65,8 @@ const coreSession = {
     effective_level: 2,
     level_display_name: 'Lv2',
     game_profile_public: false,
+    charity_profile_public: false,
+    automatic_restrictions: [],
     created_at: 1_700_000_000,
     updated_at: 1_700_000_001,
     usage: {
@@ -1073,8 +1075,9 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(screen.getByRole('button', { name: 'Create platform model' }));
-    await rendered.user.type(screen.getByLabelText('Service provider'), 'created-provider');
-    await rendered.user.type(screen.getByLabelText('Model name'), 'created-model');
+    const createForm = within(screen.getByLabelText('Model name').closest('form')!);
+    await rendered.user.type(createForm.getByLabelText('Service provider'), 'created-provider');
+    await rendered.user.type(createForm.getByLabelText('Model name'), 'created-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findAllByText('created-provider/created-model');
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
@@ -2756,11 +2759,11 @@ describe('experimental policy and charity controls', () => {
   test('does not download an export returned for the previous account', async () => {
     const marker = 'account-a-export-marker-123456';
     const completion = deferred<AccountExportAttachment>();
-    const exportV8 = vi.fn(() => completion.promise);
+    const exportV9 = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV8: true, deleteAccount: false },
+      capabilities: { exportV9: true, deleteAccount: false },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV8,
+      exportV9,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -2778,7 +2781,7 @@ describe('experimental policy and charity controls', () => {
       rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
       const dialog = await screen.findByRole('alertdialog');
       await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportV8).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(exportV9).toHaveBeenCalledTimes(1));
 
       rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
       const currentSession = { user: { id: '2' } };
@@ -2786,7 +2789,7 @@ describe('experimental policy and charity controls', () => {
       await act(async () => {
         completion.resolve({
           blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 8,
+          schemaVersion: 9,
         });
         await completion.promise;
       });

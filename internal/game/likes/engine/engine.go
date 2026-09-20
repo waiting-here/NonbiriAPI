@@ -15,21 +15,35 @@ var ErrInvariant = errors.New("likes: rule invariant failed")
 var ErrRandom = errors.New("likes: random source unavailable")
 
 type Engine struct {
-	c         catalog.Config
-	hash      string
-	skills    map[string]catalog.Skill
-	buffs     map[string]catalog.Buff
-	roles     map[string]catalog.Role
-	harnesses map[string]catalog.Harness
-	passives  map[string]catalog.Passive
+	characterPassives bool
+	c                 catalog.Config
+	hash              string
+	skills            map[string]catalog.Skill
+	buffs             map[string]catalog.Buff
+	roles             map[string]catalog.Role
+	harnesses         map[string]catalog.Harness
+	passives          map[string]catalog.Passive
 }
 
 func New(mode string) (*Engine, error) {
-	c, hash, err := catalog.Load(mode)
+	return newEngine(mode, false)
+}
+
+func NewLegacy(mode string) (*Engine, error) {
+	return newEngine(mode, true)
+}
+
+func newEngine(mode string, legacy bool) (*Engine, error) {
+	load := catalog.Load
+	if legacy {
+		load = catalog.LoadLegacy
+	}
+	c, hash, err := load(mode)
 	if err != nil {
 		return nil, err
 	}
 	e := &Engine{c: c, hash: hash, skills: map[string]catalog.Skill{}, buffs: map[string]catalog.Buff{}, roles: map[string]catalog.Role{}, harnesses: map[string]catalog.Harness{}, passives: map[string]catalog.Passive{}}
+	e.characterPassives = !legacy
 	for _, sk := range c.Skills {
 		e.skills[sk.ID] = sk
 	}

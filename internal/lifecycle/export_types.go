@@ -9,30 +9,34 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
-	Checkins       []CheckinExport         `json:"checkins"`
-	GameOnboarding []OnboardingExport      `json:"game_onboarding"`
-	SchemaVersion  int                     `json:"schema_version"`
-	GeneratedAt    int64                   `json:"generated_at"`
-	User           UserExport              `json:"user"`
-	Endpoints      []EndpointExport        `json:"endpoints"`
-	CatalogPairs   []CatalogPairExport     `json:"catalog_pairs"`
-	Models         []ModelExport           `json:"models"`
-	CallerKey      *CallerKeyExport        `json:"caller_key"`
-	Usage          UsageExport             `json:"usage"`
-	LogSummary     LogSummaryExport        `json:"log_summary"`
-	Issues         []IssueExport           `json:"issues"`
-	CreditLedger   []LedgerEntryExport     `json:"credit_ledger"`
-	WelfareClaims  []WelfareExport         `json:"welfare_claims"`
-	Thursday       []ThursdayExport        `json:"thursday"`
-	Donations      []DonationExport        `json:"donations"`
-	Charity        CharityExport           `json:"charity"`
-	Fishing        FishingExport           `json:"fishing"`
-	LinkLink       LinkLinkExport          `json:"linklink"`
-	RPS            RPSExport               `json:"rps"`
-	Bidding        DuelExport              `json:"bidding"`
-	Likes          DuelExport              `json:"likes"`
-	Blackjack      BlackjackExport         `json:"blackjack"`
-	Randomness     []RandomnessProofExport `json:"randomness"`
+	Checkins            []CheckinExport         `json:"checkins"`
+	GameOnboarding      []OnboardingExport      `json:"game_onboarding"`
+	GameOnboardingHolds []OnboardingHoldExport  `json:"game_onboarding_holds"`
+	Loans               []LoanExport            `json:"loans"`
+	GameRankings        RankingExport           `json:"game_rankings"`
+	Penalties           []PenaltyExport         `json:"penalties"`
+	SchemaVersion       int                     `json:"schema_version"`
+	GeneratedAt         int64                   `json:"generated_at"`
+	User                UserExport              `json:"user"`
+	Endpoints           []EndpointExport        `json:"endpoints"`
+	CatalogPairs        []CatalogPairExport     `json:"catalog_pairs"`
+	Models              []ModelExport           `json:"models"`
+	CallerKey           *CallerKeyExport        `json:"caller_key"`
+	Usage               UsageExport             `json:"usage"`
+	LogSummary          LogSummaryExport        `json:"log_summary"`
+	Issues              []IssueExport           `json:"issues"`
+	CreditLedger        []LedgerEntryExport     `json:"credit_ledger"`
+	WelfareClaims       []WelfareExport         `json:"welfare_claims"`
+	Thursday            []ThursdayExport        `json:"thursday"`
+	Donations           []DonationExport        `json:"donations"`
+	Charity             CharityExport           `json:"charity"`
+	Fishing             FishingExport           `json:"fishing"`
+	LinkLink            LinkLinkExport          `json:"linklink"`
+	RPS                 RPSExport               `json:"rps"`
+	Bidding             DuelExport              `json:"bidding"`
+	Likes               DuelExport              `json:"likes"`
+	Blackjack           BlackjackExport         `json:"blackjack"`
+	Randomness          []RandomnessProofExport `json:"randomness"`
 }
 
 type UserExport struct {
@@ -55,9 +59,11 @@ type UserExport struct {
 	GameBalance               string  `json:"game_balance"`
 	Balance                   string  `json:"balance"`
 	DonationCredit            string  `json:"donation_credit"`
+	DonationCreditAchievedAt  *int64  `json:"donation_credit_achieved_at"`
 	EffectiveLevel            int     `json:"effective_level"`
 	LevelDisplayName          string  `json:"level_display_name"`
 	GameProfilePublic         bool    `json:"game_profile_public"`
+	CharityProfilePublic      bool    `json:"charity_profile_public"`
 	CreatedAt                 int64   `json:"created_at"`
 	UpdatedAt                 int64   `json:"updated_at"`
 }
@@ -536,6 +542,14 @@ type ActivityExporter interface {
 	ExportActivities(context.Context, *sql.Tx, ExportRequest) (ActivityExport, error)
 }
 
+type RankingExporter interface {
+	ExportRankings(context.Context, *sql.Tx, ExportRequest) (RankingExport, error)
+}
+
+type PenaltyExporter interface {
+	ExportPenalties(context.Context, *sql.Tx, ExportRequest) ([]PenaltyExport, error)
+}
+
 type DonationExporter interface {
 	ExportDonations(context.Context, *sql.Tx, ExportRequest) ([]DonationExport, error)
 }
@@ -568,11 +582,81 @@ type OnboardingExport struct {
 	TaskKey     string `json:"task_key"`
 	Award       string `json:"award"`
 	CompletedAt int64  `json:"completed_at"`
+	OperationID string `json:"operation_id"`
+}
+
+type OnboardingHoldExport struct {
+	ID        string `json:"id"`
+	GameKey   string `json:"game_key"`
+	TaskKey   string `json:"task_key"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type LoanExport struct {
+	ID            string `json:"loan_id"`
+	OperationID   string `json:"operation_id"`
+	CreatedAt     int64  `json:"created_at"`
+	Principal     string `json:"principal"`
+	A             string `json:"a"`
+	B             string `json:"b"`
+	Nominal       string `json:"nominal"`
+	Disbursed     string `json:"disbursed"`
+	Fee           string `json:"fee"`
+	Repayment     string `json:"repayment"`
+	Interest      string `json:"interest"`
+	GeneralBefore string `json:"general_before"`
+	GeneralAfter  string `json:"general_after"`
+	GameBefore    string `json:"game_before"`
+	GameAfter     string `json:"game_after"`
+}
+
+type RankingExport struct {
+	StatisticsStart int64                `json:"statistics_start"`
+	Totals          []RankingTotalExport `json:"totals"`
+	Events          []RankingEventExport `json:"events"`
+}
+
+type RankingTotalExport struct {
+	Board      string `json:"board"`
+	Window     string `json:"window"`
+	Amount     string `json:"amount"`
+	AchievedAt int64  `json:"achieved_at"`
+}
+
+type RankingEventExport struct {
+	Game           string  `json:"game"`
+	SettledAt      int64   `json:"settled_at"`
+	Loss           *string `json:"loss"`
+	PositiveProfit *string `json:"positive_profit"`
+}
+
+type PenaltyExport struct {
+	ID         string                `json:"id"`
+	Kind       string                `json:"kind"`
+	ReasonCode string                `json:"reason_code"`
+	StartedAt  int64                 `json:"started_at"`
+	EndsAt     *int64                `json:"ends_at"`
+	EndedAt    *int64                `json:"ended_at"`
+	State      string                `json:"state"`
+	Result     string                `json:"result"`
+	Actions    []PenaltyActionExport `json:"actions"`
+}
+
+type PenaltyActionExport struct {
+	Action         string  `json:"action"`
+	OccurredAt     int64   `json:"occurred_at"`
+	ReasonCode     string  `json:"reason_code"`
+	PreviousEndsAt *int64  `json:"previous_ends_at"`
+	EndsAt         *int64  `json:"ends_at"`
+	RequestID      *string `json:"request_id"`
+	OperationID    *string `json:"operation_id"`
 }
 
 type ActivityExport struct {
-	Checkins       []CheckinExport
-	GameOnboarding []OnboardingExport
-	WelfareClaims  []WelfareExport
-	Thursday       []ThursdayExport
+	Checkins            []CheckinExport
+	GameOnboarding      []OnboardingExport
+	GameOnboardingHolds []OnboardingHoldExport
+	Loans               []LoanExport
+	WelfareClaims       []WelfareExport
+	Thursday            []ThursdayExport
 }

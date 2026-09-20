@@ -174,6 +174,8 @@ const coreBaseUser = {
   effective_level: 2,
   level_display_name: 'Lv2',
   game_profile_public: false,
+  charity_profile_public: false,
+  automatic_restrictions: [],
   created_at: 1_700_000_000,
   updated_at: 1_700_000_001,
   usage: {
@@ -780,7 +782,7 @@ describe('admin per-user limit explanations', () => {
 });
 
 const initialGameConfig: GamesConfig = {
-  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 } },
+  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 }, quick_stakes: ['1000', '5000', '10000', '50000'] },
   bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,

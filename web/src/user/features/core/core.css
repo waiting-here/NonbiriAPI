@@ -698,3 +698,14 @@
 .core-selection-list li > button {
   flex-shrink: 0;
 }
+
+.core-resource-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin-block: 0.75rem;
+}
+.core-resource-filters label { display: grid; gap: 0.35rem; min-width: 0; }
+.core-resource-filters input, .core-resource-filters select { width: 100%; min-width: 0; min-height: 44px; }
+.core-resource-filters .field-error { grid-column: 1 / -1; }

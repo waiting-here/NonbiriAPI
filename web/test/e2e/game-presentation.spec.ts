@@ -459,6 +459,12 @@ async function installGameRoutes(
       await route.fulfill({ json: gamesSnapshot() });
       return;
     }
+    if (url.pathname === '/api/games/leaderboards/charity' && method === 'GET') {
+      await route.fulfill({ json: {
+        as_of: NOW, statistics_start: NOW, window: 'history', rows: [], me: null,
+      } });
+      return;
+    }
     if (url.pathname === '/api/games/rps/state' && method === 'GET') {
       await route.fulfill({ json: rpsHome });
       return;

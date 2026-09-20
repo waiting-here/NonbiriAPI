@@ -2,7 +2,7 @@
 
 ## 中文
 
-全站共用一张九人牌桌，一人即可开局。每个服务器整分钟的前 15 秒落座，随后 30 秒同时决策，最后 15 秒展示结果。全桌提前结束可提前展示，下一局仍在整分钟开始；无人时不保存空局。
+全站共用一张九人牌桌，一人即可开局。每个服务器 :00 和 :30 开始一场，前 5 秒落座，随后 20 秒同时决策，最后 5 秒展示结果。全桌提前结束会延长结果展示，下一局仍按原定 :00／:30 开始；无人时不保存空局。
 
 点击“加入队列”会立即预留基础投入，先花游戏积分，再由通用积分补足，并冻结本次金额和费率。按服务器首次有效受理的顺序落座前九人，候补最多 4,096 人。刷新、重复请求和多标签页不会重复排队或改变位置。落座窗口内退出原币退款并递补；发牌后不能退出退款。未落座候补跨轮保留，可以随时离开退款。参与者在整桌结算后须主动重新加入队尾，不保座、不自动续投。
 
@@ -17,6 +17,10 @@
 
 没有保险、投降、五龙或旁注。个人最大总投入为基础金额四倍。默认基础投入为 1,000～50,000，步长 1,000，默认选中 5,000；管理员可调整，新游戏默认关闭。
 
+快捷按钮默认提供 1,000／5,000／10,000／50,000；管理员可配置 0～8 个不重复且符合限额与步长的金额，空数组关闭按钮。点击仅选中金额，再点击加入队列才扣款。落座阶段在手机和桌面均显示 3×3 九席。
+
+新人任务各限一次：完成一局 1,000，首次任一手胜利 2,000，首次爆牌 3,000，首次达到 21 点 4,000，首次自然二十一点 5,000。自然二十一点可同时满足完成、胜利、21 点与自然任务；分牌 21 不算自然。系统取消不发奖，奖励不计入利润榜。
+
 每手应返总额：失败为零、平局为本金、普通获胜为本金两倍、自然二十一点为本金 2.5 倍。应返总额分别扣平台、低保池和周四池费用，默认各 1%，每项按整数毫积分向下取整。剩余全部发为通用积分，包含返还中的本金；零返还不另外收费。
 
 | 单手基础投入 1,000 | 通用积分到账 |
@@ -30,11 +34,11 @@
 
 断线和关页不暂停。重启取消尚未正常结算的整桌，所有投入原币退还且不抽水；候补继续排队，已提交结果不回滚。维护或关闭游戏释放候补及未发牌席位，已发牌局继续完成。被封禁的席位自动停牌；删号去除身份并继续收尾，不影响其他玩家，不能再入钱包的款项按对应积分种类计入外部账户。
 
-本人近期 30 天历史可在页面查阅。之后仅管理员保留去身份的牌局事实；个人导出第八版增加本人安全的排队、付款和牌局记录。导出不含其他人的付款来源、身份或未揭示底牌。游戏使用专属入口插画和发牌、翻牌、加倍、分牌、自然二十一点及爆牌音效；音效默认关闭，在当前浏览器记住选择，进入后台暂停。
+本人近期 30 天历史可在页面查阅。之后仅管理员保留去身份的牌局事实；个人导出第九版包含本人安全的排队、付款和牌局记录。导出不含其他人的付款来源、身份或未揭示底牌。游戏使用专属入口插画和发牌、翻牌、加倍、分牌、自然二十一点及爆牌音效；音效默认关闭，在当前浏览器记住选择，进入后台暂停。
 
 ## English
 
-One shared table seats up to nine players and starts with one. Each server minute has 15 seconds for seating, 30 seconds for simultaneous decisions and 15 seconds for results. An early finish extends the result display without changing the next minute. Empty rounds are not saved.
+One shared table seats up to nine players and starts with one. Each server :00 and :30 starts a round with 5 seconds for seating, 20 seconds for simultaneous decisions and 5 seconds for results. An early finish extends the result display without changing the next scheduled start. Empty rounds are not saved.
 
 Joining reserves the base stake immediately, using game credits before general credits, and freezes the stake and three fee rates. The first nine accepted entries take seats; up to 4,096 wait in a persistent FIFO queue. Retries and multiple tabs cannot duplicate or reorder an entry. Before dealing, seated players may leave for an original-asset refund and the next waiter is promoted. Waiting entries never expire automatically and may leave at any time. After settlement, players explicitly join the tail again; seats and stakes never renew automatically.
 
@@ -44,10 +48,14 @@ Save the random commitment during seating. The hole card and undealt shoe stay s
 
 Hit, stand, double or split equal-value initial cards once. Doubling reserves one additional base stake and draws one final card. Doubling after ordinary splits is allowed. Split aces receive one card each and stand; split 21 is an ordinary win. Unfunded additions leave the hand unchanged. No insurance, surrender, five-card bonus or side bets. Maximum personal exposure is four base stakes. Defaults are 1,000–50,000 in steps of 1,000, with 5,000 selected. Administrators can configure these values; the game starts disabled.
 
+Quick buttons default to 1,000 / 5,000 / 10,000 / 50,000. Administrators can save 0–8 distinct amounts within the stake limits and step; an empty array hides the buttons. A button only selects an amount; joining confirms payment. Seating uses a 3×3 grid on phones and desktops.
+
+Once-only newcomer awards are 1,000 for completion, 2,000 for a first winning hand, 3,000 for a first bust, 4,000 for a first 21 and 5,000 for a first natural. A natural can qualify for completion, win, 21 and natural together; split 21 is not natural. System cancellations do not award credits, and rewards do not enter profit rankings.
+
 Gross returns per hand are zero for a loss, one stake for a push, two for a win and 2.5 for a natural. Platform, welfare and Thursday fees default to 1% each, independently rounded down to integer milli-credits. The complete net return, including principal, is general credits. A 1,000 stake returns 0 / 970 / 1,940 / 2,425 respectively. Zero returns have no extra fee. Default long-term expected returns are negative; secure shuffling never responds to players' wins or losses.
 
 Spectators see public cards. Seated players can send rate-limited preset emotes; there is no free chat. Dealing, scores, busts and payouts have motion feedback, with all values preserved in reduced-motion mode.
 
 Disconnecting does not pause play. Restart cancels an unsettled table and refunds all original assets without fees, preserves waiting entries and never rolls back committed results. Maintenance or closure refunds waiters and undealt seats while dealt tables finish. Banned seats stand automatically; deleted identities are detached without cancelling others, and unavailable payouts go to the appropriate external asset account.
 
-Personal history remains available for 30 days, followed by administrator-only anonymous game facts. Account export version 8 adds the user's safe queue, payment and game records without other players' identities, funding sources or hidden dealer cards. The game has a dedicated cover and dealing, reveal, double, split, natural and bust effects. Sound starts off, remembers this browser's choice and pauses in the background.
+Personal history remains available for 30 days, followed by administrator-only anonymous game facts. Account export version 9 includes the user's safe queue, payment and game records without other players' identities, funding sources or hidden dealer cards. The game has a dedicated cover and dealing, reveal, double, split, natural and bust effects. Sound starts off, remembers this browser's choice and pauses in the background.

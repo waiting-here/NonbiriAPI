@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -79,20 +80,22 @@ func TestEmbeddingExtensionPreservesReleasedDataAndStorage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// The final manifest checks every constraint. Separately prove that
+		// appended rejection fields did not reorder or alter the old columns.
 		for _, table := range []string{"logical_requests", "request_logs"} {
-			var previous, current string
-			for _, object := range manifestBefore.Objects {
-				if object.Type == "table" && object.Name == table {
-					previous = object.SQL
+			var previous, current []columnManifest
+			for _, object := range manifestBefore.Tables {
+				if object.Name == table {
+					previous = object.Columns
 				}
 			}
-			for _, object := range after.Objects {
-				if object.Type == "table" && object.Name == table {
-					current = object.SQL
+			for _, object := range after.Tables {
+				if object.Name == table {
+					current = object.Columns
 				}
 			}
-			if previous == "" || strings.Replace(current, ",'openai_embeddings','charity_embeddings'", "", 1) != previous {
-				t.Fatalf("request table %s changed beyond its route CHECK", table)
+			if len(previous) == 0 || len(current) != len(previous)+4 || !reflect.DeepEqual(current[:len(previous)], previous) {
+				t.Fatalf("request table %s changed existing columns", table)
 			}
 		}
 		if err := store.Close(); err != nil {

@@ -90,7 +90,7 @@ func (s *Service) Create(
 	input CreateInput,
 ) (resources.MutationResult[Donation], error) {
 	if s == nil || ctx == nil || userID <= 0 || mutation.Method != http.MethodPost || mutation.Route != routeDonations ||
-		len(mutation.PathIDs) != 0 || mutation.Query != "" || !validDonationText(input.Description) ||
+		len(mutation.PathIDs) != 0 || mutation.Query != "" || !validDonationDescription(input.Description) ||
 		!input.OwnershipAuthorized || !validCreateKeys(input.Keys) {
 		return resources.MutationResult[Donation]{}, ErrInvalidRequest
 	}
@@ -127,7 +127,7 @@ func (s *Service) Create(
 
 // CreateInTransaction records one donation in a caller-owned transaction.
 func (s *Service) CreateInTransaction(ctx context.Context, tx *sql.Tx, userID int64, input CreateInput) (Donation, error) {
-	if s == nil || ctx == nil || tx == nil || userID <= 0 || !validDonationText(input.Description) || !input.OwnershipAuthorized || !validCreateKeys(input.Keys) {
+	if s == nil || ctx == nil || tx == nil || userID <= 0 || !validDonationDescription(input.Description) || !input.OwnershipAuthorized || !validCreateKeys(input.Keys) {
 		return Donation{}, ErrInvalidRequest
 	}
 	if err := s.ownerAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
@@ -236,7 +236,7 @@ func (s *Service) Edit(
 	input EditInput,
 ) (resources.MutationResult[Donation], error) {
 	if s == nil || ctx == nil || userID <= 0 || donationID <= 0 || input.ExpectedRevision <= 0 ||
-		!validDonationText(input.Description) || !validMutation(mutation, http.MethodPatch, routeDonation, donationID) {
+		!validDonationDescription(input.Description) || !validMutation(mutation, http.MethodPatch, routeDonation, donationID) {
 		return resources.MutationResult[Donation]{}, ErrInvalidRequest
 	}
 	return s.ownerDonationMutation(ctx, userID, donationID, mutation, func(ctx context.Context, tx *sql.Tx, now int64) error {
@@ -1249,6 +1249,10 @@ func validCreateKeys(keys []CreateKeyInput) bool {
 		seen[key.EndpointKeyID] = struct{}{}
 	}
 	return true
+}
+
+func validDonationDescription(value string) bool {
+	return strings.TrimSpace(value) != "" && validDonationText(value)
 }
 
 func validDonationText(value string) bool {

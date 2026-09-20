@@ -15,11 +15,12 @@ func TestAdmitDenialObserverClassifiesOnlyUserLimit(t *testing.T) {
 	config := testRPMConfig()
 	controller, err := newWithClock(Config{
 		RPM: config,
-		OnDenied: func(_ context.Context, userID int64, reason ratelimit.RPMReason) {
+		OnDenied: func(_ context.Context, userID int64, reason ratelimit.RPMReason) error {
 			mu.Lock()
 			users = append(users, userID)
 			reasons = append(reasons, reason)
 			mu.Unlock()
+			return nil
 		},
 	}, newFakeClock())
 	if err != nil {

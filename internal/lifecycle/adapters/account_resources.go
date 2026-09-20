@@ -91,8 +91,9 @@ func (adapter *AccountResources) ExportIdentity(
 			ConcurrencyLimit:          identity.ConcurrencyLimit,
 			EffectiveConcurrencyLimit: identity.EffectiveConcurrencyLimit,
 			GameBalance:               identity.GameBalance, Balance: identity.Balance, DonationCredit: identity.DonationCredit,
-			EffectiveLevel: identity.EffectiveLevel, LevelDisplayName: identity.LevelDisplayName,
-			GameProfilePublic: identity.GameProfilePublic, CreatedAt: identity.CreatedAt, UpdatedAt: identity.UpdatedAt,
+			DonationCreditAchievedAt: cloneInt64(identity.DonationCreditAchievedAt),
+			EffectiveLevel:           identity.EffectiveLevel, LevelDisplayName: identity.LevelDisplayName,
+			GameProfilePublic: identity.GameProfilePublic, CharityProfilePublic: identity.CharityProfilePublic, CreatedAt: identity.CreatedAt, UpdatedAt: identity.UpdatedAt,
 		}, lifecycle.UsageExport{
 			TotalRequests:              usage.TotalRequests,
 			TotalUncachedInputTokens:   usage.TotalUncachedInputTokens,

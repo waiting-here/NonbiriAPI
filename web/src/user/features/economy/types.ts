@@ -247,6 +247,7 @@ export interface ThursdayView {
 }
 
 export interface ActivitiesSnapshot {
+  loan: import('@shared/operations/loans').LoanView;
   master: ActivitiesMaster;
   welfare: WelfareView;
   thursday: ThursdayView;

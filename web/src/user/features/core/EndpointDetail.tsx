@@ -1,3 +1,5 @@
+import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
+import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -1477,11 +1479,13 @@ export function EndpointDetail({
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const filters = useResourceFilters('keys', accountId, 'keys_', 'keys_page');
   const keyPager = useUrlPagePager({
     station: 'user',
     listType: 'endpoint-keys',
     scopeKey: `${accountId}:${endpointId}`,
     scopeReady: true,
+    resetKey: filters.identity,
     pageParam: 'keys_page',
     pageSizeParam: 'keys_page_size',
   });
@@ -1495,7 +1499,9 @@ export function EndpointDetail({
       pageSize,
     },
     Boolean(accountId && endpointId),
+    filters.filters,
   );
+  useResourceListScroll(accountId, Boolean(keys.data) && !keys.isFetching);
   const [addingKey, setAddingKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1692,7 +1698,11 @@ export function EndpointDetail({
         icon="endpoints"
         title={t('endpoints.detailsTitle')}
         description={t('endpoints.detailsDescription')}
-        back={<Link to={returnTo}>{t('common.back')}</Link>}
+        back={
+          <Link to={returnTo} state={location.state}>
+            {t('common.back')}
+          </Link>
+        }
       />
       <section className="core-card">
         <div className="core-card__header">
@@ -1840,6 +1850,7 @@ export function EndpointDetail({
             {t('endpoints.addKey')}
           </button>
         </div>
+        <ResourceFilterBar control={filters} />
         {addingKey ? (
           <AddEndpointKeyForm
             accountId={accountId}
@@ -1857,6 +1868,8 @@ export function EndpointDetail({
             error={keys.error ?? new Error('The key details are unavailable.')}
             onRetry={() => void keys.refetch()}
           />
+        ) : keys.data.data.length === 0 && filters.active ? (
+          <FilteredResourceEmpty control={filters} />
         ) : keys.data.data.length === 0 ? (
           <CoreEmpty title={t('endpoints.noKeysTitle')} body={t('endpoints.noKeysBody')} />
         ) : (
