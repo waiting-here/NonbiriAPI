@@ -168,7 +168,15 @@ func (s *Service) session(ctx context.Context, tx *sql.Tx, id string) (sessionRe
 	if err != nil {
 		return v, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT seat_no,user_id,general_paid_milli,game_paid_milli,loadout_json,current_plan_json,locked,timeout_count FROM game_duel_seats WHERE session_id=? ORDER BY seat_no`, id)
+	return s.sessionSeats(ctx, tx, v)
+}
+
+type sessionQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (s *Service) sessionSeats(ctx context.Context, reader sessionQueryer, v sessionRecord) (sessionRecord, error) {
+	rows, err := reader.QueryContext(ctx, `SELECT seat_no,user_id,general_paid_milli,game_paid_milli,loadout_json,current_plan_json,locked,timeout_count FROM game_duel_seats WHERE session_id=? ORDER BY seat_no`, v.ID)
 	if err != nil {
 		return v, err
 	}
