@@ -4,13 +4,17 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Current release:** [1.0.0-rc.1](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.1), a source prerelease for Linux/amd64. Build from the tagged source; no official precompiled binaries are provided. Review the deployment, privacy and security documentation before exposing an instance to users.
+> **Current release:** [1.0.0-rc.2](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.2), a source prerelease for Linux/amd64. Build from the tagged source; no official precompiled binaries are provided. Review the deployment, privacy and security documentation before exposing an instance to users.
 >
-> **Compatibility boundary:** Generation 2 (`application_id=0x4E425249`, `user_version=2`), targeting Linux/amd64. The validated release upgrade is complete beta.4 → rc.1, ending at 117 tables while preserving existing data and configuration. Unreleased intermediate schemas are outside the release upgrade guarantee. The three new games start disabled. Alpha/Generation 1 still requires an explicit fresh cutover. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes).
+> **Compatibility boundary:** Generation 2 (`application_id=0x4E425249`, `user_version=2`), targeting Linux/amd64. The validated release upgrade is complete rc.1 → rc.2 while preserving existing data and configuration. Unreleased intermediate schemas are outside the release upgrade guarantee. Loans start disabled. Alpha/Generation 1 still requires an explicit fresh cutover. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes).
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## Highlights
+
+- Optional game-credit loans show exact fees, immediate general-credit repayment and both resulting balances before confirmation. Four leaderboards cover cumulative charity support, net game spending and positive Bidding/Blackjack profit; charity visibility has its own opt-in setting.
+- Automatic penalties have durable violation windows, safe personal summaries and authorized management history. Search and filters cover complete paginated resources; authorized managers can trace a donated key back to its associated models.
+- New character passives, layer-by-layer resistance, clear suit colors, mobile quick stakes and synchronized feedback across six games preserve server-authoritative results. Battle follow-up cues grow across a round and distinguish normal, partial and complete resistance.
 
 - Turn-based battles offer an optional browser-local tutorial, ten scripted rounds ending in a narrow win, concise effect cards and linked player rules. Live turns warn below five seconds; overload highlights the actual depleted resources. Closed games and modes disable matching while keeping learning and history available.
 - Banned Discord sign-ins open the site's branded 403 page. The charity catalog avoids repeating provider/model details already included in the complete model name.
@@ -23,8 +27,8 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
-- Account export schema 8 includes game-randomness proofs, both wallets, asset-tagged entries, independent check-ins, game payment sources and lifetime newcomer completions while excluding secrets, other users and internal capacity, scheduling and audit data.
-- Separate general and game wallets with independent check-ins. Games spend game credits first, then general credits; eligible refunds return their original assets. API calls and Thursday contributions use general credits. Daily welfare pays game credits, and nine once-only newcomer tasks award 17,000 general credits in total.
+- Account export schema 9 includes safe loan receipts, ranking contributions, penalties, newcomer completions and pending qualifications alongside game-randomness proofs, both wallets, asset-tagged entries and independent check-ins while excluding secrets, other users and internal capacity, scheduling and audit data.
+- Separate general and game wallets with independent check-ins. Games spend game credits first, then general credits; eligible refunds return their original assets. API calls and Thursday contributions use general credits. Daily welfare pays game credits, and 22 once-only newcomer tasks across all six games award 60,000 general credits in total.
 - Shared user-limit, effective-level filtering and announcement management for administrators and L5 stewards. Stewards can modify only other current L1–L4 users, cannot delete accounts or change cumulative donor credit, and can reset donated-key failure streaks in bounded batches across a complete selected result set. Donors can reset their own eligible keys.
 - Fishing defaults to 100% gross RTP on fresh databases, preserving existing settings on upgrade. Each catch contributes separately rounded platform, welfare and Thursday cuts, defaulting to 1% each, with gross and net rewards displayed.
 - Credits, check-in with a server-configured balance gate, personal credit history, donation-backed charity routing, per-key donation expiry and usage limits, and level-5 co-management. Authorized administrator and steward logs expose a fixed safe set of upstream resource details, including the routed key identifier and logical-request charge; ordinary charity callers do not receive those details.
@@ -46,7 +50,7 @@ Bidding Duel offers 13 simultaneous hidden-card rounds. Turn-based Battle Miniga
 
 The six games have dedicated covers; Fishing includes illustrated catches with an SVG fallback. Bidding Duel, Turn-based Battle Minigame (Test) and Blackjack include short sound effects. Turn-based Battle Minigame (Test) also has synchronized scene music. Sound and music start off and remember each game's choice in the browser. Account → Local preferences offers lightweight or lossless music, applied on the next music activation or game entry. Media sources and formats are documented in the [audio notice](web/src/shared/assets/game-audio/NOTICE.md).
 
-Blackjack shares one nine-seat table with a persistent waiting queue and a 15/30/15-second minute cadence. Six-deck rules include splitting and doubling; each hand pays all net returns in general credits after frozen fees. The game starts disabled. See [Blackjack rules](docs/blackjack.md).
+Blackjack shares one nine-seat table with a persistent waiting queue and a 5/20/5-second cadence aligned to each :00 and :30. Six-deck rules include splitting and doubling; each hand pays all net returns in general credits after frozen fees. The game starts disabled. See [Blackjack rules](docs/blackjack.md).
 
 All six games provide private per-game seeds, opening commitments and terminal verification. See [randomness and phased disclosure](docs/game-randomness.md) for the protocol, independent verifier and its limits.
 
@@ -111,7 +115,7 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-The database remains Generation 2 with 117 tables. The validated release upgrade is complete populated beta.4 → rc.1. Source validation, atomic extension, foreign keys and both asset ledgers are checked before startup; unknown or partial structures are rejected. Existing identities, wallets, settled charges, saved game rules, configuration, site branding and legal overrides are preserved. The three new games start disabled on sources without their settings. Unreleased intermediate schemas are outside the release upgrade guarantee. Older binaries reject the new manifest; rollback requires the matching complete stopped snapshot. Alpha/Generation 1 requires a fresh cutover.
+The database remains Generation 2. The validated release upgrade is complete populated rc.1 → rc.2. Source validation, atomic extension, foreign keys and both asset ledgers are checked before startup; unknown or partial structures are rejected. Existing identities, wallets, settled charges, saved game rules, configuration, site branding and legal overrides are preserved. Loans default to disabled, existing game settings remain intact, and quick stakes are derived from the saved limits. Unreleased intermediate schemas are outside the release upgrade guarantee. Older binaries reject the new manifest; rollback requires the matching complete stopped snapshot. Alpha/Generation 1 requires a fresh cutover.
 
 The project is source-first and supports Linux/amd64 as its production target. Operators compile the exact release source commit on that target or use an equivalent controlled build pipeline. This source release provides no official precompiled binaries, container images, or installers; other production platforms are not supported.
 

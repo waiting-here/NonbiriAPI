@@ -792,9 +792,9 @@ describe('account deletion confirmation', () => {
     document.cookie = 'nb_elevated=elevated_token; Path=/; SameSite=Lax';
     const deleteAccount = vi.fn(async () => undefined);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV8: false, deleteAccount: true },
+      capabilities: { exportV9: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV8: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 8 }) as const),
+      exportV9: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 9 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -842,9 +842,9 @@ describe('account deletion confirmation', () => {
     const completion = deferred<void>();
     const deleteAccount = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV8: false, deleteAccount: true },
+      capabilities: { exportV9: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV8: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 8 }) as const),
+      exportV9: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 9 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -888,9 +888,9 @@ describe('account deletion confirmation', () => {
       .mockResolvedValueOnce('active')
       .mockResolvedValueOnce('deleted');
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV8: false, deleteAccount: true },
+      capabilities: { exportV9: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV8: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 8 }) as const),
+      exportV9: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 9 }) as const),
       deleteAccount,
       readAccountAuthority,
     };
@@ -928,13 +928,13 @@ describe('account deletion confirmation', () => {
     window.sessionStorage.setItem('nb.pending.elevation.account', '1');
     document.cookie = 'nb_elevated=unknown_export_token; Path=/; SameSite=Lax';
     const beginElevation = vi.fn(async () => 'https://identity.example.test/elevate');
-    const exportV8 = vi.fn(async () => {
+    const exportV9 = vi.fn(async () => {
       throw new ApiError('network_error', 'The network request failed.', 0);
     });
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV8: true, deleteAccount: false },
+      capabilities: { exportV9: true, deleteAccount: false },
       beginElevation,
-      exportV8,
+      exportV9,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -950,8 +950,8 @@ describe('account deletion confirmation', () => {
     expect(
       await screen.findByText(/verify your Discord identity again to create a new export/i),
     ).toBeVisible();
-    expect(exportV8).toHaveBeenCalledTimes(1);
-    expect(exportV8).toHaveBeenCalledWith({
+    expect(exportV9).toHaveBeenCalledTimes(1);
+    expect(exportV9).toHaveBeenCalledWith({
       accountId: '1',
       elevatedToken: 'unknown_export_token',
     });

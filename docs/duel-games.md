@@ -5,7 +5,7 @@
 Bidding Duel and Turn-based Battle Minigame (Test) use separate two-player queues. The game, mode,
 entry price and three fee rates shown before joining are fixed for that entry.
 You can play one of each game at the same time, but cannot join two modes of the
-same game. Both new games start disabled and have no newcomer award.
+same game. Fresh installations start both games disabled. Once-only newcomer tasks award 10,000 General Credits across four Bidding tasks and 18,000 across four battle tasks; completion and victory awards can stack. System cancellation gives no award. The game page shows each task and its authoritative completion state.
 
 Game credits pay first, then general credits. A negative wallet does not reduce
 the positive funds in the other wallet. Cancelling a queue, waiting 120 seconds
@@ -22,7 +22,7 @@ that user's wallet. Displayed game points are separate from spendable credits.
 Each player receives a shuffled hand of ranks 1–13. The deal uses fixed A–K
 13-card slots for 13 rounds, and each player has a separate shuffled reward
 deck. Both hands remain visible with fixed positions, and played cards stay grey
-and unavailable. Reward cards use red diamond (♦) and black club (♣) suits. The first 12
+and unavailable. The red side uses hearts (♥) in hand and diamonds (♦) for rewards; the black side uses spades (♠) in hand and clubs (♣) for rewards. Seats, rather than the viewer's position or theme, determine the suit. The first 12
 rounds alternate the dealer; each player is dealer six times. A dealer holding
 a joker has 10 seconds to use or save it. A used joker doubles only that
 player's reward for the current round, and does not double carried rewards.
@@ -99,6 +99,14 @@ Reduced-motion mode retains every final number, before/after change and reason.
 Final results and wallet settlement commit immediately; the outcome illustration
 appears after the last round's remaining presentation time.
 
+## Character passives and resistance
+
+Every character has one always-active passive, separate from equipped skills. ChatGPT retains its image quota and DeepSeek its subscription-free resources. Claude gains one base like on an executed main skill with a positive nominal base when strictly ahead at the start of that step. Extra skills and follow-ups do not trigger it. Gemini gains one base like on executed normal attacks, including Flash follow-ups; distilled PUB41 remains a special skill. Existing decay and subsequent modifiers still apply.
+
+GLM has 25% resistance, rising to 50% while strictly behind. DeepSeek has 25% effect hit, rising to 50% while strictly ahead. Each main step, paired extra-skill slot and Flash batch uses a shared score snapshot. Each attempted enemy debuff layer succeeds with probability `min(1,(100+hit)/(100+resistance))`. Overload, speed mode and self-inflicted effects are outside this check. Partial resistance applies only successful layers; full resistance adds nothing and does not refresh duration. SOTA's additional debuff follows successful application and has its own resistance check, without recursion. Saved older matches retain their original catalog and rules.
+
+Normal application, partial resistance and full resistance have distinct feedback. Follow-up effects grow through three capped levels within a round. All six games synchronize sound with server events, coalesce batch results and avoid replay after reconnect. Music ducks and resumes at its original position. Muting and reduced motion preserve the same result and values.
+
 ## Learning, availability and reminders
 
 Closed games and modes disable matching. Learning, the field guide, history and
@@ -113,7 +121,7 @@ side; phone readers can follow links and return to the previous entry.
 
 An optional local tutorial equips ChatGPT with Codex, Usage reset, Hello, world!,
 Regenerate, Pedal faster and Words and pictures. A scripted Claude opponent with
-Codex plays ten quick-mode rounds ending 66–64. Teaching waits for your actions,
+Codex plays ten quick-mode rounds ending 66–61. Teaching waits for your actions,
 can be skipped at any time, and never queues, spends credits, awards prizes or
 creates a real match. The browser remembers completion or skipping; replay starts
 from the beginning. Applying the loadout only fills the normal form. A real queue
@@ -153,11 +161,17 @@ can resume from the last completed page, while the signed cursor is valid.
 
 ## 双人游戏
 
-《竞标对决》和《回合制对战小游戏（测试）》各自匹配两名玩家，可以同时进行，但同一款游戏只能排队或参加一局。入队时冻结模式、票价和三项抽成；两款新游戏初始关闭，不设新人奖励。
+每个角色的固有被动持续生效，不占配装。ChatGPT 保留图像额度，DeepSeek 保留无订阅资源。Claude 在步骤开始严格领先、主技能自身标称基础得赞大于零且实际施放时，基础得赞加 1；额外技能和连答不触发。Gemini 的普攻类技能基础加 1，包含 Flash 连答，蒸馏 PUB41 仍属特殊技能。原有衰减及后续增减、倍率继续生效。
+
+GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%，严格领先时为 50%。主技能、各额外槽位与每批连答分别取双方共同的步骤得赞快照。向敌方施加的每层减益独立按 `min(1,(100+命中)/(100+抵抗))` 判定；过载、倍速等状态和自身副作用不参与。部分抵抗只施加成功层，全部抵抗不加层也不刷新。SOTA 追加减益须由成功施加触发，自身另行抵抗，不递归。旧局沿用保存的旧图鉴与规则。
+
+正常施加、部分抵抗、全部抵抗各有反馈，单回合连答按三档递进并封顶。六游戏音画跟随服务端事件，批量结果合并，刷新重连不补播；音乐让位后从原位置恢复。静音及减少动态仍显示相同结果与数值。
+
+《竞标对决》和《回合制对战小游戏（测试）》各自匹配两名玩家，可以同时进行，但同一款游戏只能排队或参加一局。入队时冻结模式、票价和三项抽成；全新安装时两款游戏初始关闭。竞标的四项一次性新人任务合计奖励 10,000 通用积分，对战四项合计 18,000；同局的完成与获胜奖励可以叠加，系统取消不奖励。具体任务和服务端完成状态见游戏页面。
 
 门票优先使用游戏积分，不足部分用通用积分；一只钱包欠款不抵扣另一只钱包的正余额。取消排队、120 秒未匹配、平局或系统取消均按原币种退票。胜负局退还胜者原门票，再把败者门票扣除平台、福利池和星期四池各自向下取整的抽成后，以通用积分奖励胜者。认输算负，断线不停表；服务重启、封禁或删号取消未完成对局，删号后的钱包不会被迟到结算重建。局内分数不是可消费积分。
 
-竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持有 Joker 的庄家有 10 秒决定使用或保留；Joker 只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。奖励使用红方块 ♦ 与黑梅花 ♣，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
+竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持有 Joker 的庄家有 10 秒决定使用或保留；Joker 只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。红方手牌使用红桃 ♥、奖励使用方块 ♦，黑方手牌使用黑桃 ♠、奖励使用梅花 ♣；花色由阵营决定，不随观看视角或主题翻转，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
 
 回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
@@ -175,7 +189,7 @@ can resume from the last completed page, while the signed cursor is valid.
 
 配装、选招和状态卡片直接显示效果摘要。词条详情区分原版／蒸馏版本，相关术语可以点击，桌面并排阅读关联解释，手机支持跳转与返回；玩梗独立作为引用展示。
 
-新手引导在浏览器本地运行，可随时跳过并重看，浏览器记住完成或跳过状态。引导配装为 ChatGPT＋Codex＋用量重置＋Hello, world!＋重新生成＋加速猛蹬＋图文并茂，对手为携带 Codex 的 Claude，完整十轮快速对战以 66∶64 险胜结束。讲解及操作等待玩家，不真实匹配、不扣积分、不发奖励、不创建真实记录。“使用教学配装”只填写大厅表单，中途刷新后从头开始；其他标签页出现真实排队或对局时立即恢复真实状态。
+新手引导在浏览器本地运行，可随时跳过并重看，浏览器记住完成或跳过状态。引导配装为 ChatGPT＋Codex＋用量重置＋Hello, world!＋重新生成＋加速猛蹬＋图文并茂，对手为携带 Codex 的 Claude，完整十轮快速对战以 66∶61 险胜结束。讲解及操作等待玩家，不真实匹配、不扣积分、不发奖励、不创建真实记录。“使用教学配装”只填写大厅表单，中途刷新后从头开始；其他标签页出现真实排队或对局时立即恢复真实状态。
 
 正式对局本人仍需确认时，不足五秒会强调倒计时和操作区；开启音效后每秒最多一次短提示。提交、锁定、超时或自动过载跳过后停止；后台不播放，返回不补播，减少动态模式保留静态强调。
 

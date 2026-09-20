@@ -186,12 +186,12 @@ describe('beta.1 game pages', () => {
       },
     };
     act(() => view.queryClient.setQueryData(linkLinkKeys.current, normalizeLinkLinkCurrent(next)));
-    await waitFor(() => expect(audio.play.mock.calls).toEqual([['link_match']]));
+    await waitFor(() => expect(audio.play.mock.calls).toEqual([['link_match', { chain: 1 }]]));
     await view.user.click(screen.getAllByRole('gridcell')[0]);
     act(() =>
       view.queryClient.setQueryData(linkLinkKeys.current, normalizeLinkLinkCurrent({ ...next })),
     );
-    expect(audio.play.mock.calls).toEqual([['link_match']]);
+    expect(audio.play.mock.calls).toEqual([['link_match', { chain: 1 }]]);
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     act(() => document.dispatchEvent(new Event('visibilitychange')));
     const terminal = {
@@ -212,7 +212,7 @@ describe('beta.1 game pages', () => {
     await screen.findByText('Time ran out');
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     act(() => document.dispatchEvent(new Event('visibilitychange')));
-    expect(audio.play.mock.calls).toEqual([['link_match']]);
+    expect(audio.play.mock.calls).toEqual([['link_match', { chain: 1 }]]);
     view.unmount();
     expect(audio.close).toHaveBeenCalled();
   });

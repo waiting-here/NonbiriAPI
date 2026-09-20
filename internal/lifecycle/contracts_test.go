@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 8 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 9 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -46,6 +46,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
+		"game_onboarding_holds", "loans", "game_rankings", "penalties",
 		"bidding", "likes", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
 		"fishing", "generated_at", "issues", "linklink", "log_summary", "models", "rps",
@@ -58,6 +59,14 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 }
 
 func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
+	assertClosedJSONKeys(t, LoanExport{}, "loan_id", "operation_id", "created_at", "principal", "a", "b", "nominal", "disbursed", "fee", "repayment", "interest", "general_before", "general_after", "game_before", "game_after")
+	assertClosedJSONKeys(t, OnboardingExport{}, "game_key", "task_key", "award", "completed_at", "operation_id")
+	assertClosedJSONKeys(t, OnboardingHoldExport{}, "id", "game_key", "task_key", "created_at")
+	assertClosedJSONKeys(t, RankingExport{}, "statistics_start", "totals", "events")
+	assertClosedJSONKeys(t, RankingTotalExport{}, "board", "window", "amount", "achieved_at")
+	assertClosedJSONKeys(t, RankingEventExport{}, "game", "settled_at", "loss", "positive_profit")
+	assertClosedJSONKeys(t, PenaltyExport{}, "id", "kind", "reason_code", "started_at", "ends_at", "ended_at", "state", "result", "actions")
+	assertClosedJSONKeys(t, PenaltyActionExport{}, "action", "occurred_at", "reason_code", "previous_ends_at", "ends_at", "request_id", "operation_id")
 	assertClosedJSONKeys(t, EndpointExport{},
 		"id", "connector_type", "base_url", "origin", "note", "enabled", "created_at", "updated_at", "keys")
 	assertClosedJSONKeys(t, EndpointOriginExport{Kind: "custom"}, "kind")

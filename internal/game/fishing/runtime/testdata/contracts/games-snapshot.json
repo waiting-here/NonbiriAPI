@@ -12,9 +12,9 @@
     "config_hash": "951c2ff7aa625bf0734c80c61de529007b6b34dfdf922c8e70db83e1fb2a2fa4",
     "queue_capacity": 4096,
     "seats": 9,
-    "seating_seconds": 15,
-    "decision_seconds": 30,
-    "round_seconds": 60
+    "seating_seconds": 5,
+    "decision_seconds": 20,
+    "round_seconds": 30
   },
   "balance": "1000000",
   "game_balance": "0",
@@ -253,8 +253,8 @@
           "thursday": 100
         },
         "available": true,
-        "terms_hash": "811e853550498190b701b574efe06ffa85f7c4f631914f7ae5c61bdbb16cf125",
-        "content_hash": "65512e407ece9c31486cc808100780607b524cc6a95d1e2a9b6ef0424c6f7333"
+        "terms_hash": "d52e005ce2c76a4bf8a383b1ec2b718bddc5310bfe8d778c37fda31bfe880dab",
+        "content_hash": "177cb83e30206c8343cd91984963228970980fe6b36a4fb6844253f7d76ececc"
       },
       "standard": {
         "enabled": false,
@@ -265,8 +265,8 @@
           "thursday": 100
         },
         "available": true,
-        "terms_hash": "dc53d6b33d08208156071ed999c0c09b8ca1c4d8a4e8bcf3cbc95143138bba6d",
-        "content_hash": "55473a4623bf7974a64210f1afbcc2f0411d7557888c9a20fc8df88ad23d0dd7"
+        "terms_hash": "ddee0b07338084558fe9844dd4eb9650dc8e8d7d0dc3077a6585d4f65523dcce",
+        "content_hash": "27fe126841daa7328c487036241469a8854866c9bf9602743eda2f925a84cced"
       }
     },
     "available": true,

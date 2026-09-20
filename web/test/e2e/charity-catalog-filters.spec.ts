@@ -389,7 +389,7 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   await pageSize.selectOption('10');
   await expect(page.locator('.economy-catalog-item')).toHaveCount(10);
   await expect(page.getByText('Page 1 of 3 · Total: 26', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Pagination', exact: true }).getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('[公益]provider/model-11', { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/page=2&page_size=10/);
   expect(fixture.requests.at(-1)).toBe('/api/charity/models?view=catalog&page=2&page_size=10');

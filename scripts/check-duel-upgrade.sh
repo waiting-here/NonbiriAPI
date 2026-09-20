@@ -36,6 +36,7 @@ gameplay = temporary / "gameplay.go"
 gameplay.write_text(source, encoding="utf-8", newline="\n")
 replacements = {
     str(legacy / "released_gameplay_fixture_test.go"): str(gameplay),
+    str(legacy / "released_progression_fixture_test.go"): str(root / "internal/db/testdata/released_progression_fixture_test.go.txt"),
     str(legacy / "internal/ledger/released_dual_wallet_fixture_test.go"): str(root / "internal/db/testdata/released_dual_wallet_fixture_test.go.txt"),
 }
 (temporary / "overlay.json").write_text(json.dumps({"Replace": replacements}), encoding="utf-8", newline="\n")
@@ -45,16 +46,18 @@ export NONBIRI_DUAL_WALLET_FIXTURE="$temporary/data/wallet.db"
 export NONBIRI_DUAL_UPGRADED_FIXTURE="$temporary/data/upgraded.db"
 export NONBIRI_GAMEPLAY_FIXTURE="$temporary/data/gameplay.db"
 export NONBIRI_BILLING_FIXTURE="$temporary/data/billing.db"
+export NONBIRI_DUAL_DUEL_FIXTURE="$temporary/data/duel.db"
+export NONBIRI_DUAL_BLACKJACK_FIXTURE="$temporary/data/blackjack.db"
 (
     cd "$temporary/released"
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-app.test" .
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-wallet.test" ./internal/ledger
-    "$temporary/released-app.test" -test.run '^TestWriteReleased(Gameplay|Billing)Fixture$' -test.v -test.timeout 2m
+    "$temporary/released-app.test" -test.run '^TestWriteReleased(Gameplay|Billing|Progression)Fixture$' -test.v -test.timeout 2m
     "$temporary/released-wallet.test" -test.run '^TestWriteReleasedDualWalletFixture$' -test.v -test.timeout 2m
 )
 "$go_command" test -count=1 -v -run '^TestDuelUpgradeFromReleasedBinary$' ./internal/db
 NONBIRI_DUAL_GAMEPLAY_FIXTURE="$NONBIRI_GAMEPLAY_FIXTURE" NONBIRI_DUAL_BILLING_FIXTURE="$NONBIRI_BILLING_FIXTURE" \
-    "$go_command" test -count=1 -v -run '^TestReleasedDualAsset(Gameplay|Billing)Upgrade$' .
+    "$go_command" test -count=1 -v -run '^TestReleased(DualAsset(Gameplay|Billing)|Progression)Upgrade$' .
 "$temporary/released-wallet.test" -test.run '^TestReleasedRejectsDuelUpgrade$' -test.v -test.timeout 2m
 printf 'Released source: %s\n' "$released_commit"
 "$go_command" version

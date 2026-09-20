@@ -18,7 +18,7 @@ const maximumUnixSecond = int64(253402300799)
 type OpaqueIDSource func(string) (string, error)
 
 // ExportAdapters is the closed Generation 2 export registry. The coordinator
-// calls every member in this order inside one transaction.
+// converges game state before reading financial projections in one transaction.
 type ExportAdapters struct {
 	Identity   IdentityExporter
 	Resources  ResourceExporter
@@ -34,6 +34,8 @@ type ExportAdapters struct {
 	Likes      DuelExporter
 	Blackjack  BlackjackExporter
 	Randomness RandomnessExporter
+	Rankings   RankingExporter
+	Penalties  PenaltyExporter
 }
 
 // DeleteAdapters is the closed account-deletion registry. Each adapter owns
@@ -243,7 +245,8 @@ func New(config Config) (*Coordinator, error) {
 func completeExportAdapters(a ExportAdapters) bool {
 	return a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
 		a.Activities != nil && a.Donations != nil && a.Charity != nil && a.Fishing != nil &&
-		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil
+		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil &&
+		a.Rankings != nil && a.Penalties != nil
 }
 
 func completeDeleteAdapters(a DeleteAdapters) bool {
@@ -282,7 +285,7 @@ func validDecision(userID, decisionNow int64) bool {
 	return userID > 0 && decisionNow >= 0 && decisionNow <= maximumUnixSecond
 }
 
-// Export builds and commits one authoritative schema-v5 snapshot. The encoded
+// Export builds and commits one authoritative snapshot. The encoded
 // bytes are finalized before commit so an oversized document never commits a
 // lazy-expiry write performed by a domain exporter.
 func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow int64) ([]byte, error) {
@@ -312,30 +315,8 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	}
 	request := ExportRequest{UserID: userID, DecisionNow: decisionNow, Limit: CollectionLimit}
 	document := ExportDocument{SchemaVersion: SchemaVersion, GeneratedAt: decisionNow}
-	if document.User, document.Usage, document.LogSummary, err = coordinator.export.Identity.ExportIdentity(ctx, tx, request); err != nil {
-		return nil, err
-	}
-	if document.Endpoints, document.CatalogPairs, document.Models, document.CallerKey, err = coordinator.export.Resources.ExportResources(ctx, tx, request); err != nil {
-		return nil, err
-	}
-	if document.Issues, err = coordinator.export.Issues.ExportIssues(ctx, tx, request); err != nil {
-		return nil, err
-	}
-	if document.CreditLedger, err = coordinator.export.Ledger.ExportLedger(ctx, tx, request); err != nil {
-		return nil, err
-	}
-	activity, err := coordinator.export.Activities.ExportActivities(ctx, tx, request)
-	if err != nil {
-		return nil, err
-	}
-	document.WelfareClaims, document.Thursday = activity.WelfareClaims, activity.Thursday
-	document.Checkins, document.GameOnboarding = activity.Checkins, activity.GameOnboarding
-	if document.Donations, err = coordinator.export.Donations.ExportDonations(ctx, tx, request); err != nil {
-		return nil, err
-	}
-	if document.Charity, err = coordinator.export.Charity.ExportCharity(ctx, tx, request); err != nil {
-		return nil, err
-	}
+	// Lazy game completion can post rewards and ranking contributions. Read
+	// balances, ledgers and holds only after all such writes have converged.
 	var finalizer ExportFinalizer
 	if document.Fishing, finalizer, err = coordinator.export.Fishing.ExportFishing(ctx, tx, request); finalizer != nil {
 		finalizers = append(finalizers, finalizer)
@@ -376,6 +357,37 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if document.Randomness, err = coordinator.export.Randomness.ExportRandomness(ctx, tx, request); err != nil {
 		return nil, err
 	}
+	if document.User, document.Usage, document.LogSummary, err = coordinator.export.Identity.ExportIdentity(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.Endpoints, document.CatalogPairs, document.Models, document.CallerKey, err = coordinator.export.Resources.ExportResources(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.Issues, err = coordinator.export.Issues.ExportIssues(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.CreditLedger, err = coordinator.export.Ledger.ExportLedger(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	activity, err := coordinator.export.Activities.ExportActivities(ctx, tx, request)
+	if err != nil {
+		return nil, err
+	}
+	document.WelfareClaims, document.Thursday = activity.WelfareClaims, activity.Thursday
+	document.Checkins, document.GameOnboarding = activity.Checkins, activity.GameOnboarding
+	document.GameOnboardingHolds, document.Loans = activity.GameOnboardingHolds, activity.Loans
+	if document.Donations, err = coordinator.export.Donations.ExportDonations(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.Charity, err = coordinator.export.Charity.ExportCharity(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.GameRankings, err = coordinator.export.Rankings.ExportRankings(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.Penalties, err = coordinator.export.Penalties.ExportPenalties(ctx, tx, request); err != nil {
+		return nil, err
+	}
 	normalizeExportDocument(&document)
 	if err := validateExportCollectionBounds(document); err != nil {
 		return nil, err
@@ -398,6 +410,26 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 }
 
 func normalizeExportDocument(document *ExportDocument) {
+	if document.GameOnboardingHolds == nil {
+		document.GameOnboardingHolds = []OnboardingHoldExport{}
+	}
+	if document.Loans == nil {
+		document.Loans = []LoanExport{}
+	}
+	if document.GameRankings.Totals == nil {
+		document.GameRankings.Totals = []RankingTotalExport{}
+	}
+	if document.GameRankings.Events == nil {
+		document.GameRankings.Events = []RankingEventExport{}
+	}
+	if document.Penalties == nil {
+		document.Penalties = []PenaltyExport{}
+	}
+	for i := range document.Penalties {
+		if document.Penalties[i].Actions == nil {
+			document.Penalties[i].Actions = []PenaltyActionExport{}
+		}
+	}
 	if document.Randomness == nil {
 		document.Randomness = []RandomnessProofExport{}
 	}
@@ -517,10 +549,18 @@ func validateExportCollectionBounds(document ExportDocument) error {
 		}
 	}
 	lengths := []int{
+		len(document.GameOnboardingHolds), len(document.Loans), len(document.GameRankings.Totals), len(document.GameRankings.Events), len(document.Penalties),
 		len(document.Randomness),
 		len(document.Endpoints), len(document.CatalogPairs), len(document.Models), len(document.Issues),
 		len(document.Checkins), len(document.GameOnboarding), len(document.CreditLedger), len(document.WelfareClaims), len(document.Thursday), len(document.Donations),
 		len(document.Fishing.Pending), len(document.Fishing.Terminal), len(document.LinkLink.Summaries), len(document.RPS.Summaries),
+	}
+	penaltyActions := 0
+	for _, penalty := range document.Penalties {
+		if len(penalty.Actions) > CollectionLimit-penaltyActions {
+			return ErrTooLarge
+		}
+		penaltyActions += len(penalty.Actions)
 	}
 	for _, endpoint := range document.Endpoints {
 		lengths = append(lengths, len(endpoint.Keys))

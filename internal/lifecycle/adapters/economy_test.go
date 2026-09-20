@@ -17,6 +17,8 @@ import (
 )
 
 type fakeActivityOwner struct {
+	loans                   []activities.LoanReceipt
+	loanErr                 error
 	export                  activities.UserExport
 	exportErr               error
 	exportUserID            int64
@@ -43,6 +45,13 @@ func (owner *fakeActivityOwner) PrepareUserDeletion(
 	owner.deleteUserID = userID
 	owner.deleteNow = decisionNow
 	return nil
+}
+
+func (owner *fakeActivityOwner) ExportLoansTx(_ context.Context, _ *sql.Tx, userID int64, limit int) ([]activities.LoanReceipt, error) {
+	if userID != owner.exportUserID || limit != owner.exportLimit {
+		return nil, lifecycle.ErrInvalid
+	}
+	return owner.loans, owner.loanErr
 }
 
 type fakeDonationOwner struct {

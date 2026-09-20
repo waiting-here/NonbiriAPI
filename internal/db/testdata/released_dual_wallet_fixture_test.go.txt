@@ -49,7 +49,12 @@ func TestWriteReleasedDualWalletFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		plan, err := NewAdminUserAdjustment(Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: user, CreatedAt: ledgerTestNow}, general.ID, external.ID, AmountFromMilli(amount), 0, Amount{}, "synthetic balance")
+		balance := AmountFromMilli(amount)
+		if i == 0 {
+			balance, err = ParseAmount("9000000000000000")
+			if err != nil { t.Fatal(err) }
+		}
+		plan, err := NewAdminUserAdjustment(Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: user, CreatedAt: ledgerTestNow}, general.ID, external.ID, balance, 0, Amount{}, "synthetic balance")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -75,6 +80,9 @@ func TestWriteReleasedDualWalletFixture(t *testing.T) {
 			}
 			if _, err := tx.Exec(`UPDATE users SET game_profile_public=1 WHERE id=?`,user); err != nil {t.Fatal(err)}
 		}
+		var until any
+		if i == 1 { until = int64(253400000000) }
+		if _, err := tx.Exec(`UPDATE users SET is_banned=1,auto_banned=1,banned_reason='Automatic RPM restriction',banned_until=?,charity_suspended_until=? WHERE id=?`,until,253400000000,user); err != nil {t.Fatal(err)}
 	}
 	for key, value := range map[string]string{"site_name": "Synthetic dual wallet fixture", "legal_privacy_override_en": "Synthetic privacy.\nPreserve this text.", "game_fishing_rtp": "90", "game_fishing_rtp_premium": "88"} {
 		if _, err := tx.Exec(`UPDATE site_config SET value=?,updated_at=? WHERE key=?`, value, ledgerTestNow, key); err != nil {
