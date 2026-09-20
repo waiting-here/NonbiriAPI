@@ -76,6 +76,7 @@ describe('blackjack authoritative audio facts', () => {
     expect(blackjackAudioFacts(bust, before).some((fact) => fact.cue === 'blackjack_bust')).toBe(
       true,
     );
+    expect(blackjackAudioFacts(bust, before).some((fact) => fact.cue === 'blackjack_deal')).toBe(false);
 
     const flipWire = copy(blackjackWire());
     flipWire.server_now++;
@@ -153,6 +154,7 @@ describe('blackjack authoritative audio facts', () => {
   it('recognizes a natural deal after seating and aggregates split settlement net deltas', () => {
     const seating = state('seating');
     const before = state();
+    expect(blackjackAudioFacts(before, seating).filter((fact) => fact.cue === 'blackjack_deal')).toHaveLength(1);
     const naturalWire = copy(blackjackWire());
     naturalWire.server_now++;
     tableCards(naturalWire).seats[0].hands[0].natural = true;
@@ -160,6 +162,7 @@ describe('blackjack authoritative audio facts', () => {
     const natural = blackjackState(naturalWire);
     const naturalFacts = blackjackAudioFacts(natural, seating);
     expect(naturalFacts.filter((fact) => fact.cue === 'blackjack_natural')).toHaveLength(1);
+    expect(naturalFacts.some((fact) => fact.cue === 'blackjack_deal')).toBe(false);
 
     const mixedWire = copy(blackjackWire('result'));
     tableCards(mixedWire).seats[0].hands.push({

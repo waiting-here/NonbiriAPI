@@ -284,6 +284,7 @@ export function LinkLinkGame() {
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
   const current = useLinkLinkCurrent(Boolean(snapshot.data));
+  const matchSequence = useRef({ id: '', at: -Infinity, count: 0 });
   const previousSoundState = useRef<{
     readonly value: LinkLinkCurrent | undefined;
     readonly fetched: boolean;
@@ -307,7 +308,15 @@ export function LinkLinkGame() {
       BigInt(next.revision) > BigInt(before.revision) &&
       next.pairsRemoved > before.pairsRemoved
     ) {
-      playSound(boardWasRearranged(before, next) ? 'link_shuffle' : 'link_match');
+      const at = performance.now();
+      const previousMatch = matchSequence.current;
+      const count =
+        previousMatch.id === next.sessionID && at - previousMatch.at < 2200
+          ? previousMatch.count + 1
+          : 1;
+      matchSequence.current = { id: next.sessionID, at, count };
+      if (boardWasRearranged(before, next)) playSound('link_shuffle');
+      else playSound('link_match', { chain: count });
     }
   }, [current.data, current.isFetchedAfterMount, playSound]);
   const [selectedSpec, setSelectedSpec] = useState<LinkLinkSpec>('6x8');

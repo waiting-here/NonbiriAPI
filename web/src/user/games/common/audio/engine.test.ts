@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createArcadeAudio, gainAt, nextBeat, type ArcadeAudio } from './engine';
+import { duckLevel, effectMix } from './mix';
 
 class Param {
   value = 0;
@@ -20,6 +21,7 @@ class Node {
   disconnect = vi.fn();
 }
 class Source extends Node {
+  playbackRate = new Param();
   buffer: AudioBuffer | null = null;
   loop = false;
   loopStart = 0;
@@ -87,6 +89,45 @@ afterEach(() => {
 });
 
 describe('shared music clock', () => {
+  it('ducks overlapping turning points without restarting or seeking the music', async () => {
+    const { engine, context } = setup();
+    engine.setMusic('battle');
+    engine.setEffectsEnabled(true);
+    await engine.unlock();
+    await settle();
+    const music = context.sources[0];
+    const voiceGain = music.connect.mock.calls[0][0] as Node;
+    const bus = voiceGain.connect.mock.calls[0][0] as Node;
+    context.currentTime = 11;
+    engine.play('common_select');
+    await settle();
+    expect(bus.gain.events).toHaveLength(0);
+    engine.play('likes_combo');
+    await settle();
+    expect(bus.gain.events).toContainEqual(['ramp', 0.32, 11.035]);
+    const firstRestore = bus.gain.events.at(-1)![2];
+    context.currentTime = 11.2;
+    engine.play('likes_combo');
+    await settle();
+    expect(bus.gain.events.at(-4)).toEqual(['set', 0.32, 11.2]);
+    expect(bus.gain.events.at(-1)![2]).toBeGreaterThan(firstRestore);
+    expect(music.start).toHaveBeenCalledOnce();
+    expect(music.stop).not.toHaveBeenCalled();
+    expect(context.sources.filter((source) => source.loop)).toHaveLength(1);
+    engine.pause();
+    expect(bus.gain.events.at(-1)).toEqual(['set', 1, 11.2]);
+  });
+
+  it('computes a continuous attack, hold and return level for interruption', () => {
+    const envelope = { start: 1, attackEnd: 1.1, holdEnd: 1.4, end: 1.8, from: 1, level: 0.3 };
+    expect(duckLevel(envelope, 1)).toBe(1);
+    expect(duckLevel(envelope, 1.05)).toBeCloseTo(0.65);
+    expect(duckLevel(envelope, 1.2)).toBe(0.3);
+    expect(duckLevel(envelope, 1.6)).toBeCloseTo(0.65);
+    expect(duckLevel(envelope, 1.8)).toBe(1);
+    expect(duckLevel(null, 1.2)).toBe(1);
+  });
+
   it('uses the decoded loop period for the next beat and complementary one-beat ramps', () => {
     const duration = 2919724 / 44100,
       epoch = 0.028;
@@ -160,6 +201,50 @@ describe('shared music clock', () => {
 });
 
 describe('sample effects', () => {
+  it('schedules resistance taps separately and cancels the future tap on mute', async () => {
+    const { engine, context } = setup();
+    engine.setEffectsEnabled(true);
+    await engine.unlock();
+    await settle();
+    engine.play('common_lock');
+    engine.play('common_lock', { delay: 0.09 });
+    await settle();
+    expect(context.sources.map((source) => source.start.mock.calls[0][0])).toEqual([10, 10.09]);
+    engine.setEffectsEnabled(false);
+    expect(context.sources[1].stop).toHaveBeenCalledOnce();
+    expect(context.sources[1].disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('bounds layered gain and pitch, and mutes every layer together', async () => {
+    const { engine, context } = setup();
+    engine.setEffectsEnabled(true);
+    await engine.unlock();
+    await settle();
+    engine.play('likes_combo', { gain: 100, semitones: 40 });
+    await settle();
+    engine.play('likes_score_burst', { gain: 0.4, semitones: 2 });
+    await settle();
+    const [main, accent] = context.sources;
+    const gain = main.connect.mock.calls[0][0] as Node;
+    expect(gain.gain.events).toContainEqual(['set', effectMix('likes_combo').gain * 1.5, 10]);
+    expect(main.playbackRate.events).toContainEqual(['set', 2 ** (4 / 12), 10]);
+    expect(accent.playbackRate.events).toContainEqual(['set', 2 ** (2 / 12), 10]);
+    engine.setEffectsEnabled(false);
+    expect(main.stop).toHaveBeenCalledOnce();
+    expect(accent.stop).toHaveBeenCalledOnce();
+    context.currentTime += 1;
+    engine.setEffectsEnabled(true);
+    engine.play('likes_cast', { gain: NaN, semitones: Infinity });
+    await settle();
+    const plain = context.sources.at(-1)!;
+    expect(plain.playbackRate.events).toContainEqual(['set', 1, 11]);
+    expect((plain.connect.mock.calls[0][0] as Node).gain.events).toContainEqual([
+      'set',
+      effectMix('likes_cast').gain,
+      11,
+    ]);
+  });
+
   it('cancels a pending deadline cue and stops its voice without cutting other effects', async () => {
     const { engine, context } = setup();
     engine.setEffectsEnabled(true);

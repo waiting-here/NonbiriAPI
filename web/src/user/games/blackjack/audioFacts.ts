@@ -230,5 +230,21 @@ export function blackjackAudioFacts(home: BlackjackState, previous?: BlackjackSt
   const facts: AudioFact[] = [];
   tableTransitionFacts(home, previous, facts);
   tableResultFacts(home, previous, facts);
-  return facts;
+  const emphasized = new Set(
+    facts
+      .filter((fact) =>
+        ['blackjack_natural', 'blackjack_bust', 'blackjack_double', 'blackjack_split'].includes(
+          fact.cue,
+        ),
+      )
+      .map((fact) => fact.at),
+  );
+  const seen = new Set<string>();
+  return facts.filter((fact) => {
+    if (fact.cue === 'blackjack_deal' && emphasized.has(fact.at)) return false;
+    const key = `${fact.at}:${fact.cue}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

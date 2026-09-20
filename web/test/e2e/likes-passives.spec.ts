@@ -99,6 +99,11 @@ for (const mobile of [false, true]) {
     await expect(page.locator('.likes-application-result').last()).toContainText(
       'Applied 0 / Resisted 1',
     );
+    const reaction = page.locator('.likes-player[data-side="opponent"] .likes-reaction');
+    await expect(reaction).toHaveAttribute('data-result', 'partial');
+    await expect(reaction).toContainText('Applied 1 · Resisted 2');
+    if (mobile)
+      expect(await reaction.evaluate((node) => getComputedStyle(node).animationName)).toBe('none');
     await expect(page.locator('.likes-character-passive')).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -131,15 +136,20 @@ test('long Flash chain reveals each authoritative cast pair once', async ({ page
   const steps = wire.chain.summary.timeline;
   let elapsed = 0,
     seen = 1000;
+  let followups = 0;
   for (const step of steps) {
     const pair = wire.chain.summary.events.filter(
       (e) => step.event_ids.includes(e.id) && e.kind === 'cast' && e.data.derived,
     );
     if (pair.length) {
+      followups++;
       await page.clock.runFor(Math.max(0, elapsed + 500 - seen));
       seen = elapsed + 500;
       await expect(
         page.locator('.likes-cast-facts strong').filter({ hasText: 'Follow-up' }),
+      ).toHaveCount(2);
+      await expect(
+        page.locator('.likes-hit-label span').filter({ hasText: `FOLLOW-UP ×${followups}` }),
       ).toHaveCount(2);
       await expect(page.locator('.likes-character-passive').first()).toContainText(
         'World knowledge',

@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createArcadeAudio, type ArcadeAudio } from './engine';
 import { isEffectCue, type AudioGame, type EffectCue, type MusicScene } from './assets';
 import { readAudioPreference, readMusicQuality, writeAudioPreference } from './preferences';
+import type { EffectPlayback } from './mix';
+import type { EffectVoice } from './phrases';
 
 export interface AudioFact {
   readonly key: string;
   readonly cue: string;
   readonly at: number;
+  readonly playback?: EffectPlayback;
+  readonly accents?: readonly EffectVoice[];
 }
 export interface ArcadeSoundControl {
   readonly enabled: boolean;
@@ -84,9 +88,11 @@ export function useArcadeAudio(
       }
     }
   }, [activate, game]);
-  const play = useCallback((cue: EffectCue) => {
-    if (choices.current.effects && document.visibilityState === 'visible')
-      engine.current?.play(cue);
+  const play = useCallback((cue: EffectCue, playback?: EffectPlayback) => {
+    if (choices.current.effects && document.visibilityState === 'visible') {
+      if (playback) engine.current?.play(cue, playback);
+      else engine.current?.play(cue);
+    }
   }, []);
   const stop = useCallback((cue: EffectCue) => engine.current?.stopEffect(cue), []);
 
@@ -100,8 +106,10 @@ export function useArcadeAudio(
     for (const fact of options.facts) {
       if (fact.at > options.now || seen.current.has(fact.key)) continue;
       seen.current.add(fact.key);
-      if (!baseline.current && options.now - fact.at <= 1500 && isEffectCue(fact.cue))
-        play(fact.cue);
+      if (!baseline.current && options.now - fact.at <= 1500 && isEffectCue(fact.cue)) {
+        play(fact.cue, fact.playback);
+        for (const accent of fact.accents ?? []) play(accent.cue, accent);
+      }
     }
     baseline.current = false;
     while (seen.current.size > 2048) seen.current.delete(seen.current.values().next().value!);

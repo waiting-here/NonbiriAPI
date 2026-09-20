@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { useArcadeAudio } from './useArcadeAudio';
+import { useArcadeAudio, type AudioFact } from './useArcadeAudio';
 import { createArcadeAudio } from './engine';
 import { MUSIC_QUALITY_KEY } from './preferences';
 
@@ -75,4 +75,28 @@ it('marks muted facts consumed so enabling does not replay old sounds', () => {
   act(() => result.current.sound.toggle());
   rerender({ ...initial, now: 1300, facts });
   expect(factory.mock.results[0].value.play).not.toHaveBeenCalled();
+});
+
+it('consumes an entire layered result once and forwards its timed resistance accent', () => {
+  const options = { ...initial, facts: [] as AudioFact[] };
+  const { result, rerender } = renderHook((props) => useArcadeAudio('likes', props), {
+    initialProps: options,
+  });
+  act(() => result.current.sound.toggle());
+  const fact: AudioFact = {
+    key: 'revealed-resistance',
+    at: 1200,
+    cue: 'likes_cleanse',
+    playback: { semitones: -3 },
+    accents: [
+      { cue: 'common_lock', semitones: -4 },
+      { cue: 'common_lock', semitones: 3, delay: 0.09 },
+    ],
+  };
+  rerender({ ...options, now: 1200, facts: [fact] });
+  const engine = factory.mock.results[0].value;
+  expect(engine.play).toHaveBeenCalledTimes(3);
+  expect(engine.play).toHaveBeenLastCalledWith('common_lock', fact.accents![1]);
+  rerender({ ...options, now: 1300, facts: [fact] });
+  expect(engine.play).toHaveBeenCalledTimes(3);
 });

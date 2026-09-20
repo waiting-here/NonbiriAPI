@@ -250,3 +250,43 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.likes-reaction {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.35rem 0.7rem;
+  margin-block: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 2px solid currentColor;
+  border-radius: 0.65rem;
+  color: var(--nb-color-text);
+  background: var(--l-bg);
+  animation: likes-reaction-impact 260ms ease-out;
+  overflow-wrap: anywhere;
+}
+.likes-reaction[data-result='resisted'] {
+  border-style: double;
+  border-width: 3px;
+}
+.likes-reaction[data-result='partial'] {
+  border-style: dashed;
+}
+@keyframes likes-reaction-impact {
+  0% {
+    transform: translateX(4px);
+  }
+  45% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+.likes-arena[data-reduced-motion='true'] .likes-reaction {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .likes-reaction {
+    animation: none;
+  }
+}

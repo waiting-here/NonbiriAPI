@@ -251,7 +251,7 @@
   animation: bid-presentation-draw-from-deck 0.8s ease-out both;
 }
 .bid-presentation--reveal .bid-presentation__bid {
-  animation: bid-presentation-flip 0.8s ease-out both;
+  animation: bid-presentation-flip 0.16s ease-out both;
 }
 .bid-presentation--settle .is-owner-you .bid-presentation__center {
   animation: bid-presentation-collect-you 1.1s ease-in-out both;

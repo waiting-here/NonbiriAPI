@@ -6,7 +6,7 @@ type SoundGame = 'linklink' | 'fishing' | 'rps' | 'blackjack';
 export interface GameSoundControl {
   readonly enabled: boolean;
   readonly toggle: () => void;
-  readonly play: (cue: GameSoundCue) => void;
+  readonly play: (cue: GameSoundCue, variation?: { readonly chain: number }) => void;
 }
 
 function preferenceKey(game: SoundGame): string {
@@ -30,8 +30,11 @@ export function useGameSound(game: SoundGame): GameSoundControl {
     engine.current ??= createGameSound();
     void engine.current.unlock();
   }, []);
-  const play = useCallback((cue: GameSoundCue) => {
-    if (enabledRef.current && document.visibilityState === 'visible') engine.current?.play(cue);
+  const play = useCallback((cue: GameSoundCue, variation?: { readonly chain: number }) => {
+    if (enabledRef.current && document.visibilityState === 'visible') {
+      if (variation) engine.current?.play(cue, variation);
+      else engine.current?.play(cue);
+    }
   }, []);
   const toggle = useCallback(() => {
     const next = !enabledRef.current;

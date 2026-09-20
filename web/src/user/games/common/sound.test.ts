@@ -136,6 +136,7 @@ const allCues: readonly GameSoundCue[] = [
   'fishing_rare',
   'fishing_epic',
   'phase',
+  'reveal',
   'follow',
   'win',
   'loss',
@@ -180,7 +181,7 @@ describe('shared game sound engine', () => {
 
     expect(FakeAudioContext.instances).toHaveLength(1);
     expect(FakeAudioContext.instances[0].resume).toHaveBeenCalledTimes(1);
-    expect(FakeAudioContext.instances[0].gains[0].gain.value).toBe(0.18);
+    expect(FakeAudioContext.instances[0].gains[0].gain.value).toBe(0.24);
     expect(FakeAudioContext.instances[0].gains[1].gain.value).toBe(1);
     expect(FakeAudioContext.instances[0].gains[0].connections[0]).toBe(
       FakeAudioContext.instances[0].destination,
