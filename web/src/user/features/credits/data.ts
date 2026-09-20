@@ -17,6 +17,7 @@ import {
 export const HISTORY_CATEGORIES = [
   'checkin',
   'onboarding',
+  'loan',
   'welfare',
   'thursday',
   'fishing',
@@ -34,6 +35,7 @@ export const HISTORY_KINDS = [
   'account_delete_zero',
   'checkin_award',
   'game_onboarding_reward',
+  'activity_loan',
   'anti_abuse_penalty',
   'welfare_claim',
   'thursday_contribution',

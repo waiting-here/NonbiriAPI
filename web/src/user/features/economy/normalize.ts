@@ -1118,7 +1118,8 @@ function normalizeThursday(value: unknown): ActivitiesSnapshot['thursday'] {
 }
 
 export function normalizeActivitiesSnapshot(value: unknown): ActivitiesSnapshot {
-  const item = record(value, 'activities snapshot', ['master', 'welfare', 'thursday']);
+  const item = record(value, 'activities snapshot', ['master', 'welfare', 'thursday', 'loan']);
+  const loan = normalizeLoanView(item.loan);
   const master = normalizeMaster(item.master);
   const welfare = normalizeWelfare(item.welfare);
   const thursday = normalizeThursday(item.thursday);
@@ -1135,7 +1136,8 @@ export function normalizeActivitiesSnapshot(value: unknown): ActivitiesSnapshot 
       invalid('Thursday availability overlay');
     }
   }
-  return { master, welfare, thursday };
+  if (loan.available && !master.available) invalid('loan availability overlay');
+  return { master, welfare, thursday, loan };
 }
 
 export function normalizeWelfareClaimResult(value: unknown): WelfareClaimResult {
@@ -1190,3 +1192,4 @@ export function isDimensionExhausted(
     : (value: unknown) => BigInt(decimal(value, 'usage dimension'));
   return parse(used) + parse(inflight) >= parse(limit);
 }
+import { normalizeLoanView } from '@shared/operations/loans';

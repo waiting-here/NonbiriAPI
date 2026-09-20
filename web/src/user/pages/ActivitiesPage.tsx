@@ -11,6 +11,7 @@ import {
   WelfareCard,
 } from '../features/economy/ActivitiesPanels';
 import { useActivities, useActivityAccountEvents } from '../features/economy/queries';
+import { LoanCard } from '../features/economy/LoanCard';
 import '../features/economy/economy.css';
 
 function ActivitiesContent() {
@@ -47,6 +48,7 @@ function ActivitiesContent() {
           />
           <ActivitiesMasterNotice snapshot={activities.data} />
           <section className="economy-activities-grid" aria-label={t('user.activities.cardsLabel')}>
+            <LoanCard key={`loan:${accountID}`} account={accountID ?? ''} loan={activities.data.loan} masterAvailable={activities.data.master.available} />
             <WelfareCard
               key={`welfare:${accountID}`}
               welfare={activities.data.welfare}

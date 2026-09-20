@@ -14,6 +14,7 @@ import { DuelFinance, DuelTerms } from '../common/duel/Finance';
 import { DuelHistory } from '../common/duel/History';
 import type { DuelLobbyContext } from '../common/duel/types';
 import { creditsToMilli, formatCredits } from '../common/strict';
+import { spendableGameCredits } from '../common/spendable';
 import { BIDDING_MODES, biddingCodec } from './normalize';
 import { BiddingControls, PublicCards, RewardCard, RewardDeck } from './Cards';
 import { BiddingRoundView, PlayedHistory } from './HistoryView';
@@ -92,7 +93,7 @@ export function BiddingGame({ config, wallets, onboarding, accepting, refreshWal
   const selected = config.modes[mode];
   const enough =
     selected &&
-    creditsToMilli(wallets.balance) + creditsToMilli(wallets.gameBalance) >=
+    creditsToMilli(spendableGameCredits(wallets).total) >=
       creditsToMilli(selected.ticket);
   const unavailable = entryProblem({ config, accepting }, mode);
   return (

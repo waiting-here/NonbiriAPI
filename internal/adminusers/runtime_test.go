@@ -283,7 +283,7 @@ func responseCode(t *testing.T, recorder *httptest.ResponseRecorder) string {
 
 func TestRegisterRoutesOwnsOnlyFrozenCorrectiveSurface(t *testing.T) {
 	fixture := newAdminUsersFixture(t)
-	if len(fixture.registrar.routes) != 9 {
+	if len(fixture.registrar.routes) != 10 {
 		t.Fatalf("registered routes=%d", len(fixture.registrar.routes))
 	}
 	want := map[string]bool{
@@ -291,6 +291,7 @@ func TestRegisterRoutesOwnsOnlyFrozenCorrectiveSurface(t *testing.T) {
 		"POST " + routeBan: true, "POST " + routeUnban: true, "GET " + routeUsage: true,
 		"GET " + routeActivity: true, "GET " + routeEndpointOverview: true,
 		"GET " + routeEndpointOverviewUsers: true,
+		"GET " + routeUserLoans:             true,
 	}
 	for _, route := range fixture.registrar.routes {
 		key := route.method + " " + route.pattern

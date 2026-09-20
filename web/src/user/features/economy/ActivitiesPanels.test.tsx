@@ -111,6 +111,7 @@ describe('activity cards', () => {
     vi.mocked(economyQueries.useClaimWelfare).mockReturnValue(claimMutation as never);
     vi.mocked(economyQueries.useContributeThursday).mockReturnValue(contributionMutation as never);
     let snapshot: ActivitiesSnapshot = {
+      loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
       master: { enabled: true, available: true, reason: 'available' },
       welfare: { ...welfare, state: 'available', poolBalance: '10' },
       thursday,

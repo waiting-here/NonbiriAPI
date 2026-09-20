@@ -16,6 +16,7 @@ import { DuelHistory, DuelRoundLog } from '../common/duel/History';
 import type { DuelLobbyContext, DuelResult, Seat } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
 import { creditsToMilli } from '../common/strict';
+import { spendableGameCredits } from '../common/spendable';
 import { likesCatalog, type ModeCatalog } from './catalog';
 import { assertArtCoverage, characterSlot } from './art';
 import { LikesArt } from './LikesArt';
@@ -157,7 +158,7 @@ function Lobby({
   const [selection, setSelection] = useState(() => initialLoadout ?? initialSelection(catalog));
   const mode = context.config.modes[catalog.mode],
     enough =
-      creditsToMilli(context.wallets.balance) + creditsToMilli(context.wallets.gameBalance) >=
+      creditsToMilli(spendableGameCredits(context.wallets).total) >=
       creditsToMilli(mode?.ticket ?? '0');
   const unavailable = entryProblem(context, catalog.mode);
   return (

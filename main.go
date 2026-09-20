@@ -998,7 +998,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	}
 	activityRepository, err := activities.NewRepository(activities.RepositoryConfig{
 		Store:          store,
-		UserFinalAuth:  authRuntime,
+		UserFinalAuth:  activityUserAuthorizer{runtime: authRuntime},
 		AdminFinalAuth: roleAuthorizer,
 		UserGate:       activityMutationGate{},
 		CursorKeys:     vault,
