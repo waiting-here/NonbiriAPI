@@ -61,9 +61,10 @@ describe('games snapshot normalizer', () => {
     expect(() => normalizeGamesSnapshot(boundary)).toThrow(/snapshot balance/i);
   });
 
-  it('requires all nine ordered reward facts and a consistent completion summary', () => {
+  it('requires every ordered reward fact and a consistent completion summary', () => {
     const wire = gamesSnapshotWire();
     expect(normalizeGamesSnapshot(wire).onboarding.linklink.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000']);
+    expect(normalizeGamesSnapshot(wire).onboarding.blackjack.items.map((item) => item.reward)).toEqual(['1000', '2000', '3000', '4000', '5000']);
     wire.onboarding.rps.items[0].completed = true;
     expect(normalizeGamesSnapshot(wire).onboarding.rps.items[0].completed).toBe(true);
     const wrongReward = structuredClone(wire);

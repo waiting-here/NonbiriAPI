@@ -50,9 +50,9 @@ export function duelSnapshotWire(game: 'bidding' | 'likes') {
 
 export function onboardingWire() {
   return {
-    blackjack: { items: [], all_completed: true },
-    bidding: { items: [], all_completed: true },
-    likes: { items: [], all_completed: true },
+    blackjack: { items: [["complete","1000"],["first_win","2000"],["first_bust","3000"],["first_21","4000"],["first_natural_21","5000"]].map(([key, reward]) => ({ key, reward, asset_type: 'general', completed: false })), all_completed: false },
+    bidding: { items: [["complete_tier_1","1000"],["complete_tier_2","2000"],["complete_tier_3","5000"],["first_win","2000"]].map(([key, reward]) => ({ key, reward, asset_type: 'general', completed: false })), all_completed: false },
+    likes: { items: [["quick_complete","1000"],["quick_win","2000"],["standard_complete","5000"],["standard_win","10000"]].map(([key, reward]) => ({ key, reward, asset_type: 'general', completed: false })), all_completed: false },
     "fishing": {
       "items": [
         {

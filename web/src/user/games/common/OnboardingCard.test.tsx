@@ -10,6 +10,19 @@ import { gamesSnapshotWire } from './testFixtures';
 import { spendableGameCredits } from './spendable';
 
 describe('newcomer progress', () => {
+  it('announces all four natural-win awards once while retaining the unearned bust task', async () => {
+    const wire = gamesSnapshotWire();
+    const card = () => <ToastProvider><OnboardingCard game="blackjack" progress={normalizeGamesSnapshot(wire).onboarding.blackjack} /></ToastProvider>;
+    const rendered = await renderWithProviders(card(), { station: 'user' });
+    for (const item of wire.onboarding.blackjack.items) item.completed = item.key !== 'first_bust';
+    rendered.rerender(card());
+    expect(screen.getAllByRole('status')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: /Newcomer rewards/ })).toHaveTextContent('1 tasks left · 3,000 general credits available');
+    expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(1);
+    rendered.rerender(card());
+    expect(screen.getAllByRole('status')).toHaveLength(4);
+  });
+
   it('starts expanded, retains remaining rewards when collapsed, and announces only newly earned rewards', async () => {
     const wire = gamesSnapshotWire();
     const card = () => <ToastProvider><OnboardingCard game="rps" progress={normalizeGamesSnapshot(wire).onboarding.rps} /></ToastProvider>;

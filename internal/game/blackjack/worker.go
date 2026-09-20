@@ -111,12 +111,16 @@ func (s *Service) RecoverBeforeListen(ctx context.Context, now int64, limit int,
 	if err != nil {
 		return host.WorkResult{}, err
 	}
+	processed, more, err := s.finance.RestoreOnboarding(ctx, tx, limit, max(now, sampled))
+	if err != nil {
+		return host.WorkResult{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return host.WorkResult{}, err
 	}
-	s.recovered.Store(true)
+	s.recovered.Store(!more)
 	s.publish(ctx, facts)
-	return host.WorkResult{Processed: 1}, nil
+	return host.WorkResult{Processed: max(1, processed), More: more}, nil
 }
 func (s *Service) work(ctx context.Context, limit int) (host.WorkResult, error) {
 	tx, now, err := s.begin(ctx)
@@ -234,6 +238,9 @@ func (s *Service) stopUserTx(ctx context.Context, tx *sql.Tx, user, now int64, d
 		}
 	}
 	if deleting {
+		if err := s.finance.ReleaseOnboarding(ctx, tx, user); err != nil {
+			return nil, err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE game_blackjack_entries SET user_id=NULL WHERE user_id=?`, user); err != nil {
 			return nil, err
 		}

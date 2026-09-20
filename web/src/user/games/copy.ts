@@ -5,6 +5,21 @@ type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
   'onboarding.title': ['Newcomer rewards', '新人奖励'],
+  'onboarding.biddingHelp': ['Complete each tier and win once to earn general credits automatically. Surrendering does not complete a task; your opponent can still qualify. Each task pays once.', '每档首次正常完成及任意档首次获胜，会自动奖励通用积分。认输方不计完成，对手仍可达成；每项仅奖励一次。'],
+  'onboarding.likesHelp': ['Quick and standard modes each have completion and first-win rewards. Normal timeout play counts; surrendering does not. Tutorials and system cancellations do not qualify.', '快速与标准模式分别设完成及首胜奖励。超时自动操作后的正常结算计入，认输方不计；本地教学和系统取消不计。'],
+  'onboarding.blackjackHelp': ['A dealt round counts when it settles normally, even on a tie or bust. Any winning hand qualifies, regardless of the total profit. Unsplit natural 21 also earns the ordinary 21 reward. Several tasks can pay together, once each.', '发牌后正常结算即完成，平局或爆牌也计入。任一手获胜即可达成首胜，不要求整局净赚。未分牌的自然21点同时达成普通21点；同局可叠加，每项仅一次。'],
+  'onboarding.tier1': ['Complete tier 1 once', '首次完成第一档'],
+  'onboarding.tier2': ['Complete tier 2 once', '首次完成第二档'],
+  'onboarding.tier3': ['Complete tier 3 once', '首次完成第三档'],
+  'onboarding.firstWin': ['Win once', '首次获胜'],
+  'onboarding.quickComplete': ['Complete quick mode once', '首次完成快速模式'],
+  'onboarding.quickWin': ['Win quick mode once', '快速模式首次获胜'],
+  'onboarding.standardComplete': ['Complete standard mode once', '首次完成标准模式'],
+  'onboarding.standardWin': ['Win standard mode once', '标准模式首次获胜'],
+  'onboarding.complete': ['Complete a dealt round', '首次完成一局'],
+  'onboarding.firstBust': ['Bust once', '首次爆牌'],
+  'onboarding.first21': ['Reach 21 once', '首次达到21点'],
+  'onboarding.firstNatural21': ['Get a natural 21 once', '首次自然21点'],
   'onboarding.remaining': [
     '{{count}} tasks left · {{reward}} general credits available',
     '待完成 {{count}} 项 · 共可获 {{reward}} 通用积分',

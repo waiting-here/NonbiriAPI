@@ -86,7 +86,7 @@ WHERE a.id=? AND a.user_id=? AND a.rules_version=s.rules_version AND a.spec=s.sp
 	case "completed":
 		return port.complete(ctx, tx, userID, spec, parent, now)
 	case "timed_out", "abandoned":
-		return port.release(ctx, tx, parent)
+		return port.release(ctx, tx, parent, userID)
 	default:
 		return ledger.ErrInvalidPlan
 	}

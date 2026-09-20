@@ -19,7 +19,16 @@
   "balance": "1000000",
   "game_balance": "0",
   "onboarding": {
-    "blackjack": {"items": [], "all_completed": true},
+    "blackjack": {
+      "items": [
+        {"key":"complete","reward":"1000","asset_type":"general","completed":false},
+        {"key":"first_win","reward":"2000","asset_type":"general","completed":false},
+        {"key":"first_bust","reward":"3000","asset_type":"general","completed":false},
+        {"key":"first_21","reward":"4000","asset_type":"general","completed":false},
+        {"key":"first_natural_21","reward":"5000","asset_type":"general","completed":false}
+      ],
+      "all_completed": false
+    },
     "fishing": {
       "items": [
         {
@@ -90,12 +99,22 @@
       "all_completed": false
     },
     "bidding": {
-      "items": [],
-      "all_completed": true
+      "items": [
+        {"key":"complete_tier_1","reward":"1000","asset_type":"general","completed":false},
+        {"key":"complete_tier_2","reward":"2000","asset_type":"general","completed":false},
+        {"key":"complete_tier_3","reward":"5000","asset_type":"general","completed":false},
+        {"key":"first_win","reward":"2000","asset_type":"general","completed":false}
+      ],
+      "all_completed": false
     },
     "likes": {
-      "items": [],
-      "all_completed": true
+      "items": [
+        {"key":"quick_complete","reward":"1000","asset_type":"general","completed":false},
+        {"key":"quick_win","reward":"2000","asset_type":"general","completed":false},
+        {"key":"standard_complete","reward":"5000","asset_type":"general","completed":false},
+        {"key":"standard_win","reward":"10000","asset_type":"general","completed":false}
+      ],
+      "all_completed": false
     }
   },
   "tutorial_rps_seen": false,

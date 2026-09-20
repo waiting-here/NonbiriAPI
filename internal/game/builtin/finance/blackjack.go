@@ -106,7 +106,14 @@ func (blackjackPort) Reserve(ctx context.Context, tx *sql.Tx, input ports.Entry,
 		return err
 	}
 	_, err = ledger.Apply(ctx, tx, plan)
-	return err
+	if err != nil {
+		return err
+	}
+	f, err := blackjackSource(ctx, tx, input)
+	if err != nil || f.kind != "base" {
+		return err
+	}
+	return reserveBlackjackOnboarding(ctx, tx, f.user, f.entry, input.Meta.CreatedAt)
 }
 
 func (blackjackPort) Release(ctx context.Context, tx *sql.Tx, input ports.Entry, write ports.Mutation) error {
@@ -142,21 +149,23 @@ func (blackjackPort) Release(ctx context.Context, tx *sql.Tx, input ports.Entry,
 		return err
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
-	return err
+	if err != nil || f.kind != "base" {
+		return err
+	}
+	return (onboarding{config.Descriptor()}).release(ctx, tx, onboardingParent{column: "blackjack_entry_id", id: f.entry}, f.user)
 }
 
-func blackjackProceeds(ctx context.Context, tx *sql.Tx, f blackjackFunding) ([4]int64, error) {
-	var result [4]int64
+func blackjackHands(ctx context.Context, tx *sql.Tx, f blackjackFunding) ([]engine.Hand, error) {
 	if f.state != "playing" || !f.session.Valid || !f.seat.Valid {
-		return result, ledger.ErrInvalidPlan
+		return nil, ledger.ErrInvalidPlan
 	}
 	var body string
 	if err := tx.QueryRowContext(ctx, `SELECT state_json FROM game_blackjack_sessions WHERE id=? AND phase='decision'`, f.session.String).Scan(&body); err != nil {
-		return result, err
+		return nil, err
 	}
 	var s engine.State
 	if err := json.Unmarshal([]byte(body), &s); err != nil || s.Validate() != nil || !s.Finished {
-		return result, ledger.ErrInvalidPlan
+		return nil, ledger.ErrInvalidPlan
 	}
 	var hands []engine.Hand
 	for _, seat := range s.Seats {
@@ -165,7 +174,16 @@ func blackjackProceeds(ctx context.Context, tx *sql.Tx, f blackjackFunding) ([4]
 		}
 	}
 	if len(hands) == 0 {
-		return result, ledger.ErrInvalidPlan
+		return nil, ledger.ErrInvalidPlan
+	}
+	return hands, nil
+}
+
+func blackjackProceeds(ctx context.Context, tx *sql.Tx, f blackjackFunding) ([4]int64, error) {
+	var result [4]int64
+	hands, err := blackjackHands(ctx, tx, f)
+	if err != nil {
+		return result, err
 	}
 	var payments int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_blackjack_payments WHERE entry_id=? AND state<>'released'`, f.entry).Scan(&payments); err != nil {
@@ -255,5 +273,12 @@ func (blackjackPort) Settle(ctx context.Context, tx *sql.Tx, input ports.Blackja
 		return err
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
-	return err
+	if err != nil || f.kind != "base" || f.user == 0 {
+		return err
+	}
+	hands, err := blackjackHands(ctx, tx, f)
+	if err != nil {
+		return err
+	}
+	return (onboarding{config.Descriptor()}).completeTasks(ctx, tx, f.user, blackjackRewardTasks(hands), onboardingParent{column: "blackjack_entry_id", id: f.entry}, input.Meta.CreatedAt)
 }

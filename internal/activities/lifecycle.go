@@ -250,7 +250,7 @@ ORDER BY created_at,1 LIMIT ?`, userID, userID, limit+1)
 }
 
 func exportOnboardingTx(ctx context.Context, tx *sql.Tx, userID int64, limit int) ([]OnboardingExport, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT game_key,task_key,award_milli,completed_at FROM game_onboarding_completions WHERE user_id=? ORDER BY completed_at,game_key,task_key LIMIT ?`, userID, min(limit, 9)+1)
+	rows, err := tx.QueryContext(ctx, `SELECT game_key,task_key,award_milli,completed_at FROM game_onboarding_completions WHERE user_id=? ORDER BY completed_at,game_key,task_key LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return nil, classifyDatabaseError("read onboarding export", err)
 	}
@@ -264,7 +264,7 @@ func exportOnboardingTx(ctx context.Context, tx *sql.Tx, userID int64, limit int
 		}
 		item.Award = formatMilliPointsInt64(award)
 		items = append(items, item)
-		if len(items) > limit || len(items) > 9 {
+		if len(items) > limit {
 			return nil, ErrResourceLimit
 		}
 	}

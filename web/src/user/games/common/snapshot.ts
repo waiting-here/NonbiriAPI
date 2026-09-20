@@ -182,9 +182,9 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     gameBalance: creditsValue(record.game_balance, { signed: true }, 'snapshot game balance'),
     tutorialRPSSeen: booleanValue(record.tutorial_rps_seen, 'tutorial flag'),
     onboarding: {
-      bidding: normalizeOnboarding(onboarding.bidding, [], [], 'bidding onboarding'),
-      likes: normalizeOnboarding(onboarding.likes, [], [], 'likes onboarding'),
-      blackjack: normalizeOnboarding(onboarding.blackjack, [], [], 'blackjack onboarding'),
+      bidding: normalizeOnboarding(onboarding.bidding, ['complete_tier_1', 'complete_tier_2', 'complete_tier_3', 'first_win'], ['1000', '2000', '5000', '2000'], 'bidding onboarding'),
+      likes: normalizeOnboarding(onboarding.likes, ['quick_complete', 'quick_win', 'standard_complete', 'standard_win'], ['1000', '2000', '5000', '10000'], 'likes onboarding'),
+      blackjack: normalizeOnboarding(onboarding.blackjack, ['complete', 'first_win', 'first_bust', 'first_21', 'first_natural_21'], ['1000', '2000', '3000', '4000', '5000'], 'blackjack onboarding'),
       fishing: normalizeOnboarding(
         onboarding.fishing,
         BAITS,

@@ -142,7 +142,7 @@ func (port rpsPort) QueueRelease(ctx context.Context, tx *sql.Tx, input ports.En
 		return err
 	}
 	if funding.version == 2 {
-		if err := port.release(ctx, tx, onboardingParent{column: "rps_queue_id", id: input.ResourceID}); err != nil {
+		if err := port.release(ctx, tx, onboardingParent{column: "rps_queue_id", id: input.ResourceID}, input.UserID); err != nil {
 			return err
 		}
 	}
