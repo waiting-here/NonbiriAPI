@@ -35,8 +35,8 @@ function BiddingRules({ onClose }: { readonly onClose: () => void }) {
       <h3>{t('十三轮，把握每一张牌', 'Thirteen rounds. Make every card count.')}</h3>
       <p>
         {t(
-          '双方各有A至K共13张出价牌，点数为1至13；每张整局只能使用一次。每轮翻开红心和黑桃奖励各一张，双方同时暗选出价。较大者取得整个奖池的分数，出价牌本身不计分。',
-          'Each player has thirteen bidding cards, A through K, valued 1–13. Each card is used once. Every round reveals one heart and one spade reward. Both players bid privately; the higher bid claims the entire pool. Bidding cards do not score points themselves.',
+          '红方手牌为红桃♥，奖励为方块♦；黑方手牌为黑桃♠，奖励为梅花♣。双方各有A至K共13张出价牌，点数为1至13；每张整局只能使用一次。每轮翻开双方奖励各一张，同时暗选出价。较大者取得整个奖池的分数，出价牌本身不计分。',
+          'The red side bids with hearts ♥ and has diamond ♦ rewards; the black side bids with spades ♠ and has club ♣ rewards. Each player has thirteen bidding cards, A through K, valued 1–13, used once each. Every round reveals one reward from each side. Both players bid privately; the higher bid claims the entire pool. Bidding cards do not score points themselves.',
         )}
       </p>
       <h3>{t('平手与累计', 'Ties and carry')}</h3>
@@ -63,7 +63,13 @@ function BiddingRules({ onClose }: { readonly onClose: () => void }) {
     </DuelDialog>
   );
 }
-export function BiddingGame({ config, wallets, onboarding, accepting, refreshWallets }: DuelLobbyContext) {
+export function BiddingGame({
+  config,
+  wallets,
+  onboarding,
+  accepting,
+  refreshWallets,
+}: DuelLobbyContext) {
   const t = useDuelText();
   const duel = useDuel(biddingCodec, refreshWallets);
   const [mode, setMode] = useState<string>(
@@ -94,8 +100,7 @@ export function BiddingGame({ config, wallets, onboarding, accepting, refreshWal
   const selected = config.modes[mode];
   const enough =
     selected &&
-    creditsToMilli(spendableGameCredits(wallets).total) >=
-      creditsToMilli(selected.ticket);
+    creditsToMilli(spendableGameCredits(wallets).total) >= creditsToMilli(selected.ticket);
   const unavailable = entryProblem({ config, accepting }, mode);
   return (
     <div className="bidding-game">

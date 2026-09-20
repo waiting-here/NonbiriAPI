@@ -204,7 +204,7 @@ test('bidding keeps thirteen hand positions and reward decks usable at every wid
   await expect(page.locator('.bid-hand')).toHaveCount(2);
   await expect(page.locator('.bid-decision .bid-card')).toHaveCount(13);
   await expect(page.locator('.bid-public .bid-card')).toHaveCount(13);
-  await expect(page.getByRole('button', { name: 'Bid 2 (2)', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Bid Spades 2 (2)', exact: true })).toBeDisabled();
   await expect(page.locator('.bid-public .is-played')).toHaveCount(1);
   for (const width of [1920, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });

@@ -6,9 +6,18 @@ type GameCopyEntry = readonly [en: string, zh: string];
 const copy = {
   'linklink.leaderboard.anonymous': ['Anonymous player', '匿名玩家'],
   'onboarding.title': ['Newcomer rewards', '新人奖励'],
-  'onboarding.biddingHelp': ['Complete each tier and win once to earn general credits automatically. Surrendering does not complete a task; your opponent can still qualify. Each task pays once.', '每档首次正常完成及任意档首次获胜，会自动奖励通用积分。认输方不计完成，对手仍可达成；每项仅奖励一次。'],
-  'onboarding.likesHelp': ['Quick and standard modes each have completion and first-win rewards. Normal timeout play counts; surrendering does not. Tutorials and system cancellations do not qualify.', '快速与标准模式分别设完成及首胜奖励。超时自动操作后的正常结算计入，认输方不计；本地教学和系统取消不计。'],
-  'onboarding.blackjackHelp': ['A dealt round counts when it settles normally, even on a tie or bust. Any winning hand qualifies, regardless of the total profit. Unsplit natural 21 also earns the ordinary 21 reward. Several tasks can pay together, once each.', '发牌后正常结算即完成，平局或爆牌也计入。任一手获胜即可达成首胜，不要求整局净赚。未分牌的自然21点同时达成普通21点；同局可叠加，每项仅一次。'],
+  'onboarding.biddingHelp': [
+    'Complete each tier and win once to earn general credits automatically. Surrendering does not complete a task; your opponent can still qualify. Each task pays once.',
+    '每档首次正常完成及任意档首次获胜，会自动奖励通用积分。认输方不计完成，对手仍可达成；每项仅奖励一次。',
+  ],
+  'onboarding.likesHelp': [
+    'Quick and standard modes each have completion and first-win rewards. Normal timeout play counts; surrendering does not. Tutorials and system cancellations do not qualify.',
+    '快速与标准模式分别设完成及首胜奖励。超时自动操作后的正常结算计入，认输方不计；本地教学和系统取消不计。',
+  ],
+  'onboarding.blackjackHelp': [
+    'A dealt round counts when it settles normally, even on a tie or bust. Any winning hand qualifies, regardless of the total profit. Unsplit natural 21 also earns the ordinary 21 reward. Several tasks can pay together, once each.',
+    '发牌后正常结算即完成，平局或爆牌也计入。任一手获胜即可达成首胜，不要求整局净赚。未分牌的自然21点同时达成普通21点；同局可叠加，每项仅一次。',
+  ],
   'onboarding.tier1': ['Complete tier 1 once', '首次完成第一档'],
   'onboarding.tier2': ['Complete tier 2 once', '首次完成第二档'],
   'onboarding.tier3': ['Complete tier 3 once', '首次完成第三档'],
@@ -112,8 +121,8 @@ const copy = {
   'center.likes.title': ['Turn-based Battle Minigame (Test)', '回合制对战小游戏（测试）'],
   'center.blackjack.title': ['Blackjack', '二十一点'],
   'center.blackjack.body': [
-    'One table, nine seats and a new hand every minute.',
-    '单桌九席，每分钟新一局。与同桌一起向庄家挑战。',
+    'One table, nine seats and a new hand every 30 seconds.',
+    '单桌九席，每30秒新一局。与同桌一起向庄家挑战。',
   ],
   'center.likes.body': [
     'Build your loadout and race for likes on shared power.',

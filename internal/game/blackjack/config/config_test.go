@@ -64,7 +64,7 @@ func TestQuickStakesNormalizeAndValidateWithLimits(t *testing.T) {
 	if err != nil || next.Raw()[QuickStakesKey] != `["1000","5000","10000"]` {
 		t.Fatal(next, err)
 	}
-	for _, patch := range []string{`{"quick_stakes":null}`, `{"quick_stakes":["1000","1000"]}`, `{"quick_stakes":["1001"]}`, `{"quick_stakes":["1000","2000","3000","4000","5000","6000","7000","8000","9000"]}`, `{"min_stake":"2000"}`} {
+	for _, patch := range []string{`{"quick_stakes":null}`, `{"quick_stakes":"1000"}`, `{"quick_stakes":[null]}`, `{"quick_stakes":[1000]}`, `{"quick_stakes":["1000.0"]}`, `{"quick_stakes":["01000"]}`, `{"quick_stakes":[" 1000"]}`, `{"quick_stakes":["0"]}`, `{"quick_stakes":["51000"]}`, `{"quick_stakes":["1000","1000"]}`, `{"quick_stakes":["1001"]}`, `{"quick_stakes":["1000","2000","3000","4000","5000","6000","7000","8000","9000"]}`, `{"min_stake":"2000"}`} {
 		if _, err := c.Merge(current, json.RawMessage(patch), false); err == nil {
 			t.Fatal("invalid quick stakes accepted", patch)
 		}
@@ -72,5 +72,15 @@ func TestQuickStakesNormalizeAndValidateWithLimits(t *testing.T) {
 	next, err = c.Merge(current, json.RawMessage(`{"min_stake":"2000","quick_stakes":[]}`), false)
 	if err != nil || next.Raw()[QuickStakesKey] != "[]" {
 		t.Fatal("empty quick stakes", err)
+	}
+	for _, values := range []string{`["5000"]`, `["1000","2000","3000","4000","5000","6000","7000","8000"]`} {
+		next, err = c.Merge(current, json.RawMessage(`{"quick_stakes":`+values+`}`), false)
+		if err != nil || next.Raw()[QuickStakesKey] != values {
+			t.Fatal("valid quick stakes", values, err)
+		}
+	}
+	next, err = c.Merge(current, json.RawMessage(`{"min_stake":"1.001","max_stake":"1.025","stake_step":"0.003","default_stake":"1.007","quick_stakes":["1.025","1.001"]}`), false)
+	if err != nil || next.Raw()[QuickStakesKey] != `["1.001","1.025"]` {
+		t.Fatal("minimum-anchored fractional steps", err)
 	}
 }

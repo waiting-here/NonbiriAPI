@@ -1,6 +1,6 @@
 import type { DuelRound, Seat } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
-import { cardLabel } from './labels';
+import { cardLabel, handSuit } from './labels';
 import type { BiddingRound, BiddingView } from './normalize';
 
 export function BiddingRoundView({
@@ -17,7 +17,8 @@ export function BiddingRoundView({
       <p>
         {t('你／对手出牌', 'Your bid / opponent’s bid')}:{' '}
         <strong>
-          {cardLabel(fact.bids[you])} / {cardLabel(fact.bids[1 - you])}
+          {handSuit(you, t).name} {cardLabel(fact.bids[you])} / {handSuit(1 - you, t).name}{' '}
+          {cardLabel(fact.bids[1 - you])}
         </strong>
       </p>
       <p>
@@ -72,8 +73,12 @@ export function PlayedHistory({ view, you }: { readonly view: BiddingView; reado
               return (
                 <tr key={index}>
                   <td>{index + 1}</td>
-                  <td>{cardLabel(view.played[you][index])}</td>
-                  <td>{cardLabel(view.played[1 - you][index])}</td>
+                  <td>
+                    {handSuit(you, t).name} {cardLabel(view.played[you][index])}
+                  </td>
+                  <td>
+                    {handSuit(1 - you, t).name} {cardLabel(view.played[1 - you][index])}
+                  </td>
                   <td>
                     {reward?.status === 'pool'
                       ? t('奖池累计', 'In carried pool')

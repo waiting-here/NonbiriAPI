@@ -46,7 +46,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 				if _, err := tx.ExecContext(ctx, `DELETE FROM game_blackjack_sessions WHERE id=?`, v.ID); err != nil {
 					return facts, err
 				}
-			} else if now >= v.StartedAt+15 {
+			} else if now >= v.StartedAt+engine.SeatingSeconds {
 				list, err := sessionEntries(ctx, tx, v.ID)
 				if err != nil {
 					return facts, err
@@ -71,7 +71,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 							return facts, err
 						}
 					}
-					state, err := engine.New(numbers, int(v.StartedAt/60%engine.MaxSeats), random)
+					state, err := engine.New(numbers, int(v.StartedAt/engine.RoundSeconds%engine.MaxSeats), random)
 					if err != nil {
 						return facts, err
 					}
@@ -85,7 +85,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 					if err != nil {
 						return facts, err
 					}
-					if err := saveState(ctx, tx, &v, state, fact, v.StartedAt+15, "deal"); err != nil {
+					if err := saveState(ctx, tx, &v, state, fact, v.StartedAt+engine.SeatingSeconds, "deal"); err != nil {
 						return facts, err
 					}
 					if state.Finished {
@@ -119,7 +119,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 		}
 		return facts, nil
 	}
-	if !allowSeating || now%60 >= 15 {
+	if !allowSeating || now%engine.RoundSeconds >= engine.SeatingSeconds {
 		return facts, nil
 	}
 	v, err = currentSession(ctx, tx)
@@ -134,7 +134,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 		if count == 0 {
 			return facts, nil
 		}
-		start := now - now%60
+		start := now - now%engine.RoundSeconds
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_blackjack_sessions WHERE started_at=?`, start).Scan(&count); err != nil {
 			return facts, err
 		}
@@ -159,7 +159,7 @@ func (s *Service) progress(ctx context.Context, tx *sql.Tx, now int64, allowSeat
 		}
 		v = sessionRecord{ID: id, StartedAt: start, Phase: "seating", Revision: 1, LastBatch: start}
 	}
-	if v.Phase != "seating" || v.StartedAt+15 <= now {
+	if v.Phase != "seating" || v.StartedAt+engine.SeatingSeconds <= now {
 		return facts, nil
 	}
 	list, err := sessionEntries(ctx, tx, v.ID)
@@ -220,7 +220,7 @@ func (s *Service) advanceDecisions(ctx context.Context, tx *sql.Tx, v *sessionRe
 	if err != nil {
 		return facts, err
 	}
-	for batch := v.LastBatch + 1; batch <= min(now, v.StartedAt+45); batch++ {
+	for batch := v.LastBatch + 1; batch <= min(now, v.StartedAt+engine.DecisionEnd); batch++ {
 		list, err := sessionEntries(ctx, tx, v.ID)
 		if err != nil {
 			return facts, err
@@ -239,7 +239,7 @@ func (s *Service) advanceDecisions(ctx context.Context, tx *sql.Tx, v *sessionRe
 					return facts, err
 				}
 			}
-			if e.Stopped || batch == v.StartedAt+45 {
+			if e.Stopped || batch == v.StartedAt+engine.DecisionEnd {
 				stop = append(stop, int(e.Seat.Int64))
 			}
 		}
@@ -269,7 +269,7 @@ func (s *Service) advanceDecisions(ctx context.Context, tx *sql.Tx, v *sessionRe
 			return facts, err
 		}
 		kind := "actions"
-		if batch == v.StartedAt+45 {
+		if batch == v.StartedAt+engine.DecisionEnd {
 			kind = "timeout"
 		}
 		if err := saveState(ctx, tx, v, state, fact, batch, kind); err != nil {

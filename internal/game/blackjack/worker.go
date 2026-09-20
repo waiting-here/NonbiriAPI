@@ -75,6 +75,8 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 				if json.Unmarshal([]byte(e.Pending.String), &action) != nil {
 					return ErrInvariant
 				}
+				// Persisted actions from the former 60-second schedule are validated
+				// before recovery cancels the table and refunds its original assets.
 				additional, err := state.AdditionalUnits(action)
 				if err != nil || action.Seat != int(e.Seat.Int64) || e.Batch.Int64 <= v.LastBatch || e.Batch.Int64 > v.StartedAt+45 {
 					return ErrInvariant

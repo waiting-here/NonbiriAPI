@@ -21,7 +21,7 @@ func TestNewcomerDeleteReleasesEveryHoldBeforeLateSettlement(t *testing.T) {
 			}
 			f.join(0)
 			if phase == "decision" {
-				f.clock.Store(start + 15)
+				f.clock.Store(start + 5)
 				if home := f.read(0); home.Phase != "decision" {
 					t.Fatal("expected active hand", home.Phase)
 				}
@@ -43,7 +43,7 @@ func TestNewcomerDeleteReleasesEveryHoldBeforeLateSettlement(t *testing.T) {
 				t.Fatal(err)
 			}
 			final.Commit()
-			f.clock.Store(start + 45)
+			f.clock.Store(start + 25)
 			if _, err := f.s.RecoverBeforeListen(f.ctx, f.clock.Load(), 128, time.Now().Add(time.Minute)); err != nil {
 				t.Fatal(err)
 			}

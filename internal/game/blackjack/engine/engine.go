@@ -14,9 +14,10 @@ const (
 	DeckSize        = 312
 	MaxSeats        = 9
 	MaxHands        = 2
-	SeatingSeconds  = 15
-	DecisionSeconds = 30
-	RoundSeconds    = 60
+	SeatingSeconds  = 5
+	DecisionSeconds = 20
+	RoundSeconds    = 30
+	DecisionEnd     = SeatingSeconds + DecisionSeconds
 )
 
 var (

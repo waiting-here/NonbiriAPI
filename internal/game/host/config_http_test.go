@@ -124,6 +124,34 @@ func TestPatchGamesConfigRevisionCAS(t *testing.T) {
 	}
 }
 
+func TestInvalidQuickStakesRollBackWholeConfigurationPatch(t *testing.T) {
+	f := newGameFixture(t, nil)
+	ctx := context.Background()
+	before, err := f.service.ReadGamesConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, delta := range []string{`{"min_stake":"2000"}`, `{"quick_stakes":["1000","1000"]}`, `{"quick_stakes":null}`} {
+		body := []byte(`{"expected_revision":"` + before.Revision + `","fishing":{"bait_prices":{"worm":"2500"}},"blackjack":` + delta + `}`)
+		if _, err := f.service.PatchGamesConfig(ctx, body, validTestKey(200+i)); !errors.Is(err, ErrInvalidRequest) {
+			t.Fatal("invalid patch accepted", err)
+		}
+		after, err := f.service.ReadGamesConfig(ctx)
+		if err != nil || !equalJSONValue(t, before, after) {
+			t.Fatal("invalid patch changed configuration or revision", err)
+		}
+		var n int
+		if err := f.database.QueryRow(`SELECT COUNT(*) FROM idempotency_records WHERE scope='control_mutation'`).Scan(&n); err != nil || n != 0 {
+			t.Fatal("invalid patch retained mutation record", n, err)
+		}
+	}
+	body := []byte(`{"expected_revision":"` + before.Revision + `","blackjack":{"min_stake":"2000","quick_stakes":["5000","2000"]}}`)
+	after, err := f.service.PatchGamesConfig(ctx, body, validTestKey(210))
+	if err != nil || after.Revision == before.Revision || !bytes.Contains(after.Modules["blackjack"], []byte(`"quick_stakes":["2000","5000"]`)) {
+		t.Fatal("atomic limits and buttons patch failed", err)
+	}
+}
+
 func TestPatchConfigHTTPRequiresOneValidIdempotencyKey(t *testing.T) {
 	tests := []struct {
 		name    string

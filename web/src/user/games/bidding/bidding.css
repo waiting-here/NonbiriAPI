@@ -565,7 +565,7 @@
   transform: rotate(180deg);
 }
 .bid-card__center {
-  color: var(--bid-red);
+  color: inherit;
   font-size: 1.15rem;
   line-height: 1;
 }
@@ -584,23 +584,28 @@
   opacity: 1;
 }
 .bid-card small {
-  color: var(--bid-muted);
+  color: inherit;
   font-size: 0.68rem;
+}
+.bid-suit--0 {
+  color: var(--bid-red);
+}
+.bid-suit--1 {
+  color: var(--bid-ink);
 }
 .bid-card:not(:disabled):hover {
   transform: translateY(-4px);
   border-color: var(--bid-ink);
 }
 .bid-card.is-selected {
-  background: var(--bid-ink);
-  color: var(--bid-paper);
+  background: var(--bid-paper);
   border-color: var(--bid-ink);
   box-shadow:
     0 0 0 2px var(--bid-paper),
     0 0 0 3px var(--bid-ink);
 }
 .bid-card.is-selected small {
-  color: var(--bid-paper);
+  color: inherit;
 }
 .bid-card:disabled {
   cursor: default;

@@ -15,7 +15,7 @@ describe('bidding decisions', () => {
       { station: 'user' },
     );
     expect(screen.getByRole('button', { name: 'Lock in bid' })).toBeDisabled();
-    await rendered.user.click(screen.getByRole('button', { name: 'Bid K (13)' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Bid Hearts K (13)' }));
     expect(onAction).not.toHaveBeenCalled();
     await rendered.user.click(screen.getByRole('button', { name: 'Lock in bid' }));
     expect(onAction).toHaveBeenCalledExactlyOnceWith({ kind: 'bid', card: 13 });
@@ -27,11 +27,11 @@ describe('bidding decisions', () => {
         onAction={onAction}
       />,
     );
-    expect(screen.getByRole('button', { name: 'Bid 8 (8)' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Bid Hearts 8 (8)' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(screen.getByRole('button', { name: 'Bid K (13)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Bid Hearts K (13)' })).toBeDisabled();
   });
   it('lets only the current dealer decide on the joker and blocks expired actions', async () => {
     const state = homeValue(biddingHomeWire('joker'), biddingCodec).current!;
@@ -71,7 +71,7 @@ describe('bidding decisions', () => {
       screen.getByRole('group', { name: 'Opponent’s thirteen cards' }).querySelectorAll('button'),
     ).toHaveLength(13);
     expect(
-      screen.getByRole('button', { name: /Opponent’s thirteen cards 2 \(2\).*Played/ }),
+      screen.getByRole('button', { name: /Opponent’s thirteen cards Spades 2 \(2\).*Played/ }),
     ).toHaveClass('is-played');
     expect(rendered.container.querySelectorAll('.bid-card:disabled')).toHaveLength(13);
   });

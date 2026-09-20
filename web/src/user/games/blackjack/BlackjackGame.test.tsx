@@ -42,9 +42,22 @@ function install(home = blackjackWire()) {
   return state;
 }
 beforeEach(() => {
-  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} })));
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.setAttribute('open', ''); } });
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.removeAttribute('open'); } });
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} })),
+  );
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value() {
+      this.setAttribute('open', '');
+    },
+  });
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value() {
+      this.removeAttribute('open');
+    },
+  });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -202,6 +215,57 @@ describe('blackjack public state and simultaneous controls', () => {
     expect(screen.getByRole('button', { name: 'Join queue' })).toBeDisabled();
     fireEvent.change(stake, { target: { value: '2000' } });
     expect(screen.getByRole('button', { name: 'Join queue' })).toBeEnabled();
+  });
+
+  it('selects quick amounts without a write and preserves the selection across configuration changes', async () => {
+    const server = install(blackjackWire('seating', null));
+    const view = await renderWithProviders(<BlackjackGame />, {
+      station: 'user',
+      route: '/games/blackjack',
+      role: 'user',
+    });
+    const group = await screen.findByRole('group', { name: 'Quick stake selection' });
+    const stake = screen.getByRole('spinbutton', { name: 'Base stake' });
+    for (const amount of ['1,000', '50,000', '10,000'])
+      await view.user.click(within(group).getByRole('button', { name: amount }));
+    expect(stake).toHaveValue(10000);
+    expect(within(group).getByRole('button', { name: '10,000' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(server.requests.filter((r) => r.init?.method && r.init.method !== 'GET')).toHaveLength(
+      0,
+    );
+    server.home.config.default_stake = '50000';
+    server.home.config.quick_stakes = ['1000', '50000'];
+    await act(async () => {
+      await view.queryClient.invalidateQueries({ queryKey: blackjackKeys.state });
+    });
+    await waitFor(() => expect(within(group).getAllByRole('button')).toHaveLength(2));
+    expect(stake).toHaveValue(10000);
+    expect(within(group).queryByRole('button', { pressed: true })).not.toBeInTheDocument();
+    server.home.config.min_stake = '20000';
+    server.home.config.quick_stakes = [];
+    await act(async () => {
+      await view.queryClient.invalidateQueries({ queryKey: blackjackKeys.state });
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('group', { name: 'Quick stake selection' }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(stake).toHaveValue(10000);
+    expect(screen.getByRole('button', { name: 'Join queue' })).toBeDisabled();
+  });
+
+  it('decodes a legacy home without inventing quick stakes and rejects malformed present values', () => {
+    const home = blackjackWire('seating', null);
+    const old: Partial<typeof home.config> = { ...home.config };
+    delete old.quick_stakes;
+    expect(blackjackState({ ...home, config: old }).config.quick_stakes).toBeUndefined();
+    for (const quick_stakes of [null, '1000', ['1000', '1000'], ['10000', '1000'], ['1001']]) {
+      expect(() => blackjackState({ ...home, config: { ...home.config, quick_stakes } })).toThrow();
+    }
   });
 
   it('rejects private shoe fields, unexpected seats, and identity-bearing anonymous exports', () => {

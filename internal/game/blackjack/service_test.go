@@ -220,14 +220,14 @@ func (f *fixture) recovery() {
 	}
 }
 
-func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
+func TestTableFIFOReplacementPersistentQueueAndFixedThirtySeconds(t *testing.T) {
 	f := newFixture(t, 12)
 	receipts := make([]blackjack.QueueReceipt, 11)
 	for i := range receipts {
 		receipts[i] = f.join(i)
 	}
 	h := f.read(11)
-	if h.Table == nil || len(h.Table.Fact.Seats) != 9 || h.QueueCount != "2" || h.Deadline != 135 {
+	if h.Table == nil || len(h.Table.Fact.Seats) != 9 || h.QueueCount != "2" || h.Deadline != 125 {
 		t.Fatalf("table admission: %+v", h)
 	}
 	for i := 9; i < 11; i++ {
@@ -236,14 +236,14 @@ func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
 			t.Fatal("FIFO rank")
 		}
 	}
-	f.clock.Store(134)
+	f.clock.Store(124)
 	if _, err := f.s.Leave(f.ctx, f.users[2], f.id("op_"), receipts[2].ID); err != nil {
 		t.Fatal(err)
 	}
 	if v := f.read(9); v.You == nil || v.You.State != "seated" || *v.You.Seat != 2 {
 		t.Fatal("replacement missing")
 	}
-	f.clock.Store(135)
+	f.clock.Store(125)
 	h = f.read(0)
 	if h.Table == nil || h.Table.Fact.Cards == nil || len(h.Table.Fact.Cards.Seats) != 9 {
 		t.Fatal("table did not deal")
@@ -251,9 +251,9 @@ func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
 	if r, err := f.s.Leave(f.ctx, f.users[0], f.id("op_"), receipts[0].ID); err != nil || r.Status != 409 {
 		t.Fatal("late departure should not refund", r.Status, err)
 	}
-	f.clock.Store(165)
+	f.clock.Store(145)
 	h = f.read(11)
-	if h.Phase != "result" || h.NextRoundAt != 180 || h.Table == nil || len(h.Table.Fact.Settlements) != 9 {
+	if h.Phase != "result" || h.NextRoundAt != 150 || h.Table == nil || len(h.Table.Fact.Settlements) != 9 {
 		t.Fatalf("deadline result: %+v", h)
 	}
 	if v := f.read(10); v.You == nil || v.You.State != "waiting" || v.You.Position != "1" {
@@ -263,10 +263,10 @@ func TestTableFIFOReplacementPersistentQueueAndFixedMinute(t *testing.T) {
 	if v := f.read(0); v.You.Position != "2" {
 		t.Fatal("former player did not join tail")
 	}
-	f.clock.Store(180)
+	f.clock.Store(150)
 	h = f.read(10)
-	if h.You.State != "seated" || *h.You.Seat != 0 || len(h.Table.Fact.Seats) != 2 || h.Deadline != 195 {
-		t.Fatal("next minute seat order")
+	if h.You.State != "seated" || *h.You.Seat != 0 || len(h.Table.Fact.Seats) != 2 || h.Deadline != 155 {
+		t.Fatal("next round seat order")
 	}
 	f.recovery()
 }
@@ -319,7 +319,7 @@ func TestRestartCancelsDealtTableButPreservesWaiter(t *testing.T) {
 		f.join(i)
 	}
 	waiter := f.read(9).You.ID
-	f.clock.Store(136)
+	f.clock.Store(126)
 	h := f.read(0)
 	if h.Phase != "decision" {
 		t.Fatalf("expected reproducible unfinished fixture, got %s", h.Phase)
@@ -354,7 +354,7 @@ func TestActionBatchRevisionAndPrivateProjection(t *testing.T) {
 	for i := range 3 {
 		f.join(i)
 	}
-	f.clock.Store(135)
+	f.clock.Store(125)
 	h := f.read(0)
 	if h.Phase != "decision" {
 		t.Fatalf("expected reproducible unfinished fixture, got %s", h.Phase)
@@ -390,9 +390,9 @@ func TestActionBatchRevisionAndPrivateProjection(t *testing.T) {
 	if _, err := f.s.Act(f.ctx, dupe); !errors.Is(err, blackjack.ErrConflict) {
 		t.Fatal("multiple actions accepted", err)
 	}
-	f.clock.Store(136)
+	f.clock.Store(126)
 	h = f.read(0)
-	if h.Phase != "result" || h.Table.Fact.Cards.HoleHidden || h.NextRoundAt != 180 {
+	if h.Phase != "result" || h.Table.Fact.Cards.HoleHidden || h.NextRoundAt != 150 {
 		t.Fatal("batch did not complete concurrently")
 	}
 	result, err := f.s.Act(f.ctx, inputs[0])
