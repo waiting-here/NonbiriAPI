@@ -60,6 +60,9 @@ func (r *Repository) ProjectActivities(ctx context.Context, userID int64) (Snaps
 	if err := projectThursdayTx(ctx, tx, userID, now, config, &snapshot.Thursday); err != nil {
 		return SnapshotProjection{}, err
 	}
+	if err := projectLoanTx(ctx, tx, userID, now, config, &snapshot.Loan); err != nil {
+		return SnapshotProjection{}, err
+	}
 	revision, err := activitiesProjectionRevisionTx(ctx, tx, userID, config.revision)
 	if err != nil {
 		return SnapshotProjection{}, err

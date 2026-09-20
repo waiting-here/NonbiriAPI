@@ -516,6 +516,7 @@ test('administrator activities route reads the singleton and unbound Thursday po
     body: {
       revision: '5',
       master_enabled: true,
+      loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
       welfare: { enabled: true, threshold: '12345678901234567890', cap: '22345678901234567890' },
       thursday: { enabled: true },
     },

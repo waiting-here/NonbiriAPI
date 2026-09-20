@@ -219,6 +219,9 @@ WHERE period_id=? AND participant_ref=? AND user_id=? AND settled=0 AND ledger_r
 	if _, err := tx.ExecContext(ctx, `DELETE FROM welfare_claims WHERE user_id=?`, userID); err != nil {
 		return classifyDatabaseError("delete welfare claim facts", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM activity_loans WHERE user_id=?`, userID); err != nil {
+		return classifyDatabaseError("delete loan receipts", err)
+	}
 	return nil
 }
 

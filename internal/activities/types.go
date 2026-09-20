@@ -165,6 +165,7 @@ type ActivitiesSnapshot struct {
 	Master   MasterView   `json:"master"`
 	Welfare  WelfareView  `json:"welfare"`
 	Thursday ThursdayView `json:"thursday"`
+	Loan     LoanView     `json:"loan"`
 }
 
 type WelfareConfig struct {
@@ -178,6 +179,7 @@ type ThursdayConfig struct {
 }
 
 type ActivitiesConfig struct {
+	LoanConfig
 	Revision      string         `json:"revision"`
 	MasterEnabled bool           `json:"master_enabled"`
 	Welfare       WelfareConfig  `json:"welfare"`
@@ -199,6 +201,10 @@ type ActivitiesConfigPatch struct {
 	MasterEnabled    *bool
 	Welfare          *WelfareConfigPatch
 	Thursday         *ThursdayConfigPatch
+	LoanEnabled      *bool
+	LoanTiers        *[]string
+	LoanA            *string
+	LoanB            *string
 }
 
 type ThursdayNextMutation struct {

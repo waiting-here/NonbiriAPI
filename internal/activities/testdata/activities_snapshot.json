@@ -1,5 +1,6 @@
 {
   "master": {"enabled": false, "available": false, "reason": "disabled"},
+  "loan": {"enabled": false, "available": false, "reason": "disabled", "tiers": ["10000", "100000", "1000000"]},
   "welfare": {
     "enabled": false,
     "state": "unavailable",

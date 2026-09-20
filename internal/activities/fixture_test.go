@@ -26,7 +26,7 @@ func TestActivitiesSnapshotFixtureMatchesClosedDTO(t *testing.T) {
 	if err := json.Unmarshal(encoded, &fields); err != nil {
 		t.Fatal(err)
 	}
-	if len(fields) != 3 || fields["master"] == nil || fields["welfare"] == nil || fields["thursday"] == nil {
+	if len(fields) != 4 || fields["master"] == nil || fields["welfare"] == nil || fields["thursday"] == nil || fields["loan"] == nil {
 		t.Fatalf("snapshot fields=%v", fields)
 	}
 }

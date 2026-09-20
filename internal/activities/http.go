@@ -43,6 +43,9 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, servic
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, routeActivities, api.getActivities},
+		{http.MethodPost, routeLoanQuote, api.quoteLoan},
+		{http.MethodPost, routeLoan, api.borrow},
+		{http.MethodGet, routeLoans, api.listLoans},
 		{http.MethodPost, routeWelfareClaims, api.claimWelfare},
 		{http.MethodGet, routeThursday, api.getThursday},
 		{http.MethodPost, routeThursdayContributions, api.contributeThursday},
@@ -286,6 +289,10 @@ type configPatchWire struct {
 	MasterEnabled    requestField[bool]              `json:"master_enabled"`
 	Welfare          requestField[welfarePatchWire]  `json:"welfare"`
 	Thursday         requestField[thursdayPatchWire] `json:"thursday"`
+	LoanEnabled      requestField[bool]              `json:"loan_enabled"`
+	LoanTiers        requestField[[]string]          `json:"loan_tiers"`
+	LoanA            requestField[string]            `json:"loan_a"`
+	LoanB            requestField[string]            `json:"loan_b"`
 }
 
 func (api *httpAPI) patchConfig(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
@@ -304,6 +311,26 @@ func (api *httpAPI) patchConfig(writer http.ResponseWriter, request *http.Reques
 	}
 	patch := ActivitiesConfigPatch{ExpectedRevision: revision}
 	canonical := map[string]any{"expected_revision": body.ExpectedRevision.Value}
+	if body.LoanEnabled.Set {
+		value := body.LoanEnabled.Value
+		patch.LoanEnabled = &value
+		canonical["loan_enabled"] = value
+	}
+	if body.LoanTiers.Set {
+		value := body.LoanTiers.Value
+		patch.LoanTiers = &value
+		canonical["loan_tiers"] = value
+	}
+	if body.LoanA.Set {
+		value := body.LoanA.Value
+		patch.LoanA = &value
+		canonical["loan_a"] = value
+	}
+	if body.LoanB.Set {
+		value := body.LoanB.Value
+		patch.LoanB = &value
+		canonical["loan_b"] = value
+	}
 	if body.MasterEnabled.Set {
 		value := body.MasterEnabled.Value
 		patch.MasterEnabled = &value
@@ -341,7 +368,7 @@ func (api *httpAPI) patchConfig(writer http.ResponseWriter, request *http.Reques
 		patch.Thursday = &ThursdayConfigPatch{Enabled: &value}
 		canonical["thursday"] = map[string]any{"enabled": value}
 	}
-	if patch.MasterEnabled == nil && patch.Welfare == nil && patch.Thursday == nil {
+	if patch.MasterEnabled == nil && patch.Welfare == nil && patch.Thursday == nil && !patch.hasLoan() {
 		writeActivitiesError(writer, ErrInvalidRequest)
 		return
 	}

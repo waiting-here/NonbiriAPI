@@ -209,6 +209,7 @@ function UserAuthority({
           ) : null}
         </dl>
       </Card>
+      <LoanHistory role={role} account={account} userID={user.id} />
       {editable ? (
         <>
           <Card>
@@ -767,3 +768,4 @@ export function UserManagement({
     </div>
   );
 }
+import { LoanHistory } from './LoanDetails';

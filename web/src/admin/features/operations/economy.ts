@@ -103,18 +103,19 @@ export function normalizePeriod(value: unknown): Period {
   };
 }
 
-export interface ActivitiesConfig {
+export interface ActivitiesConfig extends LoanConfig {
   revision: string; master_enabled: boolean;
   welfare: { enabled: boolean; threshold: string; cap: string };
   thursday: { enabled: boolean };
 }
 export function normalizeActivitiesConfig(value: unknown): ActivitiesConfig {
-  const root = record(value, ['revision', 'master_enabled', 'welfare', 'thursday'], 'activities configuration');
+  const root = record(value, ['revision', 'master_enabled', 'welfare', 'thursday', 'loan_enabled', 'loan_tiers', 'loan_a', 'loan_b'], 'activities configuration');
   const welfare = record(root.welfare, ['enabled', 'threshold', 'cap'], 'welfare configuration');
   const thursday = record(root.thursday, ['enabled'], 'Thursday configuration');
   return {
     revision: decimal(root.revision, 'activities configuration revision', { positive: true }),
     master_enabled: boolean(root.master_enabled, 'activities master switch'),
+    ...normalizeLoanConfig(root),
     welfare: { enabled: boolean(welfare.enabled, 'welfare switch'), threshold: amount(welfare.threshold, 'welfare threshold', false), cap: amount(welfare.cap, 'welfare cap', false) },
     thursday: { enabled: boolean(thursday.enabled, 'Thursday switch') },
   };
@@ -368,3 +369,4 @@ export const getActiveCounts = () => decoded('/admin/api/games/active-counts', n
 export const patchGamesConfig = (body: unknown, key: string) => decoded('/admin/api/games/config', normalizeGamesConfig, idempotentOptions(key, { method: 'PATCH', json: body }));
 
 export type { GamesConfig, RPSModeConfig };
+import { normalizeLoanConfig, type LoanConfig } from '@shared/operations/loans';

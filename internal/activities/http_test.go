@@ -39,7 +39,7 @@ func TestActivitiesHTTPStrictRoutesAndZeroConfig(t *testing.T) {
 	if err := RegisterRoutes(users, admins, service); err != nil {
 		t.Fatal(err)
 	}
-	if len(users.handlers) != 4 || len(admins.handlers) != 7 {
+	if len(users.handlers) != 7 || len(admins.handlers) != 7 {
 		t.Fatalf("registered user=%d admin=%d", len(users.handlers), len(admins.handlers))
 	}
 

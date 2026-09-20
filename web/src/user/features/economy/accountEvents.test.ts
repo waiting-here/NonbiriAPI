@@ -6,6 +6,7 @@ const EVENT_ID_2 = 'sse_abcdefghijklmnopqrstuQ';
 const EVENT_ID_3 = 'sse_abcdefghijklmnopqrstug';
 const EVENT_ID_4 = 'sse_abcdefghijklmnopqrstuw';
 const ACTIVITY_FIXTURE = {
+  loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
     asset_type: 'game',
