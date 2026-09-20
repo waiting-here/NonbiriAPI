@@ -69,7 +69,11 @@ for (const [lang, width, theme] of [
     for (const box of await quick.getByRole('button').evaluateAll((nodes) =>
       nodes.map((node) => {
         const r = node.getBoundingClientRect();
-        return { width: r.width, height: r.height };
+        // Chromium can report 43.999969px for a 44px layout box.
+        return {
+          width: Math.round(r.width * 1000) / 1000,
+          height: Math.round(r.height * 1000) / 1000,
+        };
       }),
     )) {
       expect(box.width).toBeGreaterThanOrEqual(44);

@@ -24,7 +24,11 @@ func TestReleasedProgressionUpgrade(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			path := filepath.Join(t.TempDir(), "upgrade.db")
+			dir := t.TempDir()
+			if err := os.Chmod(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "upgrade.db")
 			if err := os.WriteFile(path, body, 0600); err != nil {
 				t.Fatal(err)
 			}
