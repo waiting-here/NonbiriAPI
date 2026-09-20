@@ -22,9 +22,29 @@ func readPersonalExport(t *testing.T, f *duelWireFixture, seat int) lifecycle.Ex
 	r := f.call(seat, "POST", "/api/account/export", nil, true)
 	var document lifecycle.ExportDocument
 	if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &document) != nil || document.SchemaVersion != 9 || r.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v9.json"` {
-		t.Fatal("invalid personal export", r.Code)
+		t.Fatal("invalid personal export", r.Code, r.Body.String())
 	}
 	return document
+}
+
+func advancePersonalRankingFixture(t *testing.T, f *duelWireFixture) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	for ready := false; !ready; {
+		tx, err := f.store.DB().BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ready, err = ranking.AdvanceTx(ctx, tx, f.clock.Load())
+		if err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestExportConvergesGameFactsAndBalancesAtomically(t *testing.T) {
@@ -117,11 +137,15 @@ func TestPersonalHistoryExportExpiryOwnershipAndDeletion(t *testing.T) {
 		t.Fatal("penalty crossed owner boundary")
 	}
 	f.clock.Store(now + 7*86400)
+	// Expiry projection requires completed bounded maintenance. Under race
+	// instrumentation even these small groups may need multiple committed passes.
+	advancePersonalRankingFixture(t, f)
 	document = readPersonalExport(t, f, 0)
 	if len(document.GameRankings.Events) != 1 || document.GameRankings.Events[0].Loss != nil || document.GameRankings.Events[0].PositiveProfit == nil {
 		t.Fatal("expired charity payload survived export")
 	}
 	f.clock.Store(now + 31*86400)
+	advancePersonalRankingFixture(t, f)
 	document = readPersonalExport(t, f, 0)
 	if len(document.GameRankings.Events) != 0 || len(document.Penalties) != 1 || document.Penalties[0].Actions[0].RequestID != nil {
 		t.Fatal("request and contribution retention differed")
@@ -145,6 +169,13 @@ func TestPersonalHistoryExportExpiryOwnershipAndDeletion(t *testing.T) {
 
 func TestPersonalExportRankingBudgetRollsBackAndRetries(t *testing.T) {
 	f := newDuelWireFixture(t)
+	// This assertion isolates export rollback from independently committed
+	// maintenance progress, which is covered by the ranking worker tests.
+	f.app.rankingCancel()
+	<-f.app.rankingDone
+	// Cold database bootstrap establishes the statistics epoch after the
+	// fixture's initial clock. Seed contributions at a current decision time.
+	f.clock.Store(time.Now().Unix())
 	ctx := context.Background()
 	now := f.clock.Load()
 	tx, err := f.store.DB().BeginTx(ctx, nil)
@@ -160,6 +191,10 @@ func TestPersonalExportRankingBudgetRollsBackAndRetries(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	var seeded int
+	if err := f.store.DB().QueryRow(`SELECT count(*) FROM game_rank_events`).Scan(&seeded); err != nil || seeded != 513 {
+		t.Fatal("incomplete ranking backlog fixture", seeded, err)
+	}
 	f.clock.Store(now + 7*86400)
 	r := f.call(0, "POST", "/api/account/export", nil, true)
 	if r.Code != 503 || r.Header().Get("Content-Disposition") != "" {
@@ -172,20 +207,7 @@ func TestPersonalExportRankingBudgetRollsBackAndRetries(t *testing.T) {
 	if err := f.store.DB().QueryRow(`SELECT count(*) FROM game_rank_expiry_work`).Scan(&scratch); err != nil || scratch != 0 {
 		t.Fatal("failed export retained scratch", scratch, err)
 	}
-	for ready := false; !ready; {
-		tx, err := f.store.DB().BeginTx(ctx, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ready, err = ranking.AdvanceTx(ctx, tx, f.clock.Load())
-		if err != nil {
-			tx.Rollback()
-			t.Fatal(err)
-		}
-		if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		}
-	}
+	advancePersonalRankingFixture(t, f)
 	if len(readPersonalExport(t, f, 0).GameRankings.Events) != 0 {
 		t.Fatal("retry exported expired facts")
 	}
