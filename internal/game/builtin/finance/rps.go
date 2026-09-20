@@ -490,7 +490,10 @@ func (port rpsPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.Termin
 		}
 	}
 	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
-	return err
+	if err != nil {
+		return err
+	}
+	return rpsFinishRanking(ctx, tx, input)
 }
 
 func (port rpsPort) TransferOnboarding(ctx context.Context, tx *sql.Tx, input ports.QueueOnboardingTransfer) error {

@@ -280,5 +280,9 @@ func (blackjackPort) Settle(ctx context.Context, tx *sql.Tx, input ports.Blackja
 	if err != nil {
 		return err
 	}
-	return (onboarding{config.Descriptor()}).completeTasks(ctx, tx, f.user, blackjackRewardTasks(hands), onboardingParent{column: "blackjack_entry_id", id: f.entry}, input.Meta.CreatedAt)
+	if err := (onboarding{config.Descriptor()}).completeTasks(ctx, tx, f.user, blackjackRewardTasks(hands), onboardingParent{column: "blackjack_entry_id", id: f.entry}, input.Meta.CreatedAt); err != nil {
+		return err
+	}
+	loss, profit := blackjackRankAmounts(f.amount, hands, input.Net.Big())
+	return recordRank(ctx, tx, f.user, "blackjack", f.entry, input.Meta.CreatedAt, loss, profit)
 }

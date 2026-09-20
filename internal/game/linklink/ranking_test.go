@@ -21,6 +21,32 @@ const rankSummaryInsertSQL = `
 INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score,rules_version,assists_initial,assists_remaining)
 VALUES(?,?,?,1000,?,?,?,?,?,?,?,?,?)`
 
+func TestBannedLeaderboardWinnerStaysRankedWithoutIdentity(t *testing.T) {
+	f := newFixture(t)
+	user := f.rankUser("private-while-banned", 1)
+	viewer := f.rankUser("viewer", 2)
+	f.rankSummary(user, "6x8", 2, TerminalCompleted, testNow-10, 10, 1)
+	if _, err := f.database.Exec(`UPDATE users SET is_banned=1,banned_until=? WHERE id=?`, testNow+1, user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.database.Exec(`UPDATE game_user_preferences SET game_profile_public=1 WHERE user_id=?`, user); err != nil {
+		t.Fatal(err)
+	}
+	for _, window := range []string{"7d", "30d"} {
+		board, err := f.service.Leaderboard(context.Background(), viewer, "6x8", window)
+		if err != nil || len(board.Rows) != 1 || board.Rows[0].Rank != "1" || board.Rows[0].Identity.Kind != "anonymous" || board.Rows[0].Identity.AvatarURL != nil {
+			t.Fatal(board, err)
+		}
+	}
+	if _, err := f.database.Exec(`UPDATE users SET banned_until=? WHERE id=?`, testNow, user); err != nil {
+		t.Fatal(err)
+	}
+	board, err := f.service.Leaderboard(context.Background(), viewer, "6x8", "7d")
+	if err != nil || board.Rows[0].Identity.Kind != "public" {
+		t.Fatal(board, err)
+	}
+}
+
 func rankSummaryValues(id string, user int64, spec string, version int, reason string, at, elapsed int64, remaining int) []any {
 	d, _ := resolveSpec(spec)
 	initial, pairs := 0, d.totalPairs()

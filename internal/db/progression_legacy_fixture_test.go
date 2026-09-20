@@ -52,7 +52,7 @@ func makePreProgressionFixture(t *testing.T, database *sql.DB) {
 			}
 		}
 	}
-	for _, table := range []string{"abuse_evidence", "abuse_actions", "abuse_cases", "abuse_window_events", "abuse_windows", "activity_loans", "game_rank_totals", "game_rank_events", "game_rank_counters", "game_statistics_epoch"} {
+	for _, table := range []string{"abuse_evidence", "abuse_actions", "abuse_cases", "abuse_window_events", "abuse_windows", "activity_loans", "game_rank_expiry_work", "game_rank_totals", "game_rank_events", "game_rank_counters", "game_statistics_epoch"} {
 		var count int
 		if err := tx.QueryRow("SELECT count(*) FROM " + quoteSQLiteIdentifier(table)).Scan(&count); err != nil {
 			t.Fatal(err)

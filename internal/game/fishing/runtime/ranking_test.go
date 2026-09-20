@@ -45,7 +45,7 @@ func TestZeroSizeOutcomeCreatesSingleBestAndExplicitWireSize(t *testing.T) {
 	}
 }
 
-func TestFishingRankingPrivacyExclusionAndStableOrder(t *testing.T) {
+func TestFishingRankingPrivacyAndStableOrder(t *testing.T) {
 	source := &scriptedSource{values: []uint64{
 		968, 0, 20,
 		968, 0, 19,
@@ -70,13 +70,16 @@ func TestFishingRankingPrivacyExclusionAndStableOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	board, err := fixture.service.FishingLeaderboard(context.Background(), ids[1], "single")
-	if err != nil || len(board.Entries) != 2 || board.Me != nil {
+	if err != nil || len(board.Entries) != 3 || board.Me != nil {
 		t.Fatalf("single leaderboard = (%#v,%v)", board, err)
 	}
 	if board.Entries[0].Rank != "1" || board.Entries[0].SizeCM != 25 || board.Entries[0].Identity.Kind != "anonymous" || board.Entries[0].IsMe {
 		t.Fatalf("anonymous row = %#v", board.Entries[0])
 	}
 	public := board.Entries[1]
+	if board.Entries[2].Rank != "3" || board.Entries[2].Identity.Kind != "anonymous" || board.Entries[2].Identity.AvatarURL != nil {
+		t.Fatal("banned ranking changed or identity leaked", board.Entries[2])
+	}
 	if public.Rank != "2" || public.SizeCM != 24 || public.Identity.Kind != "public" || public.Identity.DisplayName != "Public Angler" || public.Identity.AvatarURL != nil || !public.IsMe {
 		t.Fatalf("public row = %#v", public)
 	}

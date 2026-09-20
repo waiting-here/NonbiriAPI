@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
+import { Leaderboard } from '../ranking/Leaderboard';
 import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
@@ -317,6 +318,7 @@ export function BiddingGame({ config, wallets, onboarding, accepting, refreshWal
         </>
       )}
       {rules && <BiddingRules onClose={closeRules} />}
+      <Leaderboard board="bidding" />
       {history && (
         <DuelHistory
           codec={biddingCodec}

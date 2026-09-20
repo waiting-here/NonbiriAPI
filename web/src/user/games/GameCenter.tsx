@@ -1,6 +1,7 @@
 import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
 import { GamePrivacyControl } from './common/GamePrivacyControl';
+import { Leaderboard } from './ranking/Leaderboard';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { GameHero, type GameHeroKind } from './assets/GameHero';
 import { useGameCopy, type GameCopyKey } from './copy';
@@ -145,6 +146,7 @@ export function GameCenter() {
         ))}
       </div>
       <GamePrivacyControl />
+      <Leaderboard board="game_charity" />
     </main>
   );
 }

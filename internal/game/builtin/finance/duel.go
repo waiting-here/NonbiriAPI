@@ -323,5 +323,8 @@ func (p duelPort) Terminal(ctx context.Context, tx *sql.Tx, input ports.DuelFini
 	if err != nil {
 		return err
 	}
-	return p.finishOnboarding(ctx, tx, input)
+	if err := p.finishOnboarding(ctx, tx, input); err != nil {
+		return err
+	}
+	return p.finishRanking(ctx, tx, input, ticket, cuts)
 }

@@ -330,7 +330,7 @@ func TestFishingHugeLengthsAreExactAcrossAuthorityExportAndDeletion(t *testing.T
 	}
 }
 
-func TestFishingRecentLengthTop20PrivacyAndBanExclusion(t *testing.T) {
+func TestFishingRecentLengthTop20PrivacyAndBanAnonymity(t *testing.T) {
 	f := newGameFixture(t, nil)
 	var first, requester int64
 	for index := 0; index < 21; index++ {
@@ -363,7 +363,7 @@ func TestFishingRecentLengthTop20PrivacyAndBanExclusion(t *testing.T) {
 		t.Fatal(err)
 	}
 	board, err = f.service.FishingLeaderboard(context.Background(), requester, "recent_single")
-	if err != nil || len(board.Entries) != 20 || board.Me != nil || board.Entries[19].Rank != "20" || !board.Entries[19].IsMe || board.Entries[19].Identity.DisplayName != "Public recent angler" {
+	if err != nil || len(board.Entries) != 20 || board.Me == nil || board.Me.Rank != "21" || !board.Me.IsMe || board.Me.Identity.DisplayName != "Public recent angler" || board.Entries[0].Identity.Kind != "anonymous" {
 		t.Fatalf("ban/public: %+v %v", board, err)
 	}
 }

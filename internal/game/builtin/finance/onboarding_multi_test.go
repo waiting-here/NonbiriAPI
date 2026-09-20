@@ -188,6 +188,29 @@ func TestBlackjackMultipleAwardsUseHandsAndAtomicLedger(t *testing.T) {
 			if err != nil || wallet.Balance.Big().Int64() != tc.gross-tc.gross/100*3+tc.reward {
 				t.Fatal(wallet, err)
 			}
+			var lossSign int
+			var lossMag, profitRaw []byte
+			if err := f.tx.QueryRow(`SELECT loss_sign,loss_mag,positive_profit FROM game_rank_events WHERE user_id=? AND game_key='blackjack' AND source_id=?`, f.user, entry).Scan(&lossSign, &lossMag, &profitRaw); err != nil {
+				t.Fatal(err)
+			}
+			loss, err := db.NewSM128(lossSign, lossMag)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profit, err := db.DecodeU128(profitRaw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantProfit := int64(0)
+			if tc.name == "natural_win" {
+				wantProfit = 1500000
+			}
+			if tc.split {
+				wantProfit = 1000000
+			}
+			if loss.Big().Int64() != total-tc.gross+tc.gross/100*3 || profit.Big().Int64() != wantProfit {
+				t.Fatal("hand ranking includes rewards or offsets a winning hand", loss, profit, wantProfit)
+			}
 			if after, err := ledger.ReadCapacity(f.ctx, f.tx); err != nil || after.ReservedFutureRows.Decimal() != "0" {
 				t.Fatal(after, err)
 			}

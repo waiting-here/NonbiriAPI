@@ -40,6 +40,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
+	"github.com/waiting-here/NonbiriAPI/internal/game/ranking"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
@@ -310,6 +311,8 @@ type application struct {
 	lifecycle       *lifecycle.Coordinator
 	lifecycleCancel context.CancelFunc
 	lifecycleDone   <-chan struct{}
+	rankingCancel   context.CancelFunc
+	rankingDone     <-chan struct{}
 	debug           *debug.Hub
 	logs            *logapi.Repository
 	accountEvents   *accountEventConnections
@@ -355,6 +358,12 @@ func (a *application) Close() error {
 	a.closeOnce.Do(func() {
 		a.BeginShutdown()
 		var closeErrors []error
+		if a.rankingCancel != nil {
+			a.rankingCancel()
+		}
+		if a.rankingDone != nil {
+			<-a.rankingDone
+		}
 		if a.lifecycleCancel != nil {
 			a.lifecycleCancel()
 		}
@@ -1072,6 +1081,15 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		return nil, fmt.Errorf("create check-in service: %w", err)
 	}
 	homeGameService := gameRuntimes.Service
+	rankingService, err := ranking.New(store.DB(), authRuntime, gameNow)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := ranking.RegisterRoutes(authRuntime, rankingService); err != nil {
+		cleanup()
+		return nil, err
+	}
 	if err := gameRuntimes.RegisterRoutes(gamehost.Registrars{
 		User: authRuntime, Admin: authRuntime, Continuation: authRuntime, Maintenance: registry,
 	}); err != nil {
@@ -1278,6 +1296,9 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		return nil, fmt.Errorf("start account lifecycle worker: %w", err)
 	}
 	failures := make(chan error, 1)
+	rankingContext, rankingCancel := context.WithCancel(context.Background())
+	rankingDone := make(chan struct{})
+	go func() { defer close(rankingDone); rankingService.Run(rankingContext) }()
 	return &application{
 		handler:         handler,
 		authRuntime:     authRuntime,
@@ -1302,6 +1323,8 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		lifecycle:       lifecycleCoordinator,
 		lifecycleCancel: lifecycleCancel,
 		lifecycleDone:   lifecycleDone,
+		rankingCancel:   rankingCancel,
+		rankingDone:     rankingDone,
 		debug:           debugHub,
 		logs:            logRepository,
 		accountEvents:   accountConnections,

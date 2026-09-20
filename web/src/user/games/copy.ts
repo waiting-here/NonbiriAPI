@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
+  'linklink.leaderboard.anonymous': ['Anonymous player', '匿名玩家'],
   'onboarding.title': ['Newcomer rewards', '新人奖励'],
   'onboarding.biddingHelp': ['Complete each tier and win once to earn general credits automatically. Surrendering does not complete a task; your opponent can still qualify. Each task pays once.', '每档首次正常完成及任意档首次获胜，会自动奖励通用积分。认输方不计完成，对手仍可达成；每项仅奖励一次。'],
   'onboarding.likesHelp': ['Quick and standard modes each have completion and first-win rewards. Normal timeout play counts; surrendering does not. Tutorials and system cancellations do not qualify.', '快速与标准模式分别设完成及首胜奖励。超时自动操作后的正常结算计入，认输方不计；本地教学和系统取消不计。'],

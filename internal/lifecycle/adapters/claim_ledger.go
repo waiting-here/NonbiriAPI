@@ -10,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/game/ranking"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
@@ -155,6 +156,9 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 	if a == nil || !validDeleteCall(ctx, tx, request) ||
 		!db.ValidateOpaqueID(deletionOperationID, "op_") {
 		return lifecycle.ErrInvalid
+	}
+	if err := ranking.DeleteTx(ctx, tx, request.UserID); err != nil {
+		return fmt.Errorf("lifecycle adapters: remove rankings: %w", err)
 	}
 	wallet, err := ledger.UserAccount(ctx, tx, request.UserID)
 	if err != nil {

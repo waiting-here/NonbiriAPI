@@ -1,0 +1,64 @@
+.progression-ranking {
+  min-width: 0;
+  margin-top: 1rem;
+}
+.rank-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+.rank-actions label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.rank-actions button,
+.rank-actions select,
+.rank-privacy .checkbox-label {
+  min-height: 44px;
+}
+.rank-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.rank-table-scroll .data-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.rank-table-scroll td,
+.rank-table-scroll th {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.rank-table-scroll th:first-child {
+  width: 14%;
+}
+.rank-table-scroll th:nth-child(2) {
+  width: 43%;
+}
+.rank-table-scroll th:nth-child(3) {
+  width: 43%;
+}
+.rank-identity > span {
+  min-width: 0;
+}
+.rank-table-scroll tr.is-me {
+  background: color-mix(in srgb, var(--accent, #8779d9) 15%, transparent);
+  font-weight: 600;
+}
+.rank-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rank-identity img {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rank-privacy {
+  margin-top: 1rem;
+}

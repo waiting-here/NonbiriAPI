@@ -9,6 +9,7 @@ import {
 } from '@shared/games/blackjack';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { GameWallets } from '../common/GameWallets';
+import { Leaderboard } from '../ranking/Leaderboard';
 import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { useAuthoritativeCountdown } from '../common/countdown';
@@ -565,6 +566,7 @@ export function BlackjackGame() {
         )}
         {panel === 'rules' && <Rules close={close} />}
         {panel === 'history' && <History close={close} />}
+        <Leaderboard board="blackjack" />
       </div>
     </main>
   );
