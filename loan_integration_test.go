@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
 func TestLoanRealAuthorizationReceiptAndDebtGameAdmission(t *testing.T) {
@@ -51,8 +53,31 @@ func TestLoanRealAuthorizationReceiptAndDebtGameAdmission(t *testing.T) {
 	if steward.Code != 200 || owner.Code != 200 || steward.Body.String() != admin.Body.String() || owner.Body.String() != admin.Body.String() {
 		t.Fatal("loan history parity", steward.Code, steward.Body, owner.Code, owner.Body, admin.Body)
 	}
+	exported := f.call(0, http.MethodPost, "/api/account/export", nil, true)
+	var document lifecycle.ExportDocument
+	if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &document) != nil || len(document.Loans) != 1 {
+		t.Fatal("loan missing from export", exported.Code)
+	}
+	loan := document.Loans[0]
+	if loan.ID != receipt.ID || loan.OperationID != receipt.OperationID || loan.Principal != receipt.Principal || loan.GeneralAfter != receipt.GeneralAfter || loan.GameAfter != receipt.GameAfter || document.User.Balance != loan.GeneralAfter || document.User.GameBalance != loan.GameAfter {
+		t.Fatal("exported loan and wallet differ from committed receipt")
+	}
+	loanJSON, _ := json.Marshal(loan)
+	for _, field := range []string{"quote_token", "nonce", "sequence", "config_revision"} {
+		if strings.Contains(string(loanJSON), `"`+field+`"`) {
+			t.Fatal("private loan field exported", field)
+		}
+	}
+	other := readPersonalExport(t, f, 1)
+	if len(other.Loans) != 0 {
+		t.Fatal("loan crossed owner boundary")
+	}
 	// Borrowing debt must leave the received game balance spendable.
 	f.enqueue(0, "bidding", "tier1")
+	document = readPersonalExport(t, f, 0)
+	if len(document.GameOnboardingHolds) != 2 || document.GameOnboardingHolds[0].GameKey != "bidding" || len(readPersonalExport(t, f, 1).GameOnboardingHolds) != 0 {
+		t.Fatal("pending rewards are missing or crossed owner boundary")
+	}
 	f.checkLedger()
 }
 

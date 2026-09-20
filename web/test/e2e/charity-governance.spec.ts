@@ -582,7 +582,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
   await saveScreenshot(page, 'catalog-expanded-320-dark-zh', '.economy-catalog-item');
 
-  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await page.getByRole('navigation', { name: '分页', exact: true }).getByRole('button', { name: '下一页', exact: true }).click();
   await expect(page.getByText('[公益]provider/page-two', { exact: true })).toBeVisible();
   const search = page.getByRole('searchbox');
   const requestCountBeforeTyping = catalogRequests.length;

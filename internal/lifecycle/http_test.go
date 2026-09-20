@@ -46,13 +46,13 @@ func TestRegisterRoutesAndAccountLifecycleHTTP(t *testing.T) {
 		exportResponse, exportRequest, UserPrincipal{UserID: 7},
 	)
 	if exportResponse.Code != http.StatusOK ||
-		exportResponse.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v7.json"` ||
+		exportResponse.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v9.json"` ||
 		exportResponse.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("export response status=%d headers=%v body=%s",
 			exportResponse.Code, exportResponse.Header(), exportResponse.Body.String())
 	}
 	var exported map[string]any
-	if err := json.Unmarshal(exportResponse.Body.Bytes(), &exported); err != nil || exported["schema_version"] != float64(8) {
+	if err := json.Unmarshal(exportResponse.Body.Bytes(), &exported); err != nil || exported["schema_version"] != float64(9) {
 		t.Fatalf("export body=%v error=%v", exported, err)
 	}
 

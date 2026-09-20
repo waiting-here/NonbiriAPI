@@ -365,6 +365,7 @@ func TestWriteReleasedBillingFixture(t *testing.T) {
 	}
 	f := newEmbeddingHTTPFixture(t)
 	f.exec(t, "UPDATE site_config SET value='5' WHERE key='charity_token_reserve_milli'")
+	f.exec(t, "UPDATE donations SET description=''")
 	var modelID, donationKey, endpointID int64
 	var base string
 	if err := f.store.DB().QueryRow("SELECT id FROM charity_models WHERE pricing_mode='per_token'").Scan(&modelID); err != nil {

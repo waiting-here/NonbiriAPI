@@ -212,11 +212,20 @@ func TestGameOnboardingHTTPExportAndPhysicalDeletion(t *testing.T) {
 	if err := json.Unmarshal(exported.Body.Bytes(), &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.SchemaVersion != 8 || len(document.GameOnboarding) != 1 || document.GameOnboarding[0].GameKey != "rps" || document.GameOnboarding[0].TaskKey != "quick" || document.GameOnboarding[0].Award != "1000" || document.User.GameBalance != "0" {
+	if document.SchemaVersion != 9 || len(document.GameOnboarding) != 1 || document.GameOnboarding[0].GameKey != "rps" || document.GameOnboarding[0].TaskKey != "quick" || document.GameOnboarding[0].Award != "1000" || document.User.GameBalance != "0" || document.GameOnboarding[0].OperationID == "" {
 		t.Fatalf("earned reward missing from export: %+v", document.GameOnboarding)
 	}
 	if len(document.Randomness) != 1 || document.Randomness[0].Commitment != openingCommitment || len(document.Randomness[0].Seed) != 64 {
 		t.Fatal("terminal RPS proof missing from export")
+	}
+	linked := false
+	for _, entry := range document.CreditLedger {
+		if entry.OperationID == document.GameOnboarding[0].OperationID {
+			linked = true
+		}
+	}
+	if !linked {
+		t.Fatal("onboarding completion is not linked to the exported ledger")
 	}
 	for i := range users {
 		r := call(i, "GET", "/api/games/rps/randomness/"+sessionID, "", false)

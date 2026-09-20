@@ -304,6 +304,7 @@ func newLifecycleCoordinator(
 	maintenanceService *maintenance.Service,
 	activityEvents *accountstream.Hub,
 	debugHub *debug.Hub,
+	now func() time.Time,
 ) (*lifecycle.Coordinator, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
 		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil ||
@@ -360,7 +361,7 @@ func newLifecycleCoordinator(
 	)
 
 	coordinator, err := lifecycle.New(lifecycle.Config{
-		Store: store, UserAuth: roleAuthorizer, AdminAuth: roleAuthorizer, CursorKeys: vault,
+		Store: store, UserAuth: roleAuthorizer, AdminAuth: roleAuthorizer, CursorKeys: vault, Now: now,
 		Retirement: &productionRetirementBoundary{
 			gate: forwardRuntime.lifecycle, flow: forwardRuntime.flow, games: gameRuntimes.Limiter(),
 		},
@@ -371,6 +372,7 @@ func newLifecycleCoordinator(
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
 			Randomness: lifecycleadapters.RandomnessAdapter{},
+			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,

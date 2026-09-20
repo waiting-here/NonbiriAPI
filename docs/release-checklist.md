@@ -1,69 +1,67 @@
 # Release checklist
 
-Bind evidence to the candidate commit/tree, relevant input and lock hashes,
-toolchain, command, environment, time and real exit status. Reuse matching green
-results. Changed schema, DTOs, root wiring, dependencies or lifecycle invalidate
-the corresponding integration evidence; isolated copy/style changes affect their
-own checks. This checklist does not itself assert a pass.
+Bind evidence to the candidate commit/tree, input and lock hashes, toolchain,
+command, environment, time and real exit status. Reuse matching green results.
+Schema, DTO, root wiring, dependency or lifecycle changes invalidate their
+integration evidence; isolated copy and style changes affect their own checks.
+This checklist does not itself assert a pass.
 
 ## Source and compatibility
 
-- Freeze scope and synchronize README, changelog, package metadata, HTTP contract,
-  configuration, game-module and lifecycle documentation.
-- Verify Generation 2 identity, atomic rollback on injected failure,
-  unknown/partial schema zero-write rejection and second-start no-op.
-  The deployed beta.4 source is the upgrade baseline for this target. Build that
-  exact source to generate populated fixtures, then exercise the target on Linux
-  with existing API reservations, wallets and games. Validate the final 117-table
-  manifest; unreleased intermediate schemas are outside this upgrade gate.
-- Preserve original account/entry IDs, settled charges, saved game rules, configured
-  RTP, security roots and custom legal text. Existing game wallets remain unchanged; only older sources without them receive zero game wallets. Bidding, Likes and Blackjack start disabled on sources without their configuration.
-- Verify that saved old games retain their rules, new Fishing/LinkLink/RPS admissions use version 2 and Bidding/Likes/Blackjack use their own version 1; never infer unrecorded historical payment sources or fabricate proofs for old games.
-- Verify matching complete-snapshot restore and old-binary rejection of the new
-  schema. Do not open an online production database with external SQLite.
+- Synchronize version metadata, bilingual README/changelog, API, configuration,
+  lifecycle, game, legal and deployment documentation.
+- Validate the formal rc.1 source at `bd6198ceccb59dc8b8e0143831a94e94340235d1`
+  to rc.2 upgrade. Generate populated samples with that exact old code. Include
+  wide and negative balances, manual donation-credit adjustments, historical
+  empty descriptions, bans, active/terminal games, reward holds, nine Blackjack
+  seats and a waiter, saved catalogs, configuration and credentials.
+- Check exact fresh/upgrade manifest equality, injected-failure rollback,
+  repeated startup, unknown/partial schema zero-write rejection and old-binary
+  rejection. Unreleased intermediate schemas are outside this guarantee.
+- Preserve old account/entry IDs, settled charges, saved rules, configured games,
+  security roots and legal overrides. Initialize loans disabled; derive valid
+  quick stakes from existing limits. Reconstruct charity achievement from the
+  ledger and initialize the game-statistics start once. Do not invent historical
+  rewards, penalties or contributions.
+- Check matching complete-snapshot restore. Never connect external SQLite to an
+  online production database.
 
 ## Financial, control and lifecycle acceptance
 
-- Verify per-asset conservation, independent check-ins, game-welfare eligibility,
-  mixed payments, original refunds, RPS per-round sources, actual charity charges
-  above reserve, unknown versus zero usage and historical terminal replay.
-- Verify Fishing per-outcome cuts, net rankings and preserved old RTP; all nine
-  atomic once-only newcomer rewards and their capacity reservation/release.
-- Verify LinkLink hints/deadlock refresh, shared 2/3/5 counters, no automatic v2
-  refresh, completion bonuses, six boards, privacy, per-user best and earliest
-  achievement ordering. Measure queries against 100,000 summaries.
-- Verify role matrices in the final transaction, target promotion and actor
-  demotion, limit strings/inheritance, levels, dual-wallet adjustments, shared
-  announcement actions and no-content audits.
-- Verify owner/management failure resets, generation-safe late callbacks,
-  complete selection before bounded batches, interruption and exact uncertain
-  replay. Do not introduce persistent background jobs for browser batching.
-- Verify multiline Thursday text/preview and complete validation before model-ID
-  deduplication.
-- Verify export v8 and synchronous deletion across both assets, holds, game state,
-  rankings and permanent newcomer completions, including both late-write orders.
-- Verify Blackjack's single nine-seat table, fixed-minute stages, persistent FIFO,
-  withdrawal/replacement cutoff and requeue behavior. Cover all 50 default stakes,
-  game/general/mixed payment, atomic split/double additions, independently rounded
-  per-hand fees, normal General Credit returns and original-source cancellation.
-  Check maintenance, bans, deletion, restart before/after settlement and welfare
-  asset accounting without restoring deleted accounts or cancelling other seats.
-- Verify every table rule and fixed-seed strategy simulations over at least one
-  million tables, including one/nine players and each seat. Report confidence
-  bounds and actual rounding; do not infer negative expectation from random play.
-- Verify six-game commitments, whole-game disclosure, deterministic replay and
-  source/proof tamper rejection. Active status, logs, history, errors and export
-  must omit unrevealed seeds, plans and future draws. Verify parent cleanup,
-  owner-only history and removal of proof fingerprints from anonymous archives.
-- Synchronize bilingual embedded privacy/terms and administrator/steward calling
-  instructions. Keep instance custom legal overrides intact unless their
-  replacement is explicitly authorized.
+- Verify 22 once-only newcomer tasks, multi-award atomicity, reward-capacity
+  release, natural-21 stacking, surrender/system-cancel boundaries and deletion
+  races. Awards and loans must not inflate game ranking contributions.
+- Verify exact integer loan quotes, owner/expiry/config binding, maximum and
+  invalid coefficients, idempotent replay, negative General Credit results,
+  independent Game Credit availability, four-entry conservation and rollback.
+- Verify four leaderboards, independent privacy preferences, banned anonymity,
+  signed loss aggregation, positive-profit rules, logical 7/30-day expiry,
+  tie ordering, immutable statistics start and bounded catch-up.
+- Verify each authenticated pre-handler rejection is recorded once with no
+  call fee; retain rule snapshots, manual endings and authorized traceability.
+  Durable violation windows must survive restart without repeating measures.
+  Check 90-day case and 30-day request-link boundaries.
+- Verify character passives, simultaneous step snapshots, per-layer resistance,
+  SOTA derivation, full/partial outcomes, deterministic proof replay and saved
+  old catalogs. Run the ten-round local tutorial with the current engine and
+  its actual 66–61 result, without real game or financial writes.
+- Verify Blackjack :00/:30 rounds with 5/20/5 stages, early settlement extending
+  presentation without advancing the next round, skipped-time recovery,
+  3×3 seating, quick-stake validation/migration and select-before-queue behavior.
+- Verify Bidding suits by seat; combined resource filters and equal count/row
+  predicates; safe key reverse lookup including all still-associated states;
+  required new donation descriptions with historical blank compatibility.
+- Verify v9 owner-only exports, all-or-error size/row budgets, rollback on
+  incomplete ranking catch-up, synchronous deletion and both late-write orders.
+  Lazy game finalization, financial facts and rankings must agree in one snapshot.
+- Keep prior ownership, egress, secrets, financial, randomness and game contracts
+  intact. Reuse unchanged evidence and supplement candidate-specific gaps.
 
 ## Build and checks
 
-Use a clean candidate checkout. Daily work runs affected tests; stable points run
-the full Go gate. Final Linux Go/race evidence may come from the cumulative PR CI,
-with local Windows and missing platform checks supplementing it.
+Daily work runs affected checks. Stable candidates run the complete Go and web
+gates; final Linux/race evidence may come from cumulative PR CI, supplemented by
+local Windows and platform-specific checks.
 
 ```sh
 npm --prefix web ci
@@ -73,69 +71,55 @@ npm --prefix web run lint
 npm --prefix web run build
 npm --prefix web run test:e2e
 scripts/check-go.sh
+scripts/check-upgrade.sh
 scripts/race-check.sh
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags dist -trimpath -o nonbiriapi-linux-amd64 .
 ```
 
-Run each command only where its evidence is needed. One frontend build generates
-both stations, notices and hashes. CI divides the live race-test catalog across
-twelve concurrent shards. Each shard uses a bounded four-command worker pool;
-split packages are partitioned by timing weights and unsplit packages run one
-package per command. It verifies that every package or split test runs exactly
-once. Timing hints affect balance, not coverage; verbose results expose individual
-test durations for later rebalancing. Require all shards and aggregate Go/Web/CodeQL
-checks. The protected master is validated through pull requests; after merge,
-reuse evidence for the identical tree and use manual dispatch when a rerun is
-needed. Daily affected-package race defaults to one shuffled round.
+Run each command where its evidence is needed. One web build generates both
+stations, notices and hashes. Preserve the full CI matrix: all twelve race
+shards and aggregate Go/Web/CodeQL checks. Verify current dependency integrity,
+license notices and available vulnerability scans; record actual findings and
+unavailable scans. Never classify unavailable evidence as a pass.
 
-- Check clean installation, `go mod verify`, current `govulncheck` and `npm audit`,
-  dependency licenses/notices and redacted credential scans. Record findings and
-  dispositions; an unavailable scan is not a pass.
-- Confirm pinned Actions and real embedded bundles. Build Windows/amd64 and the
-  final Linux/amd64 pure-Go artifact, record VCS/tree/toolchain and SHA256.
-- Compare complete first-party JS/CSS gzip totals with an exact beta.4 clean build
-  using the same tools; the user station may grow by at most 256 KiB and the
-  administrator station by 96 KiB.
-- Verify all three new games with real participant sessions, full match results and
-  sealed per-asset accounting. Exercise 4096 queues, large history datasets and
-  bounded export/worker transactions. Check the 127 art slots, simultaneous
-  settlement, resource refill feedback, uncapped numeric counters and reduced
-  motion at phone and desktop sizes. Unfinished final presentation must not
-  delay or repeat wallet settlement.
-- Include nine Blackjack players and spectators, public-card privacy, split-hand
-  controls, reconnect de-duplication, and proof verification/download in all six
-  games. Verify the dashboard endpoint total with 101 shared users and the large
-  existing numbered-page fixture while retaining the legacy response limit.
-- Cover actual HTTP financial/control flows and representative Chinese/English,
-  light/dark, desktop/mobile combinations. Play LinkLink through ordinary UI,
-  including a 10×10 board at 320 px; measure latency without extra anticheat.
-- Review final diff, LF text, generated files, executable bits and sensitive paths.
-  Reuse unchanged auth, egress, secret and protocol evidence; supplement only
-  gaps created by this candidate.
+- Build Windows/amd64 and Linux/amd64 pure-Go dist artifacts. Record revision,
+  clean VCS, tree, toolchain, build parameters and SHA256; validate isolated
+  startup and embedded resources.
+- Cover new pages and changed flows in real Chromium at phone/desktop sizes,
+  Chinese/English and light/dark themes, including keyboard and reduced motion.
+- Validate sound separately with actual listening. Six-game feedback must use
+  authoritative events, capped follow-up layers, distinct resistance outcomes,
+  batch coalescing, music recovery and no historical replay on reconnect.
+- Review the cumulative diff, LF, sensitive paths, executable bits and generated
+  output. Retain exact command status and scope when reusing earlier results.
 
-## Candidate and deployment
+## PR, release and deployment
 
-- For this source prerelease, merge through the protected master PR after required
-  checks. Bind an annotated `v1.0.0-rc.1` tag and GitHub prerelease to that exact
-  master commit, without adding public precompiled attachments. Deploy it only
-  after verifying that the tag, release, CI tree and final binary agree.
-- Preserve the latest production legal text, site name and administrator settings.
-  Check local teaching without real paid-game writes. Cover disabled/partial
-  admission, all ten tutorial rounds, linked explanations, countdown sound cleanup,
-  authoritative overload highlights and forbidden OAuth navigation.
-- Verify origin and protected master, integrate any master advance, audit the
-  cumulative diff and push one candidate PR. Require exact-candidate CI success.
-- Prepare one trusted final Linux artifact. Production reuses validated evidence
-  and checks that artifact's hash instead of repeating full Go/race/web/build.
-- Close admission, drain, stop, create one complete snapshot and start the target
-  once. Reuse valid isolated upgrade evidence; additional rehearsal requires a
-  concrete startup/storage/accounting gap.
-- After local health, reopen and perform public-page acceptance alongside about
-  60 seconds of process/error observation. Do not overwrite newly accepted data
-  automatically with the old snapshot.
-- Remove temporary verification copies/processes and retain the two most recent
-  successful ordinary-switch recovery sets; preserve independent backups,
-  explicit exceptions and unresolved incident sets.
-- Deliver candidate identity, PR/check status, production identity, acceptance
-  results and practical test areas. Merge, tag and release require the owner's
-  later testing decision.
+- Push one candidate PR to protected `master`, integrate any master advance
+  without rewriting shared history, and require full exact-candidate CI.
+  Save the successful run's original PR association record and checksum before
+  normal protected merge.
+- Synchronize local master and verify its tree equals the tested candidate.
+  Create annotated `v1.0.0-rc.2` and a GitHub source prerelease at that merge
+  commit, without public precompiled attachments.
+- Once the tag is visible, create the final trusted Linux artifact from a clean
+  independent checkout. Reuse matching business-test evidence, record its full
+  revision and checksum, and verify the deployment source and target.
+- Preserve current production data, keys, configuration, site name and legal
+  overrides; loans stay disabled by default. A maintained local legal draft does
+  not publish instance policy.
+- Reuse valid CI, artifact and upgrade evidence. Supplement isolated
+  startup/storage/finance validation where the schema or real deployment
+  requires it. Do not rerun complete builds and tests on the VPS by default.
+- Close admission, drain, stop, create one complete recovery snapshot, switch
+  and start the target. Use the instance's measured health budget and stop
+  polling as soon as health succeeds.
+- After local health, reopen and check both stations, login boundaries and
+  changed pages alongside about 60 seconds of runtime observation.
+  Restore only within the helper's pre-commit boundary; after commit or opening,
+  preserve newly accepted data and respond to the actual failure.
+- Remove temporary processes and verification copies; retain the two eligible
+  latest ordinary recovery sets and existing independent/exception sets.
+- Deliver PR/release links, unified release/production revision, artifact checksum,
+  acceptance results, recovery location and the legal draft awaiting manual
+  publication.

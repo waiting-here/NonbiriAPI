@@ -19,6 +19,7 @@ import (
 // account lifecycle. The domain retains all SQL and settlement algorithms.
 type ActivityLifecycleOwner interface {
 	ExportUserTx(context.Context, *sql.Tx, int64, int) (activities.UserExport, error)
+	ExportLoansTx(context.Context, *sql.Tx, int64, int) ([]activities.LoanReceipt, error)
 	PrepareUserDeletion(context.Context, *sql.Tx, int64, int64) error
 }
 
@@ -83,7 +84,27 @@ func (adapter *ActivityAdapter) ExportActivities(
 		out.Checkins[i] = lifecycle.CheckinExport{Asset: string(item.Asset), SiteDay: item.SiteDay, Award: item.Award, CreatedAt: item.CreatedAt}
 	}
 	for i, item := range value.GameOnboarding {
-		out.GameOnboarding[i] = lifecycle.OnboardingExport{GameKey: item.GameKey, TaskKey: item.TaskKey, Award: item.Award, CompletedAt: item.CompletedAt}
+		out.GameOnboarding[i] = lifecycle.OnboardingExport{GameKey: item.GameKey, TaskKey: item.TaskKey, Award: item.Award, CompletedAt: item.CompletedAt, OperationID: item.OperationID}
+	}
+	out.GameOnboardingHolds = make([]lifecycle.OnboardingHoldExport, len(value.GameOnboardingHolds))
+	for i, item := range value.GameOnboardingHolds {
+		out.GameOnboardingHolds[i] = lifecycle.OnboardingHoldExport{ID: item.ID, GameKey: item.GameKey, TaskKey: item.TaskKey, CreatedAt: item.CreatedAt}
+	}
+	loans, err := adapter.owner.ExportLoansTx(ctx, tx, request.UserID, request.Limit)
+	if errors.Is(err, activities.ErrResourceLimit) {
+		return lifecycle.ActivityExport{}, lifecycle.ErrTooLarge
+	}
+	if err != nil {
+		return lifecycle.ActivityExport{}, err
+	}
+	out.Loans = make([]lifecycle.LoanExport, len(loans))
+	for i, item := range loans {
+		out.Loans[i] = lifecycle.LoanExport{
+			ID: item.ID, OperationID: item.OperationID, CreatedAt: item.CreatedAt,
+			Principal: item.Principal, A: item.A, B: item.B, Nominal: item.Nominal,
+			Disbursed: item.Disbursed, Fee: item.Fee, Repayment: item.Repayment, Interest: item.Interest,
+			GeneralBefore: item.GeneralBefore, GeneralAfter: item.GeneralAfter, GameBefore: item.GameBefore, GameAfter: item.GameAfter,
+		}
 	}
 	return out, nil
 }

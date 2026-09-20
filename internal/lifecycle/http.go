@@ -92,7 +92,7 @@ func (api *lifecycleHTTP) exportAccount(writer http.ResponseWriter, request *htt
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Header().Set("Content-Disposition", `attachment; filename="nonbiriapi-account-export-v7.json"`)
+	writer.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="nonbiriapi-account-export-v%d.json"`, SchemaVersion))
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(payload)
 }

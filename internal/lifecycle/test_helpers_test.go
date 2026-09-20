@@ -69,6 +69,9 @@ type testExportAdapter struct {
 	ledger           []LedgerEntryExport
 	welfare          []WelfareExport
 	thursday         []ThursdayExport
+	activity         ActivityExport
+	rankings         RankingExport
+	penalties        []PenaltyExport
 	donations        []DonationExport
 	charity          CharityExport
 	fishing          FishingExport
@@ -83,7 +86,7 @@ type testExportAdapter struct {
 func (adapter *testExportAdapter) record(name string, tx *sql.Tx) error {
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
-	if name == "identity" {
+	if name == "fishing" {
 		adapter.tx = tx
 	} else if adapter.tx == nil {
 		adapter.tx = tx
@@ -117,7 +120,17 @@ func (adapter *testExportAdapter) ExportLedger(_ context.Context, tx *sql.Tx, _ 
 
 func (adapter *testExportAdapter) ExportActivities(_ context.Context, tx *sql.Tx, _ ExportRequest) (ActivityExport, error) {
 	err := adapter.record("activities", tx)
-	return ActivityExport{WelfareClaims: adapter.welfare, Thursday: adapter.thursday}, err
+	value := adapter.activity
+	value.WelfareClaims, value.Thursday = adapter.welfare, adapter.thursday
+	return value, err
+}
+
+func (adapter *testExportAdapter) ExportRankings(_ context.Context, tx *sql.Tx, _ ExportRequest) (RankingExport, error) {
+	return adapter.rankings, adapter.record("rankings", tx)
+}
+
+func (adapter *testExportAdapter) ExportPenalties(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]PenaltyExport, error) {
+	return adapter.penalties, adapter.record("penalties", tx)
 }
 
 func (adapter *testExportAdapter) ExportDonations(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]DonationExport, error) {
@@ -341,6 +354,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"},
 			Blackjack:  testDuelExport{owner: exports, name: "blackjack"},
 			Randomness: testDuelExport{owner: exports, name: "randomness"},
+			Rankings:   exports, Penalties: exports,
 		},
 		Delete: DeleteAdapters{
 			AuthSessionCallerKey: noopDelete("auth"), Resources: noopDelete("resources"), ClaimLog: noopDelete("claim_log"),

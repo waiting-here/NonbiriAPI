@@ -25,6 +25,8 @@ func TestNewRequiresEveryClosedAdapterFamily(t *testing.T) {
 		{"retirement", func(config *Config) { config.Retirement = nil }},
 		{"ledger", func(config *Config) { config.Ledger = nil }},
 		{"export", func(config *Config) { config.Export.RPS = nil }},
+		{"ranking export", func(config *Config) { config.Export.Rankings = nil }},
+		{"penalty export", func(config *Config) { config.Export.Penalties = nil }},
 		{"delete", func(config *Config) { config.Delete.Reports = nil }},
 		{"recovery", func(config *Config) { config.Recovery.Claims = nil }},
 		{"retention", func(config *Config) { config.Retention.RequestLogs = nil }},
@@ -52,7 +54,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	wantOrder := []string{"identity", "resources", "issues", "ledger", "activities", "donations", "charity", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "randomness"}
+	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "blackjack", "randomness", "identity", "resources", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties"}
 	if !reflect.DeepEqual(fixture.exports.calls, wantOrder) {
 		t.Fatalf("export order = %v, want %v", fixture.exports.calls, wantOrder)
 	}
@@ -63,12 +65,13 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err := json.Unmarshal(body, &document); err != nil {
 		t.Fatalf("decode export: %v", err)
 	}
-	if document.SchemaVersion != 8 || document.GeneratedAt != 100 {
+	if document.SchemaVersion != 9 || document.GeneratedAt != 100 {
 		t.Fatalf("export header = version %d at %d", document.SchemaVersion, document.GeneratedAt)
 	}
 	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.Issues == nil ||
 		document.CreditLedger == nil || document.WelfareClaims == nil || document.Thursday == nil || document.Donations == nil ||
-		document.Fishing.Pending == nil || document.Fishing.Terminal == nil || document.LinkLink.Summaries == nil || document.RPS.Summaries == nil {
+		document.Fishing.Pending == nil || document.Fishing.Terminal == nil || document.LinkLink.Summaries == nil || document.RPS.Summaries == nil ||
+		document.GameOnboardingHolds == nil || document.Loans == nil || document.Penalties == nil || document.GameRankings.Totals == nil || document.GameRankings.Events == nil {
 		t.Fatal("an empty export collection encoded as null")
 	}
 	for index, finalizer := range finalizers {
@@ -143,6 +146,38 @@ func TestExportAbortsEveryPreparedFinalizerWhenLaterDomainFails(t *testing.T) {
 		if finalizer.commits != 0 || finalizer.aborts != 1 {
 			t.Fatalf("failed export finalizer %d commits=%d aborts=%d", index, finalizer.commits, finalizer.aborts)
 		}
+	}
+}
+
+func TestPersonalExportCollectionsFailRatherThanTruncate(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		seed func(*testExportAdapter, int)
+	}{
+		{"holds", func(a *testExportAdapter, n int) { a.activity.GameOnboardingHolds = make([]OnboardingHoldExport, n) }},
+		{"loans", func(a *testExportAdapter, n int) { a.activity.Loans = make([]LoanExport, n) }},
+		{"ranking totals", func(a *testExportAdapter, n int) { a.rankings.Totals = make([]RankingTotalExport, n) }},
+		{"ranking events", func(a *testExportAdapter, n int) { a.rankings.Events = make([]RankingEventExport, n) }},
+		{"penalties", func(a *testExportAdapter, n int) { a.penalties = make([]PenaltyExport, n) }},
+		{"combined penalty actions", func(a *testExportAdapter, n int) {
+			a.penalties = []PenaltyExport{{Actions: make([]PenaltyActionExport, n/2)}, {Actions: make([]PenaltyActionExport, n-n/2)}}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newLifecycleTestFixture(t, 100)
+			coordinator := mustNewLifecycleCoordinator(t, fixture.config)
+			tc.seed(fixture.exports, CollectionLimit)
+			if _, err := coordinator.Export(context.Background(), 7, 100); err != nil {
+				t.Fatalf("exact limit: %v", err)
+			}
+			finalizer := &testFinalizer{}
+			fixture.exports.linkFinalizer = finalizer
+			tc.seed(fixture.exports, CollectionLimit+1)
+			body, err := coordinator.Export(context.Background(), 7, 100)
+			if !errors.Is(err, ErrTooLarge) || body != nil || finalizer.commits != 0 || finalizer.aborts != 1 {
+				t.Fatalf("oversize result: bytes=%d error=%v commits=%d aborts=%d", len(body), err, finalizer.commits, finalizer.aborts)
+			}
+		})
 	}
 }
 

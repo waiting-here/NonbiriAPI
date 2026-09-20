@@ -1,6 +1,6 @@
-# NonbiriAPI HTTP API Contract (`v1.0.0-rc.1`)
+# NonbiriAPI HTTP API Contract (`v1.0.0-rc.2`)
 
-- Status: **v1.0.0-rc.1 source prerelease contract**.
+- Status: **v1.0.0-rc.2 source prerelease contract**.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
 
@@ -79,9 +79,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Fresh creation requires the main/WAL/SHM set to be absent. Fifteen exact predecessor manifests, from early Generation 2 through complete beta.4 and the preceding release-candidate schema, receive an atomic upgrade to 117 tables. Missing predecessor extensions and the duel schema are applied before the complete manifest, foreign keys, both asset ledgers and reward capacity are validated. Unknown or partial structures are rejected before source writes; a second startup adds nothing. Existing identities, both wallets, settled charges, game rules, configuration and custom legal text remain intact. Game wallets are initialized to zero only when upgrading a source that did not have them. Existing Fishing, LinkLink and RPS games retain their saved version-1 or version-2 rules. The three new games use independent rules version 1 and start disabled. No historical payment source or newcomer completion is invented. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. Alpha/Generation 1 and arbitrary schema repair remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. The validated release upgrade is formal rc.1 → rc.2. Exact supported predecessor manifests are recognized and extended atomically; unknown or partial structures are rejected before source writes. Existing identities, wallets, settled charges, saved game catalogs, configuration and legal overrides remain intact. Loans default to disabled and quick stakes respect existing limits. Charity achievement metadata comes from the original ledger; a fixed game-statistics start is written once. Recovery does not fabricate old rewards, penalties or contributions. Older binaries reject the new manifest; rollback requires the matching complete stopped snapshot. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
 
-Account export `schema_version=8` is independent of SQLite `user_version`.
+Account export `schema_version=9` is independent of SQLite `user_version`.
 
 ## 2. OpenAI-compatible ingress
 
@@ -187,7 +187,7 @@ Request-log and Debug `route_kind` values are `openai_chat_completions`, `charit
 | `GET /api/auth/discord/start` | Anonymous; optional server-issued return route; 302 to Discord after IP admission. |
 | `GET /api/auth/discord/callback` | OAuth `code,state`; atomically signs in or creates an allowed account, then redirects to the bound route. A forbidden account instead receives a no-store redirect to `/access-denied`, without a new session; ordinary API authorization failures remain JSON 403 responses. |
 | `GET /api/session`, `GET /api/me` | Current `UserEnvelope`; the shapes are identical. |
-| `PATCH /api/me` | `{lang?,game_profile_public?}` with at least one field; returns `UserEnvelope`. |
+| `PATCH /api/me` | `{lang?,game_profile_public?,charity_profile_public?}` with at least one field; returns `UserEnvelope`. |
 | `POST /api/auth/logout` | Clears the user session; 204. Available during maintenance. |
 | `POST /api/auth/elevate` | Starts the bound two-step elevation flow. |
 | `GET /api/me/usage` | Four-bucket and request usage summary. |
@@ -198,24 +198,24 @@ Request-log and Debug `route_kind` values are `openai_chat_completions`, `charit
 | `GET /api/logs/{id}` | Legacy `attempt_cursor,attempt_limit` or numbered `attempt_page,attempt_page_size`; numbered detail returns `attempt_pagination`. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
 | `GET /api/issues` | Required `state=current|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; returns the owner's bounded issue page and numbered `pagination`. |
-| `POST /api/account/export` | Fresh elevation; bounded schema-v8 JSON attachment. |
+| `POST /api/account/export` | Fresh elevation; bounded schema-v9 JSON attachment. |
 | `POST /api/account/delete` | Fresh elevation and confirmation; synchronous coordinated deletion; 204. |
 
 `balance` always means general credits; `game_balance` is the separate signed game-credit wallet. Both use exact decimal strings. New accounts start both at zero. API calls, donations and Thursday use general credits. Administrators can adjust either wallet, including below zero; cumulative donation credit remains nonnegative and is a separate lifetime statistic.
 
-`UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state, and game-public preference. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
+`UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state and independent game/charity public preferences. `automatic_restrictions` is an array of safe `{kind,reason_code,reason,started_at,ends_at}` summaries, without thresholds, counters or evidence. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
 
 ### 3.1 Endpoints and keys
 
 | Method and path | Request / response |
 | --- | --- |
 | `GET /api/endpoint-create-options` | `{base_connector_types,mainstream_channels}`; channels are active and enabled. |
-| `GET /api/endpoints` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q` and returns `Endpoint` with `pagination`. |
+| `GET /api/endpoints` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q,connector_type,source,state` and returns `Endpoint` with `pagination`. |
 | `POST /api/endpoints` | Strict union `{source:"mainstream",channel_id,note,enabled}` or `{source:"custom",connector_type,base_url,note,enabled}`; returns 201. |
 | `GET /api/endpoints/{id}` | One owner endpoint. |
 | `PATCH /api/endpoints/{id}` | `{note?,enabled?,expected_revision}`; origin and Connector are immutable. |
 | `DELETE /api/endpoints/{id}` | `{expected_revision}`; 204. Report locks return `resource_locked`. |
-| `GET /api/endpoints/{id}/keys` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q` and returns safe `EndpointKey` with `pagination`. |
+| `GET /api/endpoints/{id}/keys` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q,enabled,donated,suspension_state` and returns safe `EndpointKey` with `pagination`. |
 | `POST /api/endpoints/{id}/keys` | `{secret,note,enabled,force_store_false,ownership_confirmed:true,max_concurrency?,max_rpm?}`; returns 201 safe metadata. |
 | `PATCH /api/endpoints/{id}/keys/{keyId}` | `{note?,enabled?,force_store_false?,max_concurrency?,max_rpm?,expected_revision}`. |
 | `DELETE /api/endpoints/{id}/keys/{keyId}` | `{expected_revision}`; claim-first deletion; 204. |
@@ -246,7 +246,7 @@ Administrator and level-5 steward donation-key projections include read-only `ma
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /api/models` | Legacy `cursor,limit` or numbered `page,page_size`; numbered response includes `pagination` and the owner models. |
+| `GET /api/models` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode accepts `q,provider,route_strategy,connection_state`; response includes `pagination` and the owner models. |
 | `POST /api/models` | Provider/model, strategy, retry and flatten policy; returns 201 model. |
 | `GET /api/models/{id}` | One owner model. |
 | `PATCH /api/models/{id}` | Partial business fields plus `expected_revision`. |
@@ -258,6 +258,8 @@ Administrator and level-5 steward donation-key projections include read-only `ma
 | `DELETE /api/models/{id}/bindings/{bId}` | Expected binding revision; returns the complete new binding set. |
 
 Provider/model parts are bounded opaque strings and form the external `provider/model` name. `[公益]` is reserved. Binding DTOs contain only owner-safe endpoint/key display data, Connector type, upstream model ID, and order.
+
+Numbered resource filters combine with AND, and counts and rows use the same bounded read snapshot. Endpoint `q` searches the base URL, note and mainstream channel name; `source=mainstream|custom`, `state=available|endpoint_disabled|no_keys|no_usable_key`, and a registered `connector_type` are optional. Key `q` searches only displayed fragments and notes; `enabled` and `donated` accept `true|false`, while `suspension_state=none|security_processing` is independent of donation membership. Model `q` searches the full model name and every binding's upstream ID without duplicate rows; `provider` is exact, `route_strategy=ordered|random`, and `connection_state=available|unavailable|unconfigured`. Empty optional choices, unknown/repeated filters and unsupported combinations are rejected. Omit a filter to clear it. Sizes remain 10/20/50/100, default 20, with out-of-range pages clamped. Legacy cursor behavior remains unchanged and does not acquire these new filters.
 
 ### 3.3 Credit history
 
@@ -281,6 +283,8 @@ Pass the returned nullable `anchor` operation ID to subsequent pages to keep new
 | `POST /api/donations/{id}/withdraw` | Pending `{expected_revision}`. |
 | `POST /api/donations/{id}/terminate` | Approved `{expected_revision,confirmation}`. |
 | `GET /api/charity/models` | Without query parameters: `{state,models,donation_intake,server_now}`. Use `view=catalog` for the paginated web directory described below. |
+
+Creation and pending edits require a non-whitespace donor description, with the existing 1,024-code-point / 4,096-byte limit and LF normalization. Historical blank descriptions remain readable, reviewable and usable; review notes may still be empty.
 
 Each donation key has immutable `authorized_expires_at` and an effective `expires_at`, equal at creation. A reviewer may shorten the effective expiry or restore it only up to the donor's authorization; an unlimited effective value is permitted only when the authorization is unlimited. One key expiring removes only that key's membership and bindings and blocks new claims. The donation becomes expired only when its last live key ends. Accepted claims and reservations complete normally.
 
@@ -354,9 +358,9 @@ Announcement bodies use a fixed Markdown subset: paragraphs, headings h2–h4, e
 
 ### 5.2 Shared game payments and newcomer awards
 
-New game entries spend positive game credits first, then positive general credits. A negative wallet does not reduce the other wallet's available funds. `payment:{general,game}` contains canonical credit strings. Releases of an unused entry return each part to its original wallet. Game payouts and the nine once-only newcomer awards use general credits. LinkLink has no ordinary monetary payout.
+New game entries spend positive game credits first, then positive general credits. A negative wallet does not reduce the other wallet's available funds. `payment:{general,game}` contains canonical credit strings. Releases of an unused entry return each part to its original wallet. Game payouts and the 22 once-only newcomer awards use general credits. LinkLink has no ordinary monetary payout.
 
-`GET /api/games` returns six game configurations and `onboarding`. Only Fishing, LinkLink and RPS have three tasks each; Bidding Duel, Turn-based Battle Minigame (Test) and Blackjack return empty, completed onboarding groups and award no newcomer credits. Completing each RPS mode, each LinkLink size, and Fishing with each bait qualifies once; a ten-catch batch qualifies only its bait once. All accounts qualify through new normal play. RPS automatic choices on timeout count as normal completion; LinkLink requires a cleared board but no minimum speed. Abandonment, cancellation, deletion and abnormal termination do not qualify. The nine rewards total 17,000 general credits. Completion, payment and reward commit together; acknowledgement, restart and replay do not repeat an award. Each game's card disappears once its three tasks are complete. The turn-based battle tutorial is separate browser-local practice and never changes these server-side completion groups.
+`GET /api/games` returns six game configurations and `onboarding`. Fishing, LinkLink and RPS retain their nine once-only tasks and 17,000 general-credit awards. Bidding adds `complete_tier_1:1000`, `complete_tier_2:2000`, `complete_tier_3:5000`, `first_win:2000`. Likes adds `quick_complete:1000`, `quick_win:2000`, `standard_complete:5000`, `standard_win:10000`. Blackjack adds `complete:1000`, `first_win:2000`, `first_bust:3000`, `first_21:4000`, `first_natural_21:5000`. There are 22 tasks totalling 60,000 credits. Completion, financial settlement, all qualifying awards and ranking contributions commit together; simultaneous completion/win or natural-21 qualifications stack. Bidding/Likes surrender disqualifies the surrendering player's completion; the other player can qualify normally. Blackjack completion includes pushes or all busts, and first win is per hand; split 21 is not natural. System cancellation, restart cancellation and local teaching never award credits. No historical finished matches are scanned. All accounts can qualify through normal play after upgrade, and completed tasks survive game-history expiry and cannot be earned again. RPS automatic timeout choices count as normal completion; LinkLink requires a cleared board. Each card disappears once all that game's tasks are complete.
 
 ### 5.3 Pond Fishing
 
@@ -468,7 +472,7 @@ The independent nine-seat module uses `/api/games/blackjack`. All responses are 
 | `GET /history` | Owner's settled games from the last 30 days. `limit` defaults to 20, maximum 50; optional signed `cursor`. `{items,next_cursor}`. |
 | `GET /history/{id}` | Own `{summary,table}` including payment composition and public final facts; ownership checked. |
 
-The table rotates on server minutes: 15 seconds of seating, 30 of decisions and 15 of results. Early completion retains the original next-minute boundary. Waiting positions survive rounds and restarts; completed participants must explicitly rejoin. One accepted action per seat per second uses the requesting hand's revision. Additions reserve before the batch applies, and insufficient funds leave the hand unchanged. Other seats never cause a hand-version conflict. The public projection never includes the shoe, dealer hole card before reveal, pending intents, participant identities or another user's funding sources.
+The table starts at each server :00 and :30: 5 seconds of seating, 20 of decisions and 5 of results. Early completion extends the display to the original next-round boundary. Waiting positions survive rounds and restarts; completed participants must explicitly rejoin. One accepted action per seat per second uses the requesting hand's revision. Additions reserve before the batch applies, and insufficient funds leave the hand unchanged. Other seats never cause a hand-version conflict. The public projection never includes the shoe, dealer hole card before reveal, pending intents, participant identities or another user's funding sources.
 
 Owner `payment` is `{general,game}` for all reserved additions. Public hand settlement amounts are decimal integer **milli-credit** strings: `stake_milli,gross_milli,platform_milli,welfare_milli,thursday_milli,net_milli`, plus `outcome`. Each hand is independently rounded and then summed; all normal net returns, including pushes and principal, are general credits. Cancelled tables include public per-seat total `refunds` without funding sources. See [full bilingual rules](blackjack.md).
 
@@ -478,7 +482,29 @@ Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` a
 
 `POST /admin/api/games/blackjack/history/export` accepts `{dataset,cursor?}` and returns `{format:"blackjack-history/v1",dataset,items,next_cursor}` in bounded batches of at most 10 records. Clients may save each successful batch as NDJSON and resume only from its returned cursor. Signed cursors expire after one hour and bind the account/session, dataset, limit, endpoint kind, high-water mark and page position. Exporting or reading history does not pause play.
 
-Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export v8 adds `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export v9 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+
+### 5.9 Loans and leaderboards
+
+Loans are an optional activity, disabled by default. `GET /api/activities` adds `loan:{enabled,available,reason,tiers}`; reasons are `disabled|ineligible|negative_balance|available`. Closed activities retain readable history.
+
+| Method and path | Request / response |
+| --- | --- |
+| `POST /api/activities/loan/quote` | Strict `{tier:"1"|"2"|"3"}`; no financial write. |
+| `POST /api/activities/loan` | Strict `{quote_token}` and `Idempotency-Key`; 201 immutable receipt. |
+| `GET /api/activities/loans` | Owner history, `page,page_size`, default 1/20; sizes 10/20/50/100. |
+| `GET /admin/api/users/{id}/loans`, `GET /api/steward/users/{id}/loans` | Authorized read-only history with the same receipt fields. |
+| `GET /api/charity/leaderboard` | Cumulative positive donation credit, `page`, fixed 20 rows. |
+| `GET /api/games/leaderboards/charity` | Rolling seven-day net game spending, no query fields. |
+| `GET /api/games/bidding/leaderboard`, `GET /api/games/blackjack/leaderboard` | `window=7d|30d|history`, default 7d. |
+
+A quote includes `principal,a,b,nominal,disbursed,fee,repayment,interest,general_before,general_after,game_before,game_after,quote_token,expires_at,config_revision,as_of`. All coefficients and amounts are canonical strings. A receipt replaces quote expiry/token with `loan_id,operation_id,sequence,created_at`, retaining the terms, configuration revision and actual before/after balances. History is ordered by creation time and sequence descending. Bodies are limited to 4 KiB and tokens to 2,048 bytes.
+
+Quotes are owner-bound and expire after 60 seconds. Expiry or changed configuration returns 409 and requires a fresh quote and confirmation. Balance estimates may change before acceptance; the final transaction checks the current general balance is at least zero, then credits game funds and immediately debits general repayment, which may make that wallet negative. Default borrowing of 10,000 adds 9,000 game credits and subtracts 13,000 general credits, including a 1,000 game fee and 3,000 general interest. A general balance of zero can borrow once. Game funds remain usable when general funds are negative. The same key and body replay the receipt; a different key cannot reuse the quote nonce. Loans do not change donation credit, activity pools or game rankings.
+
+Boards return `as_of,statistics_start,window,rows,me`, plus `pagination` for charity. Rows contain `rank,amount,is_me,identity`; identity is `{kind:"anonymous"}` or `{kind:"public",display_name,avatar_url}`. Charity paginates all positive totals. The three game boards return the top 20 and a separate `me` only for an eligible caller below them. Charity visibility uses `charity_profile_public`, default false and independent of game visibility. A currently banned user remains ranked anonymously with no avatar; administrators are excluded.
+
+Game charity sums actual spending minus all net returns across six games, combining both currencies 1:1; losses and wins offset. Bidding counts positive pre-fee profit per match, while Blackjack sums positive pre-fee profit per hand. Principal, loans and newcomer awards are excluded. New statistics begin at the fixed installation/upgrade time without reconstructing prior finished games. Rolling windows are `(as_of-duration,as_of]`; expired contributions are advanced before returning a consistent result. Incomplete bounded catch-up returns retryable 503. Higher positive amounts rank first, then earlier achievement of that current amount; returning from 200 to 100 establishes a new achievement time.
 
 ## 6. Debug and level-5 steward surfaces
 
@@ -510,6 +536,12 @@ The browser routes below require a currently effective L5 user session on the us
 | Failure reset | Shared batch and selection routes in §4.2 |
 
 Stewards can review and manage charity settings across donations. They can enable but cannot disable maintenance. They have no report, legal-hold, account-export or account-deletion route and cannot change cumulative donation credit or grant level 5. Known-ID donation and request-log details under an active legal hold are available to both management roles, with a separate steward read audit. Shared management does not widen an account's owner export.
+
+Both management prefixes (`/admin/api` and `/api/steward`) expose read-only `GET {prefix}/donations/{id}/keys/{keyId}/models` and `GET {prefix}/donations/{id}/keys/{keyId}/models/{modelId}/bindings`. These require the appropriate current browser session, accept numbered `page,page_size` only (default 1/20), and recheck role and donation/key parentage in the read transaction. Model rows are `{model_id,full_name,enabled,binding_count,available_binding_count}`, deduplicated across upstream bindings. Expanded bindings are `{binding_id,upstream_model_id,ord,state}`. Every still-associated binding is included, with state precedence `ended|expired|pending|feature_disabled|model_disabled|disabled|suspended|available|unavailable`. They return no secrets or private owner metadata and grant no mutation or CallerKey access.
+
+Penalty history uses `GET {prefix}/users/{id}/penalties`, `GET {prefix}/users/{id}/penalties/{caseId}`, and `GET {prefix}/users/{id}/penalties/{caseId}/actions/{actionId}/evidence`. Lists accept `page,page_size,type=deduction|ban|charity_suspend,state=active|ended`; detail/evidence accept pagination only. They share existing administrator/steward target-user read permissions and recheck authority in the read snapshot. The list is `{data,pagination,legacy_details_unavailable}`; detail is `{case,actions:{data,pagination}}`. Cases contain `id,kind,reason_code,started_at,ends_at,ended_at,state,result`. Actions add safe request/operation links, actor ID, previous/current end times and an evidence count. Evidence is `{rules,statistics,members:{data,pagination}}`, whose members contain only violation kind, time, request link, numeric content count and link availability. No request body or credential is stored here. Ordinary user summaries and account export exclude these rule/statistical/evidence projections. Earlier restrictions keep their original reason without invented case evidence.
+
+Authenticated pre-handler rejections create one bounded request log with `phase=pre_handler`, `rejection_stage,rejection_reason,request_method,request_path`, zero attempts, usage and call fee. Ordinary handled requests use `phase=handler`; log lists and exports accept that exact phase filter. Independent penalty ledger entries are not call fees. Applicable violation windows survive restart, retain already-executed action state and expire by their configured logical window. Active cases remain until ended; ended cases and deduction records remain 90 days. Request links stop working at the ordinary 30-day boundary. Account deletion clears user cases, durable windows and cached state.
 
 Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}/donations/badge`, with no query or body. The no-store response is `{pending_count,server_now}` with an exact decimal-string count. Only logically active donations with pending handling count; expiration is reflected even before cleanup runs.
 
@@ -708,7 +740,9 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-Export v8 adds `blackjack` and `randomness` to the complete v7 shape, retaining `bidding` and `likes`. Blackjack includes the owner-safe queue, payment composition, current table and recent history; active hidden cards and other participants' identities or funding are excluded. The ordinary game fields do not list a complete shoe or unused Bidding reward decks. Their owner-safe in-flight and retained round/result data omit opponent identities, profile snapshots and unrevealed equipment. The combined rows of each new-game collection are capped at 10,000. `randomness` is a separately bounded array of owner-accessible proofs: active items contain only `algorithm,game,resource_id,rules,commitment`; terminal items also contain `seed` and optional `streams`, allowing reconstruction of that game's full shuffled decks, including unused cards. It never includes spectator-only games or proofs past their 30-day terminal access period. Export v8 contains the user's safe identity/profile, effective level, endpoints and key metadata, endpoint origins, discovery evidence, catalogs, personal models/bindings, CallerKey metadata/generation, issues, both wallets and asset-tagged private ledger entries, independent check-in records, lifetime game-newcomer completion records, welfare/Thursday participation, donation and per-key status/limits/usage/authorized-effective expiry/safe source, charity-consumer summary, and the documented game state and retained results. It includes `schema_version:8` and the generation time. `checkins` entries contain `asset_type,site_day,award,created_at`; `game_onboarding` contains `game_key,task_key,award,completed_at`. Welfare records retain their original asset. Temporary reward-capacity holds and internal account IDs are excluded. Each donated key adds `recurring_limits`, containing the current safe RuleView values from that same export snapshot; it excludes internal receipts, buckets and claim identities. Fishing exports preserve the original species and economic size alongside nullable Easter-egg lengths in outcomes; `best` includes its Easter-egg length when recorded, and `rolling_best` contains only the requester's current recent-length row or `null`. Private RPS result and own-seat exports include nullable `own_buy_in` and `own_cash_out`; unrecorded values remain `null`.
+Export v9 retains all previous safe account, resource, wallet, activity, donation and game fields, adding `game_onboarding_holds`, `loans`, `game_rankings` and `penalties`. The attachment is `nonbiriapi-account-export-v9.json`, with `schema_version:9` and `generated_at`. `user` adds `charity_profile_public` and nullable `donation_credit_achieved_at`, without internal tie sequence. `game_onboarding` includes `game_key,task_key,award,completed_at,operation_id`; pending qualifications contain only `id,game_key,task_key,created_at`, never internal capacity or parent/account IDs. Loan exports contain `loan_id,operation_id,created_at`, the terms and actual balances listed in §5.9, excluding quote tokens, nonces, internal sequence and configuration revision. `game_rankings` contains `statistics_start,totals,events`: totals contain `board,window,amount,achieved_at`; events contain `game,settled_at,loss,positive_profit` with expired amounts null. Charity contributions expire at seven days and profit events at 30 days; historical totals remain until account deletion. `penalties` contains safe reason codes, actual/expected times, state/result and actions, with owner request/operation links where available; it excludes rules, thresholds, counted members and management evidence. Active cases persist; ended cases and direct deductions expire after 90 days, while request links expire after 30 days. Every collection, and the combined actions across penalty cases, is capped at 10,000; the complete JSON is capped at 16 MiB. Exceeding either fails without truncation. Bounded ranking catch-up can return retryable 503. Game settlement and safe projections share one transaction, so exported balances and qualifications agree.
+
+Blackjack contains the owner's safe current queue, payment composition and retained history; opposing identities, funding, hidden cards and equipment are excluded. `randomness` contains only owner-accessible proofs: active items disclose commitments, terminal proofs disclose seeds and bounded streams for independent verification, including reconstructed unused deck order. Proofs do not extend the parent's 30-day access. Endpoint/key metadata, safe origins, current recurring limits, check-ins and original game payment/rule fields retain their established projections. No raw keys, ciphertext, authentication tokens, Debug bodies or internal scheduling/audit data are exported.
 
 Secrets, ciphertext, fingerprints, request/response bodies, report data, IP material, other identities, complete pool ledgers, announcement copies, anti-collusion values, workers/checkpoints/replay internals, management notes, channel category/revision, internal source IDs, and administrator/steward audit material are excluded. If the result exceeds 16 MiB or any collection exceeds 10,000 rows, export fails atomically with 413; it is never silently truncated.
 

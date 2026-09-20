@@ -120,9 +120,7 @@ function renderDebugHook() {
 }
 
 function requestSequence(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
-  return fetchMock.mock.calls.map(
-    ([input, init]) => `${init?.method ?? 'GET'} ${String(input)}`,
-  );
+  return fetchMock.mock.calls.map(([input, init]) => `${init?.method ?? 'GET'} ${String(input)}`);
 }
 
 beforeEach(() => {
@@ -295,7 +293,9 @@ describe('useDebugV2 authority and observer boundaries', () => {
         const path = String(input);
         const method = init?.method ?? 'GET';
         if (path === '/api/debug/session' && method === 'GET') {
-          return authorityFailure === null ? jsonResponse(SESSION) : errorResponse(authorityFailure);
+          return authorityFailure === null
+            ? jsonResponse(SESSION)
+            : errorResponse(authorityFailure);
         }
         throw new Error(`Unexpected request: ${method} ${path}`);
       });
@@ -318,7 +318,10 @@ describe('useDebugV2 authority and observer boundaries', () => {
       expect(rendered.result.current.observer).toBe('disconnected');
       expect(rendered.result.current.streamError).toBeNull();
       expect(window.localStorage).toHaveLength(0);
-      expect(window.sessionStorage).toHaveLength(0);
+      expect(Object.keys(window.sessionStorage)).toEqual(['nonbiri:resource-navigation-epoch:v1']);
+      expect(window.sessionStorage.getItem('nonbiri:resource-navigation-epoch:v1')).toMatch(
+        /^\d+$/,
+      );
     },
   );
 });

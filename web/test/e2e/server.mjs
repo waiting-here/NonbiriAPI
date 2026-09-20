@@ -299,11 +299,20 @@ async function serveStation(request, response, station) {
   }
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (isAPIPath(url.pathname)) {
+    if (request.method === 'GET' && url.pathname === '/api/endpoint-create-options') {
+      send(response, 200, 'application/json', JSON.stringify({
+        base_connector_types: ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'],
+        mainstream_channels: [],
+      }));
+      return;
+    }
     // Layout fixtures can omit ranking rows; ranking tests supply their own
     // ordered records, windows and privacy cases.
     if (
       request.method === 'GET' &&
-      /^\/api\/games\/(bidding|blackjack)\/leaderboard$/.test(url.pathname)
+      (/^\/api\/games\/(bidding|blackjack)\/leaderboard$/.test(url.pathname) ||
+        url.pathname === '/api/games/leaderboards/charity' ||
+        url.pathname === '/api/charity/leaderboard')
     ) {
       send(
         response,
@@ -312,9 +321,17 @@ async function serveStation(request, response, station) {
         JSON.stringify({
           as_of: 1800000000,
           statistics_start: 1800000000,
-          window: url.searchParams.get('window') ?? '7d',
+          window:
+            url.pathname === '/api/charity/leaderboard'
+              ? 'history'
+              : (url.searchParams.get('window') ?? '7d'),
           rows: [],
           me: null,
+          ...(url.pathname === '/api/charity/leaderboard'
+            ? {
+                pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+              }
+            : {}),
         }),
       );
       return;

@@ -1128,7 +1128,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		claimService, resourceRepository, issueService, logRepository,
 		activityService, activityRepository, donationService, charityService,
 		reportRepository, announcementRepository, maintenanceService,
-		activityEvents, debugHub,
+		activityEvents, debugHub, gameNow,
 	)
 	if err != nil {
 		cleanup()
