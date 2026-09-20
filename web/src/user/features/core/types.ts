@@ -1,3 +1,5 @@
+import type { AutomaticRestriction } from '@shared/operations/restrictions';
+
 export const CONNECTOR_TYPES = [
   'openai-compatible',
   'anthropic-compatible',
@@ -51,6 +53,8 @@ export interface UserProfile {
   effective_level: 1 | 2 | 3 | 4 | 5;
   level_display_name: string;
   game_profile_public: boolean;
+  charity_profile_public: boolean;
+  automatic_restrictions: AutomaticRestriction[];
   created_at: number;
   updated_at: number;
   usage: UsageSummary;

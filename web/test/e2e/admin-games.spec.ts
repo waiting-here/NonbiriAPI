@@ -19,7 +19,7 @@ type Route = Parameters<RouteHandler>[0];
 const EPHEMERAL_MARKER = 'admin-games-ephemeral-marker';
 
 const INITIAL_CONFIG: GamesConfig = {
-  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 } },
+  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 }, quick_stakes: ['1000', '5000', '10000', '50000'] },
   bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,

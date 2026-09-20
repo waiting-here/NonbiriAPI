@@ -40,6 +40,7 @@ type LifecycleIdentity struct {
 	EffectiveLevel            int
 	LevelDisplayName          string
 	GameProfilePublic         bool
+	CharityProfilePublic      bool
 	CreatedAt                 int64
 	UpdatedAt                 int64
 }
@@ -95,7 +96,7 @@ func (r *Runtime) ExportLifecycleIdentity(
 		EffectiveConcurrencyLimit: user.EffectiveConcurrencyLimit,
 		GameBalance:               user.GameBalance, Balance: user.Balance, DonationCredit: user.DonationCredit,
 		EffectiveLevel: user.EffectiveLevel, LevelDisplayName: user.LevelDisplayName,
-		GameProfilePublic: user.GameProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+		GameProfilePublic: user.GameProfilePublic, CharityProfilePublic: user.CharityProfilePublic, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 	}
 	usage := LifecycleUsage{
 		TotalRequests:              user.Usage.TotalRequests,

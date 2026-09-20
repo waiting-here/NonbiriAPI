@@ -75,7 +75,7 @@ describe('user operations contracts', () => {
       lang: 'en', is_banned: false, banned_until: null, charity_suspended_until: null,
       endpoint_limit: null, effective_endpoint_limit: '5', rpm_limit: null, effective_rpm_limit: '60',
       concurrency_limit: null, effective_concurrency_limit: '2', balance: '1.5', game_balance: '-0.001', donation_credit: '0',
-      effective_level: 1, level_display_name: 'Lv1', game_profile_public: false, created_at: 1, updated_at: 1,
+      effective_level: 1, level_display_name: 'Lv1', game_profile_public: false, charity_profile_public: false, automatic_restrictions: [], created_at: 1, updated_at: 1,
       usage: {
         total_requests: '0', total_uncached_input_tokens: '0', total_cache_write_input_tokens: '0',
         total_cache_read_input_tokens: '0', total_output_tokens: '0', total_prompt_tokens: '0',

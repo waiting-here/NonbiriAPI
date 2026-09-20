@@ -47,5 +47,5 @@ func TestGameRandomnessSchemaExtension(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	assertRetainedManifest(t, database, PinnedGenerationTwoManifestHash)
+	assertRetainedManifest(t, database, preProgressionManifestHash)
 }

@@ -4,8 +4,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 go_command=${GO:-go}
 python_command=${PYTHON:-python3}
-released_commit=7ed0822c8ae7191421645c638a322a2411b1c8a9
-test "$(git rev-parse 'v1.0.0-beta.4^{commit}')" = "$released_commit"
+released_commit=bd6198ceccb59dc8b8e0143831a94e94340235d1
+test "$(git rev-parse 'v1.0.0-rc.1^{commit}')" = "$released_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
 cleanup() {
@@ -25,7 +25,7 @@ root, temporary = map(pathlib.Path, sys.argv[1:])
 legacy = temporary / "released"
 source = (root / "internal/db/testdata/released_gameplay_fixture_test.go.txt").read_text(encoding="utf-8")
 source = source.replace("gameWireFixture", "releasedGameWireFixture").replace("newGameWireFixture", "newReleasedGameWireFixture")
-source = source.replace("f94972e6544ee5020c6a16451d4213c0cdef61b51814b6216ba9291e3db9734c", "346a89c664c68eb4c566118c4f0b4f4ba6f3ae2f5584ede333fb6f88070e83bb")
+source = source.replace("f94972e6544ee5020c6a16451d4213c0cdef61b51814b6216ba9291e3db9734c", "5e443ca3f99ad1903ed03af718c0c6a1b93b06499740dba201006d132396bc37")
 assert source.count("charge != 5") == 1
 source = source.replace("charge != 5", "charge != 7").replace("old cap was not reproduced", "released actual charge was not preserved")
 for indent, user in [("\t", "userID"), ("\t\t", "id")]:
@@ -49,13 +49,13 @@ export NONBIRI_BILLING_FIXTURE="$temporary/data/billing.db"
     cd "$temporary/released"
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-app.test" .
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-wallet.test" ./internal/ledger
-    "$temporary/released-app.test" -test.run '^TestWriteReleased(Gameplay|Billing)Fixture$' -test.v
-    "$temporary/released-wallet.test" -test.run '^TestWriteReleasedDualWalletFixture$' -test.v
+    "$temporary/released-app.test" -test.run '^TestWriteReleased(Gameplay|Billing)Fixture$' -test.v -test.timeout 2m
+    "$temporary/released-wallet.test" -test.run '^TestWriteReleasedDualWalletFixture$' -test.v -test.timeout 2m
 )
 "$go_command" test -count=1 -v -run '^TestDuelUpgradeFromReleasedBinary$' ./internal/db
 NONBIRI_DUAL_GAMEPLAY_FIXTURE="$NONBIRI_GAMEPLAY_FIXTURE" NONBIRI_DUAL_BILLING_FIXTURE="$NONBIRI_BILLING_FIXTURE" \
     "$go_command" test -count=1 -v -run '^TestReleasedDualAsset(Gameplay|Billing)Upgrade$' .
-"$temporary/released-wallet.test" -test.run '^TestReleasedRejectsDuelUpgrade$' -test.v
+"$temporary/released-wallet.test" -test.run '^TestReleasedRejectsDuelUpgrade$' -test.v -test.timeout 2m
 printf 'Released source: %s\n' "$released_commit"
 "$go_command" version
 sha256sum "$temporary/data/"*.db

@@ -67,6 +67,8 @@ const stewardSession = {
     effective_level: 5,
     level_display_name: 'Lv5',
     game_profile_public: false,
+    charity_profile_public: false,
+    automatic_restrictions: [],
     created_at: 1,
     updated_at: 1,
     usage: {

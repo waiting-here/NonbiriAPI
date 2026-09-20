@@ -189,7 +189,7 @@ func (r *Runtime) deleteSession(ctx context.Context, rawToken string) (bool, err
 type userRow struct {
 	id                                                                   int64
 	discordID, username, avatar, guildNick, guildAvatarURL, lang         string
-	isBanned, gamePublic                                                 bool
+	isBanned, gamePublic, charityPublic                                  bool
 	bannedUntil, charityUntil                                            sql.NullInt64
 	endpointLimit, rpmLimit, concurrencyLimit                            sql.NullInt64
 	donation                                                             []byte
@@ -201,13 +201,14 @@ type userRow struct {
 
 func readUserRow(ctx context.Context, tx *sql.Tx, userID int64) (userRow, error) {
 	var u userRow
-	var banned, public int
-	err := tx.QueryRowContext(ctx, `SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,lang,created_at,updated_at FROM users WHERE id=? AND is_admin=0`, userID).Scan(&u.id, &u.discordID, &u.username, &u.avatar, &u.guildNick, &u.guildAvatarURL, &banned, &u.bannedUntil, &u.charityUntil, &u.endpointLimit, &u.rpmLimit, &u.concurrencyLimit, &public, &u.donation, &u.manualLevel, &u.autoLevel, &u.requests, &u.uncached, &u.cacheWrite, &u.cacheRead, &u.output, &u.unknown, &u.revision, &u.lang, &u.createdAt, &u.updatedAt)
+	var banned, public, charityPublic int
+	err := tx.QueryRowContext(ctx, `SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,lang,created_at,updated_at,charity_profile_public FROM users WHERE id=? AND is_admin=0`, userID).Scan(&u.id, &u.discordID, &u.username, &u.avatar, &u.guildNick, &u.guildAvatarURL, &banned, &u.bannedUntil, &u.charityUntil, &u.endpointLimit, &u.rpmLimit, &u.concurrencyLimit, &public, &u.donation, &u.manualLevel, &u.autoLevel, &u.requests, &u.uncached, &u.cacheWrite, &u.cacheRead, &u.output, &u.unknown, &u.revision, &u.lang, &u.createdAt, &u.updatedAt, &charityPublic)
 	if err != nil {
 		return userRow{}, err
 	}
 	u.isBanned = banned == 1
 	u.gamePublic = public == 1
+	u.charityPublic = charityPublic == 1
 	return u, nil
 }
 
@@ -392,7 +393,11 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 		}
 		return strconv.FormatInt(fallback, 10)
 	}
-	return UserEnvelope{User: User{ID: strconv.FormatInt(u.id, 10), Username: u.username, Avatar: stringPtr(u.avatar), AvatarURL: discordAvatarURL(u.discordID, u.avatar), GuildNick: stringPtr(u.guildNick), GuildAvatarURL: stringPtr(u.guildAvatarURL), Lang: u.lang, IsBanned: u.isBanned && (!u.bannedUntil.Valid || u.bannedUntil.Int64 > now), BannedUntil: nullableFuture(u.bannedUntil, now), CharitySuspendedUntil: nullableFuture(u.charityUntil, now), EndpointLimit: nullableDecimal(u.endpointLimit), EffectiveEndpointLimit: effectiveLimit(u.endpointLimit, endpointDefault), RPMLimit: nullableDecimal(u.rpmLimit), EffectiveRPMLimit: effectiveLimit(u.rpmLimit, rpmDefault), ConcurrencyLimit: nullableDecimal(u.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(u.concurrencyLimit, concurrencyDefault), Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()), EffectiveLevel: effective, LevelDisplayName: display, GameProfilePublic: u.gamePublic, CreatedAt: u.createdAt, UpdatedAt: u.updatedAt, Usage: UsageSummary{TotalRequests: values[0].Decimal(), TotalUncachedInputTokens: values[1].Decimal(), TotalCacheWriteInputTokens: values[2].Decimal(), TotalCacheReadInputTokens: values[3].Decimal(), TotalOutputTokens: values[4].Decimal(), TotalPromptTokens: prompt.String(), TotalCompletionTokens: values[4].Decimal(), TotalUnknownUsageRequests: values[5].Decimal()}}}, nil
+	restrictions, err := readAutomaticRestrictions(ctx, tx, u.id, now, u.lang)
+	if err != nil {
+		return UserEnvelope{}, err
+	}
+	return UserEnvelope{User: User{ID: strconv.FormatInt(u.id, 10), Username: u.username, Avatar: stringPtr(u.avatar), AvatarURL: discordAvatarURL(u.discordID, u.avatar), GuildNick: stringPtr(u.guildNick), GuildAvatarURL: stringPtr(u.guildAvatarURL), Lang: u.lang, IsBanned: u.isBanned && (!u.bannedUntil.Valid || u.bannedUntil.Int64 > now), BannedUntil: nullableFuture(u.bannedUntil, now), CharitySuspendedUntil: nullableFuture(u.charityUntil, now), EndpointLimit: nullableDecimal(u.endpointLimit), EffectiveEndpointLimit: effectiveLimit(u.endpointLimit, endpointDefault), RPMLimit: nullableDecimal(u.rpmLimit), EffectiveRPMLimit: effectiveLimit(u.rpmLimit, rpmDefault), ConcurrencyLimit: nullableDecimal(u.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(u.concurrencyLimit, concurrencyDefault), Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()), EffectiveLevel: effective, LevelDisplayName: display, GameProfilePublic: u.gamePublic, CharityProfilePublic: u.charityPublic, AutomaticRestrictions: restrictions, CreatedAt: u.createdAt, UpdatedAt: u.updatedAt, Usage: UsageSummary{TotalRequests: values[0].Decimal(), TotalUncachedInputTokens: values[1].Decimal(), TotalCacheWriteInputTokens: values[2].Decimal(), TotalCacheReadInputTokens: values[3].Decimal(), TotalOutputTokens: values[4].Decimal(), TotalPromptTokens: prompt.String(), TotalCompletionTokens: values[4].Decimal(), TotalUnknownUsageRequests: values[5].Decimal()}}}, nil
 }
 
 func (r *Runtime) readUserEnvelope(ctx context.Context, userID int64) (UserEnvelope, error) {

@@ -126,5 +126,5 @@ export function onboardingWire() {
 }
 
 export function blackjackSnapshotWire() {
-  return { enabled: false, available: true, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 }, config_hash: 'c'.repeat(64), queue_capacity: 4096, seats: 9, seating_seconds: 15, decision_seconds: 30, round_seconds: 60 };
+  return { enabled: false, available: true, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 }, quick_stakes: ['1000', '5000', '10000', '50000'], config_hash: 'c'.repeat(64), queue_capacity: 4096, seats: 9, seating_seconds: 15, decision_seconds: 30, round_seconds: 60 };
 }

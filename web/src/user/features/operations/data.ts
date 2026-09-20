@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
+import { automaticRestrictions } from '@shared/operations/restrictions';
 import { decoded, queryPath } from '@shared/operations/api';
 import {
   isPageNumber,
@@ -123,6 +124,8 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
     'effective_level',
     'level_display_name',
     'game_profile_public',
+    'charity_profile_public',
+    'automatic_restrictions',
     'created_at',
     'updated_at',
     'usage',
@@ -145,6 +148,8 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
   amount(user.donation_credit, 'donation credit', false);
   string(user.level_display_name, 'level display name', { min: 1, max: 128, bytes: 512 });
   boolean(user.game_profile_public, 'game profile visibility');
+  boolean(user.charity_profile_public, 'charity profile visibility');
+  automaticRestrictions(user.automatic_restrictions);
   unixSecond(user.created_at, 'account creation time');
   unixSecond(user.updated_at, 'account update time');
   const usage = record(user.usage, USAGE_FIELDS, 'usage summary');

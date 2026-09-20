@@ -40,6 +40,7 @@ func testResponseExtensionPreservesData(t *testing.T, wantHash string) {
 	if err := store.DB().QueryRow(`SELECT encrypted_secret FROM endpoint_key_secrets WHERE id=?`, ids[0]).Scan(&envelope); err != nil {
 		t.Fatal(err)
 	}
+	makePreProgressionFixture(t, store.DB())
 	if _, err := store.DB().Exec(`DROP TABLE dispatch_response_starts`); err != nil {
 		t.Fatal(err)
 	}

@@ -45,6 +45,7 @@ type HistoryPage struct {
 var historyCategories = map[string][]Kind{
 	"checkin":    {KindCheckinAward},
 	"onboarding": {KindGameOnboardingReward},
+	"loan":       {KindActivityLoan},
 	"welfare":    {KindWelfareClaim},
 	"thursday":   {KindThursdayContribution, KindThursdayPayout, KindThursdayFinalize},
 	"fishing":    {KindFishingReserve, KindFishingSettle, KindFishingRelease},
