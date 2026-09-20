@@ -1,3 +1,5 @@
+import { useResourceFilters, useResourceListScroll } from '../features/core/useResourceFilters';
+import { ResourceFilterBar, FilteredResourceEmpty } from '../features/core/ResourceFilterControls';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { PageHeader } from '@shared/components/States';
@@ -25,11 +27,13 @@ import '../features/core/core.css';
 function EndpointList({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
   const location = useLocation();
+  const filters = useResourceFilters('endpoints', user.id);
   const pager = useUrlPagePager({
     station: 'user',
     listType: 'endpoints',
     scopeKey: user.id,
     scopeReady: true,
+    resetKey: filters.identity,
   });
   const { page, pageSize, setPage, setPageSize } = pager;
   const endpoints = useNumberedEndpoints(
@@ -39,10 +43,12 @@ function EndpointList({ user }: { user: UserProfile }) {
       pageSize,
     },
     Boolean(user.id),
+    filters.filters,
   );
   const [creating, setCreating] = useState(false);
 
   const pageData = endpoints.data;
+  useResourceListScroll(user.id, Boolean(pageData) && !endpoints.isFetching);
   const returnTo = pageData
     ? (() => {
         const params = new URLSearchParams(location.search);
@@ -79,6 +85,7 @@ function EndpointList({ user }: { user: UserProfile }) {
         />
       ) : null}
 
+      <ResourceFilterBar control={filters} />
       {endpoints.isPending && !pageData ? (
         <CoreLoading />
       ) : endpoints.error && !pageData ? (
@@ -92,7 +99,9 @@ function EndpointList({ user }: { user: UserProfile }) {
               onRetry={() => void endpoints.refetch()}
             />
           ) : null}
-          {pageData.data.length === 0 ? (
+          {pageData.data.length === 0 && filters.active ? (
+            <FilteredResourceEmpty control={filters} />
+          ) : pageData.data.length === 0 ? (
             <CoreEmpty
               title={t('endpoints.emptyTitle')}
               body={t('endpoints.emptyBody')}
@@ -149,7 +158,7 @@ function EndpointList({ user }: { user: UserProfile }) {
                     <Link
                       className="btn btn-secondary"
                       to={CORE_ROUTE_PATHS.endpointDetail(endpoint.id)}
-                      state={returnTo ? { returnTo } : undefined}
+                      state={returnTo ? { ...location.state, returnTo } : undefined}
                     >
                       {t('endpoints.manage')}
                     </Link>

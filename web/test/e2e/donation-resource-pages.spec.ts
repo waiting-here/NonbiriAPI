@@ -107,6 +107,17 @@ test.describe('donation resource submission', () => {
         const request = route.request();
         const url = new URL(request.url());
         if (url.origin !== USER_ORIGIN) return route.fallback();
+        if (url.pathname === '/api/charity/leaderboard')
+          return route.fulfill({
+            json: {
+              as_of: NOW,
+              statistics_start: NOW,
+              window: 'history',
+              rows: [],
+              me: null,
+              pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+            },
+          });
         if (url.pathname === '/api/charity/models')
           return route.fulfill({
             json: url.searchParams.has('page')

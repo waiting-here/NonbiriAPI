@@ -85,8 +85,13 @@ func (api *httpAPI) listModels(writer http.ResponseWriter, request *http.Request
 	if !requireNoBody(writer, request) {
 		return
 	}
-	if serveNumberedPage(writer, request, nil, func(ctx context.Context, _ url.Values, page pagination.Request) (Page[Model], error) {
-		return api.repository.ListModelsPage(ctx, principal.UserID, page)
+	if serveNumberedPage(writer, request, []string{"q", "provider", "route_strategy", "connection_state"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[Model], error) {
+		if !nonemptyPageFilters(values, "provider", "route_strategy", "connection_state") {
+			return Page[Model]{}, ErrInvalidRequest
+		}
+		return api.repository.FilterModelsPage(ctx, principal.UserID, ModelPageFilters{
+			Query: values.Get("q"), Provider: values.Get("provider"), RouteStrategy: values.Get("route_strategy"), ConnectionState: values.Get("connection_state"),
+		}, page)
 	}) {
 		return
 	}

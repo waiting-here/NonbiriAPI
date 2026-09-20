@@ -4,6 +4,33 @@ import { useTranslation } from 'react-i18next';
 type CoreCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
+  'filters.title': ['Resource filters', '资源筛选'],
+  'filters.all': ['All', '不限'],
+  'filters.source': ['Source', '来源'],
+  'filters.mainstream': ['Mainstream channel', '主流渠道'],
+  'filters.custom': ['Custom endpoint', '自定义端点'],
+  'filters.state': ['Availability', '可用状态'],
+  'filters.noKeys': ['No keys', '没有密钥'],
+  'filters.noUsableKeys': ['No usable keys', '没有可用密钥'],
+  'filters.enabled': ['Enabled state', '启用状态'],
+  'filters.donated': ['Donated', '已捐赠'],
+  'filters.security': ['Security status', '安全状态'],
+  'filters.securityNone': ['No security processing', '未处于安全处理'],
+  'filters.securityProcessing': ['Security processing', '安全处理中'],
+  'filters.connection': ['Connections', '连接状态'],
+  'filters.unavailable': ['No available connection', '连接均不可用'],
+  'filters.unconfigured': ['No connections configured', '未配置连接'],
+  'filters.clear': ['Clear filters', '清除筛选'],
+  'filters.empty': ['No matching resources', '没有符合条件的资源'],
+  'filters.emptyBody': [
+    'Try other filters or clear them to see all your resources.',
+    '可调整或清除筛选，查看全部资源。',
+  ],
+  'filters.invalid': [
+    'Check the search text and filter values. Control characters are not allowed.',
+    '请检查搜索词和筛选值，不允许控制字符。',
+  ],
+
   'account.musicQuality': ['Game music quality', '游戏音乐音质'],
   'account.musicLight': ['Lightweight', '轻量版'],
   'account.musicLossless': ['Lossless', '无损版'],

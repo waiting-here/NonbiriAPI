@@ -539,7 +539,7 @@
       "mutationConflictRefreshed": "The resource changed before this action completed.",
       "mutationReconciled": "The latest state has been loaded. Review it before deciding whether to act again.",
       "submitted": "Donation submitted for review.",
-      "descriptionInvalid": "The description must contain at most 1,024 characters and no control characters.",
+      "descriptionInvalid": "The description is required, must contain at most 1,024 characters, and cannot contain control characters.",
       "chooseExistingKeys": "Select at least one eligible existing key.",
       "authorizationRequired": "Confirm that you own and are authorized to share every selected resource.",
       "splitDonationSources": "Submit custom resources separately from mainstream resources, and use only one mainstream channel per donation.",

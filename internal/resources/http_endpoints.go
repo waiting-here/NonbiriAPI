@@ -88,8 +88,11 @@ func (api *httpAPI) listEndpoints(writer http.ResponseWriter, request *http.Requ
 	if !requireNoBody(writer, request) {
 		return
 	}
-	if serveNumberedPage(writer, request, []string{"q"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[Endpoint], error) {
-		return api.repository.SearchEndpointsPage(ctx, principal.UserID, values.Get("q"), page)
+	if serveNumberedPage(writer, request, []string{"q", "connector_type", "source", "state"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[Endpoint], error) {
+		if !nonemptyPageFilters(values, "connector_type", "source", "state") {
+			return Page[Endpoint]{}, ErrInvalidRequest
+		}
+		return api.repository.FilterEndpointsPage(ctx, principal.UserID, EndpointPageFilters{Query: values.Get("q"), ConnectorType: values.Get("connector_type"), Source: values.Get("source"), State: values.Get("state")}, page)
 	}) {
 		return
 	}
@@ -230,8 +233,11 @@ func (api *httpAPI) listEndpointKeys(writer http.ResponseWriter, request *http.R
 	if !ok || !requireNoBody(writer, request) {
 		return
 	}
-	if serveNumberedPage(writer, request, []string{"q"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[EndpointKey], error) {
-		return api.repository.SearchEndpointKeysPage(ctx, principal.UserID, endpointID, values.Get("q"), page)
+	if serveNumberedPage(writer, request, []string{"q", "enabled", "donated", "suspension_state"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[EndpointKey], error) {
+		if !nonemptyPageFilters(values, "enabled", "donated", "suspension_state") {
+			return Page[EndpointKey]{}, ErrInvalidRequest
+		}
+		return api.repository.FilterEndpointKeysPage(ctx, principal.UserID, endpointID, EndpointKeyPageFilters{Query: values.Get("q"), Enabled: values.Get("enabled"), Donated: values.Get("donated"), SuspensionState: values.Get("suspension_state")}, page)
 	}) {
 		return
 	}

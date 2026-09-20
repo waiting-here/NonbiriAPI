@@ -1,3 +1,4 @@
+import { resourceFilterIdentity, type ResourceFilters } from './resourceFilters';
 import { useQuery, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
 import { coreKeys } from './queries';
 import { getCatalogPage, listEndpointKeysPage, listEndpointsPage } from './pageApi';
@@ -29,13 +30,16 @@ export function useNumberedEndpoints(
   accountId: string,
   window: PageWindow,
   enabled = true,
+  filters: ResourceFilters = {},
 ): UseQueryResult<NumberedPage<Endpoint>, Error> {
-  const root = coreKeys.endpointsRoot(accountId);
+  const root = coreKeys.endpointsRoot(accountId),
+    identity = resourceFilterIdentity('endpoints', filters);
+  const scope = [...root, 'filters', identity];
   return useQuery<NumberedPage<Endpoint>, Error, NumberedPage<Endpoint>>({
-    queryKey: [...root, ...pageWindowKey(window)],
-    queryFn: ({ signal }) => listEndpointsPage(window, signal),
+    queryKey: [...scope, ...pageWindowKey(window)],
+    queryFn: ({ signal }) => listEndpointsPage(window, signal, filters),
     enabled: enabled && Boolean(accountId),
-    placeholderData: sameScopePlaceholder<NumberedPage<Endpoint>>(root),
+    placeholderData: sameScopePlaceholder<NumberedPage<Endpoint>>(scope),
   });
 }
 
@@ -44,18 +48,22 @@ export function useNumberedEndpointKeys(
   endpointId: string | undefined,
   window: PageWindow,
   enabled = true,
+  filters: ResourceFilters = {},
 ): UseQueryResult<NumberedPage<EndpointKey>, Error> {
   const root = endpointId
     ? coreKeys.endpointKeysRoot(accountId, endpointId)
     : [...coreKeys.endpointsRoot(accountId), 'keys', 'none'];
+  const scope = [...root, 'filters', resourceFilterIdentity('keys', filters)];
   return useQuery<NumberedPage<EndpointKey>, Error, NumberedPage<EndpointKey>>({
-    queryKey: [...root, ...pageWindowKey(window)],
+    queryKey: [...scope, ...pageWindowKey(window)],
     queryFn: ({ signal }) => {
       if (!endpointId) throw new Error('endpoint id is required');
-      return listEndpointKeysPage(endpointId, window, signal);
+      return listEndpointKeysPage(endpointId, window, signal, filters);
     },
     enabled: enabled && Boolean(accountId && endpointId),
-    placeholderData: endpointId ? sameScopePlaceholder<NumberedPage<EndpointKey>>(root) : undefined,
+    placeholderData: endpointId
+      ? sameScopePlaceholder<NumberedPage<EndpointKey>>(scope)
+      : undefined,
     refetchInterval: (query) =>
       !query.state.error &&
       query.state.data?.data.some((key) => key.browse?.discovery.state === 'checking')

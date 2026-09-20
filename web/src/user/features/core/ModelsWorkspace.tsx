@@ -1,3 +1,5 @@
+import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
+import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import {
   useEffect,
   useMemo,
@@ -1842,12 +1844,13 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
     deletedModelRef.current = null;
   }, [queryClient, selectedModelId, user.id]);
   const scopeReady = !session.error && session.data?.accountId === user.id;
+  const filters = useResourceFilters('models', user.id);
   const pager = useUrlPagePager({
     station: 'user',
     listType: 'models',
     scopeKey: user.id,
     scopeReady,
-    resetKey: undefined,
+    resetKey: filters.identity,
     pageParam: 'page',
     pageSizeParam: 'page_size',
   });
@@ -1855,7 +1858,9 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
     user.id,
     { page: pager.page, pageSize: pager.pageSize },
     scopeReady && !selectedModelId,
+    filters.filters,
   );
+  useResourceListScroll(user.id, Boolean(models.data) && !models.isFetching, !selectedModelId);
   const accessLossError =
     (permissionLost?.scope === user.id ? permissionLost.error : null) ??
     (isAccessLoss(models.error) ? models.error : null);
@@ -1930,6 +1935,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           }}
         />
       ) : null}
+      <ResourceFilterBar control={filters} />
       {models.isPending && !models.data ? (
         <CoreLoading />
       ) : models.error && !models.data ? (
@@ -1939,7 +1945,9 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           {models.error ? (
             <CoreErrorPanel compact error={models.error} onRetry={() => void models.refetch()} />
           ) : null}
-          {models.data.data.length === 0 ? (
+          {models.data.data.length === 0 && filters.active ? (
+            <FilteredResourceEmpty control={filters} />
+          ) : models.data.data.length === 0 ? (
             <CoreEmpty
               title={t('models.emptyTitle')}
               body={t('models.emptyBody')}

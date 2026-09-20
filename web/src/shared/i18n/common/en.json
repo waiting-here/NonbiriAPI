@@ -498,6 +498,30 @@
       "notFound": "Not found",
       "item": "Donation {{donation}} · key {{key}}",
       "singleDone": "Failure count reset."
+    },
+    "keyModels": {
+      "title": "Related charity models",
+      "help": "Shows current associations, including disabled models and unavailable connections.",
+      "empty": "No related models",
+      "emptyBody": "This donated key has no current charity model bindings.",
+      "available": "Enabled · available connections",
+      "unavailable": "Enabled · no available connections",
+      "disabled": "Model disabled",
+      "count": "{{count}} connections · {{available}} available",
+      "connections": "Show connections",
+      "manage": "Manage model",
+      "returnToKey": "Return to donated key",
+      "states": {
+        "available": "Available",
+        "unavailable": "Unavailable",
+        "ended": "Ended",
+        "expired": "Expired",
+        "pending": "Not approved",
+        "feature_disabled": "Charity service disabled",
+        "model_disabled": "Model disabled",
+        "disabled": "Resource disabled",
+        "suspended": "Security or failure suspension"
+      }
     }
   },
   "logs": {

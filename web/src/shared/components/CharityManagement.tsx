@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router';
+import { DonationKeyModels } from './DonationKeyModels';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -1094,6 +1096,13 @@ function DonationKeyPages({
                   donation={item}
                   role={role}
                   refresh={refresh}
+                  onCapabilityLoss={onCapabilityLoss}
+                />
+                <DonationKeyModels
+                  role={role}
+                  accountId={accountId}
+                  donationId={item.id}
+                  keyId={key.id}
                   onCapabilityLoss={onCapabilityLoss}
                 />
                 <RecurringLimitsDisclosure
@@ -2314,6 +2323,7 @@ function ModelsPanel({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const rawQuery = oneParam(params, 'model_q');
@@ -2347,12 +2357,24 @@ function ModelsPanel({
   };
   const setSelected = (id: string) => {
     if (id) remember();
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      if (id) next.set('charity_model', id);
-      else next.delete('charity_model');
-      return next;
-    });
+    const returnKey = !id ? selectedID(params, 'model_from_key') : '';
+    const returnDonation = !id ? selectedID(params, 'model_from_donation') : '';
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (id) next.set('charity_model', id);
+        else next.delete('charity_model');
+        if (returnKey && returnDonation) {
+          next.set('charity_section', 'donations');
+          next.set('donation_id', returnDonation);
+          next.set('donation_key', returnKey);
+        }
+        next.delete('model_from_key');
+        next.delete('model_from_donation');
+        return next;
+      },
+      { state: { ...location.state, restoreDonationKey: returnKey || undefined } },
+    );
   };
   useEffect(() => {
     const desired = { model_q: query, model_enabled: enabled, charity_model: selectedId };
@@ -2552,7 +2574,11 @@ function ModelsPanel({
       {selectedId ? (
         <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
           <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
-            {t('common.operations.charity.returnToList')}
+            {t(
+              selectedID(params, 'model_from_key')
+                ? 'common.keyModels.returnToKey'
+                : 'common.operations.charity.returnToList',
+            )}
           </button>
           {detail.isPending ? (
             <LoadingState />

@@ -13,6 +13,16 @@ import (
 // cannot be dispatched, even when it contains individually eligible keys.
 // Only repository-owned SQL expressions are interpolated here.
 func catalogAvailableSQL() string {
+	return catalogAvailableBindingSQL("")
+}
+
+// bindingID is an internal SQL expression, never request input. An empty
+// expression retains the public catalog's bounded model availability check.
+func catalogAvailableBindingSQL(bindingID string) string {
+	scope := ""
+	if bindingID != "" {
+		scope = " AND b.id=" + bindingID
+	}
 	price := `(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price ELSE COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cx.token_reserve) END)`
 	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
  SELECT 1 FROM charity_model_bindings b
@@ -33,5 +43,6 @@ func catalogAvailableSQL() string {
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(dk.token_reserve)
  AND ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + `
+ ` + scope + `
 	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) BETWEEN 1 AND ` + strconv.Itoa(MaxRuntimeCandidates) + ` ELSE 0 END)`
 }
