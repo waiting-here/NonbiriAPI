@@ -10,6 +10,7 @@ export function CastImpact({
   progress,
   reduced,
   overloaded = false,
+  followUpCount = 0,
 }: {
   readonly events: readonly LikesEvent[];
   readonly from: number;
@@ -18,6 +19,7 @@ export function CastImpact({
   readonly progress: number;
   readonly reduced: boolean;
   readonly overloaded?: boolean;
+  readonly followUpCount?: number;
 }) {
   const t = useDuelText();
   const count = events.filter((event) => event.cast?.success).length;
@@ -55,7 +57,11 @@ export function CastImpact({
                   : t('技能释放', 'SKILL CAST')}
             </strong>
             <span>
-              {count > 1 ? `×${count} ${t('施放', 'CASTS')}` : t('实得赞', 'LIKES AWARDED')}
+              {followUpCount > 0
+                ? `${t('连答', 'FOLLOW-UP')} ×${followUpCount}`
+                : count > 1
+                  ? `×${count} ${t('施放', 'CASTS')}`
+                  : t('实得赞', 'LIKES AWARDED')}
             </span>
           </div>
           <strong

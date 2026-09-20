@@ -4,6 +4,7 @@ import { likesCodec } from './normalize';
 import { likesAudioFacts, likesMusicScene, type LikesHome } from './audioFacts';
 import wire from './testdata/authority.json';
 import timings from './testdata/timelines.json';
+import passives from './testdata/passives.json';
 
 function currentWire(summary: unknown = wire.rounds[1].summary) {
   const presentation = likesCodec.presentation!(summary);
@@ -76,13 +77,59 @@ function resultHome(outcome: 'win' | 'loss' | 'draw' | 'system_cancelled'): Like
 }
 
 describe('likes authoritative audio facts', () => {
+  it('counts follow-ups separately for each seat and resets on the next round', () => {
+    const home = currentHome(passives.chain.summary);
+    const combos = likesAudioFacts(home).filter((fact) => fact.cue === 'likes_combo');
+    expect(combos.map((fact) => fact.playback?.semitones)).toEqual([0, 0, 2, 2, 4, 4]);
+    expect(combos.map((fact) => fact.accents?.length)).toEqual([0, 0, 1, 1, 2, 2]);
+    const next = currentHome(passives.chain.summary);
+    expect(
+      likesAudioFacts(next).filter((fact) => fact.cue === 'likes_combo')[0].playback?.semitones,
+    ).toBe(0);
+  });
+
+  it('distinguishes normal, partial and full resistance using revealed cast results', () => {
+    for (const [success, resisted, cue, accents] of [
+      [3, 0, 'likes_buff', 0],
+      [1, 2, 'likes_buff', 1],
+      [0, 3, 'likes_cleanse', 2],
+    ] as const) {
+      const home = currentHome(passives.partial.summary);
+      const resolution = home.current!.resolution!;
+      const events = resolution.summary.events.map((event) =>
+        event.cast
+          ? {
+              ...event,
+              cast: {
+                ...event.cast,
+                applications: [
+                  { buffID: 'B36:原版', target: 1 as const, success, resisted, derived: false },
+                ],
+              },
+            }
+          : event,
+      );
+      const changed = {
+        ...home,
+        current: {
+          ...home.current!,
+          resolution: { ...resolution, summary: { ...resolution.summary, events } },
+        },
+      };
+      const fact = likesAudioFacts(changed).find((value) => value.key.endsWith(':impact'))!;
+      expect(fact.cue).toBe(cue);
+      expect(fact.accents).toHaveLength(accents);
+      if (success === 0) expect(fact.accents?.map((value) => value.delay ?? 0)).toEqual([0, 0.09]);
+    }
+  });
+
   it('times each follow-up sound to its actual step without collapsing a long sequence', () => {
     const home = currentHome({
       ...wire.scenarios.chain.summary,
       timeline: timings.scenarios.chain.timeline,
     });
     const facts = likesAudioFacts(home);
-    const casts = facts.filter((fact) => fact.cue === 'likes_cast');
+    const casts = facts.filter((fact) => fact.key.endsWith(':impact'));
     expect(casts.map((fact) => fact.at)).toEqual([103500, 105900, 108300, 110700, 113100]);
     expect(new Set(casts.map((fact) => fact.key)).size).toBe(5);
     const original = resultHome('win');
@@ -99,7 +146,6 @@ describe('likes authoritative audio facts', () => {
     const cues = new Set(facts.map((fact) => fact.cue));
     expect(cues).toEqual(
       new Set([
-        'likes_cast',
         'likes_score_burst',
         'likes_pay',
         'likes_charge',

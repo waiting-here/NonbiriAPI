@@ -183,8 +183,9 @@ export function BiddingPresentation({
       if (!cancelled && scene.bids) {
         setStep('settle');
         if (scene.awardedTo !== null) onCue?.('bidding_pot_collect');
+        else if (!scene.terminal) onCue?.('bidding_pot_add');
       }
-    }, 1200);
+    }, 160);
     const nextDraw = window.setTimeout(() => {
       if (!cancelled && scene.bids && scene.nextRewards.length) {
         setStep('draw');

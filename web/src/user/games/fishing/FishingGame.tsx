@@ -37,6 +37,7 @@ import {
   useFishingState,
 } from './api';
 import { FISHING_REVEAL_MS, fishingPresentationPhase, nextRevealCount } from './stateMachine';
+import { fishingRevealCue } from './feedback';
 import type {
   FishingBatchResult,
   FishingRake,
@@ -623,14 +624,8 @@ export function FishingGame() {
     const previous = soundBatch.current.through;
     if (revealed <= previous) return;
     soundBatch.current.through = revealed;
-    const tiers = result.outcomes.slice(previous, revealed).map((outcome) => outcome.tier);
-    playSound(
-      tiers.some((tier) => tier === 'legend' || tier === 'treasure')
-        ? 'fishing_epic'
-        : tiers.some((tier) => tier === 'big' || tier === 'giant')
-          ? 'fishing_rare'
-          : 'fishing_common',
-    );
+    const cue = fishingRevealCue(result.outcomes, previous, revealed);
+    if (cue) playSound(cue);
   }, [playSound, result, revealed]);
 
   const refreshAfterMutation = useCallback(async () => {
@@ -847,7 +842,9 @@ export function FishingGame() {
             phase={shownResult && shownRevealed === shownResult.outcomes.length ? 'result' : phase}
             level4={(session.data?.user.effective_level ?? 0) >= 4}
             catchResult={
-              shownResult && shownRevealed === shownResult.outcomes.length ? shownResult : null
+              shownResult && shownRevealed > 0
+                ? { ...shownResult, outcomes: shownResult.outcomes.slice(0, shownRevealed) }
+                : null
             }
           />
           {state.isPending ? <LoadingState label={text('common.loading')} /> : null}

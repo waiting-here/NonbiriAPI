@@ -339,6 +339,19 @@ export function Arena({
               )
               .reduce((sum, event) => sum + event.cast!.likes, 0);
           const awardedNow = casts.reduce((sum, event) => sum + event.cast!.likes, 0);
+          const received = events.flatMap(
+            (event) =>
+              event.cast?.applications?.filter(
+                (effect) => effect.target === seat && event.seat !== seat,
+              ) ?? [],
+          );
+          const applied = received.reduce((sum, effect) => sum + effect.success, 0);
+          const resisted = received.reduce((sum, effect) => sum + effect.resisted, 0);
+          const followUpCount = casts.some((event) => event.cast?.derived)
+            ? motion.revealedEvents.filter(
+                (event) => event.round === round && event.seat === seat && event.cast?.derived,
+              ).length
+            : 0;
           return (
             <article
               className={`likes-player ${slot ? 'likes-player--casting' : ''} ${overloaded ? 'is-overloaded' : ''} ${stunned ? 'is-stunned' : ''}`}
@@ -422,8 +435,28 @@ export function Arena({
                 target={catalog.parameters.TARGET_LIKES}
                 progress={motion.stepProgress}
                 reduced={reduced}
+                followUpCount={followUpCount}
                 overloaded={!!overloadedNow[seat] && impact === 'overload'}
               />
+              {received.length > 0 && (
+                <div
+                  className="likes-reaction"
+                  data-result={resisted === 0 ? 'applied' : applied ? 'partial' : 'resisted'}
+                  key={`reaction:${events.map((event) => event.id).join(':')}`}
+                  role="status"
+                >
+                  <strong>
+                    {resisted === 0
+                      ? t('效果施加', 'EFFECT APPLIED')
+                      : applied
+                        ? t('部分抵抗', 'PARTLY RESISTED')
+                        : t('全部抵抗', 'FULLY RESISTED')}
+                  </strong>
+                  <span>
+                    {t('施加', 'Applied')} {applied} · {t('抵抗', 'Resisted')} {resisted}
+                  </span>
+                </div>
+              )}
               {events
                 .filter((event) => event.seat === seat && !event.cast && !failures.includes(event))
                 .map((event) => (
