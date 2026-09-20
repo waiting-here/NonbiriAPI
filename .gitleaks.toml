@@ -55,3 +55,10 @@ condition = "AND"
 regexTarget = "line"
 paths = ['''^web[\\/]test[\\/]e2e[\\/]list-density\.spec\.ts$''']
 regexes = ["discord_id: '123456789012345678'"]
+
+[[allowlists]]
+description = "Exact synthetic loan quote token encoding quote.signature"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^web[\\/]test[\\/]fixtures[\\/]loans\.ts$''']
+regexes = ['''^cXVvdGU\.c2lnbmF0dXJl$''']
