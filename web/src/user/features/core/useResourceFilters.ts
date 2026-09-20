@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -107,9 +107,11 @@ export function useResourceListScroll(accountId: string, ready: boolean, visible
   const client = useQueryClient();
   const location = useLocation();
   const nav = resourceNavigation(client);
-  const key = `${nav.epoch}:${accountId}:${location.pathname}${location.search}`;
+  const search = new URLSearchParams(location.search);
+  search.sort();
+  const key = `${nav.epoch}:${accountId}:${location.pathname}?${search.toString()}`;
   const restored = useRef('');
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!visible) return;
     let position = window.scrollY;
     const remember = () => {
@@ -127,12 +129,12 @@ export function useResourceListScroll(accountId: string, ready: boolean, visible
       return;
     }
     if (!ready || restored.current === key) return;
-    restored.current = key;
     const position = nav.scroll.get(key);
     if (position === undefined) return;
-    const frame = requestAnimationFrame(() =>
-      window.scrollTo({ top: position, behavior: 'instant' }),
-    );
+    const frame = requestAnimationFrame(() => {
+      window.scrollTo({ top: position, behavior: 'instant' });
+      restored.current = key;
+    });
     return () => cancelAnimationFrame(frame);
   }, [key, nav, ready, visible]);
 }
