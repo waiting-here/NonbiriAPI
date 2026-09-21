@@ -970,6 +970,104 @@ function initialState(overrides: Partial<FixtureState> = {}): FixtureState {
 }
 
 for (const station of ['admin', 'user'] as const) {
+  test(station + ' fetches donation models through all three scopes', async ({ context, page }) => {
+    const setup = await prepareStation(context, page, station, station === 'admin' ? 1280 : 375);
+    await installManagementRoutes(page, station, initialState());
+    const selections: unknown[] = [];
+    const starts: string[] = [];
+    await page.route(setup.origin + setup.root + '/**', async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith('/models/refresh/selection')) {
+        const input = request.postDataJSON() as {
+          donation_id: string | null;
+          cursor: string | null;
+        };
+        selections.push(input);
+        // The global set deliberately includes an item outside the visible list.
+        await fulfillJSON(route, {
+          items: [
+            { donation_id: input.donation_id ?? '91', key_id: input.donation_id ? '1019' : '9191' },
+          ],
+          next_cursor: null,
+        });
+      } else if (path.endsWith('/models/refresh')) {
+        expect(request.postData()).toBeNull();
+        expect(request.headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{22,128}$/);
+        starts.push(path);
+        await fulfillJSON(
+          route,
+          {
+            operation_id: 'op_' + 'A'.repeat(22),
+            evidence: {
+              state: 'checking',
+              revision: '2',
+              result: null,
+              safe_class: 'none',
+              observed_at: NOW,
+              count: null,
+            },
+          },
+          202,
+        );
+      } else if (path.endsWith('/models/discovery')) {
+        await fulfillJSON(route, {
+          state: 'succeeded',
+          revision: '2',
+          result: 'empty',
+          safe_class: 'none',
+          observed_at: NOW,
+          count: '0',
+        });
+      } else await route.fallback();
+    });
+    const root = station === 'admin' ? '/charity?' : '/steward?tab=charity&';
+    await page.goto(
+      setup.origin +
+        root +
+        'charity_section=donations&handling=pending&donations_page=2&donations_page_size=10',
+    );
+    await page
+      .getByRole('button', { name: 'Fetch models for all available donation keys', exact: true })
+      .click();
+    await expect(
+      page.getByText('Current filters and pagination do not limit this action.', { exact: false }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Start fetching', exact: true }).click();
+    await expect(
+      page.getByText('Fetching complete · 1 keys processed', { exact: true }),
+    ).toBeVisible();
+    expect(selections).toEqual([{ donation_id: null, cursor: null }]);
+    expect(starts[0]).toContain('/donations/91/keys/9191/');
+    await page.goto(setup.origin + root + 'charity_section=donations&donation_id=20');
+    await page
+      .getByRole('button', {
+        name: 'Fetch models for all available keys in this donation',
+        exact: true,
+      })
+      .click();
+    await page.getByRole('button', { name: 'Start fetching', exact: true }).click();
+    await expect(
+      page.getByText('Fetching complete · 1 keys processed', { exact: true }),
+    ).toBeVisible();
+    expect(selections.at(-1)).toEqual({ donation_id: '20', cursor: null });
+    await page.getByRole('button', { name: 'Fetch model list', exact: true }).click();
+    await expect(
+      page.getByText('Fetching complete · 1 keys processed', { exact: true }),
+    ).toHaveCount(2);
+    expect(starts).toHaveLength(3);
+    expect(starts[2]).toContain('/donations/20/keys/1019/');
+    await page.getByText('Recent results (up to 100)', { exact: true }).last().click();
+    await expect(page.getByText('Fetched 0 models', { exact: false }).last()).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
+    await saveScreenshot(page, station + '-donation-model-discovery');
+    await assertStationClean(page, setup);
+  });
+}
+
+for (const station of ['admin', 'user'] as const) {
   test(
     station + ' inverse key models preserve pages, expansion, and return position',
     async ({ context, page }) => {

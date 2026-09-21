@@ -47,6 +47,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		handler         http.HandlerFunc
 	}{
 		{http.MethodGet, routeAdminDonations, api.listAdmin},
+		{http.MethodPost, routeAdminDiscoverySelection, api.discoverySelectionAdmin},
 		{http.MethodGet, routeAdminSources, api.sourcesAdmin},
 		{http.MethodGet, routeAdminSourceKeys, api.sourceKeysAdmin},
 		{http.MethodGet, routeAdminKeys, api.keysAdmin},
@@ -79,6 +80,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, routeStewardDonations, api.listSteward},
+		{http.MethodPost, routeStewardDiscoverySelection, api.discoverySelectionSteward},
 		{http.MethodGet, routeStewardSources, api.sourcesSteward},
 		{http.MethodGet, routeStewardSourceKeys, api.sourceKeysSteward},
 		{http.MethodGet, routeStewardKeys, api.keysSteward},

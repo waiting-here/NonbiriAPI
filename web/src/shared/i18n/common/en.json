@@ -14,6 +14,40 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "donationDiscovery": {
+      "title": "Donation model discovery",
+      "one": "Fetch model list",
+      "donation": "Fetch models for all available keys in this donation",
+      "all": "Fetch models for all available donation keys",
+      "donationHelp": "Fetch models for every available key in this donation, including keys on other pages.",
+      "allHelp": "Fetch models for available keys across all donations. Current filters and pagination do not limit this action.",
+      "eligibility": "Only approved, unexpired, enabled and unsuspended keys with remaining quota are included. Automatic model lists are updated; manual entries and model bindings are preserved. Keep this page open to complete the batch.",
+      "confirm": "Start fetching",
+      "running": "Fetching models · {{processed}} of {{selected}} selected keys processed",
+      "paused": "Fetching paused · {{processed}} of {{selected}} selected keys processed",
+      "done": "Fetching complete · {{processed}} keys processed",
+      "counts": "{{succeeded}} succeeded · {{failed}} failed · {{skipped}} skipped",
+      "current": "Donation {{donation}} · key {{key}}",
+      "stop": "Stop further requests",
+      "resume": "Resume",
+      "resumeHelp": "Already accepted checks can finish. Resume continues this run and reuses the request identity for any uncertain response. Reloading or leaving this page ends the batch controls.",
+      "results": "Recent results (up to 100)",
+      "status": {
+        "succeeded": "Fetched {{count}} models",
+        "failed": "Fetch failed",
+        "ineligible": "Key is no longer available",
+        "conflict": "Conflicting check; retry this key later",
+        "superseded": "Replaced by a newer check"
+      },
+      "reasons": {
+        "auth": "Upstream rejected authentication",
+        "rate_limit": "Upstream rate limited the check",
+        "timeout": "Upstream timed out",
+        "protocol": "Upstream response could not be used",
+        "transport": "Network request failed",
+        "interrupted": "Check interrupted"
+      }
+    },
     "gatewayName": "AI SDK Gateway v3",
     "gatewayAttribution": {
       "label": "Gateway cost attribution tag",

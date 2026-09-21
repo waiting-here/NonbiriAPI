@@ -42,6 +42,7 @@ type Config struct {
 	Projection          ResourceProjectionHook
 	DiscoveryRail       DiscoveryClaimRail
 	DiscoveryWorker     DiscoveryWorker
+	ManagedDiscovery    ManagedDiscoveryAuthorizer
 	CursorKeys          CursorKeyDeriver
 	FinalAuth           FinalTxAuthorizer
 	AdminFinalAuth      AdminFinalTxAuthorizer
@@ -61,6 +62,7 @@ type Repository struct {
 	projection          ResourceProjectionHook
 	discoveryRail       DiscoveryClaimRail
 	discoveryWorker     DiscoveryWorker
+	managedDiscovery    ManagedDiscoveryAuthorizer
 	finalAuth           FinalTxAuthorizer
 	adminFinalAuth      AdminFinalTxAuthorizer
 	cursors             cursorCodec
@@ -96,10 +98,11 @@ func New(config Config) (*Repository, error) {
 		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs,
 		secrets: config.Secrets, keyDeletion: config.KeyDeletion, keyCreation: config.KeyCreation,
 		projection: config.Projection, discoveryRail: config.DiscoveryRail,
-		discoveryWorker: config.DiscoveryWorker,
-		finalAuth:       config.FinalAuth,
-		adminFinalAuth:  config.AdminFinalAuth,
-		cursors:         cursorCodec{keys: config.CursorKeys}, random: config.Random,
+		discoveryWorker:  config.DiscoveryWorker,
+		managedDiscovery: config.ManagedDiscovery,
+		finalAuth:        config.FinalAuth,
+		adminFinalAuth:   config.AdminFinalAuth,
+		cursors:          cursorCodec{keys: config.CursorKeys}, random: config.Random,
 		now: config.Now, operationID: config.OperationID, mainstreamChannelID: config.MainstreamChannelID,
 	}, nil
 }

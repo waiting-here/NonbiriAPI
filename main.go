@@ -978,18 +978,19 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		return nil, fmt.Errorf("create report repository: %w", err)
 	}
 	resourceRepository, err = resources.New(resources.Config{
-		Store:           store,
-		Connectors:      connectorRegistry,
-		BaseURLs:        outbound,
-		Secrets:         bridgeRuntime,
-		KeyDeletion:     charityService,
-		KeyCreation:     reportRepository,
-		Projection:      issueService.Sources(),
-		DiscoveryRail:   bridgeRuntime,
-		DiscoveryWorker: discoveryWorker,
-		CursorKeys:      vault,
-		FinalAuth:       authRuntime,
-		AdminFinalAuth:  roleAuthorizer,
+		Store:            store,
+		Connectors:       connectorRegistry,
+		BaseURLs:         outbound,
+		Secrets:          bridgeRuntime,
+		KeyDeletion:      charityService,
+		KeyCreation:      reportRepository,
+		Projection:       issueService.Sources(),
+		DiscoveryRail:    bridgeRuntime,
+		DiscoveryWorker:  discoveryWorker,
+		ManagedDiscovery: donationService,
+		CursorKeys:       vault,
+		FinalAuth:        authRuntime,
+		AdminFinalAuth:   roleAuthorizer,
 	})
 	if err != nil {
 		cleanup()
@@ -1157,6 +1158,10 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	if err := resources.RegisterAdminRoutes(resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register resource administrator routes: %w", err)
+	}
+	if err := resources.RegisterManagedDiscoveryRoutes(authRuntime, resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register managed model discovery routes: %w", err)
 	}
 	if err := donation.RegisterOwnerRoutes(authRuntime, donationService); err != nil {
 		cleanup()

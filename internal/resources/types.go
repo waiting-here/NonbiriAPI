@@ -1,6 +1,9 @@
 package resources
 
 import (
+	"context"
+	"database/sql"
+
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -331,6 +334,9 @@ type DiscoveryClaimInput struct {
 	ConnectorType    connectorcontract.Type
 	CanonicalBaseURL string
 	Discoverer       connector.ModelDiscoverer
+	// Authorize rechecks delegated discovery in the claim and dispatch transactions.
+	// It is never populated from an HTTP field or persisted as caller input.
+	Authorize func(context.Context, *sql.Tx) error
 }
 
 type DiscoveryClaimResult struct {

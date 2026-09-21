@@ -175,11 +175,12 @@ type ClaimInput struct {
 // repository cannot manufacture a credential lookup from endpoint/key IDs.
 // Accessors expose only safe routing metadata needed by the forwarder.
 type Handle struct {
-	claimID    string
-	requestID  string
-	attemptSeq int
-	purpose    Purpose
-	candidate  Candidate
+	claimID            string
+	requestID          string
+	attemptSeq         int
+	purpose            Purpose
+	candidate          Candidate
+	discoveryAuthorize func(context.Context, *sql.Tx) error
 }
 
 func (h Handle) ClaimID() string   { return h.claimID }
@@ -313,6 +314,8 @@ type CompleteRequestInput struct {
 type DiscoveryClaimInput struct {
 	ActorUserID int64
 	Candidate   Candidate
+	// Authorize is a trusted delegated-discovery guard, not caller-controlled input.
+	Authorize func(context.Context, *sql.Tx) error
 }
 
 type RecoveryReport struct {

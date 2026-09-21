@@ -14,6 +14,40 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "donationDiscovery": {
+      "title": "捐赠密钥模型拉取",
+      "one": "拉取模型列表",
+      "donation": "拉取本捐赠全部有效密钥的模型列表",
+      "all": "拉取所有捐赠的有效密钥模型列表",
+      "donationHelp": "拉取此捐赠中全部有效密钥的模型列表，包含其他分页中的密钥。",
+      "allHelp": "拉取所有捐赠中有效密钥的模型列表，不受当前筛选条件或分页限制。",
+      "eligibility": "仅处理已批准、未到期、已启用、未暂停且限额未耗尽的密钥。更新自动模型列表，保留手工条目及现有模型绑定。请保持页面打开以完成整批操作。",
+      "confirm": "开始拉取",
+      "running": "正在拉取模型 · 已处理 {{processed}} / 已选中 {{selected}} 个密钥",
+      "paused": "拉取已暂停 · 已处理 {{processed}} / 已选中 {{selected}} 个密钥",
+      "done": "拉取完成 · 已处理 {{processed}} 个密钥",
+      "counts": "成功 {{succeeded}} · 失败 {{failed}} · 跳过 {{skipped}}",
+      "current": "捐赠 {{donation}} · 密钥 {{key}}",
+      "stop": "停止后续拉取",
+      "resume": "继续拉取",
+      "resumeHelp": "已受理的检查仍可完成。继续操作会接着处理，并对结果不确定的请求复用原请求标识；刷新或离开页面后不再继续整批操作。",
+      "results": "最近结果（最多 100 项）",
+      "status": {
+        "succeeded": "已拉取 {{count}} 个模型",
+        "failed": "拉取失败",
+        "ineligible": "密钥已不再有效",
+        "conflict": "检查冲突，请稍后单独重试",
+        "superseded": "已有更新的检查结果"
+      },
+      "reasons": {
+        "auth": "上游拒绝身份验证",
+        "rate_limit": "上游限制请求频率",
+        "timeout": "上游响应超时",
+        "protocol": "上游响应不可用",
+        "transport": "网络请求失败",
+        "interrupted": "检查已中断"
+      }
+    },
     "gatewayName": "AI SDK Gateway v3",
     "gatewayAttribution": {
       "label": "Gateway 费用归因标签",
