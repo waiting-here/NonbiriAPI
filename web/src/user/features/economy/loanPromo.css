@@ -1,0 +1,125 @@
+.loan-card {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--nb-color-accent) 45%, var(--nb-color-border));
+  background:
+    radial-gradient(
+      ellipse at 5% 0,
+      color-mix(in srgb, var(--nb-color-accent) 16%, transparent),
+      transparent 65%
+    ),
+    var(--nb-color-surface);
+}
+
+.loan-promo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 1fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  padding: clamp(0.25rem, 1.5vw, 1.5rem);
+}
+
+.loan-promo__copy,
+.loan-promo__offer {
+  min-width: 0;
+}
+
+.loan-promo__eyebrow {
+  margin-bottom: 0.8rem;
+  color: var(--nb-color-accent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.loan-promo__copy h2 {
+  margin-bottom: 0.8rem;
+  font-size: 1.15rem;
+}
+
+.loan-promo__slogan {
+  margin: 0 0 1.25rem;
+  color: var(--nb-color-text);
+  font-size: clamp(2rem, 3.5vw, 4rem);
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.loan-promo__pitch {
+  color: var(--nb-color-text-muted);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.loan-promo__perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.loan-promo__perks li::before {
+  content: '↗';
+  margin-right: 0.45rem;
+  color: var(--nb-color-accent);
+}
+
+.loan-promo__offer {
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  padding: clamp(1rem, 2vw, 2rem);
+  background: var(--nb-color-surface);
+  box-shadow: var(--nb-elevation-1);
+}
+
+.loan-promo__ticket-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed var(--nb-color-border);
+}
+
+.loan-promo__ticket-heading p {
+  margin: 0;
+  font-weight: 700;
+}
+
+.loan-promo__ticket-heading > span {
+  color: var(--nb-color-accent);
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.loan-promo__amount {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.loan-promo__amount select {
+  width: 100%;
+  min-width: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.loan-promo__offer .loan-actions {
+  margin-top: 1.25rem;
+  margin-bottom: 0;
+}
+
+@media (max-width: 50rem) {
+  .loan-promo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

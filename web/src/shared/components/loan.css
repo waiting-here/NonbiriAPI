@@ -45,12 +45,40 @@
   margin-top: 1.5rem;
   padding-top: 0.5rem;
 }
+.loan-nominal {
+  margin-block: 1.5rem;
+  font-size: clamp(2rem, 8vw, 3.5rem);
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.loan-nominal__unit {
+  display: inline-block;
+}
 .loan-asterisk {
-  font-size: 0.7rem;
-  width: 44px;
-  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+  font: inherit;
+  font-size: 0.65rem;
+  line-height: 1;
+  width: 1.5rem;
+  height: 1.5rem;
+  min-height: 0;
   padding: 0;
+  margin-inline: -0.45rem;
+  border: 0;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: var(--nb-color-text-muted);
   vertical-align: super;
+  cursor: pointer;
+}
+.loan-asterisk:hover {
+  color: var(--nb-color-accent);
+}
+.loan-asterisk:focus-visible {
+  outline: 2px solid var(--nb-color-accent);
+  outline-offset: 2px;
 }
 .loan-details {
   padding: 0.8rem;

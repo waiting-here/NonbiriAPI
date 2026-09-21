@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link, useLocation } from 'react-router';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { ErrorState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -10,6 +12,13 @@ export function GamePrivacyControl() {
   const session = useUserSession(false);
   const client = useQueryClient();
   const { text } = useGameCopy();
+  const location = useLocation();
+  const control = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (location.hash !== '#game-privacy' || !control.current) return;
+    control.current.scrollIntoView({ block: 'center' });
+    control.current.focus({ preventScroll: true });
+  }, [location.key, location.hash, session.data?.user.id]);
   const save = useRetainedOperation(
     (isPublic: boolean, key) =>
       stationSessionWrite(client, 'steward', () =>
@@ -25,7 +34,7 @@ export function GamePrivacyControl() {
   );
   if (!session.data?.user || session.error) return null;
   return (
-    <div className="game-privacy-control">
+    <div className="game-privacy-control" id="game-privacy" ref={control} tabIndex={-1}>
       <label className="checkbox-label">
         <input
           type="checkbox"
@@ -38,5 +47,15 @@ export function GamePrivacyControl() {
       <p className="table-note">{text('common.anonymousHelp')}</p>
       {save.error ? <ErrorState error={save.error} /> : null}
     </div>
+  );
+}
+
+export function GamePrivacyLink() {
+  const { text } = useGameCopy();
+  return (
+    <p className="game-privacy-control">
+      {text('common.sharedPrivacy')}{' '}
+      <Link to="/games#game-privacy">{text('common.anonymousSettings')}</Link>
+    </p>
   );
 }

@@ -32,14 +32,15 @@
 }
 
 .nb-page-header__lead {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  flex: 1 1 0;
   gap: var(--nb-space-3);
   min-width: 0;
 }
 
 .nb-page-header__icon {
   display: grid;
+  flex: 0 0 2.75rem;
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
@@ -49,6 +50,7 @@
 }
 
 .nb-page-header__copy {
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -68,7 +70,7 @@
 }
 
 .nb-page-header__description {
-  max-width: 58rem;
+  max-width: none;
   margin: 0;
   color: var(--nb-color-text-muted);
   overflow-wrap: anywhere;

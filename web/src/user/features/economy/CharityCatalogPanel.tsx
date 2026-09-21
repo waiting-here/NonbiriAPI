@@ -6,7 +6,7 @@ import { CopyValue } from '@shared/components/CopyValue';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import type { PageSize } from '@shared/operations/pageNumbers';
+import { MAX_PAGE, type PageSize } from '@shared/operations/pageNumbers';
 import {
   canonicalCharityCatalogSearch,
   charityCatalogFilterKey,
@@ -370,6 +370,10 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
     pager.setPageSize(pageSize);
   };
   const priceCount = pageData?.models.length ?? 0;
+  const changePage = (page: string) => {
+    setExpanded(new Set());
+    pager.setPage(page);
+  };
 
   return (
     <Card className="economy-catalog-card">
@@ -402,6 +406,43 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
       ) : pageData ? (
         <div className="economy-catalog-results" aria-busy={busy}>
           {busy ? <LoadingState /> : null}
+          <div className="economy-catalog-page-summary">
+            <span aria-live="polite">
+              {t('user.charity.catalog.title')}
+              {' · '}
+              {t('common.pageControls.summary', {
+                page: pageData.pagination.page,
+                pages: pageData.pagination.total_pages,
+                total: pageData.pagination.total_items,
+              })}
+            </span>
+            {BigInt(pageData.pagination.total_pages) > 1n ? (
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  aria-label={`${t('user.charity.catalog.title')} · ${t('common.previous')}`}
+                  disabled={busy || BigInt(pageData.pagination.page) <= 1n}
+                  onClick={() => changePage((BigInt(pageData.pagination.page) - 1n).toString())}
+                >
+                  {t('common.previous')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  aria-label={`${t('user.charity.catalog.title')} · ${t('common.next')}`}
+                  disabled={
+                    busy ||
+                    BigInt(pageData.pagination.page) >= BigInt(pageData.pagination.total_pages) ||
+                    BigInt(pageData.pagination.page) >= MAX_PAGE
+                  }
+                  onClick={() => changePage((BigInt(pageData.pagination.page) + 1n).toString())}
+                >
+                  {t('common.next')}
+                </button>
+              </div>
+            ) : null}
+          </div>
           {priceCount === 0 ? (
             <EmptyState
               title={t('user.charity.catalog.emptyTitle')}
@@ -424,10 +465,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
             <PagePagination
               metadata={pageData.pagination}
               busy={busy}
-              onPageChange={(page) => {
-                setExpanded(new Set());
-                pager.setPage(page);
-              }}
+              onPageChange={changePage}
               onPageSizeChange={changePageSize}
               requestedPage={filter.page}
             />

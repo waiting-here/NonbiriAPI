@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GamePrivacyControl } from '../common/GamePrivacyControl';
+import { GamePrivacyLink } from '../common/GamePrivacyControl';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
@@ -1406,7 +1406,7 @@ export function RPSGame() {
       {operationError && operationState !== 'unknown' && !isConflict(operationError) ? (
         <ErrorState error={operationError} onRetry={reconcile} />
       ) : null}
-      <GamePrivacyControl />
+      <GamePrivacyLink />
       {rulesDialog}
     </main>
   );

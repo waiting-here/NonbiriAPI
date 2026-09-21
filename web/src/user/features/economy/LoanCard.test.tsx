@@ -53,8 +53,11 @@ describe('loan confirmation', () => {
     const r = await renderCard();
     await r.user.click(screen.getByRole('button', { name: 'Get a loan' }));
     const dialog = await screen.findByRole('alertdialog');
+    expect(r.container).not.toHaveTextContent(/repay/i);
+    expect(dialog.querySelector('.loan-nominal')).toHaveTextContent('10000 Nonbiri credits');
     expect(within(dialog).queryByText('9000')).toBeNull();
     const star = within(dialog).getByRole('button', { name: 'View fees and balance details' });
+    expect(star.closest('p')).toHaveTextContent('Please confirm the amount to borrow*.');
     const calls = random.mock.calls.length;
     await r.user.click(star);
     expect(within(dialog).getByText('9000')).toBeVisible();

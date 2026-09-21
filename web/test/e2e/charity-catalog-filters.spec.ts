@@ -279,6 +279,41 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
   expect(layout.bodyWidth, JSON.stringify(layout)).toBeLessThanOrEqual(layout.viewport);
 }
 
+for (const locale of ['zh', 'en'] as const) {
+  test(`catalog sidebar and incomplete rows use available space ${locale}`, async ({ context, page }) => {
+    const fixture = createCatalogFixture();
+    const setup = await installCatalogFixture(context, page, fixture, locale,
+      locale === 'zh' ? 'dark' : 'light', 1440, `catalog-layout-${locale}-ephemeral`);
+    await page.goto(`${USER_ORIGIN}/charity?allowed_for_me=all&currently_available=all`);
+    await expect(page.locator('.economy-catalog-item')).toHaveCount(20);
+    const catalog = page.locator('.economy-catalog-card');
+    const summary = page.locator('.economy-catalog-page-summary');
+    for (const width of [320, 390, 768, 1440, 1920, 2560, 3766]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await assertNoHorizontalOverflow(page);
+      const box = (await catalog.boundingBox())!;
+      const notice = (await page.locator('.economy-safety-card').boundingBox())!;
+      const board = (await page.locator('.progression-ranking').boundingBox())!;
+      expect(board.y).toBeGreaterThan(notice.y + notice.height);
+      if (width >= 1440) {
+        expect(notice.x).toBeGreaterThan(box.x + box.width);
+        expect(Math.abs(notice.y - box.y)).toBeLessThan(2);
+        expect(board.y).toBeLessThan(box.y + box.height);
+      }
+      const list = (await page.locator('.economy-catalog-list').boundingBox())!;
+      const finalCard = (await page.locator('.economy-catalog-item').last().boundingBox())!;
+      expect(Math.abs(finalCard.x + finalCard.width - list.x - list.width)).toBeLessThan(2);
+      await page.evaluate(() => scrollTo(0, 0));
+      if ([390, 1440, 3766].includes(width)) await saveScreenshot(page, `charity-layout-${locale}-${width}`);
+    }
+    await summary.getByRole('button', { name: /Next|下一页/ }).click();
+    await expect(page.locator('.economy-catalog-item')).toHaveCount(6);
+    await expect(summary).toContainText('26');
+    await expect(summary.getByRole('button', { name: /Next|下一页/ })).toBeDisabled();
+    setup.consoleGuard.assertNone();
+  });
+}
+
 test('catalog filters use a counted complete sample and restore URL-backed state', async ({
   context,
   page,

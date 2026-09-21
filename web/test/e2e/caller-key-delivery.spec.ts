@@ -570,7 +570,7 @@ test('clears one-time plaintext across logout and a later login', async ({ conte
   await expect(page).toHaveURL(`${USER_ORIGIN}/`);
   await expect(page.getByText(secret, { exact: true })).toHaveCount(0);
 
-  await page.reload();
+  // A fresh visit loads the signed-in fixture for the later login directly.
   await page.goto(`${USER_ORIGIN}/keys`);
   await expect(
     page.getByText('Key identifier (cannot be used for calls)', { exact: true }),
