@@ -6,6 +6,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
+### Added
+
+- Administrators and stewards can fetch model lists for one available donated key, all available keys in one donation, or all available donated keys across pages and filters. Batches show progress and support pausing and resuming uncertain requests; live permission and eligibility checks protect dispatch and catalog updates.
+
 ### Fixed
 
 - Give Cyber loan a full-width promotion and a prominent nominal amount, with a compact fee-details star in the confirmation description. Keep welfare and Thursday activities together below it.

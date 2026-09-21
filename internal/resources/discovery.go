@@ -198,6 +198,14 @@ func (r *Repository) refreshDiscovery(ctx context.Context, userID, endpointID, k
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || mutation.Route != routeDiscovery || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, endpointID, keyID) || mutation.Query != "" {
 		return MutationResult[DiscoveryAccepted]{}, ErrInvalidRequest
 	}
+	return r.startDiscovery(ctx, userID, endpointID, keyID, mutation, wait, nil)
+}
+
+func (r *Repository) startDiscovery(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, wait bool, managed *managedDiscoveryRequest) (MutationResult[DiscoveryAccepted], error) {
+	actorID, actorRole := userID, "user"
+	if managed != nil {
+		actorRole = managed.role
+	}
 	now, err := r.nowUnix()
 	if err != nil {
 		return MutationResult[DiscoveryAccepted]{}, err
@@ -213,12 +221,36 @@ func (r *Repository) refreshDiscovery(ctx context.Context, userID, endpointID, k
 	if err != nil {
 		return MutationResult[DiscoveryAccepted]{}, ErrInvalidRequest
 	}
-	tx, err := r.beginAuthorizedTx(ctx, userID)
+	var tx *sql.Tx
+	if managed == nil {
+		tx, err = r.beginAuthorizedTx(ctx, userID)
+	} else {
+		tx, err = beginTx(ctx, r.db)
+	}
 	if err != nil {
 		return MutationResult[DiscoveryAccepted]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	var authorize func(context.Context, *sql.Tx) error
+	if managed != nil {
+		target, err := r.managedDiscovery.AuthorizeManagedDiscovery(ctx, tx, managed.role, actorID, managed.donationID, managed.keyID, true)
+		if err != nil {
+			return MutationResult[DiscoveryAccepted]{}, err
+		}
+		userID, endpointID, keyID = target.OwnerUserID, target.EndpointID, target.EndpointKeyID
+		identity := context.WithoutCancel(ctx)
+		authorize = func(work context.Context, transaction *sql.Tx) error {
+			current, err := r.managedDiscovery.AuthorizeManagedDiscovery(discoveryIdentityContext{Context: work, identity: identity}, transaction, managed.role, actorID, managed.donationID, managed.keyID, true)
+			if err != nil {
+				return err
+			}
+			if current != target {
+				return ErrNotFound
+			}
+			return nil
+		}
+	}
 	decision, err := idempotency.Begin(ctx, tx, idempotency.BeginInput{
 		Scope: idempotency.ScopeModelDiscovery, ActorHash: actor, Key: mutation.IdempotencyKey,
 		RequestHash: digest, DecisionNow: now,
@@ -262,6 +294,7 @@ func (r *Repository) refreshDiscovery(ctx context.Context, userID, endpointID, k
 			EndpointKeyID: keyID,
 			ConnectorType: connectorcontract.Type(owner.connectorType), CanonicalBaseURL: owner.baseURL,
 			Discoverer: descriptor.Discoverer,
+			Authorize:  authorize,
 		},
 		revision: newRevision,
 	}
@@ -289,8 +322,8 @@ func (r *Repository) refreshDiscovery(ctx context.Context, userID, endpointID, k
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO accepted_operations(
  id,kind,actor_user_id,actor_role,payload_hash,state,checkpoint,last_error_class,created_at,terminal_at
-) VALUES(?,'model_discovery',?,'user',?,'accepted',?,NULL,?,NULL)`,
-		operationID, userID, digest[:], checkpoint, now); err != nil {
+) VALUES(?,'model_discovery',?,?,?,'accepted',?,NULL,?,NULL)`,
+		operationID, actorID, actorRole, digest[:], checkpoint, now); err != nil {
 		return MutationResult[DiscoveryAccepted]{}, fmt.Errorf("resources: accept discovery operation: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `
@@ -368,6 +401,14 @@ func (r *Repository) runDiscovery(ctx context.Context, job discoveryJob) error {
 	cancelMark()
 
 	claimResult := DiscoveryClaimResult{FailureClass: DiscoveryFailureInterrupted}
+	if markErr == nil && job.input.Authorize != nil {
+		check, err := beginTx(ctx, r.db)
+		if err == nil {
+			err = job.input.Authorize(ctx, check)
+			_ = check.Rollback()
+		}
+		markErr = err
+	}
 	if markErr == nil && ctx.Err() == nil {
 		result, claimErr := r.discoveryRail.Discover(ctx, job.input)
 		if claimErr == nil && ctx.Err() == nil {
@@ -384,7 +425,7 @@ func (r *Repository) runDiscovery(ctx context.Context, job discoveryJob) error {
 	completionContext, cancelCompletion := context.WithTimeout(context.Background(), discoveryCleanupTimeout)
 	defer cancelCompletion()
 	// No network retry is attempted; stale recovery fails closed.
-	return r.completeDiscovery(completionContext, job.input.EndpointKeyID, job.input.OperationID, job.revision, claimResult)
+	return r.completeDiscoveryGuarded(completionContext, job.input.EndpointKeyID, job.input.OperationID, job.revision, claimResult, job.input.Authorize)
 }
 
 func (r *Repository) markDiscoveryRunning(ctx context.Context, operationID string) error {
@@ -408,6 +449,10 @@ WHERE id=? AND kind='model_discovery' AND state='accepted'`, operationID)
 }
 
 func (r *Repository) completeDiscovery(ctx context.Context, keyID int64, operationID string, revision int64, outcome DiscoveryClaimResult) error {
+	return r.completeDiscoveryGuarded(ctx, keyID, operationID, revision, outcome, nil)
+}
+
+func (r *Repository) completeDiscoveryGuarded(ctx context.Context, keyID int64, operationID string, revision int64, outcome DiscoveryClaimResult, authorize func(context.Context, *sql.Tx) error) error {
 	if r == nil || keyID <= 0 || !db.ValidateOpaqueID(operationID, "op_") || revision < 1 || !validDiscoveryOutcome(outcome) {
 		return ErrInvalidRequest
 	}
@@ -432,6 +477,11 @@ WHERE id=? AND kind='model_discovery' AND checkpoint=? AND state IN ('accepted',
 	}
 	if operationCount != 1 {
 		return ErrConflict
+	}
+	if authorize != nil {
+		if err := authorize(ctx, tx); err != nil {
+			outcome = DiscoveryClaimResult{FailureClass: DiscoveryFailureInterrupted}
+		}
 	}
 	var evidenceUpdated bool
 	if outcome.Succeeded {

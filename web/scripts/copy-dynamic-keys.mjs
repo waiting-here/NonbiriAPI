@@ -554,4 +554,34 @@ const dynamicCopyKeys = [
   ),
 ];
 
+dynamicCopyKeys.push(
+  ...[
+    ...['one', 'donation', 'all'].map((leaf) => [leaf, 't(`common.donationDiscovery.${label}`)']),
+    ...['donationHelp', 'allHelp'].map((leaf) => [
+      leaf,
+      't(`common.donationDiscovery.${label}Help`)',
+    ]),
+    ...['running', 'paused', 'done'].map((leaf) => [
+      leaf,
+      't(`common.donationDiscovery.${job.phase}`, job.counts)',
+    ]),
+    ...['succeeded', 'failed', 'ineligible', 'conflict', 'superseded'].map((leaf) => [
+      'status.' + leaf,
+      'common.donationDiscovery.status.${item.status}',
+    ]),
+    ...['auth', 'rate_limit', 'timeout', 'protocol', 'transport', 'interrupted'].map((leaf) => [
+      'reasons.' + leaf,
+      'common.donationDiscovery.reasons.${item.reason}',
+    ]),
+  ].map(([leaf, anchor]) =>
+    entry(
+      'common',
+      'common.donationDiscovery.' + leaf,
+      'src/shared/components/DonationDiscoveryControl.tsx',
+      anchor,
+      'Management discovery uses closed target, progress, result and safe failure domains.',
+    ),
+  ),
+);
+
 export default Object.freeze(dynamicCopyKeys);

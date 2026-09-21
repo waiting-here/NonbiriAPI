@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router';
 import { DonationKeyModels } from './DonationKeyModels';
+import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -1045,6 +1046,13 @@ function DonationKeyPages({
   return (
     <Card>
       <h3>{t('common.operations.charity.donationKeys')}</h3>
+      <DonationDiscoveryControl
+        key={`discovery:${role}:${accountId}:${item.id}`}
+        role={role}
+        target={{ donation_id: item.id }}
+        disabled={keys.isFetching || Boolean(keys.error) || staleRevision}
+        onCapabilityLoss={onCapabilityLoss}
+      />
       {keys.data ? (
         <FailureResetControl
           key={`${role}:${accountId}:${item.id}`}
@@ -1103,6 +1111,13 @@ function DonationKeyPages({
                   accountId={accountId}
                   donationId={item.id}
                   keyId={key.id}
+                  onCapabilityLoss={onCapabilityLoss}
+                />
+                <DonationDiscoveryControl
+                  key={`discovery:${role}:${accountId}:${key.id}`}
+                  role={role}
+                  target={{ donation_id: item.id, key_id: key.id }}
+                  disabled={key.charity_state !== 'available'}
                   onCapabilityLoss={onCapabilityLoss}
                 />
                 <RecurringLimitsDisclosure
@@ -1331,6 +1346,12 @@ function DonationsPanel({
             </select>
           </label>
         </div>
+        <DonationDiscoveryControl
+          key={`discovery-all:${role}:${accountId}`}
+          role={role}
+          target={{ donation_id: null }}
+          onCapabilityLoss={onCapabilityLoss}
+        />
         {list.data ? (
           <FailureResetControl
             key={`${role}:${accountId}:${status}:${handling}:${query}`}

@@ -1,0 +1,30 @@
+.donation-discovery {
+  display: grid;
+  gap: 0.75rem;
+  margin-block: 0.75rem;
+  min-width: 0;
+}
+.donation-discovery > .btn {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+.donation-discovery-progress {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.donation-discovery-progress p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.donation-discovery-progress > .btn {
+  justify-self: start;
+}
+.donation-discovery-progress ol {
+  max-height: 18rem;
+  overflow: auto;
+  padding-inline-start: 1.5rem;
+  overflow-wrap: anywhere;
+}

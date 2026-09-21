@@ -63,6 +63,18 @@ type DiscoveryClaimRail interface {
 	Discover(context.Context, DiscoveryClaimInput) (DiscoveryClaimResult, error)
 }
 
+// ManagedDiscoveryAuthorizer resolves a donation key only after checking the
+// current management session, role, parent and eligibility in the given transaction.
+type ManagedDiscoveryAuthorizer interface {
+	AuthorizeManagedDiscovery(context.Context, *sql.Tx, string, int64, int64, int64, bool) (ManagedDiscoveryTarget, error)
+}
+
+type ManagedDiscoveryTarget struct {
+	OwnerUserID   int64
+	EndpointID    int64
+	EndpointKeyID int64
+}
+
 // DiscoveryWorker provides non-blocking, bounded admission for accepted
 // discovery continuations. A successful reservation owns one admission slot
 // until Start's callback returns or Release is called. Start supplies a

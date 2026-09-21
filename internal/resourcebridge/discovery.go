@@ -44,6 +44,7 @@ func (r *Runtime) Discover(ctx context.Context, input resources.DiscoveryClaimIn
 
 	request, handle, err := r.claims.ClaimDiscovery(ctx, claim.DiscoveryClaimInput{
 		ActorUserID: input.OwnerUserID,
+		Authorize:   input.Authorize,
 		Candidate: claim.Candidate{
 			EndpointID:       input.EndpointID,
 			EndpointKeyID:    input.EndpointKeyID,

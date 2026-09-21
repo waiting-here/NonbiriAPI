@@ -209,6 +209,11 @@ func (s *Service) ClaimDiscovery(ctx context.Context, input DiscoveryClaimInput)
 		return Request{}, Handle{}, fmt.Errorf("claim: begin discovery claim: %w", err)
 	}
 	defer tx.Rollback()
+	if input.Authorize != nil {
+		if err := input.Authorize(ctx, tx); err != nil {
+			return Request{}, Handle{}, err
+		}
+	}
 	if err := requireActiveUser(ctx, tx, input.ActorUserID, at, false); err != nil {
 		return Request{}, Handle{}, err
 	}
@@ -235,6 +240,7 @@ VALUES(?,?,? ,?,'accepted',1,'none',0,'user',?,?)`,
 	if err := tx.Commit(); err != nil {
 		return Request{}, Handle{}, fmt.Errorf("claim: commit discovery claim: %w", err)
 	}
+	handle.discoveryAuthorize = input.Authorize
 	userID := input.ActorUserID
 	request := Request{
 		ID:                    requestID,
@@ -401,6 +407,14 @@ func (s *Service) TakeForDispatch(ctx context.Context, handle Handle) (*Dispatch
 		return nil, fmt.Errorf("claim: begin dispatch: %w", err)
 	}
 	defer tx.Rollback()
+	if handle.discoveryAuthorize != nil {
+		if handle.purpose != PurposeDiscovery {
+			return nil, ErrInvalidInput
+		}
+		if err := handle.discoveryAuthorize(ctx, tx); err != nil {
+			return nil, err
+		}
+	}
 	at, err := s.nowUnix()
 	if err != nil {
 		return nil, err
