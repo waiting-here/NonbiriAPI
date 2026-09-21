@@ -166,8 +166,10 @@ function CharityContent() {
         aria-label={t('user.charity.catalog.modelsList')}
       >
         <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} />
-        <CharitySafetyNotice />
-        <Leaderboard board="charity" enabled={tab === 'models'} />
+        <aside className="economy-charity-sidebar">
+          <CharitySafetyNotice />
+          <Leaderboard board="charity" enabled={tab === 'models'} />
+        </aside>
       </section>
       <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
         {accountID ? (

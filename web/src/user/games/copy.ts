@@ -90,6 +90,11 @@ const copy = {
     '维护已开启。请保持本页打开；离开、刷新或失去连接后可能无法继续。',
   ],
   'common.anonymous': ['Stay anonymous on leaderboards', '在排行榜中匿名'],
+  'common.sharedPrivacy': [
+    'All game leaderboards share the privacy setting in the game lounge.',
+    '所有游戏排行榜共用游戏大厅中的匿名设置。',
+  ],
+  'common.anonymousSettings': ['Manage game anonymity', '管理游戏匿名设置'],
   'common.anonymousHelp': [
     'Applies to all game leaderboards. Turn off to show your name and avatar. In three-player RPS matches and other public-identity play, your name and avatar remain visible to the other players.',
     '适用于所有游戏排行榜。关闭后将展示你的昵称和头像。三人猜拳对局等强制公开身份的场景中，其他玩家仍会看到你的昵称和头像。',

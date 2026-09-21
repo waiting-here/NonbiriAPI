@@ -26,7 +26,7 @@ import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { FishingArtwork } from './FishingArtwork';
 import blueFatFish from '@shared/assets/game-fishing/blue-fat-fish.png';
 import fishingScene from '@shared/assets/game-heroes/fishing.webp';
-import { GamePrivacyControl } from '../common/GamePrivacyControl';
+import { GamePrivacyLink } from '../common/GamePrivacyControl';
 import {
   acknowledgeFishing,
   fishingKeys,
@@ -1025,7 +1025,7 @@ export function FishingGame() {
           </button>
         </Card>
       </div>
-      <GamePrivacyControl />
+      <GamePrivacyLink />
       <section className="fishing-leaderboards" aria-label={text('fishing.leaderboard.single')}>
         <FishingSingleBoards historical={single} recent={recentSingle} />
         <LeaderboardCard board="total" query={total} />

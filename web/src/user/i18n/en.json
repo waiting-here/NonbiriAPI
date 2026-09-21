@@ -662,8 +662,8 @@
     "activities": {
       "nav": "Activities",
       "eyebrow": "Activities · Live updates",
-      "title": "Welfare & Thursday activity",
-      "description": "View activity status, join activities, and earn more Nonbiri credits.",
+      "title": "Activity center",
+      "description": "Cyber loans, daily game welfare and Crazy Thursday: choose your next game boost.",
       "cardsLabel": "Available activities",
       "mutationResponseUnknown": "The request outcome is uncertain.",
       "mutationConflictRefreshed": "The activity changed before the request completed.",

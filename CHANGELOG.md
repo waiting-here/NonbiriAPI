@@ -4,6 +4,14 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+### Fixed
+
+- Give Cyber loan a full-width promotion and a prominent nominal amount, with a compact fee-details star in the confirmation description. Keep welfare and Thursday activities together below it.
+- Keep charity privacy information and the True Charity leaderboard in an independent sidebar, fill incomplete catalog rows and show paging controls above the results.
+- Centralize game leaderboard anonymity in the game lounge, with direct links from Fishing and Rock–Paper–Scissors, and let shared page descriptions use available desktop space.
+
 ## [1.0.0-rc.2] - 2026-09-20
 
 ### Added

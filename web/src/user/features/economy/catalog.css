@@ -70,8 +70,9 @@
 }
 
 .economy-catalog-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--nb-space-4);
   margin: 0;
   padding: 0;
@@ -79,8 +80,8 @@
 
 .economy-catalog-item {
   display: grid;
+  flex: 1 1 32rem;
   align-content: start;
-  align-self: start;
   gap: var(--nb-space-2);
   min-width: 0;
   margin: 0;
@@ -203,6 +204,20 @@
 
 .economy-catalog-pagination {
   margin-top: var(--nb-space-5);
+}
+
+.economy-catalog-page-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--nb-space-3);
+  margin-bottom: var(--nb-space-4);
+  color: var(--nb-color-text-muted);
+}
+
+.economy-catalog-page-summary .form-actions {
+  margin: 0;
 }
 
 .economy-catalog-filter-reset {

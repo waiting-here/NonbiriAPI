@@ -21,6 +21,17 @@
   align-items: start;
 }
 
+.economy-activities-grid > .loan-card {
+  grid-column: 1 / -1;
+}
+
+.economy-charity-sidebar {
+  display: grid;
+  gap: var(--nb-space-5);
+  min-width: 0;
+  align-content: start;
+}
+
 .economy-capability-card,
 .economy-activity-card,
 .economy-master-card,

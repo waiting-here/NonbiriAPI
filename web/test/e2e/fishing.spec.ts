@@ -267,12 +267,18 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
   }
   await expect(page.getByRole('link', { name: 'API access', exact: true })).toBeVisible();
   const anonymity = page.getByRole('checkbox', { name: 'Stay anonymous on leaderboards' });
+  await expect(anonymity).toHaveCount(0);
+  await page.getByRole('link', { name: 'Manage game anonymity' }).click();
+  await expect(page).toHaveURL(`${USER_ORIGIN}/games#game-privacy`);
+  await expect(anonymity).toBeInViewport();
   await expect(anonymity).toBeChecked();
   await anonymity.click();
   await expect.poll(() => writes).toBe(1);
   await expect(anonymity).not.toBeChecked();
   await page.reload();
   await expect(anonymity).not.toBeChecked();
+  await page.goto(`${USER_ORIGIN}/games/fishing`);
+  await expect(anonymity).toHaveCount(0);
   await page.screenshot({ path: '../tmp/usability-fishing-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   for (const table of await page.locator('.fishing-table-wrap').all()) {

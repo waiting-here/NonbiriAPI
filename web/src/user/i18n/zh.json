@@ -662,8 +662,8 @@
     "activities": {
       "nav": "活动",
       "eyebrow": "活动 · 实时更新",
-      "title": "低保与疯狂星期四",
-      "description": "查看活动状态，参加活动，赚取更多悠哉积分。",
+      "title": "活动中心",
+      "description": "赛博网贷、每日游戏低保与疯狂星期四，挑选今天的游戏补给。",
       "cardsLabel": "可用活动",
       "mutationResponseUnknown": "请求结果无法确认。",
       "mutationConflictRefreshed": "活动在请求完成前已发生变化。",

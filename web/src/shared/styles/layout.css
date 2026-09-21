@@ -129,7 +129,6 @@
 
 .page-description {
   margin-bottom: 0;
-  max-width: 72ch;
   color: var(--nb-color-text-muted);
 }
 
