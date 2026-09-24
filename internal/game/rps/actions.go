@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type actionWireBody struct {
@@ -293,6 +294,9 @@ func (service *Service) Action(ctx context.Context, input ActionInput) (Mutation
 	body, err := json.Marshal(home)
 	if err != nil || len(body) > idempotency.MaxResponseBytes {
 		return MutationResult{}, ErrResourceLimit
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return MutationResult{}, err
 	}
 	if err := idempotency.Complete(ctx, tx, decision, http.StatusOK, body); err != nil {
 		return MutationResult{}, mapIdempotency(err)

@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/randomness"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type startBody struct {
@@ -412,6 +413,10 @@ func mapLedger(err error) error {
 }
 
 func (service *Service) recordGameActivity(ctx context.Context, tx *sql.Tx, userID, now int64) error {
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: userID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return err
+	}
+
 	var raw sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, db.SiteTimezoneKey).Scan(&raw); errors.Is(err, sql.ErrNoRows) {
 		return nil

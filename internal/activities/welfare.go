@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 // ClaimWelfare evaluates eligibility and, when the computed award is
@@ -156,6 +157,9 @@ VALUES(?,?,?,?,?,?,?,?,'game')`, userID, day, operationID, config.welfareThresho
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
 	}
 	if err := freezeSiteTimezoneTx(ctx, tx, now); err != nil {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: userID, At: now, Kind: "welfare", Fresh: true}); err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
 	}
 	value := WelfareClaimResult{

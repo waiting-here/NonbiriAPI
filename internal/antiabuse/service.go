@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type Retirement interface {
@@ -382,14 +383,18 @@ func applyRestrictions(ctx context.Context, tx *sql.Tx, userID, now int64, revis
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET
 is_banned=CASE WHEN ?>0 THEN 1 ELSE is_banned END,
 auto_banned=CASE WHEN ?>0 THEN 1 ELSE auto_banned END,
+ban_kind=CASE WHEN ?>0 THEN '' ELSE ban_kind END,
 banned_reason=CASE WHEN ?>0 THEN 'Automatic abuse prevention' ELSE banned_reason END,
 banned_until=CASE WHEN ?>0 THEN MAX(COALESCE(banned_until,0),?) ELSE banned_until END,
 charity_suspended_until=CASE WHEN ?>0 THEN MAX(COALESCE(charity_suspended_until,0),?) ELSE charity_suspended_until END,
-revision=?,updated_at=MAX(updated_at,?) WHERE id=? AND is_admin=0`, banSeconds, banSeconds, banSeconds, banSeconds, now+banSeconds, suspendSeconds, now+suspendSeconds, db.EncodeU128(next), now, userID); err != nil {
+revision=?,updated_at=MAX(updated_at,?) WHERE id=? AND is_admin=0`, banSeconds, banSeconds, banSeconds, banSeconds, banSeconds, now+banSeconds, suspendSeconds, now+suspendSeconds, db.EncodeU128(next), now, userID); err != nil {
 		return err
 	}
 	if banSeconds == 0 {
 		return nil
+	}
+	if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
 		return err

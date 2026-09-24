@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type enqueueBody struct {
@@ -158,6 +159,9 @@ func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult,
 	if err != nil {
 		return MutationResult{}, err
 	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: in.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return MutationResult{}, err
+	}
 	result, err := finish(ctx, tx, d, 202, QueueReceipt{QueueID: id, Revision: q.Revision.Decimal(), Deadline: q.Deadline})
 	if err != nil {
 		return MutationResult{}, err
@@ -231,6 +235,9 @@ func (s *Service) CancelQueue(ctx context.Context, in CancelInput) (MutationResu
 	}
 	d, err := s.replay(ctx, tx, in.Identity, in.IdempotencyKey, "DELETE", route, in.QueueID, body, now)
 	if err != nil {
+		return MutationResult{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: in.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
 		return MutationResult{}, err
 	}
 	result, err := finish(ctx, tx, d, 204, nil)

@@ -329,6 +329,10 @@ func TestAbandonRequiresConfirmationNeverRefundsAndAllowsFreshCharge(t *testing.
 	if err != nil || !reflect.DeepEqual(replayedSummary, summary) {
 		t.Fatalf("abandon replay = (%+v,%v)", replayedSummary, err)
 	}
+	var activitySeq int64
+	if err := fixture.database.QueryRow(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, userID).Scan(&activitySeq); err != nil || activitySeq != 2 {
+		t.Fatalf("start/lease/abandon/replay activity=%d err=%v", activitySeq, err)
+	}
 	changedAbandon := abandonInput
 	changedAbandon.ExpectedRevision = "2"
 	if _, err := fixture.service.Abandon(context.Background(), changedAbandon); !errors.Is(err, ErrConflict) {

@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 const maxUnixSecond int64 = 253402300799
@@ -232,6 +233,9 @@ func (service *Service) CheckinForAsset(ctx context.Context, userID int64, asset
 		return Result{}, classifyDatabase("insert check-in", err)
 	}
 	if err := recordCheckinActivity(ctx, tx, userID, day.activityDay, now, source.table); err != nil {
+		return Result{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: userID, At: now, Kind: "checkin", Fresh: true}); err != nil {
 		return Result{}, err
 	}
 	if err := freezeTimezone(ctx, tx, now); err != nil {

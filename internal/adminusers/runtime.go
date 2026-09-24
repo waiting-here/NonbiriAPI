@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 const (
@@ -758,6 +759,11 @@ WHERE id=? AND is_admin=0 AND revision=?`,
 	if err != nil || updated != 1 {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
+	if input.LevelSet {
+		if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	row, err = readUserRow(ctx, tx, userID)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
@@ -897,6 +903,11 @@ func (service *Service) economy(ctx context.Context, adminID, userID int64, role
 	if err != nil || updated != 1 {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
+	if authorityChanged {
+		if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	row, err = readUserRow(ctx, tx, userID)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
@@ -980,11 +991,14 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 			defer func() { finalize(done) }()
 		}
 		result, err = tx.ExecContext(ctx, `
-UPDATE users SET is_banned=1,banned_reason=?,banned_until=?,auto_banned=0,revision=?,updated_at=?
+UPDATE users SET is_banned=1,banned_reason=?,banned_until=?,auto_banned=0,ban_kind='',revision=?,updated_at=?
 WHERE id=? AND is_admin=0 AND revision=?`, reason, until, db.EncodeU128(next), now, userID, row.revision)
 	} else {
+		if err := useractivity.ResetObservationTx(ctx, tx, userID, now); err != nil {
+			return MutationResult[struct{}]{}, err
+		}
 		result, err = tx.ExecContext(ctx, `
-UPDATE users SET is_banned=0,banned_reason='',banned_until=NULL,auto_banned=0,revision=?,updated_at=?
+UPDATE users SET is_banned=0,banned_reason='',banned_until=NULL,auto_banned=0,ban_kind='',revision=?,updated_at=?
 WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row.revision)
 	}
 	if err != nil {
@@ -993,6 +1007,9 @@ WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row
 	updated, err := result.RowsAffected()
 	if err != nil || updated != 1 {
 		return MutationResult[struct{}]{}, ErrConflict
+	}
+	if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+		return MutationResult[struct{}]{}, err
 	}
 	if banned {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {

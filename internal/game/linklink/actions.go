@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type matchBody struct {
@@ -295,6 +296,9 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 		}
 		result := summaryResult(summary, false)
 		result.MatchPath = path
+		if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+			return Result{}, err
+		}
 		if err := completeResult(ctx, tx, decision, result); err != nil {
 			return Result{}, err
 		}
@@ -322,6 +326,9 @@ WHERE id=? AND user_id=? AND revision=?`, db.EncodeU128(next), record.Board.tile
 	record.Revision, record.UpdatedAt = next, now
 	result := stateResult(stateFromRecord(record, now), http.StatusOK, false)
 	result.MatchPath = path
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return Result{}, err
+	}
 	if err := completeResult(ctx, tx, decision, result); err != nil {
 		return Result{}, err
 	}
@@ -447,6 +454,9 @@ func (service *Service) Abandon(ctx context.Context, input AbandonInput) (Summar
 	}
 	summary, err := service.terminalize(ctx, tx, record, TerminalAbandoned, now)
 	if err != nil {
+		return Summary{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
 		return Summary{}, err
 	}
 	if err := completeResult(ctx, tx, decision, summaryResult(summary, false)); err != nil {
