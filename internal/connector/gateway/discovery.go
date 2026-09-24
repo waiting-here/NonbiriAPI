@@ -10,6 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 type ModelDiscoverer struct{}
@@ -71,6 +72,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 		return result
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
+		_ = (upstreamerror.Context{}).ReadResponse(ctx, response)
 		switch response.StatusCode {
 		case 401, 403:
 			result.Failure = contract.DiscoveryFailureAuth
@@ -81,6 +83,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 		return result
 	}
 	if !validContentType(response, "application/json") {
+		_ = (upstreamerror.Context{}).ReadResponse(ctx, response)
 		return result
 	}
 	body, err := readBounded(response.Body, min(int64(4<<20), input.Backend.MaxResponseBytes()))
@@ -88,6 +91,11 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 		return result
 	}
 	defer clear(body)
+	defer func() {
+		if result.Failure != contract.DiscoveryFailureNone && ctx.Err() == nil {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
+		}
+	}()
 	root, err := parseObject(body)
 	if err != nil {
 		return result

@@ -169,6 +169,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			}
 			continue
 		case "error":
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usageState.final(), wireGuard, semanticGuard, errorContext.Parse([]byte(event.Data)))
 		case "message_start":
 			if seenStart || !onlyKeys(root, "type", "message") {

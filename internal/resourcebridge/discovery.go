@@ -82,6 +82,9 @@ func (r *Runtime) Discover(ctx context.Context, input resources.DiscoveryClaimIn
 	}
 	defer credential.Clear()
 
+	if r.errorScope != nil {
+		ctx = r.errorScope(ctx, request.ID, 1)
+	}
 	typedResult, panicked := callDiscoverer(ctx, input.Discoverer, connectorcontract.DiscoveryInput{
 		Backend:    r.backend,
 		Target:     dispatch.Target(),

@@ -289,7 +289,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
 		result := upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
-		result.ErrorDetail = errorContext.Read(response.Body, a.maxJSONResponseBytes)
+		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)
 		if ctx.Err() != nil {
 			return canceledFailure()
 		}
@@ -297,6 +297,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	}
 	if request.Stream {
 		if !validResponseMediaType(response, "text/event-stream") {
+			_ = errorContext.ReadResponse(ctx, response)
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
 		if policy.FlattenToolCalls {
@@ -306,6 +307,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	}
 
 	if !validResponseMediaType(response, "application/json") {
+		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
 	return a.nonStreamWithPolicy(ctx, writer, response, guard, policy, errorContext)
@@ -328,18 +330,22 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 	}
 	defer clear(body)
 	if !validProtocolBytes(body) {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
 	if upstreamerror.IsEvent(body) {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		result := upstreamFailure("upstream response reported an error", response.StatusCode)
 		result.ErrorDetail = errorContext.Parse(body)
 		return result
 	}
 	usage, err := validateCompletion(body)
 	if err != nil {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
 	if guard.ContainsJSON(body, body) {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
 	if policy.FlattenToolCalls {
@@ -415,6 +421,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream ended before completion")
 		}
 		if event.Event == "error" || event.Event == "message" && upstreamerror.IsEvent([]byte(event.Data)) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
 		if event.Event != "message" {
@@ -523,6 +530,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			return failure("upstream stream ended before completion")
 		}
 		if event.Event == "error" || event.Event == "message" && upstreamerror.IsEvent([]byte(event.Data)) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
 		if event.Event != "message" {
