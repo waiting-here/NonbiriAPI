@@ -146,6 +146,15 @@ func newUpstream(t *testing.T) *fakeUpstream {
 				w.WriteHeader(429)
 				fmt.Fprint(w, `{"error":{"message":"synthetic rejection"}}`)
 				return
+			case 8:
+				fmt.Fprint(w, `{"queued":true,"id":"receipt/../opaque"}`)
+				return
+			case 9:
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"b64": base64.StdEncoding.EncodeToString(f.png)}}})
+				return
+			case 10:
+				_ = json.NewEncoder(w).Encode(map[string]any{"queued": true, "id": "contradictory", "data": []map[string]string{{"b64": base64.StdEncoding.EncodeToString(f.png)}}})
+				return
 			case 6:
 				fmt.Fprint(w, `{"status":"done","data":[{"b64":"`+base64.StdEncoding.EncodeToString(f.png)+`"}]`)
 				return
@@ -160,6 +169,10 @@ func newUpstream(t *testing.T) *fakeUpstream {
 		default:
 			if r.Method == http.MethodGet {
 				f.polls.Add(1)
+				if f.mode.Load() == 11 {
+					fmt.Fprint(w, `{"status":"unrecognized"}`)
+					return
+				}
 				if f.mode.Load() == 5 {
 					w.WriteHeader(503)
 					fmt.Fprint(w, `{"error":"temporary"}`)
