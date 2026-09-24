@@ -43,6 +43,12 @@ func makePreGovernanceFixture(t *testing.T, database *sql.DB) {
 	for _, object := range want.Objects {
 		known[object.Name] = object
 	}
+	currentTables := map[string]string{}
+	for _, object := range got.Objects {
+		if object.Type == "table" {
+			currentTables[object.Name] = object.SQL
+		}
+	}
 	// These are the only new tables seeded without user actions.
 	seedRows := map[string]int{
 		"observability_state": 1, "risk_audit_config": 1, "economy_audit_checkpoint": 1,
@@ -119,9 +125,12 @@ UPDATE site_config SET value=(SELECT value FROM site_config WHERE key='level_dis
 	// Rebuild using the old column set: dropping a single new column cannot
 	// remove a CHECK that relates several new signed-value columns.
 	for _, table := range want.Tables {
+		definition := known[table.Name].SQL
+		if currentTables[table.Name] == definition {
+			continue
+		}
 		name := quoteSQLiteIdentifier(table.Name)
 		temporary := quoteSQLiteIdentifier("legacy_fixture_" + table.Name)
-		definition := known[table.Name].SQL
 		start := strings.IndexByte(definition, '(')
 		if start < 0 {
 			t.Fatal("missing table definition", table.Name)

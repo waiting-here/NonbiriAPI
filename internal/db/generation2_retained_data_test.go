@@ -15,7 +15,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-var retainedSourceManifests = []struct{ name, hash string }{
+type retainedSourceManifest struct{ name, hash string }
+
+var retainedSourceManifests = []retainedSourceManifest{
 	{"before_routing", preRoutingManifestHash},
 	{"before_key_limits", preKeyLimitsManifestHash},
 	{"before_response_starts", preResponseStartsManifestHash},
@@ -421,9 +423,22 @@ func retainedBusinessFixture(t *testing.T) func(*testing.T, string) (string, *St
 	}
 }
 
-func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
+func TestRetainedBusinessDataEarlyRoutingSources(t *testing.T) {
+	testRetainedBusinessDataSources(t, retainedSourceManifests[:3])
+}
+
+func TestRetainedBusinessDataCoreAndRecurringSources(t *testing.T) {
+	testRetainedBusinessDataSources(t, retainedSourceManifests[3:5])
+}
+
+func TestRetainedBusinessDataBrowseAndQuotaSources(t *testing.T) {
+	testRetainedBusinessDataSources(t, retainedSourceManifests[5:])
+}
+
+func testRetainedBusinessDataSources(t *testing.T, sources []retainedSourceManifest) {
+	t.Helper()
 	fixture := retainedBusinessFixture(t)
-	for _, source := range retainedSourceManifests {
+	for _, source := range sources {
 		t.Run(source.name, func(t *testing.T) {
 			path, store := fixture(t, "retained.sqlite")
 			vault := store.secrets
@@ -469,9 +484,22 @@ func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
 	}
 }
 
-func TestRetainedExtensionRollsBackWhenStorageFills(t *testing.T) {
+func TestRetainedExtensionRollbackEarlyRoutingSources(t *testing.T) {
+	testRetainedExtensionRollbackSources(t, retainedSourceManifests[:3])
+}
+
+func TestRetainedExtensionRollbackCoreAndRecurringSources(t *testing.T) {
+	testRetainedExtensionRollbackSources(t, retainedSourceManifests[3:5])
+}
+
+func TestRetainedExtensionRollbackBrowseAndQuotaSources(t *testing.T) {
+	testRetainedExtensionRollbackSources(t, retainedSourceManifests[5:])
+}
+
+func testRetainedExtensionRollbackSources(t *testing.T, sources []retainedSourceManifest) {
+	t.Helper()
 	fixture := retainedBusinessFixture(t)
-	for _, source := range retainedSourceManifests {
+	for _, source := range sources {
 		t.Run(source.name, func(t *testing.T) {
 			_, store := fixture(t, "full.sqlite")
 			makeRetainedSource(t, store.DB(), source.hash)
