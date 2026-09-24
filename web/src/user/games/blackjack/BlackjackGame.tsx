@@ -10,6 +10,7 @@ import {
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { GameWallets } from '../common/GameWallets';
 import { Leaderboard } from '../ranking/Leaderboard';
+import { LeaderboardTabs } from '../ranking/LeaderboardTabs';
 import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { useAuthoritativeCountdown } from '../common/countdown';
@@ -617,8 +618,20 @@ export function BlackjackGame() {
         )}
         {panel === 'rules' && <Rules close={close} />}
         {panel === 'history' && <History close={close} />}
-        <Leaderboard board="blackjack" />
-        <Leaderboard board="blackjack_net_profit" />
+        <LeaderboardTabs
+          items={[
+            {
+              id: 'net-profit',
+              label: t('赌神榜', 'Card master leaderboard'),
+              content: <Leaderboard board="blackjack_net_profit" />,
+            },
+            {
+              id: 'profit',
+              label: t('利润榜', 'Profit leaderboard'),
+              content: <Leaderboard board="blackjack" />,
+            },
+          ]}
+        />
       </div>
     </main>
   );

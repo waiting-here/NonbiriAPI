@@ -68,3 +68,40 @@
 .rank-privacy {
   margin-top: 1rem;
 }
+
+.rank-switcher {
+  min-width: 0;
+  max-width: 64rem;
+  margin: 1.5rem auto;
+  scroll-margin-top: 6rem;
+}
+.rank-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--nb-color-border);
+  margin-bottom: 1rem;
+}
+.rank-tabs .btn {
+  min-height: 44px;
+}
+.rank-switcher .progression-ranking {
+  margin-top: 0;
+}
+.rank-switcher [role='tabpanel'] {
+  min-width: 0;
+}
+.rank-switcher .fishing-board,
+.rank-switcher .progression-ranking {
+  max-width: 64rem;
+  margin-inline: auto;
+}
+
+.rank-switcher .rank-table-scroll th:first-child {
+  width: 4rem;
+}
+.rank-switcher .rank-table-scroll :is(th, td):first-child {
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}

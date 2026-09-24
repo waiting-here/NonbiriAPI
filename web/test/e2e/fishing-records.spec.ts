@@ -366,11 +366,16 @@ for (const scenario of SCENARIOS) {
       await expect(page.getByRole('dialog')).not.toContainText('传说');
     await expect(page.getByRole('dialog')).toContainText('201');
     await page.getByRole('button', { name: scenario.closeRules }).click();
+    const boardTabs = page.getByRole('tablist', {
+      name: scenario.language === 'zh' ? '选择排行榜' : 'Choose a leaderboard',
+    });
+    await boardTabs.getByRole('tab').nth(2).click();
     await expect(
       page.getByRole('heading', {
         name: scenario.language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',
       }),
     ).toBeVisible();
+    await boardTabs.getByRole('tab').first().click();
     await expect(page.locator('.fishing-result')).toBeVisible();
 
     const result = page.locator('.fishing-result');
@@ -409,12 +414,14 @@ for (const scenario of SCENARIOS) {
     await expect(page.locator(`[data-batch-id="${BATCH_ID}"]`)).toHaveCount(0);
 
     const singleBoard = page.locator('.fishing-board-switch .fishing-board');
-    const totalBoard = page.locator('.fishing-leaderboards > .fishing-board');
+    const totalBoard = page.locator('.rank-switcher > [role=tabpanel] > .fishing-board');
     const recentTab = page.getByRole('tab', { name: scenario.recentTab });
     const historicalTab = page.getByRole('tab', { name: scenario.historicalTab });
     const originalSpecies = scenario.language === 'zh' ? '锦鲤' : 'Koi';
     const unit = scenario.language === 'zh' ? '厘米' : 'cm';
-    await expect(page.getByRole('tab').first()).toHaveText(scenario.recentTab);
+    await expect(page.locator('.fishing-board-switch').getByRole('tab').first()).toHaveText(
+      scenario.recentTab,
+    );
     await expect(recentTab).toHaveAttribute('aria-selected', 'true');
     await expect(singleBoard.getByRole('heading', { name: scenario.recentTitle })).toBeVisible();
     await historicalTab.click();
@@ -458,11 +465,13 @@ for (const scenario of SCENARIOS) {
     await expect.poll(() => fixture.boardRequests.recent_single).toBe(recentBeforeRefresh + 1);
     await expect(recentTab).toHaveAttribute('aria-selected', 'true');
 
+    await boardTabs.getByRole('tab').nth(1).click();
     await expect(totalBoard.getByRole('heading', { name: scenario.totalTitle })).toBeVisible();
     const totalBeforeRefresh = fixture.boardRequests.total;
     await totalBoard.getByRole('button', { name: scenario.refresh }).click();
     await expect.poll(() => fixture.boardRequests.total).toBe(totalBeforeRefresh + 1);
 
+    await boardTabs.getByRole('tab').first().click();
     await page.getByRole('tab', { name: scenario.historicalTab }).click();
     await expect(
       singleBoard.getByRole('heading', { name: scenario.historicalTitle }),
@@ -481,6 +490,14 @@ for (const scenario of SCENARIOS) {
 
     for (const width of [320, 360, 430]) {
       await assertNoHorizontalOverflow(page, width);
+    }
+    for (const width of [1440, 1920]) {
+      await assertNoHorizontalOverflow(page, width);
+      await page
+        .locator('.rank-switcher')
+        .screenshot({
+          path: '../tmp/fishing-rankings-' + scenario.language + '-' + width + '.png',
+        });
     }
     await historicalTab.click();
     await page.goto(`${USER_ORIGIN}/games`);
