@@ -41,9 +41,17 @@ async function session(browser: Browser, role: 'admin' | 1 | 5 | 6, mobile = fal
     viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
   });
   await context.addCookies([
-    { name: cookie.Name, value: cookie.Value, url: origin, httpOnly: true },
+    {
+      name: cookie.Name,
+      value: cookie.Value,
+      domain: new URL(origin).hostname,
+      path: role === 'admin' ? '/admin' : '/api',
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
   ]);
   await context.addInitScript(() => {
+    if (!['http:', 'https:'].includes(location.protocol)) return;
     localStorage.setItem('nb.lang', 'en');
     localStorage.setItem('nb.theme', 'light');
   });
@@ -170,10 +178,10 @@ async function clientRule(page: Page, name: string, editing = false) {
   await page.getByLabel('Rule name', { exact: true }).fill(name);
   await page.getByLabel('Match value', { exact: true }).fill(fixture().source_client);
   await page
-    .getByLabel('Evidence note', { exact: true })
+    .getByLabel('Evidence note')
     .fill('Synthetic review evidence; a self-reported clue only.');
   await page.getByLabel('Evidence URL', { exact: true }).fill('https://evidence.invalid/review');
-  if (editing) await page.getByLabel('Status', { exact: true }).selectOption('confirmed');
+  if (editing) await page.getByLabel('Status').selectOption('confirmed');
   const saved = page.waitForResponse(
     (r) =>
       r.url().includes('/abuse-audit/client-rules') &&
@@ -187,10 +195,10 @@ async function riskEvidence(page: Page, sustained = true) {
   const f = fixture();
   const group = page.getByRole('group', { name: 'Abuse audit', exact: true });
   await group.getByRole('button', { name: 'Users', exact: true }).click();
-  await page.getByLabel('Risk filter', { exact: true }).selectOption('rpm');
+  await page.getByLabel('Risk filter').selectOption('rpm');
   if (!sustained) {
     await expect(page.getByText('No entries on this page', { exact: true })).toBeVisible();
-    await page.getByLabel('Risk filter', { exact: true }).selectOption('');
+    await page.getByLabel('Risk filter').selectOption('');
   }
   const row = page
     .getByRole('row')
@@ -258,7 +266,7 @@ test('administrator reviews raw diagnostics, human audit evidence and all four a
       sketch_brush: '80000',
     };
     for (const asset of Object.keys(names) as Asset[]) {
-      await page.getByLabel('Asset', { exact: true }).selectOption(asset);
+      await page.getByLabel('Asset').selectOption(asset);
       await page.getByRole('button', { name: 'Apply', exact: true }).click();
       await expect(page.getByRole('heading', { name: names[asset], exact: true })).toBeVisible();
       const response = await api(context, '/admin/api/economy-audit/summary?asset=' + asset, true);
