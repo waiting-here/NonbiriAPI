@@ -14,6 +14,7 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "audit": { "source": "请求来源", "risk": "防滥用审计", "economy": "积分审计" },
     "donationDiscovery": {
       "title": "捐赠密钥模型拉取",
       "one": "拉取模型列表",

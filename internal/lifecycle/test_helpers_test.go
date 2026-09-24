@@ -371,6 +371,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 		},
 		Retention: RetentionAdapters{
 			Sessions: noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
+			Observability: noopRetention("observability"), RiskAudit: noopRetention("risk_audit"),
 			Issues: noopRetention("issues"), Fishing: noopRetention("fishing"), LinkLink: noopRetention("linklink"),
 			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Donations: noopRetention("donations"),
 			Bidding: noopRetention("bidding"), Likes: noopRetention("likes"), Blackjack: noopRetention("blackjack"),

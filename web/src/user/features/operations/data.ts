@@ -158,7 +158,7 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
     id: decimalID(user.id, 'user id'),
     username: string(user.username, 'username', { min: 1, max: 128, bytes: 512 }),
     lang: oneOf(user.lang, ['', 'zh', 'en'] as const, 'user language'),
-    effective_level: integer(user.effective_level, 'effective level', 1, 5),
+    effective_level: integer(user.effective_level, 'effective level', 1, 6),
     is_banned: boolean(user.is_banned, 'ban state'),
   };
 }

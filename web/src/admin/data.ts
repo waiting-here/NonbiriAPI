@@ -251,12 +251,7 @@ function invalidResponse(message: string): never {
   throw new ApiError('invalid_response', message, 200);
 }
 
-function boundedInteger(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-  field: string,
-): number {
+function boundedInteger(value: unknown, minimum: number, maximum: number, field: string): number {
   if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
     return invalidResponse(`The server returned an invalid ${field}.`);
   }
@@ -305,9 +300,11 @@ function pagePayload(payload: unknown, pageSize = ADMIN_PAGE_SIZE): PagePayload 
 function normalizeSession(payload: unknown): AdminSessionResponse {
   const record = asRecord(payload);
   const admin = record ? asRecord(record.admin) : null;
-  if (!admin) throw new ApiError('invalid_response', 'The server returned an invalid session.', 200);
+  if (!admin)
+    throw new ApiError('invalid_response', 'The server returned an invalid session.', 200);
   const username = text(recordValue(admin, 'username'), 128);
-  if (!username) throw new ApiError('invalid_response', 'The server returned an invalid session.', 200);
+  if (!username)
+    throw new ApiError('invalid_response', 'The server returned an invalid session.', 200);
   return { admin: { username } };
 }
 
@@ -322,7 +319,10 @@ export function normalizeAdminUser(payload: unknown): AdminUser {
   const explicitEndpointLimit = optionalBoundedInteger(endpointLimit, 0, 10_000, 'endpoint limit');
   const explicitRPMLimit = optionalBoundedInteger(rpmLimit, 1, 4_096, 'RPM limit');
   const explicitConcurrencyLimit = optionalBoundedInteger(
-    concurrencyLimit, 1, 100_000, 'concurrency limit',
+    concurrencyLimit,
+    1,
+    100_000,
+    'concurrency limit',
   );
   return {
     id: idValue(recordValue(record, 'id')),
@@ -336,34 +336,42 @@ export function normalizeAdminUser(payload: unknown): AdminUser {
     ...(bannedUntil !== undefined && bannedUntil >= 0
       ? { banned_until: Math.trunc(bannedUntil) }
       : {}),
-    ...(explicitEndpointLimit !== undefined
-      ? { endpoint_limit: explicitEndpointLimit }
-      : {}),
+    ...(explicitEndpointLimit !== undefined ? { endpoint_limit: explicitEndpointLimit } : {}),
     effective_endpoint_limit: boundedInteger(
-      recordValue(record, 'effective_endpoint_limit'), 0, 10_000, 'effective endpoint limit',
+      recordValue(record, 'effective_endpoint_limit'),
+      0,
+      10_000,
+      'effective endpoint limit',
     ),
-    ...(explicitRPMLimit !== undefined
-      ? { rpm_limit: explicitRPMLimit }
-      : {}),
+    ...(explicitRPMLimit !== undefined ? { rpm_limit: explicitRPMLimit } : {}),
     effective_rpm_limit: boundedInteger(
-      recordValue(record, 'effective_rpm_limit'), 1, 4_096, 'effective RPM limit',
+      recordValue(record, 'effective_rpm_limit'),
+      1,
+      4_096,
+      'effective RPM limit',
     ),
     ...(explicitConcurrencyLimit !== undefined
       ? { concurrency_limit: explicitConcurrencyLimit }
       : {}),
     effective_concurrency_limit: boundedInteger(
-      recordValue(record, 'effective_concurrency_limit'), 1, 100_000, 'effective concurrency limit',
+      recordValue(record, 'effective_concurrency_limit'),
+      1,
+      100_000,
+      'effective concurrency limit',
     ),
     total_requests: Math.max(0, integerValue(recordValue(record, 'total_requests'))),
     total_prompt_tokens: Math.max(0, integerValue(recordValue(record, 'total_prompt_tokens'))),
-    total_completion_tokens: Math.max(0, integerValue(recordValue(record, 'total_completion_tokens'))),
+    total_completion_tokens: Math.max(
+      0,
+      integerValue(recordValue(record, 'total_completion_tokens')),
+    ),
     total_unknown_usage_requests: Math.max(
       0,
       integerValue(recordValue(record, 'total_unknown_usage_requests')),
     ),
     credits_balance: amountValue(recordValue(record, 'credits_balance')),
     donation_credit_balance: amountValue(recordValue(record, 'donation_credit_balance')),
-    ...(level !== undefined && level >= 1 && level <= 5 ? { level: Math.trunc(level) } : {}),
+    ...(level !== undefined && level >= 1 && level <= 6 ? { level: Math.trunc(level) } : {}),
     auto_level:
       autoLevel !== undefined && autoLevel >= 1 && autoLevel <= 4 ? Math.trunc(autoLevel) : 1,
     created_at: dateValue(recordValue(record, 'created_at')),
@@ -411,7 +419,8 @@ function normalizeLog(payload: unknown): AdminRequestLog {
 
 function normalizeUsage(payload: unknown): AdminUsage {
   const record = asRecord(payload);
-  if (!record) throw new ApiError('invalid_response', 'The server returned an invalid usage summary.', 200);
+  if (!record)
+    throw new ApiError('invalid_response', 'The server returned an invalid usage summary.', 200);
   const required = (key: string): number => {
     const raw = recordValue(record, key);
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
@@ -465,8 +474,16 @@ function normalizeAlert(payload: unknown): AdminAlert {
 }
 
 const SITE_CONFIG_CATALOG_TYPES = new Set<SiteConfigCatalogValueType>([
-  'text', 'locale', 'optional_locale', 'integer', 'optional_integer', 'boolean',
-  'multiline_text', 'amount', 'optional_amount', 'enum',
+  'text',
+  'locale',
+  'optional_locale',
+  'integer',
+  'optional_integer',
+  'boolean',
+  'multiline_text',
+  'amount',
+  'optional_amount',
+  'enum',
 ]);
 
 function legalTextBytes(value: string): number {
@@ -485,7 +502,10 @@ const CANONICAL_DECIMAL = /^-?(0|[1-9][0-9]*)$/;
 function hasDisallowedControl(value: string, legalText: boolean): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
-    if (code === 0x7f || (code < 0x20 && (!legalText || (code !== 0x09 && code !== 0x0a && code !== 0x0d)))) {
+    if (
+      code === 0x7f ||
+      (code < 0x20 && (!legalText || (code !== 0x09 && code !== 0x0a && code !== 0x0d)))
+    ) {
       return true;
     }
   }
@@ -498,9 +518,14 @@ function canonicalCatalogAmount(value: unknown, entry: SiteConfigCatalogEntry): 
   }
   try {
     const parsed = BigInt(value);
-    if (typeof entry.minimum !== 'string' || typeof entry.maximum !== 'string' ||
-        !CANONICAL_DECIMAL.test(entry.minimum) || !CANONICAL_DECIMAL.test(entry.maximum) ||
-        parsed < BigInt(entry.minimum) || parsed > BigInt(entry.maximum)) {
+    if (
+      typeof entry.minimum !== 'string' ||
+      typeof entry.maximum !== 'string' ||
+      !CANONICAL_DECIMAL.test(entry.minimum) ||
+      !CANONICAL_DECIMAL.test(entry.maximum) ||
+      parsed < BigInt(entry.minimum) ||
+      parsed > BigInt(entry.maximum)
+    ) {
       return invalidResponse(`The server returned an out-of-range ${entry.key} amount.`);
     }
   } catch {
@@ -516,15 +541,21 @@ function normalizeCatalogConfigValue(raw: unknown, entry: SiteConfigCatalogEntry
   }
   switch (entry.value_type) {
     case 'boolean':
-      if (typeof raw !== 'boolean') return invalidResponse(`The server returned an invalid ${entry.key} boolean.`);
+      if (typeof raw !== 'boolean')
+        return invalidResponse(`The server returned an invalid ${entry.key} boolean.`);
       return raw;
     case 'integer':
     case 'optional_integer': {
-      if (!Number.isSafeInteger(raw)) return invalidResponse(`The server returned an invalid ${entry.key} integer.`);
+      if (!Number.isSafeInteger(raw))
+        return invalidResponse(`The server returned an invalid ${entry.key} integer.`);
       const parsed = raw as number;
-      if (typeof entry.minimum !== 'number' || typeof entry.maximum !== 'number' ||
-          parsed < entry.minimum || parsed > entry.maximum ||
-          (typeof entry.step === 'number' && parsed % entry.step !== 0)) {
+      if (
+        typeof entry.minimum !== 'number' ||
+        typeof entry.maximum !== 'number' ||
+        parsed < entry.minimum ||
+        parsed > entry.maximum ||
+        (typeof entry.step === 'number' && parsed % entry.step !== 0)
+      ) {
         return invalidResponse(`The server returned an out-of-range ${entry.key} integer.`);
       }
       return parsed;
@@ -535,20 +566,30 @@ function normalizeCatalogConfigValue(raw: unknown, entry: SiteConfigCatalogEntry
     case 'locale':
     case 'optional_locale':
     case 'enum': {
-      if (typeof raw !== 'string' || hasDisallowedControl(raw, false) ||
-          !entry.allowed_values || entry.allowed_values.length === 0 ||
-          (!entry.allowed_values.includes(raw) && raw !== entry.raw_default)) {
+      if (
+        typeof raw !== 'string' ||
+        hasDisallowedControl(raw, false) ||
+        !entry.allowed_values ||
+        entry.allowed_values.length === 0 ||
+        (!entry.allowed_values.includes(raw) && raw !== entry.raw_default)
+      ) {
         return invalidResponse(`The server returned an invalid ${entry.key} choice.`);
       }
       return raw;
     }
     case 'text':
     case 'multiline_text': {
-      if (typeof raw !== 'string') return invalidResponse(`The server returned an invalid ${entry.key} text.`);
+      if (typeof raw !== 'string')
+        return invalidResponse(`The server returned an invalid ${entry.key} text.`);
       const legal = LOSSLESS_LEGAL_CONFIG_KEYS.has(entry.key);
       const maximum = legal ? 65_536 : entry.maximum;
-      if (typeof maximum !== 'number' || !Number.isSafeInteger(maximum) || maximum < 0 ||
-          legalTextBytes(raw) > maximum || hasDisallowedControl(raw, legal)) {
+      if (
+        typeof maximum !== 'number' ||
+        !Number.isSafeInteger(maximum) ||
+        maximum < 0 ||
+        legalTextBytes(raw) > maximum ||
+        hasDisallowedControl(raw, legal)
+      ) {
         return invalidResponse(`The server returned an invalid ${entry.key} text.`);
       }
       // Only the four legal override values are lossless large-body text.
@@ -580,8 +621,15 @@ export function normalizeSiteConfig(
 
 function localizedCatalogText(value: unknown, field: string): LocalizedCatalogText {
   const record = asRecord(value);
-  if (!record || typeof record.zh !== 'string' || typeof record.en !== 'string' ||
-      !record.zh.trim() || !record.en.trim() || record.zh.length > 4_096 || record.en.length > 4_096) {
+  if (
+    !record ||
+    typeof record.zh !== 'string' ||
+    typeof record.en !== 'string' ||
+    !record.zh.trim() ||
+    !record.en.trim() ||
+    record.zh.length > 4_096 ||
+    record.en.length > 4_096
+  ) {
     return invalidResponse(`The server returned invalid catalog ${field}.`);
   }
   return { zh: record.zh, en: record.en };
@@ -609,14 +657,22 @@ export function normalizeSiteConfigCatalog(payload: unknown): SiteConfigCatalogE
   let previous = '';
   return root.data.map((value, index) => {
     const record = asRecord(value);
-    if (!record || typeof record.key !== 'string' || !record.key || record.key.length > 128 ||
-        typeof record.group !== 'string' || !record.group || record.group.length > 64 ||
-        typeof record.value_type !== 'string' ||
-        !SITE_CONFIG_CATALOG_TYPES.has(record.value_type as SiteConfigCatalogValueType) ||
-        typeof record.nullable !== 'boolean' ||
-        typeof record.write_endpoint !== 'string' ||
-        !record.write_endpoint.startsWith('/') || record.write_endpoint.length > 256 ||
-        !Array.isArray(record.independent_gates)) {
+    if (
+      !record ||
+      typeof record.key !== 'string' ||
+      !record.key ||
+      record.key.length > 128 ||
+      typeof record.group !== 'string' ||
+      !record.group ||
+      record.group.length > 64 ||
+      typeof record.value_type !== 'string' ||
+      !SITE_CONFIG_CATALOG_TYPES.has(record.value_type as SiteConfigCatalogValueType) ||
+      typeof record.nullable !== 'boolean' ||
+      typeof record.write_endpoint !== 'string' ||
+      !record.write_endpoint.startsWith('/') ||
+      record.write_endpoint.length > 256 ||
+      !Array.isArray(record.independent_gates)
+    ) {
       return invalidResponse(`The server returned an invalid catalog entry at ${index}.`);
     }
     if (record.null_writable !== undefined && typeof record.null_writable !== 'boolean') {
@@ -625,8 +681,12 @@ export function normalizeSiteConfigCatalog(payload: unknown): SiteConfigCatalogE
     if (record.allowed_values !== undefined && !Array.isArray(record.allowed_values)) {
       return invalidResponse('The server returned invalid catalog allowed values.');
     }
-    if (record.step !== undefined && record.step !== null &&
-        typeof record.step !== 'string' && !Number.isSafeInteger(record.step)) {
+    if (
+      record.step !== undefined &&
+      record.step !== null &&
+      typeof record.step !== 'string' &&
+      !Number.isSafeInteger(record.step)
+    ) {
       return invalidResponse('The server returned invalid catalog step.');
     }
     if (seen.has(record.key) || (previous && previous >= record.key)) {
@@ -643,12 +703,14 @@ export function normalizeSiteConfigCatalog(payload: unknown): SiteConfigCatalogE
     if (allowedValues && new Set(allowedValues).size !== allowedValues.length) {
       return invalidResponse('The server returned duplicate catalog allowed values.');
     }
-    const zeroSemantics = record.zero_semantics === null
-      ? null
-      : localizedCatalogText(record.zero_semantics, 'zero semantics');
-    const emptySemantics = record.empty_semantics === undefined
-      ? undefined
-      : localizedCatalogText(record.empty_semantics, 'empty semantics');
+    const zeroSemantics =
+      record.zero_semantics === null
+        ? null
+        : localizedCatalogText(record.zero_semantics, 'zero semantics');
+    const emptySemantics =
+      record.empty_semantics === undefined
+        ? undefined
+        : localizedCatalogText(record.empty_semantics, 'empty semantics');
     return {
       key: record.key,
       group: record.group,
@@ -711,10 +773,7 @@ export function useAdminUsers(
   return useQuery({
     queryKey: adminKeys.users(page, pageSize, isBanned, q),
     queryFn: async () => {
-      const result = pagePayload(
-        await apiFetch<unknown>(`/admin/api/users?${params}`),
-        pageSize,
-      );
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/users?${params}`), pageSize);
       return {
         items: result.items.map(normalizeAdminUser),
         hasNext: result.hasNext,
@@ -842,10 +901,8 @@ export function useSiteConfig(
 ) {
   return useQuery({
     queryKey: adminKeys.siteConfig,
-    queryFn: async () => normalizeSiteConfig(
-      await apiFetch<unknown>('/admin/api/site-config'),
-      catalog ?? [],
-    ),
+    queryFn: async () =>
+      normalizeSiteConfig(await apiFetch<unknown>('/admin/api/site-config'), catalog ?? []),
     enabled: enabled && catalog !== undefined,
     staleTime: 0,
   });
@@ -854,9 +911,8 @@ export function useSiteConfig(
 export function useSiteConfigCatalog(enabled = true) {
   return useQuery({
     queryKey: adminKeys.siteConfigCatalog,
-    queryFn: async () => normalizeSiteConfigCatalog(
-      await apiFetch<unknown>('/admin/api/site-config/catalog'),
-    ),
+    queryFn: async () =>
+      normalizeSiteConfigCatalog(await apiFetch<unknown>('/admin/api/site-config/catalog')),
     enabled,
     staleTime: 30_000,
   });

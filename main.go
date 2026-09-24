@@ -318,6 +318,7 @@ type application struct {
 	accountEvents   *accountEventConnections
 	forward         *publicForwardRuntime
 	games           *gameRuntimeBundle
+	audits          *auditRuntime
 	failures        <-chan error
 	authorizer      *authz.Authorizer
 	elevation       *elevation.Manager
@@ -387,6 +388,11 @@ func (a *application) Close() error {
 		}
 		if a.forward != nil {
 			if err := a.forward.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.audits != nil {
+			if err := a.audits.Close(); err != nil {
 				closeErrors = append(closeErrors, err)
 			}
 		}
@@ -783,6 +789,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	var accountConnections *accountEventConnections
 	var forwardRuntime *publicForwardRuntime
 	var gameRuntimes *gameRuntimeBundle
+	var audits *auditRuntime
 	cleanup := func() {
 		if accountConnections != nil {
 			_ = accountConnections.Close()
@@ -801,6 +808,9 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		}
 		if forwardRuntime != nil {
 			_ = forwardRuntime.Close()
+		}
+		if audits != nil {
+			_ = audits.Close()
 		}
 		if activityEvents != nil {
 			_ = activityEvents.Close()
@@ -864,8 +874,14 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		return nil, fmt.Errorf("create authentication runtime: %w", err)
 	}
 	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
+	audits, err = newAuditRuntime(store, vault, roleAuthorizer)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create audit runtime: %w", err)
+	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
+		Committed: audits.configurationChanged,
 	})
 	if err != nil {
 		cleanup()
@@ -902,11 +918,12 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		return nil, fmt.Errorf("create charity service: %w", err)
 	}
 	claimService, err := claim.New(claim.Dependencies{
-		DB:         store.DB(),
-		Secrets:    vault,
-		Accounting: claim.NewLedgerAccounting(),
-		Charity:    charityService,
-		Acceptance: maintenanceService,
+		Observations: audits.observations,
+		DB:           store.DB(),
+		Secrets:      vault,
+		Accounting:   claim.NewLedgerAccounting(),
+		Charity:      charityService,
+		Acceptance:   maintenanceService,
 	})
 	if err != nil {
 		cleanup()
@@ -920,10 +937,11 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		return nil, fmt.Errorf("initialize request usage totals: %w", err)
 	}
 	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
-		Store:   store,
-		Vault:   vault,
-		Claims:  claimService,
-		Backend: localBackend,
+		ErrorScope: audits.observations.DiscoveryScope,
+		Store:      store,
+		Vault:      vault,
+		Claims:     claimService,
+		Backend:    localBackend,
 	})
 	if err != nil {
 		cleanup()
@@ -1114,7 +1132,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
 		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
-		connectorRegistry, localBackend, debugHub, gate, rpmLimits, gameRuntimes.CancelUserDuelsTx, userInvalidations.InvalidateUserAuthority,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits, gameRuntimes.CancelUserDuelsTx, audits, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
 		cleanup()
@@ -1124,12 +1142,18 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		cleanup()
 		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
 	}
+	audits.flow = forwardRuntime.flow
+	userInvalidations.limitsChanged = forwardRuntime.flow.NotifyUserLimitsChanged
+	if err := audits.attachAccess(resourceRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("attach auxiliary access observations: %w", err)
+	}
 	lifecycleCoordinator, err = newLifecycleCoordinator(
 		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
 		claimService, resourceRepository, issueService, logRepository,
 		activityService, activityRepository, donationService, charityService,
 		reportRepository, announcementRepository, maintenanceService,
-		activityEvents, debugHub, gameNow,
+		activityEvents, debugHub, gameNow, audits,
 	)
 	if err != nil {
 		cleanup()
@@ -1240,6 +1264,10 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		cleanup()
 		return nil, fmt.Errorf("register administrator log routes: %w", err)
 	}
+	if err := audits.registerRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register audit routes: %w", err)
+	}
 	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
 	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
 		cleanup()
@@ -1285,7 +1313,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		cleanup()
 		return nil, err
 	}
-	handler, err := stationBoundary(cfg, mux)
+	handler, err := stationBoundary(cfg, audits.Wrap(mux))
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -1304,7 +1332,9 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	rankingContext, rankingCancel := context.WithCancel(context.Background())
 	rankingDone := make(chan struct{})
 	go func() { defer close(rankingDone); rankingService.Run(rankingContext) }()
+	audits.Start()
 	return &application{
+		audits:          audits,
 		handler:         handler,
 		authRuntime:     authRuntime,
 		bridge:          bridgeRuntime,

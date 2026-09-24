@@ -130,7 +130,7 @@ const MAX_MONEY_MILLI = 9_000_000_000_000_000n;
 const MAX_TOKEN_RESERVE = 2_147_483_647;
 const MAX_UNIX_SECOND = 253_402_300_799;
 const CANONICAL_DECIMAL = /^(0|[1-9][0-9]*)$/;
-const MODEL_LEVELS = [1, 2, 3, 4, 5] as const;
+const MODEL_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 
 function validText(value: string, maximum: number, required = false): boolean {
   return (

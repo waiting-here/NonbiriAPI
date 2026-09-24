@@ -244,6 +244,28 @@ export const USER_ROUTE_DESCRIPTORS = [
 
 export const ADMIN_ROUTE_DESCRIPTORS = [
   admin({
+    id: 'admin-risk-audit',
+    path: '/abuse-audit',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    registered: true,
+    navGroup: 'operations',
+    icon: 'logs',
+    labelKey: 'common.audit.risk',
+  }),
+  admin({
+    id: 'admin-economy-audit',
+    path: '/economy-audit',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    registered: true,
+    navGroup: 'content',
+    icon: 'activities',
+    labelKey: 'common.audit.economy',
+  }),
+  admin({
     id: 'admin-home',
     path: '/',
     access: 'admin',

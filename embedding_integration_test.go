@@ -150,12 +150,12 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx)
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = runtime.Close() })
-	handler, err := stationBoundary(auditConfig(), httpmw.API(runtime.handler))
+	handler, err := stationBoundary(auditConfig(), f.app.audits.Wrap(httpmw.API(runtime.handler)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -579,6 +579,9 @@ WHERE logical_request_id=?
 		if err := requireOneRow(logResult); err != nil {
 			return fmt.Errorf("claim: verify request log terminal mirror: %w", err)
 		}
+		if err := s.recordObservationsTx(callbackCtx, callbackTx, request, input.Caller.Class, dispatchedClaims > 0, at); err != nil {
+			return err
+		}
 		return addRequestUsageTx(callbackCtx, callbackTx, request.ID, request.UserID, at)
 	}
 

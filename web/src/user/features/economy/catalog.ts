@@ -336,7 +336,7 @@ function normalizePublicDescription(value: unknown): string {
 
 function normalizeAllowedLevels(value: unknown): number[] {
   const raw = array(value, 'charity catalog allowed levels', 5);
-  const levels = raw.map((entry) => integer(entry, 'charity catalog allowed level', 1, 5));
+  const levels = raw.map((entry) => integer(entry, 'charity catalog allowed level', 1, 6));
   for (let index = 1; index < levels.length; index += 1) {
     if (levels[index] <= levels[index - 1]) invalidResponse('charity catalog allowed levels');
   }

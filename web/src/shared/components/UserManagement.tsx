@@ -87,7 +87,7 @@ function UserAuthority({
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
-  const editable = role === 'admin' || (user.id !== account && user.level.effective < 5);
+  const editable = role === 'admin' || (user.id !== account && user.level.effective < 6);
   const root = managementRoot(role);
   const reconcile = async () => {
     await refresh();
@@ -253,7 +253,7 @@ function UserAuthority({
                   onChange={(event) => setDraft({ ...draft, level: event.target.value })}
                 >
                   <option value="">{t('management.users.levelManualNone')}</option>
-                  {(role === 'admin' ? [1, 2, 3, 4, 5] : [1, 2, 3, 4]).map((level) => (
+                  {(role === 'admin' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]).map((level) => (
                     <option key={level} value={level}>
                       {level}
                     </option>
@@ -641,7 +641,7 @@ export function UserManagement({
               onChange={(event) => commitListState(query, banned, event.target.value)}
             >
               <option value="">{t('common.all')}</option>
-              {[1, 2, 3, 4, 5].map((value) => (
+              {[1, 2, 3, 4, 5, 6].map((value) => (
                 <option key={value} value={value}>
                   {value}
                 </option>
@@ -720,7 +720,7 @@ export function UserManagement({
                         >
                           {t(
                             role === 'steward' &&
-                              (user.id === account || user.level.effective === 5)
+                              (user.id === account || user.level.effective === 6)
                               ? 'management.users.view'
                               : 'management.users.manage',
                           )}

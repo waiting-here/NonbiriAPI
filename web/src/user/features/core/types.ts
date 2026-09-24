@@ -50,7 +50,7 @@ export interface UserProfile {
   balance: string;
   game_balance: string;
   donation_credit: string;
-  effective_level: 1 | 2 | 3 | 4 | 5;
+  effective_level: 1 | 2 | 3 | 4 | 5 | 6;
   level_display_name: string;
   game_profile_public: boolean;
   charity_profile_public: boolean;

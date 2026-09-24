@@ -164,27 +164,26 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 	if err := antiabuse.DeleteTx(ctx, tx, request.UserID); err != nil {
 		return fmt.Errorf("lifecycle adapters: remove penalty records: %w", err)
 	}
-	wallet, err := ledger.UserAccount(ctx, tx, request.UserID)
-	if err != nil {
-		return fmt.Errorf("lifecycle adapters: read deletion wallet: %w", err)
+	var wallets []ledger.AssetWallet
+	for _, asset := range ledger.Assets() {
+		wallet, err := ledger.UserAssetAccount(ctx, tx, request.UserID, asset)
+		if errors.Is(err, ledger.ErrNotFound) && (asset == ledger.SketchPaper || asset == ledger.SketchBrush) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("lifecycle adapters: read deletion wallet: %w", err)
+		}
+		external, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
+		if err != nil {
+			return fmt.Errorf("lifecycle adapters: read deletion external account: %w", err)
+		}
+		wallets = append(wallets, ledger.AssetWallet{Asset: asset, WalletID: wallet.ID, ExternalID: external.ID})
 	}
-	external, err := ledger.CodedAccount(ctx, tx, "external")
-	if err != nil {
-		return fmt.Errorf("lifecycle adapters: read deletion external account: %w", err)
-	}
-	gameWallet, err := ledger.UserAssetAccount(ctx, tx, request.UserID, ledger.Game)
-	if err != nil {
-		return fmt.Errorf("lifecycle adapters: read deletion game wallet: %w", err)
-	}
-	gameExternal, err := ledger.CodedAssetAccount(ctx, tx, "external", ledger.Game)
-	if err != nil {
-		return fmt.Errorf("lifecycle adapters: read deletion game external: %w", err)
-	}
-	plan, err := ledger.NewWalletsDeleteZero(ledger.Meta{
+	plan, err := ledger.NewAssetWalletsDeleteZero(ledger.Meta{
 		OperationID: deletionOperationID,
 		ActorUserID: request.UserID,
 		CreatedAt:   request.DecisionNow,
-	}, ledger.AccountPair{General: wallet.ID, Game: gameWallet.ID}, ledger.AccountPair{General: external.ID, Game: gameExternal.ID})
+	}, wallets)
 	if err != nil {
 		return fmt.Errorf("lifecycle adapters: build account deletion operation: %w", err)
 	}
@@ -196,9 +195,9 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 		applied.SourceType != "operation" || applied.SourceID != deletionOperationID {
 		return lifecycle.ErrInvariant
 	}
-	for _, id := range []int64{wallet.ID, gameWallet.ID} {
+	for _, wallet := range wallets {
 		result, err := tx.ExecContext(ctx, `DELETE FROM credit_accounts
-WHERE id=? AND kind='user' AND user_id=? AND balance_sign=0`, id, request.UserID)
+WHERE id=? AND kind='user' AND user_id=? AND balance_sign=0`, wallet.WalletID, request.UserID)
 		if err != nil {
 			return fmt.Errorf("lifecycle adapters: delete zeroed wallet: %w", err)
 		}

@@ -62,7 +62,7 @@ function sessionAccount(role: CharityRole, value: unknown): string | undefined {
   const userRoot = user as Record<string, unknown>;
   const id = userRoot.id;
   const level = userRoot.effective_level;
-  return typeof id === 'string' && id.length > 0 && level === 5 ? id : undefined;
+  return typeof id === 'string' && id.length > 0 && level === 6 ? id : undefined;
 }
 
 function sourceTitle(source: DonationPageSafeSource, translate: TFunction): string {

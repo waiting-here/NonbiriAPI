@@ -731,7 +731,7 @@ function normalizeTokenReserveCredits(value: unknown, label: string): string | n
 
 function normalizeAllowedLevels(value: unknown, label: string): number[] {
   const levels = array(value, label, 5).map((entry, index) =>
-    integer(entry, `${label} item ${index + 1}`, 1, 5),
+    integer(entry, `${label} item ${index + 1}`, 1, 6),
   );
   if (levels.some((level, index) => index > 0 && levels[index - 1] >= level)) {
     invalidResponse(`${label} order`);

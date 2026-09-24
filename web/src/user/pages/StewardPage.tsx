@@ -10,6 +10,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { RoleLogPanel } from '@shared/components/log';
+import { RiskAuditPanel } from '@shared/riskAudit/Panel';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import { operationsKeys, useUserAuthority } from '../features/operations/data';
@@ -27,12 +28,13 @@ export function StewardPage() {
     requestedTab === 'charity' ||
     requestedTab === 'maintenance' ||
     requestedTab === 'users' ||
+    requestedTab === 'risk' ||
     requestedTab === 'announcements'
       ? requestedTab
       : 'logs';
   const announcement = searchParams.get('announcement') ?? '';
   const setSection = useCallback(
-    (value: 'logs' | 'charity' | 'maintenance' | 'users' | 'announcements') => {
+    (value: 'logs' | 'charity' | 'maintenance' | 'users' | 'announcements' | 'risk') => {
       setSearchParams({ tab: value }, { replace: true });
     },
     [setSearchParams],
@@ -50,7 +52,7 @@ export function StewardPage() {
   }, [clearSensitiveQueries, refetchAuthority, setSection]);
 
   const allowed = Boolean(
-    authority.data && authority.data.effective_level === 5 && !authority.data.is_banned,
+    authority.data && authority.data.effective_level === 6 && !authority.data.is_banned,
   );
   useEffect(() => {
     if (!authority.isPending && !allowed) clearSensitiveQueries();
@@ -83,6 +85,15 @@ export function StewardPage() {
         description={t('user.steward.operationsDescription')}
       />
       <div className="ops-tabs" role="tablist" aria-label={t('user.steward.sectionsLabel')}>
+        <button
+          className={section === 'risk' ? 'btn btn-primary' : 'btn btn-secondary'}
+          type="button"
+          role="tab"
+          aria-selected={section === 'risk'}
+          onClick={() => setSection('risk')}
+        >
+          {t('common.audit.risk')}
+        </button>
         <button
           className={section === 'logs' ? 'btn btn-primary' : 'btn btn-secondary'}
           type="button"
@@ -132,6 +143,9 @@ export function StewardPage() {
           enabled
           onAuthorityLoss={authorityLoss}
         />
+      ) : null}
+      {section === 'risk' ? (
+        <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} />
       ) : null}
       {section === 'charity' ? (
         <CharityManagement

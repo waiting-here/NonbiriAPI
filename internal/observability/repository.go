@@ -133,6 +133,13 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 		}
 		logID = id
 	} else if ref.TaskID != "" {
+		var live bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM image_activity_tasks WHERE id=? AND user_id IS NOT NULL)`, ref.TaskID).Scan(&live); err != nil {
+			return err
+		}
+		if !live {
+			return nil
+		}
 		taskID = ref.TaskID
 	} else {
 		operationID = ref.OperationID

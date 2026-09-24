@@ -153,6 +153,8 @@ type DebugCapture interface {
 // constructed by root wiring; forward validates them against Registry and
 // never reaches Backend, egress, or Vault directly.
 type Config struct {
+	ErrorScope     func(context.Context, string, int) context.Context
+	Classify       func(context.Context, int64, string)
 	Personal       PersonalRouter
 	Charity        CharityRouter
 	Claims         ClaimRail

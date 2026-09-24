@@ -116,21 +116,23 @@ func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
 // RetentionAdapters fixes the six-hour cleanup order. Separate game fields
 // keep each reducer and retention cursor under its domain owner.
 type RetentionAdapters struct {
-	Sessions    RetentionAdapter
-	RequestLogs RetentionAdapter
-	Audits      RetentionAdapter
-	Issues      RetentionAdapter
-	Fishing     RetentionAdapter
-	LinkLink    RetentionAdapter
-	RPS         RetentionAdapter
-	Bidding     RetentionAdapter
-	Likes       RetentionAdapter
-	Blackjack   RetentionAdapter
-	Reports     RetentionAdapter
-	Donations   RetentionAdapter
-	Charity     RetentionAdapter
-	Idempotency RetentionAdapter
-	Secrets     RetentionAdapter
+	Sessions      RetentionAdapter
+	RequestLogs   RetentionAdapter
+	Audits        RetentionAdapter
+	Observability RetentionAdapter
+	RiskAudit     RetentionAdapter
+	Issues        RetentionAdapter
+	Fishing       RetentionAdapter
+	LinkLink      RetentionAdapter
+	RPS           RetentionAdapter
+	Bidding       RetentionAdapter
+	Likes         RetentionAdapter
+	Blackjack     RetentionAdapter
+	Reports       RetentionAdapter
+	Donations     RetentionAdapter
+	Charity       RetentionAdapter
+	Idempotency   RetentionAdapter
+	Secrets       RetentionAdapter
 }
 
 func (adapters RetentionAdapters) ordered() []RetentionAdapter {
@@ -138,6 +140,8 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.Sessions,
 		adapters.RequestLogs,
 		adapters.Audits,
+		adapters.Observability,
+		adapters.RiskAudit,
 		adapters.Issues,
 		adapters.Fishing,
 		adapters.LinkLink,

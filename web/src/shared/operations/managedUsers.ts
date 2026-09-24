@@ -139,9 +139,9 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     ['manual', 'automatic', 'effective', 'display_name'],
     'administrator user level',
   );
-  const automatic = integer(level.automatic, 'automatic level', 1, 5);
-  const effective = integer(level.effective, 'effective level', 1, 5);
-  const manual = level.manual === null ? null : integer(level.manual, 'manual level', 1, 5);
+  const automatic = integer(level.automatic, 'automatic level', 1, 4);
+  const effective = integer(level.effective, 'effective level', 1, 6);
+  const manual = level.manual === null ? null : integer(level.manual, 'manual level', 1, 6);
   const isBanned = boolean(root.is_banned, 'user banned state');
   const bannedUntil = nullableUnixSecond(root.banned_until, 'ban expiry');
   const bannedReason = string(root.banned_reason, 'ban reason', {

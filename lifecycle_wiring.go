@@ -305,6 +305,7 @@ func newLifecycleCoordinator(
 	activityEvents *accountstream.Hub,
 	debugHub *debug.Hub,
 	now func() time.Time,
+	audits *auditRuntime,
 ) (*lifecycle.Coordinator, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
 		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil ||
@@ -312,7 +313,7 @@ func newLifecycleCoordinator(
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
 		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
 		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
-		activityEvents == nil || debugHub == nil {
+		activityEvents == nil || debugHub == nil || audits == nil {
 		return nil, lifecycle.ErrInvalid
 	}
 
@@ -334,7 +335,7 @@ func newLifecycleCoordinator(
 	if err != nil {
 		return nil, err
 	}
-	runtimeMemory, err := lifecycleadapters.NewRuntimeMemoryDeleteAdapter(activityEvents, debugHub, forwardRuntime.abuse.ForgetUser)
+	runtimeMemory, err := lifecycleadapters.NewRuntimeMemoryDeleteAdapter(activityEvents, debugHub, forwardRuntime.abuse.ForgetUser, audits.collector.ForgetUser)
 	if err != nil {
 		return nil, err
 	}
@@ -398,11 +399,13 @@ func newLifecycleCoordinator(
 			Secrets:     secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
-			Sessions:    lifecycleadapters.NewAuthSessionRetention(authRuntime),
-			RequestLogs: lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:      lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
-			Issues:      lifecycleadapters.NewIssueRetention(issueService),
-			Fishing:     fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Sessions:      lifecycleadapters.NewAuthSessionRetention(authRuntime),
+			RequestLogs:   lifecycleadapters.NewRequestLogRetention(logRepository),
+			Audits:        lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Observability: diagnosticRetention{audits.observations},
+			RiskAudit:     riskRetention{audits.risk},
+			Issues:        lifecycleadapters.NewIssueRetention(issueService),
+			Fishing:       fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,

@@ -43,12 +43,14 @@ type SiteConfigRepositoryOptions struct {
 	Store           *db.Store
 	FinalAuthorizer SiteConfigFinalAuthorizer
 	Now             func() time.Time
+	Committed       func([]string)
 }
 
 type SiteConfigRepository struct {
 	database        *sql.DB
 	finalAuthorizer SiteConfigFinalAuthorizer
 	now             func() time.Time
+	committed       func([]string)
 }
 
 func NewSiteConfigRepository(options SiteConfigRepositoryOptions) (*SiteConfigRepository, error) {
@@ -59,7 +61,7 @@ func NewSiteConfigRepository(options SiteConfigRepositoryOptions) (*SiteConfigRe
 	if now == nil {
 		now = time.Now
 	}
-	return &SiteConfigRepository{database: options.Store.DB(), finalAuthorizer: options.FinalAuthorizer, now: now}, nil
+	return &SiteConfigRepository{database: options.Store.DB(), finalAuthorizer: options.FinalAuthorizer, now: now, committed: options.Committed}, nil
 }
 
 type SiteConfigSnapshot struct {
@@ -294,6 +296,9 @@ func (repository *SiteConfigRepository) PatchSiteConfig(ctx context.Context, inp
 	}
 	if err := tx.Commit(); err != nil {
 		return SiteConfigMutationResult{}, classifySiteConfigDatabase("commit configuration mutation", err)
+	}
+	if repository.committed != nil {
+		repository.committed([]string{input.Key})
 	}
 	return SiteConfigMutationResult{Status: http.StatusOK, Body: body, Response: response}, nil
 }

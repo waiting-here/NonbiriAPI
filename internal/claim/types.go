@@ -12,6 +12,7 @@ import (
 	"time"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -502,10 +503,11 @@ type CharityRequestCompletion struct {
 }
 
 type Dependencies struct {
-	DB         *sql.DB
-	Secrets    secret.GenerationTwoContextCodec
-	Accounting Accounting
-	Charity    Charity
-	Acceptance AcceptanceGate
-	Now        func() time.Time
+	Observations *observability.Repository
+	DB           *sql.DB
+	Secrets      secret.GenerationTwoContextCodec
+	Accounting   Accounting
+	Charity      Charity
+	Acceptance   AcceptanceGate
+	Now          func() time.Time
 }

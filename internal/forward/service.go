@@ -45,8 +45,10 @@ const (
 // held for the whole operation so Close waits for every credential-bearing
 // attempt and no new attempt can race safety-key zeroization.
 type Service struct {
-	lifecycle sync.RWMutex
-	closed    bool
+	errorScope func(context.Context, string, int) context.Context
+	classify   func(context.Context, int64, string)
+	lifecycle  sync.RWMutex
+	closed     bool
 
 	personal       PersonalRouter
 	charity        CharityRouter
@@ -137,6 +139,7 @@ func NewService(config Config) (*Service, error) {
 	}
 
 	return &Service{
+		errorScope: config.ErrorScope, classify: config.Classify,
 		personal: config.Personal, charity: config.Charity, claims: config.Claims,
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
 		connectors: instances, safety: config.Safety, observer: config.Observer,
@@ -372,6 +375,14 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 }
 
 func (service *Service) preflight(ctx context.Context, userID int64, request *validatedRequest) (logicalAdmission, *validatedRequest, func(), error) {
+	kind := "self"
+	if strings.HasPrefix(request.Model, charityModelPrefix) {
+		kind = "charity"
+	}
+	requestattempt.Classify(ctx, kind)
+	if service.classify != nil {
+		service.classify(ctx, userID, kind)
+	}
 	if strings.HasPrefix(request.Model, charityModelPrefix) {
 		now, err := service.nowUnix()
 		if err != nil {
@@ -639,7 +650,11 @@ func (service *Service) runAttempts(
 			run.completeSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		result := protocolConnector.Attempt(executionContext, connector.AttemptInput{
+		attemptContext := executionContext
+		if service.errorScope != nil {
+			attemptContext = service.errorScope(attemptContext, accepted.ID, index+1)
+		}
+		result := protocolConnector.Attempt(attemptContext, connector.AttemptInput{
 			Operation: attemptRequest.operation,
 			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding,
 			Policy: policy, Sink: sink, Observer: service.observer,

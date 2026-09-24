@@ -13,6 +13,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -20,12 +21,13 @@ import (
 const maxUnixSecond = int64(253402300799)
 
 type Service struct {
-	db         *sql.DB
-	secrets    secret.GenerationTwoContextCodec
-	accounting Accounting
-	charity    Charity
-	acceptance AcceptanceGate
-	now        func() time.Time
+	observations *observability.Repository
+	db           *sql.DB
+	secrets      secret.GenerationTwoContextCodec
+	accounting   Accounting
+	charity      Charity
+	acceptance   AcceptanceGate
+	now          func() time.Time
 }
 
 func New(dependencies Dependencies) (*Service, error) {
@@ -42,12 +44,13 @@ func New(dependencies Dependencies) (*Service, error) {
 		dependencies.Charity = nil
 	}
 	return &Service{
-		db:         dependencies.DB,
-		secrets:    dependencies.Secrets,
-		accounting: dependencies.Accounting,
-		charity:    dependencies.Charity,
-		acceptance: dependencies.Acceptance,
-		now:        dependencies.Now,
+		observations: dependencies.Observations,
+		db:           dependencies.DB,
+		secrets:      dependencies.Secrets,
+		accounting:   dependencies.Accounting,
+		charity:      dependencies.Charity,
+		acceptance:   dependencies.Acceptance,
+		now:          dependencies.Now,
 	}, nil
 }
 
@@ -102,7 +105,7 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 			input.ReservedMilli, rows, at); err != nil {
 			return fmt.Errorf("claim: persist request acceptance: %w", err)
 		}
-		if err := ensureRequestLogTx(callbackCtx, callbackTx, requestID); err != nil {
+		if err := s.ensureRequestLogTx(callbackCtx, callbackTx, requestID); err != nil {
 			return err
 		}
 		if input.Route.IsCharity() {
@@ -224,7 +227,7 @@ VALUES(?,?,? ,?,'accepted',1,'none',0,'user',?,?)`,
 		requestID, input.ActorUserID, RouteDiscovery, "", u128Small(0), at); err != nil {
 		return Request{}, Handle{}, fmt.Errorf("claim: persist discovery request: %w", err)
 	}
-	if err := ensureRequestLogTx(ctx, tx, requestID); err != nil {
+	if err := s.ensureRequestLogTx(ctx, tx, requestID); err != nil {
 		return Request{}, Handle{}, err
 	}
 	handle, err := s.claimTx(ctx, tx, claimID, at, ClaimInput{
@@ -375,7 +378,7 @@ VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?)`,
 WHERE id=? AND state='accepted'`, input.RequestID); err != nil {
 		return Handle{}, fmt.Errorf("claim: mark request running: %w", err)
 	}
-	if err := ensureRequestLogTx(ctx, tx, input.RequestID); err != nil {
+	if err := s.ensureRequestLogTx(ctx, tx, input.RequestID); err != nil {
 		return Handle{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE request_logs
@@ -550,12 +553,33 @@ type targetRow struct {
 	secretBaseURL     string
 }
 
-func ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
+func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
 	if _, err := tx.ExecContext(ctx, `INSERT INTO request_logs(
 logical_request_id,user_id,model,route_kind,started_at)
 SELECT id,user_id,model_snapshot,route_kind,created_at FROM logical_requests WHERE id=?
 ON CONFLICT(logical_request_id) DO NOTHING`, requestID); err != nil {
 		return fmt.Errorf("claim: ensure request log: %w", err)
+	}
+	if s.observations != nil {
+		if _, present := observability.SourceFromContext(ctx); present {
+			var user sql.NullInt64
+			var route RouteKind
+			var at int64
+			if err := tx.QueryRowContext(ctx, `SELECT user_id,route_kind,started_at FROM request_logs WHERE logical_request_id=?`, requestID).Scan(&user, &route, &at); err != nil {
+				return err
+			}
+			kind := "unclassified"
+			if route.IsSelf() {
+				kind = "self"
+			} else if route.IsCharity() {
+				kind = "charity"
+			} else if route == RouteDiscovery {
+				kind = "discovery"
+			}
+			if user.Valid {
+				return s.observations.RecordSourceTx(ctx, tx, requestID, user.Int64, kind, at)
+			}
+		}
 	}
 	return nil
 }
