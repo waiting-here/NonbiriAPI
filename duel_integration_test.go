@@ -43,6 +43,9 @@ func newDuelWireFixture(t *testing.T) *duelWireFixture {
 	clock := &atomic.Int64{}
 	clock.Store(time.Now().Unix())
 	f := &duelWireFixture{gameWireFixture: newGameWireFixtureWithClock(t, func() time.Time { return time.Unix(clock.Load(), 0) }), t: t, clock: clock}
+	// A cold database template is seeded after the initial clock capture.
+	// Start game actions at the initialized fixture's time, after its epoch.
+	clock.Store(f.now)
 	f.users[0], f.userCookies[0] = f.userID, f.cookies[0]
 	z := db.EncodeU128(db.U128{})
 	r, err := f.store.DB().Exec(`INSERT INTO users(discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, "duel-player-two", "Second player", z, z, z, z, z, z, z, z, f.now, f.now)
