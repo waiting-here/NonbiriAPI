@@ -936,22 +936,30 @@ func TestConcurrentShuffleExactOnce(t *testing.T) {
 		}
 		plans[i] = plan
 	}
+	phaseStarted := time.Now()
+	phaseCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	var wg sync.WaitGroup
 	var failures atomic.Int64
-	for _, plan := range plans {
+	var totalAttempts atomic.Int64
+	for planIndex, plan := range plans {
 		for duplicate := 0; duplicate < 2; duplicate++ {
 			wg.Add(1)
-			go func(plan Plan) {
+			go func(plan Plan, worker int) {
 				defer wg.Done()
 				var lastErr error
-				for attempt := 0; attempt < 100; attempt++ {
-					tx, err := store.DB().BeginTx(ctx, nil)
+				attempts := 0
+				backoff := time.Millisecond
+				for phaseCtx.Err() == nil {
+					attempts++
+					totalAttempts.Add(1)
+					tx, err := store.DB().BeginTx(phaseCtx, nil)
 					if err != nil {
-						t.Errorf("begin concurrent transaction (attempt %d): %v", attempt, err)
+						t.Errorf("begin concurrent transaction (worker %d, attempts %d, elapsed %s): %v", worker, attempts, time.Since(phaseStarted), err)
 						failures.Add(1)
 						return
 					}
-					_, err = Apply(ctx, tx, plan)
+					_, err = Apply(phaseCtx, tx, plan)
 					if err == nil {
 						err = tx.Commit()
 					} else {
@@ -961,19 +969,31 @@ func TestConcurrentShuffleExactOnce(t *testing.T) {
 						return
 					}
 					if !errors.Is(err, ErrRetryable) {
-						t.Errorf("concurrent apply/commit (attempt %d): %v", attempt, err)
+						t.Errorf("concurrent apply/commit (worker %d, attempts %d, elapsed %s): %v", worker, attempts, time.Since(phaseStarted), err)
 						failures.Add(1)
 						return
 					}
 					lastErr = err
-					time.Sleep(time.Duration(attempt%3+1) * time.Millisecond)
+					// Keep writers concurrent without repeatedly synchronizing retries.
+					// Equal jitter is deterministic and stays within the capped backoff.
+					fraction := time.Duration((worker*37 + attempts*17) % 101)
+					delay := backoff/2 + backoff/2*fraction/100
+					timer := time.NewTimer(delay)
+					select {
+					case <-timer.C:
+					case <-phaseCtx.Done():
+					}
+					timer.Stop()
+					backoff = min(2*backoff, 50*time.Millisecond)
 				}
-				t.Errorf("concurrent transaction exhausted retries: %v", lastErr)
+				t.Errorf("concurrent transaction retry deadline (worker %d, attempts %d, elapsed %s): %v; last error: %v; pool: %+v", worker, attempts, time.Since(phaseStarted), phaseCtx.Err(), lastErr, store.DB().Stats())
 				failures.Add(1)
-			}(plan)
+			}(plan, planIndex*2+duplicate)
 		}
 	}
 	wg.Wait()
+	cancel()
+	t.Logf("concurrent submissions: attempts=%d elapsed=%s", totalAttempts.Load(), time.Since(phaseStarted))
 	if failures.Load() != 0 {
 		t.Fatalf("concurrent failures = %d", failures.Load())
 	}
