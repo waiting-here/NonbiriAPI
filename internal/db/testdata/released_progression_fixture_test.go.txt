@@ -18,12 +18,16 @@ import (
 
 // Compiled only against the pinned released source, using its public game APIs.
 func TestWriteReleasedProgressionFixture(t *testing.T) {
-	if db.GenerationTwoSchemaHash() != "5e443ca3f99ad1903ed03af718c0c6a1b93b06499740dba201006d132396bc37" { t.Fatal("wrong source schema") }
+	if db.GenerationTwoSchemaHash() != "dcce93b162d6f9540ec45118fbcc9661b633119fe35037213506a8f956117098" {
+		t.Fatal("wrong source schema")
+	}
 	t.Run("duel", func(t *testing.T) {
 		f := newDuelWireFixture(t)
 		prior := f.matched("likes", "quick")
-		r := f.call(0, "POST", "/api/games/likes/sessions/"+prior.ID+"/surrender", map[string]string{"phase_seq":prior.PhaseSeq}, false)
-		if r.Code != 200 { t.Fatal("surrender", r.Code) }
+		r := f.call(0, "POST", "/api/games/likes/sessions/"+prior.ID+"/surrender", map[string]string{"phase_seq": prior.PhaseSeq}, false)
+		if r.Code != 200 {
+			t.Fatal("surrender", r.Code)
+		}
 		f.matched("bidding", "tier1")
 		f.settlement()
 		f.checkLedger()
@@ -36,34 +40,60 @@ func TestWriteReleasedProgressionFixture(t *testing.T) {
 		ctx := context.Background()
 		for i := 2; i < 10; i++ {
 			z := db.EncodeU128(db.U128{})
-			result, err := f.store.DB().Exec(`INSERT INTO users(discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,fmt.Sprintf("released-seat-%d",i),"Synthetic player",z,z,z,z,z,z,z,z,f.now,f.now)
-			if err != nil { t.Fatal(err) }
+			result, err := f.store.DB().Exec(`INSERT INTO users(discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, fmt.Sprintf("released-seat-%d", i), "Synthetic player", z, z, z, z, z, z, z, z, f.now, f.now)
+			if err != nil {
+				t.Fatal(err)
+			}
 			id, err := result.LastInsertId()
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			f.users[1] = id
-			raw := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byte(80+i)},32))
-			f.userCookies[1] = &http.Cookie{Name:auth.UserSessionCookieName,Value:raw}
+			raw := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byte(80 + i)}, 32))
+			f.userCookies[1] = &http.Cookie{Name: auth.UserSessionCookieName, Value: raw}
 			digest := sha256.Sum256([]byte(raw))
 			f.bindings[1] = hex.EncodeToString(digest[:])
-			if _,err := f.store.DB().Exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`,f.bindings[1],id,f.now,f.now+3600,f.now+7200,f.now,"released-seat-session");err != nil {t.Fatal(err)}
-			tx, err := f.store.DB().BeginTx(ctx,nil)
-			if err != nil {t.Fatal(err)}
-			general, err := ledger.CreateUserAssetAccount(ctx,tx,id,ledger.General,f.now)
-			if err != nil {t.Fatal(err)}
-			if _,err := ledger.CreateUserAssetAccount(ctx,tx,id,ledger.Game,f.now);err != nil {t.Fatal(err)}
-			external, err := ledger.CodedAccount(ctx,tx,"external")
-			if err != nil {t.Fatal(err)}
+			if _, err := f.store.DB().Exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`, f.bindings[1], id, f.now, f.now+3600, f.now+7200, f.now, "released-seat-session"); err != nil {
+				t.Fatal(err)
+			}
+			tx, err := f.store.DB().BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			general, err := ledger.CreateUserAssetAccount(ctx, tx, id, ledger.General, f.now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ledger.CreateUserAssetAccount(ctx, tx, id, ledger.Game, f.now); err != nil {
+				t.Fatal(err)
+			}
+			external, err := ledger.CodedAccount(ctx, tx, "external")
+			if err != nil {
+				t.Fatal(err)
+			}
 			op, err := db.GenerateOpaqueID("op_")
-			if err != nil {t.Fatal(err)}
-			plan,err := ledger.NewAdminUserAdjustment(ledger.Meta{OperationID:op,ActorUserID:f.adminID,CreatedAt:f.now},general.ID,external.ID,ledger.AmountFromMilli(10000000),0,ledger.Amount{},"synthetic table funding")
-			if err != nil {t.Fatal(err)}
-			if _,err := ledger.Apply(ctx,tx,plan);err != nil {t.Fatal(err)}
-			if err := tx.Commit();err != nil {t.Fatal(err)}
-			joinBlackjackHTTP(f,1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan, err := ledger.NewAdminUserAdjustment(ledger.Meta{OperationID: op, ActorUserID: f.adminID, CreatedAt: f.now}, general.ID, external.ID, ledger.AmountFromMilli(10000000), 0, ledger.Amount{}, "synthetic table funding")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ledger.Apply(ctx, tx, plan); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			joinBlackjackHTTP(f, 1)
 		}
-		var seated,waiting int
-		if err := f.store.DB().QueryRow(`SELECT count(*) FROM game_blackjack_entries WHERE state='seated'`).Scan(&seated);err != nil || seated != 9 {t.Fatal("nine-seat fixture",seated,err)}
-		if err := f.store.DB().QueryRow(`SELECT count(*) FROM game_blackjack_entries WHERE state='waiting'`).Scan(&waiting);err != nil || waiting != 1 {t.Fatal("waiter fixture",waiting,err)}
+		var seated, waiting int
+		if err := f.store.DB().QueryRow(`SELECT count(*) FROM game_blackjack_entries WHERE state='seated'`).Scan(&seated); err != nil || seated != 9 {
+			t.Fatal("nine-seat fixture", seated, err)
+		}
+		if err := f.store.DB().QueryRow(`SELECT count(*) FROM game_blackjack_entries WHERE state='waiting'`).Scan(&waiting); err != nil || waiting != 1 {
+			t.Fatal("waiter fixture", waiting, err)
+		}
 		f.checkLedger()
 		writeReleasedFixture(t, f.app, f.store, os.Getenv("NONBIRI_DUAL_BLACKJACK_FIXTURE"))
 	})

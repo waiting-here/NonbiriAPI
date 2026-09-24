@@ -37,6 +37,14 @@ func TestReleasedProgressionUpgrade(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := releasedImages(t, prior)
+			counts := map[string]int64{}
+			for _, table := range []string{"game_onboarding_completions", "game_rank_events", "abuse_cases"} {
+				var count int64
+				if err := prior.QueryRow("SELECT count(*) FROM " + quotedSQLName(table)).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				counts[table] = count
+			}
 			var now int64
 			query := `SELECT max(started_at) FROM game_duel_sessions`
 			if name == "BLACKJACK" {
@@ -92,10 +100,13 @@ func TestReleasedProgressionUpgrade(t *testing.T) {
 					// are refunded and detached while the waiter keeps its place.
 					upgradeScalar(t, store.DB(), `SELECT count(*) FROM game_blackjack_sessions`, 0)
 				}
-				upgradeScalar(t, store.DB(), `SELECT count(*) FROM game_onboarding_completions`, 0)
-				upgradeScalar(t, store.DB(), `SELECT count(*) FROM game_rank_events`, 0)
-				upgradeScalar(t, store.DB(), `SELECT count(*) FROM abuse_cases`, 0)
+				upgradeScalar(t, store.DB(), `SELECT count(*) FROM game_onboarding_completions`, counts["game_onboarding_completions"])
+				upgradeScalar(t, store.DB(), `SELECT count(*) FROM game_rank_events`, counts["game_rank_events"])
+				upgradeScalar(t, store.DB(), `SELECT count(*) FROM abuse_cases`, counts["abuse_cases"])
 				upgradeScalar(t, store.DB(), `SELECT started_at FROM game_statistics_epoch WHERE id=1`, epoch)
+				requireReleasedRows(t, store.DB(), map[string]releasedTableImage{
+					"game_rank_events": before["game_rank_events"], "site_config": before["site_config"],
+				})
 				checkUpgradedLedger(t, store)
 			}
 		})
