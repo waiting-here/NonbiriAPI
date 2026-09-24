@@ -18,6 +18,7 @@ export default defineConfig({
   preserveOutput: 'failures-only',
   globalSetup: './test/audit/global-setup.mjs',
   use: {
+    actionTimeout: 15_000,
     headless: true,
     serviceWorkers: 'block',
     trace: 'off',

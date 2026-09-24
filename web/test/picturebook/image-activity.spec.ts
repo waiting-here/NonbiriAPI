@@ -24,9 +24,17 @@ async function context(browser: Browser, index = 0, language = 'en', admin = fal
   const cookie = admin ? state.admin_cookie : state.users[index].cookie;
   const result = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await result.addCookies([
-    { name: cookie.Name, value: cookie.Value, url: origin, httpOnly: true },
+    {
+      name: cookie.Name,
+      value: cookie.Value,
+      domain: new URL(origin).hostname,
+      path: admin ? '/admin' : '/api',
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
   ]);
   await result.addInitScript((language) => {
+    if (!['http:', 'https:'].includes(location.protocol)) return;
     localStorage.setItem('nb.lang', language);
     localStorage.setItem('nb.theme', language === 'zh' ? 'dark' : 'light');
   }, language);
