@@ -14,6 +14,8 @@ import {
   unixSecond,
 } from '@shared/operations/wire';
 
+export const HISTORY_ASSETS = ['general', 'game', 'sketch_paper', 'sketch_brush'] as const;
+export const HISTORY_ASSET_FILTERS = [...HISTORY_ASSETS, 'all'] as const;
 export const HISTORY_CATEGORIES = [
   'checkin',
   'onboarding',
@@ -23,6 +25,8 @@ export const HISTORY_CATEGORIES = [
   'fishing',
   'linklink',
   'rps',
+  'picture_book',
+  'inactivity',
   'api',
   'charity',
   'donation',
@@ -57,12 +61,18 @@ export const HISTORY_KINDS = [
   'rps_session_start',
   'rps_round_cut',
   'rps_terminal',
+  'activity_exchange',
+  'image_reserve',
+  'image_settle',
+  'image_refund',
+  'image_delete_finalize',
+  'inactivity_decay',
 ] as const;
 export const MAX_HISTORY_PAGE = 9_223_372_036_854_775_807n;
 export const MAX_HISTORY_UNIX_SECOND = 253_402_300_799;
 export type HistoryKind = (typeof HISTORY_KINDS)[number];
 export interface HistoryEntry {
-  asset_type: 'general' | 'game';
+  asset_type: (typeof HISTORY_ASSETS)[number];
   operation_id: string;
   line: number;
   kind: HistoryKind;
@@ -82,7 +92,7 @@ export interface HistoryPage {
   server_now: number;
 }
 export interface HistoryFilter {
-  asset_type?: 'general' | 'game' | 'all';
+  asset_type?: (typeof HISTORY_ASSET_FILTERS)[number];
   page: string;
   page_size: PageSize;
   anchor?: string;
@@ -131,10 +141,13 @@ export function normalizeHistory(value: unknown): HistoryPage {
       ].includes(kind)
     )
       invalidResponse('credit history request association');
+    const asset = oneOf(entry.asset_type, HISTORY_ASSETS, 'credit history asset');
     const delta = amount(entry.delta, 'credit history change');
     if (delta === '0') invalidResponse('credit history zero change');
+    if ((asset === 'sketch_paper' || asset === 'sketch_brush') && delta.includes('.'))
+      invalidResponse('credit history activity units');
     return {
-      asset_type: oneOf(entry.asset_type, ['general', 'game'] as const, 'credit history asset'),
+      asset_type: asset,
       operation_id: opaqueID(entry.operation_id, 'op_', 'credit history operation'),
       line: integer(entry.line, 'credit history line', 0, 255),
       kind,
@@ -190,6 +203,12 @@ export function isHistoryAnchor(value: unknown): value is string {
   return typeof value === 'string' && /^op_[A-Za-z0-9_-]{21}[AQgw]$/.test(value);
 }
 
+export function isHistoryAssetFilter(
+  value: unknown,
+): value is NonNullable<HistoryFilter['asset_type']> {
+  return typeof value === 'string' && HISTORY_ASSET_FILTERS.some((asset) => asset === value);
+}
+
 function isHistoryUnixSecond(value: unknown): value is number {
   return (
     typeof value === 'number' &&
@@ -225,7 +244,7 @@ export function normalizeHistoryFilter(filter: HistoryFilter): HistoryFilter {
   if (!isHistoryPage(filter.page) || !PAGE_SIZES.includes(filter.page_size)) {
     return invalidHistoryFilter();
   }
-  if (filter.asset_type !== undefined && !['general', 'game', 'all'].includes(filter.asset_type))
+  if (filter.asset_type !== undefined && !isHistoryAssetFilter(filter.asset_type))
     return invalidHistoryFilter();
   if (filter.anchor !== undefined && !isHistoryAnchor(filter.anchor)) return invalidHistoryFilter();
   if (filter.from !== undefined && !isHistoryUnixSecond(filter.from)) {
