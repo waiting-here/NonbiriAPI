@@ -1,0 +1,106 @@
+.picturebook-stack,
+.picturebook-form {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.picturebook-form fieldset {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.picturebook-form label {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.picturebook-form input,
+.picturebook-form select,
+.picturebook-form textarea {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+.picturebook-form textarea {
+  min-height: 7rem;
+  resize: vertical;
+  font: inherit;
+}
+.picturebook-form .picturebook-json {
+  font-family: monospace;
+  min-height: 12rem;
+}
+.picturebook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+.picturebook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+.picturebook-facts {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
+  gap: 0.4rem 1rem;
+  margin: 0.5rem 0;
+}
+.picturebook-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.picturebook-notice {
+  border-inline-start: 0.2rem solid var(--accent, #7c6fe6);
+  padding-inline-start: 1rem;
+}
+.picturebook-prewrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.picturebook-images figure {
+  margin: 0;
+  min-width: 0;
+}
+.picturebook-images img {
+  display: block;
+  max-width: 100%;
+  width: 100%;
+  max-height: 38rem;
+  object-fit: contain;
+}
+.picturebook-images figcaption {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.picturebook-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+}
+.picturebook-checkbox input {
+  width: auto;
+}
+.picturebook-card {
+  border: 1px solid var(--border, #8885);
+  border-radius: 0.6rem;
+  padding: 1rem;
+  min-width: 0;
+}
+
+.picturebook-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.picturebook-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
