@@ -40,6 +40,9 @@
     "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance": 4,
     "github.com/waiting-here/NonbiriAPI/internal/charityrouting": 44
   },
+  "split_group_caps": {
+    "github.com/waiting-here/NonbiriAPI/internal/db": 4
+  },
   "test_seconds": {
     "github.com/waiting-here/NonbiriAPI/internal/db": {
       "TestBrowseExtensionPreservesPopulatedStateFromPreBrowse": 553.66,
@@ -64,14 +67,18 @@
       "TestGenerationTwoHostileManifestDynamicRPSAccountIdentity": 904.76,
       "TestBetaTwoExtensionSeedsSidecarDefaultsFromBeta1": 549.75,
       "TestGenerationTwoCurrentRejectsExternallyMutatedValidDatabaseWithoutSourceWrite": 555.54,
-      "TestRetainedExtensionRollsBackWhenStorageFills": 1117.73,
+      "TestRetainedExtensionRollbackEarlyRoutingSources": 814.2857142857143,
+      "TestRetainedExtensionRollbackCoreAndRecurringSources": 542.8571428571429,
+      "TestRetainedExtensionRollbackBrowseAndQuotaSources": 542.8571428571429,
       "TestModelTokenReserveExtensionRollsBackAndRetries": 544.83,
       "TestCredentialRestartValidatesStoredURLsAndLiveTargets": 1044.1,
       "TestGenerationTwoCurrentRecoveryFailurePreservesStableClassification": 244.33,
       "TestRetainedExtensionRejectsMixedSourcesWithoutWriting": 492.82,
       "TestDuelBootstrapRollbackAndPartialSourceRejection": 561.23,
       "TestRoutingExtensionPreservesExistingGenerationTwoData": 552.18,
-      "TestRetainedBusinessDataAcrossEverySupportedSource": 1500
+      "TestRetainedBusinessDataEarlyRoutingSources": 642.8571428571429,
+      "TestRetainedBusinessDataCoreAndRecurringSources": 428.57142857142856,
+      "TestRetainedBusinessDataBrowseAndQuotaSources": 428.57142857142856
     },
     "github.com/waiting-here/NonbiriAPI/internal/activities": {
       "TestAcceptedPeriodFinalizesAtCapacityMaximum": 3.26,
