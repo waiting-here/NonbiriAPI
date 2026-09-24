@@ -229,7 +229,11 @@ tasks but allows accepted tasks to finish.
 
 ## Memory, recovery, and privacy
 
-Prompts and execution parameters exist only in server memory. A service restart
+The execution copy of prompts and parameters exists only in server memory.
+The site does not proactively log request bodies; an upstream error that echoes
+request content can nevertheless retain that content in restricted raw error
+diagnostics under the [data retention rules](data-lifecycle-checklist.md).
+A service restart
 refunds queued tasks whose payload was lost. Known upstream task identifiers
 resume status queries. A dispatch with no confirmed identifier remains uncertain
 and is never submitted again.
