@@ -11,13 +11,21 @@ import (
 // Any failed domain keeps listener startup closed, but later domains are still
 // attempted so one failure does not hide another recoverable backlog.
 func (coordinator *Coordinator) RecoverBeforeListener(ctx context.Context) error {
+	if coordinator == nil {
+		return ErrInvalid
+	}
+	return coordinator.RecoverBeforeListenerAt(ctx, coordinator.now().Unix())
+}
+
+// RecoverBeforeListenerAt shares a fixed decision time with startup prerequisites.
+// It has the same fail-closed behavior and fixed domain order as ordinary recovery.
+func (coordinator *Coordinator) RecoverBeforeListenerAt(ctx context.Context, decisionNow int64) error {
 	if coordinator == nil || ctx == nil {
 		return ErrInvalid
 	}
 	if coordinator.closed.Load() {
 		return ErrClosed
 	}
-	decisionNow := coordinator.now().Unix()
 	runErr := coordinator.runRecovery(ctx, decisionNow)
 	return errors.Join(runErr, coordinator.recordWorkerOutcome(ctx, lifecycleRecoveryWorkerKey, decisionNow, runErr))
 }

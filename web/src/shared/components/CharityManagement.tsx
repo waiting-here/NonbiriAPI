@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { DonationKeyModels } from './DonationKeyModels';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -429,32 +429,74 @@ function KeyExpiryEditor({
   );
 }
 
-function SplitTokenFields({
+function KeyQuotaFields({
   value,
   onChange,
 }: {
   value: Omit<KeySettingsDraft, 'enabled'>;
   onChange: (value: Partial<KeySettingsDraft>) => void;
 }) {
-  const copy = charityControlCopy(useTranslation().i18n.language);
+  const { t, i18n } = useTranslation();
+  const copy = charityControlCopy(i18n.language);
   return (
     <>
-      {(
-        [
-          ['input_tokens_limit', copy.inputTokens],
-          ['output_tokens_limit', copy.outputTokens],
-          ['input_token_reserve', copy.inputReserve],
-          ['output_token_reserve', copy.outputReserve],
-        ] as const
-      ).map(([field, label]) => (
-        <NullableValue
-          key={field}
-          label={label}
-          value={value[field]}
-          onChange={(next) => onChange({ [field]: next })}
-        />
-      ))}
-      <p className="muted">{copy.splitHint}</p>
+      <fieldset className="ops-form-section">
+        <legend>{copy.cumulativeLimits}</legend>
+        <div className="ops-field-grid">
+          <NullableValue
+            label={t('common.operations.charity.priceLimitCredits')}
+            value={value.price_limit}
+            onChange={(next) => onChange({ price_limit: next })}
+          />
+          <NullableValue
+            label={t('common.operations.charity.callLimit')}
+            value={value.calls_limit}
+            onChange={(next) => onChange({ calls_limit: next })}
+          />
+          <NullableValue
+            label={t('common.operations.charity.tokenLimit')}
+            value={value.tokens_limit}
+            onChange={(next) => onChange({ tokens_limit: next })}
+          />
+          <NullableValue
+            label={copy.inputTokens}
+            value={value.input_tokens_limit}
+            onChange={(next) => onChange({ input_tokens_limit: next })}
+          />
+          <NullableValue
+            label={copy.outputTokens}
+            value={value.output_tokens_limit}
+            onChange={(next) => onChange({ output_tokens_limit: next })}
+          />
+        </div>
+      </fieldset>
+      <fieldset className="ops-form-section">
+        <legend>{copy.tokenReservations}</legend>
+        <p className="muted">{copy.splitHint}</p>
+        <div className="ops-field-grid">
+          <NullableValue
+            label={copy.inputReserve}
+            value={value.input_token_reserve}
+            onChange={(next) => onChange({ input_token_reserve: next })}
+          />
+          <NullableValue
+            label={copy.outputReserve}
+            value={value.output_token_reserve}
+            onChange={(next) => onChange({ output_token_reserve: next })}
+          />
+          <label>
+            <span>{t('common.operations.charity.tokenReserve')}</span>
+            <input
+              type="number"
+              min="0"
+              max={MAX_TOKEN_RESERVE}
+              step="1"
+              value={value.token_reserve}
+              onChange={(event) => onChange({ token_reserve: Number(event.target.value) })}
+            />
+          </label>
+        </div>
+      </fieldset>
     </>
   );
 }
@@ -523,7 +565,7 @@ function DonationKeyEditor({
     );
   }
   return (
-    <section className="ops-subcard ops-unframed">
+    <section className="ops-subcard ops-unframed donation-key-editor">
       <h4>
         {t('common.operations.charity.keyHeading', {
           id: item.id,
@@ -532,6 +574,24 @@ function DonationKeyEditor({
         })}
       </h4>
       <p>{safeSourceLabel(item.safe_source, t)}</p>
+      {!modelID ? (
+        item.endpoint_key_id ? (
+          <div className="ops-actions">
+            <Link
+              className="btn btn-secondary"
+              to={
+                role === 'admin'
+                  ? `/logs?endpoint_key_id=${encodeURIComponent(item.endpoint_key_id)}`
+                  : `/steward?tab=logs&endpoint_key_id=${encodeURIComponent(item.endpoint_key_id)}`
+              }
+            >
+              {t('common.operations.logs.viewKeyLogs')}
+            </Link>
+          </div>
+        ) : (
+          <p className="muted">{t('common.operations.logs.keyLogsUnavailable')}</p>
+        )
+      ) : null}
       <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
@@ -544,6 +604,7 @@ function DonationKeyEditor({
         threshold={item.failure_disable_threshold}
         refresh={refresh}
       />
+      <h5>{copy.keyUsage}</h5>
       <div className="ops-toolbar">
         <StatusBadge
           active={item.charity_state === 'available'}
@@ -625,76 +686,54 @@ function DonationKeyEditor({
       {donation.status === 'approved' && !terminal ? (
         <>
           <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
-          <div className="ops-field-grid">
-            <NullableValue
-              label={t('common.operations.charity.priceLimitCredits')}
-              value={draft.price_limit}
-              onChange={(value) => setDraft({ ...draft, price_limit: value })}
-            />
-            <NullableValue
-              label={t('common.operations.charity.callLimit')}
-              value={draft.calls_limit}
-              onChange={(value) => setDraft({ ...draft, calls_limit: value })}
-            />
-            <NullableValue
-              label={t('common.operations.charity.tokenLimit')}
-              value={draft.tokens_limit}
-              onChange={(value) => setDraft({ ...draft, tokens_limit: value })}
-            />
-            <SplitTokenFields value={draft} onChange={(next) => setDraft({ ...draft, ...next })} />
-            <label>
-              <span>{t('common.operations.charity.tokenReserve')}</span>
-              <input
-                type="number"
-                min="0"
-                max={MAX_TOKEN_RESERVE}
-                step="1"
-                value={draft.token_reserve}
-                onChange={(event) =>
-                  setDraft({ ...draft, token_reserve: Number(event.target.value) })
-                }
-              />
-            </label>
-            <label>
-              <span>{t('common.operations.charity.safeNote')}</span>
-              <input
-                value={draft.safe_note}
-                onChange={(event) => setDraft({ ...draft, safe_note: event.target.value })}
-              />
-            </label>
-            <label>
-              <span>{t('common.operations.charity.charitySwitchChange')}</span>
-              <select
-                value={draft.enabled === null ? '' : String(draft.enabled)}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    enabled: event.target.value === '' ? null : event.target.value === 'true',
-                  })
-                }
-              >
-                <option value="">{t('common.operations.charity.leaveUnchanged')}</option>
-                <option value="true">{t('common.operations.charity.enableForCharity')}</option>
-                <option value="false">{t('common.operations.charity.disableForCharity')}</option>
-              </select>
-            </label>
-            <KeyExpiryEditor
-              station={role === 'admin' ? 'admin' : 'user'}
-              draft={draft}
-              authorizedExpiresAt={item.authorized_expires_at}
-              onChange={(update) => setDraft((current) => ({ ...current, ...update(current) }))}
-            />
-            {item.streak.failure_disabled ? (
-              <label className="checkbox-label">
+          <KeyQuotaFields
+            value={draft}
+            onChange={(next) => setDraft((current) => ({ ...current, ...next }))}
+          />
+          <fieldset className="ops-form-section">
+            <legend>{copy.keyManagement}</legend>
+            <div className="ops-field-grid">
+              <label>
+                <span>{t('common.operations.charity.safeNote')}</span>
                 <input
-                  type="checkbox"
-                  checked={reset}
-                  onChange={(event) => setReset(event.target.checked)}
+                  value={draft.safe_note}
+                  onChange={(event) => setDraft({ ...draft, safe_note: event.target.value })}
                 />
-                <span>{t('common.operations.charity.resetFailureStreak')}</span>
               </label>
-            ) : null}
-          </div>
+              <label>
+                <span>{t('common.operations.charity.charitySwitchChange')}</span>
+                <select
+                  value={draft.enabled === null ? '' : String(draft.enabled)}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      enabled: event.target.value === '' ? null : event.target.value === 'true',
+                    })
+                  }
+                >
+                  <option value="">{t('common.operations.charity.leaveUnchanged')}</option>
+                  <option value="true">{t('common.operations.charity.enableForCharity')}</option>
+                  <option value="false">{t('common.operations.charity.disableForCharity')}</option>
+                </select>
+              </label>
+              <KeyExpiryEditor
+                station={role === 'admin' ? 'admin' : 'user'}
+                draft={draft}
+                authorizedExpiresAt={item.authorized_expires_at}
+                onChange={(update) => setDraft((current) => ({ ...current, ...update(current) }))}
+              />
+              {item.streak.failure_disabled ? (
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={reset}
+                    onChange={(event) => setReset(event.target.checked)}
+                  />
+                  <span>{t('common.operations.charity.resetFailureStreak')}</span>
+                </label>
+              ) : null}
+            </div>
+          </fieldset>
           {validationError ? (
             <p className="field-error" role="alert">
               {t(`common.operations.charity.validation.${validationError}`)}
@@ -702,7 +741,7 @@ function DonationKeyEditor({
           ) : null}
           {save.error ? <ErrorState error={save.error} /> : null}
           <button
-            className="btn btn-secondary"
+            className="btn btn-primary"
             type="button"
             disabled={save.isPending || Boolean(validationError)}
             onClick={() => {
@@ -940,48 +979,16 @@ function DonationReview({
                       readOnly
                     />
                     <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
+                    <KeyQuotaFields
+                      value={draft}
+                      onChange={(next) =>
+                        setKeys((current) => ({
+                          ...current,
+                          [entry.id]: { ...current[entry.id], ...next },
+                        }))
+                      }
+                    />
                     <div className="ops-field-grid">
-                      <NullableValue
-                        label={t('common.operations.charity.priceLimitCredits')}
-                        value={draft.price_limit}
-                        onChange={(value) =>
-                          setKeys({ ...keys, [entry.id]: { ...draft, price_limit: value } })
-                        }
-                      />
-                      <NullableValue
-                        label={t('common.operations.charity.callLimit')}
-                        value={draft.calls_limit}
-                        onChange={(value) =>
-                          setKeys({ ...keys, [entry.id]: { ...draft, calls_limit: value } })
-                        }
-                      />
-                      <NullableValue
-                        label={t('common.operations.charity.tokenLimit')}
-                        value={draft.tokens_limit}
-                        onChange={(value) =>
-                          setKeys({ ...keys, [entry.id]: { ...draft, tokens_limit: value } })
-                        }
-                      />
-                      <SplitTokenFields
-                        value={draft}
-                        onChange={(next) => setKeys({ ...keys, [entry.id]: { ...draft, ...next } })}
-                      />
-                      <label>
-                        <span>{t('common.operations.charity.tokenReserve')}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max={MAX_TOKEN_RESERVE}
-                          step="1"
-                          value={draft.token_reserve}
-                          onChange={(event) =>
-                            setKeys({
-                              ...keys,
-                              [entry.id]: { ...draft, token_reserve: Number(event.target.value) },
-                            })
-                          }
-                        />
-                      </label>
                       <label>
                         <span>{t('common.operations.charity.safeNote')}</span>
                         <input
@@ -1823,7 +1830,7 @@ function ModelForm({
     setDraft({ ...draft, [side]: { ...draft[side], [field]: value } });
   const copy = charityControlCopy(i18n.language);
   return (
-    <Card>
+    <Card className="charity-model-editor">
       <h3>{model ? model.full_name : t(charityCopyKey(role, 'newModel'))}</h3>
       <p>{t('common.operations.charity.namingHelp')}</p>
       <p className="ops-model-preview">
@@ -1845,294 +1852,316 @@ function ModelForm({
           })}
         </p>
       ) : null}
-      <div className="ops-field-grid">
-        <label>
-          <span>{t(charityCopyKey(role, 'provider'))}</span>
-          <input
-            value={draft.provider}
-            onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>{t(charityCopyKey(role, 'model'))}</span>
-          <input
-            value={draft.model}
-            onChange={(event) => setDraft({ ...draft, model: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>{t('common.operations.charity.routeStrategy')}</span>
-          <select
-            value={draft.routeStrategy}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                routeStrategy: event.target.value as ModelDraft['routeStrategy'],
-              })
-            }
-          >
-            <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
-            <option value="random">{t('common.operations.charity.routeRandom')}</option>
-            <option value="expiry_weighted">
-              {t('common.operations.charity.routeExpiryWeighted')}
-            </option>
-          </select>
-          <small>
-            {t(
-              draft.routeStrategy === 'ordered'
-                ? 'common.operations.charity.routeOrderedHelp'
-                : draft.routeStrategy === 'random'
-                  ? 'common.operations.charity.routeRandomHelp'
-                  : 'common.operations.charity.routeExpiryWeightedHelp',
-            )}
-          </small>
-        </label>
-        <label>
-          <span>{t(charityCopyKey(role, 'pricingMode'))}</span>
-          <select
-            value={draft.mode}
-            onChange={(event) =>
-              setDraft({ ...draft, mode: event.target.value as ModelDraft['mode'] })
-            }
-          >
-            <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
-            <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
-          </select>
-        </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
-          />
-          <span>{t('common.operations.charity.enableCharityModel')}</span>
-        </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.flatten}
-            onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
-          />
-          <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
-        </label>
-      </div>
+      <fieldset className="ops-form-section">
+        <legend>{copy.basicSettings}</legend>
+        <div className="ops-field-grid">
+          <label>
+            <span>{t(charityCopyKey(role, 'provider'))}</span>
+            <input
+              value={draft.provider}
+              onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>{t(charityCopyKey(role, 'model'))}</span>
+            <input
+              value={draft.model}
+              onChange={(event) => setDraft({ ...draft, model: event.target.value })}
+            />
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
+            />
+            <span>{t('common.operations.charity.enableCharityModel')}</span>
+          </label>
+        </div>
+      </fieldset>
       <p>{t('common.operations.charity.operationHelp')}</p>
       <p>{t('common.operations.charity.embeddingBillingHelp')}</p>
-      <div className="ops-model-settings">
-        <fieldset className="ops-model-levels">
-          <legend>{t('common.operations.charity.allowedLevels')}</legend>
-          <div className="ops-model-level-actions">
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() =>
-                setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
+      <fieldset className="ops-form-section">
+        <legend>{copy.accessRouting}</legend>
+        <div className="ops-field-grid">
+          <label>
+            <span>{t('common.operations.charity.routeStrategy')}</span>
+            <select
+              value={draft.routeStrategy}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  routeStrategy: event.target.value as ModelDraft['routeStrategy'],
+                })
               }
             >
-              {t('common.operations.charity.selectAllLevels')}
-            </button>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
+              <option value="ordered">{t('common.operations.charity.routeOrdered')}</option>
+              <option value="random">{t('common.operations.charity.routeRandom')}</option>
+              <option value="expiry_weighted">
+                {t('common.operations.charity.routeExpiryWeighted')}
+              </option>
+            </select>
+            <small>
+              {t(
+                draft.routeStrategy === 'ordered'
+                  ? 'common.operations.charity.routeOrderedHelp'
+                  : draft.routeStrategy === 'random'
+                    ? 'common.operations.charity.routeRandomHelp'
+                    : 'common.operations.charity.routeExpiryWeightedHelp',
+              )}
+            </small>
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={draft.flatten}
+              onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
+            />
+            <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
+          </label>
+        </div>
+        <div className="ops-model-settings">
+          <fieldset className="ops-model-levels">
+            <legend>{t('common.operations.charity.allowedLevels')}</legend>
+            <div className="ops-model-level-actions">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() =>
+                  setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
+                }
+              >
+                {t('common.operations.charity.selectAllLevels')}
+              </button>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
+              >
+                {t('common.operations.charity.clearAllLevels')}
+              </button>
+            </div>
+            <div className="ops-model-level-options">
+              {MODEL_LEVELS.map((level) => (
+                <label className="checkbox-label" key={level}>
+                  <input
+                    type="checkbox"
+                    checked={draft.allowedLevels.includes(level)}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        allowedLevels: event.target.checked
+                          ? MODEL_LEVELS.filter(
+                              (candidate) =>
+                                candidate === level || current.allowedLevels.includes(candidate),
+                            )
+                          : current.allowedLevels.filter((candidate) => candidate !== level),
+                      }))
+                    }
+                  />
+                  <span>{t('common.operations.charity.levelLabel', { level })}</span>
+                </label>
+              ))}
+            </div>
+            {draft.allowedLevels.length === 0 ? (
+              <small className="ops-model-level-empty">
+                {t('common.operations.charity.noAllowedLevels')}
+              </small>
+            ) : null}
+          </fieldset>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={draft.isMainstream}
+              onChange={(event) => setDraft({ ...draft, isMainstream: event.target.checked })}
+            />
+            <span>{copy.mainstream}</span>
+          </label>
+          <label>
+            <span>{copy.excluded}</span>
+            <textarea
+              value={draft.excluded}
+              onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
+            />
+            <small>{copy.excludedHint}</small>
+          </label>
+          <label className="ops-model-description">
+            <span>{t('common.operations.charity.publicDescription')}</span>
+            <textarea
+              rows={5}
+              value={draft.publicDescription}
+              aria-label={t('common.operations.charity.publicDescription')}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, publicDescription: event.target.value }))
+              }
+            />
+            <small>{t('common.operations.charity.publicDescriptionHelp')}</small>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className="ops-form-section">
+        <legend>{copy.pricingRewards}</legend>
+        <div className="ops-field-grid">
+          <label>
+            <span>{t(charityCopyKey(role, 'pricingMode'))}</span>
+            <select
+              value={draft.mode}
+              onChange={(event) =>
+                setDraft({ ...draft, mode: event.target.value as ModelDraft['mode'] })
+              }
             >
-              {t('common.operations.charity.clearAllLevels')}
-            </button>
+              <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
+              <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
+            </select>
+          </label>
+        </div>
+        <div className="ops-actions">
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => {
+              const prices =
+                draft.mode === 'per_request'
+                  ? [['request', draft.requestUser]]
+                  : Object.entries(draft.userPrices);
+              const invalid = prices.find(([, value]) => halfPrice(value) === null);
+              if (invalid) {
+                setHalfError(true);
+                priceInputs.current[invalid[0]]?.focus();
+                return;
+              }
+              setHalfError(false);
+              if (draft.mode === 'per_request') {
+                const reward = halfPrice(draft.requestUser);
+                if (reward !== null) setDraft({ ...draft, requestDonor: reward });
+              } else {
+                const entries = Object.entries(draft.userPrices).map(([key, value]) => [
+                  key,
+                  halfPrice(value),
+                ]);
+                if (entries.every(([, value]) => value !== null))
+                  setDraft({ ...draft, donorRewards: Object.fromEntries(entries) as TokenPrices });
+              }
+            }}
+          >
+            {copy.halfPrice}
+          </button>
+          {halfError ? (
+            <p className="field-error" role="alert">
+              {copy.halfInvalid}
+            </p>
+          ) : null}
+        </div>
+        {draft.mode === 'per_request' ? (
+          <div className="ops-field-grid">
+            <label>
+              <span>{t(charityCopyKey(role, 'request_user_price_milli'))}</span>
+              <input
+                value={draft.requestUser}
+                ref={(element) => {
+                  priceInputs.current.request = element;
+                }}
+                onChange={(event) => setDraft({ ...draft, requestUser: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</span>
+              <input
+                value={draft.requestDonor}
+                onChange={(event) => setDraft({ ...draft, requestDonor: event.target.value })}
+              />
+            </label>
           </div>
-          <div className="ops-model-level-options">
-            {MODEL_LEVELS.map((level) => (
-              <label className="checkbox-label" key={level}>
+        ) : (
+          <>
+            <div className="ops-field-grid">
+              <label>
+                <span>{t('common.operations.charity.tokenReserveCredits')}</span>
                 <input
-                  type="checkbox"
-                  checked={draft.allowedLevels.includes(level)}
+                  aria-label={t('common.operations.charity.tokenReserveCredits')}
+                  inputMode="decimal"
+                  value={draft.tokenReserveCredits ?? ''}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
-                      allowedLevels: event.target.checked
-                        ? MODEL_LEVELS.filter(
-                            (candidate) =>
-                              candidate === level || current.allowedLevels.includes(candidate),
-                          )
-                        : current.allowedLevels.filter((candidate) => candidate !== level),
+                      tokenReserveCredits: event.target.value || null,
                     }))
                   }
                 />
-                <span>{t('common.operations.charity.levelLabel', { level })}</span>
+                <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
               </label>
-            ))}
-          </div>
-          {draft.allowedLevels.length === 0 ? (
-            <small className="ops-model-level-empty">
-              {t('common.operations.charity.noAllowedLevels')}
-            </small>
-          ) : null}
-        </fieldset>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.isMainstream}
-            onChange={(event) => setDraft({ ...draft, isMainstream: event.target.checked })}
-          />
-          <span>{copy.mainstream}</span>
-        </label>
-        <label>
-          <span>{copy.excluded}</span>
-          <textarea
-            value={draft.excluded}
-            onChange={(event) => setDraft({ ...draft, excluded: event.target.value })}
-          />
-          <small>{copy.excludedHint}</small>
-        </label>
-        <label className="ops-model-description">
-          <span>{t('common.operations.charity.publicDescription')}</span>
-          <textarea
-            rows={5}
-            value={draft.publicDescription}
-            aria-label={t('common.operations.charity.publicDescription')}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, publicDescription: event.target.value }))
-            }
-          />
-          <small>{t('common.operations.charity.publicDescriptionHelp')}</small>
-        </label>
-      </div>
-      {draft.mode === 'per_request' ? (
-        <div className="ops-field-grid">
-          <label>
-            <span>{t(charityCopyKey(role, 'request_user_price_milli'))}</span>
-            <input
-              value={draft.requestUser}
-              ref={(element) => {
-                priceInputs.current.request = element;
-              }}
-              onChange={(event) => setDraft({ ...draft, requestUser: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</span>
-            <input
-              value={draft.requestDonor}
-              onChange={(event) => setDraft({ ...draft, requestDonor: event.target.value })}
-            />
-          </label>
-        </div>
-      ) : (
-        <>
-          <div className="ops-field-grid">
-            <label>
-              <span>{t('common.operations.charity.tokenReserveCredits')}</span>
-              <input
-                aria-label={t('common.operations.charity.tokenReserveCredits')}
-                inputMode="decimal"
-                value={draft.tokenReserveCredits ?? ''}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    tokenReserveCredits: event.target.value || null,
-                  }))
-                }
-              />
-              <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
-            </label>
-          </div>
-          <div className="ops-grid">
-            {(['userPrices', 'donorRewards'] as const).map((side) => (
-              <section key={side} className="ops-subcard">
-                <h4>
-                  {t(
-                    `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
-                  )}
-                </h4>
-                {(Object.keys(draft[side]) as (keyof TokenPrices)[]).map((field) => (
-                  <label key={field}>
-                    <span>{t(tokenPriceCopyKey(role, side, field))}</span>
-                    <input
-                      value={draft[side][field]}
-                      ref={(element) => {
-                        if (side === 'userPrices') priceInputs.current[field] = element;
-                      }}
-                      onChange={(event) => setPrice(side, field, event.target.value)}
-                    />
-                  </label>
+            </div>
+            <div className="charity-price-grid">
+              <div className="charity-price-headings" aria-hidden="true">
+                {(['userPrices', 'donorRewards'] as const).map((side) => (
+                  <strong key={side}>
+                    {t(
+                      `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
+                    )}
+                  </strong>
                 ))}
-              </section>
-            ))}
-          </div>
-        </>
-      )}
-      <div className="ops-field-grid">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.discountEnabled}
-            onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
-          />
-          <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
-        </label>
-        <button
-          className="btn btn-secondary"
-          type="button"
-          onClick={() => {
-            const prices =
-              draft.mode === 'per_request'
-                ? [['request', draft.requestUser]]
-                : Object.entries(draft.userPrices);
-            const invalid = prices.find(([, value]) => halfPrice(value) === null);
-            if (invalid) {
-              setHalfError(true);
-              priceInputs.current[invalid[0]]?.focus();
-              return;
-            }
-            setHalfError(false);
-            if (draft.mode === 'per_request') {
-              const reward = halfPrice(draft.requestUser);
-              if (reward !== null) setDraft({ ...draft, requestDonor: reward });
-            } else {
-              const entries = Object.entries(draft.userPrices).map(([key, value]) => [
-                key,
-                halfPrice(value),
-              ]);
-              if (entries.every(([, value]) => value !== null))
-                setDraft({ ...draft, donorRewards: Object.fromEntries(entries) as TokenPrices });
-            }
-          }}
-        >
-          {copy.halfPrice}
-        </button>
-        {halfError ? (
-          <p className="field-error" role="alert">
-            {copy.halfInvalid}
-          </p>
-        ) : null}
-        <label>
-          <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={draft.discountPercent}
-            onChange={(event) =>
-              setDraft({ ...draft, discountPercent: Number(event.target.value) })
+              </div>
+              {(Object.keys(draft.userPrices) as (keyof TokenPrices)[]).map((field) => (
+                <div className="charity-price-row" key={field}>
+                  {(['userPrices', 'donorRewards'] as const).map((side) => (
+                    <label key={side}>
+                      <span>{t(tokenPriceCopyKey(role, side, field))}</span>
+                      <input
+                        value={draft[side][field]}
+                        ref={(element) => {
+                          if (side === 'userPrices') priceInputs.current[field] = element;
+                        }}
+                        onChange={(event) => setPrice(side, field, event.target.value)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </fieldset>
+      <fieldset className="ops-form-section">
+        <legend>{copy.discountSettings}</legend>
+        <div className="ops-field-grid">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={draft.discountEnabled}
+              onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
+            />
+            <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
+          </label>
+          <label>
+            <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={draft.discountPercent}
+              onChange={(event) =>
+                setDraft({ ...draft, discountPercent: Number(event.target.value) })
+              }
+            />
+          </label>
+          <TimeInput
+            label={t(charityCopyKey(role, 'discountStart'))}
+            station={role === 'admin' ? 'admin' : 'user'}
+            draft={draft.discountStart}
+            onChange={(update) =>
+              setDraft((current) => ({ ...current, discountStart: update(current.discountStart) }))
             }
           />
-        </label>
-        <TimeInput
-          label={t(charityCopyKey(role, 'discountStart'))}
-          station={role === 'admin' ? 'admin' : 'user'}
-          draft={draft.discountStart}
-          onChange={(update) =>
-            setDraft((current) => ({ ...current, discountStart: update(current.discountStart) }))
-          }
-        />
-        <TimeInput
-          label={t(charityCopyKey(role, 'discountEnd'))}
-          station={role === 'admin' ? 'admin' : 'user'}
-          draft={draft.discountEnd}
-          onChange={(update) =>
-            setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
-          }
-        />
-      </div>
+          <TimeInput
+            label={t(charityCopyKey(role, 'discountEnd'))}
+            station={role === 'admin' ? 'admin' : 'user'}
+            draft={draft.discountEnd}
+            onChange={(update) =>
+              setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
+            }
+          />
+        </div>
+      </fieldset>
       {save.error ? (
         <ErrorState error={save.error} />
       ) : remove.error ? (

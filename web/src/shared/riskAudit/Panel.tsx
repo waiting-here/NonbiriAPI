@@ -604,6 +604,29 @@ function RuleEditor({
         <div className="audit-patterns">
           <strong>{c.ruleTemplate}</strong>
           <div className="ops-actions">
+            {(
+              [
+                ['Tavo', 'user_agent', 'prefix', 'Tavo/'],
+                ['New API', 'openrouter_title', 'equals', 'New API'],
+                ['One API', 'legacy_title', 'equals', 'One API'],
+              ] as const
+            ).map(([name, field, operator, match]) => (
+              <button
+                key={name}
+                className="btn btn-secondary"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  setValue({
+                    ...emptyRule(),
+                    name,
+                    conditions: [{ field, operator, value: match, case_sensitive: false }],
+                  })
+                }
+              >
+                {name}
+              </button>
+            ))}
             <button
               className="btn btn-secondary"
               type="button"

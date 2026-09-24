@@ -53,6 +53,28 @@ beforeEach(() => {
   api.rules.mockResolvedValue({ items: [], total: 0, next: '', has_more: false });
 });
 describe('Risk audit access and evidence presentation', () => {
+  it.each([
+    ['Tavo', 'user_agent', 'prefix', 'Tavo/'],
+    ['New API', 'openrouter_title', 'equals', 'New API'],
+    ['One API', 'legacy_title', 'equals', 'One API'],
+  ])(
+    'populates the %s preset without saving or requiring a website',
+    async (name, field, operator, value) => {
+      const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+        station: 'admin',
+        role: 'admin',
+      });
+      await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+      await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
+      await view.user.click(screen.getByRole('button', { name }));
+      expect(screen.getByLabelText('Rule name')).toHaveValue(name);
+      expect(screen.getByLabelText('Field')).toHaveValue(field);
+      expect(screen.getByLabelText('Operator')).toHaveValue(operator);
+      expect(screen.getByLabelText('Match value')).toHaveValue(value);
+      expect(screen.getAllByLabelText('Field')).toHaveLength(1);
+      expect(api.saveRule).not.toHaveBeenCalled();
+    },
+  );
   it('removes privileged evidence immediately after a revoked-session response', async () => {
     const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
       station: 'admin',

@@ -138,3 +138,54 @@ test('an expired or foreign request link stays unavailable in the current accoun
   await expect(page.getByRole('dialog')).toContainText(/no longer available|unavailable|expired/i);
   await expect(page.locator('.log-attempt')).toHaveCount(0);
 });
+
+test('management diagnostics use shared buttons and recover without refreshing', async ({
+  page,
+}) => {
+  const errors = collectConsoleViolations(page);
+  await mockRoleSession(page, 'admin', 'admin');
+  await mockPublicConfig(page, 'admin');
+  await page.route('**/admin/api/logs?*', (route) =>
+    route.fulfill({
+      json: {
+        data: [],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      },
+    }),
+  );
+  let fail = true;
+  await page.route('**/admin/api/diagnostics?*', async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    await route.fulfill({
+      json: fail
+        ? {}
+        : {
+            data: [],
+            next_before: null,
+            from: Number(params.get('from')),
+            to: Number(params.get('to')),
+          },
+    });
+  });
+  await page.goto(ADMIN_ORIGIN + '/logs');
+  const section = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
+  const button = section.getByRole('button', { name: 'Search diagnostics' });
+  await expect(button).toHaveClass(/btn-primary/);
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(section.getByRole('alert')).toBeVisible();
+  fail = false;
+  await button.click();
+  await expect(section.getByRole('alert')).toHaveCount(0);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await section
+        .locator('button')
+        .evaluateAll((nodes) => nodes.every((n) => n.classList.contains('btn'))),
+    ).toBe(true);
+    expect(await section.evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
+  }
+  errors.assertNone();
+});

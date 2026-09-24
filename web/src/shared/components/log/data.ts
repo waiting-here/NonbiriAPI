@@ -141,6 +141,7 @@ export interface LogFiltersValue {
   phase?: 'handler' | 'pre_handler';
   model?: string;
   user_id?: string;
+  endpoint_key_id?: string;
   endpoint_base_url?: string;
   upstream_model?: string;
   error_code?: string;
@@ -657,6 +658,9 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
   if (role !== 'user') {
     assign('endpoint_base_url', 512);
     assign('upstream_model', 512);
+    const keyID = raw.endpoint_key_id?.trim();
+    if (keyID && /^[1-9][0-9]{0,18}$/.test(keyID) && BigInt(keyID) <= 9_223_372_036_854_775_807n)
+      result.endpoint_key_id = keyID;
   }
   assign('error_code', 96);
   const status = raw.status?.trim();

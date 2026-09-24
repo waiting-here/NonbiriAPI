@@ -187,6 +187,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND l.user_id=?`
 		args = append(args, *filter.UserID)
 	}
+	if filter.EndpointKeyID != nil {
+		query += ` AND EXISTS(SELECT 1 FROM request_attempts fk WHERE fk.request_log_id=l.id AND fk.endpoint_key_id_snapshot=?)`
+		args = append(args, *filter.EndpointKeyID)
+	}
 	if filter.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts fa WHERE fa.request_log_id=l.id AND fa.canonical_base_url=?)`
 		args = append(args, *filter.EndpointBaseURL)
@@ -314,6 +318,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	if filter.UserID != nil {
 		query += ` AND l.user_id=?`
 		args = append(args, *filter.UserID)
+	}
+	if filter.EndpointKeyID != nil {
+		query += ` AND EXISTS(SELECT 1 FROM request_attempts fk WHERE fk.request_log_id=l.id AND fk.endpoint_key_id_snapshot=?)`
+		args = append(args, *filter.EndpointKeyID)
 	}
 	if filter.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts sa WHERE sa.request_log_id=l.id AND sa.canonical_base_url=?)`

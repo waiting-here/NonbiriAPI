@@ -117,6 +117,30 @@ afterEach(() => {
 });
 
 describe('numbered log wire', () => {
+  it.each(['admin', 'steward'] as const)(
+    'binds %s pages and cache identities to the physical key',
+    async (role) => {
+      const root = role === 'admin' ? '/admin/api' : '/api/steward';
+      const fetchMock = installJsonFetchFixtures([
+        {
+          method: 'GET',
+          path: `${root}/logs?endpoint_key_id=9007199254740993&page=1&page_size=20`,
+          body: list([], pagination('1', 20, 0)),
+        },
+      ]);
+      const filter = { endpoint_key_id: '9007199254740993' };
+      expect(numberedLogKeys.list(role, 'viewer', '1', 20, filter)).not.toEqual(
+        numberedLogKeys.list(role, 'viewer', '1', 20, { endpoint_key_id: '9007199254740994' }),
+      );
+      await getRoleLogsPage(role, '1', 20, filter);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      for (const value of ['0', '-1', '01', 'x', '9223372036854775808']) {
+        await expect(getRoleLogsPage(role, '1', 20, { endpoint_key_id: value })).rejects.toThrow();
+      }
+      await expect(getRoleLogsPage('user', '1', 20, filter)).rejects.toThrow();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
   it.each(['user', 'admin', 'steward'] as const)(
     'sends the selected phase for %s numbered pages',
     async (role) => {

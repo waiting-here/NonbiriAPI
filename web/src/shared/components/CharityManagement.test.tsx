@@ -239,10 +239,11 @@ function installDonationFetch(initial: AdminDonation) {
   const idempotencyKeys: string[] = [];
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input), 'https://example.test');
-    const path = url.pathname;
+    const path = url.pathname.replace('/api/steward/', '/admin/api/');
     const method = init?.method ?? 'GET';
+    if (method === 'GET' && path === '/api/session') return jsonResponse(stewardSession);
     if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
-    if (method === 'GET' && path === '/admin/api/time-zones')
+    if (method === 'GET' && (path === '/admin/api/time-zones' || path === '/api/time-zones'))
       return jsonResponse({
         version: 'go1.26.6-zoneinfo',
         zones: ['America/Indianapolis', 'UTC'],
@@ -338,6 +339,38 @@ function localDateTime(epoch: number): string {
 }
 
 describe('CharityManagement corrective controls', () => {
+  it('explains unavailable historical key IDs instead of linking all logs', async () => {
+    installDonationFetch(approvedDonation(managedKey({ endpoint_key_id: null })));
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+    expect(
+      await screen.findByText(
+        'The physical key ID is no longer available, so its request logs cannot be linked.',
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole('link', { name: "View this key's request logs" }),
+    ).not.toBeInTheDocument();
+  });
+  it.each(['admin', 'steward'] as const)(
+    'links %s donation details to the exact physical key',
+    async (frame) => {
+      installDonationFetch(approvedDonation());
+      const view = await renderWithProviders(<SessionBackedManagement frame={frame} />, {
+        station: frame === 'admin' ? 'admin' : 'user',
+        role: frame === 'admin' ? 'admin' : 'user',
+      });
+      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+      const link = await screen.findByRole('link', { name: "View this key's request logs" });
+      expect(link).toHaveAttribute(
+        'href',
+        frame === 'admin' ? '/logs?endpoint_key_id=21' : '/steward?tab=logs&endpoint_key_id=21',
+      );
+    },
+  );
   it('limits a trainee landing page to scoped model browsing', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input), 'https://example.test');

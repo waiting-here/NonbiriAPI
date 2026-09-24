@@ -1,6 +1,70 @@
 .charity-management .charity-editor {
   margin: 1rem 0;
 }
+.charity-management .ops-field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+.charity-management :is(.ops-field-grid label, .ops-form-field, .ops-model-settings > label) {
+  align-content: start;
+}
+.charity-management .ops-field-grid > .checkbox-label {
+  align-self: start;
+  width: auto;
+  border: 0;
+  background: transparent;
+}
+.charity-management .ops-form-section {
+  min-width: 0;
+}
+.charity-management .ops-form-section > .ops-actions {
+  margin-bottom: 1rem;
+}
+.charity-management :is(.charity-model-editor, .donation-key-editor) {
+  max-width: 90rem;
+}
+.charity-management .donation-key-editor h5 {
+  font-size: 1rem;
+  margin-block: 1rem 0.5rem;
+}
+.charity-price-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.charity-price-row,
+.charity-price-headings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.charity-price-row label {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.charity-price-row input {
+  min-width: 0;
+}
+@media (max-width: 60rem) {
+  .charity-management .ops-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 40rem) {
+  .charity-price-headings {
+    display: none;
+  }
+  .charity-management .ops-field-grid,
+  .charity-price-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .charity-price-row {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--nb-color-border);
+  }
+}
 .charity-management fieldset {
   border: 1px solid var(--nb-color-border);
   border-radius: 0.75rem;

@@ -268,16 +268,21 @@ async function prepareStation(
   page: Page,
   station: Station,
   width = 1_280,
+  locale: 'en' | 'zh' = 'en',
+  theme: 'light' | 'dark' = 'light',
 ): Promise<StationSetup> {
   const config = stationConfig(station);
   const consoleGuard = collectConsoleViolations(page);
   await installURLPersistenceObserver(context, [config.marker]);
   await page.setViewportSize({ width, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.addInitScript(() => {
-    localStorage.setItem('nb.lang', 'en');
-    localStorage.setItem('nb.theme', 'light');
-  });
+  await page.addInitScript(
+    ({ locale, theme }) => {
+      localStorage.setItem('nb.lang', locale);
+      localStorage.setItem('nb.theme', theme);
+    },
+    { locale, theme },
+  );
   await mockPublicConfig(page, station);
   await mockRoleSession(page, station, config.role);
   return { ...config, consoleGuard };
@@ -1463,3 +1468,123 @@ test('steward detail permission loss clears the visible private projection', asy
   expect(consoleMessages[0]).toMatchObject({ type: 'error' });
   expect(consoleMessages[0].text).toMatch(/Failed to load resource:.*403/);
 });
+
+for (const scenario of [
+  { station: 'admin', locale: 'en', theme: 'light' },
+  { station: 'admin', locale: 'zh', theme: 'dark' },
+  { station: 'user', locale: 'en', theme: 'dark' },
+  { station: 'user', locale: 'zh', theme: 'light' },
+] as const) {
+  test(
+    'grouped management forms and physical key log navigation ' +
+      scenario.station +
+      ' ' +
+      scenario.locale +
+      ' ' +
+      scenario.theme,
+    async ({ context, page }) => {
+      const { station, locale, theme } = scenario;
+      const setup = await prepareStation(context, page, station, 1440, locale, theme);
+      const state = initialState();
+      await installManagementRoutes(page, station, state);
+      let logReads = 0;
+      await page.route('**' + setup.root + '/logs?*', async (route) => {
+        const params = new URL(route.request().url()).searchParams;
+        expect(params.get('endpoint_key_id')).toBe('2000');
+        logReads++;
+        await fulfillJSON(route, numberedPage([], params));
+      });
+      const base = station === 'admin' ? '/charity?' : '/steward?tab=charity&';
+      await page.goto(setup.origin + base + 'charity_section=donations&donation_id=1');
+      const key = page.locator('.donation-key-editor');
+      await expect(key).toHaveCount(1);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+          .toBe(true);
+        expect(
+          await key
+            .locator('.ops-field-grid')
+            .first()
+            .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
+        ).toBe(width === 1440 ? 3 : 1);
+        expect(
+          await key
+            .locator('input:not([type=checkbox]),select')
+            .evaluateAll(
+              (nodes) => nodes.filter((n) => n.getBoundingClientRect().height > 70).length,
+            ),
+        ).toBe(0);
+        await key.scrollIntoViewIfNeeded();
+        await saveScreenshot(page, 'grouped-key-' + station + '-' + locale + '-' + width);
+        if (EVIDENCE_DIR)
+          await key.screenshot({
+            path: resolve(
+              EVIDENCE_DIR,
+              'key-form-' + station + '-' + locale + '-' + width + '.png',
+            ),
+          });
+      }
+      if (station === 'admin' && locale === 'en') {
+        const attempts: string[] = [];
+        await page.route('**/admin/api/donations/1/keys/1000', async (route) => {
+          attempts.push(route.request().headers()['idempotency-key']);
+          await fulfillJSON(
+            route,
+            attempts.length === 1 ? {} : { ...donationDetail(0), revision: '2' },
+          );
+        });
+        const save = key.getByRole('button', { name: 'Save key limits', exact: true });
+        await save.click();
+        await expect(key.getByRole('alert')).toBeVisible();
+        await save.click();
+        await expect.poll(() => attempts.length).toBe(2);
+        expect(attempts[1]).toBe(attempts[0]);
+        await expect(key.getByRole('alert')).toHaveCount(0);
+      }
+      const logsLink = key.getByRole('link', {
+        name: locale === 'en' ? "View this key's request logs" : '查看该密钥请求日志',
+      });
+      await logsLink.focus();
+      await page.keyboard.press('Enter');
+      await expect.poll(() => logReads).toBeGreaterThan(0);
+      await expect(page.locator('.inline-notice').filter({ hasText: '#2000' })).toBeVisible();
+      await page.reload();
+      await expect.poll(() => logReads).toBeGreaterThan(1);
+      await page.goBack();
+      await expect(key).toHaveCount(1);
+      await page.goto(setup.origin + base + 'charity_section=models&charity_model=1');
+      await expect(
+        page.getByRole('heading', { name: '[公益]DetailProvider/detail-model-1', exact: true }),
+      ).toBeVisible();
+      const editor = page.locator('.ops-detail-target .charity-model-editor');
+      await expect(editor).toBeVisible();
+      await editor
+        .getByLabel(locale === 'en' ? 'Pricing mode' : '计价模式')
+        .selectOption('per_token');
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await expect(editor.locator('.charity-price-row')).toHaveCount(4);
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+          .toBe(true);
+        expect(
+          await editor
+            .locator('.charity-price-row')
+            .first()
+            .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
+        ).toBe(width === 1440 ? 2 : 1);
+        await saveScreenshot(page, 'grouped-model-' + station + '-' + locale + '-' + width);
+        if (EVIDENCE_DIR)
+          await editor.screenshot({
+            path: resolve(
+              EVIDENCE_DIR,
+              'model-form-' + station + '-' + locale + '-' + width + '.png',
+            ),
+          });
+      }
+      await assertStationClean(page, setup);
+    },
+  );
+}

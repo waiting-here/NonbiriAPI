@@ -126,6 +126,57 @@ function queryFromProbe(view: HTMLElement): URLSearchParams {
 }
 
 describe('numbered role log panel', () => {
+  it.each(['bad', '0', '9223372036854775808', '2&endpoint_key_id=3'])(
+    'never falls back to all logs for invalid key link %s',
+    async (value) => {
+      const fetchMock = installJsonFetchFixtures([timeZoneFixture('/admin/api/time-zones')]);
+      await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+        station: 'admin',
+        role: 'admin',
+        route: '/logs?endpoint_key_id=' + value,
+      });
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'physical key ID filter is invalid',
+      );
+      expect(fetchMock.mock.calls.every(([url]) => !String(url).includes('/logs?'))).toBe(true);
+      expect(screen.queryByRole('link', { name: 'Export CSV' })).not.toBeInTheDocument();
+    },
+  );
+  it('restores a physical key link and marks only matching attempts', async () => {
+    const row = { ...adminRow(1), attempt_count: '2' };
+    installJsonFetchFixtures([
+      timeZoneFixture('/admin/api/time-zones'),
+      {
+        method: 'GET',
+        path: '/admin/api/logs?endpoint_key_id=2&page=1&page_size=20',
+        body: listBody([row], pagination()),
+      },
+      {
+        method: 'GET',
+        path: `/admin/api/logs/${row.id}?attempt_page=1&attempt_page_size=20`,
+        body: detailBody(
+          row,
+          [attempt(1), { ...attempt(2), endpoint_key_id: '3' }],
+          pagination('1', 20, 2),
+        ),
+      },
+    ]);
+    const view = await renderWithProviders(
+      <>
+        <LocationProbe />
+        <RoleLogPanel accountId="viewer" role="admin" />
+      </>,
+      {
+        station: 'admin',
+        role: 'admin',
+        route: '/logs?endpoint_key_id=2',
+      },
+    );
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
+    expect(await screen.findByText('Matched this key')).toBeVisible();
+    expect(screen.getAllByText('Matched this key')).toHaveLength(1);
+    expect(queryFromProbe(view.container).get('endpoint_key_id')).toBe('2');
+  });
   it('waits for a real account and purges content when that session is cleared', async () => {
     const fetchMock = installJsonFetchFixtures([
       timeZoneFixture('/admin/api/time-zones'),

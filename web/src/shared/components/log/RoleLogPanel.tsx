@@ -118,6 +118,7 @@ function useStationScope(
 function AttemptTable({
   detail,
   role,
+  endpointKeyID,
   page,
   busy,
   onPageChange,
@@ -125,6 +126,7 @@ function AttemptTable({
 }: {
   detail: NumberedRoleLogDetail;
   role: LogRole;
+  endpointKeyID?: string;
   page: string;
   busy: boolean;
   onPageChange: (page: string) => void;
@@ -142,6 +144,11 @@ function AttemptTable({
           {attempts.data.map((attempt) => (
             <li className="log-attempt" key={attempt.attempt_seq}>
               <div className="log-attempt-heading">
+                {endpointKeyID && attempt.endpoint_key_id === endpointKeyID ? (
+                  <span className="status-badge">
+                    {t('common.operations.logs.matchedKeyAttempt')}
+                  </span>
+                ) : null}
                 <h3>
                   {t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}
                 </h3>
@@ -286,12 +293,20 @@ function ScopedRoleLogPanel({
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const station = role === 'admin' ? 'admin' : 'user';
+  const keyParams = searchParams.getAll('endpoint_key_id');
+  const invalidKeyFilter =
+    role !== 'user' &&
+    keyParams.length > 0 &&
+    (keyParams.length !== 1 ||
+      !/^[1-9][0-9]{0,18}$/.test(keyParams[0]) ||
+      BigInt(keyParams[0]) > 9_223_372_036_854_775_807n);
   const textParams = useMemo(
     () =>
       role === 'user'
         ? (['model', 'error_code', 'status', 'phase'] as const)
         : ([
             'user_id',
+            'endpoint_key_id',
             'endpoint_base_url',
             'upstream_model',
             'error_code',
@@ -353,7 +368,7 @@ function ScopedRoleLogPanel({
   const [revoked, setRevoked] = useState(false);
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
-  const observerEnabled = enabled && scopeReady && !revoked;
+  const observerEnabled = enabled && scopeReady && !revoked && !invalidKeyFilter;
   const logs = useRoleLogsPage(
     role,
     accountID,
@@ -422,6 +437,12 @@ function ScopedRoleLogPanel({
         maxLength: 39,
       });
     if (role !== 'user') {
+      values.push({
+        name: 'endpoint_key_id',
+        label: t('common.operations.logs.endpointKeyId'),
+        ariaLabel: t('common.operations.logs.endpointKeyId'),
+        maxLength: 19,
+      });
       values.push({
         name: 'endpoint_base_url',
         label: t('logs.endpointBaseUrl'),
@@ -662,6 +683,7 @@ function ScopedRoleLogPanel({
                     <AttemptTable
                       detail={detailData}
                       role={role}
+                      endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
                       page={attemptPager.page}
                       busy={detail.isFetching}
                       onPageChange={attemptPager.setPage}
@@ -718,13 +740,13 @@ function ScopedRoleLogPanel({
       </Card>
     );
 
-  const pageData = logs.data;
+  const pageData = invalidKeyFilter ? undefined : logs.data;
   const listBusy = logs.isFetching;
   return (
     <Card className="ops-stack">
       <div className="card-title-row">
         <h2>{title}</h2>
-        {
+        {!invalidKeyFilter && (
           <div className="ops-actions">
             <a className="btn btn-secondary" href={roleLogExportPath(role, filter, 'csv')} download>
               {t('common.operations.logs.exportCsv')}
@@ -737,11 +759,21 @@ function ScopedRoleLogPanel({
               {t('common.operations.logs.exportJson')}
             </a>
           </div>
-        }
+        )}
       </div>
       {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
-      {logs.error && !pageData ? (
+      {invalidKeyFilter ? (
+        <p className="field-error" role="alert">
+          {t('common.operations.logs.invalidKeyFilter')}
+        </p>
+      ) : null}
+      {role !== 'user' && filter.endpoint_key_id ? (
+        <p className="inline-notice" role="status">
+          {t('common.operations.logs.keyFilterNotice', { id: filter.endpoint_key_id })}
+        </p>
+      ) : null}
+      {invalidKeyFilter ? null : logs.error && !pageData ? (
         <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
       ) : pageData ? (
         <div className="ops-stack" aria-busy={listBusy}>
@@ -781,7 +813,7 @@ function ScopedRoleLogPanel({
         <LoadingState />
       )}
       <LogDetailDrawer
-        open={Boolean(selectedID)}
+        open={Boolean(selectedID) && !invalidKeyFilter}
         onClose={closeDetail}
         title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
         fields={detailFields}

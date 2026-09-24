@@ -77,7 +77,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
   }
   return (
     <section
-      className="request-diagnostics independent-diagnostics"
+      className="card request-diagnostics independent-diagnostics"
       aria-label={words('Discovery and activity diagnostics', '模型拉取与活动诊断')}
     >
       <h2>{words('Discovery and activity diagnostics', '模型拉取与活动诊断')}</h2>
@@ -130,7 +130,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
             <option value="720">{words('Last 30 days', '最近30天')}</option>
           </select>
         </label>
-        <button type="submit" disabled={busy}>
+        <button className="btn btn-primary" type="submit" disabled={busy}>
           {words('Search diagnostics', '查询诊断')}
         </button>
       </form>
@@ -163,7 +163,12 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
         ))}
       </div>
       {page?.next_before && (
-        <button type="button" disabled={busy} onClick={() => void load(true)}>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          disabled={busy}
+          onClick={() => void load(true)}
+        >
           {words('Next diagnostics', '下一页诊断')}
         </button>
       )}
@@ -208,7 +213,12 @@ function Detail({ role, id, synthetic }: { role: DiagnosticRole; id: string; syn
   return (
     <div>
       {!detail && (
-        <button type="button" disabled={busy} onClick={() => void load()}>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          disabled={busy}
+          onClick={() => void load()}
+        >
           {synthetic
             ? words('Load safe diagnostic and source', '加载安全诊断与来源')
             : words('Load error details and source', '加载错误详情与来源')}

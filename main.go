@@ -782,6 +782,9 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		return nil, errors.New("application dependencies are required")
 	}
 	gameNow := options.GameNow
+	if gameNow == nil {
+		gameNow = time.Now
+	}
 
 	elevationManager, err := elevation.NewManager()
 	if err != nil {
@@ -1340,7 +1343,7 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		cleanup()
 		return nil, fmt.Errorf("validate recurring charity limits: %w", err)
 	}
-	if err := lifecycleCoordinator.RecoverBeforeListener(startupContext); err != nil {
+	if err := recoverRankingsAndLifecycleBeforeListener(startupContext, rankingService, lifecycleCoordinator, gameNow().Unix()); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}

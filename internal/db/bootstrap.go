@@ -515,6 +515,9 @@ func sqliteFileURI(path, mode string) (string, error) {
 	query := u.Query()
 	query.Set("mode", mode)
 	query.Set("cache", "private")
+	// Apply connection-local protections again whenever the pool replaces a connection.
+	query.Add("_pragma", "foreign_keys(1)")
+	query.Add("_pragma", "busy_timeout(5000)")
 	u.RawQuery = query.Encode()
 	return u.String(), nil
 }

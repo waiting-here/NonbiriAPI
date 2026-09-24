@@ -81,6 +81,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
   user: ['model', 'error_code', 'status', 'from', 'to', 'phase'],
   steward: [
     'user_id',
+    'endpoint_key_id',
     'endpoint_base_url',
     'upstream_model',
     'error_code',
@@ -91,6 +92,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
   ],
   admin: [
     'user_id',
+    'endpoint_key_id',
     'endpoint_base_url',
     'upstream_model',
     'error_code',
@@ -144,8 +146,11 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
     if (key === 'phase' && text !== 'handler' && text !== 'pre_handler')
       invalidRequest('log phase filter');
     if (key === 'status' && !/^[1-5][0-9]{2}$/.test(text)) invalidRequest('log status filter');
-    if (key === 'user_id' && (!/^[1-9][0-9]*$/.test(text) || BigInt(text) > MAX_LOG_USER_ID))
-      invalidRequest('log user id filter');
+    if (
+      (key === 'user_id' || key === 'endpoint_key_id') &&
+      (!/^[1-9][0-9]{0,18}$/.test(text) || BigInt(text) > MAX_LOG_USER_ID)
+    )
+      invalidRequest(`log ${key} filter`);
     result[key] = text as never;
   }
   if (result.from !== undefined && result.to !== undefined && result.from >= result.to)

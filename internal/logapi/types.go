@@ -227,6 +227,7 @@ type StewardLogDetail struct {
 type ListFilter struct {
 	Phase           string
 	UserID          *int64
+	EndpointKeyID   *int64
 	EndpointBaseURL *string
 	UpstreamModel   *string
 	Model           *string
