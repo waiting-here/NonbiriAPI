@@ -95,6 +95,9 @@ func RecordTx(ctx context.Context, tx *sql.Tx, c Contribution) error {
 	if err := changeTotal(ctx, tx, c.UserID, "game_charity", "7d", c.Loss, c.SettledAt, 1, raw); err != nil {
 		return err
 	}
+	if err := recordNetTotals(ctx, tx, c, raw); err != nil {
+		return err
+	}
 	if profitBoard {
 		for _, window := range []string{"7d", "30d", "history"} {
 			if err := changeTotal(ctx, tx, c.UserID, c.Game, window, c.PositiveProfit, c.SettledAt, 1, raw); err != nil {
@@ -123,7 +126,7 @@ func changeTotal(ctx context.Context, tx *sql.Tx, user int64, board, window stri
 		return err
 	}
 	current.Add(current, delta)
-	if board != "game_charity" && current.Sign() < 0 {
+	if board != "game_charity" && !isNetBoard(board) && current.Sign() < 0 {
 		return ErrInvalid
 	}
 	value, err := db.SM128FromBig(current)

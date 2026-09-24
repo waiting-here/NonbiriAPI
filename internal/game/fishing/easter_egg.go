@@ -16,14 +16,28 @@ const (
 
 var ErrEasterEggBudget = errors.New("fishing: presentation draw budget exhausted")
 
-// DecorateBatch runs after every economic outcome has been selected. Each
-// legend has an independent 1/10 chance of an Easter egg. Its length is 201+N,
+// DecorateBatch preserves the default probability for callers without a
+// configurable presentation snapshot.
+func DecorateBatch(ctx context.Context, results []Result, source IntSource) ([]Result, error) {
+	return DecorateBatchWithChance(ctx, results, source, DefaultBlueFishChanceBPS)
+}
+
+// DecorateBatchWithChance runs after every economic outcome has been selected.
+// Only legendary fish participate in the configured chance. Its length is 201+N,
 // where P(N>=n)=(99/100)^n. Rewards and original species are never changed.
 // No partial result is returned on cancellation, random failure or exhaustion.
-func DecorateBatch(ctx context.Context, results []Result, source IntSource) ([]Result, error) {
+func DecorateBatchWithChance(ctx context.Context, results []Result, source IntSource, chanceBPS int) ([]Result, error) {
 	if ctx == nil {
 		return nil, errors.New("fishing: nil context")
 	}
+	if chanceBPS < 0 || chanceBPS > MaximumBlueFishChanceBPS {
+		return nil, ErrInvalidConfig
+	}
+	divisor, remainder := MaximumBlueFishChanceBPS, chanceBPS
+	for remainder != 0 {
+		divisor, remainder = remainder, divisor%remainder
+	}
+	denominator, numerator := uint64(MaximumBlueFishChanceBPS/divisor), uint64(chanceBPS/divisor)
 	decorated := append([]Result(nil), results...)
 	remaining := easterEggDrawBudget
 	next := func(bound uint64) (uint64, error) {
@@ -48,12 +62,17 @@ func DecorateBatch(ctx context.Context, results []Result, source IntSource) ([]R
 			outcome.Key != "yellowcheek" && outcome.Key != "taimen" && outcome.Key != "koi" {
 			return nil, errors.New("fishing: invalid legend outcome")
 		}
-		selected, err := next(10)
-		if err != nil {
-			return nil, err
-		}
-		if selected != 0 {
+		if numerator == 0 {
 			continue
+		}
+		if numerator < denominator {
+			selected, err := next(denominator)
+			if err != nil {
+				return nil, err
+			}
+			if selected >= numerator {
+				continue
+			}
 		}
 		length := big.NewInt(201)
 		for {

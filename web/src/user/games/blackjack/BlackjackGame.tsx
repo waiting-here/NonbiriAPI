@@ -618,6 +618,7 @@ export function BlackjackGame() {
         {panel === 'rules' && <Rules close={close} />}
         {panel === 'history' && <History close={close} />}
         <Leaderboard board="blackjack" />
+        <Leaderboard board="blackjack_net_profit" />
       </div>
     </main>
   );

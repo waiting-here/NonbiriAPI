@@ -20,12 +20,14 @@ const (
 	FishingPremiumPriceMilliKey        = "game_fishing_bait_premium_price_milli"
 	FishingStandardRTPKey              = "game_fishing_rtp"
 	FishingPremiumRTPKey               = "game_fishing_rtp_premium"
+	FishingBlueFishChanceBPSKey        = "game_fishing_blue_fish_chance_bps"
 	FishingTreasureBottleMultiplierKey = "game_fishing_treasure_bottle_mult"
 	FishingTreasureCloverMultiplierKey = "game_fishing_treasure_clover_mult"
 	FishingTreasureShellMultiplierKey  = "game_fishing_treasure_shell_mult"
 )
 
 type FishingWireConfig struct {
+	BlueFishChanceBPS   int                        `json:"blue_fish_chance_bps"`
 	RakeBP              fishing.RakeBasisPoints    `json:"rake_bp"`
 	Enabled             bool                       `json:"enabled"`
 	BaitPrices          FishingBaitPrices          `json:"bait_prices"`
@@ -52,6 +54,7 @@ type FishingRakePatch struct {
 	Thursday *int `json:"thursday,omitempty"`
 }
 type FishingConfigPatch struct {
+	BlueFishChanceBPS   *int                    `json:"blue_fish_chance_bps,omitempty"`
 	RakeBP              *FishingRakePatch       `json:"rake_bp,omitempty"`
 	Enabled             *bool                   `json:"enabled,omitempty"`
 	BaitPrices          *FishingBaitPricesPatch `json:"bait_prices,omitempty"`
@@ -100,6 +103,11 @@ func CompileConfig(raw map[string]string) (Snapshot, error) {
 	}
 	fishingConfig.StandardRTPPercent = standardRTP
 	fishingConfig.PremiumRTPPercent = premiumRTP
+	chance, err := game.RawInt(raw, FishingBlueFishChanceBPSKey, fishingConfig.BlueFishChanceBPS, 0, fishing.MaximumBlueFishChanceBPS)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	fishingConfig.BlueFishChanceBPS = chance
 	for species, key := range map[string]string{
 		"bottle": FishingTreasureBottleMultiplierKey,
 		"clover": FishingTreasureCloverMultiplierKey,
@@ -156,6 +164,7 @@ func mustEntry(rules *fishing.Ruleset, bait fishing.Bait) int64 {
 func (snapshot Snapshot) Wire() FishingWireConfig {
 	var result FishingWireConfig
 	result.Enabled = snapshot.FishingEnabled
+	result.BlueFishChanceBPS = snapshot.Fishing.BlueFishChanceBPS
 	result.RakeBP = snapshot.Fishing.RakeBP
 	result.BaitPrices = FishingBaitPrices{
 		Worm:    game.FormatAmount(mustEntry(snapshot.Rules, fishing.BaitWorm)),
@@ -185,6 +194,7 @@ func wireRaw(config FishingWireConfig) (map[string]string, error) {
 	raw[FishingRakeThursdayBPKey] = strconv.Itoa(config.RakeBP.Thursday)
 	raw[FishingStandardRTPKey] = strconv.Itoa(config.RTPPercent.Standard)
 	raw[FishingPremiumRTPKey] = strconv.Itoa(config.RTPPercent.Premium)
+	raw[FishingBlueFishChanceBPSKey] = strconv.Itoa(config.BlueFishChanceBPS)
 	raw[FishingTreasureBottleMultiplierKey] = strconv.Itoa(config.TreasureMultipliers.Bottle)
 	raw[FishingTreasureCloverMultiplierKey] = strconv.Itoa(config.TreasureMultipliers.Clover)
 	raw[FishingTreasureShellMultiplierKey] = strconv.Itoa(config.TreasureMultipliers.Shell)
@@ -198,7 +208,7 @@ type compiled struct {
 }
 
 func (Codec) Keys() []string {
-	return []string{FishingRakePlatformBPKey, FishingRakeWelfareBPKey, FishingRakeThursdayBPKey, FishingEnabledKey, FishingWormPriceMilliKey, FishingLurePriceMilliKey, FishingPremiumPriceMilliKey, FishingStandardRTPKey, FishingPremiumRTPKey, FishingTreasureBottleMultiplierKey, FishingTreasureCloverMultiplierKey, FishingTreasureShellMultiplierKey}
+	return []string{FishingRakePlatformBPKey, FishingRakeWelfareBPKey, FishingRakeThursdayBPKey, FishingEnabledKey, FishingWormPriceMilliKey, FishingLurePriceMilliKey, FishingPremiumPriceMilliKey, FishingStandardRTPKey, FishingPremiumRTPKey, FishingBlueFishChanceBPSKey, FishingTreasureBottleMultiplierKey, FishingTreasureCloverMultiplierKey, FishingTreasureShellMultiplierKey}
 }
 func (Codec) Compile(raw map[string]string) (game.ConfigValue, error) {
 	snapshot, err := CompileConfig(raw)
@@ -237,8 +247,9 @@ func (value compiled) Raw() map[string]string { return maps.Clone(value.raw) }
 func (value compiled) Wire() json.RawMessage  { return game.ConfigJSON(value.snapshot.Wire()) }
 func (value compiled) UserWire(available func(mode, spec string) bool) json.RawMessage {
 	return game.ConfigJSON(struct {
-		Enabled    bool              `json:"enabled"`
-		Available  bool              `json:"available"`
-		BaitPrices FishingBaitPrices `json:"bait_prices"`
-	}{value.snapshot.FishingEnabled, available("", ""), value.snapshot.Wire().BaitPrices})
+		Enabled           bool              `json:"enabled"`
+		Available         bool              `json:"available"`
+		BaitPrices        FishingBaitPrices `json:"bait_prices"`
+		BlueFishChanceBPS int               `json:"blue_fish_chance_bps"`
+	}{value.snapshot.FishingEnabled, available("", ""), value.snapshot.Wire().BaitPrices, value.snapshot.Fishing.BlueFishChanceBPS})
 }

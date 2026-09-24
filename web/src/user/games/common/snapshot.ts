@@ -121,7 +121,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
   );
   const fishing = exactRecord(
     record.fishing,
-    ['enabled', 'available', 'bait_prices'],
+    ['enabled', 'available', 'bait_prices', 'blue_fish_chance_bps'],
     [],
     'fishing module',
   );
@@ -211,6 +211,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
     fishing: {
       enabled: fishingEnabled,
       available: booleanValue(fishing.available, 'fishing runtime availability'),
+      blueFishChanceBPS: safeInteger(fishing.blue_fish_chance_bps, 0, 10_000, 'blue fat fish chance'),
       baitPrices: {
         worm: creditsValue(baits.worm, { positive: true }, 'worm price'),
         lure: creditsValue(baits.lure, { positive: true }, 'lure price'),

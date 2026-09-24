@@ -12,8 +12,23 @@ import {
   unixTime,
 } from '../common/strict';
 
-export type RankBoard = 'charity' | 'game_charity' | 'bidding' | 'blackjack';
+export type RankBoard =
+  | 'charity'
+  | 'game_charity'
+  | 'bidding'
+  | 'blackjack'
+  | 'game_net_profit'
+  | 'fishing_net_profit'
+  | 'blackjack_net_profit';
 export type RankWindow = '7d' | '30d' | 'history';
+
+export function isNetProfitBoard(board: RankBoard) {
+  return (
+    board === 'game_net_profit' ||
+    board === 'fishing_net_profit' ||
+    board === 'blackjack_net_profit'
+  );
+}
 
 function row(value: unknown) {
   const v = exactRecord(value, ['rank', 'amount', 'is_me', 'identity']);
@@ -26,6 +41,7 @@ function row(value: unknown) {
 }
 
 export function normalizeRanking(value: unknown, board: RankBoard, window: RankWindow, page = '1') {
+  if (isNetProfitBoard(board) && window !== '7d') invalidResponse('rank window');
   const v = exactRecord(
     value,
     ['as_of', 'statistics_start', 'window', 'rows', 'me'],
@@ -74,12 +90,19 @@ export function loadRanking(
   page: string,
   signal: AbortSignal,
 ) {
+  const netPaths = {
+    game_net_profit: '/api/games/leaderboards/net-profit',
+    fishing_net_profit: '/api/games/fishing/net-profit',
+    blackjack_net_profit: '/api/games/blackjack/net-profit',
+  };
   const path =
     board === 'charity'
       ? '/api/charity/leaderboard'
       : board === 'game_charity'
         ? '/api/games/leaderboards/charity'
-        : `/api/games/${board}/leaderboard`;
+        : board in netPaths
+          ? netPaths[board as keyof typeof netPaths]
+          : `/api/games/${board}/leaderboard`;
   return decoded(
     queryPath(path, board === 'charity' ? { page } : board === 'game_charity' ? {} : { window }),
     (value) => normalizeRanking(value, board, window, page),

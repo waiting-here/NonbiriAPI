@@ -33,6 +33,7 @@ const INITIAL_CONFIG: GamesConfig = {
   revision: '7',
   master_enabled: true,
   fishing: {
+    blue_fish_chance_bps: 1000,
     enabled: true,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
@@ -216,6 +217,9 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await worm.focus();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('3');
+  const chance = page.getByLabel('Blue-fish probability after a legendary catch (%)');
+  await expect(chance).toHaveValue('10');
+  await chance.fill('37.5');
   const save = page.getByRole('button', { name: 'Save game configuration' });
   await save.focus();
   await page.keyboard.press('Enter');
@@ -228,6 +232,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     likes: INITIAL_CONFIG.likes,
     fishing: {
       ...INITIAL_CONFIG.fishing,
+      blue_fish_chance_bps: 3750,
       bait_prices: { ...INITIAL_CONFIG.fishing.bait_prices, worm: '3' },
     },
     linklink: INITIAL_CONFIG.linklink,

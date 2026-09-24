@@ -787,6 +787,7 @@ const initialGameConfig: GamesConfig = {
   revision: '7',
   master_enabled: true,
   fishing: {
+    blue_fish_chance_bps: 1000,
     enabled: false,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },

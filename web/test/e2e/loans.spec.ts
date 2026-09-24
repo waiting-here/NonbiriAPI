@@ -86,7 +86,7 @@ for (const scenario of [
     await expect(dialog.locator('.loan-nominal')).toContainText('10000');
     await expect(dialog.getByText('9000', { exact: true })).toHaveCount(0);
     const star = dialog.getByRole('button', {
-      name: zh ? '查看费用与余额详情' : 'View fees and balance details',
+      name: zh ? '查看借款明细' : 'View loan breakdown',
     });
     const box = await star.boundingBox();
     expect(box!.width).toBeGreaterThanOrEqual(24);
@@ -103,7 +103,13 @@ for (const scenario of [
     await expect(star).toHaveAttribute('aria-expanded', 'true');
     await expect(dialog.getByText('9000', { exact: true })).toBeVisible();
     await expect(dialog.getByText('13000', { exact: true })).toBeVisible();
-    await expect(dialog.getByText('0 → -13000', { exact: true })).toBeVisible();
+    await expect(dialog.locator('.loan-facts dt')).toHaveText(
+      zh
+        ? ['本金', '手续费', '游戏积分实到', '利息', '通用积分扣减']
+        : ['Principal', 'Fee', 'Game credits received', 'Interest', 'General credits deducted'],
+    );
+    await expect(dialog.getByText('0 → -13000', { exact: true })).toHaveCount(0);
+    await expect(dialog.locator('.loan-facts')).not.toContainText(/系数|coefficient/);
     await dialog.screenshot({ path: `../tmp/loan-details-${scenario.width}.png` });
     await star.click();
     await expect(dialog.getByText('9000', { exact: true })).toHaveCount(0);
@@ -119,7 +125,8 @@ for (const scenario of [
     ).toBeDisabled();
     await page.getByRole('button', { name: zh ? '借款明细' : 'Loan history', exact: true }).click();
     const history = page.getByRole('dialog');
-    await expect(history.getByText('9007199254740993', { exact: true })).toBeVisible();
+    await expect(history.locator('.loan-facts dt')).toHaveCount(5);
+    await expect(history.locator('.loan-facts')).not.toContainText(/系数|coefficient|→/);
     await history.locator('select').selectOption('100');
     await expect.poll(() => pages.length).toBe(2);
     expect(pages[1]).toBe('?page=1&page_size=100');

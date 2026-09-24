@@ -176,7 +176,7 @@ export function LoanCard({
       {receipt ? (
         <div role="status">
           <h3>{text('借款已到账', 'Loan received')}</h3>
-          <LoanFacts loan={receipt} />
+          <LoanFacts loan={receipt} projection="owner" />
         </div>
       ) : null}
       <ConfirmDialog
@@ -188,7 +188,7 @@ export function LoanCard({
             <button
               type="button"
               className="loan-asterisk"
-              aria-label={text('查看费用与余额详情', 'View fees and balance details')}
+              aria-label={text('查看借款明细', 'View loan breakdown')}
               aria-expanded={reason !== null}
               aria-controls="loan-quote-details"
               onClick={() =>
@@ -227,13 +227,7 @@ export function LoanCard({
             {reason !== null ? (
               <section id="loan-quote-details" className="loan-details">
                 <p>{text(loanReasons[reason][0], loanReasons[reason][1])}</p>
-                <LoanFacts loan={quote.value} />
-                <p>
-                  {text(
-                    '余额为当前预估，实际成交明细以成交时的余额为准。',
-                    'Balances are estimates. The receipt uses your balances at the time of the transaction.',
-                  )}
-                </p>
+                <LoanFacts loan={quote.value} projection="owner" />
               </section>
             ) : null}
             {conflict ? (
