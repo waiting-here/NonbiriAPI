@@ -10,6 +10,10 @@ The changes below include development toward 1.0.0-rc.3. The published rc.2 tag 
 
 ### Added
 
+- Configurable model-request body size in administrator settings, defaulting to 10 MiB, with a finite 1–64 MiB range shared by chat and embedding calls.
+- Administrator account-deletion alerts with retained Discord identity and economic balances, unresolved negative-balance review, alert-type filters and bulk resolution.
+- An administrator Discord blacklist that prevents registration and atomically permanently bans existing accounts, revokes sessions and caller keys, and prevents unbanning while listed.
+
 - Level-5 trainee stewards with scoped mainstream charity-model maintenance, alongside full level-6 stewards and explicit appointment boundaries. Donation-key management includes donor and review notes, immutable public-thanks choices and shared-configuration impact.
 - Restricted original upstream-error diagnostics and request-source facts, with 30-day ordinary retention, 1 MiB per error, and a configurable 1 GiB default total payload cap. Raw upstream failures can contain upstream-echoed inputs or credentials; personal exports exclude these diagnostics.
 - Manual abuse auditing for sustained RPM/concurrency use, shared IPs, bounded client rules and authenticated auxiliary access events. Anonymous probe counts remain separate and observations do not automatically punish users.
@@ -29,6 +33,8 @@ The changes below include development toward 1.0.0-rc.3. The published rc.2 tag 
 - Administrators and stewards can fetch model lists for one available donated key, all available keys in one donation, or all available donated keys across pages and filters. Batches show progress and support pausing and resuming uncertain requests; live permission and eligibility checks protect dispatch and catalog updates.
 
 ### Fixed
+
+- Level-6 stewards can use general and game check-ins, including level-gated mode, with unchanged daily and balance limits.
 
 - Show the requested charity model in administrator and full-steward log lists, details and exports, using the historical request snapshot while retaining private self-use model boundaries.
 

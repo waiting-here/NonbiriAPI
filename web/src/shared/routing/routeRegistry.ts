@@ -307,6 +307,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.navigation.overview',
     fallbackLabelKey: 'admin.dashboard.nav',
   }),
+  admin({id: 'admin-blacklist', path: '/blacklist', access: 'admin', layout: 'wide', nav: true, navGroup: 'users', icon: 'users', labelKey: 'admin.blacklist.title', registered: true}),
   admin({
     id: 'admin-users',
     path: '/users',

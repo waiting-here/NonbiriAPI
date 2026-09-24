@@ -167,6 +167,7 @@ describe('administrator alert page requests', () => {
       'true',
       '3',
       100,
+      'all',
     ]);
   });
 });

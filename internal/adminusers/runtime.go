@@ -967,6 +967,15 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 	if !equalU128Bytes(row.revision, expected) {
 		return MutationResult[struct{}]{}, ErrConflict
 	}
+	if !banned || duration != nil {
+		var blocked bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discord_blacklist WHERE discord_id=?)`, row.discordID.String).Scan(&blocked); err != nil {
+			return MutationResult[struct{}]{}, err
+		}
+		if blocked {
+			return MutationResult[struct{}]{}, ErrBlacklisted
+		}
+	}
 	next, err := incrementU128(expected)
 	if err != nil {
 		return MutationResult[struct{}]{}, ErrResourceLimit

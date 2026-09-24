@@ -75,6 +75,9 @@ func RegisterRoutes(registrar AdminRouteRegistrar, service *Service) error {
 	}
 	api := &httpAPI{service: service}
 	routes := append(api.userRoutes(), []managementRoute{
+		{http.MethodGet, routeBlacklist, api.listBlacklist},
+		{http.MethodPost, routeBlacklist, api.addBlacklist},
+		{http.MethodPost, routeBlacklistRemove, api.removeBlacklist},
 		{http.MethodGet, routeUsage, api.getUsage},
 		{http.MethodGet, routeActivity, api.getActivity},
 		{http.MethodGet, routeEndpointOverview, api.getEndpointOverview},
@@ -808,6 +811,8 @@ func writeMutation(writer http.ResponseWriter, status int, body []byte) {
 
 func writeError(writer http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrBlacklisted):
+		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "remove the Discord ID from the blacklist before changing its permanent ban"))
 	case errors.Is(err, ErrInvalidRequest):
 		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 	case errors.Is(err, ErrUnauthorized):

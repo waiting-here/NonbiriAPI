@@ -15,9 +15,10 @@ import (
 
 func TestRegisterRoutesIsIndependentExactSurface(t *testing.T) {
 	environment := newAlertTestEnvironment(t)
-	if len(environment.routes.handlers) != 2 ||
+	if len(environment.routes.handlers) != 3 ||
 		environment.routes.handlers[http.MethodGet+" "+routeAlerts] == nil ||
-		environment.routes.handlers[http.MethodPost+" "+routeResolveAlert] == nil {
+		environment.routes.handlers[http.MethodPost+" "+routeResolveAlert] == nil ||
+		environment.routes.handlers[http.MethodPost+" /admin/api/alerts/resolve"] == nil {
 		t.Fatalf("registered routes=%v", environment.routes.handlers)
 	}
 	var nilRegistrar *routeCapture

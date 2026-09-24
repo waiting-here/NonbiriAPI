@@ -164,3 +164,9 @@ guarantee.
 Any new table, column, route, or retention value requires an explicit export
 whitelist/exclusion, synchronous deletion and late-write behavior, an exact retention
 sweep or cap, bilingual privacy review, and fixed-clock/cascade tests before release.
+
+### Account deletion alerts and Discord blacklist
+
+When a user deletes their account, an administrator-only deletion alert retains the former user ID, Discord ID, general and game credit balances, donation credit, and paper/brush balances after pending work is settled and before wallet zeroing. A negative general or game balance leaves the alert unresolved; otherwise it is resolved automatically. This management audit record survives account deletion and alert resolution and currently has no automatic expiry. Administrator-maintained Discord ID blacklist entries and reasons remain until removed and prevent registration. Adding an entry permanently bans any existing account; removal does not automatically unban it. These management security records are excluded from personal exports.
+
+The snapshot is committed atomically with deletion, after domain handoffs and before zeroing. It has no surviving user foreign key; its sole parent is the administrator alert. Blacklist enforcement shares the account-ban transaction and remains effective after the user row is gone.

@@ -14,6 +14,7 @@ export const router = createBrowserRouter([
     hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage station="admin" />,
     children: [
+{ path: pathFor('admin-blacklist'), lazy: async () => ({Component: (await import('./pages/BlacklistPage')).BlacklistPage}) },
       {
         index: true,
         lazy: async () => ({ Component: (await import('./pages/DashboardPage')).DashboardPage }),

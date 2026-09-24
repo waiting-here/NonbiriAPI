@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	ErrBlacklisted     = errors.New("adminusers: identity remains blacklisted")
 	ErrInvalidRequest  = errors.New("adminusers: invalid request")
 	ErrUnauthorized    = errors.New("adminusers: unauthorized")
 	ErrForbidden       = errors.New("adminusers: forbidden")
