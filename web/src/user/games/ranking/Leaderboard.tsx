@@ -7,7 +7,7 @@ import { useUserSession, userKeys } from '../../data';
 import { patchCharityProfile } from '../../features/core/api';
 import { useDuelText } from '../common/duel/copy';
 import { formatCredits } from '../common/strict';
-import { loadRanking, type RankBoard, type RankWindow } from './api';
+import { isNetProfitBoard, loadRanking, type RankBoard, type RankWindow } from './api';
 import './ranking.css';
 
 function CharityPrivacy() {
@@ -81,7 +81,12 @@ function RankingPanel({
   const t = useDuelText();
   const [selectedWindow, setWindow] = useState<RankWindow>('7d');
   const [page, setPage] = useState('1');
-  const window = board === 'charity' ? 'history' : board === 'game_charity' ? '7d' : selectedWindow;
+  const window =
+    board === 'charity'
+      ? 'history'
+      : board === 'game_charity' || isNetProfitBoard(board)
+        ? '7d'
+        : selectedWindow;
   const query = useQuery({
     queryKey: ['user', 'games', 'rankings', owner, board, window, page],
     queryFn: ({ signal }) => loadRanking(board, window, page, signal),
@@ -93,6 +98,12 @@ function RankingPanel({
     game_charity: [t('游戏慈善榜', 'Game Charity'), t('匿名慈善家', 'Anonymous philanthropist')],
     bidding: [t('竞标利润榜', 'Bidding profits'), t('匿名竞标者', 'Anonymous bidder')],
     blackjack: [t('二十一点利润榜', 'Blackjack profits'), t('匿名牌手', 'Anonymous card player')],
+    game_net_profit: [t('暴富榜', 'Fortune leaderboard'), t('匿名玩家', 'Anonymous player')],
+    fishing_net_profit: [t('锦鲤榜', 'Lucky catch leaderboard'), t('匿名钓友', 'Anonymous angler')],
+    blackjack_net_profit: [
+      t('赌神榜', 'Card master leaderboard'),
+      t('匿名牌手', 'Anonymous card player'),
+    ],
   };
   const help =
     board === 'charity'
@@ -100,20 +111,25 @@ function RankingPanel({
           '按全部历史捐赠积分排名，包含管理员调整。只展示正值，每页20人。',
           'All-time donation credits, including administrator adjustments. Positive totals only, twenty people per page.',
         )
-      : board === 'game_charity'
+      : isNetProfitBoard(board)
         ? t(
-            '最近7×24小时，六游戏实际支出减去抽水后返还，输赢相抵。两种积分等值计算，不含新人奖励和贷款。仅正净亏损入榜。',
-            'Over the last 7×24 hours: spending minus after-fee returns across all six games. Wins offset losses and both credit types count equally. Newcomer rewards and loans are excluded. Positive net losses only.',
+            `最近7×24小时，${board === 'game_net_profit' ? '六游戏' : board === 'fishing_net_profit' ? '池塘垂钓' : '二十一点'}实际返还减实际投入，输赢相抵并计入抽水与入场费。两种积分等值计算，排除奖励、网贷和调账等非对局收支。仅正净盈利入榜。`,
+            `Over the last 7×24 hours: returns minus spending ${board === 'game_net_profit' ? 'across all six games' : board === 'fishing_net_profit' ? 'in pond fishing' : 'in blackjack'}, including fees and entry costs. Losses offset wins and both credit types count equally. Rewards, loans and other non-game transactions are excluded. Positive net profits only.`,
           )
-        : board === 'bidding'
+        : board === 'game_charity'
           ? t(
-              '三档合计抽水前的正利润，不含本金，亏损不抵扣。',
-              'Positive profits before fees across all three tiers. Principal is excluded and losses do not offset profits.',
+              '最近7×24小时，六游戏实际支出减去抽水后返还，输赢相抵。两种积分等值计算，不含新人奖励和贷款。仅正净亏损入榜。',
+              'Over the last 7×24 hours: spending minus after-fee returns across all six games. Wins offset losses and both credit types count equally. Newcomer rewards and loans are excluded. Positive net losses only.',
             )
-          : t(
-              '每手抽水前利润分别取正值再累加，包含分牌和加倍；不以整局净赚为门槛。',
-              'Positive profits before fees are added separately for each hand, including split and doubled hands. The whole round need not be profitable.',
-            );
+          : board === 'bidding'
+            ? t(
+                '三档合计抽水前的正利润，不含本金，亏损不抵扣。',
+                'Positive profits before fees across all three tiers. Principal is excluded and losses do not offset profits.',
+              )
+            : t(
+                '每手抽水前利润分别取正值再累加，包含分牌和加倍；不以整局净赚为门槛。',
+                'Positive profits before fees are added separately for each hand, including split and doubled hands. The whole round need not be profitable.',
+              );
   const data = !query.error && owner ? query.data : undefined;
   const rows = [...(data?.rows ?? []), ...(data?.me ? [data.me] : [])];
   return (

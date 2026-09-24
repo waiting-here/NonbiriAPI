@@ -19,6 +19,9 @@ func RegisterRoutes(registrar resources.UserRouteRegistrar, s *Service) error {
 		{"/api/games/leaderboards/charity", "game_charity"},
 		{"/api/games/bidding/leaderboard", "bidding"},
 		{"/api/games/blackjack/leaderboard", "blackjack"},
+		{"/api/games/leaderboards/net-profit", "game_net_profit"},
+		{"/api/games/fishing/net-profit", "fishing_net_profit"},
+		{"/api/games/blackjack/net-profit", "blackjack_net_profit"},
 	} {
 		if err := registrar.RegisterUserRoute(http.MethodGet, route.path, func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			if r.ContentLength != 0 || len(r.TransferEncoding) != 0 {
@@ -33,7 +36,7 @@ func RegisterRoutes(registrar resources.UserRouteRegistrar, s *Service) error {
 			window := "7d"
 			page := pagination.Default()
 			for key, list := range values {
-				if len(list) != 1 || !(route.board == "charity" && key == "page" || (route.board == "bidding" || route.board == "blackjack") && key == "window") {
+				if len(list) != 1 || !(route.board == "charity" && key == "page" || (route.board == "bidding" || route.board == "blackjack" || isNetBoard(route.board)) && key == "window") {
 					writeError(w, ErrInvalid)
 					return
 				}

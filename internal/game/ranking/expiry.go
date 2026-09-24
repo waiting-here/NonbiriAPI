@@ -16,6 +16,8 @@ type expiryGroup struct {
 	user, at      int64
 	board, window string
 	delta         *big.Int
+	netDelta      [3]*big.Int
+	netSeq        [2][]byte
 	seq           []byte
 }
 
@@ -40,6 +42,11 @@ func AdvanceTx(ctx context.Context, tx *sql.Tx, now int64) (bool, error) {
 	}
 	deadline := time.Now().Add(advanceTime)
 	remaining := advanceRows
+	ready, used, err := advanceNetRebuild(ctx, tx, remaining, deadline)
+	if err != nil || !ready {
+		return false, err
+	}
+	remaining -= used
 	for remaining > 0 && time.Now().Before(deadline) {
 		g, err := nextGroup(ctx, tx, now)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -58,7 +65,11 @@ func AdvanceTx(ctx context.Context, tx *sql.Tx, now int64) (bool, error) {
 }
 
 func ReadyTx(ctx context.Context, tx *sql.Tx, now int64) (bool, error) {
-	_, err := nextGroup(ctx, tx, now)
+	ready, err := netRebuildReady(ctx, tx)
+	if err != nil || !ready {
+		return false, err
+	}
+	_, err = nextGroup(ctx, tx, now)
 	if errors.Is(err, sql.ErrNoRows) {
 		return true, nil
 	}
@@ -69,11 +80,25 @@ func nextGroup(ctx context.Context, tx *sql.Tx, now int64) (expiryGroup, error) 
 	var g expiryGroup
 	var sign int
 	var raw []byte
-	err := tx.QueryRowContext(ctx, `SELECT user_id,board,window,expires_at,delta_sign,delta_mag,last_seq FROM game_rank_expiry_work WHERE id=1`).Scan(&g.user, &g.board, &g.window, &g.at, &sign, &raw, &g.seq)
+	var netSigns [3]int
+	var netRaw [3][]byte
+	for i := range g.netDelta {
+		g.netDelta[i] = new(big.Int)
+	}
+	for i := range g.netSeq {
+		g.netSeq[i] = make([]byte, 16)
+	}
+	err := tx.QueryRowContext(ctx, `SELECT user_id,board,window,expires_at,delta_sign,delta_mag,last_seq,net_game_delta_sign,net_game_delta_mag,net_fishing_delta_sign,net_fishing_delta_mag,net_blackjack_delta_sign,net_blackjack_delta_mag,net_fishing_last_seq,net_blackjack_last_seq FROM game_rank_expiry_work WHERE id=1`).Scan(&g.user, &g.board, &g.window, &g.at, &sign, &raw, &g.seq, &netSigns[0], &netRaw[0], &netSigns[1], &netRaw[1], &netSigns[2], &netRaw[2], &g.netSeq[0], &g.netSeq[1])
 	if err == nil {
 		g.delta = new(big.Int).SetBytes(raw)
 		if sign < 0 {
 			g.delta.Neg(g.delta)
+		}
+		for i := range g.netDelta {
+			g.netDelta[i].SetBytes(netRaw[i])
+			if netSigns[i] < 0 {
+				g.netDelta[i].Neg(g.netDelta[i])
+			}
 		}
 		if g.at > now {
 			return expiryGroup{}, ErrCatchingUp
@@ -107,18 +132,19 @@ func advanceGroup(ctx context.Context, tx *sql.Tx, g expiryGroup, limit int) (in
 		value = `loss_sign,loss_mag`
 	}
 	args = append(args, limit)
-	rows, err := tx.QueryContext(ctx, `SELECT seq,`+value+` FROM game_rank_events WHERE `+predicate+` ORDER BY seq LIMIT ?`, args...)
+	rows, err := tx.QueryContext(ctx, `SELECT seq,`+value+`,game_key FROM game_rank_events WHERE `+predicate+` ORDER BY seq LIMIT ?`, args...)
 	if err != nil {
 		return 0, err
 	}
 	type item struct {
 		seq, mag []byte
 		sign     int
+		game     string
 	}
 	items := make([]item, 0, limit)
 	for rows.Next() {
 		var v item
-		if err := rows.Scan(&v.seq, &v.sign, &v.mag); err != nil {
+		if err := rows.Scan(&v.seq, &v.sign, &v.mag, &v.game); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -137,6 +163,15 @@ func advanceGroup(ctx context.Context, tx *sql.Tx, g expiryGroup, limit int) (in
 			amount.Neg(amount)
 		}
 		g.delta.Sub(g.delta, amount)
+		if g.board == "game_charity" {
+			g.netDelta[0].Add(g.netDelta[0], amount)
+			if index := netGameIndex(v.game); index >= 0 {
+				g.netDelta[index].Add(g.netDelta[index], amount)
+				if amount.Sign() != 0 {
+					g.netSeq[index-1] = v.seq
+				}
+			}
+		}
 		g.seq = v.seq
 		set := column + `=NULL`
 		if g.board == "game_charity" {
@@ -158,13 +193,31 @@ func advanceGroup(ctx context.Context, tx *sql.Tx, g expiryGroup, limit int) (in
 		if err := changeTotal(ctx, tx, g.user, g.board, g.window, g.delta, g.at, 0, g.seq); err != nil {
 			return 0, err
 		}
+		if g.board == "game_charity" {
+			for i, board := range netBoards {
+				seq := g.seq
+				if i > 0 {
+					seq = g.netSeq[i-1]
+				}
+				if err := changeTotal(ctx, tx, g.user, board, "7d", g.netDelta[i], g.at, 0, seq); err != nil {
+					return 0, err
+				}
+			}
+		}
 		_, err = tx.ExecContext(ctx, `DELETE FROM game_rank_expiry_work WHERE id=1`)
 	} else {
 		if g.delta.BitLen() > 256 {
 			return 0, ErrInvalid
 		}
 		mag := new(big.Int).Abs(g.delta).FillBytes(make([]byte, 32))
-		_, err = tx.ExecContext(ctx, `INSERT INTO game_rank_expiry_work(id,user_id,board,window,expires_at,delta_sign,delta_mag,last_seq) VALUES(1,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET delta_sign=excluded.delta_sign,delta_mag=excluded.delta_mag,last_seq=excluded.last_seq`, g.user, g.board, g.window, g.at, g.delta.Sign(), mag, g.seq)
+		netRaw := [3][]byte{}
+		for i, value := range g.netDelta {
+			if value.BitLen() > 256 {
+				return 0, ErrInvalid
+			}
+			netRaw[i] = new(big.Int).Abs(value).FillBytes(make([]byte, 32))
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO game_rank_expiry_work(id,user_id,board,window,expires_at,delta_sign,delta_mag,last_seq,net_game_delta_sign,net_game_delta_mag,net_fishing_delta_sign,net_fishing_delta_mag,net_blackjack_delta_sign,net_blackjack_delta_mag,net_fishing_last_seq,net_blackjack_last_seq) VALUES(1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET delta_sign=excluded.delta_sign,delta_mag=excluded.delta_mag,last_seq=excluded.last_seq,net_game_delta_sign=excluded.net_game_delta_sign,net_game_delta_mag=excluded.net_game_delta_mag,net_fishing_delta_sign=excluded.net_fishing_delta_sign,net_fishing_delta_mag=excluded.net_fishing_delta_mag,net_blackjack_delta_sign=excluded.net_blackjack_delta_sign,net_blackjack_delta_mag=excluded.net_blackjack_delta_mag,net_fishing_last_seq=excluded.net_fishing_last_seq,net_blackjack_last_seq=excluded.net_blackjack_last_seq`, g.user, g.board, g.window, g.at, g.delta.Sign(), mag, g.seq, g.netDelta[0].Sign(), netRaw[0], g.netDelta[1].Sign(), netRaw[1], g.netDelta[2].Sign(), netRaw[2], g.netSeq[0], g.netSeq[1])
 	}
 	return len(items), err
 }

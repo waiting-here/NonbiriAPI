@@ -121,7 +121,7 @@ func validBoard(board, window string) bool {
 	switch board {
 	case "charity":
 		return window == "history"
-	case "game_charity":
+	case "game_charity", "game_net_profit", "fishing_net_profit", "blackjack_net_profit":
 		return window == "7d"
 	case "bidding", "blackjack":
 		return window == "7d" || window == "30d" || window == "history"
@@ -132,7 +132,7 @@ func validBoard(board, window string) bool {
 // DeleteTx participates in the account coordinator's transaction, before
 // retiring the ledger owner. Late settlements cannot recreate a deleted FK.
 func DeleteTx(ctx context.Context, tx *sql.Tx, user int64) error {
-	for _, table := range []string{"game_rank_expiry_work", "game_rank_events", "game_rank_totals"} {
+	for _, table := range []string{"game_rank_net_rebuild_totals", "game_rank_expiry_work", "game_rank_events", "game_rank_totals"} {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE user_id=?`, user); err != nil {
 			return err
 		}

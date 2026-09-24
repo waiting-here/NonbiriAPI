@@ -27,6 +27,7 @@ import { FishingArtwork } from './FishingArtwork';
 import blueFatFish from '@shared/assets/game-fishing/blue-fat-fish.png';
 import fishingScene from '@shared/assets/game-heroes/fishing.webp';
 import { GamePrivacyLink } from '../common/GamePrivacyControl';
+import { Leaderboard as NetProfitLeaderboard } from '../ranking/Leaderboard';
 import {
   acknowledgeFishing,
   fishingKeys,
@@ -117,13 +118,25 @@ function OutcomeName({
   );
 }
 
-function FishingRules({ open, onClose }: { readonly open: boolean; readonly onClose: () => void }) {
+function FishingRules({
+  open,
+  onClose,
+  chanceBPS,
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly chanceBPS?: number;
+}) {
   const { text } = useGameCopy();
   const sections: readonly GameRulesSection[] = (
     ['choose', 'batch', 'result', 'recovery', 'scores', 'start'] as const
   ).map((section) => ({
     title: text(`fishing.rules.${section}Title`),
-    paragraphs: [text(`fishing.rules.${section}Body`)],
+    paragraphs: [
+      text(`fishing.rules.${section}Body`, {
+        chance: chanceBPS === undefined ? '—' : `${chanceBPS / 100}%`,
+      }),
+    ],
   }));
   return (
     <GameRulesDialog
@@ -799,7 +812,13 @@ export function FishingGame() {
       onRules={() => setRulesOpen(true)}
     />
   );
-  const rulesDialog = <FishingRules open={rulesOpen} onClose={closeRules} />;
+  const rulesDialog = (
+    <FishingRules
+      open={rulesOpen}
+      onClose={closeRules}
+      chanceBPS={snapshot.data?.fishing.blueFishChanceBPS}
+    />
+  );
 
   if (snapshot.isPending)
     return (
@@ -1029,6 +1048,7 @@ export function FishingGame() {
       <section className="fishing-leaderboards" aria-label={text('fishing.leaderboard.single')}>
         <FishingSingleBoards historical={single} recent={recentSingle} />
         <LeaderboardCard board="total" query={total} />
+        <NetProfitLeaderboard board="fishing_net_profit" />
       </section>
       {rulesDialog}
     </main>

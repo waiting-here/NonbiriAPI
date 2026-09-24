@@ -223,7 +223,7 @@ const copy = {
   'fishing.tier.regular': ['Common', '普通'],
   'fishing.tier.big': ['Big catch', '大鱼'],
   'fishing.tier.giant': ['Giant', '巨物'],
-  'fishing.tier.legend': ['Legendary', '传说'],
+  'fishing.tier.legend': ['Legendary', '传奇'],
   'fishing.tier.junk': ['Pond find', '池塘杂物'],
   'fishing.tier.treasure': ['Treasure', '宝物'],
   'fishing.size': ['{{size}} cm', '{{size}} 厘米'],
@@ -274,8 +274,8 @@ const copy = {
   ],
   'fishing.rules.resultTitle': ['What you receive', '你会看到什么'],
   'fishing.rules.resultBody': [
-    'Results show the catch, length and net general credits after per-catch deductions. Expand a catch to see its gross reward and deductions. Legendary fish have a 10% chance of the blue fat fish egg: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Only artwork and length rankings change; original species and rewards stay unchanged.',
-    '结果展示收获、长度和逐条抽水后的通用积分净到账，展开可看原始渔获与各项抽水。传奇鱼有 10% 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
+    'Results show the catch, length and net general credits after per-catch deductions. Expand a catch to see its gross reward and deductions. Once a legendary fish is caught, the current chance of the blue fat fish egg is {{chance}}: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Each new batch fixes its chance when accepted. Only artwork and length rankings change; original species and rewards stay unchanged.',
+    '结果展示收获、长度和逐条抽水后的通用积分净到账，展开可看原始渔获与各项抽水。先钓中传奇鱼后，当前有 {{chance}} 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。每批在受理时固定概率。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
   ],
   'fishing.rules.recoveryTitle': ['If you leave or refresh', '离开或刷新后怎么办'],
   'fishing.rules.recoveryBody': [

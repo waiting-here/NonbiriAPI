@@ -39,7 +39,9 @@ const BLUE_RESULT = {
   species_key: 'koi',
   tier: 'legend',
   size_cm: 122,
-  reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
+  reward: '2',
+  net_reward: '2',
+  rake: { platform: '0', welfare: '0', thursday: '0' },
   blue_fat_fish_length_cm: LONG_BLUE_LENGTH,
 };
 
@@ -48,7 +50,9 @@ const OLD_RESULT = {
   species_key: 'taimen',
   tier: 'legend',
   size_cm: 121,
-  reward: '1', net_reward: '1', rake: { platform: '0', welfare: '0', thursday: '0' },
+  reward: '1',
+  net_reward: '1',
+  rake: { platform: '0', welfare: '0', thursday: '0' },
 };
 
 const FILLER_RESULTS = Array.from({ length: 8 }, (_, index) => ({
@@ -56,7 +60,9 @@ const FILLER_RESULTS = Array.from({ length: 8 }, (_, index) => ({
   species_key: 'whitebait',
   tier: 'small',
   size_cm: 10,
-  reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
+  reward: '0',
+  net_reward: '0',
+  rake: { platform: '0', welfare: '0', thursday: '0' },
 }));
 
 const RESULT = {
@@ -68,7 +74,9 @@ const RESULT = {
   rules_version: 1,
   payment: { general: '25', game: '0' },
   outcomes: [OLD_RESULT, BLUE_RESULT, ...FILLER_RESULTS],
-  payout_total: '3', net_payout_total: '3', rake: { platform: '0', welfare: '0', thursday: '0' },
+  payout_total: '3',
+  net_payout_total: '3',
+  rake: { platform: '0', welfare: '0', thursday: '0' },
   balance: '4999995',
   game_balance: '0',
   settled_at: 1_800_000_111,
@@ -163,12 +171,25 @@ async function installFishingRoutes(page: Page, fixture: FishingFixture): Promis
     if (requestURL.pathname === '/api/games' && request.method() === 'GET') {
       const snapshot = gamesSnapshotWire();
       snapshot.balance = '5000000';
+      snapshot.fishing.blue_fish_chance_bps = 3750;
       snapshot.fishing.bait_prices = { worm: '2.5', lure: '5', premium: '7.5' };
       await route.fulfill(jsonResponse(snapshot));
       return;
     }
     if (requestURL.pathname === '/api/games/fishing/state' && request.method() === 'GET') {
       await route.fulfill(jsonResponse(fixture.state));
+      return;
+    }
+    if (requestURL.pathname === '/api/games/fishing/net-profit' && request.method() === 'GET') {
+      await route.fulfill(
+        jsonResponse({
+          as_of: 2000000000,
+          statistics_start: 1900000000,
+          window: '7d',
+          rows: [],
+          me: null,
+        }),
+      );
       return;
     }
     if (requestURL.pathname === '/api/games/fishing/leaderboard' && request.method() === 'GET') {
@@ -340,9 +361,16 @@ for (const scenario of SCENARIOS) {
     await expect(page.getByRole('heading', { name: scenario.pageTitle })).toBeVisible();
     await page.getByRole('button', { name: scenario.rulesButton }).click();
     await expect(page.getByRole('dialog')).toContainText(scenario.helpNotice);
-    await expect(page.getByRole('dialog')).toContainText('10%');
+    await expect(page.getByRole('dialog')).toContainText('37.5%');
+    if (scenario.language === 'zh')
+      await expect(page.getByRole('dialog')).not.toContainText('传说');
     await expect(page.getByRole('dialog')).toContainText('201');
     await page.getByRole('button', { name: scenario.closeRules }).click();
+    await expect(
+      page.getByRole('heading', {
+        name: scenario.language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',
+      }),
+    ).toBeVisible();
     await expect(page.locator('.fishing-result')).toBeVisible();
 
     const result = page.locator('.fishing-result');
