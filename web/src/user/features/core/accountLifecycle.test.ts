@@ -9,7 +9,7 @@ function fixture(path: string): unknown {
 
 function exportDocument(): Record<string, unknown> {
   return {
-    schema_version: 9,
+    schema_version: 10,
     generated_at: 1_700_000_000,
     user: {},
     endpoints: [],
@@ -37,6 +37,12 @@ function exportDocument(): Record<string, unknown> {
     likes: {},
     blackjack: {},
     randomness: [],
+    limited_activities: {
+      wallet: { general: '0', sketch_paper: '0', sketch_brush: '0' },
+      exchanges: [],
+    },
+    image_tasks: [],
+    inactivity: { activity: null, runs: [] },
   };
 }
 
@@ -45,7 +51,7 @@ function exportResponse(body: unknown, headers: HeadersInit = {}): Response {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v9.json"',
+      'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v10.json"',
       ...headers,
     },
   });
@@ -56,17 +62,17 @@ afterEach(() => {
 });
 
 describe('production account lifecycle adapter', () => {
-  it('downloads one bounded schema-v9 attachment with only the elevated capability header', async () => {
+  it('downloads one bounded schema-v10 attachment with only the elevated capability header', async () => {
     const document = exportDocument();
     const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
     vi.stubGlobal('fetch', fetchMock);
 
-    const attachment = await productionAccountLifecycleAdapter.exportV9({
+    const attachment = await productionAccountLifecycleAdapter.exportAccount({
       accountId: '1',
       elevatedToken: 'elevated_token',
     });
 
-    expect(attachment.schemaVersion).toBe(9);
+    expect(attachment.schemaVersion).toBe(10);
     expect(JSON.parse(await attachment.blob.text())).toEqual(document);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0] ?? [];
@@ -88,13 +94,56 @@ describe('production account lifecycle adapter', () => {
 
     for (let index = 0; index < 3; index += 1) {
       await expect(
-        productionAccountLifecycleAdapter.exportV9({
+        productionAccountLifecycleAdapter.exportAccount({
           accountId: '1',
           elevatedToken: 'elevated_token',
         }),
       ).rejects.toMatchObject({ code: 'invalid_response' });
     }
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['limited_activities', 'image_tasks', 'inactivity'])(
+    'rejects an export missing the required %s section without retrying',
+    async (key) => {
+      const document = exportDocument();
+      delete document[key];
+      const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(
+        productionAccountLifecycleAdapter.exportAccount({
+          accountId: '1',
+          elevatedToken: 'elevated_token',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('rejects the previous export schema and filename without retrying', async () => {
+    const previousDocument = exportDocument();
+    previousDocument.schema_version = 9;
+    delete previousDocument.limited_activities;
+    delete previousDocument.image_tasks;
+    delete previousDocument.inactivity;
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(exportResponse(previousDocument)).mockResolvedValueOnce(
+      exportResponse(exportDocument(), {
+        'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v9.json"',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (let index = 0; index < 2; index += 1) {
+      await expect(
+        productionAccountLifecycleAdapter.exportAccount({
+          accountId: '1',
+          elevatedToken: 'elevated_token',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('submits exact DELETE once and accepts only a 204 response', async () => {
@@ -149,7 +198,7 @@ describe('production account lifecycle adapter', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      productionAccountLifecycleAdapter.exportV9({ accountId: '01', elevatedToken: 'short' }),
+      productionAccountLifecycleAdapter.exportAccount({ accountId: '01', elevatedToken: 'short' }),
     ).rejects.toMatchObject({ code: 'invalid_request' });
     expect(fetchMock).not.toHaveBeenCalled();
   });

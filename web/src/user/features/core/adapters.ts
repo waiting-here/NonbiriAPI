@@ -2,7 +2,7 @@ import { ApiError } from '@shared/query/http';
 import {
   beginElevation,
   deleteCurrentAccount,
-  exportAccountV9,
+  exportAccount,
   getHomeAnnouncements,
   getHomeCheckinStatus,
   getHomeGameSummary,
@@ -42,21 +42,21 @@ const unavailable = async (): Promise<never> => {
  * deletion without issuing a request or manufacturing a successful result.
  */
 export const disabledAccountLifecycleAdapter: AccountLifecycleAdapter = Object.freeze({
-  capabilities: Object.freeze({ exportV9: false, deleteAccount: false }),
+  capabilities: Object.freeze({ exportAccount: false, deleteAccount: false }),
   beginElevation: unavailable,
-  exportV9: unavailable,
+  exportAccount: unavailable,
   deleteAccount: unavailable,
   readAccountAuthority: unavailable,
 });
 
 export const productionAccountLifecycleAdapter = Object.freeze<AccountLifecycleAdapter>({
-  capabilities: Object.freeze({ exportV9: true, deleteAccount: true }),
+  capabilities: Object.freeze({ exportAccount: true, deleteAccount: true }),
   beginElevation: async (_intent, accountId) => {
     if (!/^[1-9][0-9]*$/.test(accountId))
       throw new ApiError('invalid_request', 'Invalid account id.', 400);
     return beginElevation();
   },
-  exportV9: ({ accountId, elevatedToken }) => exportAccountV9(accountId, elevatedToken),
+  exportAccount: ({ accountId, elevatedToken }) => exportAccount(accountId, elevatedToken),
   deleteAccount: ({ accountId, elevatedToken, confirmation }) =>
     deleteCurrentAccount(accountId, elevatedToken, confirmation),
   readAccountAuthority,

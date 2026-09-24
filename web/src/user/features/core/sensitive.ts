@@ -92,7 +92,7 @@ export function downloadAccountExport(attachment: AccountExportAttachment): void
   const url = URL.createObjectURL(attachment.blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'nonbiriapi-account-export-v9.json';
+  link.download = `nonbiriapi-account-export-v${attachment.schemaVersion}.json`;
   link.rel = 'noopener';
   document.body.appendChild(link);
   link.click();
