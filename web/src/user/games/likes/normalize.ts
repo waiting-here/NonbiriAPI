@@ -76,6 +76,10 @@ function status(value: unknown): Status {
     ['key', 'kind', 'name', 'positive', 'p', 'q', 'remaining', 'layers', 'buffId', 'activeFrom'],
     ['category', 'targetSkill', 'expires', 'refreshedTurn', 'appliedBy', 'persistentLayers'],
   );
+  const layers = amount(r.layers),
+    persistent = optionalNumber(r, 'persistentLayers');
+  if (persistent !== undefined && (persistent > layers || r.kind !== 'CACHE'))
+    invalidResponse('persistent cache layers');
   return {
     key: label(r.key),
     kind: label(r.kind),
@@ -84,7 +88,7 @@ function status(value: unknown): Status {
     p: amount(r.p),
     q: amount(r.q),
     remaining: amount(r.remaining),
-    layers: amount(r.layers),
+    layers,
     buffId: label(r.buffId),
     activeFrom: amount(r.activeFrom),
     category: optionalString(r, 'category'),
@@ -92,7 +96,7 @@ function status(value: unknown): Status {
     expires: optionalNumber(r, 'expires'),
     refreshedTurn: optionalNumber(r, 'refreshedTurn'),
     appliedBy: optionalString(r, 'appliedBy'),
-    persistentLayers: optionalNumber(r, 'persistentLayers'),
+    persistentLayers: persistent,
   };
 }
 function subscription(value: unknown): Subscription {
@@ -241,12 +245,21 @@ export function likesView(value: unknown): LikesView {
   };
 }
 function effectCue(value: unknown): EffectCue {
-  const r = exactRecord(value, ['key', 'kind', 'buff_id', 'layers', 'remaining', 'active_from']);
+  const r = exactRecord(
+    value,
+    ['key', 'kind', 'buff_id', 'layers', 'remaining', 'active_from'],
+    ['persistent_layers'],
+  );
+  const layers = amount(r.layers),
+    persistent = optionalNumber(r, 'persistent_layers');
+  if (persistent !== undefined && (persistent > layers || r.kind !== 'CACHE'))
+    invalidResponse('persistent cache layers');
   return {
     key: label(r.key),
     kind: label(r.kind),
     buff_id: label(r.buff_id),
-    layers: amount(r.layers),
+    layers,
+    persistent_layers: persistent,
     remaining: amount(r.remaining),
     active_from: amount(r.active_from),
   };
@@ -286,6 +299,7 @@ function resources(value: unknown, full: boolean): Resources {
           layers: s.layers,
           remaining: s.remaining,
           active_from: s.activeFrom,
+          persistent_layers: s.persistentLayers,
         }))
       : list(r.effects, 128, effectCue),
   };
