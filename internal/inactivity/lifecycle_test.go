@@ -168,7 +168,7 @@ func TestDeletionAndWorkerCannotResurrectActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = RecordActiveTx(ctx, tx, ActiveEvent{id, testNow, "api", true}); err != nil {
+	if err = RecordActiveTx(ctx, tx, ActiveEvent{UserID: id, At: testNow, Kind: "api", Fresh: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {

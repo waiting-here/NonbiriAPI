@@ -183,7 +183,7 @@ func TestConcurrentWorkersAndActivityDoNotDuplicateCharges(t *testing.T) {
 			return
 		}
 		defer tx.Rollback()
-		err = RecordActiveTx(context.Background(), tx, ActiveEvent{id, testNow, "game", true})
+		err = RecordActiveTx(context.Background(), tx, ActiveEvent{UserID: id, At: testNow, Kind: "game", Fresh: true})
 		if err == nil {
 			err = tx.Commit()
 		}

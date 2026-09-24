@@ -482,6 +482,13 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 			t.Fatal(err)
 		}
 		body := `{"model":"[公益]provider/model","messages":[{"role":"user","content":"hi"}]}`
+		// Policy lookup precedes optional request parsing; use an existing,
+		// accessible model so this case reaches short-content enforcement.
+		if _, err := store.DB().Exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,created_at,updated_at)
+VALUES('provider','model','[公益]provider/model',1,'per_request',1,1);
+INSERT INTO charity_model_access(model_id,allowed_level_mask) SELECT id,63 FROM charity_models WHERE full_name='[公益]provider/model'`); err != nil {
+			t.Fatal(err)
+		}
 		headers := map[string]string{"Authorization": "Bearer " + callerKey, "Content-Type": "application/json"}
 		rejected := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", body, nil, headers)
 		requestID := rejected.Header().Get("X-Request-ID")

@@ -244,8 +244,23 @@ func TestFourAssetInventoryRefundAndDeletedUserHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 		one, _ := db.ParseU128Decimal("1")
+		control, model := auditID(t, "iup_"), auditID(t, "imdl_")
+		paperPrice, _ := db.ParseU128Decimal("4000")
+		brushPrice, _ := db.ParseU128Decimal("1000")
+		if _, err := tx.ExecContext(ctx, `INSERT INTO image_upstream_control(id,identity_hash,rpm_limit,concurrency_limit,protection_paused,protection_reason,protection_revision,updated_at)
+VALUES(?,randomblob(32),10,1,0,'',1,?)`, control, at); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO image_activity_models(id,control_id,upstream_model_id,metadata_json,current_revision,discovered_at) VALUES(?,?,'inventory-fixture','{}',1,?)`, model, control, at); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO image_model_revisions(model_id,revision,display_name,description,enabled,parameters_json,combinations_json,mapping_json,paper_price_mag,brush_price_mag,created_at)
+VALUES(?,1,'Inventory fixture','',1,'[]','[]','{}',?,?,?)`, model, db.EncodeU128(paperPrice), db.EncodeU128(brushPrice), at); err != nil {
+			t.Fatal(err)
+		}
 		if err := ledger.Reserve(ctx, tx, ref, one, func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `INSERT INTO image_activity_tasks(id,user_id,state,ledger_rows_remaining,created_at,updated_at) VALUES(?,?,'queued',?,?,?)`, id, f.user, db.EncodeU128(one), at+2, at+2)
+			_, err := tx.ExecContext(ctx, `INSERT INTO image_activity_tasks(id,user_id,model_id,model_revision,n,paper_charge_mag,brush_charge_mag,state,finance_state,slot_state,ledger_rows_remaining,created_at,updated_at,queue_deadline,execution_timeout_seconds)
+VALUES(?,?,?,1,1,?,?,'queued','reserved','none',?,?,?,?,1800)`, id, f.user, model, db.EncodeU128(paperPrice), db.EncodeU128(brushPrice), db.EncodeU128(one), at+2, at+2, at+1802)
 			return err
 		}); err != nil {
 			t.Fatal(err)
@@ -274,7 +289,7 @@ func TestFourAssetInventoryRefundAndDeletedUserHistory(t *testing.T) {
 		}
 		ref, _ := ledger.ImageTaskReservation(id)
 		_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `UPDATE image_activity_tasks SET state='cancelled',ledger_rows_remaining=?,updated_at=? WHERE id=?`, make([]byte, 16), at+3, id)
+			_, err := tx.ExecContext(ctx, `UPDATE image_activity_tasks SET state='cancelled',finance_state='refunded',completed_at=?,ledger_rows_remaining=?,updated_at=? WHERE id=?`, at+3, make([]byte, 16), at+3, id)
 			return err
 		})
 		if err != nil {
@@ -295,6 +310,9 @@ func TestFourAssetInventoryRefundAndDeletedUserHistory(t *testing.T) {
 		}
 		p, e := ledger.NewAssetWalletsDeleteZero(f.meta(t, at+4), wallets)
 		applyAuditPlan(t, tx, p, e)
+		if _, err := tx.Exec(`DELETE FROM image_activity_tasks WHERE id=?`, id); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := tx.Exec(`DELETE FROM users WHERE id=?`, f.user); err != nil {
 			t.Fatal(err)
 		}

@@ -46,7 +46,7 @@ func TestRegisterRoutesAndAccountLifecycleHTTP(t *testing.T) {
 		exportResponse, exportRequest, UserPrincipal{UserID: 7},
 	)
 	if exportResponse.Code != http.StatusOK ||
-		exportResponse.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v9.json"` ||
+		exportResponse.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v10.json"` ||
 		exportResponse.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("export response status=%d headers=%v body=%s",
 			exportResponse.Code, exportResponse.Header(), exportResponse.Body.String())

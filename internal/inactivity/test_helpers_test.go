@@ -159,7 +159,7 @@ func active(t *testing.T, e *testEnv, id, at int64, fresh bool) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if err = RecordActiveTx(context.Background(), tx, ActiveEvent{id, at, "api", fresh}); err != nil {
+	if err = RecordActiveTx(context.Background(), tx, ActiveEvent{UserID: id, At: at, Kind: "api", Fresh: fresh}); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
