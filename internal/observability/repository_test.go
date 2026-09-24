@@ -292,23 +292,21 @@ func TestAccessObserverPreservesResponseAndReusesIdentity(t *testing.T) {
 }
 
 func TestRetentionUsesCanonicalKeysAndLeavesRequestRootsToTheirAuthority(t *testing.T) {
-	r, userID := newObservedDatabase(t)
+	fixture := newDiagnosticFixture(t)
+	r, userID := fixture.repository, fixture.owner
 	now := r.now().Unix()
 	old := now - RetentionSeconds - 60
 	r.now = func() time.Time { return time.Unix(old, 0) }
 	requestID, rootID := observedLog(t, r, userID, old)
 	upstreamerror.CaptureEvent(r.ErrorScope(context.Background(), DiagnosticRef{RequestID: requestID, AttemptSeq: 1}), 503, "text/plain", []byte("root"))
-	var heldTask string
+	heldTask, _ := fixture.imageRoots(t)
 	for i := range 2 {
-		id, err := db.GenerateOpaqueID("img_")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			heldTask = id
-		}
-		if _, err = r.db.Exec(`INSERT INTO image_activity_tasks(id,user_id,state,ledger_rows_remaining,created_at,updated_at) VALUES(?,?,'failed',zeroblob(16),?,?)`, id, userID, old, old); err != nil {
-			t.Fatal(err)
+		id := heldTask
+		if i != 0 {
+			id = diagnosticID(t, "img_")
+			if _, err := r.db.Exec("INSERT INTO image_activity_tasks(id,user_id,model_id,model_revision,n,paper_charge_mag,brush_charge_mag,state,finance_state,slot_state,ledger_rows_remaining,created_at,updated_at,queue_deadline,execution_timeout_seconds,completed_at) SELECT ?,user_id,model_id,model_revision,n,paper_charge_mag,brush_charge_mag,state,finance_state,slot_state,ledger_rows_remaining,created_at,updated_at,queue_deadline,execution_timeout_seconds,completed_at FROM image_activity_tasks WHERE id=?", id, heldTask); err != nil {
+				t.Fatal(err)
+			}
 		}
 		upstreamerror.CaptureEvent(r.ErrorScope(context.Background(), DiagnosticRef{TaskID: id, AttemptSeq: 1}), 503, "text/plain", []byte("task"))
 	}
