@@ -16,6 +16,7 @@ var governanceChangedTables = []string{
 	"users", "charity_model_access", "donation_handling", "donations",
 	"donation_reviews", "policy_audits", "credit_accounts", "credit_entries", "credit_operations",
 	"game_rank_totals", "accepted_operations",
+	"dispatch_claims", "donation_usage_reservations", "donation_quota_epochs",
 }
 
 func governanceReplace(source, before, after string) (string, error) {
@@ -28,6 +29,14 @@ func governanceReplace(source, before, after string) (string, error) {
 func governanceTableSQL(table, previous string) (string, error) {
 	var changes [][2]string
 	switch table {
+	case "dispatch_claims":
+		changes = append(changes, [2]string{"reserved_tokens BETWEEN 0 AND 2147483647", "reserved_tokens BETWEEN 0 AND 9223372036854775807"})
+	case "donation_usage_reservations":
+		changes = append(changes,
+			[2]string{"tokens_reserved BETWEEN 0 AND 2147483647", "tokens_reserved BETWEEN 0 AND 9223372036854775807"},
+			[2]string{"tokens_actual BETWEEN 0 AND 2147483647", "tokens_actual BETWEEN 0 AND 9223372036854775807"})
+	case "donation_quota_epochs":
+		changes = append(changes, [2]string{"metric IN ('calls','tokens','credits')", "metric IN ('calls','tokens','credits','input_tokens','output_tokens')"})
 	case "users":
 		changes = append(changes, [2]string{"level BETWEEN 1 AND 5", "level BETWEEN 1 AND 6"})
 	case "accepted_operations":
@@ -138,6 +147,9 @@ func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
 	if err != nil || !present {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, `UPDATE donation_keys SET breakdown_started_at=?,unattributed_total_tokens=tokens_used WHERE breakdown_started_at=0`, at); err != nil {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO observability_state(id,capture_started_at) VALUES(1,?);
  INSERT INTO risk_audit_config VALUES(1,80,5,24,3,1,?);
  INSERT INTO economy_audit_checkpoint(id,last_ledger_seq,opening_known,updated_at) VALUES(1,0,1,?)`, at, at, at); err != nil {
@@ -224,7 +236,7 @@ func applyGovernanceExtension(ctx context.Context, tx *sql.Tx) error {
 }
 
 func governanceAdditiveSchema() string {
-	return imageActivitySchema + governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema + imageActivityGuardsSchema()
+	return imageActivitySchema + governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema + imageActivityGuardsSchema() + tokenDimensionsSchema()
 }
 
 // The modulo expression operates directly on all 128 bits; SQLite integer

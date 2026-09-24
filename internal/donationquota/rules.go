@@ -85,15 +85,26 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 		return ErrInvalid
 	}
 	seen := make(map[string]bool)
+	split := false
 	for _, rule := range input {
 		if err := Validate(rule); err != nil {
 			return err
 		}
+		split = split || rule.Metric == "input_tokens" || rule.Metric == "output_tokens"
 		if rule.ID != nil {
 			if seen[*rule.ID] {
 				return ErrInvalid
 			}
 			seen[*rule.ID] = true
+		}
+	}
+	if split {
+		budget, err := ReadTokenBudget(ctx, tx, keyID)
+		if err != nil {
+			return err
+		}
+		if budget.Reservation.Input == nil {
+			return ErrInvalid
 		}
 	}
 	old, err := currentEpochs(ctx, tx, keyID)

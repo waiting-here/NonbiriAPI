@@ -53,7 +53,10 @@ func readReceipts(ctx context.Context, q Reader, claimID string) ([]receipt, err
 	return out, rows.Err()
 }
 
-type Amounts struct{ Calls, Tokens, Credits db.U128 }
+type Amounts struct {
+	Calls, Tokens, InputTokens, OutputTokens, Credits db.U128
+	TokenBreakdown                                    bool
+}
 
 func amountFor(metric string, a Amounts) db.U128 {
 	switch metric {
@@ -61,6 +64,10 @@ func amountFor(metric string, a Amounts) db.U128 {
 		return a.Calls
 	case "tokens":
 		return a.Tokens
+	case "input_tokens":
+		return a.InputTokens
+	case "output_tokens":
+		return a.OutputTokens
 	default:
 		return a.Credits
 	}
@@ -68,20 +75,23 @@ func amountFor(metric string, a Amounts) db.U128 {
 
 func claimReservation(ctx context.Context, tx *sql.Tx, claimID string) (int64, Amounts, error) {
 	var keyID, price, calls, tokens int64
-	err := tx.QueryRowContext(ctx, `SELECT donation_key_id,reserved_price_milli,reserved_calls,reserved_tokens FROM dispatch_claims WHERE id=? AND state='claimed' AND purpose='charity'`, claimID).Scan(&keyID, &price, &calls, &tokens)
+	var input, output *int64
+	err := tx.QueryRowContext(ctx, `SELECT donation_key_id,reserved_price_milli,reserved_calls,reserved_tokens,reserved_input_tokens,reserved_output_tokens FROM dispatch_claims WHERE id=? AND state='claimed' AND purpose='charity'`, claimID).Scan(&keyID, &price, &calls, &tokens, &input, &output)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, Amounts{}, ErrConflict
 	}
 	if err != nil {
 		return 0, Amounts{}, err
 	}
-	if keyID <= 0 || price < 0 || calls != 1 || tokens < 0 {
+	vector := TokenVector{Total: tokens, Input: input, Output: output}
+	if keyID <= 0 || price < 0 || calls != 1 || !vector.Valid() {
 		return 0, Amounts{}, ErrInvariant
 	}
 	p, _ := db.U128FromBig(big.NewInt(price))
 	c, _ := db.U128FromBig(big.NewInt(calls))
-	t, _ := db.U128FromBig(big.NewInt(tokens))
-	return keyID, Amounts{Calls: c, Tokens: t, Credits: p}, nil
+	amounts := vector.Amounts()
+	amounts.Calls, amounts.Credits = c, p
+	return keyID, amounts, nil
 }
 
 // Reserve runs after the dispatch_claims row is inserted in its original tx.
@@ -107,6 +117,9 @@ func Reserve(ctx context.Context, tx *sql.Tx, claimID string, now int64) error {
 	}
 	for i := range epochs {
 		e := &epochs[i]
+		if (e.rule.Metric == "input_tokens" || e.rule.Metric == "output_tokens") && !amounts.TokenBreakdown {
+			return ErrInvariant
+		}
 		if err := advance(ctx, tx, e, now); err != nil {
 			return err
 		}
@@ -349,6 +362,9 @@ func Settle(ctx context.Context, tx *sql.Tx, claimID string, now int64, amounts 
 			return err
 		}
 		actual := amountFor(e.rule.Metric, amounts)
+		if started && (e.rule.Metric == "input_tokens" || e.rule.Metric == "output_tokens") && !amounts.TokenBreakdown {
+			return ErrInvariant
+		}
 		if !started && actual != (db.U128{}) {
 			return ErrInvariant
 		}

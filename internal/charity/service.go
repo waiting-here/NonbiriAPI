@@ -241,6 +241,11 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 	}
 
 	priceReserve := row.pricing.tokenReserve
+	tokenBudget, err := donationquota.ReadTokenBudget(ctx, tx, row.donationKeyID)
+	if err != nil {
+		return claim.CharityReservation{}, err
+	}
+	row.tokenReserve = tokenBudget.Reservation.Total
 	frozenPrice, frozenReward := priceReserve, int64(0)
 	if row.pricing.mode == "per_request" {
 		priceReserve = row.pricing.requestUser
@@ -296,6 +301,9 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 	if err != nil {
 		return claim.CharityReservation{}, err
 	}
+	if err := tokenBudget.ReplaceReservation(ctx, tx, row.donationKeyID, donationquota.TokenVector{}); err != nil {
+		return claim.CharityReservation{}, err
+	}
 
 	result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET
 price_reserved_mag=?,calls_reserved=?,tokens_reserved=?,next_claim_seq=?,updated_at=?
@@ -310,9 +318,9 @@ WHERE id=? AND endpoint_key_id=? AND ended_at IS NULL
 		return claim.CharityReservation{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_usage_reservations(
-claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,calls_reserved,tokens_reserved,state,created_at)
-VALUES(?,?,?,?,?,?,?,'reserved',?)`, input.ClaimID, row.donationKeyID, db.EncodeU128(generation),
-		db.EncodeU128(claimSeq), priceReserve, 1, row.tokenReserve, input.ClaimedAt); err != nil {
+claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,calls_reserved,tokens_reserved,state,created_at,input_tokens_reserved,output_tokens_reserved)
+VALUES(?,?,?,?,?,?,?,'reserved',?,?,?)`, input.ClaimID, row.donationKeyID, db.EncodeU128(generation),
+		db.EncodeU128(claimSeq), priceReserve, 1, row.tokenReserve, input.ClaimedAt, tokenBudget.Reservation.Input, tokenBudget.Reservation.Output); err != nil {
 		return claim.CharityReservation{}, fmt.Errorf("charity: persist claim reservation: %w", err)
 	}
 
@@ -321,6 +329,7 @@ VALUES(?,?,?,?,?,?,?,'reserved',?)`, input.ClaimID, row.donationKeyID, db.Encode
 		FrozenPriceMilli: frozenPrice, FrozenRewardMilli: frozenReward,
 		ReceiverUserID: row.receiverUserID, ReservedPriceMilli: priceReserve,
 		ReservedCalls: 1, ReservedTokens: row.tokenReserve,
+		ReservedInputTokens: tokenBudget.Reservation.Input, ReservedOutputTokens: tokenBudget.Reservation.Output,
 	}, nil
 }
 
@@ -451,6 +460,9 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 		if err := releaseKeyCapacity(ctx, tx, *row.keyID, row.priceReserved, row.callsReserved, row.tokensReserved, input.ReleasedAt); err != nil {
 			return err
 		}
+		if err := donationquota.SettleTokenVector(ctx, tx, *row.keyID, row.tokenVector(), donationquota.TokenVector{}); err != nil {
+			return err
+		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE donation_usage_reservations
 SET state='released',finalized_at=? WHERE claim_id=? AND state='reserved'`, input.ReleasedAt, input.ClaimID)
@@ -467,12 +479,17 @@ SET state='released',finalized_at=? WHERE claim_id=? AND state='reserved'`, inpu
 }
 
 type usageReservation struct {
-	keyID           *int64
-	state           string
-	generation, seq db.U128
-	priceReserved   int64
-	callsReserved   int
-	tokensReserved  int64
+	keyID                                     *int64
+	state                                     string
+	generation, seq                           db.U128
+	priceReserved                             int64
+	callsReserved                             int
+	tokensReserved                            int64
+	inputTokensReserved, outputTokensReserved *int64
+}
+
+func (r usageReservation) tokenVector() donationquota.TokenVector {
+	return donationquota.TokenVector{Total: r.tokensReserved, Input: r.inputTokensReserved, Output: r.outputTokensReserved}
 }
 
 func readUsageReservation(ctx context.Context, tx *sql.Tx, requestID, claimID string) (usageReservation, error) {
@@ -480,11 +497,11 @@ func readUsageReservation(ctx context.Context, tx *sql.Tx, requestID, claimID st
 	var key sql.NullInt64
 	var generation, seq []byte
 	err := tx.QueryRowContext(ctx, `SELECT u.donation_key_id,u.state,u.streak_generation,u.claim_seq,
-u.price_reserved_milli,u.calls_reserved,u.tokens_reserved
+u.price_reserved_milli,u.calls_reserved,u.tokens_reserved,u.input_tokens_reserved,u.output_tokens_reserved
 FROM donation_usage_reservations u
 JOIN dispatch_claims c ON c.id=u.claim_id
 WHERE u.claim_id=? AND c.logical_request_id=?`, claimID, requestID).Scan(
-		&key, &row.state, &generation, &seq, &row.priceReserved, &row.callsReserved, &row.tokensReserved)
+		&key, &row.state, &generation, &seq, &row.priceReserved, &row.callsReserved, &row.tokensReserved, &row.inputTokensReserved, &row.outputTokensReserved)
 	if errors.Is(err, sql.ErrNoRows) {
 		return usageReservation{}, claim.ErrNotFound
 	}
@@ -496,7 +513,7 @@ WHERE u.claim_id=? AND c.logical_request_id=?`, claimID, requestID).Scan(
 	if decodeErr == nil {
 		row.seq, decodeErr = db.DecodeU128(seq)
 	}
-	if decodeErr != nil {
+	if decodeErr != nil || !row.tokenVector().Valid() {
 		return usageReservation{}, claim.ErrInvariant
 	}
 	if key.Valid {
@@ -657,10 +674,11 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	if row.state != "reserved" || row.keyID == nil {
 		return claim.ErrConflict
 	}
-	tokensActual, err := actualTokenCount(input, row.tokensReserved)
+	tokenActual, err := actualTokenVector(input, row.tokenVector())
 	if err != nil {
 		return err
 	}
+	tokensActual := tokenActual.Total
 	callsActual := 0
 	if input.ResponseStarted {
 		callsActual = 1
@@ -673,23 +691,24 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	if err != nil {
 		return claim.ErrInvariant
 	}
-	quotaTokens, err := db.U128FromBig(big.NewInt(tokensActual))
-	if err != nil {
-		return claim.ErrInvariant
-	}
+	quotaAmounts := tokenActual.Amounts()
+	quotaAmounts.Calls, quotaAmounts.Credits = quotaCalls, quotaPrice
 	if err := donationquota.Settle(ctx, tx, input.ClaimID, input.CompletedAt,
-		donationquota.Amounts{Calls: quotaCalls, Tokens: quotaTokens, Credits: quotaPrice}, input.ResponseStarted); err != nil {
+		quotaAmounts, input.ResponseStarted); err != nil {
 		return err
 	}
 
 	if err := settleKeyCapacity(ctx, tx, *row.keyID, row, completion.Actual, callsActual, tokensActual, input.CompletedAt); err != nil {
 		return err
 	}
+	if err := donationquota.SettleTokenVector(ctx, tx, *row.keyID, row.tokenVector(), tokenActual); err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE donation_usage_reservations SET
-price_actual_milli=?,reward_actual_milli=?,calls_actual=?,tokens_actual=?,protocol_success=?,usage_unknown=?,
+price_actual_milli=?,reward_actual_milli=?,calls_actual=?,tokens_actual=?,protocol_success=?,usage_unknown=?,input_tokens_actual=?,output_tokens_actual=?,
 state='committed',finalized_at=? WHERE claim_id=? AND state='reserved'`,
 		completion.Actual.PriceMilli, completion.Actual.RewardMilli, callsActual, tokensActual,
-		boolInt(input.ProtocolSuccess), boolInt(input.UsageUnknown), input.CompletedAt, input.ClaimID)
+		boolInt(input.ProtocolSuccess), boolInt(input.UsageUnknown), tokenActual.Input, tokenActual.Output, input.CompletedAt, input.ClaimID)
 	if err != nil {
 		return fmt.Errorf("charity: commit attempt usage: %w", err)
 	}
@@ -703,27 +722,24 @@ state='committed',finalized_at=? WHERE claim_id=? AND state='reserved'`,
 }
 
 func verifyCompletedAttempt(ctx context.Context, tx *sql.Tx, completion claim.CharityAttemptCompletion) error {
+	reservation, err := readUsageReservation(ctx, tx, completion.Attempt.RequestID, completion.Attempt.ClaimID)
+	if err != nil {
+		return err
+	}
+	expected, countErr := actualTokenVector(completion.Attempt, reservation.tokenVector())
 	var state string
 	var price, reward, calls, tokens sql.NullInt64
 	var success, unknown sql.NullInt64
-	err := tx.QueryRowContext(ctx, `SELECT state,price_actual_milli,reward_actual_milli,calls_actual,tokens_actual,
-protocol_success,usage_unknown
+	var input, output *int64
+	err = tx.QueryRowContext(ctx, `SELECT state,price_actual_milli,reward_actual_milli,calls_actual,tokens_actual,
+protocol_success,usage_unknown,input_tokens_actual,output_tokens_actual
 FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).Scan(
-		&state, &price, &reward, &calls, &tokens, &success, &unknown)
+		&state, &price, &reward, &calls, &tokens, &success, &unknown, &input, &output)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.ErrNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("charity: verify attempt replay: %w", err)
-	}
-	tokenCount, countErr := actualTokenCount(completion.Attempt, 0)
-	if completion.Attempt.UsageUnknown {
-		var reserved int64
-		if err := tx.QueryRowContext(ctx, `SELECT tokens_reserved FROM donation_usage_reservations WHERE claim_id=?`,
-			completion.Attempt.ClaimID).Scan(&reserved); err != nil {
-			return fmt.Errorf("charity: verify conservative token replay: %w", err)
-		}
-		tokenCount, countErr = actualTokenCount(completion.Attempt, reserved)
 	}
 	callCount := int64(0)
 	if completion.Attempt.ResponseStarted {
@@ -731,7 +747,7 @@ FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).
 	}
 	if countErr == nil && state == "committed" && price.Valid && reward.Valid && calls.Valid && tokens.Valid && success.Valid && unknown.Valid &&
 		price.Int64 == completion.Actual.PriceMilli && reward.Int64 == completion.Actual.RewardMilli &&
-		calls.Int64 == callCount && tokens.Int64 == tokenCount &&
+		calls.Int64 == callCount && tokens.Int64 == expected.Total && equalTokenValue(input, expected.Input) && equalTokenValue(output, expected.Output) &&
 		success.Int64 == int64(boolInt(completion.Attempt.ProtocolSuccess)) &&
 		unknown.Int64 == int64(boolInt(completion.Attempt.UsageUnknown)) {
 		return nil
@@ -750,7 +766,7 @@ func actualTokenCount(input claim.CharityAttemptInput, reserve int64) (int64, er
 		input.Usage.CacheReadInputTokens, input.Usage.OutputTokens}
 	total := int64(0)
 	for _, value := range values {
-		if value < 0 || value > math.MaxInt32-total {
+		if value < 0 || value > math.MaxInt64-total {
 			return 0, claim.ErrInvariant
 		}
 		total += value

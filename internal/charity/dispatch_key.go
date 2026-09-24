@@ -31,6 +31,11 @@ func (s *Service) revalidateDispatchKey(ctx context.Context, tx *sql.Tx, input c
 	if err != nil {
 		return err
 	}
+	budget, err := donationquota.ReadTokenBudget(ctx, tx, row.donationKeyID)
+	if err != nil {
+		return err
+	}
+	row.tokenReserve = budget.Reservation.Total
 	for _, dimension := range []struct {
 		used, reserved, limit []byte
 		own, next             int64
@@ -66,6 +71,9 @@ func (s *Service) revalidateDispatchKey(ctx context.Context, tx *sql.Tx, input c
 	// The per-key token fallback is mutable until dispatch. Replace our own
 	// total reservation and its claim snapshot before reconciling the current
 	// recurring rules. A later rejection rolls all three changes back together.
+	if err := budget.ReplaceReservation(ctx, tx, row.donationKeyID, reservation.tokenVector()); err != nil {
+		return err
+	}
 	if reservation.tokensReserved != row.tokenReserve {
 		previous, err := db.DecodeU128(row.tokensReserved)
 		if err != nil {
@@ -82,17 +90,17 @@ func (s *Service) revalidateDispatchKey(ctx context.Context, tx *sql.Tx, input c
 		if err := requireOne(result); err != nil {
 			return err
 		}
-		for _, query := range []string{
-			`UPDATE donation_usage_reservations SET tokens_reserved=? WHERE claim_id=? AND state='reserved' AND tokens_reserved=?`,
-			`UPDATE dispatch_claims SET reserved_tokens=? WHERE id=? AND state='claimed' AND reserved_tokens=?`,
-		} {
-			result, err := tx.ExecContext(ctx, query, row.tokenReserve, input.ClaimID, reservation.tokensReserved)
-			if err != nil {
-				return err
-			}
-			if err := requireOne(result); err != nil {
-				return err
-			}
+	}
+	for _, query := range []string{
+		`UPDATE donation_usage_reservations SET tokens_reserved=?,input_tokens_reserved=?,output_tokens_reserved=? WHERE claim_id=? AND state='reserved' AND tokens_reserved=? AND input_tokens_reserved IS ? AND output_tokens_reserved IS ?`,
+		`UPDATE dispatch_claims SET reserved_tokens=?,reserved_input_tokens=?,reserved_output_tokens=? WHERE id=? AND state='claimed' AND reserved_tokens=? AND reserved_input_tokens IS ? AND reserved_output_tokens IS ?`,
+	} {
+		result, err := tx.ExecContext(ctx, query, row.tokenReserve, budget.Reservation.Input, budget.Reservation.Output, input.ClaimID, reservation.tokensReserved, reservation.inputTokensReserved, reservation.outputTokensReserved)
+		if err != nil {
+			return err
+		}
+		if err := requireOne(result); err != nil {
+			return err
 		}
 	}
 	return nil

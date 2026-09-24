@@ -44,6 +44,7 @@ type RuleInput struct {
 
 type RuleView struct {
 	RuleInput
+	EffectiveAt      int64  `json:"effective_at"`
 	Used             string `json:"used"`
 	Reserved         string `json:"reserved"`
 	Remaining        string `json:"remaining"`
@@ -117,7 +118,7 @@ func parseMagnitude(metric, text string) (db.U128, error) {
 	if len(text) == 0 || len(text) > 43 {
 		return db.U128{}, ErrInvalid
 	}
-	if metric == "calls" || metric == "tokens" {
+	if metric == "calls" || metric == "tokens" || metric == "input_tokens" || metric == "output_tokens" {
 		n, err := db.ParseU128Decimal(text)
 		if err != nil {
 			return db.U128{}, ErrInvalid

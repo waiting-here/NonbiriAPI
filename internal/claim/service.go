@@ -361,12 +361,12 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 	if _, err := tx.ExecContext(ctx, `INSERT INTO dispatch_claims(
 id,logical_request_id,attempt_seq,purpose,endpoint_key_id,secret_ref_id,donation_key_id,
 streak_generation,claim_now,state,frozen_price_milli,frozen_reward_milli,receiver_user_id,
-reserved_price_milli,reserved_calls,reserved_tokens,donor_reward_state)
-VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?)`,
+reserved_price_milli,reserved_calls,reserved_tokens,donor_reward_state,reserved_input_tokens,reserved_output_tokens)
+VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?,?,?)`,
 		claimID, input.RequestID, input.AttemptSeq, input.Purpose, input.Candidate.EndpointKeyID,
 		target.secretRefID, donationKey, streakGeneration, at, reservation.FrozenPriceMilli,
 		reservation.FrozenRewardMilli, receiverUser, reservation.ReservedPriceMilli,
-		reservation.ReservedCalls, reservation.ReservedTokens, donorState); err != nil {
+		reservation.ReservedCalls, reservation.ReservedTokens, donorState, reservation.ReservedInputTokens, reservation.ReservedOutputTokens); err != nil {
 		return Handle{}, fmt.Errorf("claim: persist dispatch claim: %w", err)
 	}
 	if input.Purpose == PurposeCharity {
@@ -683,11 +683,12 @@ func purposeMatchesRoute(purpose Purpose, route RouteKind) bool {
 }
 
 func validCharityReservation(value CharityReservation, expectedDonationKeyID int64) bool {
+	vector := donationquota.TokenVector{Total: value.ReservedTokens, Input: value.ReservedInputTokens, Output: value.ReservedOutputTokens}
 	return value.DonationKeyID == expectedDonationKeyID && value.DonationKeyID > 0 &&
 		value.StreakGeneration > 0 && value.ReceiverUserID > 0 &&
 		validMoney(value.FrozenPriceMilli) && validMoney(value.FrozenRewardMilli) &&
 		validMoney(value.ReservedPriceMilli) && value.ReservedCalls >= 0 && value.ReservedCalls <= 1 &&
-		value.ReservedTokens >= 0 && value.ReservedTokens <= 2147483647
+		vector.Valid()
 }
 
 func validMoney(value int64) bool { return value >= 0 && value <= MaxMoneyMilli }

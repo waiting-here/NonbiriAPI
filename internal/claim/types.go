@@ -445,14 +445,16 @@ type CharityClaimInput struct {
 }
 
 type CharityReservation struct {
-	DonationKeyID      int64
-	StreakGeneration   int64
-	FrozenPriceMilli   int64
-	FrozenRewardMilli  int64
-	ReceiverUserID     int64
-	ReservedPriceMilli int64
-	ReservedCalls      int
-	ReservedTokens     int64
+	DonationKeyID        int64
+	StreakGeneration     int64
+	FrozenPriceMilli     int64
+	FrozenRewardMilli    int64
+	ReceiverUserID       int64
+	ReservedPriceMilli   int64
+	ReservedCalls        int
+	ReservedTokens       int64
+	ReservedInputTokens  *int64
+	ReservedOutputTokens *int64
 }
 
 type CharityRelease struct {
