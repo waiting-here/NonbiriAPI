@@ -14,6 +14,11 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "activities": {
+      "permanent": "Permanent activities",
+      "limited": "Limited-time activities",
+      "inactivity": "Inactivity policy"
+    },
     "audit": {
       "source": "Request source",
       "risk": "Abuse audit",

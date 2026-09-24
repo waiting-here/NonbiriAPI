@@ -103,7 +103,7 @@ describe('inactivity policy', () => {
       decay_at: null,
       protection_at: null,
     });
-    mount(<InactivityStatus />);
+    mount(<InactivityStatus accountId="17" />);
     expect(await screen.findByText('Observation started')).toBeInTheDocument();
     expect(screen.getByText(/Donors are not exempt/)).toBeInTheDocument();
     expect(requests.apiFetch).toHaveBeenCalledWith(

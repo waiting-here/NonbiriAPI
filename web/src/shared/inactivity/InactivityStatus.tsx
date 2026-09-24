@@ -45,11 +45,11 @@ export function PolicySummary({ policy, zh }: { policy: Policy; zh: boolean }) {
   );
 }
 
-export function InactivityStatus() {
+export function InactivityStatus({ accountId }: { readonly accountId: string }) {
   const { i18n } = useTranslation();
   const zh = Boolean(i18n.resolvedLanguage?.startsWith('zh'));
   const query = useQuery({
-    queryKey: ['inactivity-status'],
+    queryKey: ['user', accountId, 'inactivity-status'],
     queryFn: ({ signal }) => getStatus(signal),
     staleTime: 60_000,
   });

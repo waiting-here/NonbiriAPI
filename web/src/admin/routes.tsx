@@ -23,6 +23,14 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/UsersPage')).UsersPage }),
       },
       {
+        path: pathFor('admin-inactivity-policy'),
+        lazy: async () => ({ Component: (await import('@shared/inactivity/InactivityPolicyPage')).InactivityPolicyPage }),
+      },
+      {
+        path: pathFor('admin-limited-activities'),
+        lazy: async () => ({ Component: (await import('./pages/PictureBookSettingsPage')).PictureBookSettingsPage }),
+      },
+      {
         path: pathFor('admin-logs'),
         lazy: async () => ({ Component: (await import('./pages/LogsPage')).LogsPage }),
       },

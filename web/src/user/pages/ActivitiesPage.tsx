@@ -12,6 +12,7 @@ import {
 } from '../features/economy/ActivitiesPanels';
 import { useActivities, useActivityAccountEvents } from '../features/economy/queries';
 import { LoanCard } from '../features/economy/LoanCard';
+import { LimitedActivitiesSection } from '../features/limitedactivities/LimitedActivities';
 import '../features/economy/economy.css';
 
 function ActivitiesContent() {
@@ -35,6 +36,8 @@ function ActivitiesContent() {
         icon="activities"
         actions={<Link className="btn btn-secondary" to="/credits">{copy.title}</Link>}
       />
+      <LimitedActivitiesSection />
+      <h2>{t('common.activities.permanent')}</h2>
       {activities.isPending && !activities.data ? <LoadingState /> : null}
       {activities.error && !activities.data ? (
         <ErrorState error={activities.error} onRetry={() => void activities.refetch()} />

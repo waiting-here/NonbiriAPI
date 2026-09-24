@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@shared/components/States';
 import { RoleLogPanel } from '@shared/components/log';
+import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
 import '@shared/operations/operations.css';
 import { useAdminSession } from '../data';
 
@@ -17,6 +18,12 @@ export function LogsPage() {
       <RoleLogPanel
         role="admin"
         language={i18n.resolvedLanguage}
+        accountId={session.data?.admin.username}
+        scopeReady={!session.isPending && !session.error && Boolean(session.data?.admin.username)}
+        enabled={!session.isPending && !session.error}
+      />
+      <IndependentDiagnostics
+        role="admin"
         accountId={session.data?.admin.username}
         scopeReady={!session.isPending && !session.error && Boolean(session.data?.admin.username)}
         enabled={!session.isPending && !session.error}

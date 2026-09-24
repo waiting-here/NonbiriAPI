@@ -76,6 +76,10 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/ActivitiesPage')).ActivitiesPage }),
       },
       {
+        path: pathFor('picture-book'),
+        lazy: async () => ({ Component: (await import('./pages/PictureBookActivityPage')).PictureBookActivityPage }),
+      },
+      {
         path: pathFor('caller-key'),
         lazy: async () => ({ Component: (await import('./pages/KeysPage')).KeysPage }),
       },
