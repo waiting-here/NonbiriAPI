@@ -282,17 +282,17 @@ func TestExecutionGroupsUseExactTopLevelPatterns(t *testing.T) {
 	if len(groups) != 3 {
 		t.Fatalf("group count = %d, want 3", len(groups))
 	}
-	wantWhole := []string{"test", "-race", "-count=1", "-timeout=30m", "-p=1", "-v", "example/a"}
+	wantWhole := []string{"test", "-race", "-shuffle=on", "-count=1", "-timeout=30m", "-p=1", "-v", "example/a"}
 	if !reflect.DeepEqual(groups[0].Args, wantWhole) {
 		t.Fatalf("whole args = %#v, want %#v", groups[0].Args, wantWhole)
 	}
 	if groups[1].Args[len(groups[1].Args)-1] != "example/z" {
 		t.Fatalf("second whole args = %#v", groups[1].Args)
 	}
-	if len(groups[2].Args) != 9 || groups[2].Args[6] != "-run" || groups[2].Args[8] != "example/slow" {
+	if len(groups[2].Args) != 10 || groups[2].Args[7] != "-run" || groups[2].Args[9] != "example/slow" {
 		t.Fatalf("split args = %#v", groups[2].Args)
 	}
-	pattern, err := regexp.Compile(groups[2].Args[7])
+	pattern, err := regexp.Compile(groups[2].Args[len(groups[2].Args)-2])
 	if err != nil {
 		t.Fatalf("compile generated pattern: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestExecutionGroupsSplitByWeightDeterministicallyAndExactlyOnce(t *testing.
 	}
 	seen := make(map[string]int)
 	for _, group := range first[1:] {
-		pattern, err := regexp.Compile(group.Args[7])
+		pattern, err := regexp.Compile(group.Args[len(group.Args)-2])
 		if err != nil {
 			t.Fatalf("compile %s: %v", group.Label, err)
 		}

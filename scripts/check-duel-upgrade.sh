@@ -4,8 +4,8 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 go_command=${GO:-go}
 python_command=${PYTHON:-python3}
-released_commit=bd6198ceccb59dc8b8e0143831a94e94340235d1
-test "$(git rev-parse 'v1.0.0-rc.1^{commit}')" = "$released_commit"
+released_commit=db959c64674afc531046a63066de0464725d439c
+test "$(git rev-parse "$released_commit^{commit}")" = "$released_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
 cleanup() {

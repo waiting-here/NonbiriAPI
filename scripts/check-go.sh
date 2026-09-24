@@ -24,6 +24,8 @@ set -euo pipefail
 # Use the Go toolchain on PATH by default; callers may pin one with GO.
 GO="${GO:-go}"
 
+export CGO_ENABLED=0
+
 # Always run against the repository root regardless of the caller's CWD.
 cd "$(dirname "$0")/.."
 

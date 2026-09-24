@@ -50,8 +50,8 @@ if [ "${1:-}" = "--shard" ]; then
     -timeout "$RACE_TIMEOUT" \
     -workers "$RACE_WORKERS"
 elif [ $# -gt 0 ]; then
-  "$GO" test -race -count=1 -timeout="$RACE_TIMEOUT" "$@"
+  "$GO" test -v -race -shuffle=on -count=1 -timeout="$RACE_TIMEOUT" "$@"
 else
   pkgs="$("$GO" list ./... | grep -v '/node_modules/')"
-  "$GO" test -race -count=1 -timeout="$RACE_TIMEOUT" $pkgs
+  "$GO" test -v -race -shuffle=on -count=1 -timeout="$RACE_TIMEOUT" $pkgs
 fi
