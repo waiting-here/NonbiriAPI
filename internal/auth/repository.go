@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 var (
@@ -282,6 +283,9 @@ func (r *Runtime) promoteLevel(ctx context.Context, tx *sql.Tx, u *userRow, now 
 	if n != 1 {
 		return errIdentityConflict
 	}
+	if err := useractivity.RescheduleTx(ctx, tx, u.id); err != nil {
+		return err
+	}
 	u.autoLevel = eligible
 	u.revision = nextRevision
 	u.updatedAt = now
@@ -445,6 +449,11 @@ func canonicalUserInsert(ctx context.Context, tx *sql.Tx, discordID, username, a
 	if err != nil || id <= 0 {
 		return 0, fmt.Errorf("invalid user id")
 	}
+	if !isAdmin {
+		if err := useractivity.InitializeTx(ctx, tx, id, now); err != nil {
+			return 0, err
+		}
+	}
 	return id, nil
 }
 
@@ -523,6 +532,9 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 	if err != nil {
 		return "", 0, err
 	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: userID, At: now, Kind: "login", Fresh: true}); err != nil {
+		return "", 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return "", 0, err
 	}
@@ -587,6 +599,9 @@ func (r *Runtime) registerUser(ctx context.Context, identity DiscordIdentity, me
 	}
 	token, expiry, _, err := r.createSessionTx(ctx, tx, userID, generation, now)
 	if err != nil {
+		return 0, "", 0, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: userID, At: now, Kind: "login", Fresh: true}); err != nil {
 		return 0, "", 0, err
 	}
 	if err := tx.Commit(); err != nil {

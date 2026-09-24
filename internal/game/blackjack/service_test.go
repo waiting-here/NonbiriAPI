@@ -395,6 +395,12 @@ func TestActionBatchRevisionAndPrivateProjection(t *testing.T) {
 	if h.Phase != "result" || h.Table.Fact.Cards.HoleHidden || h.NextRoundAt != 150 {
 		t.Fatal("batch did not complete concurrently")
 	}
+	for _, input := range inputs {
+		var seq int64
+		if err := f.db.QueryRow(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, input.UserID).Scan(&seq); err != nil || seq != 2 {
+			t.Fatalf("queue/manual/automatic activity=%d err=%v", seq, err)
+		}
+	}
 	result, err := f.s.Act(f.ctx, inputs[0])
 	if err != nil || !result.Replayed {
 		t.Fatal("lost response cannot replay", err)

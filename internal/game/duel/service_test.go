@@ -341,6 +341,12 @@ func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 	if home.Current != nil || home.LatestResult == nil || home.LatestResult.Outcome != "loss" || home.LatestResult.TerminalAt != end {
 		t.Fatal(home)
 	}
+	for index, want := range []int64{4, 3} {
+		var seq int64
+		if err := f.db.QueryRow(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, f.identity(index).UserID).Scan(&seq); err != nil || seq != want {
+			t.Fatalf("manual/automatic/replay activity=%d want=%d err=%v", seq, want, err)
+		}
+	}
 	other := f.read(1)
 	if other.LatestResult.Outcome != "win" || other.LatestResult.PrizeGeneral != "5" || other.LatestResult.OwnRefund.Game != "4" {
 		t.Fatal(other.LatestResult)

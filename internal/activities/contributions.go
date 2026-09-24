@@ -10,6 +10,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type participantRecord struct {
@@ -275,6 +276,9 @@ WHERE id=? AND revision=? AND state IN ('configured','open') AND opens_at<=? AND
 		return MutationResult[ThursdayContributionResult]{}, PublishFacts{}, classifyDatabaseError("advance Thursday pool", err)
 	}
 	if err := mustRowsAffected(result, 1, true); err != nil {
+		return MutationResult[ThursdayContributionResult]{}, PublishFacts{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: userID, At: now, Kind: "activity", Fresh: true}); err != nil {
 		return MutationResult[ThursdayContributionResult]{}, PublishFacts{}, err
 	}
 	value := ThursdayContributionResult{
