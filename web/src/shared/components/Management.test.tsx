@@ -32,8 +32,8 @@ const userFixture = (id = '7', level = 1): AdminUser => ({
   game_balance: '-1.25',
   donation_credit: '0',
   level: {
-    manual: level === 5 ? 5 : null,
-    automatic: level === 5 ? 1 : level,
+    manual: level >= 5 ? level : null,
+    automatic: level >= 5 ? 1 : level,
     effective: level,
     display_name: 'Lv' + level,
   },
@@ -52,7 +52,7 @@ const userFixture = (id = '7', level = 1): AdminUser => ({
     total_unknown_usage_requests: '0',
   },
 });
-function session(level = 5) {
+function session(level = 6) {
   const user = userFixture('9', level);
   const fields = Object.fromEntries(
     Object.entries(user).filter(
@@ -60,7 +60,14 @@ function session(level = 5) {
     ),
   );
   return {
-    user: { ...fields, avatar: null, effective_level: level, level_display_name: 'Lv' + level, charity_profile_public: false, automatic_restrictions: [] },
+    user: {
+      ...fields,
+      avatar: null,
+      effective_level: level,
+      level_display_name: 'Lv' + level,
+      charity_profile_public: false,
+      automatic_restrictions: [],
+    },
   };
 }
 const page = (data: unknown[]) => ({
@@ -107,11 +114,15 @@ afterEach(() => {
 });
 
 describe('shared account management', () => {
-  it.each(['admin', 'steward'] as const)(
-    'submits canonical nullable limits and rejects invalid input for %s',
-    async (role) => {
+  it.each([
+    ['admin', 1],
+    ['steward', 1],
+    ['steward', 5],
+  ] as const)(
+    'submits canonical nullable limits and rejects invalid input for %s managing level %i',
+    async (role, targetLevel) => {
       const base = role === 'admin' ? '/admin/api/users' : '/api/steward/users';
-      let target = userFixture();
+      let target = userFixture('7', targetLevel);
       const calls = install((call) => {
         if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
         if (call.path === '/api/session') return session();
@@ -125,7 +136,7 @@ describe('shared account management', () => {
       });
       const view = await renderWithProviders(role === 'admin' ? <UsersPage /> : <StewardPage />, {
         station: role === 'admin' ? 'admin' : 'user',
-        role: role === 'admin' ? 'admin' : 'level5',
+        role: role === 'admin' ? 'admin' : 'user',
         route: role === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7',
       });
       view.queryClient.setQueryData(
@@ -157,7 +168,10 @@ describe('shared account management', () => {
       expect(write.headers.get('Idempotency-Key')).toBeTruthy();
       if (role === 'steward') {
         expect(
-          within(screen.getByLabelText('Set level')).queryByRole('option', { name: '5' }),
+          within(screen.getByLabelText('Set level')).getByRole('option', { name: '5' }),
+        ).toBeEnabled();
+        expect(
+          within(screen.getByLabelText('Set level')).queryByRole('option', { name: '6' }),
         ).toBeNull();
         expect(
           within(screen.getByLabelText('Target')).queryByRole('option', { name: 'Donor reward' }),
@@ -169,8 +183,8 @@ describe('shared account management', () => {
   );
 
   it.each([
-    ['9', 5],
-    ['7', 5],
+    ['9', 6],
+    ['7', 6],
   ] as const)('keeps steward target %s read only', async (id, level) => {
     const target = userFixture(id, level);
     install((call) => {
@@ -181,7 +195,7 @@ describe('shared account management', () => {
     });
     await renderWithProviders(<StewardPage />, {
       station: 'user',
-      role: 'level5',
+      role: 'user',
       route: '/steward?tab=users&user=' + id,
     });
     expect(
@@ -204,7 +218,7 @@ describe('shared account management', () => {
       </>,
       {
         station: 'user',
-        role: 'level5',
+        role: 'user',
         route: '/steward?tab=users&page=2',
       },
     );
@@ -220,20 +234,20 @@ describe('shared account management', () => {
   });
 
   it('discards the editing view when a mutation discovers demotion', async () => {
-    let currentLevel = 5;
+    let currentLevel = 6;
     install((call) => {
       if (call.path === '/api/session') return session(currentLevel);
       if (call.path.startsWith('/api/steward/users?')) return page([userFixture()]);
       if (call.path === '/api/steward/users/7' && call.method === 'GET') return userFixture();
       if (call.method === 'PATCH') {
-        currentLevel = 4;
+        currentLevel = 5;
         return json({ error: { code: 'forbidden', message: 'Forbidden' } }, 403);
       }
       throw new Error('Unexpected request ' + call.path);
     });
     const view = await renderWithProviders(<StewardPage />, {
       station: 'user',
-      role: 'level5',
+      role: 'user',
       route: '/steward?tab=users&user=7',
     });
     view.queryClient.setQueryData(['user', 'session'], session());
@@ -247,19 +261,19 @@ describe('shared account management', () => {
 
 describe('shared announcement editor', () => {
   it('closes a private announcement draft when a steward is demoted', async () => {
-    let currentLevel = 5;
+    let currentLevel = 6;
     install((call) => {
       if (call.path === '/api/session') return session(currentLevel);
       if (call.path.startsWith('/api/steward/announcements?')) return page([]);
       if (call.path === '/api/steward/announcements' && call.method === 'POST') {
-        currentLevel = 4;
+        currentLevel = 5;
         return json({ error: { code: 'forbidden', message: 'Forbidden' } }, 403);
       }
       throw new Error('Unexpected request ' + call.path);
     });
     const view = await renderWithProviders(<StewardPage />, {
       station: 'user',
-      role: 'level5',
+      role: 'user',
       route: '/steward?tab=announcements',
     });
     view.queryClient.setQueryData(['user', 'session'], session());
@@ -312,7 +326,7 @@ describe('shared announcement editor', () => {
         announcementId={id}
         backTo="/steward?tab=announcements"
       />,
-      { station: 'user', role: 'level5' },
+      { station: 'user', role: 'user' },
     );
     view.queryClient.setQueryData(['user', 'session'], session());
     await screen.findByLabelText('English title');

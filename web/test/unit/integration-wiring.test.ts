@@ -21,7 +21,7 @@ function childPaths(router: typeof userRouter): string[] {
   );
 }
 
-describe('alpha.3 central route and navigation wiring', () => {
+describe('central route and navigation wiring', () => {
   test('exposes lazy user and admin feature routes in the intended order', () => {
     const userChildren = userRouter.routes[0]?.children ?? [];
     const adminChildren = adminRouter.routes[0]?.children ?? [];
@@ -32,6 +32,9 @@ describe('alpha.3 central route and navigation wiring', () => {
     expect(userPaths.indexOf('debug')).toBe(userPaths.indexOf('keys') + 1);
     expect(userChildren.find((route) => route.path === 'games')?.lazy).toBeTypeOf('function');
     expect(userChildren.find((route) => route.path === 'activities')?.lazy).toBeTypeOf('function');
+    expect(userChildren.find((route) => route.path === 'activities/picture-book')?.lazy).toBeTypeOf(
+      'function',
+    );
     expect(
       userChildren.find((route) => route.path === 'charity/donations/:donationId')?.lazy,
     ).toBeTypeOf('function');
@@ -42,6 +45,14 @@ describe('alpha.3 central route and navigation wiring', () => {
     expect(adminChildren.find((route) => route.path === 'mainstream-channels')?.lazy).toBeTypeOf(
       'function',
     );
+    for (const path of [
+      'inactivity-policy',
+      'limited-activities',
+      'abuse-audit',
+      'economy-audit',
+    ]) {
+      expect(adminChildren.find((route) => route.path === path)?.lazy).toBeTypeOf('function');
+    }
 
     expect(userNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/:home',
@@ -54,6 +65,10 @@ describe('alpha.3 central route and navigation wiring', () => {
       '/logs:logs',
     ]);
     expect(adminNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
+      '/inactivity-policy:admin-inactivity-policy',
+      '/limited-activities:admin-limited-activities',
+      '/abuse-audit:admin-risk-audit',
+      '/economy-audit:admin-economy-audit',
       '/:admin-home',
       '/users:admin-users',
       '/logs:admin-logs',
