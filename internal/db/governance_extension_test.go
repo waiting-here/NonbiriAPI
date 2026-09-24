@@ -98,6 +98,17 @@ func TestGovernancePublishedSourceUpgrade(t *testing.T) {
 	if err := validateGenerationTwoSeedManifest(ctx, source); err != nil {
 		t.Fatal(err)
 	}
+	var observation int64
+	var inactiveConfig, activityConfig string
+	if err := source.QueryRow(`SELECT observation_started_at FROM user_activity_state WHERE user_id=?`, user).Scan(&observation); err != nil || observation <= 1 {
+		t.Fatal("old account observation epoch", observation, err)
+	}
+	if err := source.QueryRow(`SELECT config_json FROM inactivity_policy WHERE id=1`).Scan(&inactiveConfig); err != nil || inactiveConfig != `{"enabled":false,"decay":{"enabled":false,"inactive_days":null,"interval_days":null,"assets":{"general":null,"game":null}},"protection":{"enabled":false,"inactive_days":null}}` {
+		t.Fatal("inactivity policy must start disabled", inactiveConfig, err)
+	}
+	if err := source.QueryRow(`SELECT module_config FROM limited_activity_revisions WHERE activity_key='picture-book' AND revision=1`).Scan(&activityConfig); err != nil || activityConfig != `{"paper_price":"1000","brush_price":"10000","brush_cap":"10"}` {
+		t.Fatal("initial activity revision", activityConfig, err)
+	}
 	var before int64
 	if err := source.QueryRow(`SELECT capture_started_at FROM observability_state`).Scan(&before); err != nil {
 		t.Fatal(err)

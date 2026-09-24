@@ -32,10 +32,10 @@ func TestDualAssetSeeds(t *testing.T) {
 	if err := validateGenerationTwoFreshSeedManifest(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
-	for _, code := range []string{"external", "platform", "game_fishing_reserve"} {
+	for code, want := range map[string]int{"external": 4, "platform": 2, "game_fishing_reserve": 2, "image_activity_reserve": 2} {
 		var count int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT asset_type) FROM credit_accounts WHERE code=? AND balance_sign=0`, code).Scan(&count); err != nil || count != 2 {
-			t.Fatalf("two zero assets for %s: %d, %v", code, count, err)
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT asset_type) FROM credit_accounts WHERE code=? AND balance_sign=0`, code).Scan(&count); err != nil || count != want {
+			t.Fatalf("zero assets for %s: %d, want %d: %v", code, count, want, err)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO credit_accounts(kind,code,asset_type,balance_sign,balance_mag,created_at,updated_at)

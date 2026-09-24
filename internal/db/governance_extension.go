@@ -108,14 +108,16 @@ func GovernanceStoragePresent(ctx context.Context, q queryer) (bool, error) {
 	err := q.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE type='table' AND name IN
  ('image_activity_tasks','request_source_facts','request_error_bodies','observability_state','audit_access_events',
  'anonymous_access_minutes','charity_request_outcomes','risk_audit_minutes','risk_audit_gaps','risk_audit_config',
- 'risk_client_rules','economy_audit_checkpoint','economy_audit_buckets')`).Scan(&count)
+ 'risk_client_rules','economy_audit_checkpoint','economy_audit_buckets',
+ 'limited_activity_configs','limited_activity_revisions','activity_exchange_state','activity_exchange_receipts',
+ 'inactivity_policy','user_activity_state','inactivity_runs','inactivity_audits')`).Scan(&count)
 	if err != nil {
 		return false, err
 	}
-	if count != 0 && count != 13 {
+	if count != 0 && count != 21 {
 		return false, errors.New("partial governance storage")
 	}
-	return count == 13, nil
+	return count == 21, nil
 }
 
 func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
@@ -136,7 +138,10 @@ func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
 			}
 		}
 	}
-	return nil
+	if err := seedLimitedActivities(ctx, tx, at); err != nil {
+		return err
+	}
+	return seedInactivity(ctx, tx, at)
 }
 
 func applyGovernanceExtension(ctx context.Context, tx *sql.Tx) error {
@@ -200,7 +205,7 @@ func applyGovernanceExtension(ctx context.Context, tx *sql.Tx) error {
 }
 
 func governanceAdditiveSchema() string {
-	return governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema()
+	return governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema
 }
 
 // The modulo expression operates directly on all 128 bits; SQLite integer
