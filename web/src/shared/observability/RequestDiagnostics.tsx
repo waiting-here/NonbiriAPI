@@ -107,7 +107,12 @@ function ScopedAttemptErrors({
   }
   return (
     <section className="request-diagnostics">
-      <button type="button" disabled={busy} onClick={() => void load()}>
+      <button
+        className="btn btn-secondary"
+        type="button"
+        disabled={busy}
+        onClick={() => void load()}
+      >
         {words('Upstream error details', '上游错误详情')}
       </button>
       {failed && <p role="alert">{words('Could not load diagnostics.', '无法加载错误详情。')}</p>}
@@ -140,7 +145,12 @@ function ScopedAttemptErrors({
         </details>
       ))}
       {page?.next_after != null && (
-        <button type="button" disabled={busy} onClick={() => void load(page.next_after!)}>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          disabled={busy}
+          onClick={() => void load(page.next_after!)}
+        >
           {words('Next events', '后续事件')}
         </button>
       )}
@@ -185,7 +195,12 @@ function LazyErrorBody({
     <RawErrorViewer body={body} />
   ) : (
     <>
-      <button type="button" disabled={busy} onClick={() => void load()}>
+      <button
+        className="btn btn-secondary"
+        type="button"
+        disabled={busy}
+        onClick={() => void load()}
+      >
         {words('Load original body', '加载原始正文')}
       </button>
       {failed && (
@@ -287,6 +302,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
       )}
       <div className="diagnostic-actions">
         <button
+          className="btn btn-secondary"
           type="button"
           disabled={body.truncated || body.encoding === 'base64' || formatting}
           onClick={format}
@@ -294,7 +310,11 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
           {words('Format JSON', '格式化 JSON')}
         </button>
         {formatted && (
-          <button type="button" onClick={() => setShowRaw((value) => !value)}>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => setShowRaw((value) => !value)}
+          >
             {showRaw
               ? words('Formatted', '格式化')
               : synthetic
@@ -303,6 +323,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
           </button>
         )}
         <button
+          className="btn btn-secondary"
           type="button"
           onClick={() => {
             void copyText(showRaw ? raw : (formatted ?? raw)).then((ok) =>
@@ -312,7 +333,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
         >
           {words('Copy text', '复制文本')}
         </button>
-        <button type="button" onClick={download}>
+        <button className="btn btn-secondary" type="button" onClick={download}>
           {synthetic
             ? words('Download diagnostic summary', '下载诊断摘要')
             : words('Download original', '下载原始正文')}

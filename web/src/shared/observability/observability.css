@@ -42,6 +42,9 @@
 }
 .diagnostic-filters label {
   display: grid;
+  flex: 1 1 12rem;
+  min-width: 0;
+  align-content: start;
   gap: 0.3rem;
   max-width: 100%;
 }
@@ -51,4 +54,33 @@
 }
 .independent-diagnostics summary {
   overflow-wrap: anywhere;
+}
+.independent-diagnostics {
+  display: grid;
+  gap: 1rem;
+}
+.independent-diagnostics > :is(h2, p) {
+  margin: 0;
+}
+.request-diagnostics summary {
+  cursor: pointer;
+  padding-block: 0.5rem;
+}
+.request-diagnostics .btn {
+  align-self: start;
+}
+.diagnostic-filters .btn {
+  align-self: end;
+}
+@media (max-width: 40rem) {
+  .diagnostic-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .diagnostic-filters label {
+    flex-basis: auto;
+  }
+  .diagnostic-filters .btn {
+    align-self: stretch;
+  }
 }

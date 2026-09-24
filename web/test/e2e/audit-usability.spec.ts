@@ -106,6 +106,16 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('button', { name: 'Client rules', exact: true }).click();
   await page.getByRole('button', { name: 'New rule', exact: true }).click();
+  for (const [name, field, value] of [
+    ['Tavo', 'user_agent', 'Tavo/'],
+    ['New API', 'openrouter_title', 'New API'],
+    ['One API', 'legacy_title', 'One API'],
+  ]) {
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.getByLabel(/^Field/)).toHaveValue(field);
+    await expect(page.getByLabel('Match value', { exact: true })).toHaveValue(value);
+    expect(saved).toBeNull();
+  }
   await page
     .getByRole('button', { name: 'Source website and application title', exact: true })
     .click();

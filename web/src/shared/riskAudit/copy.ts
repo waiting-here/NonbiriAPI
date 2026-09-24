@@ -146,7 +146,7 @@ const english = {
   uaTemplate: 'Client name in User-Agent',
   siteTemplate: 'Source website and application title',
   templateHelp:
-    'Enter the observed values and save. Website and title must both match. These patterns cannot identify clients that hide or replace their headers.',
+    'Client presets fill observed self-reported markers; review and save to enable them. New API and One API titles do not require a fixed website. These markers occur only on some relay paths; derivatives can match if they retain them. Hidden or changed markers need another observed rule. The custom website-and-title pattern requires both fields.',
   advanced: 'Risk classification and supporting evidence',
   and: 'All of these',
   or: 'OR',
@@ -293,7 +293,7 @@ const chinese: typeof english = {
   uaTemplate: 'User-Agent 中的客户端名称',
   siteTemplate: '来源网站与应用标题',
   templateHelp:
-    '填写实际观察到的值并保存。“网站与标题”需要两项同时匹配；隐藏或改写请求头的客户端无法据此识别。',
+    '客户端预设会填入已知的自报标记，核对并保存后启用。New API 与 One API 按标题匹配，不要求固定网址；这些标记仅在部分中继路径出现，保留标记的衍生品也可命中。隐藏或改写标记后需要另建有依据的规则。自定义“网站与标题”仍要求两项同时满足。',
   advanced: '风险分类与依据',
   and: '同时满足',
   or: 'OR',
