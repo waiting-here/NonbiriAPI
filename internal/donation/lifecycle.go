@@ -614,7 +614,8 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 			}
 		}
 		items = append(items, ExportDonation{
-			ID: projection.ID, Status: projection.Status, Description: projection.Description,
+			DiscordPublicThanks: projection.DiscordPublicThanks,
+			ID:                  projection.ID, Status: projection.Status, Description: projection.Description,
 			ReviewResult: projection.ReviewResult, Keys: keys,
 			CreatedAt: projection.CreatedAt, UpdatedAt: projection.UpdatedAt,
 		})
@@ -627,6 +628,7 @@ func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
 	for index, value := range values {
 		owner := ownerKey(value)
 		out[index] = ExportDonationKey{
+			TokenBreakdown:          value.TokenBreakdown,
 			FailureDisableThreshold: owner.FailureDisableThreshold,
 			ID:                      owner.ID, EndpointKeyID: owner.EndpointKeyID,
 			DisplayHead: owner.DisplayHead, DisplayTail: owner.DisplayTail,

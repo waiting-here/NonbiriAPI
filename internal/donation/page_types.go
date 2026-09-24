@@ -1,21 +1,25 @@
 package donation
 
-import "github.com/waiting-here/NonbiriAPI/internal/donationquota"
+import (
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+)
 
 // DonationSummary contains no key records or management-only fields. Source
 // previews are bounded to three distinct sources; source_count is authoritative.
 type DonationSummary struct {
-	ID           string            `json:"id"`
-	Status       string            `json:"status"`
-	Revision     string            `json:"revision"`
-	Description  string            `json:"description"`
-	ReviewResult *ReviewResult     `json:"review_result"`
-	CreatedAt    int64             `json:"created_at"`
-	UpdatedAt    int64             `json:"updated_at"`
-	KeyCount     string            `json:"key_count"`
-	StateCounts  map[string]string `json:"state_counts"`
-	SourceCount  string            `json:"source_count"`
-	Sources      []SafeSource      `json:"sources"`
+	DiscordPublicThanks *bool             `json:"discord_public_thanks"`
+	ID                  string            `json:"id"`
+	Status              string            `json:"status"`
+	Revision            string            `json:"revision"`
+	Description         string            `json:"description"`
+	ReviewResult        *ReviewResult     `json:"review_result"`
+	CreatedAt           int64             `json:"created_at"`
+	UpdatedAt           int64             `json:"updated_at"`
+	KeyCount            string            `json:"key_count"`
+	StateCounts         map[string]string `json:"state_counts"`
+	SourceCount         string            `json:"source_count"`
+	Sources             []SafeSource      `json:"sources"`
 }
 
 type AdminDonationSummary struct {
@@ -49,13 +53,17 @@ type ManagedKeySummary struct {
 	DonationKey
 	RecurringReceipt
 	RecurringSummary
-	AuthorizedExpiresAt *int64           `json:"authorized_expires_at"`
-	SafeNote            string           `json:"safe_note"`
-	MaxConcurrency      *int64           `json:"max_concurrency"`
-	MaxRPM              *int64           `json:"max_rpm"`
-	BindingCount        string           `json:"binding_count"`
-	Idle                bool             `json:"idle"`
-	Handling            DonationHandling `json:"handling"`
+	AuthorizedExpiresAt    *int64                      `json:"authorized_expires_at"`
+	SafeNote               string                      `json:"safe_note"`
+	MaxConcurrency         *int64                      `json:"max_concurrency"`
+	MaxRPM                 *int64                      `json:"max_rpm"`
+	BindingCount           string                      `json:"binding_count"`
+	Idle                   bool                        `json:"idle"`
+	Handling               DonationHandling            `json:"handling"`
+	DonationNote           string                      `json:"donation_note"`
+	ApprovalNote           *string                     `json:"approval_note"`
+	VisibleModels          []charityscope.VisibleModel `json:"visible_models"`
+	VisibleModelsTruncated bool                        `json:"visible_models_truncated"`
 }
 
 type DonationSource struct {
@@ -67,4 +75,7 @@ type DonationSource struct {
 	PendingDonationCount string     `json:"pending_donation_count"`
 }
 
-type SourceFilter struct{ Query, Scope, Handling, Idle string }
+type SourceFilter struct {
+	Query, Scope, Handling, Idle string
+	traineeModelID               int64
+}

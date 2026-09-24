@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 const (
@@ -218,7 +219,7 @@ JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowe
 	}
 	available := make([]AvailableModel, 0, len(models))
 	for _, model := range models {
-		if _, err := s.snapshot(ctx, model.ModelID, decisionNow, false, nil); err == nil {
+		if _, err := s.snapshot(ctx, model.ModelID, decisionNow, false, nil, userID); err == nil {
 			available = append(available, model)
 		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) && !errors.Is(err, donationquota.ErrLimited) {
 			return nil, err
@@ -244,7 +245,20 @@ func (s *Service) Snapshot(ctx context.Context, modelID int64, decisionNow int64
 	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet)
 }
 
-func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}) (RuntimeSnapshot, error) {
+// SnapshotForCaller applies donor ownership before ordering or counting
+// physical candidates. The final dispatch transaction repeats this decision.
+func (s *Service) SnapshotForCaller(ctx context.Context, userID, modelID, decisionNow int64, connectorTypes []connectorcontract.Type) (RuntimeSnapshot, error) {
+	if userID <= 0 {
+		return RuntimeSnapshot{}, ErrInvalidRequest
+	}
+	connectorSet, err := runtimeConnectorSet(connectorTypes)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, userID)
+}
+
+func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callers ...int64) (RuntimeSnapshot, error) {
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
@@ -253,7 +267,20 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
 	}
 	defer tx.Rollback()
-	snapshot, admissionErr := s.readSnapshotTx(ctx, tx, modelID, decisionNow, freezeOrder, connectorSet)
+	callerID := int64(0)
+	if len(callers) > 1 || len(callers) == 1 && callers[0] <= 0 {
+		return RuntimeSnapshot{}, ErrInvalidRequest
+	}
+	if len(callers) == 1 {
+		callerID = callers[0]
+		if err := charityaccess.Require(ctx, tx, callerID, modelID); err != nil {
+			if errors.Is(err, charityaccess.ErrForbidden) {
+				return RuntimeSnapshot{}, ErrForbidden
+			}
+			return RuntimeSnapshot{}, ErrNotFound
+		}
+	}
+	snapshot, admissionErr := s.readSnapshotTx(ctx, tx, modelID, decisionNow, freezeOrder, connectorSet, callerID)
 	if admissionErr != nil && !errors.Is(admissionErr, ErrUnavailable) {
 		return RuntimeSnapshot{}, admissionErr
 	}
@@ -268,7 +295,7 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 
 // readSnapshotTx shares eligibility with read-only catalogs without opening a
 // second transaction or materializing expiry inside a browse request.
-func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}) (RuntimeSnapshot, error) {
+func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callerID int64) (RuntimeSnapshot, error) {
 	var snapshot RuntimeSnapshot
 	var enabled int
 	var pricingMode string
@@ -329,7 +356,9 @@ WHERE b.charity_model_id=? AND d.status='approved'
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
 AND k.enabled=1 AND e.enabled=1 AND (pc.automatic_supports>0 OR pc.manual_supports>0)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
-ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
+AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level)=6))
+AND EXISTS(SELECT 1 FROM users donor WHERE donor.id=d.user_id AND (donor.is_banned=0 OR donor.banned_until<=? OR (donor.banned_until IS NULL AND donor.ban_kind='protective_inactivity')))
+ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow, maxBindingBatch+1)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime candidates: %w", err)
 	}
@@ -374,6 +403,18 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 		if pricingMode == "per_request" {
 			priceReserve = requestPrice
 		}
+		budget, err := donationquota.ReadTokenBudget(ctx, tx, candidate.DonationKeyID)
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		eligible, err = budget.Available()
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		if !eligible {
+			continue
+		}
+		tokenReserve = budget.Reservation.Total
 		eligible, err = capacityAllows(priceLimit, priceUsed, priceInflight, big.NewInt(priceReserve))
 		if err == nil && eligible {
 			eligible, err = capacityAllows(callLimit, callsUsed, callsInflight, big.NewInt(1))
@@ -392,12 +433,10 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 		if err != nil {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
-		quotaTokens, err := db.U128FromBig(big.NewInt(tokenReserve))
-		if err != nil {
-			return RuntimeSnapshot{}, ErrInvariant
-		}
 		quotaCalls, _ := db.U128FromBig(big.NewInt(1))
-		eligible, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, donationquota.Amounts{Calls: quotaCalls, Tokens: quotaTokens, Credits: quotaPrice})
+		amounts := budget.Reservation.Amounts()
+		amounts.Calls, amounts.Credits = quotaCalls, quotaPrice
+		eligible, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, amounts)
 		if err != nil {
 			return RuntimeSnapshot{}, err
 		}
@@ -551,6 +590,12 @@ WHERE enabled=1 ORDER BY id`)
 		return Capability{}, fmt.Errorf("charity routing: close capability models: %w", err)
 	}
 	// Snapshot opens its own transaction and can materialize donation expiry.
+	for index, id := range modelIDs {
+		models[index].RecentSuccess, err = observability.RecentSuccessTx(ctx, tx, id, decisionNow)
+		if err != nil {
+			return Capability{}, err
+		}
+	}
 	// Commit the complete gate/model fact snapshot first so a one-connection
 	// production pool cannot self-deadlock and later candidate changes cannot
 	// rewrite the intake fact observed above.
@@ -572,7 +617,7 @@ WHERE enabled=1 ORDER BY id`)
 		if !allowed[index] {
 			continue
 		}
-		if _, err := s.snapshot(ctx, id, decisionNow, false, nil); err == nil {
+		if _, err := s.snapshot(ctx, id, decisionNow, false, nil, userID); err == nil {
 			available = append(available, models[index])
 		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) && !errors.Is(err, donationquota.ErrLimited) {
 			return Capability{}, err

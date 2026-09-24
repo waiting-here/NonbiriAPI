@@ -93,9 +93,13 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPut, routeStewardRecurring, api.replaceRecurringSteward},
 		{http.MethodPost, routeStewardReview, api.reviewSteward},
 		{http.MethodPatch, routeStewardKey, api.manageKeySteward},
+		{http.MethodGet, routeStewardKey, api.keySteward},
 		{http.MethodPatch, routeStewardFailurePolicy, api.failurePolicySteward},
 	}
 	for _, route := range routes {
+		if scopedDonationRoute(route.pattern) {
+			route.handler = scopeHandler(route.handler)
+		}
 		if err := registrar.RegisterUserRoute(route.method, route.pattern, route.handler); err != nil {
 			return registerError("donation", route.method, route.pattern, err)
 		}
@@ -167,6 +171,7 @@ type createKeyWire struct {
 }
 
 type createWire struct {
+	DiscordPublicThanks requiredField[bool]            `json:"discord_public_thanks"`
 	Description         requiredField[string]          `json:"description"`
 	Keys                requiredField[[]createKeyWire] `json:"keys"`
 	OwnershipAuthorized requiredField[bool]            `json:"ownership_authorized"`
@@ -180,7 +185,7 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 	if !decodeStrictObject(writer, request, &wire) {
 		return
 	}
-	if !wire.Description.Set || !wire.Keys.Set || !wire.OwnershipAuthorized.Set {
+	if !wire.Description.Set || !wire.Keys.Set || !wire.OwnershipAuthorized.Set || !wire.DiscordPublicThanks.Set {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
 	}
@@ -201,13 +206,14 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 		}
 	}
 	canonical := map[string]any{"description": wire.Description.Value, "keys": canonicalKeys,
-		"ownership_authorized": wire.OwnershipAuthorized.Value}
+		"ownership_authorized": wire.OwnershipAuthorized.Value, "discord_public_thanks": wire.DiscordPublicThanks.Value}
 	mutation, ok := mutationFor(writer, request, routeDonations, nil, canonical)
 	if !ok {
 		return
 	}
 	result, err := api.service.Create(request.Context(), principal.UserID, mutation, CreateInput{
-		Description: wire.Description.Value, Keys: keys, OwnershipAuthorized: wire.OwnershipAuthorized.Value,
+		DiscordPublicThanks: wire.DiscordPublicThanks.Value,
+		Description:         wire.Description.Value, Keys: keys, OwnershipAuthorized: wire.OwnershipAuthorized.Value,
 	})
 	if err != nil {
 		writeDonationError(writer, err)
@@ -217,8 +223,9 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 }
 
 type editWire struct {
-	Description      requiredField[string] `json:"description"`
-	ExpectedRevision requiredField[string] `json:"expected_revision"`
+	DiscordPublicThanks requiredField[bool]   `json:"discord_public_thanks"`
+	Description         requiredField[string] `json:"description"`
+	ExpectedRevision    requiredField[string] `json:"expected_revision"`
 }
 
 func (api *httpAPI) editOwner(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -236,12 +243,17 @@ func (api *httpAPI) editOwner(writer http.ResponseWriter, request *http.Request,
 		return
 	}
 	canonical := map[string]any{"description": wire.Description.Value, "expected_revision": wire.ExpectedRevision.Value}
+	var thanks *bool
+	if wire.DiscordPublicThanks.Set {
+		thanks = &wire.DiscordPublicThanks.Value
+		canonical["discord_public_thanks"] = *thanks
+	}
 	mutation, ok := mutationFor(writer, request, routeDonation, []int64{id}, canonical)
 	if !ok {
 		return
 	}
 	result, err := api.service.Edit(request.Context(), principal.UserID, id, mutation,
-		EditInput{Description: wire.Description.Value, ExpectedRevision: revision})
+		EditInput{Description: wire.Description.Value, ExpectedRevision: revision, DiscordPublicThanks: thanks})
 	if err != nil {
 		writeDonationError(writer, err)
 		return
@@ -425,6 +437,7 @@ func (api *httpAPI) getSteward(writer http.ResponseWriter, request *http.Request
 }
 
 type reviewKeyWire struct {
+	splitTokenWire
 	DonationKeyID requiredField[string] `json:"donation_key_id"`
 	PriceLimit    nullableField[string] `json:"price_limit"`
 	CallsLimit    nullableField[string] `json:"calls_limit"`
@@ -478,6 +491,14 @@ func parseReviewWire(wire reviewWire) (ReviewInput, map[string]any, error) {
 				"price_limit": setting.PriceLimit.Value, "calls_limit": setting.CallsLimit.Value,
 				"tokens_limit": setting.TokensLimit.Value, "token_reserve": setting.TokenReserve.Value,
 				"enabled": setting.Enabled.Value, "safe_note": setting.SafeNote.Value, "expires_at": setting.ExpiresAt.Value}
+			split, fields, err := splitTokenInput(setting.splitTokenWire)
+			if err != nil {
+				return ReviewInput{}, nil, err
+			}
+			settings[index].SplitTokens = split
+			for name, value := range fields {
+				canonicalSettings[index][name] = value
+			}
 		}
 		input.KeySettings = settings
 		canonical["key_settings"] = canonicalSettings
@@ -535,6 +556,7 @@ func (api *httpAPI) reviewRole(writer http.ResponseWriter, request *http.Request
 }
 
 type keyManagementWire struct {
+	splitTokenWire
 	ExpectedRevision   requiredField[string] `json:"expected_revision"`
 	Enabled            requiredField[bool]   `json:"enabled"`
 	PriceLimit         nullableField[string] `json:"price_limit"`
@@ -547,14 +569,20 @@ type keyManagementWire struct {
 }
 
 func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[string]any, error) {
+	split, fields, splitErr := splitTokenInput(wire.splitTokenWire)
+	if splitErr != nil {
+		return KeyManagementInput{}, nil, splitErr
+	}
 	revision, err := requiredRevision(wire.ExpectedRevision)
 	if err != nil || !wire.Enabled.Set && !wire.PriceLimit.Set && !wire.CallsLimit.Set && !wire.TokensLimit.Set &&
-		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set ||
+		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set && !splitTokenChanged(split) ||
 		wire.ResetFailureStreak.Set && !wire.ResetFailureStreak.Value {
 		return KeyManagementInput{}, nil, ErrInvalidRequest
 	}
-	input := KeyManagementInput{ExpectedRevision: revision, ResetFailureStreak: wire.ResetFailureStreak.Set}
-	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	input := split
+	input.ExpectedRevision, input.ResetFailureStreak = revision, wire.ResetFailureStreak.Set
+	canonical := fields
+	canonical["expected_revision"] = wire.ExpectedRevision.Value
 	if wire.Enabled.Set {
 		value := wire.Enabled.Value
 		input.Enabled = &value
@@ -635,7 +663,7 @@ func (api *httpAPI) manageKeyRole(writer http.ResponseWriter, request *http.Requ
 		writeMutation(writer, result)
 		return
 	}
-	result, err := api.service.ManageKeySteward(request.Context(), principal.UserID, donationID, keyID, mutation, input)
+	result, err := api.service.ManageKeySession(request.Context(), principal.UserID, donationID, keyID, mutation, input)
 	if err != nil {
 		writeDonationError(writer, err)
 		return

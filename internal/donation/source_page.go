@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -44,6 +45,10 @@ FROM donation_keys dk` + index + ` CROSS JOIN donations d ON d.id=dk.donation_id
 JOIN donation_handling h ON h.donation_id=d.id
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now, now - terminalRetention}
+	if filter.traineeModelID > 0 {
+		query += ` AND ` + charityscope.KeyPredicate()
+		args = append(args, filter.traineeModelID, now)
+	}
 	if len(candidates) > 0 {
 		query += ` AND dk.id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(candidates)), ",") + `)`
 		for _, id := range candidates {
@@ -113,7 +118,7 @@ SELECT CASE WHEN dk.donation_status='approved' AND dk.user_id IS NOT NULL AND dk
  AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>=nbi_u128(dk.price_reserve)
  AND nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))>=nbi_u128(1)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
- AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(dk.token_reserve)
+ AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(` + donationquota.EffectiveTokenReserveSQL("dk.id", "dk.token_reserve") + `)
  AND ` + donationquota.AvailabilityPredicate("dk.id", "?", "dk.price_reserve", "dk.token_reserve") + `
  THEN 1 ELSE 0 END ELSE 0 END FROM key_cost dk`
 }
@@ -138,11 +143,14 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.beginBrowseTx(ctx, role, userID)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	if scope.Trainee {
+		filter.traineeModelID = scope.ModelID
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -236,11 +244,14 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.beginBrowseTx(ctx, role, userID)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	if scope.Trainee {
+		filter.traineeModelID = scope.ModelID
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -283,7 +294,16 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		if err != nil {
 			return empty, err
 		}
-		result.Data = append(result.Data, managedKeySummary(keys[0], header, rules))
+		value := managedKeySummary(keys[0], header, rules)
+		if scope.Trainee {
+			value.EndpointKeyID = nil
+		}
+		impact, err := scope.Impact(ctx, tx, keyID)
+		if err != nil {
+			return empty, err
+		}
+		value.VisibleModels, value.VisibleModelsTruncated = impact.VisibleModels, impact.VisibleModelsTruncated
+		result.Data = append(result.Data, value)
 	}
 	if err := tx.Commit(); err != nil {
 		return empty, err

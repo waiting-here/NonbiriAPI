@@ -29,7 +29,7 @@ func TestManagementModelPagesCountFilteredSetAndAuthorizeBeforeEmpty(t *testing.
 	}
 	for _, role := range []roleKind{roleAdmin, roleSteward} {
 		for _, size := range []int{10, 20, 50, 100} {
-			out, err := env.service.modelsPage(context.Background(), role, steward, "page-", nil, pagination.Request{Page: pagination.MaxPage, Size: size})
+			out, err := env.service.modelsPage(context.Background(), role, testRoleActor(role, steward), "page-", nil, pagination.Request{Page: pagination.MaxPage, Size: size})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,11 +88,11 @@ func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 	for _, role := range []roleKind{roleAdmin, roleSteward} {
 		for _, size := range []int{10, 20, 50, 100} {
 			request := pagination.Request{Page: pagination.MaxPage, Size: size}
-			candidates, err := env.service.candidatesPage(context.Background(), role, steward, modelID, CandidateQuery{}, request)
+			candidates, err := env.service.candidatesPage(context.Background(), role, testRoleActor(role, steward), modelID, CandidateQuery{}, request)
 			if err != nil {
 				t.Fatal(err)
 			}
-			donations, _, err := env.service.bindingSourcesPage(context.Background(), role, steward, modelID, 0, request)
+			donations, _, err := env.service.bindingSourcesPage(context.Background(), role, testRoleActor(role, steward), modelID, 0, request)
 			if err != nil {
 				t.Fatal(err)
 			}

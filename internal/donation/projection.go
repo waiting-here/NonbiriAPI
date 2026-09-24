@@ -338,7 +338,8 @@ func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now
 		return Donation{}, ErrNotFound
 	}
 	return Donation{
-		ID: admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
+		DiscordPublicThanks: admin.DiscordPublicThanks,
+		ID:                  admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
 		ReviewResult: admin.ReviewResult, Keys: ownerKeys(admin.Keys),
 		CreatedAt: admin.CreatedAt, UpdatedAt: admin.UpdatedAt,
 	}, nil
@@ -366,12 +367,13 @@ func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID int64) (Adm
 	var username, guildNick string
 	var reviewedAt sql.NullInt64
 	var reviewRole, reviewNote string
+	var thanks sql.NullBool
 	err := tx.QueryRowContext(ctx, `SELECT d.id,d.status,d.revision,d.description,d.review_note,
 d.reviewed_by_user_id,d.reviewed_by_role,d.reviewed_at,d.created_at,d.updated_at,
-d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,'')
+d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,''),d.discord_public_thanks
 FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).Scan(
 		&id, &out.Status, &revision, &out.Description, &reviewNote, &reviewedBy, &reviewRole,
-		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick)
+		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick, &thanks)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminDonation{}, ErrNotFound
 	}
@@ -379,6 +381,9 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		return AdminDonation{}, fmt.Errorf("donation: read projection: %w", err)
 	}
 	out.ID = strconv.FormatInt(id, 10)
+	if thanks.Valid {
+		out.DiscordPublicThanks = &thanks.Bool
+	}
 	out.Revision = strconv.FormatInt(revision, 10)
 	if reviewedAt.Valid && (out.Status == "approved" || out.Status == "rejected" || out.Status == "expired" || out.Status == "deleted") {
 		decision := "approve"
@@ -590,6 +595,9 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 		default:
 			item.CharityState = "available"
 		}
+		if err := readSplitTokenProjection(ctx, tx, id, &item); err != nil {
+			return nil, err
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -605,7 +613,8 @@ func stewardFromAdmin(value AdminDonation, _ int64) StewardDonation {
 		owner = &copy
 	}
 	return StewardDonation{
-		ID: value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
+		DiscordPublicThanks: value.DiscordPublicThanks,
+		ID:                  value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
 		ReviewResult: value.ReviewResult, Keys: stewardKeys(value.Keys),
 		Owner: owner, Reviewer: value.Reviewer, Handling: value.Handling, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
 	}
@@ -636,6 +645,7 @@ func ownerKey(value AdminDonationKey) DonationKey {
 		Name:          value.SafeSource.Name,
 	}
 	return DonationKey{
+		TokenBreakdown:          value.TokenBreakdown,
 		FailureDisableThreshold: value.FailureDisableThreshold,
 		ID:                      value.ID, EndpointKeyID: value.EndpointKeyID, DisplayHead: value.DisplayHead,
 		DisplayTail: value.DisplayTail, SafeSource: source, PhysicalEnabled: value.PhysicalEnabled,

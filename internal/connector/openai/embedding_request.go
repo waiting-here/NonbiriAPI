@@ -17,6 +17,7 @@ const MaxEmbeddingBatch = 2048
 // a chat message or guesses model capabilities from a model name.
 type EmbeddingRequest struct {
 	fields         []jsonField
+	excluded       []string
 	Model          string
 	InputCount     int
 	EncodingFormat string
@@ -178,6 +179,8 @@ func (r *EmbeddingRequest) Clear() {
 	}
 	clearFields(r.fields)
 	r.fields = nil
+	clear(r.excluded)
+	r.excluded = nil
 	r.Model, r.EncodingFormat = "", ""
 	r.InputCount, r.Dimensions = 0, 0
 }
@@ -187,6 +190,7 @@ func (r *EmbeddingRequest) CloneForAttempt() *EmbeddingRequest {
 		return nil
 	}
 	clone := *r
+	clone.excluded = append([]string(nil), r.excluded...)
 	clone.fields = make([]jsonField, len(r.fields))
 	for i, field := range r.fields {
 		clone.fields[i] = jsonField{name: field.name, value: append(json.RawMessage(nil), field.value...)}
@@ -235,7 +239,7 @@ func (r *EmbeddingRequest) marshalUpstream(upstreamModel, identifier string) ([]
 			out.Write(field.value)
 		}
 	}
-	if !userSeen {
+	if !userSeen && !r.FieldExcluded("user") {
 		out.WriteString(`,"user":`)
 		out.Write(identifierJSON)
 	}

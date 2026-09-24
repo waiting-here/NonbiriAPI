@@ -24,9 +24,13 @@ import (
 const donationTestNow int64 = 1_700_000_000
 
 type donationTestAuth struct {
-	denyOwner   atomic.Bool
-	denyAdmin   atomic.Bool
-	denySteward atomic.Bool
+	sessionUser  atomic.Int64
+	sessionAdmin atomic.Bool
+	sessionEpoch atomic.Int64
+	denySession  atomic.Bool
+	denyOwner    atomic.Bool
+	denyAdmin    atomic.Bool
+	denySteward  atomic.Bool
 }
 
 func (auth *donationTestAuth) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
@@ -37,6 +41,8 @@ func (auth *donationTestAuth) AuthorizeUserMutation(ctx context.Context, tx *sql
 }
 
 func (auth *donationTestAuth) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	auth.sessionUser.Store(userID)
+	auth.sessionAdmin.Store(true)
 	if auth.denyAdmin.Load() {
 		return ErrForbidden
 	}
@@ -53,6 +59,8 @@ func (auth *donationTestAuth) AuthorizeAdminMutation(ctx context.Context, tx *sq
 }
 
 func (auth *donationTestAuth) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	auth.sessionUser.Store(userID)
+	auth.sessionAdmin.Store(false)
 	if auth.denySteward.Load() {
 		return ErrForbidden
 	}

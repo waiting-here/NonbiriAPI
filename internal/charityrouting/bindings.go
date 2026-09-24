@@ -49,13 +49,9 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 		return nil, 0, "", fmt.Errorf("charity routing: begin candidate read: %w", err)
 	}
 	defer tx.Rollback()
-	if role == roleSteward {
-		if nilDependency(s.roleAuth) {
-			return nil, 0, "", ErrUnavailable
-		}
-		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
-			return nil, 0, "", mapAuthorization(err)
-		}
+	scope, err := s.managementScope(ctx, tx, role, actorUserID, modelID, false)
+	if err != nil {
+		return nil, 0, "", err
 	}
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: materialize candidate expiry: %w", err)
@@ -74,6 +70,9 @@ AND dk.ended_at IS NULL AND (dk.id>? OR (dk.id=? AND pc.normalized_model_id>?))
 AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`
 	args := []any{modelID, now, query.AfterKeyID, query.AfterKeyID, query.AfterModelID}
+	if scope.Trainee {
+		statement += ` AND dk.mainstream_channel_id IS NOT NULL`
+	}
 	if query.DonationID > 0 {
 		statement += ` AND d.id=?`
 		args = append(args, query.DonationID)
@@ -135,7 +134,12 @@ func (s *Service) GetBindingsAdmin(ctx context.Context, modelID int64) (AdminBin
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 {
 		return AdminBindings{}, ErrInvalidRequest
 	}
-	return readAdminBindingsDB(ctx, s.db, modelID)
+	tx, _, err := s.beginManagementTx(ctx, roleAdmin, 0, modelID, false, true)
+	if err != nil {
+		return AdminBindings{}, err
+	}
+	defer tx.Rollback()
+	return readAdminBindingsTx(ctx, tx, modelID)
 }
 
 func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID int64) (StewardBindings, error) {
@@ -147,8 +151,8 @@ func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID i
 		return StewardBindings{}, fmt.Errorf("charity routing: begin steward bindings read: %w", err)
 	}
 	defer tx.Rollback()
-	if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
-		return StewardBindings{}, mapAuthorization(err)
+	if _, err := s.managementScope(ctx, tx, roleSteward, actorUserID, modelID, false); err != nil {
+		return StewardBindings{}, err
 	}
 	value, err := readAdminBindingsTx(ctx, tx, modelID)
 	if err != nil {
@@ -193,18 +197,30 @@ func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, m
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginMutation(ctx, tx, role, actorID, mutation, now)
+	for _, selection := range selections {
+		var donationID int64
+		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, selection.donationKeyID).Scan(&donationID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return resources.MutationResult[AdminBindings]{}, ErrNotFound
+			}
+			return resources.MutationResult[AdminBindings]{}, err
+		}
+		if err := scope.RequireKey(ctx, tx, donationID, selection.donationKeyID, now, true); err != nil {
+			return resources.MutationResult[AdminBindings]{}, managementScopeError(err)
+		}
+	}
+	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), scope.ActorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replay[AdminBindings](decision)
+		return replayScopedBindings(ctx, tx, decision, scope, now)
 	}
 	current, count, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
@@ -289,18 +305,18 @@ func (s *Service) orderBindings(ctx context.Context, role roleKind, actorUserID,
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginMutation(ctx, tx, role, actorID, mutation, now)
+	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), scope.ActorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replay[AdminBindings](decision)
+		return replayScopedBindings(ctx, tx, decision, scope, now)
 	}
 	current, count, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
@@ -374,18 +390,18 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginMutation(ctx, tx, role, actorID, mutation, now)
+	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), scope.ActorID, mutation, now)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replay[AdminBindings](decision)
+		return replayScopedBindings(ctx, tx, decision, scope, now)
 	}
 	current, _, err := readBindingHeadTx(ctx, tx, modelID)
 	if err != nil {
@@ -526,12 +542,12 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 	}
 	out.BindingRevision = strconv.FormatInt(revision, 10)
 	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,b.upstream_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
+dk.display_head,dk.display_tail,b.upstream_model_id,COALESCE(pc.automatic_supports,0),COALESCE(pc.manual_supports,0),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
 FROM charity_model_bindings b
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=b.endpoint_key_id
 JOIN donation_keys dk ON dk.id=b.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
+LEFT JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
 WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 	if err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings: %w", err)

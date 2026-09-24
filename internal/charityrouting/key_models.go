@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -66,11 +67,18 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.beginPageRead(ctx, role, actorID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, charityscope.ModelID(ctx), false, true)
 	if err != nil {
 		return models, bindings, err
 	}
 	defer tx.Rollback()
+	now, err := s.nowUnix()
+	if err != nil {
+		return models, bindings, err
+	}
+	if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+		return models, bindings, managementScopeError(err)
+	}
 	var exists bool
 	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_keys k JOIN donations d ON d.id=k.donation_id WHERE d.id=? AND k.id=?)`, donationID, keyID).Scan(&exists); err != nil {
 		return models, bindings, err
@@ -79,16 +87,17 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 		return models, bindings, ErrNotFound
 	}
 	if modelID != 0 {
+		if scope.Trainee {
+			if _, err := s.managementScope(ctx, tx, role, actorID, modelID, false); err != nil {
+				return models, bindings, err
+			}
+		}
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM charity_model_bindings WHERE charity_model_id=? AND donation_key_id=?)`, modelID, keyID).Scan(&exists); err != nil {
 			return models, bindings, err
 		}
 		if !exists {
 			return models, bindings, ErrNotFound
 		}
-	}
-	now, err := s.nowUnix()
-	if err != nil {
-		return models, bindings, err
 	}
 	gate, err := capabilityGateTx(ctx, tx, "charity_enabled")
 	if err != nil {
@@ -106,10 +115,14 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 		}
 	}
 	args := []any{now, reserve, gate == "1", donationID, keyID}
-	selection := `SELECT cm.id,cm.full_name,cm.enabled,COUNT(*),SUM(CASE WHEN (` + keyModelStateSQL() + `)='available' THEN 1 ELSE 0 END)` + keyModelFrom + ` GROUP BY cm.id,cm.full_name,cm.enabled`
+	from := keyModelFrom
+	if scope.Trainee {
+		from += ` AND cm.is_mainstream=1`
+	}
+	selection := `SELECT cm.id,cm.full_name,cm.enabled,COUNT(*),SUM(CASE WHEN (` + keyModelStateSQL() + `)='available' THEN 1 ELSE 0 END)` + from + ` GROUP BY cm.id,cm.full_name,cm.enabled`
 	order := "cm.full_name,cm.id"
 	if modelID != 0 {
-		selection = `SELECT rb.id,rb.upstream_model_id,rb.ord,` + keyModelStateSQL() + keyModelFrom + ` AND cm.id=?`
+		selection = `SELECT rb.id,rb.upstream_model_id,rb.ord,` + keyModelStateSQL() + from + ` AND cm.id=?`
 		args = append(args, modelID)
 		order = "rb.ord,rb.id"
 	}
@@ -168,6 +181,12 @@ func (api *httpAPI) stewardKeyModelBindings(w http.ResponseWriter, r *http.Reque
 	api.keyModels(w, r, roleSteward, p.UserID, true)
 }
 func (api *httpAPI) keyModels(w http.ResponseWriter, r *http.Request, role roleKind, actorID int64, expanded bool) {
+	selected, err := charityscope.SelectRequest(r)
+	if err != nil {
+		writeRoutingError(w, ErrInvalidRequest)
+		return
+	}
+	r = selected
 	if !requireNoBody(w, r) {
 		return
 	}
