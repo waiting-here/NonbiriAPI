@@ -300,13 +300,26 @@ func TestImageRefundAndSettlementCompeteForOneReservedTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	one := mustU128(t, "1")
+	controlID, modelID := mustLedgerID(t, "iup_"), mustLedgerID(t, "imdl_")
+	if _, err := tx.ExecContext(ctx, `INSERT INTO image_upstream_control(id,identity_hash,rpm_limit,concurrency_limit,protection_paused,protection_reason,protection_revision,updated_at)
+ VALUES(?,zeroblob(32),10,1,0,'',1,?)`, controlID, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO image_activity_models(id,control_id,upstream_model_id,metadata_json,discovered_at) VALUES(?,?,'fixture-image','{}',?)`, modelID, controlID, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	price := SketchPayment{Paper: AmountFromMilli(2000), Brush: AmountFromMilli(1000)}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO image_model_revisions(model_id,revision,display_name,description,enabled,parameters_json,combinations_json,mapping_json,paper_price_mag,brush_price_mag,created_at)
+ VALUES(?,1,'Fixture image','',1,'[]','[]','{}',?,?,?)`, modelID, price.Paper.value.Mag[:], price.Brush.value.Mag[:], ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
 	if err := Reserve(ctx, tx, ref, one, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO image_activity_tasks(id,user_id,state,ledger_rows_remaining,created_at,updated_at) VALUES(?,?,'dispatched',?,?,?)`, id, user, db.EncodeU128(one), ledgerTestNow, ledgerTestNow)
+		_, err := tx.ExecContext(ctx, `INSERT INTO image_activity_tasks(id,user_id,model_id,model_revision,control_id,n,paper_charge_mag,brush_charge_mag,state,finance_state,slot_state,ledger_rows_remaining,created_at,updated_at,queue_deadline,execution_timeout_seconds,dispatched_at,execution_deadline)
+ VALUES(?,?,?,1,?,1,?,?,'dispatching','reserved','held',?,?,?,?,1800,?,?)`, id, user, modelID, controlID, price.Paper.value.Mag[:], price.Brush.value.Mag[:], db.EncodeU128(one), ledgerTestNow, ledgerTestNow, ledgerTestNow+1800, ledgerTestNow, ledgerTestNow+1800)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	price := SketchPayment{Paper: AmountFromMilli(2000), Brush: AmountFromMilli(1000)}
 	reserve, err := NewImageReserve(meta(), id, wallets, escrow, price)
 	if err != nil {
 		t.Fatal(err)
@@ -345,7 +358,7 @@ func TestImageRefundAndSettlementCompeteForOneReservedTerminal(t *testing.T) {
 			}
 			defer tx.Rollback()
 			_, err = ConsumeReserved(ctx, tx, ref, attempt.plan, func(ctx context.Context, tx *sql.Tx) error {
-				result, err := tx.ExecContext(ctx, `UPDATE image_activity_tasks SET state=?,ledger_rows_remaining=?,updated_at=? WHERE id=? AND state='dispatched' AND ledger_rows_remaining=?`, attempt.state, make([]byte, 16), ledgerTestNow, id, db.EncodeU128(one))
+				result, err := tx.ExecContext(ctx, `UPDATE image_activity_tasks SET state=?,finance_state=CASE WHEN ?='succeeded' THEN 'settled' ELSE 'refunded' END,slot_state='none',ledger_rows_remaining=?,updated_at=?,completed_at=? WHERE id=? AND state='dispatching' AND ledger_rows_remaining=?`, attempt.state, attempt.state, make([]byte, 16), ledgerTestNow, ledgerTestNow, id, db.EncodeU128(one))
 				if err != nil {
 					return err
 				}

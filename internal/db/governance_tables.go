@@ -2,16 +2,6 @@ package db
 
 // Governance tables share the ordinary request, account, and ledger roots.
 const governanceTablesSchema = `
-CREATE TABLE image_activity_tasks (
- id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='img_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
- user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
- state TEXT NOT NULL CHECK(state IN ('queued','dispatched','succeeded','failed','cancelled','unknown')),
- ledger_rows_remaining BLOB NOT NULL CHECK(ledger_rows_remaining IN (X'00000000000000000000000000000000',X'00000000000000000000000000000001')),
- created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
- updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN created_at AND 253402300799)
-) STRICT;
-CREATE INDEX idx_image_activity_tasks_user ON image_activity_tasks(user_id,created_at,id);
-
 CREATE TABLE request_source_facts (
  request_log_id INTEGER PRIMARY KEY REFERENCES request_logs(id) ON DELETE CASCADE,
  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

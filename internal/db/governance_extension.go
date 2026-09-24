@@ -15,7 +15,7 @@ const preGovernanceManifestHash = "cbab638c0f8c97efd0037f47cdcff58575de714dd4739
 var governanceChangedTables = []string{
 	"users", "charity_model_access", "donation_handling", "donations",
 	"donation_reviews", "policy_audits", "credit_accounts", "credit_entries", "credit_operations",
-	"game_rank_totals",
+	"game_rank_totals", "accepted_operations",
 }
 
 func governanceReplace(source, before, after string) (string, error) {
@@ -30,6 +30,8 @@ func governanceTableSQL(table, previous string) (string, error) {
 	switch table {
 	case "users":
 		changes = append(changes, [2]string{"level BETWEEN 1 AND 5", "level BETWEEN 1 AND 6"})
+	case "accepted_operations":
+		changes = append(changes, [2]string{"'model_discovery','maintenance_enable'", "'model_discovery','image_model_discovery','image_upstream_resume','maintenance_enable'"})
 	case "charity_model_access":
 		changes = append(changes, [2]string{"DEFAULT 31", "DEFAULT 63"}, [2]string{"allowed_level_mask BETWEEN 0 AND 31", "allowed_level_mask BETWEEN 0 AND 63"})
 	case "game_rank_totals":
@@ -119,14 +121,16 @@ func GovernanceStoragePresent(ctx context.Context, q queryer) (bool, error) {
  'risk_client_rules','economy_audit_checkpoint','economy_audit_buckets',
  'limited_activity_configs','limited_activity_revisions','activity_exchange_state','activity_exchange_receipts',
  'inactivity_policy','user_activity_state','inactivity_runs','inactivity_audits',
- 'game_rank_net_rebuild','game_rank_net_rebuild_totals')`).Scan(&count)
+ 'game_rank_net_rebuild','game_rank_net_rebuild_totals',
+ 'image_upstream_control','image_upstream_revisions','image_activity_state','image_activity_models',
+ 'image_model_revisions','image_model_refreshes','image_upstream_resume_audits','image_task_sources')`).Scan(&count)
 	if err != nil {
 		return false, err
 	}
-	if count != 0 && count != 23 {
+	if count != 0 && count != 31 {
 		return false, errors.New("partial governance storage")
 	}
-	return count == 23, nil
+	return count == 31, nil
 }
 
 func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
@@ -151,6 +155,9 @@ func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO game_rank_net_rebuild VALUES(1,0,NULL,zeroblob(16))`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO image_activity_state(id,revision,upstream_revision,task_rows,updated_at) VALUES(1,1,NULL,0,?)`, at); err != nil {
 		return err
 	}
 	return seedInactivity(ctx, tx, at)
@@ -217,7 +224,7 @@ func applyGovernanceExtension(ctx context.Context, tx *sql.Tx) error {
 }
 
 func governanceAdditiveSchema() string {
-	return governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema
+	return imageActivitySchema + governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema + imageActivityGuardsSchema()
 }
 
 // The modulo expression operates directly on all 128 bits; SQLite integer

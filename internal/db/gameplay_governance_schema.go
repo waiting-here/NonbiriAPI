@@ -19,6 +19,9 @@ ALTER TABLE game_rank_expiry_work ADD COLUMN net_blackjack_delta_sign INTEGER NO
 ALTER TABLE game_rank_expiry_work ADD COLUMN net_blackjack_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
  CHECK(length(net_blackjack_delta_mag)=32 AND (net_blackjack_delta_sign=0)=(net_blackjack_delta_mag=zeroblob(32)));
 
+ALTER TABLE game_rank_expiry_work ADD COLUMN net_fishing_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_fishing_last_seq)=16);
+ALTER TABLE game_rank_expiry_work ADD COLUMN net_blackjack_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_blackjack_last_seq)=16);
+
 CREATE TABLE game_rank_net_rebuild (
  id INTEGER PRIMARY KEY CHECK(id=1),
  phase INTEGER NOT NULL CHECK(phase IN (0,1,2)),
