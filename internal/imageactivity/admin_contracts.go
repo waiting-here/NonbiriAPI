@@ -77,9 +77,14 @@ type DiscoveryAdapter struct {
 	MetadataPointer *string `json:"metadata_pointer,omitempty"`
 }
 type SubmitAdapter struct {
-	Method  string  `json:"method"`
-	Path    string  `json:"path"`
-	Mapping Mapping `json:"mapping"`
+	Method  string          `json:"method"`
+	Path    string          `json:"path"`
+	Mapping Mapping         `json:"mapping"`
+	Receipt *ReceiptAdapter `json:"receipt,omitempty"`
+}
+type ReceiptAdapter struct {
+	IndicatorPointer string          `json:"indicator_pointer"`
+	IndicatorValue   json.RawMessage `json:"indicator_value"`
 }
 type PollAdapter struct {
 	Method string `json:"method"`

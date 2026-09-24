@@ -213,6 +213,9 @@ func ValidateAdapter(a Adapter) error {
 	} else if a.Response.TaskIDPointer != nil {
 		return ErrInvalid
 	}
+	if err = validateReceipt(a); err != nil {
+		return err
+	}
 	return nil
 }
 func requestURL(base, path, id string) (string, error) {

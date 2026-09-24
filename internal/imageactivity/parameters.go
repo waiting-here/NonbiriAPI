@@ -71,6 +71,9 @@ func ruleValue(rule ParameterRule, value any, enum bool) error {
 		if rule.Key != Prompt && rule.Key != NegativePrompt && len(text) > 512 {
 			return ErrInvalid
 		}
+		if rule.Dimensions != nil && rule.Dimensions.checkValue(text) != nil {
+			return ErrInvalid
+		}
 	case "integer", "number":
 		n, ok := value.(float64)
 		if !ok || !finite(n) || rule.Type == "integer" && !safeInteger(n) {
@@ -162,6 +165,9 @@ func validateParameters(rules []ParameterRule, combinations []CombinationRule) e
 			}
 		}
 		if r.Required && !r.Supported {
+			return ErrInvalid
+		}
+		if r.Dimensions != nil && (r.Key != Size || r.Type != "string" || !r.Supported || r.Dimensions.validate() != nil) {
 			return ErrInvalid
 		}
 		if r.Type == "string" {

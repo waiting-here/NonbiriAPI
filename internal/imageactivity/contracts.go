@@ -100,6 +100,17 @@ type ParameterRule struct {
 	MinLength  *int              `json:"min_length,omitempty"`
 	MaxLength  *int              `json:"max_length,omitempty"`
 	LengthUnit string            `json:"length_unit,omitempty"`
+	Dimensions *DimensionRule    `json:"dimensions,omitempty"`
+}
+type DimensionRange struct {
+	Minimum int `json:"minimum"`
+	Maximum int `json:"maximum"`
+	Step    int `json:"step"`
+}
+type DimensionRule struct {
+	Format string         `json:"format"`
+	Width  DimensionRange `json:"width"`
+	Height DimensionRange `json:"height"`
 }
 type CombinationRule struct {
 	Keys    []ParameterKey      `json:"keys"`

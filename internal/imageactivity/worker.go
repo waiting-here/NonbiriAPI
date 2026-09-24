@@ -351,7 +351,7 @@ func (s *Service) runTask(id string, submit bool) {
 		}
 		latest, readErr := s.readTask(ctx, id)
 		if readErr == nil && latest.finance == "deleted" {
-			if state, e := responseState(response.body, snapshot.adapter.Response); response.err == nil && e == nil && (state == "succeeded" || state == "failed") {
+			if state, e := submissionState(response.body, snapshot.adapter); response.err == nil && e == nil && (state == "succeeded" || state == "failed") {
 				s.finishCleanup(ctx, id, true)
 				return
 			}
@@ -365,7 +365,7 @@ func (s *Service) runTask(id string, submit bool) {
 				return
 			}
 		} else {
-			state, e := responseState(response.body, snapshot.adapter.Response)
+			state, e := submissionState(response.body, snapshot.adapter)
 			if e != nil {
 				s.captureImageOmission(ctx, observability.DiagnosticRef{TaskID: id, AttemptSeq: response.seq}, response, "invalid_response")
 			}
