@@ -80,6 +80,11 @@ jobs:
           node-version: 22.22.3
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Set up Go for browser integration
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.6
+          cache: true
       - name: Pin npm
         run: |
           npm install --global npm@12.0.1
@@ -102,3 +107,13 @@ jobs:
         env:
           PLAYWRIGHT_HTML_OPEN: never
         run: npm run test:e2e
+      - name: Image activity browser integration
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          CGO_ENABLED: "0"
+        run: npx playwright test -c playwright.picturebook.config.ts
+      - name: Audit browser integration
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          CGO_ENABLED: "0"
+        run: npx playwright test -c playwright.audit.config.ts
