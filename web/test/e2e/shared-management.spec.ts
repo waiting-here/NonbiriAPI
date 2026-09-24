@@ -21,7 +21,7 @@ for (const scenario of [
       localStorage.setItem('nb.theme', theme);
     }, scenario);
     await mockPublicConfig(page, station);
-    await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level5');
+    await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level6');
     const fields = Object.fromEntries(
       Object.entries(userSession('user').user).filter(
         ([key]) =>
@@ -131,6 +131,9 @@ for (const scenario of [
       );
       await expect(
         page.getByLabel(copy.users.levelControl).locator('option[value="5"]'),
+      ).toBeEnabled();
+      await expect(
+        page.getByLabel(copy.users.levelControl).locator('option[value="6"]'),
       ).toHaveCount(0);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

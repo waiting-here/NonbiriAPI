@@ -22,7 +22,7 @@ for (const scenario of [
       localStorage.setItem('nb.theme', theme);
     }, scenario);
     await mockPublicConfig(page, station);
-    await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level5');
+    await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level6');
     const requests: { path: string; key: string | null; items?: FailureResetRef[] }[] = [];
     let failed = false;
     await page.route('**/*', async (route) => {

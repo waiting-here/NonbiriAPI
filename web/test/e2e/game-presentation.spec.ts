@@ -38,6 +38,7 @@ function gamesSnapshot() {
     fishing: {
       enabled: true,
       available: true,
+      blue_fish_chance_bps: 1000,
       bait_prices: { worm: '1', lure: '2.5', premium: '10' },
     },
     linklink: {
@@ -333,10 +334,14 @@ function fishingResult(tier: 'big' | 'legend'): Record<string, unknown> {
         species_key: legendary ? 'koi' : 'common_carp',
         tier,
         size_cm: legendary ? 120 : 42,
-        reward: legendary ? '8' : '3', net_reward: legendary ? '8' : '3', rake: { platform: '0', welfare: '0', thursday: '0' },
+        reward: legendary ? '8' : '3',
+        net_reward: legendary ? '8' : '3',
+        rake: { platform: '0', welfare: '0', thursday: '0' },
       },
     ],
-    payout_total: legendary ? '8' : '3', net_payout_total: legendary ? '8' : '3', rake: { platform: '0', welfare: '0', thursday: '0' },
+    payout_total: legendary ? '8' : '3',
+    net_payout_total: legendary ? '8' : '3',
+    rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567890.125',
     game_balance: '0',
     settled_at: NOW + 1,
@@ -460,9 +465,15 @@ async function installGameRoutes(
       return;
     }
     if (url.pathname === '/api/games/leaderboards/charity' && method === 'GET') {
-      await route.fulfill({ json: {
-        as_of: NOW, statistics_start: NOW, window: 'history', rows: [], me: null,
-      } });
+      await route.fulfill({
+        json: {
+          as_of: NOW,
+          statistics_start: NOW,
+          window: 'history',
+          rows: [],
+          me: null,
+        },
+      });
       return;
     }
     if (url.pathname === '/api/games/rps/state' && method === 'GET') {
@@ -586,10 +597,17 @@ async function installGameRoutes(
     }
     if (url.pathname === '/api/games/linklink/leaderboard' && method === 'GET') {
       const days = url.searchParams.get('window') === '30d' ? 30 : 7;
-      await route.fulfill({ json: {
-        spec: url.searchParams.get('spec'), window_days: days,
-        window_start: NOW - days * 86400, as_of: NOW, rules_version: 2, rows: [], me: null,
-      } });
+      await route.fulfill({
+        json: {
+          spec: url.searchParams.get('spec'),
+          window_days: days,
+          window_start: NOW - days * 86400,
+          as_of: NOW,
+          rules_version: 2,
+          rows: [],
+          me: null,
+        },
+      });
       return;
     }
     if (url.pathname === '/api/games/linklink/session' && method === 'GET') {

@@ -43,7 +43,7 @@ type Pricing =
 interface Scenario {
   name: string;
   station: 'admin' | 'user';
-  role: 'admin' | 'level5';
+  role: 'admin' | 'level6';
   frame: 'admin' | 'steward';
   origin: string;
   root: string;
@@ -87,7 +87,7 @@ const scenarios: readonly Scenario[] = [
   {
     name: 'steward-zh-dark',
     station: 'user',
-    role: 'level5',
+    role: 'level6',
     frame: 'steward',
     origin: USER_ORIGIN,
     root: '/api/steward',

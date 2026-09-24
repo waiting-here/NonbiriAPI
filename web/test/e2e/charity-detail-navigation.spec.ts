@@ -27,7 +27,7 @@ const EVIDENCE_DIR = process.env.NONBIRI_VISUAL_DIR
   : null;
 
 type Station = 'admin' | 'user';
-type Role = 'admin' | 'level5';
+type Role = 'admin' | 'level6';
 type Frame = 'admin' | 'steward';
 type JSONRecord = Record<string, unknown>;
 type DetailMode = 'ok' | 'slow' | 'error' | 'forbidden';
@@ -255,7 +255,7 @@ function stationConfig(station: Station): {
       }
     : {
         station,
-        role: 'level5',
+        role: 'level6',
         frame: 'steward',
         origin: USER_ORIGIN,
         root: '/api/steward',

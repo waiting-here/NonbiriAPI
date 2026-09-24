@@ -121,9 +121,9 @@ async function prepare(page: Page, role: Role, locale: 'en' | 'zh', width: numbe
     localStorage.setItem('nb.theme', lang === 'zh' ? 'dark' : 'light');
   }, locale);
   await mockPublicConfig(page, station);
-  await mockRoleSession(page, station, role === 'steward' ? 'level5' : role);
+  await mockRoleSession(page, station, role === 'steward' ? 'level6' : role);
   if (station === 'user') {
-    const session = userSession(role === 'steward' ? 'level5' : 'user');
+    const session = userSession(role === 'steward' ? 'level6' : 'user');
     session.user.lang = locale;
     for (const path of ['/api/session', '/api/me'])
       await mockJson(page, { origin, method: 'GET', path, body: session });
