@@ -55,7 +55,7 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 	}
 	normalized, err := normalizeListFilter(ListFilter{
 		Phase:  filter.Phase,
-		UserID: filter.UserID, EndpointBaseURL: filter.EndpointBaseURL,
+		UserID: filter.UserID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
 		UpstreamModel: filter.UpstreamModel, ErrorCode: filter.ErrorCode,
 		Status: filter.Status, From: filter.From, To: filter.To, Limit: maximumLimit,
 	}, "admin")
@@ -78,6 +78,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	if normalized.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts ea WHERE ea.request_log_id=l.id AND ea.canonical_base_url=?)`
 		args = append(args, *normalized.EndpointBaseURL)
+	}
+	if normalized.EndpointKeyID != nil {
+		query += ` AND EXISTS(SELECT 1 FROM request_attempts ek WHERE ek.request_log_id=l.id AND ek.endpoint_key_id_snapshot=?)`
+		args = append(args, *normalized.EndpointKeyID)
 	}
 	if normalized.UpstreamModel != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts em WHERE em.request_log_id=l.id AND em.upstream_model_id=?)`

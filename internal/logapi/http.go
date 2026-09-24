@@ -290,6 +290,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		allowed["model"] = true
 	case "admin", "steward":
 		allowed["user_id"] = true
+		allowed["endpoint_key_id"] = true
 		allowed["endpoint_base_url"] = true
 		allowed["upstream_model"] = true
 	default:
@@ -327,6 +328,12 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 				return ListFilter{}, ErrInvalid
 			}
 			filter.EndpointBaseURL = &value
+		case "endpoint_key_id":
+			parsed, ok := parseCanonicalInt64(value, 1, int64(^uint64(0)>>1))
+			if !ok {
+				return ListFilter{}, ErrInvalid
+			}
+			filter.EndpointKeyID = &parsed
 		case "upstream_model":
 			if !utf8.ValidString(value) {
 				return ListFilter{}, ErrInvalid

@@ -41,7 +41,7 @@ function parseState(
     const trimmed = raw.trim();
     if (Array.from(trimmed).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) continue;
     if (
-      name === 'user_id' &&
+      (name === 'user_id' || name === 'endpoint_key_id') &&
       (!/^[1-9][0-9]{0,18}$/.test(trimmed) || BigInt(trimmed) > 9_223_372_036_854_775_807n)
     )
       continue;
