@@ -131,6 +131,7 @@ type ModelInput struct {
 	Mapping          Mapping           `json:"mapping"`
 }
 type Refresh struct {
+	HTTPStatus  *int64  `json:"http_status,omitempty"`
 	ID          string  `json:"id"`
 	State       string  `json:"state"`
 	CreatedAt   int64   `json:"created_at"`

@@ -110,6 +110,22 @@ func (s *Service) GetRefresh(ctx context.Context, admin int64, id string) (Refre
 	if err != nil {
 		return result, err
 	}
+	if result.State == "failed" {
+		now, clockErr := s.now()
+		if clockErr != nil {
+			return result, clockErr
+		}
+		// Only project a retained status code. Response bodies and provider
+		// messages remain in the separately authorized diagnostic store.
+		var status sql.NullInt64
+		err = tx.QueryRowContext(ctx, `SELECT http_status FROM request_error_bodies WHERE operation_id=? AND expires_at>? ORDER BY attempt_seq DESC,event_seq DESC,id DESC LIMIT 1`, id, now).Scan(&status)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return result, err
+		}
+		if status.Valid {
+			result.HTTPStatus = &status.Int64
+		}
+	}
 	return result, tx.Commit()
 }
 func (s *Service) stepRefresh(ctx context.Context, now int64) error {

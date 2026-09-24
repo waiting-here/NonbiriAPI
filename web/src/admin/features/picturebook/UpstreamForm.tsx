@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Card, ErrorState } from '@shared/components/States';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { normalizeLines } from '@shared/picturebook/parameters';
@@ -35,6 +35,7 @@ export function UpstreamForm({
   readonly onReload: () => void;
 }) {
   const t = usePictureBookText();
+  const helpID = useId();
   const [baseURL, setBaseURL] = useState(value.base_url),
     [secret, setSecret] = useState(''),
     [replace, setReplace] = useState(!value.secret_set);
@@ -69,11 +70,19 @@ export function UpstreamForm({
   const submit = () => {
     if (save.pending) return;
     setFormError(null);
+    let problem = t(
+      '请检查适配配置：必须是有效的 JSON，且符合下方接口字段格式。',
+      'Check the adapter: it must be valid JSON with the documented interface fields.',
+    );
     try {
       let input = save.input;
       if (!input) {
         if (new TextEncoder().encode(adapter).byteLength > 262144) throw new Error();
         const parsed = decodeAdapter(JSON.parse(adapter));
+        problem = t(
+          '请检查服务地址、密钥和各项限额；所有限额都必须是范围内的整数。',
+          'Check the service URL, key and limits; all limits must be integers within their stated ranges.',
+        );
         const numbers = Object.fromEntries(
           fields.map(([key, , min, max]) => {
             const n = Number(limits[key]);
@@ -99,16 +108,7 @@ export function UpstreamForm({
         onSaved(result);
       });
     } catch {
-      setFormError(
-        new ApiError(
-          'invalid_request',
-          t(
-            '请检查服务设置、数值范围及适配配置JSON。',
-            'Check service settings, numeric limits and adapter JSON.',
-          ),
-          400,
-        ),
-      );
+      setFormError(new ApiError('invalid_request', problem, 400));
     }
   };
   return (
@@ -185,14 +185,23 @@ export function UpstreamForm({
               'Allowed image download origins (one per line, up to 8)',
             )}
             <textarea
+              aria-describedby={helpID + '-origins'}
+              placeholder="https://cdn.example.com"
               value={origins}
               onChange={(event) => setOrigins(normalizeLines(event.target.value))}
               spellCheck={false}
             />
           </label>
+          <p id={helpID + '-origins'} className="picturebook-help">
+            {t(
+              '只有服务返回图片网址时才需要填写；返回 base64 图片时可留空。例如结果是 https://cdn.example.com/images/1.png，这里填 https://cdn.example.com。每行只填协议、域名和可选端口，不填图片路径、密钥或通配符。它限定服务器可下载图片的来源，与拉取模型目录无关。',
+              'Needed only when the service returns image URLs; leave blank for base64 images. For https://cdn.example.com/images/1.png, enter https://cdn.example.com. Each line contains only the scheme, host and optional port, with no image path, key or wildcard. This limits server-side image downloads and does not affect model discovery.',
+            )}
+          </p>
           <label>
             {t('通用适配配置JSON', 'Declarative adapter JSON')}
             <textarea
+              aria-describedby={helpID + '-adapter'}
               className="picturebook-json"
               value={adapter}
               spellCheck={false}
@@ -200,6 +209,55 @@ export function UpstreamForm({
               onChange={(event) => setAdapter(normalizeLines(event.target.value))}
             />
           </label>
+          <div id={helpID + '-adapter'} className="picturebook-help">
+            <p>
+              {t(
+                '这份配置告诉系统：到哪个接口拉取模型、怎样提交生成请求、从响应的哪个字段取图片。默认示例适用于常见的 OpenAI 兼容同步生图接口；其他服务应按其接口文档调整。',
+                'This configuration tells the system where to list models, how to submit a generation request, and which response fields contain images. The default example is for a typical OpenAI-compatible synchronous image API; adjust it to match other providers.',
+              )}
+            </p>
+            <details>
+              <summary>{t('查看填写示例与字段说明', 'Examples and field guide')}</summary>
+              <ul>
+                <li>
+                  <code>discovery</code>
+                  {t(
+                    '：模型目录。path 是请求路径；items_pointer 指向模型数组，id_pointer 指向每项的模型名。示例响应 ',
+                    ': model catalog. path is the request path; items_pointer selects the model array and id_pointer selects each model ID. Example response: ',
+                  )}
+                  <code>{'{"data":[{"id":"image-model"}]}'}</code>
+                  {t(' 对应 /data 和 /id。', ' uses /data and /id.')}
+                </li>
+                <li>
+                  <code>submit</code>
+                  {t(
+                    '：生成接口与请求字段映射，常见路径为 /v1/images/generations。',
+                    ': generation endpoint and request field mapping, commonly /v1/images/generations.',
+                  )}
+                </li>
+                <li>
+                  <code>response</code>
+                  {t(
+                    '：图片字段。base64_pointer=/b64_json 用于内嵌图片；url_pointer=/url 用于图片链接，并需填写上方来源站点。',
+                    ': image fields. base64_pointer=/b64_json reads embedded images; url_pointer=/url reads image links and requires the origins above.',
+                  )}
+                </li>
+              </ul>
+              <p>
+                {t(
+                  '服务地址填 https://api.example.com、discovery.path 填 /v1/models 时，会请求 https://api.example.com/v1/models。以 / 开头的路径从域名根目录计算；不以 / 开头则接在服务地址的路径后。避免重复填写 v1。',
+                  'With https://api.example.com and discovery.path=/v1/models, discovery requests https://api.example.com/v1/models. Paths starting with / begin at the host root; other paths append to the service URL path. Avoid duplicating v1.',
+                )}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setAdapter(JSON.stringify(genericAdapter, null, 2))}
+              >
+                {t('用 OpenAI 兼容示例替换配置', 'Use the OpenAI-compatible example')}
+              </button>
+            </details>
+          </div>
           <p>
             {t(
               '字段路径采用JSON Pointer；路径相对服务地址。可选poll配置使用GET路径及一个{task_id}占位符，并配置状态字段和工作／成功／失败状态列表。适配配置不能执行脚本。',

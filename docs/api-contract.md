@@ -879,3 +879,6 @@ Administrator-only blacklist routes are `GET /admin/api/blacklist` (optional exa
 Adding a blacklist entry and permanently banning an existing non-administrator account are atomic. Active game cancellation, session/key revocation and authority invalidation follow the existing permanent-ban rules. Registration checks the blacklist in its transaction; database guards also reject registration and temporary or removed bans while the identity remains listed. Unban or temporary-ban requests return 409 until the entry is removed. Removing an entry does not unban an account, restore sessions/keys, or erase historical alerts. Stewards of either level cannot manage the blacklist or read deletion alerts.
 
 Deletion alerts follow the existing persistent administrator-alert storage: resolution is not deletion, and there is currently no automatic expiry. Blacklist entries persist until an administrator removes them. Both are management security material, excluded from personal exports.
+
+
+Model-discovery status (`GET /admin/api/limited-activities/picture-book/models/refresh/{operationID}`) may include `http_status`, an integer from 100 through 599, on failed operations when retained diagnostic metadata is available. The field is omitted otherwise. This administrator-only projection does not return response bodies, provider messages, headers or credentials.

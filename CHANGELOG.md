@@ -6,7 +6,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
-The changes below include development toward 1.0.0-rc.3. The published rc.2 tag remains unchanged; no new release or deployment is implied. The supported upgrade source for this code is rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c`, preserving business data, configuration and instance legal text.
+The changes below include development toward 1.0.0-rc.3. The published rc.2 tag remains unchanged; no new release or deployment is implied. Supported data-preserving upgrade sources include the prior governance schema and rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c`, preserving business data, configuration and instance legal text.
 
 ### Added
 
@@ -33,6 +33,9 @@ The changes below include development toward 1.0.0-rc.3. The published rc.2 tag 
 - Administrators and stewards can fetch model lists for one available donated key, all available keys in one donation, or all available donated keys across pages and filters. Batches show progress and support pausing and resuming uncertain requests; live permission and eligibility checks protect dispatch and catalog updates.
 
 ### Fixed
+
+- Group Fishing and Blackjack leaderboards into accessible tabs. Show Card master first in Blackjack, followed by Profit, and name the global net-profit board Game fortune.
+- Explain image-download origins and adapter mappings, and show dedicated model-discovery failures with retained HTTP status, actionable guidance and a fresh retry.
 
 - Level-6 stewards can use general and game check-ins, including level-gated mode, with unchanged daily and balance limits.
 

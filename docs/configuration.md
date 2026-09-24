@@ -218,3 +218,12 @@ A public repository does not need the real URL, DNS records, Discord invite, adm
 The administrator settings catalog exposes `model_request_body_limit_mib` under request limits. It is an integer from 1 to 64, defaults to **10 MiB**, and applies to both personal/charity chat and embedding calls. A missing row in a retained database uses the default; saving a change applies to new requests. Keep the reverse proxy allowance at least as large as the intended application allowance (for example, Nginx `client_max_body_size 15m;` for a 10 MiB application limit). Independent administrative, export and diagnostics limits remain as documented.
 
 The administrator alert center supports type filtering and resolving selected unresolved alerts on the current page. User deletion records retain the Discord ID and an exact economic snapshot; a negative general or game balance requires manual review. The Discord blacklist page permanently blocks registration and bans any existing account in one transaction. Removing a blacklist entry permits future registration but requires a separate unban for an existing account.
+
+
+### Image service configuration and model discovery
+
+Image download origins apply only when an image provider returns a URL. For a result at `https://cdn.example.com/images/1.png`, allow `https://cdn.example.com`, with no path, credentials or wildcard. Base64 results need no download origin. This allowlist does not control model discovery, and downloading an image never forwards the provider API key.
+
+The adapter describes three stages: `discovery` selects the model-list endpoint and JSON fields, `submit` maps a generation request, and `response` identifies returned images. For `{"data":[{"id":"image-model"}]}`, use `items_pointer=/data` and `id_pointer=/id`. A request path beginning with `/` starts at the host root; other paths append to the configured base path. Save changes before refreshing the catalog.
+
+Failed discovery displays a dedicated explanation and, while its diagnostic record remains within ordinary retention, the upstream HTTP status. Authentication, missing endpoints, rate limits, redirects, timeouts, oversized catalogs and invalid model-list responses have distinct guidance. The response-body contents remain separate from the refresh status. A completed failure can start a new refresh; an uncertain acceptance retains its original retry key.

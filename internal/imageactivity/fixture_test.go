@@ -92,6 +92,7 @@ func (s *sourceProxy) DeleteImageTaskDataTx(ctx context.Context, tx *sql.Tx, id 
 type fakeUpstream struct {
 	server               *httptest.Server
 	mode                 atomic.Int32
+	catalogStatus        atomic.Int32
 	posts, polls, models atomic.Int64
 	mu                   sync.Mutex
 	submitted            []map[string]any
@@ -116,6 +117,11 @@ func newUpstream(t *testing.T) *fakeUpstream {
 		switch r.URL.Path {
 		case "/models":
 			f.models.Add(1)
+			if status := f.catalogStatus.Load(); status != 0 {
+				w.WriteHeader(int(status))
+				fmt.Fprint(w, `{"error":"synthetic private provider detail"}`)
+				return
+			}
 			if f.mode.Load() == 7 {
 				fmt.Fprint(w, `{"error":"synthetic malformed catalog"}`)
 				return
