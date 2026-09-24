@@ -2764,11 +2764,11 @@ describe('experimental policy and charity controls', () => {
   test('does not download an export returned for the previous account', async () => {
     const marker = 'account-a-export-marker-123456';
     const completion = deferred<AccountExportAttachment>();
-    const exportV9 = vi.fn(() => completion.promise);
+    const exportAccount = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV9: true, deleteAccount: false },
+      capabilities: { exportAccount: true, deleteAccount: false },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV9,
+      exportAccount,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -2786,7 +2786,7 @@ describe('experimental policy and charity controls', () => {
       rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
       const dialog = await screen.findByRole('alertdialog');
       await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportV9).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(exportAccount).toHaveBeenCalledTimes(1));
 
       rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
       const currentSession = { user: { id: '2' } };
@@ -2794,7 +2794,7 @@ describe('experimental policy and charity controls', () => {
       await act(async () => {
         completion.resolve({
           blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 9,
+          schemaVersion: 10,
         });
         await completion.promise;
       });
