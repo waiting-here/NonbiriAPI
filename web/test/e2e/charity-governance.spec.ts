@@ -71,7 +71,7 @@ async function prepareStation(
   context: BrowserContext,
   page: Page,
   station: 'admin' | 'user',
-  role: 'admin' | 'user' | 'level5',
+  role: 'admin' | 'user' | 'level6',
   locale: 'en' | 'zh',
   theme: 'light' | 'dark',
   width: number,
@@ -582,7 +582,10 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
   await saveScreenshot(page, 'catalog-expanded-320-dark-zh', '.economy-catalog-item');
 
-  await page.getByRole('navigation', { name: '分页', exact: true }).getByRole('button', { name: '下一页', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '分页', exact: true })
+    .getByRole('button', { name: '下一页', exact: true })
+    .click();
   await expect(page.getByText('[公益]provider/page-two', { exact: true })).toBeVisible();
   const search = page.getByRole('searchbox');
   const requestCountBeforeTyping = catalogRequests.length;
@@ -619,7 +622,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await assertPagePresentation(page, setup);
 });
 
-test('level-five stewardship shows the shared owner projection and caller identity safely', async ({
+test('level-six stewardship shows the shared owner projection and caller identity safely', async ({
   context,
   page,
 }) => {
@@ -627,7 +630,7 @@ test('level-five stewardship shows the shared owner projection and caller identi
     context,
     page,
     'user',
-    'level5',
+    'level6',
     'en',
     'dark',
     320,

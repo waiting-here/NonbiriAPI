@@ -247,7 +247,7 @@ async function prepare(
   context: Parameters<typeof installURLPersistenceObserver>[0],
   page: Parameters<typeof collectConsoleViolations>[0],
   station: 'admin' | 'user',
-  role: 'admin' | 'user' | 'level5',
+  role: 'admin' | 'user' | 'level6',
   locale: 'en' | 'zh',
   theme: 'light' | 'dark',
 ) {
@@ -870,11 +870,11 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await assertResponsiveAndClean(page, guard);
 });
 
-test('reachable level-5 steward page keeps its bounded log projection usable', async ({
+test('reachable level-6 steward page keeps its bounded log projection usable', async ({
   context,
   page,
 }) => {
-  const guard = await prepare(context, page, 'user', 'level5', 'en', 'dark');
+  const guard = await prepare(context, page, 'user', 'level6', 'en', 'dark');
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',

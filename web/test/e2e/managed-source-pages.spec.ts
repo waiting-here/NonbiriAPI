@@ -38,7 +38,7 @@ type RouteLike = {
 
 interface StationSetup {
   readonly station: 'admin' | 'user';
-  readonly role: 'admin' | 'level5';
+  readonly role: 'admin' | 'level6';
   readonly origin: string;
   readonly apiPrefix: string;
   readonly locale: 'en' | 'zh';
@@ -543,7 +543,7 @@ function setupFor(station: 'admin' | 'user'): StationSetup {
   }
   return {
     station,
-    role: 'level5',
+    role: 'level6',
     origin: USER_ORIGIN,
     apiPrefix: '/api/steward',
     locale: 'zh',
@@ -717,7 +717,11 @@ async function exerciseManagedSourceBrowser(
       price_limit: null,
       calls_limit: null,
       tokens_limit: null,
+      input_tokens_limit: null,
+      output_tokens_limit: null,
       token_reserve: 7,
+      input_token_reserve: null,
+      output_token_reserve: null,
       safe_note: UPDATED_NOTE,
       expires_at: null,
     },
@@ -772,7 +776,7 @@ test('administrator can browse a paged source, edit one key, and return with con
   await exerciseManagedSourceBrowser(context, page, setupFor('admin'));
 });
 
-test('level-five steward can browse a paged source with complete donor review information', async ({
+test('level-six steward can browse a paged source with complete donor review information', async ({
   context,
   page,
 }) => {

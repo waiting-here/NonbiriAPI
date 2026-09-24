@@ -1,6 +1,8 @@
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
-import type { TestRole, TestStation } from '../unit/support';
+import type { TestRole as UnitTestRole, TestStation } from '../unit/support';
 import { ADMIN_ORIGIN, FIXTURE_ORIGIN, USER_ORIGIN } from './ports';
+
+type TestRole = UnitTestRole | 'level6';
 
 const JSON_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' };
 const ALLOWED_BROWSER_ORIGINS = new Set([ADMIN_ORIGIN, USER_ORIGIN, FIXTURE_ORIGIN]);
@@ -139,6 +141,38 @@ export async function mockJson(page: Page, fixture: JsonFixture): Promise<void> 
   });
 }
 
+async function mockEmptyDiagnosticHistory(page: Page, station: TestStation): Promise<void> {
+  const origin = station === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN;
+  const root = station === 'admin' ? '/admin/api' : '/api/steward';
+  await mockJson(page, {
+    origin,
+    method: 'GET',
+    path: `${root}/logs/diagnostic-capacity`,
+    body: {
+      budget_bytes: 1_073_741_824,
+      used_bytes: 0,
+      capacity_omissions: 0,
+      unavailable: 0,
+    },
+  });
+  await page.route('**/*', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (
+      request.method() !== 'GET' ||
+      url.origin !== origin ||
+      url.search !== '' ||
+      !url.pathname.startsWith(`${root}/logs/`) ||
+      !/^req_[A-Za-z0-9_-]{22}\/source$/.test(url.pathname.slice(`${root}/logs/`.length))
+    ) {
+      await route.fallback();
+      return;
+    }
+    // Historical log fixtures have no captured source facts.
+    await route.fulfill({ status: 200, headers: JSON_HEADERS, body: 'null' });
+  });
+}
+
 export async function installLoopbackNetworkBoundary(context: BrowserContext): Promise<void> {
   await context.route('**/*', async (route) => {
     const requestURL = new URL(route.request().url());
@@ -159,7 +193,7 @@ export async function installLoopbackNetworkBoundary(context: BrowserContext): P
 }
 
 export function userSession(role: Exclude<TestRole, 'anonymous' | 'admin'>) {
-  const level = role === 'level5' ? 5 : role === 'level4' ? 4 : 1;
+  const level = role === 'level6' ? 6 : role === 'level5' ? 5 : role === 'level4' ? 4 : 1;
   return {
     user: {
       id: '1',
@@ -248,6 +282,7 @@ export async function mockRoleSession(
     },
   });
   if (station === 'admin') {
+    await mockEmptyDiagnosticHistory(page, station);
     await mockJson(page, {
       origin,
       method: 'GET',
@@ -269,7 +304,45 @@ export async function mockRoleSession(
   // The shell keeps a deliberately narrow session projection. Generation 2
   // pages then read the same account through /api/me for the strict profile.
   await mockJson(page, { origin, method: 'GET', path: '/api/me', body });
-  if (role === 'level5') {
+  await mockJson(page, {
+    origin,
+    method: 'GET',
+    path: '/api/inactivity-policy/status',
+    body: {
+      configuration: {
+        revision: '1',
+        enabled: false,
+        decay: {
+          enabled: false,
+          inactive_days: null,
+          interval_days: null,
+          assets: { general: null, game: null },
+        },
+        protection: { enabled: false, inactive_days: null },
+        decay_grace_until: 0,
+        protection_grace_until: 0,
+        updated_at: 0,
+      },
+      activity: {
+        observation_started_at: 1_700_000_000,
+        last_active_at: null,
+        last_decay_at: null,
+        activity_seq: '0',
+        activity_epoch: '1',
+      },
+      exempt_reason: 'disabled',
+      decay_at: null,
+      protection_at: null,
+    },
+  });
+  await mockJson(page, {
+    origin,
+    method: 'GET',
+    path: '/api/limited-activities',
+    body: [],
+  });
+  if (role === 'level6') {
+    await mockEmptyDiagnosticHistory(page, station);
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
