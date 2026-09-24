@@ -23,6 +23,9 @@ set -euo pipefail
 
 # Use the Go toolchain on PATH by default; callers may pin one with GO.
 GO="${GO:-go}"
+# Populated migration matrices can exceed Go's default package deadline on
+# shared runners. Keep an explicit bounded timeout without delaying fast tests.
+GO_TEST_TIMEOUT="${GO_TEST_TIMEOUT:-30m}"
 
 export CGO_ENABLED=0
 
@@ -37,4 +40,4 @@ pkgs="$("$GO" list ./... | grep -v '/node_modules/')"
 
 "$GO" build $pkgs
 "$GO" vet $pkgs
-"$GO" test $pkgs
+"$GO" test -timeout="$GO_TEST_TIMEOUT" $pkgs
