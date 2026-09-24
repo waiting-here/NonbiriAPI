@@ -181,7 +181,6 @@ export function Glossary({
           ))}
           {entry.meme && (
             <figure className="likes-flavor">
-              <figcaption>{t('玩梗台词', 'Flavor quote')}</figcaption>
               <blockquote>{entry.meme}</blockquote>
             </figure>
           )}
