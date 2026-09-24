@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -157,8 +158,8 @@ func (s *Service) CreateInTransaction(ctx context.Context, tx *sql.Tx, userID in
 		return Donation{}, err
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO donations(
-user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at)
-VALUES(?,'pending',1,?,'','',?,?)`, userID, input.Description, now, now)
+user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at,discord_public_thanks)
+VALUES(?,'pending',1,?,'','',?,?,?)`, userID, input.Description, now, now, input.DiscordPublicThanks)
 	if err != nil {
 		return Donation{}, fmt.Errorf("donation: create submission: %w", err)
 	}
@@ -191,6 +192,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		donationKeyID, err := result.LastInsertId()
 		if err != nil || donationKeyID <= 0 {
 			return Donation{}, ErrInvariant
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE donation_keys SET breakdown_started_at=? WHERE id=?`, now, donationKeyID); err != nil {
+			return Donation{}, err
 		}
 		defaultSettings = append(defaultSettings, KeySetting{
 			DonationKeyID: donationKeyID,
@@ -240,6 +244,15 @@ func (s *Service) Edit(
 		return resources.MutationResult[Donation]{}, ErrInvalidRequest
 	}
 	return s.ownerDonationMutation(ctx, userID, donationID, mutation, func(ctx context.Context, tx *sql.Tx, now int64) error {
+		if input.DiscordPublicThanks != nil {
+			var previous sql.NullBool
+			if err := tx.QueryRowContext(ctx, `SELECT discord_public_thanks FROM donations WHERE id=? AND user_id=?`, donationID, userID).Scan(&previous); err != nil {
+				return ErrNotFound
+			}
+			if !previous.Valid || previous.Bool != *input.DiscordPublicThanks {
+				return ErrInvalidRequest
+			}
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE donations SET description=?,revision=revision+1,updated_at=?
 WHERE id=? AND user_id=? AND status='pending' AND revision=?`,
 			input.Description, now, donationID, userID, input.ExpectedRevision)
@@ -407,6 +420,7 @@ func (s *Service) ReviewSteward(
 }
 
 type roleDonationMutation struct {
+	trainee  *ManagedKeyReceipt
 	admin    AdminDonation
 	steward  StewardDonation
 	status   int
@@ -567,6 +581,9 @@ WHERE m.donation_id=?)`, donationID).Scan(&suspended); err != nil {
 		return ErrConflict
 	}
 	for _, setting := range settings {
+		if err := applySplitTokenControlsTx(ctx, tx, setting.id, setting.splitTokens); err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET
 price_limit_mag=?,call_limit_mag=?,token_limit_mag=?,token_reserve=?,enabled=?,safe_note=?,expires_at=?,updated_at=?
 WHERE id=? AND donation_id=? AND ended_at IS NULL`, setting.priceLimit, setting.callLimit, setting.tokenLimit,
@@ -582,6 +599,7 @@ WHERE id=? AND donation_id=? AND ended_at IS NULL`, setting.priceLimit, setting.
 }
 
 type validatedKeySetting struct {
+	splitTokens                       KeyManagementInput
 	id                                int64
 	priceLimit, callLimit, tokenLimit any
 	tokenReserve                      int64
@@ -618,7 +636,8 @@ func validateReviewSettings(ctx context.Context, tx *sql.Tx, donationID int64, s
 			return nil, ErrInvalidRequest
 		}
 		validated = append(validated, validatedKeySetting{
-			id: setting.DonationKeyID, priceLimit: price, callLimit: calls, tokenLimit: tokens,
+			splitTokens: setting.SplitTokens,
+			id:          setting.DonationKeyID, priceLimit: price, callLimit: calls, tokenLimit: tokens,
 			tokenReserve: setting.TokenReserve, enabled: setting.Enabled, safeNote: setting.SafeNote,
 			expiresAt: nullableInt64Argument(setting.ExpiresAt),
 		})
@@ -697,12 +716,16 @@ func (s *Service) manageKey(
 	if s == nil || ctx == nil || donationID <= 0 || keyID <= 0 || !validKeyManagement(input) {
 		return roleDonationMutation{}, ErrInvalidRequest
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginScopedTx(ctx, role, actorUserID, false)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
+	actorID := scope.ActorID
 	committed := false
 	defer finishTx(tx, &committed)
+	if mutation.Query != charityscope.Query(ctx) {
+		return roleDonationMutation{}, ErrInvalidRequest
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return roleDonationMutation{}, err
@@ -710,11 +733,31 @@ func (s *Service) manageKey(
 	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return roleDonationMutation{}, err
 	}
-	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
+	if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+		return roleDonationMutation{}, scopeError(err)
+	}
+	decision, err := beginMutation(ctx, tx, scope.AuditRole(role == reviewerAdmin), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
+		if scope.Trainee {
+			out, err := replay[ManagedKeyReceipt](decision)
+			if err != nil {
+				return roleDonationMutation{}, err
+			}
+			if out.Value.DonationID != strconv.FormatInt(donationID, 10) || out.Value.KeyID != strconv.FormatInt(keyID, 10) {
+				return roleDonationMutation{}, ErrInvariant
+			}
+			impact, err := scope.Impact(ctx, tx, keyID)
+			if err != nil {
+				return roleDonationMutation{}, err
+			}
+			out.Value.Key.BindingCount, out.Value.Key.Idle = impact.BindingCount, impact.BindingCount == "0"
+			out.Value.Key.VisibleModels, out.Value.Key.VisibleModelsTruncated = impact.VisibleModels, impact.VisibleModelsTruncated
+			body, err := json.Marshal(out.Value)
+			return roleDonationMutation{trainee: &out.Value, status: out.Status, body: body, replayed: true}, err
+		}
 		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
@@ -722,6 +765,9 @@ func (s *Service) manageKey(
 		return roleDonationMutation{}, err
 	}
 	if expiry.changed {
+		if scope.Trainee {
+			return roleDonationMutation{}, ErrConflict
+		}
 		if err := tx.Rollback(); err != nil {
 			return roleDonationMutation{}, fmt.Errorf("donation: roll back expired key intent: %w", err)
 		}
@@ -741,8 +787,23 @@ func (s *Service) manageKey(
 	if status != "approved" || revision != input.ExpectedRevision {
 		return roleDonationMutation{}, ErrConflict
 	}
-	if err := manageDonationKeyTx(ctx, tx, donationID, keyID, actorID, string(role), input, now); err != nil {
+	if err := manageDonationKeyTx(ctx, tx, donationID, keyID, actorID, scope.AuditRole(role == reviewerAdmin), input, now); err != nil {
 		return roleDonationMutation{}, err
+	}
+	if scope.Trainee {
+		key, err := s.managedKeyTx(ctx, tx, scope, donationID, keyID, now)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		receipt := ManagedKeyReceipt{DonationID: key.DonationID, KeyID: key.KeyID, DonationRevision: key.DonationRevision, Key: key}
+		out, err := finishJSON(ctx, tx, decision, http.StatusOK, receipt)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		if err := commitTx(tx, &committed); err != nil {
+			return roleDonationMutation{}, err
+		}
+		return roleDonationMutation{trainee: &out.Value, status: out.Status, body: out.Body}, nil
 	}
 	value, err := getAdminDonationTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -773,6 +834,7 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		}
 		for index := range result.steward.Keys {
 			key := &result.steward.Keys[index]
+			normalizeLegacyReceiptUsage(&key.Usage)
 			if key.BindingCount == "" {
 				count, err := receiptBindingCount(ctx, tx, donationID, key.ID)
 				if err != nil {
@@ -802,6 +864,7 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 	}
 	for index := range result.admin.Keys {
 		key := &result.admin.Keys[index]
+		changed = normalizeLegacyReceiptUsage(&key.Usage) || changed
 		if key.BindingCount == "" {
 			count, err := receiptBindingCount(ctx, tx, donationID, key.ID)
 			if err != nil {
@@ -819,6 +882,17 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		}
 	}
 	return result, nil
+}
+
+func normalizeLegacyReceiptUsage(usage *DonationUsage) bool {
+	if usage.InputTokensUsed != "" {
+		return false
+	}
+	// Historical receipts have aggregate totals but no reliable split.
+	usage.InputTokensUsed, usage.OutputTokensUsed = "0", "0"
+	usage.InputTokensInflight, usage.OutputTokensInflight = "0", "0"
+	usage.UnattributedTotalTokens = usage.TokensUsed
+	return true
 }
 
 func receiptBindingCount(ctx context.Context, tx *sql.Tx, donationID int64, keyText string) (int64, error) {
@@ -863,6 +937,9 @@ AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dona
 		return fmt.Errorf("donation: read managed key: %w", err)
 	}
 	updates := []string{"updated_at=?"}
+	if err := applySplitTokenControlsTx(ctx, tx, keyID, input); err != nil {
+		return err
+	}
 	args := []any{now}
 	action := "limit_update"
 	if input.ResetFailureStreak {
@@ -1185,7 +1262,7 @@ func validReviewInput(input ReviewInput) bool {
 
 func validKeyManagement(input KeyManagementInput) bool {
 	if input.ExpectedRevision <= 0 || input.Enabled == nil && input.PriceLimit == nil && input.CallsLimit == nil &&
-		input.TokensLimit == nil && input.TokenReserve == nil && input.SafeNote == nil && input.ExpiresAt == nil && !input.ResetFailureStreak {
+		input.TokensLimit == nil && input.TokenReserve == nil && input.SafeNote == nil && input.ExpiresAt == nil && !input.ResetFailureStreak && !splitTokenChanged(input) {
 		return false
 	}
 	if input.TokenReserve != nil && (*input.TokenReserve < 0 || *input.TokenReserve > 2147483647) ||

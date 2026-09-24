@@ -95,7 +95,7 @@ func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) 
 	if got := request(model.ID, fmt.Sprint(donationIDs[0]), cursor, true); got.Code != 400 {
 		t.Fatalf("cross-scope cursor accepted: %d", got.Code)
 	}
-	if got := request("999", "", cursor, false); got.Code != 400 {
+	if got := request("999", "", cursor, false); got.Code != 404 {
 		t.Fatalf("cross-model cursor accepted: %d", got.Code)
 	}
 	env.auth.denySteward.Store(true)

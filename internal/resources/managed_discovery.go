@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 )
 
 const (
@@ -29,7 +31,7 @@ func (ctx discoveryIdentityContext) Value(key any) any { return ctx.identity.Val
 
 func (r *Repository) RefreshManagedDiscovery(ctx context.Context, role string, actorID, donationID, donationKeyID int64, mutation ControlMutation) (MutationResult[DiscoveryAccepted], error) {
 	if r == nil || ctx == nil || isNilInterface(r.managedDiscovery) || actorID <= 0 || donationID <= 0 || donationKeyID <= 0 ||
-		(role != "admin" && role != "level6") || mutation.Method != http.MethodPost || mutation.Query != "" ||
+		(role != "admin" && role != "level6") || mutation.Method != http.MethodPost || mutation.Query != charityscope.Query(ctx) ||
 		!mutationPathIDs(mutation, donationID, donationKeyID) ||
 		(role == "admin" && mutation.Route != routeAdminDiscovery) || (role == "level6" && mutation.Route != routeStewardDiscovery) {
 		return MutationResult[DiscoveryAccepted]{}, ErrInvalidRequest
@@ -82,6 +84,12 @@ func RegisterManagedDiscoveryRoutes(users UserRouteRegistrar, admins AdminRouteR
 }
 
 func (api *httpAPI) managedDiscoveryHTTP(w http.ResponseWriter, req *http.Request, role string, actorID int64) {
+	selected, err := charityscope.SelectRequest(req)
+	if err != nil {
+		writeResourceError(w, ErrInvalidRequest)
+		return
+	}
+	req = selected
 	donationID, ok := parsePathID(w, req, "id")
 	if !ok {
 		return
@@ -111,6 +119,7 @@ func (api *httpAPI) managedDiscoveryHTTP(w http.ResponseWriter, req *http.Reques
 	if !ok {
 		return
 	}
+	mutation.Query = charityscope.Query(req.Context())
 	result, err := api.repository.RefreshManagedDiscovery(req.Context(), role, actorID, donationID, keyID, mutation)
 	if err != nil {
 		writeResourceError(w, err)

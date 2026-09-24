@@ -17,7 +17,7 @@ import (
 )
 
 func (s *Service) create(ctx context.Context, userID int64, key string, canonical []byte, input createInput) ([]byte, error) {
-	if input.Endpoint == nil ||
+	if input.Endpoint == nil || input.DiscordPublicThanks == nil ||
 		strings.TrimSpace(input.Description) == "" || len(input.Keys) < 1 || len(input.Keys) > maxKeys {
 		return nil, errInvalid
 	}
@@ -83,7 +83,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 		donationKeys[index] = donation.CreateKeyInput{EndpointKeyID: physicalID, ExpiresAt: item.AuthorizedExpiresAt, FailureDisableThreshold: item.FailureDisableThreshold}
 		result.Keys[index].EndpointKeyID = physical.ID
 	}
-	submission, err := s.donations.CreateInTransaction(ctx, tx, userID, donation.CreateInput{Description: input.Description, Keys: donationKeys, OwnershipAuthorized: true})
+	submission, err := s.donations.CreateInTransaction(ctx, tx, userID, donation.CreateInput{Description: input.Description, Keys: donationKeys, OwnershipAuthorized: true, DiscordPublicThanks: *input.DiscordPublicThanks})
 	if err != nil {
 		return nil, atStep("donation", err)
 	}
@@ -111,7 +111,9 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 			expires = item.ExpiresAt.value
 		}
 		settings[index] = donation.KeySetting{DonationKeyID: id, PriceLimit: item.PriceLimit, CallsLimit: item.CallsLimit, TokensLimit: item.TokensLimit,
-			TokenReserve: item.TokenReserve, Enabled: enabled(item.CharityEnabled), SafeNote: item.SafeNote, ExpiresAt: expires}
+			TokenReserve: item.TokenReserve, Enabled: enabled(item.CharityEnabled), SafeNote: item.SafeNote, ExpiresAt: expires,
+			SplitTokens: donation.KeyManagementInput{InputTokensLimit: &item.InputTokensLimit, OutputTokensLimit: &item.OutputTokensLimit,
+				InputTokenReserve: &item.InputTokenReserve, OutputTokenReserve: &item.OutputTokenReserve}}
 	}
 	if err := s.donations.ApproveOwnNewInTransaction(ctx, tx, userID, donationID, donation.ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: input.ReviewNote, KeySettings: settings}); err != nil {
 		return nil, atStep("approval", err)

@@ -238,7 +238,7 @@ func TestCatalogFilteredPagesUseCompleteCollectionAndStrictQueries(t *testing.T)
 			t.Fatalf("filtered last page: %+v", value)
 		}
 	}
-	for _, query := range []string{"allowed_level=0", "allowed_level=6", "allowed_level=01", "allowed_level=1&allowed_level=2", "allowed_level=", "currently_available=1", "currently_available=", "currently_available=true&currently_available=false"} {
+	for _, query := range []string{"allowed_level=0", "allowed_level=7", "allowed_level=01", "allowed_level=1&allowed_level=2", "allowed_level=", "currently_available=1", "currently_available=", "currently_available=true&currently_available=false"} {
 		response := httptest.NewRecorder()
 		(&httpAPI{service: env.service}).capability(response, httptest.NewRequest(http.MethodGet, routeCapability+"?view=catalog&"+query, nil), UserPrincipal{UserID: env.caller})
 		if response.Code != 400 {
@@ -250,7 +250,7 @@ func TestCatalogFilteredPagesUseCompleteCollectionAndStrictQueries(t *testing.T)
 	if response.Code != 200 {
 		t.Fatalf("combined HTTP query: %d %s", response.Code, response.Body)
 	}
-	level = 6
+	level = 7
 	if _, err := env.service.Catalog(context.Background(), env.caller, filter, pagination.Default()); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("invalid repository level: %v", err)
 	}

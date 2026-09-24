@@ -102,7 +102,7 @@ func TestModelAccessHTTPDefaultsCanonicalPatchAndLimits(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &model); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(model.AllowedLevels, []int{1, 2, 3, 4, 5}) || model.PublicDescription != "" {
+	if !reflect.DeepEqual(model.AllowedLevels, []int{1, 2, 3, 4, 5, 6}) || model.PublicDescription != "" {
 		t.Fatalf("defaults %+v", model)
 	}
 	update := send(http.MethodPatch, map[string]any{"expected_revision": "1", "allowed_levels": []int{5, 2}, "public_description": "<b>literal</b>\r\n😀\tend"}, model.ID)
@@ -135,7 +135,7 @@ func TestModelAccessHTTPDefaultsCanonicalPatchAndLimits(t *testing.T) {
 	if model.AllowedLevels == nil || len(model.AllowedLevels) != 0 || model.PublicDescription != "" {
 		t.Fatalf("clear %+v", model)
 	}
-	for name, value := range map[string]any{"null": nil, "duplicate": []int{1, 1}, "zero": []int{0}, "six": []int{6}, "fraction": []float64{1.5}, "text": "1"} {
+	for name, value := range map[string]any{"null": nil, "duplicate": []int{1, 1}, "zero": []int{0}, "seven": []int{7}, "fraction": []float64{1.5}, "text": "1"} {
 		body := createBody("invalid-" + name)
 		body["allowed_levels"] = value
 		if result := send(http.MethodPost, body, ""); result.Code != 400 {
@@ -179,7 +179,7 @@ func TestLegacyModelReceiptRetainsOriginalFieldsAndKnownAccessDefaults(t *testin
 		t.Fatal(err)
 	}
 	if !result.Replayed || result.Status != 201 || !bytes.Equal(body, before) || result.Value.Revision != "3" ||
-		!reflect.DeepEqual(result.Value.AllowedLevels, []int{1, 2, 3, 4, 5}) || result.Value.PublicDescription != "" {
+		!reflect.DeepEqual(result.Value.AllowedLevels, []int{1, 2, 3, 4, 5, 6}) || result.Value.PublicDescription != "" {
 		t.Fatalf("legacy %+v", result)
 	}
 	current := []byte("{\"id\":\"7\",\"allowed_levels\":[],\"public_description\":\"current\",\"revision\":\"4\"}")

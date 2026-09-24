@@ -183,24 +183,44 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 	if role == reviewerSteward {
 		route = routeStewardFailureReset
 	}
-	if ctx == nil || len(items) == 0 || len(items) > maxFailureResetItems || !validMutation(mutation, http.MethodPost, route) {
+	if ctx == nil || len(items) == 0 || len(items) > maxFailureResetItems || !validScopedMutation(ctx, mutation, http.MethodPost, route) {
 		return empty, ErrInvalidRequest
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, userID)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, false)
 	if err != nil {
 		return empty, err
 	}
 	committed := false
+	actorID, auditRole := scope.ActorID, scope.AuditRole(role == reviewerAdmin)
 	defer finishTx(tx, &committed)
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
 	}
-	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeDonation, mutation, now)
+	allowed := make([]bool, len(items))
+	for index, item := range items {
+		if !scope.Trainee {
+			allowed[index] = true
+			continue
+		}
+		err := scope.RequireKey(ctx, tx, item.donationID, item.keyID, now, false)
+		if err != nil && !errors.Is(scopeError(err), ErrNotFound) {
+			return empty, scopeError(err)
+		}
+		allowed[index] = err == nil
+	}
+	decision, err := beginMutation(ctx, tx, auditRole, actorID, idempotency.ScopeDonation, mutation, now)
 	if err != nil {
 		return empty, err
 	}
 	if decision.Kind == idempotency.Replay {
+		if scope.Trainee {
+			for _, value := range allowed {
+				if !value {
+					return empty, ErrNotFound
+				}
+			}
+		}
 		return replay[FailureResetBatch](decision)
 	}
 	// The request boundary has already checked positive IDs, duplicate keys and
@@ -236,6 +256,10 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 		}
 		for _, index := range indices {
 			result := &value.Results[index]
+			if !allowed[index] {
+				result.Status = "not_found"
+				continue
+			}
 			result.Status = groupStatus
 			if groupStatus != "" {
 				continue
@@ -254,7 +278,7 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 				continue
 			}
 			item.expected = revision
-			if err := resetDonationKeyTx(ctx, tx, item, state, actorID, string(role), now); err != nil {
+			if err := resetDonationKeyTx(ctx, tx, item, state, actorID, auditRole, now); err != nil {
 				return empty, err
 			}
 			revision++
@@ -264,7 +288,9 @@ func (s *Service) resetFailureBatch(ctx context.Context, role reviewerRole, user
 		if groupStatus != "not_found" {
 			latest := strconv.FormatInt(revision, 10)
 			for _, index := range indices {
-				value.Results[index].Revision = &latest
+				if !scope.Trainee || allowed[index] && value.Results[index].Status != "not_found" {
+					value.Results[index].Revision = &latest
+				}
 			}
 		}
 	}

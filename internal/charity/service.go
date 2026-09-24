@@ -387,6 +387,9 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 		requestState != "accepted" && requestState != "running" || !claim.RouteKind(requestRoute).IsCharity() {
 		return keyReservation{}, claim.ErrNotFound
 	}
+	if err := requireDonationCallerTx(ctx, tx, input.ActorUserID, row.receiverUserID, input.ClaimedAt); err != nil {
+		return keyReservation{}, err
+	}
 	return row, nil
 }
 

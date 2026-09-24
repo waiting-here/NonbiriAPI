@@ -10,7 +10,7 @@ import (
 )
 
 func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, now int64) (DonationSummary, error) {
-	out := DonationSummary{ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description,
+	out := DonationSummary{DiscordPublicThanks: header.DiscordPublicThanks, ID: header.ID, Status: header.Status, Revision: header.Revision, Description: header.Description,
 		ReviewResult: header.ReviewResult, CreatedAt: header.CreatedAt, UpdatedAt: header.UpdatedAt,
 		StateCounts: map[string]string{}, Sources: []SafeSource{}}
 	for _, state := range []string{"available", "pending", "disabled", "suspended", "exhausted", "expired", "ended"} {
@@ -25,7 +25,9 @@ func donationSummaryTx(ctx context.Context, tx *sql.Tx, header AdminDonation, no
  WHEN EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) THEN 'suspended'
  WHEN nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))=nbi_u128(0)
- OR nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))=nbi_u128(0) THEN 'exhausted'
+ OR nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))=nbi_u128(0)
+ OR nbi_u128_remaining(dk.input_token_limit_mag,dk.input_tokens_used,dk.input_tokens_reserved,nbi_u128(0))=nbi_u128(0)
+ OR nbi_u128_remaining(dk.output_token_limit_mag,dk.output_tokens_used,dk.output_tokens_reserved,nbi_u128(0))=nbi_u128(0) THEN 'exhausted'
  ELSE 'available' END AS state,COUNT(*)
 FROM donation_keys dk LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id
 WHERE dk.donation_id=? GROUP BY state`, header.Status, now, header.Status, header.Status, header.ID)

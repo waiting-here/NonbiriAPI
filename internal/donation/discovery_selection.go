@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -34,7 +35,7 @@ func (s *Service) selectDiscoveries(ctx context.Context, role reviewerRole, user
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, actorID, err := s.beginBrowseActorTx(ctx, role, userID)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
 	if err != nil {
 		return empty, err
 	}
@@ -57,7 +58,10 @@ func (s *Service) selectDiscoveries(ctx context.Context, role reviewerRole, user
 		return empty, ErrUnavailable
 	}
 	defer clear(key)
-	owner := fmt.Sprintf("%s:%d:%d", role, actorID, donationID)
+	owner, err := scope.CursorOwner(ctx, s.roleAuth, fmt.Sprintf("%s:%d", role, donationID))
+	if err != nil {
+		return empty, scopeError(err)
+	}
 	started, maximum, after := now, int64(0), int64(0)
 	if token == "" {
 		err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM donation_keys`).Scan(&maximum)
@@ -97,6 +101,10 @@ func (s *Service) selectDiscoveries(ctx context.Context, role reviewerRole, user
 	if donationID != 0 {
 		query += ` AND d.id=?`
 		args = append(args, donationID)
+	}
+	if scope.Trainee {
+		query += ` AND ` + charityscope.KeyPredicate()
+		args = append(args, scope.ModelID, now)
 	}
 	rows, err = tx.QueryContext(ctx, query+` ORDER BY dk.id`, args...)
 	if err != nil {

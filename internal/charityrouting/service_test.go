@@ -28,9 +28,17 @@ import (
 
 const routingTestNow int64 = 1_700_000_000
 
-type routingTestAuth struct{ denySteward atomic.Bool }
+type routingTestAuth struct {
+	denySteward  atomic.Bool
+	sessionUser  atomic.Int64
+	sessionAdmin atomic.Bool
+	sessionEpoch atomic.Int64
+	denySession  atomic.Bool
+}
 
 func (auth *routingTestAuth) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	auth.sessionUser.Store(userID)
+	auth.sessionAdmin.Store(true)
 	var admin int
 	if err := tx.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id=?`, userID).Scan(&admin); err != nil {
 		return ErrUnauthorized
@@ -42,6 +50,8 @@ func (auth *routingTestAuth) AuthorizeAdminMutation(ctx context.Context, tx *sql
 }
 
 func (auth *routingTestAuth) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	auth.sessionUser.Store(userID)
+	auth.sessionAdmin.Store(false)
 	if auth.denySteward.Load() {
 		return ErrForbidden
 	}
@@ -212,8 +222,8 @@ func TestCreateModelInitializesFullAccessMask(t *testing.T) {
 	if err := environment.store.DB().QueryRow(`SELECT allowed_level_mask, public_description FROM charity_model_access WHERE model_id=?`, modelID).Scan(&mask, &desc); err != nil {
 		t.Fatalf("read charity_model_access: %v", err)
 	}
-	if mask != 31 || desc != "" {
-		t.Fatalf("charity_model_access = (%d,%q), want (31,'')", mask, desc)
+	if mask != 63 || desc != "" {
+		t.Fatalf("charity_model_access = (%d,%q), want (63,'')", mask, desc)
 	}
 }
 
@@ -278,8 +288,8 @@ END`); err != nil {
 	if err := environment.store.DB().QueryRow(`SELECT allowed_level_mask,public_description FROM charity_model_access WHERE model_id=?`, modelID).Scan(&mask, &description); err != nil {
 		t.Fatalf("read recovered charity model access: %v", err)
 	}
-	if mask != 31 || description != "" {
-		t.Fatalf("recovered charity_model_access = (%d,%q), want (31,'')", mask, description)
+	if mask != 63 || description != "" {
+		t.Fatalf("recovered charity_model_access = (%d,%q), want (63,'')", mask, description)
 	}
 	after := counts()
 	wantCounts := map[string]int{
@@ -337,12 +347,16 @@ func (environment *routingTestEnv) seedCandidate(t *testing.T, ownerID int64, su
 		connectorcontract.TypeOpenAICompatible)
 }
 
-func (environment *routingTestEnv) seedCandidateWithConnector(t *testing.T, ownerID int64, identity, upstream string, connectorType connectorcontract.Type) (int64, int64, int64) {
+func (environment *routingTestEnv) seedCandidateWithConnector(t *testing.T, ownerID int64, identity, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
 	t.Helper()
 	now := environment.clock.Load()
 	baseURL := fmt.Sprintf("https://%s.routing.test/v1", identity)
-	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,?,?,'private',1,1,?,?)`, ownerID, string(connectorType), baseURL, now, now)
+	var channelID, channelRevision, channelName, channelCategory any
+	if len(channel) > 0 {
+		channelID, channelRevision, channelName, channelCategory = channel[0], 1, "Example", "subscription"
+	}
+	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category)
+VALUES(?,?,?,'private',1,1,?,?,?,?,?,?)`, ownerID, string(connectorType), baseURL, now, now, channelID, channelRevision, channelName, channelCategory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,11 +389,11 @@ VALUES(?,'approved',1,'description','','admin',?,?)`, ownerID, now, now)
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
 failure_streak,streak_generation,next_claim_seq,next_fold_seq,enabled,token_reserve,safe_note,created_at,updated_at,
-authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint)
+authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category)
 VALUES(?,?,?,?,?,?,
-?,?,?,?,?,?,?,?,?,?,1,10,'safe label',?,?,NULL,NULL,?,?)`, donationID, endpointKeyID,
+?,?,?,?,?,?,?,?,?,?,1,10,'safe label',?,?,NULL,NULL,?,?,?,?,?,?)`, donationID, endpointKeyID,
 		"head", "tail", baseURL, string(connectorType), zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now,
-		endpointKeyID, fingerprint)
+		endpointKeyID, fingerprint, channelID, channelRevision, channelName, channelCategory)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -40,6 +40,21 @@ func (r *Repository) RecentSuccess(ctx context.Context, modelID, at int64) (Succ
 		return result, err
 	}
 	defer tx.Rollback()
+	result, err = RecentSuccessTx(ctx, tx, modelID, at)
+	if err != nil {
+		return result, err
+	}
+	return result, tx.Commit()
+}
+
+// RecentSuccessTx lets a caller keep model authorization and statistics in
+// one read snapshot. It never reads or returns individual request details.
+func RecentSuccessTx(ctx context.Context, tx *sql.Tx, modelID, at int64) (SuccessRate, error) {
+	result := SuccessRate{WindowStart: max(0, at-86400), AsOf: at, InsufficientSample: true}
+	if tx == nil || ctx == nil || modelID <= 0 || at < 0 {
+		return result, ErrInvalid
+	}
+	var err error
 	if err = tx.QueryRowContext(ctx, `SELECT capture_started_at FROM observability_state WHERE id=1`).Scan(&result.CaptureStartedAt); err != nil {
 		return result, err
 	}
@@ -52,5 +67,5 @@ func (r *Repository) RecentSuccess(ctx context.Context, modelID, at int64) (Succ
 		rate := float64(result.Success) / float64(result.SampleCount)
 		result.Rate = &rate
 	}
-	return result, tx.Commit()
+	return result, nil
 }

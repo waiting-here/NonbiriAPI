@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -141,6 +142,14 @@ cm.enabled,a.allowed_level_mask,a.public_description,`+catalogAvailableSQL()+fro
 	}
 	for index := range models {
 		model := &models[index]
+		modelID, err := strconv.ParseInt(model.ID, 10, 64)
+		if err != nil {
+			return Catalog{}, ErrInvariant
+		}
+		model.RecentSuccess, err = observability.RecentSuccessTx(ctx, tx, modelID, now)
+		if err != nil {
+			return Catalog{}, err
+		}
 		switch {
 		case charityGate == "0":
 			model.Availability = "feature_disabled"
@@ -226,7 +235,7 @@ func (api *httpAPI) catalog(writer http.ResponseWriter, request *http.Request, p
 	}
 	filter := CatalogFilter{Query: values.Get("q"), AllowedForMe: allowed, CurrentlyAvailable: available}
 	if entries, present := values["allowed_level"]; present {
-		if len(entries) != 1 || len(entries[0]) != 1 || entries[0][0] < '1' || entries[0][0] > '5' {
+		if len(entries) != 1 || len(entries[0]) != 1 || entries[0][0] < '1' || entries[0][0] > '6' {
 			writeRoutingError(writer, ErrInvalidRequest)
 			return
 		}

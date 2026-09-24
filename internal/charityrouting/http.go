@@ -163,7 +163,11 @@ func (api *httpAPI) listModels(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	scope := string(role) + "-charity-models"
-	owner := paginationOwner(role, actorID, query, boolFilter(enabled))
+	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, 0, paginationOwner(role, actorID, query, boolFilter(enabled)))
+	if err != nil {
+		writeRoutingError(writer, err)
+		return
+	}
 	after, err := api.service.decodeModelCursor(cursor, scope, owner, now)
 	if err != nil {
 		writeRoutingError(writer, err)
@@ -314,16 +318,18 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	TokenReserveCredits nullableField[string]       `json:"token_reserve_credits"`
-	AllowedLevels       requiredField[[]int]        `json:"allowed_levels"`
-	PublicDescription   requiredField[string]       `json:"public_description"`
-	RouteStrategy       requiredField[string]       `json:"route_strategy"`
-	Provider            requiredField[string]       `json:"provider"`
-	Model               requiredField[string]       `json:"model"`
-	Enabled             requiredField[bool]         `json:"enabled"`
-	Pricing             requiredField[pricingWire]  `json:"pricing"`
-	Discount            requiredField[discountWire] `json:"discount"`
-	FlattenToolCalls    requiredField[bool]         `json:"flatten_tool_calls"`
+	IsMainstream          requiredField[bool]         `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]     `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]       `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]        `json:"allowed_levels"`
+	PublicDescription     requiredField[string]       `json:"public_description"`
+	RouteStrategy         requiredField[string]       `json:"route_strategy"`
+	Provider              requiredField[string]       `json:"provider"`
+	Model                 requiredField[string]       `json:"model"`
+	Enabled               requiredField[bool]         `json:"enabled"`
+	Pricing               requiredField[pricingWire]  `json:"pricing"`
+	Discount              requiredField[discountWire] `json:"discount"`
+	FlattenToolCalls      requiredField[bool]         `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -342,6 +348,14 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.IsMainstream.Set {
+		input.IsMainstream = wire.IsMainstream.Value
+		canonical["is_mainstream"] = input.IsMainstream
+	}
+	if wire.ExcludedRequestFields.Set {
+		input.ExcludedRequestFields = wire.ExcludedRequestFields.Value
+		canonical["excluded_request_fields"] = input.ExcludedRequestFields
+	}
 	if wire.TokenReserveCredits.Set {
 		input.TokenReserveCredits = wire.TokenReserveCredits.Value
 		canonical["token_reserve_credits"] = wire.TokenReserveCredits.Value
@@ -450,17 +464,19 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	TokenReserveCredits nullableField[string]            `json:"token_reserve_credits"`
-	AllowedLevels       requiredField[[]int]             `json:"allowed_levels"`
-	PublicDescription   requiredField[string]            `json:"public_description"`
-	RouteStrategy       requiredField[string]            `json:"route_strategy"`
-	ExpectedRevision    requiredField[string]            `json:"expected_revision"`
-	Provider            requiredField[string]            `json:"provider"`
-	Model               requiredField[string]            `json:"model"`
-	Enabled             requiredField[bool]              `json:"enabled"`
-	Pricing             requiredField[pricingWire]       `json:"pricing"`
-	Discount            requiredField[discountPatchWire] `json:"discount"`
-	FlattenToolCalls    requiredField[bool]              `json:"flatten_tool_calls"`
+	IsMainstream          requiredField[bool]              `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]          `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]            `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]             `json:"allowed_levels"`
+	PublicDescription     requiredField[string]            `json:"public_description"`
+	RouteStrategy         requiredField[string]            `json:"route_strategy"`
+	ExpectedRevision      requiredField[string]            `json:"expected_revision"`
+	Provider              requiredField[string]            `json:"provider"`
+	Model                 requiredField[string]            `json:"model"`
+	Enabled               requiredField[bool]              `json:"enabled"`
+	Pricing               requiredField[pricingWire]       `json:"pricing"`
+	Discount              requiredField[discountPatchWire] `json:"discount"`
+	FlattenToolCalls      requiredField[bool]              `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -472,6 +488,14 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 	}
 	input := ModelPatch{ExpectedRevision: wire.ExpectedRevision.Value}
 	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	if wire.IsMainstream.Set {
+		input.IsMainstream = &wire.IsMainstream.Value
+		canonical["is_mainstream"] = wire.IsMainstream.Value
+	}
+	if wire.ExcludedRequestFields.Set {
+		input.ExcludedRequestFields = &wire.ExcludedRequestFields.Value
+		canonical["excluded_request_fields"] = wire.ExcludedRequestFields.Value
+	}
 	if wire.TokenReserveCredits.Set {
 		input.TokenReserveCredits = &wire.TokenReserveCredits.Value
 		canonical["token_reserve_credits"] = wire.TokenReserveCredits.Value

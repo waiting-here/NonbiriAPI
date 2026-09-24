@@ -67,7 +67,11 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	scope := string(role) + "-charity-binding-candidates"
-	owner := candidateFilterOwner(role, actorID, modelID, donationID, donationKeyID, source, query)
+	owner, err := api.service.managementCursorOwner(request.Context(), role, actorID, modelID, candidateFilterOwner(role, actorID, modelID, donationID, donationKeyID, source, query))
+	if err != nil {
+		writeRoutingError(writer, err)
+		return
+	}
 	afterKey, afterModel, err := api.service.decodeCandidateCursor(cursor, scope, owner, now)
 	if err != nil {
 		writeRoutingError(writer, err)

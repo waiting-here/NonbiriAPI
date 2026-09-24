@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -222,7 +223,7 @@ func mutationFor(writer http.ResponseWriter, request *http.Request, route string
 		ids[index] = strconv.FormatInt(id, 10)
 	}
 	return resources.ControlMutation{IdempotencyKey: values[0], Method: request.Method, Route: route,
-		PathIDs: ids, CanonicalBody: body}, true
+		PathIDs: ids, Query: charityscope.Query(request.Context()), CanonicalBody: body}, true
 }
 
 func writeMutation[T any](writer http.ResponseWriter, result resources.MutationResult[T]) {

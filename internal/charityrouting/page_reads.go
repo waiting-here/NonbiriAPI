@@ -3,7 +3,6 @@ package charityrouting
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -14,32 +13,8 @@ import (
 // Page counts and rows share the authorized snapshot. Browse projections use
 // logical expiry predicates without materializing events during a read.
 func (s *Service) beginPageRead(ctx context.Context, role roleKind, actorID int64) (*sql.Tx, error) {
-	if s == nil || s.db == nil || nilDependency(s.roleAuth) {
-		return nil, ErrUnavailable
-	}
-	if role != roleAdmin && role != roleSteward || role == roleSteward && actorID <= 0 {
-		return nil, ErrInvalidRequest
-	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, err
-	}
-	if role == roleAdmin {
-		err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE is_admin=1`).Scan(&actorID)
-		if errors.Is(err, sql.ErrNoRows) {
-			err = ErrForbidden
-		}
-		if err == nil {
-			err = mapAuthorization(s.roleAuth.AuthorizeAdminMutation(ctx, tx, actorID))
-		}
-	} else {
-		err = mapAuthorization(s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorID))
-	}
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-	return tx, nil
+	tx, _, err := s.beginManagementTx(ctx, role, actorID, 0, true, true)
+	return tx, err
 }
 
 func pageWindow(ctx context.Context, tx *sql.Tx, selection string, args []any, page pagination.Request) (pagination.Metadata, int64, error) {
@@ -66,7 +41,14 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 		return empty, err
 	}
 	defer tx.Rollback()
+	scope, err := s.managementScope(ctx, tx, role, actorID, 0, true)
+	if err != nil {
+		return empty, err
+	}
 	selection := `SELECT id FROM charity_models WHERE 1=1`
+	if scope.Trainee {
+		selection += ` AND is_mainstream=1`
+	}
 	args := []any{}
 	if query != "" {
 		selection += ` AND (provider LIKE ? ESCAPE '\' OR model LIKE ? ESCAPE '\' OR full_name LIKE ? ESCAPE '\')`
@@ -155,7 +137,8 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	defer tx.Rollback()
-	if _, err := getAdminModelTx(ctx, tx, modelID); err != nil {
+	scope, err := s.managementScope(ctx, tx, role, actorID, modelID, false)
+	if err != nil {
 		return empty, err
 	}
 	now, err := s.nowUnix()
@@ -163,6 +146,9 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	selection, args := candidatePageSelection(modelID, now, query)
+	if scope.Trainee {
+		selection += ` AND dk.mainstream_channel_id IS NOT NULL`
+	}
 	metadata, offset, err := pageWindow(ctx, tx, selection, args, page)
 	if err != nil {
 		return empty, err
@@ -208,19 +194,24 @@ func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID
 		return donations, keys, err
 	}
 	defer tx.Rollback()
-	if _, err := getAdminModelTx(ctx, tx, modelID); err != nil {
+	scope, err := s.managementScope(ctx, tx, role, actorID, modelID, false)
+	if err != nil {
 		return donations, keys, err
 	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return donations, keys, err
 	}
-	selection := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + bindingSourceFrom + ` GROUP BY d.id,d.description`
+	from := bindingSourceFrom
+	if scope.Trainee {
+		from += ` AND dk.mainstream_channel_id IS NOT NULL`
+	}
+	selection := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` GROUP BY d.id,d.description`
 	order := ` ORDER BY d.id`
 	args := []any{modelID, now}
 	if donationID > 0 {
 		selection = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,
-COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + bindingSourceFrom + ` AND d.id=?`
+COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=?`
 		args = append(args, donationID)
 		order = ` ORDER BY dk.id`
 	}
@@ -246,7 +237,7 @@ COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + bindingSourceFrom + ` A
 			donations.Data = append(donations.Data, item)
 		} else {
 			var item BindingSourceKey
-			if err := rows.Scan(&id, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail, &item.Note, &item.Source.MaxConcurrency, &item.Source.MaxRPM); err != nil {
+			if err := rows.Scan(&id, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail, &item.Note, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &item.DonationNote, &item.ApprovalNote); err != nil {
 				return donations, keys, err
 			}
 			item.DonationKeyID = strconv.FormatInt(id, 10)

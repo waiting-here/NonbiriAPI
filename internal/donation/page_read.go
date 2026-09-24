@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -70,7 +71,7 @@ func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page p
 	if err != nil {
 		return nil, metadata, ErrInvalidRequest
 	}
-	rows, err := tx.QueryContext(ctx, query+` ORDER BY id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, query+` ORDER BY 1 LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
 	if err != nil {
 		return nil, metadata, fmt.Errorf("donation: read browse rows: %w", err)
 	}
@@ -118,7 +119,12 @@ func recurringSummaryTx(ctx context.Context, tx *sql.Tx, keyID, now int64) (Recu
 }
 
 func managedKeySummary(key AdminDonationKey, header AdminDonation, rules RecurringSummary) ManagedKeySummary {
-	return ManagedKeySummary{DonationKey: ownerKey(key), RecurringReceipt: RecurringReceipt{
+	var approval *string
+	if header.ReviewResult != nil && header.ReviewResult.Decision == "approve" {
+		note := header.ReviewResult.Reason
+		approval = &note
+	}
+	return ManagedKeySummary{DonationNote: header.Description, ApprovalNote: approval, VisibleModels: []charityscope.VisibleModel{}, DonationKey: ownerKey(key), RecurringReceipt: RecurringReceipt{
 		DonationID: header.ID, KeyID: key.ID, DonationRevision: header.Revision}, RecurringSummary: rules,
 		AuthorizedExpiresAt: key.AuthorizedExpiresAt, SafeNote: key.SafeNote,
 		MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM, BindingCount: key.BindingCount, Idle: key.Idle, Handling: header.Handling}
@@ -131,7 +137,14 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.beginBrowseTx(ctx, role, userID)
+	var tx *sql.Tx
+	var scope charityscope.Scope
+	var err error
+	if role == recurringOwner {
+		tx, err = s.beginBrowseTx(ctx, role, userID)
+	} else {
+		tx, scope, err = s.beginScopedTx(ctx, role, userID, true)
+	}
 	if err != nil {
 		return empty, err
 	}
@@ -153,7 +166,7 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	if !visible && (role == reviewerAdmin || role == reviewerSteward) {
+	if !visible && !scope.Trainee && (role == reviewerAdmin || role == reviewerSteward) {
 		visible, err = s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 		if err != nil {
 			return empty, err
@@ -166,7 +179,12 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	ids, metadata, err := browseIDs(ctx, tx, `SELECT id FROM donation_keys WHERE donation_id=?`, []any{donationID}, page)
+	query, args := `SELECT dk.id FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE dk.donation_id=?`, []any{donationID}
+	if scope.Trainee {
+		query += ` AND ` + charityscope.KeyPredicate()
+		args = append(args, scope.ModelID, now)
+	}
+	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
 	if err != nil {
 		return empty, err
 	}
@@ -184,7 +202,18 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 		if err != nil {
 			return empty, err
 		}
-		result.Data = append(result.Data, managedKeySummary(key, header, rules))
+		value := managedKeySummary(key, header, rules)
+		if scope.Trainee {
+			value.EndpointKeyID = nil
+		}
+		if role != recurringOwner {
+			impact, err := scope.Impact(ctx, tx, id)
+			if err != nil {
+				return empty, err
+			}
+			value.VisibleModels, value.VisibleModelsTruncated = impact.VisibleModels, impact.VisibleModelsTruncated
+		}
+		result.Data = append(result.Data, value)
 	}
 	if err := tx.Commit(); err != nil {
 		return empty, err
