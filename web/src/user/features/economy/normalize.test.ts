@@ -11,7 +11,12 @@ import {
 } from './normalize';
 
 export const ACTIVITY_FIXTURE = {
-  loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
+  loan: {
+    enabled: false,
+    available: false,
+    reason: 'disabled',
+    tiers: ['10000', '100000', '1000000'],
+  },
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
     asset_type: 'game',
@@ -551,8 +556,24 @@ describe('economy closed-wire normalizers', () => {
         },
       ],
     });
-    expect(exhausted.keys[0].limits).toEqual({ price: '0', calls: '0', tokens: null });
+    expect(exhausted.keys[0].limits).toEqual({
+      price: '0',
+      calls: '0',
+      tokens: null,
+      inputTokens: null,
+      outputTokens: null,
+    });
     expect(exhausted.keys[0].usage.tokensUsed).toBe('340282366920938463463374607431768211455');
+    expect(exhausted.keys[0].inputTokenReserve).toBeNull();
+    expect(exhausted.keys[0].outputTokenReserve).toBeNull();
+    expect(exhausted.keys[0].breakdownStartedAt).toBe(0);
+    expect(exhausted.keys[0].usage).toMatchObject({
+      inputTokensUsed: '0',
+      outputTokensUsed: '0',
+      inputTokensInflight: '0',
+      outputTokensInflight: '0',
+      unattributedTotalTokens: '340282366920938463463374607431768211455',
+    });
 
     expect(() =>
       normalizeDonation({
