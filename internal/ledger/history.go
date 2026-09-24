@@ -43,23 +43,25 @@ type HistoryPage struct {
 }
 
 var historyCategories = map[string][]Kind{
-	"checkin":    {KindCheckinAward},
-	"onboarding": {KindGameOnboardingReward},
-	"loan":       {KindActivityLoan},
-	"welfare":    {KindWelfareClaim},
-	"thursday":   {KindThursdayContribution, KindThursdayPayout, KindThursdayFinalize},
-	"fishing":    {KindFishingReserve, KindFishingSettle, KindFishingRelease},
-	"linklink":   {KindLinkLinkEntry},
-	"rps":        {KindRPSQueueReserve, KindRPSQueueRelease, KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal},
-	"api":        {KindForwardReserve, KindForwardSettle, KindForwardRelease},
-	"charity":    {KindCharityReserve, KindCharitySettle, KindCharityRelease},
-	"donation":   {KindDonorReward},
-	"admin":      {KindAdminUserAdjustment},
-	"penalty":    {KindAntiAbusePenalty},
+	"checkin":      {KindCheckinAward},
+	"onboarding":   {KindGameOnboardingReward},
+	"loan":         {KindActivityLoan},
+	"welfare":      {KindWelfareClaim},
+	"thursday":     {KindThursdayContribution, KindThursdayPayout, KindThursdayFinalize},
+	"fishing":      {KindFishingReserve, KindFishingSettle, KindFishingRelease},
+	"linklink":     {KindLinkLinkEntry},
+	"rps":          {KindRPSQueueReserve, KindRPSQueueRelease, KindRPSSessionStart, KindRPSRoundCut, KindRPSTerminal},
+	"api":          {KindForwardReserve, KindForwardSettle, KindForwardRelease},
+	"charity":      {KindCharityReserve, KindCharitySettle, KindCharityRelease},
+	"donation":     {KindDonorReward},
+	"admin":        {KindAdminUserAdjustment},
+	"penalty":      {KindAntiAbusePenalty},
+	"picture_book": {KindActivityExchange, KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize},
+	"inactivity":   {KindInactivityDecay},
 }
 
 func ValidateHistoryFilter(filter HistoryFilter) error {
-	if (filter.Asset != "" && filter.Asset != "general" && filter.Asset != "game" && filter.Asset != "all") || filter.Page < 1 || (filter.PageSize != 10 && filter.PageSize != 20 && filter.PageSize != 50 && filter.PageSize != 100) ||
+	if (filter.Asset != "" && !Asset(filter.Asset).valid() && filter.Asset != "all") || filter.Page < 1 || (filter.PageSize != 10 && filter.PageSize != 20 && filter.PageSize != 50 && filter.PageSize != 100) ||
 		(filter.From != nil && !validUnix(*filter.From)) || (filter.To != nil && !validUnix(*filter.To)) ||
 		(filter.From != nil && filter.To != nil && *filter.From >= *filter.To) ||
 		(filter.Direction != "" && filter.Direction != "income" && filter.Direction != "expense") ||
@@ -91,7 +93,9 @@ func UserHistory(ctx context.Context, tx *sql.Tx, userID, now int64, filter Hist
 	if filter.Asset == "game" {
 		walletArgs = []any{gameWallet.ID}
 	} else if filter.Asset == "all" {
-		walletWhere, walletArgs = "e.account_id IN (?,?)", []any{wallet.ID, gameWallet.ID}
+		walletWhere, walletArgs = "e.account_id IN (SELECT id FROM credit_accounts WHERE kind='user' AND user_id=?)", []any{userID}
+	} else if Asset(filter.Asset).IsActivity() {
+		walletWhere, walletArgs = "e.account_id IN (SELECT id FROM credit_accounts WHERE kind='user' AND user_id=? AND asset_type=?)", []any{userID, filter.Asset}
 	}
 	page := HistoryPage{GameBalance: formatDisplayCredits(gameWallet.Balance.Big()), Data: []HistoryEntry{}, Page: "1", PageSize: filter.PageSize, Total: "0", TotalPages: "1",
 		CurrentBalance: formatDisplayCredits(wallet.Balance.Big()), ServerNow: now}
@@ -182,7 +186,7 @@ ELSE NULL END` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFF
 		amount, amountErr := amountFromParts(sign, magnitude)
 		clear(sourceSeq)
 		clear(magnitude)
-		if !valid || !entry.Asset.valid() || amountErr != nil || entry.Line < 0 || entry.Line > 255 {
+		if !valid || !entry.Asset.valid() || amountErr != nil || !validAssetAmount(entry.Asset, amount) || entry.Line < 0 || entry.Line > 255 {
 			return HistoryPage{}, ErrInvariant
 		}
 		entry.Delta = formatDisplayCredits(amount.Big())

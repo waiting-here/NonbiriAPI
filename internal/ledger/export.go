@@ -94,6 +94,9 @@ LIMIT ?`, userID, limit+1)
 		if err != nil {
 			return nil, err
 		}
+		if !validAssetAmount(entry.Asset, amount) {
+			return nil, ErrInvariant
+		}
 		entry.Delta = formatDisplayCredits(amount.Big())
 		entries = append(entries, entry)
 		if len(entries) > limit {

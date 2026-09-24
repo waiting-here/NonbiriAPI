@@ -56,6 +56,12 @@ const (
 	KindBlackjackReserve     Kind = "blackjack_reserve"
 	KindBlackjackSettle      Kind = "blackjack_settle"
 	KindBlackjackRelease     Kind = "blackjack_release"
+	KindActivityExchange     Kind = "activity_exchange"
+	KindImageReserve         Kind = "image_reserve"
+	KindImageSettle          Kind = "image_settle"
+	KindImageRefund          Kind = "image_refund"
+	KindImageDeleteFinalize  Kind = "image_delete_finalize"
+	KindInactivityDecay      Kind = "inactivity_decay"
 )
 
 type sourceType string
@@ -72,6 +78,7 @@ const (
 	sourceDuelQueue        sourceType = "duel_queue"
 	sourceDuelSession      sourceType = "duel_session"
 	sourceBlackjackPayment sourceType = "blackjack_payment"
+	sourceImageTask        sourceType = "image_task"
 )
 
 // Asset identifies one independently conserved credit balance.
@@ -85,6 +92,14 @@ const (
 )
 
 func (a Asset) valid() bool { return a == General || a == Game || a == SketchPaper || a == SketchBrush }
+
+func (a Asset) credit() bool { return a == General || a == Game }
+
+// IsActivity identifies the integer-only, independently conserved activity assets.
+func (a Asset) IsActivity() bool { return a == SketchPaper || a == SketchBrush }
+
+// Assets returns the complete asset set in stable display order.
+func Assets() []Asset { return []Asset{General, Game, SketchPaper, SketchBrush} }
 
 // AccountKind is a persisted account classification. Account creation is
 // exposed only through the closed constructors in accounts.go.
@@ -167,6 +182,7 @@ const (
 	reservationDuelQueue
 	reservationDuelSession
 	reservationBlackjackPayment
+	reservationImageTask
 )
 
 // ReservationRef is an unforgeable reference to one frozen domain remaining
@@ -187,6 +203,10 @@ func FishingReservation(id string) (ReservationRef, error) {
 
 func BlackjackReservation(id string) (ReservationRef, error) {
 	return opaqueReservation(reservationBlackjackPayment, id, "bjp_")
+}
+
+func ImageTaskReservation(id string) (ReservationRef, error) {
+	return opaqueReservation(reservationImageTask, id, "img_")
 }
 
 func ThursdayPeriodReservation(id string) (ReservationRef, error) {

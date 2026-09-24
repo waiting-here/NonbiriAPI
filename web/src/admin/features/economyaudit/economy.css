@@ -1,0 +1,96 @@
+.economy-audit {
+  display: grid;
+  gap: 1rem;
+}
+.economy-audit .audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.8rem;
+}
+.economy-audit .audit-filters label {
+  display: grid;
+  gap: 0.35rem;
+}
+.economy-audit .audit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+.economy-audit .audit-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+}
+.economy-audit .audit-metrics > div {
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  padding: 0.8rem;
+  border-radius: 0.6rem;
+}
+.economy-audit .audit-metrics dt {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+.economy-audit .audit-metrics dd {
+  margin: 0.5rem 0 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.economy-audit .audit-coverage {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.economy-audit .audit-table {
+  overflow-x: auto;
+}
+.economy-audit table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.economy-audit th,
+.economy-audit td {
+  padding: 0.7rem;
+  text-align: start;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  overflow-wrap: anywhere;
+}
+.economy-audit table caption {
+  text-align: start;
+  margin-block: 0.6rem;
+}
+.economy-audit .audit-chart {
+  margin: 0.75rem 0;
+}
+.economy-audit .audit-chart svg {
+  width: 100%;
+  max-height: 16rem;
+}
+.economy-audit .audit-chart figcaption {
+  font-size: 0.9rem;
+}
+.economy-audit .audit-operation {
+  padding-block: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+.economy-audit .audit-operation summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.economy-audit .audit-warning {
+  color: #b54135;
+  font-weight: 650;
+}
+@media (max-width: 600px) {
+  .economy-audit .audit-filters label {
+    width: 100%;
+  }
+  .economy-audit .audit-filters input,
+  .economy-audit .audit-filters select {
+    min-width: 0;
+    width: 100%;
+  }
+}
