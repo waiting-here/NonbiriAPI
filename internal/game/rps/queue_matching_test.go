@@ -204,6 +204,9 @@ func TestQueueIdempotencyAuthorizationCancelAndTimeoutRelease(t *testing.T) {
 	if err != nil || count != 1 {
 		t.Fatalf("queue sweep=(%d,%v)", count, err)
 	}
+	if seq := fixture.scalar(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, userID); seq != 3 {
+		t.Fatalf("enqueue/cancel/replay/timeout activity=%d", seq)
+	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_queue WHERE id=?`, timed.Queue.ID) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_user_slots WHERE user_id=?`, userID) != 0 ||
 		fixture.balance(userID).Cmp(big.NewInt(rpsTestFunding)) != 0 {

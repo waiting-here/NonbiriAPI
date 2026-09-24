@@ -102,6 +102,12 @@ func ActorScopeHash(kind, canonicalID string) ([32]byte, error) {
 	if kind == "" || canonicalID == "" {
 		return [32]byte{}, errors.New("actor kind and canonical ID are required")
 	}
+	// A renamed full-steward level retains its replay namespace. Live role
+	// authorization still runs before looking up a receipt; trainees use a
+	// separate identity and cannot replay an earlier steward operation.
+	if kind == "level6" {
+		kind = "level5"
+	}
 	return framedDigest("NonbiriAPI/idempotency-actor/v1", []byte(kind), []byte(canonicalID)), nil
 }
 

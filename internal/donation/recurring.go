@@ -53,7 +53,7 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 	if role == recurringOwner {
 		tx, err = s.beginOwnerTx(ctx, userID)
 	} else {
-		tx, _, err = s.beginRoleTx(ctx, role, userID)
+		tx, _, err = s.beginScopedTx(ctx, role, userID, true)
 	}
 	if err != nil {
 		return RecurringLimits{}, err
@@ -78,6 +78,20 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 }
 
 func (s *Service) recurringScope(ctx context.Context, tx *sql.Tx, role reviewerRole, userID, donationID, keyID, now int64, readOnly bool) (int64, error) {
+	if role != recurringOwner {
+		scope, err := s.managementScope(ctx, tx, role, userID)
+		if err != nil {
+			return 0, err
+		}
+		if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+			return 0, scopeError(err)
+		}
+		if scope.Trainee {
+			var revision int64
+			err := tx.QueryRowContext(ctx, `SELECT revision FROM donations WHERE id=?`, donationID).Scan(&revision)
+			return revision, err
+		}
+	}
 	if role == recurringOwner {
 		var owned bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations WHERE id=? AND user_id=?)`, donationID, userID).Scan(&owned); err != nil {
@@ -138,7 +152,7 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 	if role == reviewerSteward {
 		route = routeStewardRecurring
 	}
-	if ctx == nil || donationID <= 0 || keyID <= 0 || expected <= 0 || len(rules) > donationquota.MaxRules || !validMutation(mutation, http.MethodPut, route, donationID, keyID) {
+	if ctx == nil || donationID <= 0 || keyID <= 0 || expected <= 0 || len(rules) > donationquota.MaxRules || !validScopedMutation(ctx, mutation, http.MethodPut, route, donationID, keyID) {
 		return empty, ErrInvalidRequest
 	}
 	for _, rule := range rules {
@@ -146,11 +160,12 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 			return empty, ErrInvalidRequest
 		}
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, userID)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, false)
 	if err != nil {
 		return empty, err
 	}
 	committed := false
+	actorID, auditRole := scope.ActorID, scope.AuditRole(role == reviewerAdmin)
 	defer finishTx(tx, &committed)
 	now, err := s.nowUnix()
 	if err != nil {
@@ -159,7 +174,7 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 	if _, err := s.recurringScope(ctx, tx, role, userID, donationID, keyID, now, false); err != nil {
 		return empty, err
 	}
-	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
+	decision, err := beginMutation(ctx, tx, auditRole, actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return empty, err
 	}
@@ -178,7 +193,7 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 	if err := donationquota.Replace(ctx, tx, keyID, now, rules); err != nil {
 		return empty, quotaError(err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,?,?,'limit_update','',?)`, donationID, expected+1, actorID, string(role), now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at) VALUES(?,?,?,?,'limit_update','',?)`, donationID, expected+1, actorID, auditRole, now)
 	if err != nil {
 		return empty, err
 	}

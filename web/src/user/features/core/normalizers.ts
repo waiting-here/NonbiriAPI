@@ -359,16 +359,43 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
   if (record.state === 'waiting' || record.state === 'active') {
     const state = record.state;
     if (record.game === 'blackjack' && record.route_id === 'game-blackjack') {
-      return { game: 'blackjack', route_id: 'game-blackjack', kind: 'continue', state,
-        resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'bjq_' : 'bjt_', 'blackjack resource') };
+      return {
+        game: 'blackjack',
+        route_id: 'game-blackjack',
+        kind: 'continue',
+        state,
+        resource_id: opaqueID(
+          record.resource_id,
+          state === 'waiting' ? 'bjq_' : 'bjt_',
+          'blackjack resource',
+        ),
+      };
     }
     if (record.game === 'bidding' && record.route_id === 'game-bidding') {
-      return { game: 'bidding', route_id: 'game-bidding', kind: 'continue', state,
-        resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'bidq_' : 'bid_', 'bidding resource') };
+      return {
+        game: 'bidding',
+        route_id: 'game-bidding',
+        kind: 'continue',
+        state,
+        resource_id: opaqueID(
+          record.resource_id,
+          state === 'waiting' ? 'bidq_' : 'bid_',
+          'bidding resource',
+        ),
+      };
     }
     if (record.game === 'likes' && record.route_id === 'game-likes') {
-      return { game: 'likes', route_id: 'game-likes', kind: 'continue', state,
-        resource_id: opaqueID(record.resource_id, state === 'waiting' ? 'likq_' : 'lik_', 'likes resource') };
+      return {
+        game: 'likes',
+        route_id: 'game-likes',
+        kind: 'continue',
+        state,
+        resource_id: opaqueID(
+          record.resource_id,
+          state === 'waiting' ? 'likq_' : 'lik_',
+          'likes resource',
+        ),
+      };
     }
   }
   return invalid('home game continuation');
@@ -505,7 +532,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
   if (
     !Number.isSafeInteger(record.effective_level) ||
     (record.effective_level as number) < 1 ||
-    (record.effective_level as number) > 5
+    (record.effective_level as number) > 6
   ) {
     invalid('effective level');
   }

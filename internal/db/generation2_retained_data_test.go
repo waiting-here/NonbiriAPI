@@ -15,7 +15,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-var retainedSourceManifests = []struct{ name, hash string }{
+type retainedSourceManifest struct{ name, hash string }
+
+var retainedSourceManifests = []retainedSourceManifest{
 	{"before_routing", preRoutingManifestHash},
 	{"before_key_limits", preKeyLimitsManifestHash},
 	{"before_response_starts", preResponseStartsManifestHash},
@@ -220,6 +222,11 @@ func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[st
 
 func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, prior map[string]retainedTableImage) map[string]retainedTableImage {
 	t.Helper()
+	governancePresent, err := GovernanceStoragePresent(context.Background(), database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectPriorGovernance := prior != nil && prior["observability_state"].Columns == nil && governancePresent
 	projectPriorAssets := false
 	projectPriorDuels := false
 	projectPriorBlackjack := prior != nil && prior["game_blackjack_entries"].Columns == nil
@@ -288,11 +295,17 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 		}
 		if projectPriorAssets && table == "credit_accounts" {
 			query += " WHERE asset_type='general'"
+		} else if projectPriorGovernance && table == "credit_accounts" {
+			// Activity inventory is newly seeded; every old asset row is retained.
+			query += " WHERE asset_type IN ('general','game')"
 		}
-		if (projectPriorAssets || projectPriorDuels || projectPriorBlackjack || projectPriorGateway || projectPriorProgression) && table == "site_config" {
+		if (projectPriorAssets || projectPriorDuels || projectPriorBlackjack || projectPriorGateway || projectPriorProgression || projectPriorGovernance) && table == "site_config" {
 			var marks []string
 			for _, key := range prior[table].Keys {
 				marks = append(marks, "?")
+				if !governancePresent && key == "level_display_name_6" {
+					key = "level_display_name_5"
+				}
 				args = append(args, key)
 			}
 			if len(marks) == 0 {
@@ -318,6 +331,22 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 			}
 			if err := rows.Scan(dest...); err != nil {
 				t.Fatal(err)
+			}
+			// Compare old authority under the explicitly required role migration:
+			// the full steward and its title move to six, and the trainee inherits
+			// level four access. Historical audit-role snapshots stay untouched.
+			if !governancePresent {
+				for i, column := range columns {
+					switch {
+					case table == "users" && column == "level" && values[i] == int64(5):
+						values[i] = int64(6)
+					case table == "charity_model_access" && column == "allowed_level_mask":
+						mask := values[i].(int64)
+						values[i] = (mask & 15) | ((mask & 16) << 1) | ((mask & 8) << 1)
+					case table == "site_config" && column == "key" && values[i] == "level_display_name_5":
+						values[i] = "level_display_name_6"
+					}
+				}
 			}
 			if table == "site_config" {
 				keys = append(keys, values[0].(string))
@@ -394,9 +423,22 @@ func retainedBusinessFixture(t *testing.T) func(*testing.T, string) (string, *St
 	}
 }
 
-func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
+func TestRetainedBusinessDataEarlyRoutingSources(t *testing.T) {
+	testRetainedBusinessDataSources(t, retainedSourceManifests[:3])
+}
+
+func TestRetainedBusinessDataCoreAndRecurringSources(t *testing.T) {
+	testRetainedBusinessDataSources(t, retainedSourceManifests[3:5])
+}
+
+func TestRetainedBusinessDataBrowseAndQuotaSources(t *testing.T) {
+	testRetainedBusinessDataSources(t, retainedSourceManifests[5:])
+}
+
+func testRetainedBusinessDataSources(t *testing.T, sources []retainedSourceManifest) {
+	t.Helper()
 	fixture := retainedBusinessFixture(t)
-	for _, source := range retainedSourceManifests {
+	for _, source := range sources {
 		t.Run(source.name, func(t *testing.T) {
 			path, store := fixture(t, "retained.sqlite")
 			vault := store.secrets
@@ -421,7 +463,7 @@ func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
 					assertRetainedImages(t, store.DB(), upgraded)
 				}
 				if countRows(t, store, `SELECT COUNT(*) FROM donation_handling WHERE state='legacy' AND created_at=101 AND updated_at=109`) != 1 ||
-					countRows(t, store, `SELECT COUNT(*) FROM charity_model_access WHERE allowed_level_mask=31 AND public_description=''`) != 1 {
+					countRows(t, store, `SELECT COUNT(*) FROM charity_model_access WHERE allowed_level_mask=63 AND public_description=''`) != 1 {
 					t.Fatal("missing legacy defaults")
 				}
 				for _, table := range []string{"game_rps_presentation", "game_rps_pending_presentation", "game_rps_summary_presentation"} {
@@ -442,9 +484,22 @@ func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
 	}
 }
 
-func TestRetainedExtensionRollsBackWhenStorageFills(t *testing.T) {
+func TestRetainedExtensionRollbackEarlyRoutingSources(t *testing.T) {
+	testRetainedExtensionRollbackSources(t, retainedSourceManifests[:3])
+}
+
+func TestRetainedExtensionRollbackCoreAndRecurringSources(t *testing.T) {
+	testRetainedExtensionRollbackSources(t, retainedSourceManifests[3:5])
+}
+
+func TestRetainedExtensionRollbackBrowseAndQuotaSources(t *testing.T) {
+	testRetainedExtensionRollbackSources(t, retainedSourceManifests[5:])
+}
+
+func testRetainedExtensionRollbackSources(t *testing.T, sources []retainedSourceManifest) {
+	t.Helper()
 	fixture := retainedBusinessFixture(t)
-	for _, source := range retainedSourceManifests {
+	for _, source := range sources {
 		t.Run(source.name, func(t *testing.T) {
 			_, store := fixture(t, "full.sqlite")
 			makeRetainedSource(t, store.DB(), source.hash)

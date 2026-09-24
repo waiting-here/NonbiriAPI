@@ -55,8 +55,8 @@ WHERE u.id=? AND c.generation=? AND c.key_hash IS NOT NULL`, userID, identity.Ge
 		return Principal{}, fmt.Errorf("authorize steward caller: read live authority: %w", err)
 	}
 	if isAdmin != 0 || isBanned == 1 && (!bannedUntil.Valid || bannedUntil.Int64 > now) ||
-		!manualLevel.Valid || manualLevel.Int64 != 5 || autoLevel < 1 || autoLevel > 4 {
+		!manualLevel.Valid || manualLevel.Int64 != 6 || autoLevel < 1 || autoLevel > 4 {
 		return Principal{}, ErrForbidden
 	}
-	return Principal{UserID: userID, DiscordID: discordID.String, Role: RoleSteward, EffectiveLevel: 5}, nil
+	return Principal{UserID: userID, DiscordID: discordID.String, Role: RoleSteward, EffectiveLevel: 6}, nil
 }

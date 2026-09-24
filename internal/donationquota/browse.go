@@ -7,8 +7,11 @@ import "fmt"
 // code, never request text. All tables remain in the caller's authorized read
 // snapshot. Reservation and dispatch continue to use the transactional engine.
 func AvailabilityPredicate(keyID, decisionNow, credits, tokens string) string {
-	return fmt.Sprintf(`NOT EXISTS (
-WITH live_quota AS MATERIALIZED (
+	return fmt.Sprintf(`EXISTS (
+WITH token_budget AS MATERIALIZED (
+ SELECT tk.*,COALESCE(tk.input_token_reserve+tk.output_token_reserve,%[4]s) AS effective_reserve
+ FROM donation_keys tk WHERE tk.id=%[1]s
+), live_quota AS MATERIALIZED (
  SELECT e.*,MAX(%[2]s,e.effective_at,COALESCE(e.last_observed_at,0)) AS observed_now
  FROM donation_quota_rules r JOIN donation_quota_epochs e
    ON e.rule_id=r.id AND e.epoch=r.current_epoch
@@ -37,7 +40,22 @@ WITH live_quota AS MATERIALIZED (
  q.pending_reserved) AS remaining
  FROM quota_window q
 )
-SELECT 1 FROM quota_remaining q WHERE q.retired_at IS NOT NULL OR q.remaining=nbi_u128(0)
- OR q.remaining<nbi_u128(CASE q.metric WHEN 'calls' THEN 1 WHEN 'tokens' THEN %[4]s WHEN 'credits' THEN %[3]s ELSE -1 END)
+SELECT 1 FROM token_budget b WHERE
+ (b.input_token_limit_mag IS NULL OR (b.input_token_reserve IS NOT NULL
+   AND nbi_u128_remaining(b.input_token_limit_mag,b.input_tokens_used,b.input_tokens_reserved,nbi_u128(0))>nbi_u128(0)
+   AND nbi_u128_remaining(b.input_token_limit_mag,b.input_tokens_used,b.input_tokens_reserved,nbi_u128(0))>=nbi_u128(b.input_token_reserve)))
+ AND (b.output_token_limit_mag IS NULL OR (b.output_token_reserve IS NOT NULL
+   AND nbi_u128_remaining(b.output_token_limit_mag,b.output_tokens_used,b.output_tokens_reserved,nbi_u128(0))>nbi_u128(0)
+   AND nbi_u128_remaining(b.output_token_limit_mag,b.output_tokens_used,b.output_tokens_reserved,nbi_u128(0))>=nbi_u128(b.output_token_reserve)))
+ AND NOT EXISTS (SELECT 1 FROM quota_remaining q WHERE q.retired_at IS NOT NULL OR q.remaining=nbi_u128(0)
+ OR (q.metric IN ('input_tokens','output_tokens') AND b.input_token_reserve IS NULL)
+ OR q.remaining<nbi_u128(CASE q.metric WHEN 'calls' THEN 1 WHEN 'tokens' THEN b.effective_reserve
+ WHEN 'input_tokens' THEN b.input_token_reserve WHEN 'output_tokens' THEN b.output_token_reserve WHEN 'credits' THEN %[3]s ELSE -1 END))
 )`, keyID, decisionNow, credits, tokens)
+}
+
+// EffectiveTokenReserveSQL supplies the same pair-or-scalar amount to existing
+// cumulative total-limit predicates. Inputs are trusted repository expressions.
+func EffectiveTokenReserveSQL(keyID, legacy string) string {
+	return fmt.Sprintf(`(SELECT COALESCE(tk.input_token_reserve+tk.output_token_reserve,%s) FROM donation_keys tk WHERE tk.id=%s)`, legacy, keyID)
 }

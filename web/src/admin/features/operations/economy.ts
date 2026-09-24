@@ -130,6 +130,7 @@ interface GamesConfig {
   master_enabled: boolean;
   fishing: {
     rake_bp: GamePumps;
+    blue_fish_chance_bps: number;
     enabled: boolean;
     bait_prices: { worm: string; lure: string; premium: string };
     rtp_percent: { standard: number; premium: number };
@@ -180,7 +181,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
   );
   const fishing = record(
     root.fishing,
-    ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers', 'rake_bp'],
+    ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers', 'rake_bp', 'blue_fish_chance_bps'],
     'Fishing configuration',
   );
   const bait = record(fishing.bait_prices, ['worm', 'lure', 'premium'], 'Fishing bait prices');
@@ -210,6 +211,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
     fishing: {
       enabled: boolean(fishing.enabled, 'Fishing switch'),
       rake_bp: normalizeGamePumps(fishing.rake_bp),
+      blue_fish_chance_bps: integer(fishing.blue_fish_chance_bps, 'Blue fat fish chance', 0, 10_000),
       bait_prices: {
         worm: amount(bait.worm, 'worm price', false),
         lure: amount(bait.lure, 'lure price', false),

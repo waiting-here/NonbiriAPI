@@ -40,6 +40,18 @@ func validateAssetSourceConfig(ctx context.Context, q generationTwoConfigQueryer
 	if err != nil {
 		return err
 	}
+	governancePresent, err := GovernanceStoragePresent(ctx, q)
+	if err != nil {
+		return err
+	}
+	if !governancePresent {
+		for key, value := range governanceConfigDefaults() {
+			if _, exists := values[key]; exists {
+				return errors.New("prior schema contains governance configuration")
+			}
+			values[key] = value
+		}
+	}
 	progressionPresent, err := ProgressionStoragePresent(ctx, q)
 	if err != nil {
 		return err

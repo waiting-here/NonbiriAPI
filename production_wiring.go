@@ -79,6 +79,7 @@ func newPublicForwardRuntime(
 	maintenanceGate *maintenance.Gate,
 	rpm ratelimit.RPMConfig,
 	cancelUserDuelsTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error),
+	audits *auditRuntime,
 	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
 	if store == nil || vault == nil || claims == nil || charityService == nil || charityRoutes == nil ||
@@ -90,7 +91,12 @@ func newPublicForwardRuntime(
 		return nil, fmt.Errorf("create caller lifecycle gate: %w", err)
 	}
 	var abuse *antiabuse.Service
+	var observer flowcontrol.Observer
+	if audits != nil {
+		observer = audits.collector
+	}
 	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store),
+		Observer: observer,
 		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
 			return applyPublicRPMDenial(ctx, userID, reason, abuse)
 		},
@@ -154,10 +160,15 @@ func newPublicForwardRuntime(
 		}
 		connectors = append(connectors, instance)
 	}
-	service, err := forward.NewService(forward.Config{
+	forwardConfig := forward.Config{
 		Personal: personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
-	})
+	}
+	if audits != nil {
+		forwardConfig.ErrorScope = audits.observations.DiscoveryScope
+		forwardConfig.Classify = audits.classify
+	}
+	service, err := forward.NewService(forwardConfig)
 	if err != nil {
 		_ = safety.Close()
 		return fail(fmt.Errorf("create public forward service: %w", err))

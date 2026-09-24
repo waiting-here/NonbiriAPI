@@ -16,6 +16,16 @@ const board = () => ({
 });
 
 describe('exact rankings', () => {
+  it('restricts all net-profit boards to the existing seven-day window', () => {
+    for (const key of ['game_net_profit', 'fishing_net_profit', 'blackjack_net_profit'] as const) {
+      expect(normalizeRanking(board(), key, '7d').rows[0].amount).toBe('9007199254740993.123');
+      for (const window of ['30d', 'history'] as const)
+        expect(() => normalizeRanking({ ...board(), window }, key, window)).toThrow();
+    }
+    for (const key of ['bidding', 'blackjack'] as const)
+      for (const window of ['30d', 'history'] as const)
+        expect(normalizeRanking({ ...board(), window }, key, window).window).toBe(window);
+  });
   it('preserves wide decimals and rejects anonymous identity leaks', () => {
     expect(normalizeRanking(board(), 'bidding', '7d').rows[0].amount).toBe('9007199254740993.123');
     for (const identity of [

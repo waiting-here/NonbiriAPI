@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -26,6 +27,7 @@ type attempt struct {
 	mu      sync.Mutex
 	user    int64
 	fact    Fact
+	kind    atomic.Uint32
 	handled bool
 }
 
@@ -52,6 +54,49 @@ func get(ctx context.Context) *attempt {
 	a, _ := ctx.Value(key{}).(*attempt)
 	return a
 }
+
+// CurrentID returns the existing server-owned identity without creating one.
+func CurrentID(ctx context.Context) string {
+	if a := get(ctx); a != nil {
+		return a.fact.ID
+	}
+	return ""
+}
+
+// Classify records a validated namespace without retaining the request body.
+func Classify(ctx context.Context, kind string) {
+	var value uint32
+	switch kind {
+	case "self":
+		value = 1
+	case "charity":
+		value = 2
+	case "discovery":
+		value = 3
+	default:
+		return
+	}
+	if a := get(ctx); a != nil {
+		a.kind.Store(value)
+	}
+}
+
+func Kind(ctx context.Context) string {
+	if a := get(ctx); a != nil {
+		// Rejection recorders may read classification while the fact mutex is
+		// held by BeforeHTTPError. Classification never needs that lock.
+		switch a.kind.Load() {
+		case 1:
+			return "self"
+		case 2:
+			return "charity"
+		case 3:
+			return "discovery"
+		}
+	}
+	return "unclassified"
+}
+
 func Identity(ctx context.Context, user int64) (string, error) {
 	if a := get(ctx); a != nil {
 		if a.user != user {

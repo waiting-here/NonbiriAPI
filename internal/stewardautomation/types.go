@@ -66,6 +66,10 @@ type keyInput struct {
 	PriceLimit              *string                   `json:"price_limit"`
 	CallsLimit              *string                   `json:"calls_limit"`
 	TokensLimit             *string                   `json:"tokens_limit"`
+	InputTokensLimit        *string                   `json:"input_tokens_limit"`
+	OutputTokensLimit       *string                   `json:"output_tokens_limit"`
+	InputTokenReserve       *string                   `json:"input_token_reserve"`
+	OutputTokenReserve      *string                   `json:"output_token_reserve"`
 	TokenReserve            int64                     `json:"token_reserve"`
 	CharityEnabled          *bool                     `json:"charity_enabled"`
 	SafeNote                string                    `json:"safe_note"`
@@ -73,10 +77,11 @@ type keyInput struct {
 }
 
 type createInput struct {
-	Endpoint    *endpointInput `json:"endpoint"`
-	Description string         `json:"description"`
-	ReviewNote  string         `json:"review_note"`
-	Keys        []keyInput     `json:"keys"`
+	DiscordPublicThanks *bool          `json:"discord_public_thanks"`
+	Endpoint            *endpointInput `json:"endpoint"`
+	Description         string         `json:"description"`
+	ReviewNote          string         `json:"review_note"`
+	Keys                []keyInput     `json:"keys"`
 }
 
 type createdKey struct {

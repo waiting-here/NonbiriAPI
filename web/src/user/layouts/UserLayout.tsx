@@ -166,8 +166,8 @@ export function UserLayout() {
 
   const signedIn = !logoutRequested && !session.error && Boolean(session.data?.user);
   const profile = signedIn ? session.data?.user : undefined;
-  const showStewardEntry = profile?.effective_level === 5;
-  // The fixed primary navigation never grows with capabilities. Level-5
+  const showStewardEntry = profile?.effective_level === 5 || profile?.effective_level === 6;
+  // The fixed primary navigation never grows with capabilities. Steward
   // co-management is exposed through the account menu (and its mobile drawer
   // equivalent) exactly once, so the same destination cannot appear in both
   // primary navigation and account actions.

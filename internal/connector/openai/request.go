@@ -46,6 +46,7 @@ type jsonField struct {
 // private so they cannot accidentally enter a metadata hook or formatter.
 type ChatRequest struct {
 	fields       []jsonField
+	excluded     []string
 	requirements CapabilityRequirements
 	Model        string
 	Stream       bool
@@ -195,6 +196,8 @@ func (r *ChatRequest) Clear() {
 	}
 	clearFields(r.fields)
 	r.fields = nil
+	clear(r.excluded)
+	r.excluded = nil
 	clear(r.requirements.topLevel)
 	r.requirements = CapabilityRequirements{}
 }
@@ -209,7 +212,8 @@ func (r *ChatRequest) CloneForAttempt() *ChatRequest {
 		return nil
 	}
 	clone := &ChatRequest{
-		fields: make([]jsonField, len(r.fields)),
+		fields:   make([]jsonField, len(r.fields)),
+		excluded: append([]string(nil), r.excluded...),
 		requirements: CapabilityRequirements{
 			capabilities: r.requirements.capabilities,
 			topLevel:     append([]string(nil), r.requirements.topLevel...),
@@ -384,6 +388,7 @@ func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier 
 	}
 	modelJSON, _ := json.Marshal(upstreamModel)
 	safetyJSON, _ := json.Marshal(safetyIdentifier)
+	policy.ForceStoreFalse = policy.ForceStoreFalse && !r.FieldExcluded("store")
 
 	var out bytes.Buffer
 	out.Grow(min(int(maxForwardBodyBytes), 4096))
@@ -444,7 +449,7 @@ func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier 
 			return nil, ErrPayloadTooLarge
 		}
 	}
-	if !safetySeen {
+	if !safetySeen && !r.FieldExcluded("safety_identifier") {
 		if wrote != 0 {
 			out.WriteByte(',')
 		}

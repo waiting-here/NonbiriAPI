@@ -212,7 +212,7 @@ func TestGameOnboardingHTTPExportAndPhysicalDeletion(t *testing.T) {
 	if err := json.Unmarshal(exported.Body.Bytes(), &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.SchemaVersion != 9 || len(document.GameOnboarding) != 1 || document.GameOnboarding[0].GameKey != "rps" || document.GameOnboarding[0].TaskKey != "quick" || document.GameOnboarding[0].Award != "1000" || document.User.GameBalance != "0" || document.GameOnboarding[0].OperationID == "" {
+	if document.SchemaVersion != 10 || len(document.GameOnboarding) != 1 || document.GameOnboarding[0].GameKey != "rps" || document.GameOnboarding[0].TaskKey != "quick" || document.GameOnboarding[0].Award != "1000" || document.User.GameBalance != "0" || document.GameOnboarding[0].OperationID == "" {
 		t.Fatalf("earned reward missing from export: %+v", document.GameOnboarding)
 	}
 	if len(document.Randomness) != 1 || document.Randomness[0].Commitment != openingCommitment || len(document.Randomness[0].Seed) != 64 {

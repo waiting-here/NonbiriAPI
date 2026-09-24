@@ -132,7 +132,8 @@ function CharityContent() {
             <Link className="btn btn-secondary" to="/keys">
               {t('user.charity.apiAccess')}
             </Link>
-            {session.data?.user.effective_level === 5 ? (
+            {session.data?.user.effective_level === 5 ||
+            session.data?.user.effective_level === 6 ? (
               <Link className="btn btn-secondary" to="/steward?tab=charity">
                 {t('user.charity.manageCharity')}
               </Link>

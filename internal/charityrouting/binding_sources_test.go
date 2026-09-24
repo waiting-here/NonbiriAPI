@@ -13,7 +13,7 @@ import (
 func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	donor := env.seedUser(t, false, nil)
 	model := env.createModel(t, 'a')
@@ -95,7 +95,7 @@ func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) 
 	if got := request(model.ID, fmt.Sprint(donationIDs[0]), cursor, true); got.Code != 400 {
 		t.Fatalf("cross-scope cursor accepted: %d", got.Code)
 	}
-	if got := request("999", "", cursor, false); got.Code != 400 {
+	if got := request("999", "", cursor, false); got.Code != 404 {
 		t.Fatalf("cross-model cursor accepted: %d", got.Code)
 	}
 	env.auth.denySteward.Store(true)

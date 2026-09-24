@@ -50,7 +50,7 @@ export interface UserProfile {
   balance: string;
   game_balance: string;
   donation_credit: string;
-  effective_level: 1 | 2 | 3 | 4 | 5;
+  effective_level: 1 | 2 | 3 | 4 | 5 | 6;
   level_display_name: string;
   game_profile_public: boolean;
   charity_profile_public: boolean;
@@ -466,15 +466,18 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 9;
+  schemaVersion: 10;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV9: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportAccount: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV9(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportAccount(input: {
+    accountId: string;
+    elevatedToken: string;
+  }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

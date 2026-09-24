@@ -62,6 +62,7 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
   "default_package_seconds": 60,
   "split_packages": ["example/slow"],
   "split_test_counts": {"example/slow": 2},
+  "split_group_caps": {"example/slow": 4},
   "test_seconds": {"example/slow": {"TestOne": 90}},
   "package_seconds": {"example/slow": 120}
 }`
@@ -70,7 +71,7 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load valid hints: %v", err)
 	}
-	if hints.Shards != 6 || hints.SplitTestCounts["example/slow"] != 2 || hints.TestSeconds["example/slow"]["TestOne"] != 90 {
+	if hints.Shards != 6 || hints.SplitTestCounts["example/slow"] != 2 || hints.SplitGroupCaps["example/slow"] != 4 || hints.TestSeconds["example/slow"]["TestOne"] != 90 {
 		t.Fatalf("loaded hints = %#v", hints)
 	}
 
@@ -82,6 +83,10 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 		{name: "unknown field", content: strings.Replace(valid, `"version": 1,`, `"version": 1, "extra": true,`, 1)},
 		{name: "missing split count", content: strings.Replace(valid, `{"example/slow": 2}`, `{}`, 1)},
 		{name: "extra split count", content: strings.Replace(valid, `{"example/slow": 2}`, `{"example/slow": 2, "example/other": 1}`, 1)},
+		{name: "unsplit group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/whole": 4}`, 1)},
+		{name: "zero group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": 0}`, 1)},
+		{name: "negative group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": -1}`, 1)},
+		{name: "fractional group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": 1.5}`, 1)},
 		{name: "missing split weight", content: strings.Replace(valid, `{"example/slow": 120}`, `{}`, 1)},
 		{name: "invalid test name", content: strings.Replace(valid, `{"TestOne": 90}`, `{"helper": 90}`, 1)},
 		{name: "invalid test weight", content: strings.Replace(valid, `{"TestOne": 90}`, `{"TestOne": 0}`, 1)},
@@ -167,8 +172,8 @@ func TestBuildPlansIsDeterministicAndCoversLiveCatalogOnce(t *testing.T) {
 	if !reflect.DeepEqual(plans, again) {
 		t.Fatalf("plans depend on catalog order:\nfirst:  %#v\nsecond: %#v", plans, again)
 	}
-	if planDigest(plans) != planDigest(again) {
-		t.Fatalf("equivalent plans have different digests: %s != %s", planDigest(plans), planDigest(again))
+	if planDigest(plans, "30m", 4) != planDigest(again, "30m", 4) {
+		t.Fatalf("equivalent plans have different digests: %s != %s", planDigest(plans, "30m", 4), planDigest(again, "30m", 4))
 	}
 
 	var estimated float64
@@ -278,21 +283,21 @@ func TestExecutionGroupsUseExactTopLevelPatterns(t *testing.T) {
 		SplitTests: map[string][]string{
 			"example/slow": {"ExampleThree", "FuzzTwo", "TestOne", "TestΩ"},
 		},
-	}, "30m", 1)
+	}, "30m", 4)
 	if len(groups) != 3 {
 		t.Fatalf("group count = %d, want 3", len(groups))
 	}
-	wantWhole := []string{"test", "-race", "-count=1", "-timeout=30m", "-p=1", "-v", "example/a"}
+	wantWhole := []string{"test", "-race", "-shuffle=on", "-count=1", "-timeout=30m", "-p=1", "-v", "example/a"}
 	if !reflect.DeepEqual(groups[0].Args, wantWhole) {
 		t.Fatalf("whole args = %#v, want %#v", groups[0].Args, wantWhole)
 	}
 	if groups[1].Args[len(groups[1].Args)-1] != "example/z" {
 		t.Fatalf("second whole args = %#v", groups[1].Args)
 	}
-	if len(groups[2].Args) != 9 || groups[2].Args[6] != "-run" || groups[2].Args[8] != "example/slow" {
+	if len(groups[2].Args) != 10 || groups[2].Args[7] != "-run" || groups[2].Args[9] != "example/slow" {
 		t.Fatalf("split args = %#v", groups[2].Args)
 	}
-	pattern, err := regexp.Compile(groups[2].Args[7])
+	pattern, err := regexp.Compile(groups[2].Args[len(groups[2].Args)-2])
 	if err != nil {
 		t.Fatalf("compile generated pattern: %v", err)
 	}
@@ -317,6 +322,7 @@ func TestExecutionGroupsSplitByWeightDeterministicallyAndExactlyOnce(t *testing.
 		SplitTestWeights: map[string]map[string]float64{"example/slow": {
 			"TestLight": 1, "TestHeavy": 10, "TestMedium": 5, "TestOther": 2,
 		}},
+		SplitGroupCaps: map[string]int{"example/slow": 4},
 	}
 	first := executionGroups(plan, "30m", 2)
 	plan.SplitTests["example/slow"] = []string{"TestOther", "TestMedium", "TestHeavy", "TestLight"}
@@ -329,7 +335,7 @@ func TestExecutionGroupsSplitByWeightDeterministicallyAndExactlyOnce(t *testing.
 	}
 	seen := make(map[string]int)
 	for _, group := range first[1:] {
-		pattern, err := regexp.Compile(group.Args[7])
+		pattern, err := regexp.Compile(group.Args[len(group.Args)-2])
 		if err != nil {
 			t.Fatalf("compile %s: %v", group.Label, err)
 		}
@@ -343,6 +349,99 @@ func TestExecutionGroupsSplitByWeightDeterministicallyAndExactlyOnce(t *testing.
 		if seen[name] != 1 {
 			t.Fatalf("test %s matched %d groups", name, seen[name])
 		}
+	}
+}
+
+func TestBuildPlansApplyPackageGroupCapsAndCoverEveryTest(t *testing.T) {
+	t.Parallel()
+	catalog := []catalogPackage{
+		{ImportPath: "example/fixture", Tests: []string{"TestOne", "TestTwo", "TestThree", "TestFour", "TestFive", "TestSix"}},
+		{ImportPath: "example/migration", Tests: []string{"TestOne", "TestTwo", "TestThree", "TestFour", "TestFive", "TestSix"}},
+	}
+	hints := timingHints{
+		Version:               1,
+		Shards:                2,
+		DefaultPackageSeconds: 60,
+		SplitPackages:         []string{"example/fixture", "example/migration"},
+		SplitTestCounts:       map[string]int{"example/fixture": 6, "example/migration": 6},
+		SplitGroupCaps:        map[string]int{"example/migration": 4},
+		PackageSeconds:        map[string]float64{"example/fixture": 60, "example/migration": 60},
+	}
+	plans, err := buildPlans(catalog, hints, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[string]int)
+	for _, plan := range plans {
+		groups := executionGroups(plan, "30m", 4)
+		counts := make(map[string]int)
+		for _, group := range groups {
+			packagePath := group.Args[len(group.Args)-1]
+			counts[packagePath]++
+			pattern := regexp.MustCompile(group.Args[len(group.Args)-2])
+			for _, pkg := range catalog {
+				if pkg.ImportPath != packagePath {
+					continue
+				}
+				for _, name := range pkg.Tests {
+					if pattern.MatchString(name) {
+						seen[packagePath+"/"+name]++
+					}
+				}
+			}
+		}
+		if counts["example/fixture"] != 1 || counts["example/migration"] != 3 {
+			t.Fatalf("shard %d group counts = %#v, want one fixture process and three migration processes", plan.Index, counts)
+		}
+	}
+	for _, pkg := range catalog {
+		for _, name := range pkg.Tests {
+			key := pkg.ImportPath + "/" + name
+			if seen[key] != 1 {
+				t.Errorf("%s matched %d groups, want 1", key, seen[key])
+			}
+		}
+	}
+	for _, caps := range []map[string]int{
+		{"example/fixture": 0},
+		{"example/fixture": -1},
+		{"example/unknown": 2},
+	} {
+		hints.SplitGroupCaps = caps
+		if _, err := buildPlans(catalog, hints, 2); err == nil {
+			t.Errorf("accepted invalid caps %#v", caps)
+		}
+	}
+}
+
+func TestPlanDigestPinsEffectiveExecutionPolicy(t *testing.T) {
+	t.Parallel()
+	plan := shardPlan{
+		Index:      1,
+		SplitTests: map[string][]string{"example/slow": {"TestOne", "TestTwo", "TestThree", "TestFour"}},
+	}
+	digest := func(timeout string, workers int) string {
+		return planDigest([]shardPlan{plan}, timeout, workers)
+	}
+	defaultDigest := digest("30m", 4)
+	plan.SplitGroupCaps = map[string]int{"example/slow": 1}
+	if got := digest("30m", 4); got != defaultDigest {
+		t.Fatalf("explicit default changes digest: %s != %s", got, defaultDigest)
+	}
+	plan.SplitGroupCaps["example/slow"] = 4
+	fourGroups := digest("30m", 4)
+	if fourGroups == defaultDigest {
+		t.Fatal("different process grouping has the same digest")
+	}
+	plan.SplitGroupCaps["example/slow"] = 8
+	if got := digest("30m", 4); got != fourGroups {
+		t.Fatalf("ineffective cap changes digest: %s != %s", got, fourGroups)
+	}
+	if got := digest("30m", 2); got == fourGroups {
+		t.Fatal("different worker policy has the same digest")
+	}
+	if got := digest("20m", 4); got == fourGroups {
+		t.Fatal("different command deadline has the same digest")
 	}
 }
 

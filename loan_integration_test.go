@@ -44,7 +44,7 @@ func TestLoanRealAuthorizationReceiptAndDebtGameAdmission(t *testing.T) {
 	if denied := f.call(0, http.MethodGet, path, nil, false); denied.Code != 403 {
 		t.Fatal("ordinary user management access", denied.Code, denied.Body)
 	}
-	if _, err := f.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, f.users[0]); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, f.users[0]); err != nil {
 		t.Fatal(err)
 	}
 	steward := f.call(0, http.MethodGet, path, nil, false)
@@ -76,7 +76,11 @@ func TestLoanRealAuthorizationReceiptAndDebtGameAdmission(t *testing.T) {
 	f.enqueue(0, "bidding", "tier1")
 	document = readPersonalExport(t, f, 0)
 	if len(document.GameOnboardingHolds) != 2 || document.GameOnboardingHolds[0].GameKey != "bidding" || len(readPersonalExport(t, f, 1).GameOnboardingHolds) != 0 {
-		t.Fatal("pending rewards are missing or crossed owner boundary")
+		var epoch int64
+		if err := f.store.DB().QueryRow(`SELECT started_at FROM game_statistics_epoch WHERE id=1`).Scan(&epoch); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatalf("pending rewards are missing or crossed owner boundary: holds=%+v game_now=%d epoch=%d fixture_now=%d", document.GameOnboardingHolds, f.clock.Load(), epoch, f.now)
 	}
 	f.checkLedger()
 }

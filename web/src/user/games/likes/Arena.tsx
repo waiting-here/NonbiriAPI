@@ -5,7 +5,16 @@ import type { ModeCatalog } from './catalog';
 import type { Frame, LikesEvent, LikesView, Presentation, Resources, Score } from './types';
 import { LikesArt } from './LikesArt';
 import { artRegistry, castSlot, characterSlot } from './art';
-import { buffName, reasonName, resourceName, skillName, stageName, shopName } from './labels';
+import {
+  buffName,
+  effectName,
+  effectLayers,
+  reasonName,
+  resourceName,
+  skillName,
+  stageName,
+  shopName,
+} from './labels';
 import { arenaMotion, interpolate, overloadCues, scoreMotion } from './motion';
 import { ResourceMeter } from './ResourceMeter';
 import { PlanSummary } from './PlanEditor';
@@ -529,9 +538,9 @@ export function Arena({
                     key={effect.key}
                     onClick={() => onInspect(effect.buff_id)}
                   >
-                    {buffName(catalog, effect.buff_id)}
+                    {effectName(catalog, effect, t)}
                     <EffectSummary catalog={catalog} id={effect.buff_id} />
-                    {effect.layers > 1 ? ` ×${effect.layers}` : ''}
+                    {effect.layers > 0 ? <span>{effectLayers(effect, t)}</span> : null}
                     <small>
                       {effect.active_from > round
                         ? t('下轮生效', 'Next round')
@@ -634,8 +643,12 @@ export function FrameChanges({
                   <ul>
                     {value.players[seat].effects.map((effect) => (
                       <li key={effect.key}>
-                        {buffName(catalog, effect.buff_id)} · {t('层数', 'Layers')} {effect.layers}{' '}
-                        · {t('剩余轮数', 'Rounds left')} {effect.remaining} ·{' '}
+                        {effectName(catalog, effect, t)} · {effectLayers(effect, t)} ·{' '}
+                        {effect.kind !== 'CACHE' ? (
+                          <>
+                            {t('剩余轮数', 'Rounds left')} {effect.remaining} ·{' '}
+                          </>
+                        ) : null}{' '}
                         {t('生效轮', 'Active from round')} {effect.active_from}
                       </li>
                     ))}

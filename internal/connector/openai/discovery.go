@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -124,14 +125,10 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "upstream response was unavailable")
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
+		_ = (upstreamerror.Context{}).ReadResponse(ctx, response)
 		if response.Body != nil {
 			_ = response.Body.Close()
 		}
-		// Error bodies are fully untrusted and commonly echo Authorization,
-		// request URLs, or other owner-only values. Do not transform, truncate,
-		// inspect, or persist any fragment: searching after a byte/rune boundary
-		// can miss a sensitive value that straddles the boundary and leak its
-		// prefix. The local status category is sufficient for the issue rail.
 		return failedDiscoveryResult(discoveryStatusFailure(response.StatusCode), response, fmt.Sprintf("upstream returned status %d", response.StatusCode))
 	}
 	if response.Body == nil {
@@ -139,6 +136,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 	}
 	defer func() { _ = response.Body.Close() }()
 	if !validResponseMediaType(response, "application/json") {
+		_ = (upstreamerror.Context{}).ReadResponse(ctx, response)
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream response content type was invalid")
 	}
 
@@ -159,6 +157,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 	}
 	models, err := parseModels(body, semanticGuard)
 	if err != nil {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		if errors.Is(err, errSensitiveModels) {
 			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
 		}

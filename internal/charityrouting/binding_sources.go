@@ -16,6 +16,8 @@ type BindingDonation struct {
 }
 
 type BindingSourceKey struct {
+	DonationNote  string          `json:"donation_note"`
+	ApprovalNote  *string         `json:"approval_note"`
 	DonationKeyID string          `json:"donation_key_id"`
 	Source        CandidateSource `json:"source"`
 	Note          string          `json:"note"`
@@ -50,24 +52,21 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 		return nil, nil, 0, err
 	}
 	defer tx.Rollback()
-	if role == roleSteward {
-		if nilDependency(s.roleAuth) {
-			return nil, nil, 0, ErrUnavailable
-		}
-		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorID); err != nil {
-			return nil, nil, 0, mapAuthorization(err)
-		}
-	}
-	if _, err := getAdminModelTx(ctx, tx, modelID); err != nil {
+	scope, err := s.managementScope(ctx, tx, role, actorID, modelID, false)
+	if err != nil {
 		return nil, nil, 0, err
 	}
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, nil, 0, err
 	}
-	query := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + bindingSourceFrom + ` AND d.id>? GROUP BY d.id,d.description ORDER BY d.id LIMIT ?`
+	from := bindingSourceFrom
+	if scope.Trainee {
+		from += ` AND dk.mainstream_channel_id IS NOT NULL`
+	}
+	query := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` AND d.id>? GROUP BY d.id,d.description ORDER BY d.id LIMIT ?`
 	args := []any{modelID, now, afterID, limit + 1}
 	if donationID != 0 {
-		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + bindingSourceFrom + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
+		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
 		args = []any{modelID, now, donationID, afterID, limit + 1}
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
@@ -89,7 +88,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 			donations = append(donations, entry)
 		} else {
 			var entry BindingSourceKey
-			if err := rows.Scan(&id, &entry.Source.ConnectorType, &entry.Source.CanonicalBaseURL, &entry.Source.DisplayHead, &entry.Source.DisplayTail, &entry.Note, &entry.Source.MaxConcurrency, &entry.Source.MaxRPM); err != nil {
+			if err := rows.Scan(&id, &entry.Source.ConnectorType, &entry.Source.CanonicalBaseURL, &entry.Source.DisplayHead, &entry.Source.DisplayTail, &entry.Note, &entry.Source.MaxConcurrency, &entry.Source.MaxRPM, &entry.DonationNote, &entry.ApprovalNote); err != nil {
 				return nil, nil, 0, err
 			}
 			entry.DonationKeyID = strconv.FormatInt(id, 10)
@@ -177,7 +176,11 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 	if keys {
 		scope = string(role) + "-charity-binding-keys"
 	}
-	owner := paginationOwner(role, actorID, strconv.FormatInt(modelID, 10), strconv.FormatInt(donationID, 10))
+	owner, err := api.service.managementCursorOwner(r.Context(), role, actorID, modelID, paginationOwner(role, actorID, strconv.FormatInt(modelID, 10), strconv.FormatInt(donationID, 10)))
+	if err != nil {
+		writeRoutingError(w, err)
+		return
+	}
 	after, err := api.service.decodeModelCursor(cursor, scope, owner, now)
 	if err != nil {
 		writeRoutingError(w, err)

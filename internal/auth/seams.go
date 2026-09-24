@@ -158,7 +158,7 @@ func canonicalSessionBinding(value string) bool {
 	return true
 }
 
-// AuthorizeStewardFinal re-reads the exact user-session actor and live L5 role
+// AuthorizeStewardFinal re-reads the exact user-session actor and live L6 role
 // through the caller's final read transaction.
 func (r *Runtime) AuthorizeStewardFinal(ctx context.Context, tx *sql.Tx, userID int64) error {
 	if r == nil {

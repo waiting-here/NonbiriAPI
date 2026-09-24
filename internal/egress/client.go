@@ -239,6 +239,7 @@ type Client struct {
 	gate             *Gate
 	timeout          time.Duration
 	maxResponseBytes int64
+	disableReplay    bool
 }
 
 // BaseURL returns the canonical endpoint base URL used as the concurrency key.
@@ -287,6 +288,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	outbound := req.Clone(ctx)
+	if c.disableReplay {
+		outbound.GetBody = nil
+		for name := range outbound.Header {
+			if strings.EqualFold(name, "Idempotency-Key") || strings.EqualFold(name, "X-Idempotency-Key") {
+				delete(outbound.Header, name)
+			}
+		}
+	}
 	outbound.URL.Scheme = c.originScheme
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost

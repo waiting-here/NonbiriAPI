@@ -6,11 +6,32 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
+The changes below include development toward 1.0.0-rc.3. The published rc.2 tag remains unchanged; no new release or deployment is implied. The supported upgrade source for this code is rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c`, preserving business data, configuration and instance legal text.
+
 ### Added
+
+- Level-5 trainee stewards with scoped mainstream charity-model maintenance, alongside full level-6 stewards and explicit appointment boundaries. Donation-key management includes donor and review notes, immutable public-thanks choices and shared-configuration impact.
+- Restricted original upstream-error diagnostics and request-source facts, with 30-day ordinary retention, 1 MiB per error, and a configurable 1 GiB default total payload cap. Raw upstream failures can contain upstream-echoed inputs or credentials; personal exports exclude these diagnostics.
+- Manual abuse auditing for sustained RPM/concurrency use, shared IPs, bounded client rules and authenticated auxiliary access events. Anonymous probe counts remain separate and observations do not automatically punish users.
+- Administrator economy auditing across general credits, game credits, draft paper and brushes; issuance, retirement, transfers, balances and data coverage remain distinct. Optional inactivity policies support previews, seven-day grace, asset-specific decay and reversible protective bans.
+- Lifetime and recurring input/output Token limits alongside existing totals, with explicit split reservations, conservative missing-usage settlement and preserved historical totals. TPM remains deferred.
+- Twenty-four-hour charity success rates, protected top-level request-parameter exclusions and a local half-price donor-reward form action.
+- A reusable limited-activity framework and the picture-book activity, with separate exchange currencies, declarative private adapters, per-image prices, FIFO server scheduling, at-most-once generation submission, bounded recovery and ten-minute memory-only results. Image generation remains unavailable through ordinary personal or charity API models.
+- Rolling seven-day net-profit boards for all games, Fishing and Blackjack; configurable blue-fat-fish probability conditional on a legendary catch.
+
+### Changed
+
+- Existing manual level-5 stewards become level 6. New trainees inherit each model's former level-4 admission initially, while former level-5 admission moves to level 6. Current full stewards may manage level-5 users within existing user-management permissions.
+- Charity routing excludes a caller's own donated keys except for current level-6 stewards, whose ordinary donation rewards and cumulative credit remain unchanged.
+- Account export v10 includes safe activity wallets, exchanges, image-task outcomes and inactivity actions. Four-asset account deletion keeps each balancing entry in its own asset and prevents late image work from restoring deleted identity.
+- Loan presentation shows only principal, fee, game credits received, interest and general credits deducted. Existing financial receipt fields remain available for accounting.
 
 - Administrators and stewards can fetch model lists for one available donated key, all available keys in one donation, or all available donated keys across pages and filters. Batches show progress and support pausing and resuming uncertain requests; live permission and eligibility checks protect dispatch and catalog updates.
 
 ### Fixed
+
+- Keep game payments restricted to general/game accounts after introducing activity assets, and display whole activity-currency units correctly in personal credit history.
+- Preserve long-cache facts through battle presentation and distinguish persistent cache from short cache without changing game rules. Use the available glossary layout space and consistently name legendary fish in Chinese.
 
 - Give Cyber loan a full-width promotion and a prominent nominal amount, with a compact fee-details star in the confirmation description. Keep welfare and Thursday activities together below it.
 - Keep charity privacy information and the True Charity leaderboard in an independent sidebar, fill incomplete catalog rows and show paging controls above the results.

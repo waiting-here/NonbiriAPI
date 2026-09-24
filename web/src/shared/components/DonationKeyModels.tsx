@@ -13,6 +13,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { managementResourceID } from '@shared/operations/charityModelPages';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
+import { useCharityModelScope } from './charityModelScopeContext';
 
 interface Props {
   role: CharityRole;
@@ -69,6 +70,7 @@ function KeyModelPages({
   onCapabilityLoss,
   prefix,
 }: Props & { prefix: string }) {
+  const charityModelID = useCharityModelScope();
   const { t } = useTranslation();
   const location = useLocation();
   const [params, setParams] = useSearchState();
@@ -84,6 +86,7 @@ function KeyModelPages({
     queryKey: [
       ...charityKeys.root(role),
       'key-models',
+      charityModelID,
       accountId,
       donationId,
       keyId,
@@ -91,7 +94,15 @@ function KeyModelPages({
       pager.pageSize,
     ],
     queryFn: ({ signal }) =>
-      getDonationKeyModels(role, donationId, keyId, pager.page, pager.pageSize, signal),
+      getDonationKeyModels(
+        role,
+        donationId,
+        keyId,
+        pager.page,
+        pager.pageSize,
+        signal,
+        charityModelID,
+      ),
     retry: false,
   });
   const lost = isForbidden(query.error) || isUnauthorized(query.error);
@@ -221,6 +232,7 @@ function BindingPages({
   prefix,
   onCapabilityLoss,
 }: Props & { modelId: string; prefix: string }) {
+  const charityModelID = useCharityModelScope();
   const { t } = useTranslation();
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -233,6 +245,7 @@ function BindingPages({
     queryKey: [
       ...charityKeys.root(role),
       'key-model-bindings',
+      charityModelID,
       accountId,
       donationId,
       keyId,
@@ -249,6 +262,7 @@ function BindingPages({
         pager.page,
         pager.pageSize,
         signal,
+        charityModelID,
       ),
     retry: false,
   });

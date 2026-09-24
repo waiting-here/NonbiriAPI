@@ -22,6 +22,8 @@ import { LogDetailDrawer } from './LogDetailDrawer';
 import { LogFilters, type LogFilterField } from './LogFilters';
 import { LogTable, type LogColumn } from './LogTable';
 import { TokenBuckets } from './TokenBuckets';
+import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
+import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
 import {
   roleLogExportPath,
   validateLogFilter,
@@ -115,12 +117,14 @@ function useStationScope(
 
 function AttemptTable({
   detail,
+  role,
   page,
   busy,
   onPageChange,
   onPageSizeChange,
 }: {
   detail: NumberedRoleLogDetail;
+  role: LogRole;
   page: string;
   busy: boolean;
   onPageChange: (page: string) => void;
@@ -210,6 +214,13 @@ function AttemptTable({
                   <dd className="mono log-attempt-diagnostic">{attempt.diag ?? '—'}</dd>
                 </div>
               </dl>
+              {role !== 'user' ? (
+                <AttemptErrors
+                  role={role}
+                  requestID={detail.request.id}
+                  attempt={Number(attempt.attempt_seq)}
+                />
+              ) : null}
             </li>
           ))}
         </ol>
@@ -613,6 +624,21 @@ function ScopedRoleLogPanel({
             value: <span className="mono">{detailRequest.caller_error_code ?? '—'}</span>,
           },
           { label: t('logs.tokens'), value: <TokenBuckets row={detailRequest.usage} /> },
+          ...(role !== 'user'
+            ? [
+                {
+                  label: t('common.audit.source'),
+                  wide: true,
+                  value: (
+                    <RequestSource
+                      key={`${accountID}:${detailRequest.id}`}
+                      role={role}
+                      requestID={detailRequest.id}
+                    />
+                  ),
+                },
+              ]
+            : []),
           {
             label: t('common.operations.logs.charge'),
             value: <span className="mono">{detailRequest.usage.charge}</span>,
@@ -625,6 +651,7 @@ function ScopedRoleLogPanel({
                   value: (
                     <AttemptTable
                       detail={detailData}
+                      role={role}
                       page={attemptPager.page}
                       busy={detail.isFetching}
                       onPageChange={attemptPager.setPage}
@@ -702,6 +729,7 @@ function ScopedRoleLogPanel({
           </div>
         }
       </div>
+      {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
       {logs.error && !pageData ? (
         <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />

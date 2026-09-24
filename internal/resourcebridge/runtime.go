@@ -3,6 +3,7 @@
 package resourcebridge
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -41,12 +42,13 @@ type Vault interface {
 // and Random are injectable so timestamp and context generation boundaries can
 // be exercised deterministically.
 type Config struct {
-	Store   *db.Store
-	Vault   Vault
-	Claims  *claim.Service
-	Backend backend.Backend
-	Now     func() time.Time
-	Random  io.Reader
+	Store      *db.Store
+	Vault      Vault
+	Claims     *claim.Service
+	Backend    backend.Backend
+	Now        func() time.Time
+	Random     io.Reader
+	ErrorScope func(context.Context, string, int) context.Context
 }
 
 func (Config) String() string   { return "[redacted resource bridge config]" }
@@ -58,12 +60,13 @@ func (Config) LogValue() slog.Value {
 // Runtime owns the derived fingerprint key and coordinates its lifetime with
 // in-flight writes and discoveries.
 type Runtime struct {
-	db      *db.Store
-	vault   Vault
-	claims  *claim.Service
-	backend backend.Backend
-	now     func() time.Time
-	random  io.Reader
+	db         *db.Store
+	vault      Vault
+	claims     *claim.Service
+	backend    backend.Backend
+	now        func() time.Time
+	random     io.Reader
+	errorScope func(context.Context, string, int) context.Context
 
 	randomMu sync.Mutex
 
@@ -103,13 +106,14 @@ func New(config Config) (*Runtime, error) {
 		return nil, ErrUnavailable
 	}
 	runtime := &Runtime{
-		db:        config.Store,
-		vault:     config.Vault,
-		claims:    config.Claims,
-		backend:   config.Backend,
-		now:       config.Now,
-		random:    config.Random,
-		closeDone: make(chan struct{}),
+		db:         config.Store,
+		vault:      config.Vault,
+		claims:     config.Claims,
+		backend:    config.Backend,
+		now:        config.Now,
+		random:     config.Random,
+		errorScope: config.ErrorScope,
+		closeDone:  make(chan struct{}),
 	}
 	copy(runtime.fingerprintKey[:], derived)
 	return runtime, nil

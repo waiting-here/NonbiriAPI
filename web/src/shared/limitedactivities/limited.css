@@ -1,0 +1,51 @@
+.limited-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+.limited-form {
+  display: grid;
+  gap: 1rem;
+}
+.limited-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+.limited-form input,
+.limited-form select {
+  max-width: 100%;
+  min-width: 0;
+}
+.limited-form .limited-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.limited-form fieldset {
+  display: grid;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.limited-facts {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr);
+  gap: 0.5rem 1rem;
+}
+.limited-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.limited-notice {
+  border-inline-start: 3px solid var(--color-accent, #8274b9);
+  padding: 0.6rem 1rem;
+}
+.limited-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}

@@ -21,7 +21,7 @@ func TestStewardAnnouncementCrossRoleLifecycleAndAuthority(t *testing.T) {
 	admin := e.seedUser(t, "", "en", true)
 	steward := e.seedUser(t, "steward", "en", false)
 	reader := e.seedUser(t, "reader", "en", false)
-	if _, err := e.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", steward); err != nil {
+	if _, err := e.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", steward); err != nil {
 		t.Fatal(err)
 	}
 	routes := &announcementTestRoutes{}
@@ -124,7 +124,7 @@ func TestStewardAnnouncementUsesIndependentIdempotencyNamespace(t *testing.T) {
 	e := newAnnouncementTestEnvironment(t)
 	actor := e.seedUser(t, "", "en", true)
 	steward := e.seedUser(t, "separate-steward", "en", false)
-	if _, err := e.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", steward); err != nil {
+	if _, err := e.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", steward); err != nil {
 		t.Fatal(err)
 	}
 	routes := &announcementTestRoutes{}

@@ -104,6 +104,15 @@ func TestActiveSessionActionExactReplay(t *testing.T) {
 	if err != nil || replayed.State.Kind != "session" || !replayed.IdempotentReplay {
 		t.Fatalf("replayed action=(%+v,%v)", replayed, err)
 	}
+	for index, user := range users {
+		want := int64(1)
+		if index == 0 {
+			want = 2
+		}
+		if seq := fixture.scalar(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, user); seq != want {
+			t.Fatalf("manual/replayed/automatic activity user=%d seq=%d want=%d", user, seq, want)
+		}
+	}
 	firstBody, firstErr := json.Marshal(first.State)
 	replayBody, replayErr := json.Marshal(replayed.State)
 	if firstErr != nil || replayErr != nil || string(firstBody) != string(replayBody) {

@@ -185,5 +185,8 @@ func (repository *SiteConfigRepository) PatchSiteConfigBatch(ctx context.Context
 	if err := tx.Commit(); err != nil {
 		return SiteConfigMutationResult{}, classifySiteConfigDatabase("commit configuration batch", err)
 	}
+	if repository.committed != nil && len(changed) > 0 {
+		repository.committed(append([]string(nil), changed...))
+	}
 	return SiteConfigMutationResult{Status: http.StatusOK, Body: responseBody}, nil
 }

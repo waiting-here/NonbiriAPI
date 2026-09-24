@@ -10,6 +10,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 // ReleaseUndispatched terminalizes a claim that never crossed the dispatch
@@ -578,6 +579,14 @@ WHERE logical_request_id=?
 		}
 		if err := requireOneRow(logResult); err != nil {
 			return fmt.Errorf("claim: verify request log terminal mirror: %w", err)
+		}
+		if err := s.recordObservationsTx(callbackCtx, callbackTx, request, input.Caller.Class, dispatchedClaims > 0, at); err != nil {
+			return err
+		}
+		if input.Caller.Class == ResultSuccess && dispatchedClaims > 0 && request.UserID != nil && (request.Route.IsSelf() || request.Route.IsCharity()) {
+			if err := useractivity.RecordActiveTx(callbackCtx, callbackTx, useractivity.ActiveEvent{UserID: *request.UserID, At: at, Kind: "api", Fresh: true}); err != nil {
+				return err
+			}
 		}
 		return addRequestUsageTx(callbackCtx, callbackTx, request.ID, request.UserID, at)
 	}

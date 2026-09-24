@@ -1,0 +1,53 @@
+.inactivity-panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.inactivity-panel fieldset {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #aaa);
+  border-radius: 0.5rem;
+}
+.inactivity-panel label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.inactivity-panel input:not([type='checkbox']) {
+  width: min(100%, 22rem);
+}
+.inactivity-panel dl {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: 0.5rem 1rem;
+}
+.inactivity-panel dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.inactivity-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.inactivity-table {
+  overflow-x: auto;
+}
+.inactivity-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.inactivity-table th,
+.inactivity-table td {
+  text-align: start;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color, #aaa);
+  white-space: nowrap;
+}
+.inactivity-summary p {
+  margin-block: 0.4rem;
+}

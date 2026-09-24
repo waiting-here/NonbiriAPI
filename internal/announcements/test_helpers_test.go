@@ -188,7 +188,7 @@ func (authorizer *announcementTestAuthorizer) AuthorizeStewardMutation(ctx conte
 	if err := tx.QueryRowContext(ctx, "SELECT is_admin,COALESCE(level,auto_level),is_banned FROM users WHERE id=?", actorID).Scan(&admin, &level, &banned); err != nil {
 		return ErrUnauthorized
 	}
-	if admin != 0 || level != 5 || banned != 0 {
+	if admin != 0 || level != 6 || banned != 0 {
 		return ErrForbidden
 	}
 	return nil

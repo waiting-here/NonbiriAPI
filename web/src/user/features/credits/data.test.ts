@@ -40,6 +40,77 @@ describe('owner credit history projection', () => {
     );
   });
 
+  it('decodes exchange and inactivity debits in the General view', async () => {
+    const data = [
+      { ...entry, line: 1, kind: 'activity_exchange', delta: '-2000', request_id: null },
+      { ...entry, line: 2, kind: 'inactivity_decay', delta: '-0.125', request_id: null },
+    ];
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ...page, data, total: '2' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await loadHistory({ page: '1', page_size: 20 })).data).toEqual(data);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/credits/history?page=1&page_size=20');
+  });
+
+  it('keeps activity units as exact integers and rejects fractional or unknown assets', () => {
+    const data = [
+      {
+        ...entry,
+        line: 1,
+        asset_type: 'sketch_paper',
+        kind: 'activity_exchange',
+        delta: '9007199254740993',
+        request_id: null,
+      },
+      {
+        ...entry,
+        line: 2,
+        asset_type: 'sketch_brush',
+        kind: 'image_reserve',
+        delta: '-3',
+        request_id: null,
+      },
+      {
+        ...entry,
+        line: 3,
+        asset_type: 'sketch_brush',
+        kind: 'image_refund',
+        delta: '3',
+        request_id: null,
+      },
+    ];
+    expect(normalizeHistory({ ...page, data, total: '3' }).data).toEqual(data);
+    for (const asset_type of ['sketch_paper', 'sketch_brush']) {
+      for (const delta of ['0.001', '-0.5'])
+        expect(() =>
+          normalizeHistory({ ...page, data: [{ ...data[0], asset_type, delta }] }),
+        ).toThrow(/activity units/i);
+    }
+    for (const invalid of [
+      { ...data[0], asset_type: 'unknown_asset' },
+      { ...data[0], kind: 'unknown_operation' },
+      { ...data[0], request_id: entry.request_id },
+    ])
+      expect(() => normalizeHistory({ ...page, data: [invalid] })).toThrow();
+  });
+
+  it('accepts activity and inactivity filters without broadening unknown values', () => {
+    for (const asset_type of ['sketch_paper', 'sketch_brush', 'all'] as const) {
+      const filter = { asset_type, page: '1', page_size: 20 as const, category: 'picture_book' };
+      expect(normalizeHistoryFilter(filter)).toEqual(filter);
+    }
+    expect(
+      normalizeHistoryFilter({ page: '1', page_size: 20, category: 'inactivity' }).category,
+    ).toBe('inactivity');
+    expect(() =>
+      normalizeHistoryFilter({ page: '1', page_size: 20, category: 'unknown_category' }),
+    ).toThrow(/filter/i);
+  });
+
   it.each(HISTORY_KINDS)('accepts the %s reason without leaking a source', (kind) => {
     expect(
       normalizeHistory({ ...page, data: [{ ...entry, kind, request_id: null }] }).data[0].kind,
@@ -47,7 +118,15 @@ describe('owner credit history projection', () => {
   });
 
   it('rejects a request attached to donor rewards or unrelated entries', () => {
-    for (const kind of ['donor_reward', 'admin_user_adjustment', 'fishing_settle']) {
+    for (const kind of [
+      'donor_reward',
+      'admin_user_adjustment',
+      'fishing_settle',
+      'activity_exchange',
+      'image_reserve',
+      'image_refund',
+      'inactivity_decay',
+    ]) {
       expect(() => normalizeHistory({ ...page, data: [{ ...entry, kind }] })).toThrow(
         /association/i,
       );

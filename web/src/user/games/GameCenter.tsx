@@ -146,7 +146,10 @@ export function GameCenter() {
         ))}
       </div>
       <GamePrivacyControl />
-      <Leaderboard board="game_charity" />
+      <div className="game-leaderboards">
+        <Leaderboard board="game_charity" />
+        <Leaderboard board="game_net_profit" />
+      </div>
     </main>
   );
 }

@@ -32,7 +32,7 @@ for (const scenario of [
       localStorage.setItem('nb.theme', theme);
     }, scenario);
     await mockPublicConfig(page, station);
-    await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level5');
+    await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'level6');
     const fields = Object.fromEntries(
       Object.entries(userSession('user').user).filter(
         ([key]) =>
@@ -143,7 +143,7 @@ for (const role of ['user', 'admin', 'steward'] as const) {
     await mockRoleSession(
       page,
       station,
-      role === 'admin' ? 'admin' : role === 'steward' ? 'level5' : 'user',
+      role === 'admin' ? 'admin' : role === 'steward' ? 'level6' : 'user',
     );
     const base = {
       id: `req_${'A'.repeat(22)}`,

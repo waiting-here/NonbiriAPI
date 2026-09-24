@@ -93,20 +93,21 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyRegistrationOpen:          {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
 	KeySiteTimezoneOffsetMinutes: {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
 
-	KeyLevelThreshold2Milli:     {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
-	KeyLevelThreshold3Milli:     {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
-	KeyLevelThreshold4Milli:     {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
-	KeyCheckinMode:              {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
-	KeyCheckinAwardMinMilli:     {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
-	KeyCheckinAwardMaxMilli:     {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
-	KeyCreditsCapMilli:          {"economy", catalogText("签到积分门槛", "Check-in credit threshold"), catalogText("可用积分达到该值后拒绝新的签到，不截断已准入奖励。", "Refuses new check-ins once spendable credits reach this value; admitted awards are not truncated."), unitMilli, nil},
-	KeyGameCheckinMode:          {"economy", catalogText("游戏积分签到模式", "Game-credit check-in mode"), catalogText("独立控制游戏积分签到的开放等级。", "Controls eligibility for the independent game-credit check-in."), unitNone, nil},
-	KeyGameCheckinAwardMinMilli: {"economy", catalogText("游戏签到奖励下限", "Minimum game check-in award"), catalogText("游戏积分签到随机奖励的下限。", "Inclusive minimum game-credit check-in award."), unitMilli, []string{KeyGameCheckinAwardMaxMilli}},
-	KeyGameCheckinAwardMaxMilli: {"economy", catalogText("游戏签到奖励上限", "Maximum game check-in award"), catalogText("游戏积分签到随机奖励的上限。", "Inclusive maximum game-credit check-in award."), unitMilli, []string{KeyGameCheckinAwardMinMilli}},
-	KeyGameCreditsCapMilli:      {"economy", catalogText("游戏签到余额门槛", "Game check-in balance threshold"), catalogText("只看游戏钱包；达到门槛后不能签到，零表示不设门槛。", "Uses only the game wallet; reaching the threshold prevents check-in. Zero removes the threshold."), unitMilli, nil},
-	KeyGameFishingRakePlatform:  {"games", catalogText("垂钓平台抽成", "Fishing platform cut"), catalogText("从每次渔获收入中按基点计算，三项抽成总和须低于 10000。", "Basis-point cut from each catch; the three cuts must total less than 10000."), unitBP, []string{KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday}},
-	KeyGameFishingRakeWelfare:   {"games", catalogText("垂钓福利池抽成", "Fishing welfare-pool cut"), catalogText("从每次渔获收入划入福利池的基点比例。", "Basis-point share of each catch allocated to the welfare pool."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeThursday}},
-	KeyGameFishingRakeThursday:  {"games", catalogText("垂钓周四池抽成", "Fishing Thursday-pool cut"), catalogText("从每次渔获收入划入周四池的基点比例。", "Basis-point share of each catch allocated to the Thursday pool."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare}},
+	KeyLevelThreshold2Milli:         {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold3Milli:         {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold4Milli:         {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
+	KeyCheckinMode:                  {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
+	KeyCheckinAwardMinMilli:         {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
+	KeyCheckinAwardMaxMilli:         {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
+	KeyCreditsCapMilli:              {"economy", catalogText("签到积分门槛", "Check-in credit threshold"), catalogText("可用积分达到该值后拒绝新的签到，不截断已准入奖励。", "Refuses new check-ins once spendable credits reach this value; admitted awards are not truncated."), unitMilli, nil},
+	KeyGameCheckinMode:              {"economy", catalogText("游戏积分签到模式", "Game-credit check-in mode"), catalogText("独立控制游戏积分签到的开放等级。", "Controls eligibility for the independent game-credit check-in."), unitNone, nil},
+	KeyGameCheckinAwardMinMilli:     {"economy", catalogText("游戏签到奖励下限", "Minimum game check-in award"), catalogText("游戏积分签到随机奖励的下限。", "Inclusive minimum game-credit check-in award."), unitMilli, []string{KeyGameCheckinAwardMaxMilli}},
+	KeyGameCheckinAwardMaxMilli:     {"economy", catalogText("游戏签到奖励上限", "Maximum game check-in award"), catalogText("游戏积分签到随机奖励的上限。", "Inclusive maximum game-credit check-in award."), unitMilli, []string{KeyGameCheckinAwardMinMilli}},
+	KeyGameCreditsCapMilli:          {"economy", catalogText("游戏签到余额门槛", "Game check-in balance threshold"), catalogText("只看游戏钱包；达到门槛后不能签到，零表示不设门槛。", "Uses only the game wallet; reaching the threshold prevents check-in. Zero removes the threshold."), unitMilli, nil},
+	KeyGameFishingRakePlatform:      {"games", catalogText("垂钓平台抽成", "Fishing platform cut"), catalogText("从每次渔获收入中按基点计算，三项抽成总和须低于 10000。", "Basis-point cut from each catch; the three cuts must total less than 10000."), unitBP, []string{KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday}},
+	KeyGameFishingRakeWelfare:       {"games", catalogText("垂钓福利池抽成", "Fishing welfare-pool cut"), catalogText("从每次渔获收入划入福利池的基点比例。", "Basis-point share of each catch allocated to the welfare pool."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeThursday}},
+	KeyGameFishingRakeThursday:      {"games", catalogText("垂钓周四池抽成", "Fishing Thursday-pool cut"), catalogText("从每次渔获收入划入周四池的基点比例。", "Basis-point share of each catch allocated to the Thursday pool."), unitBP, []string{KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare}},
+	KeyGameFishingBlueFishChanceBPS: {"games", catalogText("蓝色大肥鱼概率", "Blue fat fish chance"), catalogText("抽中传奇鱼后变为蓝色大肥鱼的概率；对新受理的垂钓批次生效。", "Chance that a legendary catch becomes a blue fat fish; applies to newly accepted fishing batches."), unitBP, nil},
 
 	KeyCharityEnabled:           {"charity", catalogText("公益资源总开关", "Charity master switch"), catalogText("控制公益资源发现与调用是否开放。", "Controls whether charity discovery and calls are available."), unitNone, nil},
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
@@ -153,7 +154,8 @@ func init() {
 		}
 	}
 	add(KeyAnnouncementEpoch, "announcements", "公告代次", "Announcement epoch", "fresh 数据库生成的只读公告代次，用于客户端缓存隔离。", "Read-only epoch generated for a fresh database and used to isolate announcement caches.", unitNone)
-	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5} {
+	add(KeyRequestErrorBodyBudgetMiB, "limits", "错误原文容量上限", "Raw error storage budget", "错误原文的全站容量上限；达到上限后继续处理请求并保存安全摘要。", "Site-wide raw error budget; requests continue with safe summaries when full.", catalogText("MiB", "MiB"))
+	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5, KeyLevelDisplayName6} {
 		label := strconv.Itoa(level + 1)
 		add(key, "economy", "等级 "+label+" 显示名", "Level "+label+" display name", "覆盖该等级的纯文本显示名；留空使用内置名称。", "Plain-text display override for this level; empty uses the built-in name.", unitNone)
 	}
@@ -266,6 +268,9 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 		if spec.maxRunes > 0 {
 			maximum = spec.maxRunes
 		}
+		if key == KeyLevelDisplayName5 {
+			return spec.defStr, effective, 0, maximum, false
+		}
 		return "", effective, 0, maximum, false
 	case kindMultilineText:
 		return "", "", 0, spec.max, false
@@ -344,6 +349,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("鱼饵价格必须至少为 1 毫积分；0 被硬下限拒绝。", "Bait prices must be at least one milli-credit; the hard minimum rejects zero.")
 	case KeyGameFishingRakePlatform, KeyGameFishingRakeWelfare, KeyGameFishingRakeThursday:
 		zero = catalogTextPtr("该项不抽成。", "No cut for this destination.")
+	case KeyGameFishingBlueFishChanceBPS:
+		zero = catalogTextPtr("关闭新垂钓批次的蓝色大肥鱼彩蛋。", "Disables blue fat fish for newly accepted fishing batches.")
 	case KeyGameFishingRTP, KeyGameFishingRTPPremium:
 		zero = catalogTextPtr("0% 在字段范围内，但整体 Fishing 经济编译仍可拒绝不可行组合。", "Zero percent is within the field range, but full Fishing economy compilation may still reject an infeasible combination.")
 	case KeyAnnouncementEpoch:
@@ -391,7 +398,7 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		empty = catalogTextPtr("恢复使用对应语言的内置捐赠说明。", "Restores the corresponding built-in donation notice.")
 	case KeyLegalAuthoritativeLocale:
 		empty = catalogTextPtr("不声明中英文冲突时的权威语言；PATCH null 仍被拒绝。", "Declares no authoritative language for bilingual conflicts; PATCH null remains rejected.")
-	case KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5:
+	case KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5, KeyLevelDisplayName6:
 		empty = catalogTextPtr("使用对应等级的内置显示名。", "Uses the built-in display name for this level.")
 	}
 	if strings.HasSuffix(key, "_bp") {

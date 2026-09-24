@@ -24,7 +24,7 @@ func recurringRule() donationquota.RuleInput {
 func TestRecurringRoleIsolationPendingConfigurationAndCommandReplay(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "quota-owner", nil, false)
 	steward := e.seedUser(t, "quota-manager", &level, false)
 	stranger := e.seedUser(t, "quota-stranger", nil, false)
@@ -92,7 +92,7 @@ func TestRecurringRoleIsolationPendingConfigurationAndCommandReplay(t *testing.T
 func TestRecurringConcurrentWritersRevisionAndForeignIDs(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "quota-cas-owner", nil, false)
 	actor := e.seedUser(t, "quota-cas-manager", &level, false)
 	_, key := e.seedEndpointKey(t, owner, 'b')
@@ -146,7 +146,7 @@ func TestRecurringConcurrentWritersRevisionAndForeignIDs(t *testing.T) {
 
 func TestRecurringHTTPStrictFieldsAndBodyBudget(t *testing.T) {
 	e := newDonationTestEnv(t)
-	level := int64(5)
+	level := int64(6)
 	actor := e.seedUser(t, "quota-http", &level, false)
 	e.seedUser(t, "", nil, true)
 	_, key := e.seedEndpointKey(t, actor, 'c')

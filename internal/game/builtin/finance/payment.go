@@ -29,7 +29,7 @@ func codedAccounts(ctx context.Context, tx *sql.Tx, code string) (ledger.Account
 }
 
 func accountPair(ctx context.Context, tx *sql.Tx, predicate string, argument any) (ledger.AccountPair, error) {
-	rows, err := tx.QueryContext(ctx, "SELECT id,asset_type FROM credit_accounts WHERE "+predicate, argument)
+	rows, err := tx.QueryContext(ctx, "SELECT id,asset_type FROM credit_accounts WHERE ("+predicate+") AND asset_type IN ('general','game')", argument)
 	if err != nil {
 		return ledger.AccountPair{}, err
 	}

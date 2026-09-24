@@ -11,6 +11,8 @@ import { TimeInput } from '@shared/components/TimeInput';
 import { RecurringLimitsDisclosure } from '@shared/components/RecurringLimitsDisclosure';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { isConflictError, isResponseUnknown, type CreateDonationInput } from './api';
+import { charityControlCopy } from '@shared/components/charityControlCopy';
+import { DonationThanks } from '@shared/components/DonationControlFacts';
 import { CreditAmount, ExactCount } from './ExactValue';
 import { maskedKey } from './format';
 import { isDimensionExhausted } from './normalize';
@@ -271,6 +273,8 @@ export function DonationComposer({
   const formID = useId();
   const mutation = useCreateDonation();
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
+  const [publicThanks, setPublicThanks] = useState<'' | 'yes' | 'no'>('');
+  const controlCopy = charityControlCopy(useTranslation().i18n.language);
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
@@ -319,6 +323,10 @@ export function DonationComposer({
       setValidation(t('user.charity.authorizationRequired'));
       return;
     }
+    if (publicThanks === '') {
+      setValidation(controlCopy.thanks);
+      return;
+    }
     if (selectionMode.kind === 'mixed' || selectionMode.kind === 'cross_channel') {
       setValidation(t('user.charity.splitDonationSources'));
       return;
@@ -346,6 +354,7 @@ export function DonationComposer({
       return;
     }
     const input: CreateDonationInput = {
+      discordPublicThanks: publicThanks === 'yes',
       description,
       keys: keys as CreateDonationInput['keys'],
       ownershipAuthorized: true,
@@ -358,6 +367,7 @@ export function DonationComposer({
       setExpiryByKey({});
       setThresholdByKey({});
       setAuthorized(false);
+      setPublicThanks('');
       storeDraft(draftNamespace, '');
       setSuccess(true);
       setBlockedAuthority({ baselineGeneration });
@@ -386,6 +396,21 @@ export function DonationComposer({
       </section>
       <div className="economy-donation-form">
         <form id={formID} onSubmit={submit} noValidate>
+          <label className="full-width">
+            <span>{controlCopy.thanks}</span>
+            <select
+              aria-label={controlCopy.thanks}
+              value={publicThanks}
+              required
+              disabled={locked}
+              onChange={(event) => setPublicThanks(event.target.value as '' | 'yes' | 'no')}
+            >
+              <option value="">{controlCopy.choose}</option>
+              <option value="yes">{controlCopy.yes}</option>
+              <option value="no">{controlCopy.no}</option>
+            </select>
+            <small>{controlCopy.thanksHint}</small>
+          </label>
           <label className="full-width">
             <span>{t('user.charity.donationDescription')}</span>
             <textarea
@@ -596,7 +621,8 @@ export function DonationKeyPanel({
   returnTo?: string;
   ruleSummary?: ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const controlCopy = charityControlCopy(i18n.language);
   const states = keyStateKeys(donationKey);
   const blockingReasons = keyBlockingReasons(donationKey);
   return (
@@ -704,8 +730,54 @@ export function DonationKeyPanel({
               unit={t('user.charity.tokensUnit')}
             />
           </section>
+          <section>
+            <h5>{controlCopy.inputTokens}</h5>
+            <LimitValue
+              limit={donationKey.limits.inputTokens ?? null}
+              used={donationKey.usage.inputTokensUsed ?? '0'}
+              inflight={donationKey.usage.inputTokensInflight ?? '0'}
+              unit={t('user.charity.tokensUnit')}
+            />
+          </section>
+          <section>
+            <h5>{controlCopy.outputTokens}</h5>
+            <LimitValue
+              limit={donationKey.limits.outputTokens ?? null}
+              used={donationKey.usage.outputTokensUsed ?? '0'}
+              inflight={donationKey.usage.outputTokensInflight ?? '0'}
+              unit={t('user.charity.tokensUnit')}
+            />
+          </section>
         </div>
         <dl className="detail-grid economy-key-metadata">
+          {donationKey.inputTokenReserve != null && donationKey.outputTokenReserve != null ? (
+            <>
+              <div className="detail-row">
+                <dt>{controlCopy.inputReserve}</dt>
+                <dd>
+                  <ExactCount value={donationKey.inputTokenReserve} />
+                </dd>
+              </div>
+              <div className="detail-row">
+                <dt>{controlCopy.outputReserve}</dt>
+                <dd>
+                  <ExactCount value={donationKey.outputTokenReserve} />
+                </dd>
+              </div>
+            </>
+          ) : null}
+          {donationKey.breakdownStartedAt ? (
+            <div className="detail-row">
+              <dt>{controlCopy.breakdown}</dt>
+              <dd>{formatDateTime(donationKey.breakdownStartedAt)}</dd>
+            </div>
+          ) : null}
+          <div className="detail-row">
+            <dt>{controlCopy.unattributed}</dt>
+            <dd>
+              <ExactCount value={donationKey.usage.unattributedTotalTokens ?? '0'} />
+            </dd>
+          </div>
           <div className="detail-row">
             <dt>{t('user.charity.tokenReserve')}</dt>
             <dd>
@@ -900,38 +972,44 @@ export function DonationCard({
       </div>
 
       {showEditor ? (
-        <form onSubmit={save} className="economy-description-editor" noValidate>
-          <label>
-            <span>{t('user.charity.donationDescription')}</span>
-            <textarea
-              value={description}
-              required
-              aria-invalid={Boolean(validation) && !validDonationDescription(description)}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-            {validation && !validDonationDescription(description) ? (
-              <p className="field-error" role="alert">
-                {validation}
-              </p>
-            ) : null}
-          </label>
-          <p className="muted">{t('user.charity.pendingDescriptionOnly')}</p>
-          <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-quiet"
-              onClick={() => setEditing(false)}
-              disabled={busy}
-            >
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={busy}>
-              {busy ? t('common.working') : t('common.save')}
-            </button>
-          </div>
-        </form>
+        <>
+          <DonationThanks value={donation.discordPublicThanks} />
+          <form onSubmit={save} className="economy-description-editor" noValidate>
+            <label>
+              <span>{t('user.charity.donationDescription')}</span>
+              <textarea
+                value={description}
+                required
+                aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+              {validation && !validDonationDescription(description) ? (
+                <p className="field-error" role="alert">
+                  {validation}
+                </p>
+              ) : null}
+            </label>
+            <p className="muted">{t('user.charity.pendingDescriptionOnly')}</p>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={() => setEditing(false)}
+                disabled={busy}
+              >
+                {t('common.cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? t('common.working') : t('common.save')}
+              </button>
+            </div>
+          </form>
+        </>
       ) : (
-        <MarkdownText>{donation.description}</MarkdownText>
+        <>
+          <MarkdownText>{donation.description}</MarkdownText>
+          <DonationThanks value={donation.discordPublicThanks} />
+        </>
       )}
 
       <dl className="detail-grid">

@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 const (
@@ -39,7 +40,7 @@ const (
 type projectionConfig struct {
 	endpointDefault, rpmDefault, concurrencyDefault int64
 	thresholds                                      [5]int64
-	display                                         [6]string
+	display                                         [7]string
 }
 
 type userRow struct {
@@ -104,12 +105,15 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 		}
 		*item.dst = value
 	}
-	for level := 1; level <= 5; level++ {
+	for level := 1; level <= 6; level++ {
 		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, fmt.Sprintf("level_display_name_%d", level)).Scan(&config.display[level]); err != nil {
 			return projectionConfig{}, classifyDatabaseError("read level display configuration", err)
 		}
 		if config.display[level] == "" {
 			config.display[level] = fmt.Sprintf("Lv. %d", level)
+			if level == 5 {
+				config.display[level] = "见习协管"
+			}
 		}
 	}
 	return config, nil
@@ -192,7 +196,7 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	effective := automatic
 	var manual *int
 	if row.manualLevel.Valid {
-		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 5 {
+		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 6 {
 			return AdminUser{}, fmt.Errorf("%w: invalid manual level", ErrInvariant)
 		}
 		value := int(row.manualLevel.Int64)
@@ -231,7 +235,7 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 
 func (service *Service) listUsers(ctx context.Context, adminID int64, role managementRole, query UserListQuery) (Page[AdminUser], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
-	if limit == 0 || query.Level < 0 || query.Level > 5 {
+	if limit == 0 || query.Level < 0 || query.Level > 6 {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
 	if query.Page != nil {
@@ -713,7 +717,7 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 5 {
+	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 6 {
 		return MutationResult[AdminUser]{}, ErrForbidden
 	}
 	if decision.Kind == idempotency.Replay {
@@ -754,6 +758,11 @@ WHERE id=? AND is_admin=0 AND revision=?`,
 	updated, err := result.RowsAffected()
 	if err != nil || updated != 1 {
 		return MutationResult[AdminUser]{}, ErrConflict
+	}
+	if input.LevelSet {
+		if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
 	}
 	row, err = readUserRow(ctx, tx, userID)
 	if err != nil {
@@ -894,6 +903,11 @@ func (service *Service) economy(ctx context.Context, adminID, userID int64, role
 	if err != nil || updated != 1 {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
+	if authorityChanged {
+		if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+	}
 	row, err = readUserRow(ctx, tx, userID)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
@@ -977,11 +991,14 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 			defer func() { finalize(done) }()
 		}
 		result, err = tx.ExecContext(ctx, `
-UPDATE users SET is_banned=1,banned_reason=?,banned_until=?,auto_banned=0,revision=?,updated_at=?
+UPDATE users SET is_banned=1,banned_reason=?,banned_until=?,auto_banned=0,ban_kind='',revision=?,updated_at=?
 WHERE id=? AND is_admin=0 AND revision=?`, reason, until, db.EncodeU128(next), now, userID, row.revision)
 	} else {
+		if err := useractivity.ResetObservationTx(ctx, tx, userID, now); err != nil {
+			return MutationResult[struct{}]{}, err
+		}
 		result, err = tx.ExecContext(ctx, `
-UPDATE users SET is_banned=0,banned_reason='',banned_until=NULL,auto_banned=0,revision=?,updated_at=?
+UPDATE users SET is_banned=0,banned_reason='',banned_until=NULL,auto_banned=0,ban_kind='',revision=?,updated_at=?
 WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row.revision)
 	}
 	if err != nil {
@@ -990,6 +1007,9 @@ WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row
 	updated, err := result.RowsAffected()
 	if err != nil || updated != 1 {
 		return MutationResult[struct{}]{}, ErrConflict
+	}
+	if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
+		return MutationResult[struct{}]{}, err
 	}
 	if banned {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {

@@ -28,7 +28,7 @@ async function prepare(
   page: Page,
   station: 'user' | 'admin',
   locale: Locale = 'en',
-  level5 = false,
+  fullSteward = false,
 ) {
   const guard = collectConsoleViolations(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -40,9 +40,9 @@ async function prepare(
     { locale },
   );
   await mockPublicConfig(page, station);
-  await mockRoleSession(page, station, level5 ? 'level5' : station);
+  await mockRoleSession(page, station, fullSteward ? 'level6' : station);
   if (station === 'user') {
-    const session = userSession(level5 ? 'level5' : 'user');
+    const session = userSession(fullSteward ? 'level6' : 'user');
     session.user.lang = locale;
     for (const path of ['/api/session', '/api/me'])
       await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: session });
@@ -1262,6 +1262,9 @@ test.describe('donation selection expiry in UTC', () => {
       .getByRole('textbox', { name: 'Donation description', exact: true })
       .fill('A helpful description for the shared resources');
     await page.locator('.economy-authorization input').check();
+    await page
+      .getByRole('combobox', { name: 'Accept a public Discord thank-you' })
+      .selectOption('no');
     await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
     await expect
       .poll(() => submitted)
@@ -1276,6 +1279,7 @@ test.describe('donation selection expiry in UTC', () => {
           { endpoint_key_id: '1002', expires_at: null, failure_disable_threshold: '10' },
         ],
         ownership_authorized: true,
+        discord_public_thanks: false,
       });
     await expect(page.getByText('Donation submitted for review.', { exact: true })).toBeVisible();
     guard.assertNone();

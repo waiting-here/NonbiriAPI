@@ -47,7 +47,11 @@ for (const scenario of [
       const url = new URL(route.request().url()),
         path = url.pathname;
       if (path === '/api/games') return route.fulfill({ json: gamesSnapshotWire() });
-      if (path.endsWith('/leaderboard') || path === '/api/games/leaderboards/charity') {
+      if (
+        path.endsWith('/leaderboard') ||
+        path.endsWith('/net-profit') ||
+        path === '/api/games/leaderboards/charity'
+      ) {
         const window = url.searchParams.get('window') ?? '7d';
         windows.push(window);
         return route.fulfill({
@@ -108,7 +112,9 @@ for (const scenario of [
     );
     for (const path of ['/games', '/games/bidding', '/games/blackjack']) {
       await page.goto(`${USER_ORIGIN}${path}`);
-      const card = page.locator('.progression-ranking');
+      const cards = page.locator('.progression-ranking');
+      await expect(cards).toHaveCount(path === '/games/bidding' ? 1 : 2);
+      const card = cards.first();
       await expect(card.locator('tbody tr')).toHaveCount(21);
       await expect(card.locator('[data-own-rank]')).toContainText('17.125');
       await expect(card.getByText('9,007,199,254,740,993.123', { exact: true })).toHaveCount(20);
@@ -118,6 +124,21 @@ for (const scenario of [
         await expect.poll(() => windows.at(-1)).toBe('30d');
         await card.locator('select').selectOption('history');
         await expect(card.locator('time')).toBeVisible();
+      }
+      if (path !== '/games/bidding') {
+        const profit = cards.last();
+        await expect(profit.getByRole('heading')).toHaveText(
+          path === '/games'
+            ? zh
+              ? '暴富榜'
+              : 'Fortune leaderboard'
+            : zh
+              ? '赌神榜'
+              : 'Card master leaderboard',
+        );
+        await expect(profit.locator('tbody tr')).toHaveCount(21);
+        await expect(profit.locator('select')).toHaveCount(0);
+        await expect(profit).toContainText('7×24');
       }
       await card.scrollIntoViewIfNeeded();
       expect(

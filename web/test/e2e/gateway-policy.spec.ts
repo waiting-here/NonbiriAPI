@@ -40,7 +40,7 @@ for (const role of ['owner', 'admin', 'steward'] as const) {
     await mockRoleSession(
       page,
       station,
-      role === 'steward' ? 'level5' : role === 'owner' ? 'user' : 'admin',
+      role === 'steward' ? 'level6' : role === 'owner' ? 'user' : 'admin',
     );
     let threshold = '10';
     let revision = '1';

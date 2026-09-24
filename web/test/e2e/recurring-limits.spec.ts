@@ -206,7 +206,7 @@ async function prepare(
   await mockRoleSession(
     page,
     station,
-    role === 'steward' ? 'level5' : role === 'owner' ? 'user' : 'admin',
+    role === 'steward' ? 'level6' : role === 'owner' ? 'user' : 'admin',
   );
   const state = {
     revision: '7',

@@ -74,7 +74,7 @@ FROM donation_handling WHERE donation_id=?`, donationID).Scan(&out.State, &revis
 	}
 	out.Revision = strconv.FormatInt(revision, 10)
 	if role != "" {
-		if role == string(reviewerSteward) {
+		if role == string(reviewerSteward) || role == "level5" {
 			role = "steward"
 		}
 		out.ProcessedByRole = &role

@@ -67,6 +67,10 @@ func TestTerminalUsageIsAtomicAndIdempotent(t *testing.T) {
 	}
 	assertUsage(t, fixture, "users", userID, zero)
 	assertUsage(t, fixture, "site_usage_totals", 1, zero)
+	var activeRows int
+	if err := fixture.db.QueryRow("SELECT count(*) FROM user_activity_state WHERE user_id=?", userID).Scan(&activeRows); err != nil || activeRows != 0 {
+		t.Fatalf("rolled back terminal created activity: %d %v", activeRows, err)
+	}
 	var state string
 	if err := fixture.db.QueryRow(`SELECT state FROM logical_requests WHERE id=?`, input.RequestID).Scan(&state); err != nil || state == "terminal" {
 		t.Fatalf("request must remain recoverable: %s %v", state, err)
@@ -82,6 +86,10 @@ func TestTerminalUsageIsAtomicAndIdempotent(t *testing.T) {
 	want := [6]string{"1", "13", "2", "3", "147", "1"}
 	assertUsage(t, fixture, "users", userID, want)
 	assertUsage(t, fixture, "site_usage_totals", 1, want)
+	var activeSeq int64
+	if err := fixture.db.QueryRow("SELECT activity_seq FROM user_activity_state WHERE user_id=?", userID).Scan(&activeSeq); err != nil || activeSeq != 1 {
+		t.Fatalf("logical completion activity must count once: %d %v", activeSeq, err)
+	}
 }
 
 func TestUsageInitializationRepairsOnlyUninitializedTotals(t *testing.T) {

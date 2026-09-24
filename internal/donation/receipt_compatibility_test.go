@@ -14,7 +14,7 @@ import (
 func TestManagementReceiptAddsSafeFieldsWithoutChangingStoredResult(t *testing.T) {
 	env := newDonationTestEnv(t)
 	owner := env.seedUser(t, "receipt-owner", nil, false)
-	level := int64(5)
+	level := int64(6)
 	viewer := env.seedUser(t, "receipt-viewer", &level, false)
 	env.seedUser(t, "", nil, true)
 	_, key := env.seedEndpointKey(t, owner, 'r')

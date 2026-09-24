@@ -12,7 +12,7 @@ import (
 func TestManagedDonationKeyLimitsAreCurrentAndReadOnly(t *testing.T) {
 	e := newDonationTestEnv(t)
 	e.seedUser(t, "", nil, true)
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "limit-steward", &level, false)
 	_, kid := e.seedEndpointKey(t, owner, 'L')
 	value := e.createDonation(t, owner, kid)

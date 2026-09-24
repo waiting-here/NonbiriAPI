@@ -191,7 +191,13 @@ const en: RecurringLimitsCopy = {
     month: 'Month',
   },
   alignmentValue: { first_success: 'First successful call', calendar: 'Calendar boundary' },
-  metricValue: { calls: 'Calls', tokens: 'Tokens', credits: 'Credits' },
+  metricValue: {
+    calls: 'Calls',
+    tokens: 'Total tokens',
+    input_tokens: 'Input tokens',
+    output_tokens: 'Output tokens',
+    credits: 'Credits',
+  },
   weekValue: (day) =>
     ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day - 1] ??
     `Day ${day}`,
@@ -302,7 +308,13 @@ const zh: RecurringLimitsCopy = {
   modeValue: { reset: '刷新', sliding: '滑动窗口' },
   intervalValue: { '1h': '1 小时', '5h': '5 小时', day: '日', week: '周', month: '月' },
   alignmentValue: { first_success: '首次成功调用', calendar: '自然边界' },
-  metricValue: { calls: '调用次数', tokens: 'Token 数', credits: '积分' },
+  metricValue: {
+    calls: '调用次数',
+    tokens: '总 Token 数',
+    input_tokens: '输入 Token 数',
+    output_tokens: '输出 Token 数',
+    credits: '积分',
+  },
   weekValue: (day) =>
     ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][day - 1] ?? `第 ${day} 天`,
   weekStartValue: (day) => (day === null ? '未设置' : zh.weekValue(day)),

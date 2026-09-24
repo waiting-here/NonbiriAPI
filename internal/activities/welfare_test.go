@@ -36,6 +36,10 @@ func TestWelfareZeroValuesThresholdBoundaryAndDailySlot(t *testing.T) {
 		t.Fatalf("assets == threshold error = %v", err)
 	}
 
+	var activeRows int
+	if err := fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM user_activity_state WHERE user_id IN (?,?)`, user, equalUser).Scan(&activeRows); err != nil || activeRows != 0 {
+		t.Fatalf("zero/denied claim activity=%d err=%v", activeRows, err)
+	}
 	fixture.setActivityConfig(true, true, false, 0, 100)
 	paid, facts, err := fixture.repository.ClaimWelfare(context.Background(), user,
 		fixture.control(http.MethodPost, routeWelfareClaims, nil))
@@ -72,6 +76,10 @@ func TestWelfareControlMutationExactReplay(t *testing.T) {
 	second, facts, err := fixture.repository.ClaimWelfare(context.Background(), user, mutation)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var seq int64
+	if err := fixture.store.DB().QueryRow(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, user).Scan(&seq); err != nil || seq != 1 {
+		t.Fatalf("welfare replay activity=%d err=%v", seq, err)
 	}
 	if first.Value.Awarded != "0.1" || second.Value.Awarded != "0.1" || !second.Replayed ||
 		string(first.Body) != string(second.Body) || !facts.empty() {

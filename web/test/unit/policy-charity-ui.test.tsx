@@ -576,7 +576,7 @@ function ManagementSessionGate({
     const value =
       frame === 'admin'
         ? { admin: { username: 'fixture-admin' } }
-        : { user: { id: '1', username: 'fixture-user', effective_level: 5 } };
+        : { user: { id: '1', username: 'fixture-user', effective_level: 6 } };
     if (!noteManagementSessionSuccess(client, frame, value, generation)) return;
     client.setQueryData(['management-session-test-seed', frame], true);
   }, [client, frame]);
@@ -1441,6 +1441,10 @@ describe('experimental policy and charity controls', () => {
     );
     expect(screen.queryByPlaceholderText(/new key/i)).toBeNull();
     expect(screen.queryByPlaceholderText(/base url/i)).toBeNull();
+    await rendered.user.selectOptions(
+      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
+      'no',
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Submit for review' }));
 
     await waitFor(() =>
@@ -1448,6 +1452,7 @@ describe('experimental policy and charity controls', () => {
         description: 'fixture donation',
         keys: [{ endpoint_key_id: '2', expires_at: null, failure_disable_threshold: '10' }],
         ownership_authorized: true,
+        discord_public_thanks: false,
       }),
     );
     expect(JSON.stringify(lastBody(fetchMock, 'POST', '/api/donations'))).not.toMatch(
@@ -1713,7 +1718,7 @@ describe('experimental policy and charity controls', () => {
           body:
             frame === 'admin'
               ? { admin: { username: 'fixture-admin' } }
-              : { ...session, user: { ...session.user, effective_level: 5 } },
+              : { ...session, user: { ...session.user, effective_level: 6 } },
         },
         {
           method: 'GET',
@@ -1838,8 +1843,8 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && requestURL.pathname === '/api/session') {
         sessionReads += 1;
         return sessionReads === 1
-          ? jsonResponse({ ...session, user: { ...session.user, effective_level: 5 } })
-          : jsonResponse({ user: { effective_level: 5 } });
+          ? jsonResponse({ ...session, user: { ...session.user, effective_level: 6 } })
+          : jsonResponse({ user: { effective_level: 6 } });
       }
       if (method === 'GET' && requestURL.pathname === '/api/time-zones') {
         return jsonResponse({
@@ -1960,7 +1965,7 @@ describe('experimental policy and charity controls', () => {
           body:
             frame === 'admin'
               ? { admin: { username: 'fixture-admin' } }
-              : { ...session, user: { ...session.user, effective_level: 5 } },
+              : { ...session, user: { ...session.user, effective_level: 6 } },
         },
         {
           method: 'GET',
@@ -2015,8 +2020,8 @@ describe('experimental policy and charity controls', () => {
     },
   );
 
-  test('clears level-5 steward data after a server-forced demotion', async () => {
-    const levelFive = { ...coreSession, user: { ...coreSession.user, effective_level: 5 } };
+  test('clears level-6 steward data after a server-forced demotion', async () => {
+    const levelSix = { ...coreSession, user: { ...coreSession.user, effective_level: 6 } };
     const demoted = { ...coreSession, user: { ...coreSession.user, effective_level: 4 } };
     let sessionCalls = 0;
     let revoke = false;
@@ -2027,7 +2032,7 @@ describe('experimental policy and charity controls', () => {
       );
       const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
       if (method === 'GET' && requestURL.pathname === '/api/session') {
-        const body = sessionCalls++ === 0 ? levelFive : demoted;
+        const body = sessionCalls++ === 0 ? levelSix : demoted;
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -2067,7 +2072,7 @@ describe('experimental policy and charity controls', () => {
     revoke = true;
     await rendered.queryClient.invalidateQueries({ queryKey: roleLogKeys.root('steward') });
     await expect(
-      screen.findByText(/does not have confirmed level-5 steward access/i),
+      screen.findByText(/does not have confirmed steward access/i),
     ).resolves.toBeVisible();
     expect(sessionCalls).toBeGreaterThanOrEqual(2);
     expect(
@@ -2083,7 +2088,7 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('reopens the same steward user after a newer authoritative session success', async () => {
-    const levelFive = { ...coreSession, user: { ...coreSession.user, effective_level: 5 } };
+    const levelSix = { ...coreSession, user: { ...coreSession.user, effective_level: 6 } };
     let sessionCalls = 0;
     let logCalls = 0;
     let revoke = false;
@@ -2100,7 +2105,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && requestURL.pathname === '/api/session') {
         sessionCalls += 1;
         if (sessionCalls > 1) await refreshGate;
-        return jsonResponse(levelFive);
+        return jsonResponse(levelSix);
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/logs') {
         logCalls += 1;
@@ -2130,7 +2135,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => expect(sessionCalls).toBeGreaterThanOrEqual(2));
     releaseRefresh();
     await waitFor(() =>
-      expect(screen.queryByText(/does not have confirmed level-5 steward access/i)).toBeNull(),
+      expect(screen.queryByText(/does not have confirmed steward access/i)).toBeNull(),
     );
     await expect(screen.findByText('No logs')).resolves.toBeVisible();
   });
@@ -2146,7 +2151,7 @@ describe('experimental policy and charity controls', () => {
       if (url.pathname === '/api/session') {
         return jsonResponse({
           ...coreSession,
-          user: { ...coreSession.user, id: accountID, effective_level: 5 },
+          user: { ...coreSession.user, id: accountID, effective_level: 6 },
         });
       }
       if (url.pathname === '/api/time-zones') {
@@ -2208,8 +2213,8 @@ describe('experimental policy and charity controls', () => {
     expect(screen.queryByDisplayValue('Unsubmitted description')).toBeNull();
   });
 
-  test('clears charity management data and removes write controls after an L5 downgrade', async () => {
-    const levelFive = { ...coreSession, user: { ...coreSession.user, effective_level: 5 } };
+  test('clears charity management data and removes write controls after an L6 downgrade', async () => {
+    const levelSix = { ...coreSession, user: { ...coreSession.user, effective_level: 6 } };
     const demoted = { ...coreSession, user: { ...coreSession.user, effective_level: 4 } };
     let sessionCalls = 0;
     let demote = false;
@@ -2221,7 +2226,7 @@ describe('experimental policy and charity controls', () => {
       const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
       if (method === 'GET' && requestURL.pathname === '/api/session') {
         sessionCalls += 1;
-        return new Response(JSON.stringify(demote ? demoted : levelFive), {
+        return new Response(JSON.stringify(demote ? demoted : levelSix), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -2305,7 +2310,7 @@ describe('experimental policy and charity controls', () => {
 
     demote = true;
     await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
-    await screen.findByText(/does not have confirmed level-5 steward access/i);
+    await screen.findByText(/does not have confirmed steward access/i);
     expect(rendered.queryClient.getQueriesData({ queryKey: modelPageKey })).toEqual([]);
     expect(
       screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls (chat only)' }),
@@ -2335,7 +2340,7 @@ describe('experimental policy and charity controls', () => {
     expect(noteManagementSessionSuccess(client, 'steward', session, staleGeneration)).toBe(false);
     expect(client.getQueryData(charityManagementKeys.capability('steward'))).toBe(true);
     const otherUser = {
-      user: { ...session.user, id: '2', username: 'other-user', effective_level: 5 },
+      user: { ...session.user, id: '2', username: 'other-user', effective_level: 6 },
     };
     expect(noteManagementSessionSuccess(client, 'steward', otherUser, nextGeneration)).toBe(true);
     expect(client.getQueryData(charityManagementKeys.capability('steward'))).toBe(false);
@@ -2563,7 +2568,7 @@ describe('experimental policy and charity controls', () => {
         client,
         'steward',
         {
-          user: { id: '1', username: 'account-a', effective_level: 5 },
+          user: { id: '1', username: 'account-a', effective_level: 6 },
         },
         firstGeneration,
       ),
@@ -2584,7 +2589,7 @@ describe('experimental policy and charity controls', () => {
         client,
         'steward',
         {
-          user: { id: '2', username: 'account-b', effective_level: 5 },
+          user: { id: '2', username: 'account-b', effective_level: 6 },
         },
         secondGeneration,
       ),
@@ -2684,7 +2689,7 @@ describe('experimental policy and charity controls', () => {
       throw new ApiError('unauthorized', 'old account rejected', 401);
     });
     const otherSession = {
-      user: { ...session.user, id: '2', username: 'account-b', effective_level: 5 },
+      user: { ...session.user, id: '2', username: 'account-b', effective_level: 6 },
     };
     const generation = beginManagementSessionRequest(rendered.queryClient, 'steward');
     expect(
@@ -2759,11 +2764,11 @@ describe('experimental policy and charity controls', () => {
   test('does not download an export returned for the previous account', async () => {
     const marker = 'account-a-export-marker-123456';
     const completion = deferred<AccountExportAttachment>();
-    const exportV9 = vi.fn(() => completion.promise);
+    const exportAccount = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV9: true, deleteAccount: false },
+      capabilities: { exportAccount: true, deleteAccount: false },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV9,
+      exportAccount,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -2781,7 +2786,7 @@ describe('experimental policy and charity controls', () => {
       rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
       const dialog = await screen.findByRole('alertdialog');
       await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportV9).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(exportAccount).toHaveBeenCalledTimes(1));
 
       rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
       const currentSession = { user: { id: '2' } };
@@ -2789,7 +2794,7 @@ describe('experimental policy and charity controls', () => {
       await act(async () => {
         completion.resolve({
           blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 9,
+          schemaVersion: 10,
         });
         await completion.promise;
       });
@@ -2853,7 +2858,7 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('closes steward management when the current user session fails', async () => {
-    const levelFive = { ...session, user: { ...session.user, effective_level: 5 } };
+    const levelSix = { ...session, user: { ...session.user, effective_level: 6 } };
     let healthy = true;
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const requestURL = new URL(
@@ -2862,7 +2867,7 @@ describe('experimental policy and charity controls', () => {
       );
       if (requestURL.pathname === '/api/session') {
         return healthy
-          ? jsonResponse(levelFive)
+          ? jsonResponse(levelSix)
           : jsonResponse({ error: { code: 'unauthorized', message: 'session expired' } }, 401);
       }
       throw new Error(`Unexpected fixture request: ${requestURL.pathname}`);
@@ -2973,7 +2978,7 @@ describe('experimental policy and charity controls', () => {
         client,
         'steward',
         {
-          user: { ...session.user, effective_level: 5 },
+          user: { ...session.user, effective_level: 6 },
         },
         initialGeneration,
       ),
@@ -2989,7 +2994,7 @@ describe('experimental policy and charity controls', () => {
         client,
         'steward',
         {
-          user: { ...session.user, effective_level: 5 },
+          user: { ...session.user, effective_level: 6 },
         },
         staleGeneration,
       ),
@@ -3001,7 +3006,7 @@ describe('experimental policy and charity controls', () => {
         client,
         'steward',
         {
-          user: { ...session.user, effective_level: 5 },
+          user: { ...session.user, effective_level: 6 },
         },
         freshGeneration,
       ),

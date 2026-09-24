@@ -14,22 +14,101 @@ export const router = createBrowserRouter([
     hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage station="admin" />,
     children: [
-      { index: true, lazy: async () => ({ Component: (await import('./pages/DashboardPage')).DashboardPage }) },
-      { path: pathFor('admin-users'), lazy: async () => ({ Component: (await import('./pages/UsersPage')).UsersPage }) },
-      { path: pathFor('admin-logs'), lazy: async () => ({ Component: (await import('./pages/LogsPage')).LogsPage }) },
-      { path: pathFor('admin-endpoints'), lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }) },
-      { path: pathFor('admin-alerts'), lazy: async () => ({ Component: (await import('./pages/AlertsPage')).AlertsPage }) },
-      { path: pathFor('admin-settings'), lazy: async () => ({ Component: (await import('./pages/SettingsPage')).SettingsPage }) },
-      { path: pathFor('admin-mainstream-channels'), lazy: async () => ({ Component: (await import('./features/operations/MainstreamChannels')).MainstreamChannelsPage }) },
-      { path: pathFor('admin-games'), lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }) },
-      { path: pathFor('admin-game-history'), lazy: async () => ({ Component: (await import('./pages/DuelHistoryPage')).DuelHistoryPage }) },
-      { path: pathFor('admin-blackjack-history'), lazy: async () => ({ Component: (await import('./pages/BlackjackHistoryPage')).BlackjackHistoryPage }) },
-      { path: pathFor('admin-charity'), lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }) },
-      { path: pathFor('admin-activities'), lazy: async () => ({ Component: (await import('./pages/ActivitiesPage')).ActivitiesPage }) },
-      { path: pathFor('admin-reports'), lazy: async () => ({ Component: (await import('./pages/ReportsPage')).ReportsPage }) },
-      { path: pathFor('admin-report-detail'), lazy: async () => ({ Component: (await import('./pages/ReportDetailPage')).ReportDetailPage }) },
-      { path: pathFor('admin-announcements'), lazy: async () => ({ Component: (await import('./pages/AnnouncementsPage')).AnnouncementsPage }) },
-      { path: pathFor('admin-announcement-detail'), lazy: async () => ({ Component: (await import('./pages/AnnouncementDetailPage')).AnnouncementDetailPage }) },
+      {
+        index: true,
+        lazy: async () => ({ Component: (await import('./pages/DashboardPage')).DashboardPage }),
+      },
+      {
+        path: pathFor('admin-users'),
+        lazy: async () => ({ Component: (await import('./pages/UsersPage')).UsersPage }),
+      },
+      {
+        path: pathFor('admin-inactivity-policy'),
+        lazy: async () => ({ Component: (await import('@shared/inactivity/InactivityPolicyPage')).InactivityPolicyPage }),
+      },
+      {
+        path: pathFor('admin-limited-activities'),
+        lazy: async () => ({ Component: (await import('./pages/PictureBookSettingsPage')).PictureBookSettingsPage }),
+      },
+      {
+        path: pathFor('admin-logs'),
+        lazy: async () => ({ Component: (await import('./pages/LogsPage')).LogsPage }),
+      },
+      {
+        path: pathFor('admin-risk-audit'),
+        lazy: async () => ({ Component: (await import('./pages/RiskAuditPage')).RiskAuditPage }),
+      },
+      {
+        path: pathFor('admin-economy-audit'),
+        lazy: async () => ({
+          Component: (await import('./pages/EconomyAuditPage')).EconomyAuditPage,
+        }),
+      },
+      {
+        path: pathFor('admin-endpoints'),
+        lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }),
+      },
+      {
+        path: pathFor('admin-alerts'),
+        lazy: async () => ({ Component: (await import('./pages/AlertsPage')).AlertsPage }),
+      },
+      {
+        path: pathFor('admin-settings'),
+        lazy: async () => ({ Component: (await import('./pages/SettingsPage')).SettingsPage }),
+      },
+      {
+        path: pathFor('admin-mainstream-channels'),
+        lazy: async () => ({
+          Component: (await import('./features/operations/MainstreamChannels'))
+            .MainstreamChannelsPage,
+        }),
+      },
+      {
+        path: pathFor('admin-games'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('admin-game-history'),
+        lazy: async () => ({
+          Component: (await import('./pages/DuelHistoryPage')).DuelHistoryPage,
+        }),
+      },
+      {
+        path: pathFor('admin-blackjack-history'),
+        lazy: async () => ({
+          Component: (await import('./pages/BlackjackHistoryPage')).BlackjackHistoryPage,
+        }),
+      },
+      {
+        path: pathFor('admin-charity'),
+        lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }),
+      },
+      {
+        path: pathFor('admin-activities'),
+        lazy: async () => ({ Component: (await import('./pages/ActivitiesPage')).ActivitiesPage }),
+      },
+      {
+        path: pathFor('admin-reports'),
+        lazy: async () => ({ Component: (await import('./pages/ReportsPage')).ReportsPage }),
+      },
+      {
+        path: pathFor('admin-report-detail'),
+        lazy: async () => ({
+          Component: (await import('./pages/ReportDetailPage')).ReportDetailPage,
+        }),
+      },
+      {
+        path: pathFor('admin-announcements'),
+        lazy: async () => ({
+          Component: (await import('./pages/AnnouncementsPage')).AnnouncementsPage,
+        }),
+      },
+      {
+        path: pathFor('admin-announcement-detail'),
+        lazy: async () => ({
+          Component: (await import('./pages/AnnouncementDetailPage')).AnnouncementDetailPage,
+        }),
+      },
       { path: '*', element: <NotFoundPage station="admin" /> },
     ],
   },

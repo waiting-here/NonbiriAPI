@@ -139,6 +139,11 @@ func compileRequestWithDefaultResolver(request *openai.ChatRequest, upstreamMode
 	if request == nil || !validOpaqueRunes(upstreamModel, openai.MaxUpstreamModelRunes, true) || safetyIdentifier == "" || resolve == nil {
 		return nil, ErrInvalidRequest
 	}
+	// This protocol requires max_tokens. An explicit exclusion cannot be
+	// satisfied by silently adding a default or translating another field.
+	if request.FieldExcluded("max_tokens") {
+		return nil, ErrInvalidRequest
+	}
 	fields := request.Requirements().TopLevelFields()
 	allowed := map[string]bool{
 		"model": true, "messages": true, "max_tokens": true, "max_completion_tokens": true,

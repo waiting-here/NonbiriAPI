@@ -90,6 +90,7 @@ func validSourceID(typ sourceType, sourceID string) bool {
 		sourceRPSQueue:         "rpsq_",
 		sourceRPSSession:       "rps_",
 		sourceBlackjackPayment: "bjp_",
+		sourceImageTask:        "img_",
 	}[typ]
 	validID := prefix != "" && db.ValidateOpaqueID(sourceID, prefix)
 	if typ == sourceDuelQueue {
@@ -134,7 +135,8 @@ func sourceTypeForKind(kind Kind) (sourceType, bool) {
 	switch kind {
 	case KindAdminUserAdjustment, KindAdminPoolAdjustment, KindAccountDeleteZero,
 		KindCheckinAward, KindAntiAbusePenalty, KindWelfareClaim,
-		KindThursdayContribution, KindThursdayPayout, KindGameOnboardingReward, KindActivityLoan:
+		KindThursdayContribution, KindThursdayPayout, KindGameOnboardingReward, KindActivityLoan,
+		KindActivityExchange, KindInactivityDecay:
 		return sourceOperation, true
 	case KindForwardReserve, KindForwardSettle, KindForwardRelease,
 		KindCharityReserve, KindCharitySettle, KindCharityRelease:
@@ -157,6 +159,8 @@ func sourceTypeForKind(kind Kind) (sourceType, bool) {
 		return sourceDuelSession, true
 	case KindBlackjackReserve, KindBlackjackSettle, KindBlackjackRelease:
 		return sourceBlackjackPayment, true
+	case KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize:
+		return sourceImageTask, true
 	default:
 		return "", false
 	}

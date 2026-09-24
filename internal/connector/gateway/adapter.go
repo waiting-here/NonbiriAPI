@@ -128,7 +128,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 || stream && response.StatusCode != 200 {
 		result = upstreamFailure("upstream returned an error status", response.StatusCode)
-		result.ErrorDetail = errorContext.Read(response.Body, min(maxJSONBytes, a.backend.MaxResponseBytes()))
+		result.ErrorDetail = errorContext.ReadResponse(ctx, response, min(maxJSONBytes, a.backend.MaxResponseBytes()))
 		return result
 	}
 	if stream {
@@ -140,6 +140,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 		return a.stream(ctx, w, response, chat, guard, errorContext)
 	}
 	if !validContentType(response, "application/json") {
+		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
 	raw, err := readBounded(response.Body, min(maxJSONBytes, a.backend.MaxResponseBytes()))
@@ -152,6 +153,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	}
 	defer clear(raw)
 	if upstreamerror.IsEvent(raw) {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		result = upstreamFailure("upstream response reported an error", response.StatusCode)
 		result.ErrorDetail = errorContext.Parse(raw)
 		return result
@@ -165,9 +167,11 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	}
 	defer clear(translated)
 	if err != nil {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
 	if guard.ContainsJSON(translated, translated) {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
 	if err := contract.MarkResponseStarted(w); err != nil {

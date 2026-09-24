@@ -63,7 +63,7 @@ func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, 
 	var row userRow
 	if role == roleSteward {
 		row, err = readUserRow(ctx, tx, userID)
-		if err == nil && (userID == actorID || row.manualLevel.Valid && row.manualLevel.Int64 == 5) {
+		if err == nil && (userID == actorID || row.manualLevel.Valid && row.manualLevel.Int64 == 6) {
 			err = ErrForbidden
 		}
 	}

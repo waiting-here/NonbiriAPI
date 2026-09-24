@@ -18,7 +18,7 @@ import (
 func TestSharedHandlingAndCrossDonorManagement(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "private-donor-discord", nil, false)
 	steward := e.seedUser(t, "first-steward", &level, false)
 	other := e.seedUser(t, "second-steward", &level, false)
@@ -108,7 +108,7 @@ func TestSharedHandlingAndCrossDonorManagement(t *testing.T) {
 func TestHandlingConcurrentManagersHaveOneWinner(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "handling-owner", nil, false)
 	steward := e.seedUser(t, "handling-steward", &level, false)
 	e.seedUser(t, "", nil, true)
@@ -241,7 +241,7 @@ func TestHandlingTerminalStateMatrix(t *testing.T) {
 func TestProcessingDueDonationPersistsCloseWithoutIdempotencyAcceptance(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "due-handling-owner", nil, false)
 	steward := e.seedUser(t, "due-handling-steward", &level, false)
 	_, key := e.seedEndpointKey(t, owner, 'f')
@@ -265,7 +265,7 @@ func TestProcessingDueDonationPersistsCloseWithoutIdempotencyAcceptance(t *testi
 
 func TestHandlingHTTPStrictInputsAndManagementFilters(t *testing.T) {
 	e := newDonationTestEnv(t)
-	level := int64(5)
+	level := int64(6)
 	actor := e.seedUser(t, "handling-http", &level, false)
 	e.seedUser(t, "", nil, true)
 	_, key := e.seedEndpointKey(t, actor, 'w')

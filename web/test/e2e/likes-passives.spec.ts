@@ -14,10 +14,61 @@ async function pausePresentationClock(page: Page) {
   await page.clock.install({ time: new Date(pausedAt.getTime() - 1000) });
   await page.clock.pauseAt(pausedAt);
 }
-async function setup(page: Page, name: keyof typeof wire, offset = 0, manualClock = false) {
+async function setup(
+  page: Page,
+  name: keyof typeof wire,
+  offset = 0,
+  manualClock = false,
+  persistentCache = false,
+) {
   await mockRoleSession(page, 'user', 'user');
   await mockPublicConfig(page, 'user');
-  const source = wire[name];
+  const source = structuredClone(wire[name]);
+  const cache = {
+    key: 'B07:原版',
+    buffId: 'B07:原版',
+    kind: 'CACHE',
+    name: '短效缓存·Flash',
+    positive: true,
+    category: 'buff',
+    p: 30,
+    q: 3,
+    remaining: 0,
+    layers: 3,
+    activeFrom: 1,
+    persistentLayers: 3,
+  };
+  const after = persistentCache
+    ? {
+        ...source.after,
+        players: [{ ...source.after.players[0], effects: [cache] }, source.after.players[1]],
+      }
+    : source.after;
+  const summary = persistentCache
+    ? {
+        ...source.summary,
+        after: {
+          ...source.summary.after,
+          players: [
+            {
+              ...source.summary.after.players[0],
+              effects: [
+                {
+                  key: cache.key,
+                  buff_id: cache.buffId,
+                  kind: cache.kind,
+                  layers: 3,
+                  remaining: 0,
+                  active_from: 1,
+                  persistent_layers: 3,
+                },
+              ],
+            },
+            source.summary.after.players[1],
+          ],
+        },
+      }
+    : source.summary;
   const catalog = {
     ...catalogWire({ quick: wire.partial.content_hash, standard: wire.chain.content_hash }),
     compatible_modes: legacyCatalogWire(),
@@ -67,12 +118,12 @@ async function setup(page: Page, name: keyof typeof wire, offset = 0, manualCloc
             rake_bp: { platform: 0, welfare: 0, thursday: 0 },
             own_payment: { general: '1', game: '0' },
             profiles: [{ kind: 'anonymous' }, { kind: 'anonymous' }],
-            view: source.after,
+            view: after,
             resolution: {
               round: 1,
               started_at: now,
               ends_at: now + source.seconds,
-              summary: source.summary,
+              summary,
             },
             round_start: null,
           },
@@ -189,5 +240,26 @@ test('saved legacy catalog displays its original passives and round facts', asyn
     page.locator('.likes-event').filter({ hasText: 'Debuff hit and resistance' }),
   ).toHaveCount(0);
   await expect(page.locator('.likes-round-log')).toContainText('Successful cast');
+  errors.assertNone();
+});
+
+test('persistent cache keeps its live label, layer count and original guide identity', async ({
+  page,
+}) => {
+  const errors = collectConsoleViolations(page);
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await setup(page, 'partial', wire.partial.seconds + 1, false, true);
+  const cache = page.getByRole('button', { name: /Persistent cache·Flash/ });
+  await expect(cache).toContainText('Persistent layers: 3');
+  await expect(cache).not.toContainText('Short-lived layers');
+  await cache.click();
+  const reader = page.locator('.likes-reader');
+  await expect(reader.locator('.likes-reader-main h3')).toHaveText('短效缓存·Flash · Original');
+  await expect(reader.locator('.likes-reader-main')).toContainText(
+    'Persistent and ordinary layers share the 3-layer cap',
+  );
+  await expect(reader.locator('figcaption')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   errors.assertNone();
 });

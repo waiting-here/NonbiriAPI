@@ -3,7 +3,15 @@ import { useDuelText } from '../common/duel/copy';
 import type { ModeCatalog } from './catalog';
 import type { LikesEvent, LikesView, RoundFacts } from './types';
 import type { JSONValue } from './value';
-import { buffName, reasonName, resourceName, shopName, skillName, stageName } from './labels';
+import {
+  buffName,
+  effectName,
+  reasonName,
+  resourceName,
+  shopName,
+  skillName,
+  stageName,
+} from './labels';
 import { FrameChanges } from './Arena';
 import { PlanSummary } from './PlanEditor';
 import { characterPassive } from './characterPassives';
@@ -11,8 +19,10 @@ import { characterPassive } from './characterPassives';
 function EventData({
   data,
   catalog,
+  kind,
 }: {
   readonly data: Record<string, JSONValue>;
+  readonly kind: string;
   readonly catalog: ModeCatalog;
 }) {
   const t = useDuelText();
@@ -60,7 +70,8 @@ function EventData({
     template: t('学习模板', 'Learned template'),
     remaining: t('剩余', 'Remaining'),
     sample: t('样本', 'Sample'),
-    layers: t('层数', 'Layers'),
+    layers: kind === 'persist' ? t('持久层数', 'Persistent layers') : t('层数', 'Layers'),
+    persistentLayers: t('持久层数', 'Persistent layers'),
     buffId: 'Buff',
     enabled: t('启用', 'Enabled'),
     status: t('状态', 'Status'),
@@ -101,7 +112,18 @@ function EventData({
           : key === 'skillId' || key === 'skill_id' || key === 'templateId' || key === 'template'
             ? skillName(catalog, value)
             : key === 'buffId' || key === 'buff_id'
-              ? buffName(catalog, value)
+              ? kind === 'persist' && typeof data.layers === 'number'
+                ? effectName(
+                    catalog,
+                    {
+                      kind: 'CACHE',
+                      buff_id: value,
+                      layers: data.layers,
+                      persistent_layers: data.layers,
+                    },
+                    t,
+                  )
+                : buffName(catalog, value)
               : key === 'reason'
                 ? reasonName(value, t)
                 : key === 'item'
@@ -189,7 +211,7 @@ function EventLine({
         · {names[event.kind] ?? event.kind}
         {event.cast ? ` · ${skillName(catalog, event.cast.skillId)} +${event.cast.likes} ♥` : ''}
       </summary>
-      <EventData data={event.data} catalog={catalog} />
+      <EventData data={event.data} catalog={catalog} kind={event.kind} />
       {event.score && (
         <>
           <p>

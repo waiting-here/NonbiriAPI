@@ -45,8 +45,8 @@ const stewardSession = {
     balance: '0',
     game_balance: '0',
     donation_credit: '0',
-    effective_level: 5,
-    level_display_name: 'Lv5',
+    effective_level: 6,
+    level_display_name: 'Lv6',
     game_profile_public: false,
     charity_profile_public: false,
     automatic_restrictions: [],
@@ -406,7 +406,11 @@ describe('Generation 2 charity management policy', () => {
         price_limit: '9000000000000',
         calls_limit: '9000000000000000',
         tokens_limit: '9000000000000000',
+        input_tokens_limit: null,
+        output_tokens_limit: null,
         token_reserve: 2_147_483_647,
+        input_token_reserve: null,
+        output_token_reserve: null,
         enabled: true,
         safe_note: '🫶'.repeat(256),
         expires_at: null,
@@ -449,6 +453,8 @@ describe('Generation 2 charity management policy', () => {
           full_name: `[公益]${String(body.provider)}/${String(body.model)}`,
           enabled: true,
           allowed_levels: body.allowed_levels as number[],
+          is_mainstream: body.is_mainstream as boolean,
+          excluded_request_fields: body.excluded_request_fields as string[],
           public_description: String(body.public_description),
           token_reserve_credits:
             typeof body.token_reserve_credits === 'string' ? body.token_reserve_credits : null,
@@ -490,7 +496,9 @@ describe('Generation 2 charity management policy', () => {
     await waitFor(() => expect(createRequests).toHaveLength(1));
     const body = JSON.parse(String(createRequests[0].body)) as Record<string, unknown>;
     expect(body).toMatchObject({
-      allowed_levels: [1, 2, 3, 4, 5],
+      allowed_levels: [1, 2, 3, 4, 5, 6],
+      is_mainstream: false,
+      excluded_request_fields: [],
       public_description: '',
       pricing: { mode: 'per_request', user_price: '1.001', donor_reward: '0' },
     });

@@ -120,7 +120,7 @@ func TestOwnerFailureResetPreservesUsageAndChecksCurrentOwnership(t *testing.T) 
 
 func TestFailureResetBatchGroupsRevisionsReplaysAndRollsBack(t *testing.T) {
 	e := newDonationTestEnv(t)
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "batch-owner", nil, false)
 	steward := e.seedUser(t, "batch-steward", &level, false)
 	e.seedUser(t, "", nil, true)
@@ -255,7 +255,7 @@ func TestFailureSelectionFreezesRangeAndScansBeforeFiltering(t *testing.T) {
 	ctx := context.Background()
 	owner := e.seedUser(t, "selection-owner", nil, false)
 	e.seedUser(t, "", nil, true)
-	level := int64(5)
+	level := int64(6)
 	steward := e.seedUser(t, "selection-steward", &level, false)
 	source := seedBrowseScale(t, e, owner, 205, false)
 	filter := failureSelection{View: "sources", Source: SourceFilter{Scope: "all"}}

@@ -58,6 +58,9 @@ func TestStartFishingAtomicOneTenAndAuthoritativeReplay(t *testing.T) {
 		if replayErr != nil || replayPending != nil || replay == nil || replay.BatchID != result.BatchID || !replay.IdempotentReplay {
 			t.Fatalf("replay = (%#v,%#v,%v)", replay, replayPending, replayErr)
 		}
+		if seq := fixture.scalar(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, userID); seq != 1 {
+			t.Fatalf("fishing replay activity=%d", seq)
+		}
 		if fixture.random.callCount() != replayCalls {
 			t.Fatal("replay consumed randomness")
 		}

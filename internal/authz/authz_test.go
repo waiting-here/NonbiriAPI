@@ -92,8 +92,8 @@ func testAuthorizer(elevationConsumer ElevationConsumer) *Authorizer {
 func TestAuthorizeLiveRolesAndOwnerIsolation(t *testing.T) {
 	store := openAuthStore(t)
 	userID := insertAuthUser(t, store.DB(), "1001", "session-user", "g1", false, nil)
-	levelFive := int64(5)
-	stewardID := insertAuthUser(t, store.DB(), "1002", "session-steward", "g2", false, &levelFive)
+	levelSix := int64(6)
+	stewardID := insertAuthUser(t, store.DB(), "1002", "session-steward", "g2", false, &levelSix)
 	adminID := insertAuthUser(t, store.DB(), "1003", "session-admin", "g3", true, nil)
 	authorizer := testAuthorizer(nil)
 
@@ -265,8 +265,8 @@ func TestFinalTransactionDemotionShuffle(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			store := openAuthStore(t)
-			levelFive := int64(5)
-			userID := insertAuthUser(t, store.DB(), "4001", "session-steward", "g1", false, &levelFive)
+			levelSix := int64(6)
+			userID := insertAuthUser(t, store.DB(), "4001", "session-steward", "g1", false, &levelSix)
 			authorizer := testAuthorizer(nil)
 			actor := Actor{ActorUserSession, userID, "session-steward", "g1", ""}
 			if demotionFirst {

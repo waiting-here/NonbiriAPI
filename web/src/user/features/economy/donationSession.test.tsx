@@ -30,6 +30,7 @@ const command = {
   description: 'controlled submission',
   keys: [{ endpointKeyId: '12', expiresAt: null }],
   ownershipAuthorized: true as const,
+  discordPublicThanks: false,
 };
 const donation = { id: '14' } as Donation;
 let client: QueryClient;

@@ -12,6 +12,7 @@ import (
 // the published-binary upgrade gate supplies the independent populated source.
 func makePreProgressionFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreGovernanceFixture(t, database)
 	ctx := context.Background()
 	present, err := ProgressionStoragePresent(ctx, database)
 	if err != nil {

@@ -36,6 +36,7 @@ type timingHints struct {
 	DefaultPackageSeconds float64                       `json:"default_package_seconds"`
 	SplitPackages         []string                      `json:"split_packages"`
 	SplitTestCounts       map[string]int                `json:"split_test_counts"`
+	SplitGroupCaps        map[string]int                `json:"split_group_caps,omitempty"`
 	TestSeconds           map[string]map[string]float64 `json:"test_seconds,omitempty"`
 	PackageSeconds        map[string]float64            `json:"package_seconds"`
 }
@@ -66,6 +67,7 @@ type shardPlan struct {
 	WholePackageWeights map[string]float64
 	SplitTests          map[string][]string
 	SplitTestWeights    map[string]map[string]float64
+	SplitGroupCaps      map[string]int
 }
 
 type commandGroup struct {
@@ -139,7 +141,7 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	digest := planDigest(plans)
+	digest := planDigest(plans, *timeout, *workers)
 	if *planOnly {
 		printPlans(stdout, plans, digest, *timeout, *workers)
 		return nil
@@ -149,9 +151,9 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	for _, tests := range selected.SplitTests {
 		testCount += len(tests)
 	}
-	fmt.Fprintf(stdout, "raceplan: shard %d/%d plan=%s estimated=%.1fs whole_packages=%d split_tests=%d\n",
-		index, total, digest, selected.EstimatedSeconds, len(selected.WholePackages), testCount)
 	groups := executionGroups(selected, *timeout, *workers)
+	fmt.Fprintf(stdout, "raceplan: shard %d/%d plan=%s estimated=%.1fs whole_packages=%d split_tests=%d workers=%d groups=%d\n",
+		index, total, digest, selected.EstimatedSeconds, len(selected.WholePackages), testCount, *workers, len(groups))
 	return executeGroups(groups, *workers, func(group commandGroup, commandOutput io.Writer) error {
 		command := exec.Command(*goTool, group.Args...)
 		command.Stdout = commandOutput
@@ -214,6 +216,9 @@ func loadTimingHints(path string) (timingHints, error) {
 			return timingHints{}, fmt.Errorf("timing hints contain invalid split test count %q=%d", packagePath, count)
 		}
 	}
+	if err := validateSplitGroupCaps(hints.SplitGroupCaps, seenSplit); err != nil {
+		return timingHints{}, err
+	}
 	for packagePath, seconds := range hints.PackageSeconds {
 		if packagePath == "" || seconds <= 0 {
 			return timingHints{}, fmt.Errorf("timing hints contain invalid package weight %q=%v", packagePath, seconds)
@@ -239,6 +244,15 @@ func loadTimingHints(path string) (timingHints, error) {
 		}
 	}
 	return hints, nil
+}
+
+func validateSplitGroupCaps(caps map[string]int, split map[string]struct{}) error {
+	for packagePath, count := range caps {
+		if _, exists := split[packagePath]; !exists || count <= 0 {
+			return fmt.Errorf("timing hints contain invalid split group cap %q=%d", packagePath, count)
+		}
+	}
+	return nil
 }
 
 func listPackages(goTool string) ([]listedPackage, error) {
@@ -377,6 +391,9 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 	for _, packagePath := range hints.SplitPackages {
 		split[packagePath] = struct{}{}
 	}
+	if err := validateSplitGroupCaps(hints.SplitGroupCaps, split); err != nil {
+		return nil, err
+	}
 	if len(catalog) == 0 {
 		return nil, errors.New("catalog is empty")
 	}
@@ -447,6 +464,7 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 			WholePackageWeights: make(map[string]float64),
 			SplitTests:          make(map[string][]string),
 			SplitTestWeights:    make(map[string]map[string]float64),
+			SplitGroupCaps:      make(map[string]int),
 		}
 	}
 	for _, unit := range units {
@@ -462,6 +480,7 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 			plans[target].WholePackageWeights[unit.Package] = unit.Weight
 		} else {
 			plans[target].SplitTests[unit.Package] = append(plans[target].SplitTests[unit.Package], unit.Test)
+			plans[target].SplitGroupCaps[unit.Package] = max(1, hints.SplitGroupCaps[unit.Package])
 			if plans[target].SplitTestWeights[unit.Package] == nil {
 				plans[target].SplitTestWeights[unit.Package] = make(map[string]float64)
 			}
@@ -540,29 +559,20 @@ func validatePlans(catalog []catalogPackage, split map[string]struct{}, plans []
 	return nil
 }
 
-func planDigest(plans []shardPlan) string {
+func planDigest(plans []shardPlan, timeout string, workers int) string {
 	hash := sha256.New()
+	fmt.Fprintf(hash, "workers:%d\n", workers)
 	for _, plan := range plans {
 		fmt.Fprintf(hash, "shard:%d\n", plan.Index)
-		for _, packagePath := range plan.WholePackages {
-			fmt.Fprintf(hash, "package:%s\n", packagePath)
-		}
-		packages := make([]string, 0, len(plan.SplitTests))
-		for packagePath := range plan.SplitTests {
-			packages = append(packages, packagePath)
-		}
-		sort.Strings(packages)
-		for _, packagePath := range packages {
-			for _, testName := range plan.SplitTests[packagePath] {
-				fmt.Fprintf(hash, "test:%s:%s\n", packagePath, testName)
-			}
+		for _, group := range executionGroups(plan, timeout, workers) {
+			fmt.Fprintf(hash, "group:%s weight:%g args:%q\n", group.Label, group.Weight, group.Args)
 		}
 	}
 	return hex.EncodeToString(hash.Sum(nil))[:16]
 }
 
 func printPlans(output io.Writer, plans []shardPlan, digest, timeout string, workers int) {
-	fmt.Fprintf(output, "raceplan: plan=%s shards=%d\n", digest, len(plans))
+	fmt.Fprintf(output, "raceplan: plan=%s shards=%d workers=%d\n", digest, len(plans), workers)
 	for _, plan := range plans {
 		testCount := 0
 		for _, tests := range plan.SplitTests {
@@ -588,7 +598,7 @@ func printPlans(output io.Writer, plans []shardPlan, digest, timeout string, wor
 }
 
 func executionGroups(plan shardPlan, timeout string, workers int) []commandGroup {
-	base := []string{"test", "-race", "-count=1", "-timeout=" + timeout, "-p=1", "-v"}
+	base := []string{"test", "-race", "-shuffle=on", "-count=1", "-timeout=" + timeout, "-p=1", "-v"}
 	groups := make([]commandGroup, 0, len(plan.WholePackages)+len(plan.SplitTests))
 	wholePackages := append([]string(nil), plan.WholePackages...)
 	sort.Strings(wholePackages)
@@ -606,10 +616,9 @@ func executionGroups(plan shardPlan, timeout string, workers int) []commandGroup
 	sort.Strings(packages)
 	for _, packagePath := range packages {
 		tests := plan.SplitTests[packagePath]
-		groupCount := workers
-		if len(tests) < groupCount {
-			groupCount = len(tests)
-		}
+		// Reuse process-local fixture setup unless measured heavy tests need
+		// independent commands. Worker concurrency still applies across packages.
+		groupCount := min(max(1, plan.SplitGroupCaps[packagePath]), workers, len(tests))
 		buckets := make([][]string, groupCount)
 		weights := make([]float64, groupCount)
 		ordered := append([]string(nil), tests...)

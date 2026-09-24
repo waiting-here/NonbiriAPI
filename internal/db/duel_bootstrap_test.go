@@ -83,6 +83,9 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 	if err := applyProgressionExtension(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
+	if err := applyGovernanceExtension(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
 	got, err := readGenerationManifest(ctx, tx)
 	if err != nil || generationManifestDigest(got) != generationManifestDigest(want) {
 		t.Fatal("fresh and upgraded structures differ", generationManifestDigest(got), err)

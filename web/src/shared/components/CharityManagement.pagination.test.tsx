@@ -49,7 +49,7 @@ const key = (index: number, state = 'available') => ({
   binding_count: '0',
   idle: true,
 });
-function donation(pending = false) {
+function donation(pending = false, keyCount = 21) {
   return {
     id: '7',
     status: pending ? 'pending' : 'approved',
@@ -57,7 +57,9 @@ function donation(pending = false) {
     handling,
     description: 'Shared donation',
     review_result: pending ? null : { decision: 'approve', reason: 'Accepted', reviewed_at: 10 },
-    keys: Array.from({ length: 21 }, (_, index) => key(index, pending ? 'pending' : 'available')),
+    keys: Array.from({ length: keyCount }, (_, index) =>
+      key(index, pending ? 'pending' : 'available'),
+    ),
     owner: { user_id: '7', discord_id: null, display_name: 'Synthetic donor' },
     reviewer: pending ? null : { user_id: '9', role: 'admin' },
     created_at: 1,
@@ -72,8 +74,8 @@ function summary(value: ReturnType<typeof donation>) {
     source_count: '1',
     sources: [safeSource],
     state_counts: {
-      pending: value.status === 'pending' ? '21' : '0',
-      available: value.status === 'approved' ? '21' : '0',
+      pending: value.status === 'pending' ? String(keys.length) : '0',
+      available: value.status === 'approved' ? String(keys.length) : '0',
       disabled: '0',
       suspended: '0',
       exhausted: '0',
@@ -114,9 +116,9 @@ function Probe() {
     </>
   );
 }
-function install(pending = false, role: 'admin' | 'steward' = 'admin') {
+function install(pending = false, role: 'admin' | 'steward' = 'admin', keyCount = 21) {
   const root = role === 'admin' ? '/admin/api' : '/api/steward';
-  let current = donation(pending);
+  let current = donation(pending, keyCount);
   const requests: URL[] = [];
   const reviews: {
     expected_revision: string;
@@ -168,7 +170,7 @@ function install(pending = false, role: 'admin' | 'steward' = 'admin') {
     if (url.pathname === `${root}/donations/7/review` && method === 'POST') {
       const body = JSON.parse(String(init?.body));
       reviews.push(body);
-      current = { ...donation(), revision: '2' };
+      current = { ...donation(false, keyCount), revision: '2' };
       return json(current);
     }
     throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
@@ -305,7 +307,8 @@ describe('managed donation page integration', () => {
     },
   );
   it('retains an open recurring draft across skewed header and key-page revision refreshes', async () => {
-    const fixture = install();
+    // Revision skew needs one editor; pagination cases retain the full fixture.
+    const fixture = install(false, 'admin', 1);
     const initialFetch = globalThis.fetch;
     let holdKeys = false;
     let releaseKeys!: () => void;

@@ -311,6 +311,7 @@ async function serveStation(request, response, station) {
     if (
       request.method === 'GET' &&
       (/^\/api\/games\/(bidding|blackjack)\/leaderboard$/.test(url.pathname) ||
+        /^\/api\/games\/(leaderboards|fishing|blackjack)\/net-profit$/.test(url.pathname) ||
         url.pathname === '/api/games/leaderboards/charity' ||
         url.pathname === '/api/charity/leaderboard')
     ) {

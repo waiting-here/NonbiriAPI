@@ -1,4 +1,5 @@
 import { decoded, queryPath } from './api';
+import { charityScopePath } from './charityScope';
 import { type CharityRole } from './charity';
 import { normalizeNumberedPage, validateWindow, invalidRequest } from './numberedPage';
 import { type PageSize } from './pageNumbers';
@@ -51,10 +52,14 @@ export function getDonationKeyModels(
   page: string,
   size: PageSize,
   signal?: AbortSignal,
+  charityModelID?: string,
 ) {
   validateWindow(page, size);
   return decoded(
-    queryPath(path(role, donationId, keyId), { page, page_size: size }),
+    charityScopePath(
+      queryPath(path(role, donationId, keyId), { page, page_size: size }),
+      charityModelID,
+    ),
     (value) =>
       normalizeNumberedPage<DonationKeyModel>(
         value,
@@ -93,13 +98,17 @@ export function getDonationKeyModelBindings(
   page: string,
   size: PageSize,
   signal?: AbortSignal,
+  charityModelID?: string,
 ) {
   validateWindow(page, size);
   return decoded(
-    queryPath(`${path(role, donationId, keyId)}/${decimalID(modelId, 'model id')}/bindings`, {
-      page,
-      page_size: size,
-    }),
+    charityScopePath(
+      queryPath(`${path(role, donationId, keyId)}/${decimalID(modelId, 'model id')}/bindings`, {
+        page,
+        page_size: size,
+      }),
+      charityModelID,
+    ),
     (value) =>
       normalizeNumberedPage<DonationKeyModelBinding>(
         value,

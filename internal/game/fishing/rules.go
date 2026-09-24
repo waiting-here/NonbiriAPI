@@ -57,6 +57,8 @@ const (
 	MaximumRTPPercent               = 100
 	MinimumTreasureMultiplier       = 1
 	MaximumTreasureMultiplier       = 1000
+	DefaultBlueFishChanceBPS        = 1000
+	MaximumBlueFishChanceBPS        = 10000
 )
 
 // Species is a server-authoritative fish entry and its inclusive centimetre
@@ -75,6 +77,7 @@ type Config struct {
 	BaitPricesMilli     map[Bait]string
 	StandardRTPPercent  int
 	PremiumRTPPercent   int
+	BlueFishChanceBPS   int
 	RakeBP              RakeBasisPoints
 	TreasureMultipliers map[string]int
 }
@@ -89,6 +92,7 @@ func DefaultConfig() Config {
 		},
 		StandardRTPPercent: 100,
 		PremiumRTPPercent:  100,
+		BlueFishChanceBPS:  DefaultBlueFishChanceBPS,
 		RakeBP:             RakeBasisPoints{Platform: 100, Welfare: 100, Thursday: 100},
 		TreasureMultipliers: map[string]int{
 			"bottle": 2,
@@ -521,6 +525,9 @@ func compileWithDefinitions(config Config, defs definitions) (*Ruleset, error) {
 }
 
 func validateConfig(config Config) (map[Bait]int64, error) {
+	if config.BlueFishChanceBPS < 0 || config.BlueFishChanceBPS > MaximumBlueFishChanceBPS {
+		return nil, fmt.Errorf("%w: blue fish chance outside 0..10000", ErrInvalidConfig)
+	}
 	if !config.RakeBP.Valid() {
 		return nil, fmt.Errorf("%w: invalid rake basis points", ErrInvalidConfig)
 	}

@@ -12,11 +12,13 @@ import (
 // validatedRequest owns exactly one protocol snapshot. Metadata and capability
 // checks cannot cause a chat policy to read or transform embedding input.
 type validatedRequest struct {
-	operation contract.Operation
-	chat      *openai.ChatRequest
-	embedding *openai.EmbeddingRequest
-	Model     string
-	Stream    bool
+	operation         contract.Operation
+	chat              *openai.ChatRequest
+	embedding         *openai.EmbeddingRequest
+	Model             string
+	Stream            bool
+	policyModelID     int64
+	policyDecisionNow int64
 }
 
 func (*validatedRequest) String() string       { return "[redacted forward request]" }
@@ -77,10 +79,24 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 	if !r.valid() {
 		return nil
 	}
+	var result *validatedRequest
 	if r.chat != nil {
-		return chatRequest(r.chat.CloneForAttempt())
+		result = chatRequest(r.chat.CloneForAttempt())
+	} else {
+		result = embeddingRequest(r.embedding.CloneForAttempt())
 	}
-	return embeddingRequest(r.embedding.CloneForAttempt())
+	result.policyModelID, result.policyDecisionNow = r.policyModelID, r.policyDecisionNow
+	return result
+}
+
+func (r *validatedRequest) excludeFields(fields []string) error {
+	if !r.valid() {
+		return openai.ErrInvalidRequest
+	}
+	if r.chat != nil {
+		return r.chat.ExcludeFields(fields)
+	}
+	return r.embedding.ExcludeFields(fields)
 }
 
 func (r *validatedRequest) supports(registry *connector.Registry, kind contract.Type) bool {

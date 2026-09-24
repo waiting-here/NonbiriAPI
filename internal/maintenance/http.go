@@ -313,6 +313,7 @@ func (api *httpAPI) mutate(
 		writeHTTPError(writer, err)
 		return
 	}
+	defer transition.Finalize(false)
 	wire, err := stateResponse(transition.State())
 	if err != nil {
 		writeHTTPError(writer, err)
@@ -331,6 +332,7 @@ func (api *httpAPI) mutate(
 		writeHTTPError(writer, err)
 		return
 	}
+	transition.Finalize(true)
 	if err := transition.ObserveAfterCommit(request.Context(), api.database); err != nil {
 		writeHTTPError(writer, err)
 		return

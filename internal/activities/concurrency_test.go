@@ -53,6 +53,10 @@ func TestConcurrentWelfareClaimsHaveOneWinner(t *testing.T) {
 	var claims, operations int
 	_ = fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM welfare_claims WHERE user_id=?`, userID).Scan(&claims)
 	_ = fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM credit_operations WHERE kind='welfare_claim'`).Scan(&operations)
+	var seq int64
+	if err := fixture.store.DB().QueryRow(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, userID).Scan(&seq); err != nil || seq != 1 {
+		t.Fatalf("concurrent claim activity=%d err=%v", seq, err)
+	}
 	if claims != 1 || operations != 1 {
 		t.Fatalf("claims=%d operations=%d", claims, operations)
 	}

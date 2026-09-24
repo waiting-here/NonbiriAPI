@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -102,6 +103,7 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 			deny(platformFailure(httperr.CodeNotFound, "not found"))
 			return
 		}
+		observability.MarkResponseCategory(request.Context(), "api_json")
 		if failure := checkRoute(request.Method, request.URL.Path, request.URL.EscapedPath()); failure != nil {
 			deny(*failure)
 			return
@@ -128,6 +130,7 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 			return
 		}
 
+		observability.MarkAccessIdentity(request.Context(), identity.UserID, identity.Generation)
 		if middleware.rejections != nil && requestattempt.ValidRoute(request.Method, request.URL.Path) {
 			ctx, id, err := requestattempt.New(request.Context(), identity.UserID, request.Method, request.URL.Path)
 			if err != nil {
@@ -135,6 +138,9 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 				return
 			}
 			request = request.WithContext(ctx)
+			if request.URL.Path == "/v1/models" {
+				requestattempt.Classify(ctx, "discovery")
+			}
 			writer.Header().Set("X-Request-ID", id)
 			writer = requestattempt.Wrap(writer, ctx, middleware.rejections)
 		}

@@ -64,8 +64,8 @@ const stewardSession = {
     balance: '0',
     game_balance: '0',
     donation_credit: '0',
-    effective_level: 5,
-    level_display_name: 'Lv5',
+    effective_level: 6,
+    level_display_name: 'Lv6',
     game_profile_public: false,
     charity_profile_public: false,
     automatic_restrictions: [],
@@ -93,7 +93,13 @@ function SessionBackedManagement({ frame }: { frame: 'admin' | 'steward' }) {
         ? `admin:${admin.data.admin.username}`
         : undefined
       : user.data?.user.id;
-  return accountId ? <CharityManagement frame={frame} accountId={accountId} /> : null;
+  return accountId ? (
+    <CharityManagement
+      frame={frame}
+      accountId={accountId}
+      trainee={frame === 'steward' && user.data?.user.effective_level === 5}
+    />
+  ) : null;
 }
 
 const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonationKey => ({
@@ -332,6 +338,35 @@ function localDateTime(epoch: number): string {
 }
 
 describe('CharityManagement corrective controls', () => {
+  it('limits a trainee landing page to scoped model browsing', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), 'https://example.test');
+      if ((init?.method ?? 'GET') !== 'GET') throw new Error('Unexpected write');
+      if (url.pathname === '/api/session')
+        return jsonResponse({
+          ...stewardSession,
+          user: { ...stewardSession.user, effective_level: 5 },
+        });
+      if (url.pathname === '/api/steward/charity-models')
+        return jsonResponse(numberedPage([{ ...charityModel(10, 20), is_mainstream: true }], url));
+      throw new Error(`Unexpected trainee read: ${url.pathname}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await renderWithProviders(<SessionBackedManagement frame="steward" />, {
+      station: 'user',
+      role: 'user',
+    });
+    expect(await screen.findByText('[公益]provider/model')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Add charity model' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.every(
+        ([input]) =>
+          !String(input).includes('/donations') && !String(input).includes('/donation-sources'),
+      ),
+    ).toBe(true);
+  });
+
   it('keeps selections across two donation keys and paginated model candidates and submits the full set', async () => {
     const first = {
       ...approvedDonation(managedKey({ safe_note: 'First shared key\nReviewed limits' })),
@@ -486,6 +521,10 @@ describe('CharityManagement corrective controls', () => {
     expect(requests.keyBodies[0]).toEqual({
       expected_revision: '1',
       price_limit: null,
+      input_tokens_limit: null,
+      output_tokens_limit: null,
+      input_token_reserve: null,
+      output_token_reserve: null,
       calls_limit: null,
       tokens_limit: null,
       token_reserve: 32,
@@ -514,6 +553,10 @@ describe('CharityManagement corrective controls', () => {
       expected_revision: '1',
       enabled: false,
       price_limit: null,
+      input_tokens_limit: null,
+      output_tokens_limit: null,
+      input_token_reserve: null,
+      output_token_reserve: null,
       calls_limit: null,
       tokens_limit: null,
       token_reserve: 32,
@@ -551,6 +594,10 @@ describe('CharityManagement corrective controls', () => {
         {
           donation_key_id: '11',
           price_limit: null,
+          input_tokens_limit: null,
+          output_tokens_limit: null,
+          input_token_reserve: null,
+          output_token_reserve: null,
           calls_limit: null,
           tokens_limit: null,
           token_reserve: 32,
@@ -633,6 +680,8 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      is_mainstream: false,
+      excluded_request_fields: [],
       route_strategy: 'expiry_weighted',
       expected_revision: '1',
       provider: 'provider',
@@ -847,7 +896,7 @@ describe('CharityManagement corrective controls', () => {
     expect(screen.getByRole('checkbox', { name: 'L5' })).toBeChecked();
     await view.user.click(screen.getByRole('button', { name: 'Clear all levels' }));
     expect(
-      screen.getByText('No ordinary user can call this model (including level 5 users).'),
+      screen.getByText('No ordinary user can call this model (including level 6 users).'),
     ).toBeVisible();
     await view.user.click(screen.getByRole('checkbox', { name: 'L2' }));
     await view.user.click(screen.getByRole('checkbox', { name: 'L5' }));
@@ -856,6 +905,20 @@ describe('CharityManagement corrective controls', () => {
     fireEvent.change(screen.getByLabelText('Public description (plain text, optional)'), {
       target: { value: 'First line\r\n<b>literal</b>\t😀' },
     });
+
+    const price = screen.getByLabelText('Request user price');
+    const reward = screen.getByLabelText('Request donor reward');
+    fireEvent.change(price, { target: { value: '0.003' } });
+    await view.user.click(screen.getByRole('button', { name: 'Fill rewards with half the price' }));
+    expect(reward).toHaveValue('0.001');
+    expect(createBodies).toHaveLength(0);
+    fireEvent.change(price, { target: { value: '' } });
+    await view.user.click(screen.getByRole('button', { name: 'Fill rewards with half the price' }));
+    expect(price).toHaveFocus();
+    expect(screen.getByText('Enter valid user prices first.')).toBeVisible();
+    fireEvent.change(price, { target: { value: '1' } });
+    await view.user.click(screen.getByRole('button', { name: 'Fill rewards with half the price' }));
+    expect(reward).toHaveValue('0.5');
 
     const pricing = screen.getByRole('combobox', { name: 'Pricing mode' });
     await view.user.selectOptions(pricing, 'per_token');

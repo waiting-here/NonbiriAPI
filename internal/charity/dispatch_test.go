@@ -25,7 +25,7 @@ func testDispatchRevalidatesModelAndCaller(t *testing.T, route claim.RouteKind) 
 		{"model disabled", `UPDATE charity_models SET enabled=0 WHERE id=?`, func(e *charityTestEnv) []any { return []any{e.requestModel} }, claim.ErrModelUnavailable},
 		{"site disabled", `UPDATE site_config SET value='0' WHERE key='charity_enabled'`, func(*charityTestEnv) []any { return nil }, claim.ErrModelUnavailable},
 		{"changed effective level", `UPDATE users SET level=2 WHERE id=?`, func(e *charityTestEnv) []any { return []any{e.callerID} }, claim.ErrForbidden},
-		{"steward has no exemption", `UPDATE users SET level=5 WHERE id=?`, func(e *charityTestEnv) []any { return []any{e.callerID} }, claim.ErrForbidden},
+		{"steward has no exemption", `UPDATE users SET level=6 WHERE id=?`, func(e *charityTestEnv) []any { return []any{e.callerID} }, claim.ErrForbidden},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			e := newCharityTestEnv(t)

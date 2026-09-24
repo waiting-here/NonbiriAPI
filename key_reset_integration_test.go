@@ -34,7 +34,7 @@ func TestFailureResetRegisteredRoutesUseCurrentSessions(t *testing.T) {
 		return map[string]string{"Content-Type": "application/json", "Origin": "http://" + host, "Idempotency-Key": strings.Repeat(key, 22)}
 	}
 	created := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/donations",
-		fmt.Sprintf(`{"description":"Reset route fixture","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true}`, physical),
+		fmt.Sprintf(`{"description":"Reset route fixture","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical),
 		f.cookies, headers(auditUserHost, "C"))
 	var d struct {
 		ID, Revision string
@@ -66,7 +66,7 @@ func TestFailureResetRegisteredRoutesUseCurrentSessions(t *testing.T) {
 	if denied.Code != 403 {
 		t.Fatalf("ordinary selection: %d %s", denied.Code, denied.Body)
 	}
-	exec(`UPDATE users SET level=5 WHERE id=?`, f.userID)
+	exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
 	selected := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, stewardPath+"/selection", selection, f.cookies, headers(auditUserHost, "S"))
 	if selected.Code != 200 || !strings.Contains(selected.Body.String(), `"expected_revision":"3"`) {
 		t.Fatalf("steward selection: %d %s", selected.Code, selected.Body)

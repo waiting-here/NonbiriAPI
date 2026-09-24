@@ -12,6 +12,25 @@ describe('credit history URL state', () => {
     expect(state.canonicalSearch).toBe('');
   });
 
+  it('round-trips activity asset and policy category filters', () => {
+    for (const query of [
+      'asset_type=sketch_paper&category=picture_book',
+      'asset_type=sketch_brush&category=picture_book',
+      'asset_type=general&category=inactivity',
+      'asset_type=all&category=inactivity',
+    ]) {
+      const state = parseCreditHistorySearch(query);
+      expect(state.canonicalSearch).toBe(query);
+      expect(state.invalidAsset).toBe(false);
+      expect(state.invalidCategory).toBe(false);
+      expect(parseCreditHistorySearch(state.canonicalSearch).filter).toEqual(state.filter);
+    }
+    const invalid = parseCreditHistorySearch('asset_type=unknown_asset&category=unknown_category');
+    expect(invalid.canonicalSearch).toBe('');
+    expect(invalid.invalidAsset).toBe(true);
+    expect(invalid.invalidCategory).toBe(true);
+  });
+
   it('keeps legal int64 pages, ten rows, and zero as a valid time bound', () => {
     const state = parseCreditHistorySearch(
       `page=${MAX_HISTORY_PAGE}&page_size=10&anchor=${anchor}&from=0&to=${MAX_HISTORY_UNIX_SECOND}`,

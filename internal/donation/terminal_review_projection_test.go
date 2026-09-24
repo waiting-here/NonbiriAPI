@@ -16,7 +16,7 @@ func TestTerminalDonationReviewHistoryAcrossReaders(t *testing.T) {
 			t.Run(reviewKind+"/"+terminal, func(t *testing.T) {
 				e := newDonationTestEnv(t)
 				ctx := context.Background()
-				level := int64(5)
+				level := int64(6)
 				owner := e.seedUser(t, "terminal-review-owner", &level, false)
 				e.seedUser(t, "", nil, true)
 				var source *donationEndpointSource

@@ -286,8 +286,9 @@ func (connections *accountEventConnections) Close() error {
 }
 
 type userSessionInvalidationFanout struct {
-	debug       *debug.Hub
-	connections *accountEventConnections
+	debug         *debug.Hub
+	connections   *accountEventConnections
+	limitsChanged func(int64)
 }
 
 func (fanout *userSessionInvalidationFanout) UserSessionInvalidated(userID int64) {
@@ -299,6 +300,9 @@ func (fanout *userSessionInvalidationFanout) UserSessionInvalidated(userID int64
 	}
 	if fanout.debug != nil {
 		_ = fanout.debug.TerminateUser(userID, debug.EndAuthRevoked)
+	}
+	if fanout.limitsChanged != nil {
+		fanout.limitsChanged(userID)
 	}
 }
 

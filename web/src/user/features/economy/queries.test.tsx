@@ -62,7 +62,12 @@ interface EventHandlers {
 }
 
 const OLD_SNAPSHOT: ActivitiesSnapshot = {
-  loan: { enabled: false, available: false, reason: 'disabled', tiers: ['10000', '100000', '1000000'] },
+  loan: {
+    enabled: false,
+    available: false,
+    reason: 'disabled',
+    tiers: ['10000', '100000', '1000000'],
+  },
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
     asset: 'game',
@@ -324,6 +329,7 @@ describe('activity query authority recovery', () => {
             description: 'one intent',
             keys: [{ endpointKeyId: '61', expiresAt: null }],
             ownershipAuthorized: true,
+            discordPublicThanks: false,
           }),
         ).rejects.toBe(rejected);
       });
@@ -406,6 +412,7 @@ describe('activity query authority recovery', () => {
           description: 'one intent',
           keys: [{ endpointKeyId: '61', expiresAt: null }],
           ownershipAuthorized: true,
+          discordPublicThanks: false,
         }),
       ).rejects.toBe(rejected);
     });
@@ -461,6 +468,7 @@ describe('activity query authority recovery', () => {
           description: 'one intent',
           keys: [{ endpointKeyId: '61', expiresAt: null }],
           ownershipAuthorized: true,
+          discordPublicThanks: false,
         }),
       ).rejects.toBe(rejected);
     });

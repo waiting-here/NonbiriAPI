@@ -2956,6 +2956,28 @@ VALUES(?,0,'whitebait','small',5,1)`, fishingBatchID)
 	hostileMustFail(t, db, `UPDATE announcement_audits SET legal_hold_consumed=1.5 WHERE id=?`, announcementID)
 }
 
+func TestLimitedActivityRejectsFractionalAccountingAndScheduleFacts(t *testing.T) {
+	database := openGenerationTwoDDLForTest(t)
+	hostileMustExec(t, database, `INSERT INTO limited_activity_configs VALUES('strict-fixture',0,NULL,NULL,0,'{}',1,0)`)
+	hostileMustExec(t, database, `INSERT INTO limited_activity_revisions VALUES('strict-fixture',1,0,NULL,NULL,0,'{}',NULL,0)`)
+	hostileMustExec(t, database, `INSERT INTO activity_exchange_state VALUES('strict-fixture','sketch_paper',zeroblob(16),NULL,1)`)
+	op := hostileOID("op_")
+	hostileInsertOperation(t, database, op, 1, "activity_exchange", "operation", op)
+	for name, statement := range map[string]string{
+		"schedule": `UPDATE limited_activity_configs SET starts_at=1.5,ends_at=10 WHERE activity_key='strict-fixture'`,
+		"revision": `INSERT INTO limited_activity_revisions VALUES('strict-fixture',1.5,0,NULL,NULL,0,'{}',NULL,0)`,
+		"supply":   `UPDATE activity_exchange_state SET revision=1.5 WHERE activity_key='strict-fixture'`,
+		"receipt":  `INSERT INTO activity_exchange_receipts VALUES('` + op + `','strict-fixture',1,NULL,'sketch_paper',X'00000000000000000000000000000001',1.5,X'00000000000000000000000000000001',1,0)`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := database.Exec(statement)
+			if err == nil || !strings.Contains(err.Error(), "cannot store REAL value in INTEGER column") {
+				t.Fatalf("fractional fact was not rejected by integer storage: %v", err)
+			}
+		})
+	}
+}
+
 func TestGenerationTwoHostileIntegerColumnStructuralGuards(t *testing.T) {
 	db := openGenerationTwoDDLForTest(t)
 	rows, err := db.Query(`
@@ -3023,7 +3045,7 @@ WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 			t.Fatalf("close table_info %s: %v", tableName, err)
 		}
 		for _, column := range integerColumns {
-			protected := strings.HasSuffix(compactTableSQL, "strict") || column.pk > 0 ||
+			protected := strings.HasSuffix(compactTableSQL, "strict") || strings.HasSuffix(compactTableSQL, "strict,withoutrowid") || column.pk > 0 ||
 				hostileInlineIntegerDefense(compactTableSQL, column.name) ||
 				hostileIntegerColumnHasFK(t, db, tableName, column.name) ||
 				hostileIntegerColumnHasInsertUpdateTypeGuards(t, db, tableName, column.name)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -444,14 +445,16 @@ type CharityClaimInput struct {
 }
 
 type CharityReservation struct {
-	DonationKeyID      int64
-	StreakGeneration   int64
-	FrozenPriceMilli   int64
-	FrozenRewardMilli  int64
-	ReceiverUserID     int64
-	ReservedPriceMilli int64
-	ReservedCalls      int
-	ReservedTokens     int64
+	DonationKeyID        int64
+	StreakGeneration     int64
+	FrozenPriceMilli     int64
+	FrozenRewardMilli    int64
+	ReceiverUserID       int64
+	ReservedPriceMilli   int64
+	ReservedCalls        int
+	ReservedTokens       int64
+	ReservedInputTokens  *int64
+	ReservedOutputTokens *int64
 }
 
 type CharityRelease struct {
@@ -502,10 +505,11 @@ type CharityRequestCompletion struct {
 }
 
 type Dependencies struct {
-	DB         *sql.DB
-	Secrets    secret.GenerationTwoContextCodec
-	Accounting Accounting
-	Charity    Charity
-	Acceptance AcceptanceGate
-	Now        func() time.Time
+	Observations *observability.Repository
+	DB           *sql.DB
+	Secrets      secret.GenerationTwoContextCodec
+	Accounting   Accounting
+	Charity      Charity
+	Acceptance   AcceptanceGate
+	Now          func() time.Time
 }

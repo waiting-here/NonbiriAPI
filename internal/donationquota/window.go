@@ -191,7 +191,7 @@ func advance(ctx context.Context, tx *sql.Tx, e *epoch, now int64) error {
 }
 
 func view(ctx context.Context, q Reader, e epoch, now int64) (RuleView, error) {
-	out := RuleView{RuleInput: e.rule, State: "available"}
+	out := RuleView{RuleInput: e.rule, EffectiveAt: e.effective, State: "available"}
 	now = observedNow(e, now)
 	var used, reserved db.U128
 	if e.rule.Mode == "sliding" {

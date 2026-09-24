@@ -1,5 +1,5 @@
 import type { ModeCatalog, Skill } from './catalog';
-import type { Choice, Player } from './types';
+import type { Choice, Player, EffectCue } from './types';
 
 export type Translate = (zh: string, en: string) => string;
 export function skillName(c: ModeCatalog, id: string) {
@@ -7,6 +7,32 @@ export function skillName(c: ModeCatalog, id: string) {
 }
 export function buffName(c: ModeCatalog, id: string) {
   return c.buffs.find((s) => s.id === id)?.name ?? id;
+}
+type CacheLabel = Pick<EffectCue, 'kind' | 'buff_id' | 'layers' | 'persistent_layers'>;
+export function effectName(c: ModeCatalog, effect: CacheLabel, t: Translate) {
+  const name = buffName(c, effect.buff_id);
+  if (effect.kind !== 'CACHE' || !effect.persistent_layers) return name;
+  const title =
+    effect.persistent_layers === effect.layers
+      ? t('长效缓存', 'Persistent cache')
+      : t('缓存', 'Cache');
+  const suffix = name.startsWith('短效缓存') ? name.slice('短效缓存'.length) : ' · ' + name;
+  return title + suffix;
+}
+export function effectLayers(
+  effect: Pick<CacheLabel, 'kind' | 'layers' | 'persistent_layers'>,
+  t: Translate,
+) {
+  if (effect.kind !== 'CACHE' || effect.persistent_layers === undefined)
+    return t('层数', 'Layers') + ': ' + effect.layers;
+  const persistent = effect.persistent_layers,
+    temporary = effect.layers - persistent;
+  return [
+    persistent > 0 ? t('持久层', 'Persistent layers') + ': ' + persistent : '',
+    temporary > 0 ? t('短效层', 'Short-lived layers') + ': ' + temporary : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 export function kindName(kind: Skill['kind'], t: Translate) {
   return kind === 'basic'

@@ -22,6 +22,7 @@ export function gamesSnapshotWire() {
     fishing: {
       enabled: true,
       available: true,
+      blue_fish_chance_bps: 1000,
       bait_prices: { worm: '1', lure: '2.5', premium: '10' },
     },
     linklink: {

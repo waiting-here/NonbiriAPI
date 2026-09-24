@@ -20,12 +20,12 @@ var (
 )
 
 func Mask(levels []int) (int, error) {
-	if len(levels) > 5 {
+	if len(levels) > 6 {
 		return 0, ErrInvalid
 	}
 	mask := 0
 	for _, level := range levels {
-		if level < 1 || level > 5 {
+		if level < 1 || level > 6 {
 			return 0, ErrInvalid
 		}
 		bit := 1 << (level - 1)
@@ -38,11 +38,11 @@ func Mask(levels []int) (int, error) {
 }
 
 func Levels(mask int) ([]int, error) {
-	if mask < 0 || mask > 31 {
+	if mask < 0 || mask > 63 {
 		return nil, ErrInvariant
 	}
-	levels := make([]int, 0, 5)
-	for level := 1; level <= 5; level++ {
+	levels := make([]int, 0, 6)
+	for level := 1; level <= 6; level++ {
 		if Allows(mask, level) {
 			levels = append(levels, level)
 		}
@@ -51,7 +51,7 @@ func Levels(mask int) ([]int, error) {
 }
 
 func Allows(mask, level int) bool {
-	return mask >= 0 && mask <= 31 && level >= 1 && level <= 5 && mask&(1<<(level-1)) != 0
+	return mask >= 0 && mask <= 63 && level >= 1 && level <= 6 && mask&(1<<(level-1)) != 0
 }
 
 func NormalizeDescription(value string) (string, error) {
@@ -82,7 +82,7 @@ func CurrentLevel(ctx context.Context, tx *sql.Tx, userID int64) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("charity access: read current level: %w", err)
 	}
-	if level < 1 || level > 5 || automatic < 1 || automatic > 4 {
+	if level < 1 || level > 6 || automatic < 1 || automatic > 4 {
 		return 0, ErrInvariant
 	}
 	return level, nil
@@ -108,7 +108,7 @@ JOIN charity_model_access a ON a.model_id=m.id WHERE m.id=?`, modelID).Scan(&ena
 	if enabled != 1 {
 		return ErrUnavailable
 	}
-	if mask < 0 || mask > 31 {
+	if mask < 0 || mask > 63 {
 		return ErrInvariant
 	}
 	if !Allows(mask, level) {

@@ -14,6 +14,7 @@ import (
 	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type enqueueBody struct {
@@ -235,6 +236,9 @@ device_token_hash,source_ip_hash,deadline,created_at,rules_version,game_paid) VA
 	if err != nil {
 		return QueueMutationResult{}, ErrInvariant
 	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return QueueMutationResult{}, err
+	}
 	if err := idempotency.Complete(ctx, tx, decision, http.StatusAccepted, response); err != nil {
 		return QueueMutationResult{}, mapIdempotency(err)
 	}
@@ -301,6 +305,9 @@ func (service *Service) Cancel(ctx context.Context, input CancelInput) (EmptyMut
 		return EmptyMutationResult{}, ErrConflict
 	}
 	if err := service.releaseQueueTx(ctx, tx, record, now, input.UserID); err != nil {
+		return EmptyMutationResult{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
 		return EmptyMutationResult{}, err
 	}
 	if err := idempotency.Complete(ctx, tx, decision, http.StatusNoContent, nil); err != nil {

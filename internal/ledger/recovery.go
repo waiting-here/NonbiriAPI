@@ -107,7 +107,7 @@ FROM credit_accounts ORDER BY id`)
 		}
 		accountKind, ok := parseAccountKind(kind)
 		balance, decodeErr := amountFromParts(sign, mag)
-		if !ok || !asset.valid() || decodeErr != nil || id <= 0 || !validUnix(createdAt) || !validUnix(updatedAt) ||
+		if !ok || !asset.valid() || decodeErr != nil || !validAssetAmount(asset, balance) || id <= 0 || !validUnix(createdAt) || !validUnix(updatedAt) ||
 			(accountKind == AccountPool || accountKind == AccountPlatform) && balance.Sign() < 0 ||
 			accountKind == AccountUser && (!user.Valid || code.Valid) || accountKind != AccountUser && (user.Valid || !code.Valid) {
 			rows.Close()
@@ -222,6 +222,13 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 	}
 	if blackjackPresent {
 		queries = append(queries, reservationQuery{"blackjack_payment", `SELECT id,ledger_rows_remaining FROM game_blackjack_payments ORDER BY id`, reservationBlackjackPayment})
+	}
+	var imagePresent bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='image_activity_tasks')`).Scan(&imagePresent); err != nil {
+		return nil, nil, err
+	}
+	if imagePresent {
+		queries = append(queries, reservationQuery{"image_task", `SELECT id,ledger_rows_remaining FROM image_activity_tasks ORDER BY id`, reservationImageTask})
 	}
 	for _, item := range queries {
 		rows, err := tx.QueryContext(ctx, item.query)

@@ -187,7 +187,7 @@ describe('numbered role log panel', () => {
     expect(
       fetchMock.mock.calls
         .map(([path]) => String(path))
-        .filter((path) => path.startsWith('/admin/api/logs')),
+        .filter((path) => path.startsWith('/admin/api/logs?')),
     ).toEqual(['/admin/api/logs?page=1&page_size=20']);
   });
   it('restores outer URL state, handles POP, clamps, and returns from detail with actual page', async () => {

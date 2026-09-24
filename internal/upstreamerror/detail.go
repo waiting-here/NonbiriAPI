@@ -1,5 +1,5 @@
 // Package upstreamerror extracts a bounded, source-free description of a
-// failed upstream request. Raw responses and headers never leave this boundary.
+// failed upstream request. Raw diagnostics use a separate private capability.
 package upstreamerror
 
 import (
@@ -131,7 +131,7 @@ func IsEvent(body []byte) bool {
 	if !bytes.Contains(body, []byte(`"error"`)) && !bytes.Contains(body, []byte(`\u`)) {
 		return false
 	}
-	if len(body) > MaxBodyBytes || strictjson.ValidateObject(body) != nil {
+	if len(body) > MaxRawBodyBytes || strictjson.ValidateObject(body) != nil {
 		return false
 	}
 	var root map[string]json.RawMessage

@@ -14,6 +14,16 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "activities": {
+      "permanent": "Permanent activities",
+      "limited": "Limited-time activities",
+      "inactivity": "Inactivity policy"
+    },
+    "audit": {
+      "source": "Request source",
+      "risk": "Abuse audit",
+      "economy": "Credit economy audit"
+    },
     "donationDiscovery": {
       "title": "Donation model discovery",
       "one": "Fetch model list",
@@ -417,7 +427,7 @@
         "levelLabel": "L{{level}}",
         "selectAllLevels": "Select all levels",
         "clearAllLevels": "Clear all levels",
-        "noAllowedLevels": "No ordinary user can call this model (including level 5 users).",
+        "noAllowedLevels": "No ordinary user can call this model (including level 6 users).",
         "publicDescription": "Public description (plain text, optional)",
         "publicDescriptionHelp": "Line breaks are shown as entered. Markdown, HTML, and links are displayed as plain text.",
         "endedReason": "Ended",

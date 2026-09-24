@@ -53,7 +53,29 @@ const (
 // timezoneFreezeTables are the tables whose first row freezes the offset.
 // They may not exist yet when this guard runs (their schema lands with their
 // own features), so existence is checked per table inside the transaction.
-var timezoneFreezeTables = []string{"checkins", "game_checkins", "user_activity_daily", "site_activity_daily"}
+var timezoneFreezeTables = []string{"checkins", "game_checkins", "user_activity_daily", "site_activity_daily", "economy_audit_buckets"}
+
+// ResolveSiteTimezoneTx reads the same authoritative offset as day-key writers.
+func ResolveSiteTimezoneTx(ctx context.Context, tx *sql.Tx) (int, error) {
+	var raw sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, SiteTimezoneKey).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrTimezoneUnavailable
+	}
+	if err != nil {
+		return 0, err
+	}
+	offset, err := parseSiteTimezoneOffset(raw.String)
+	return int(offset), err
+}
+
+// FreezeSiteTimezoneTx pins the offset in the transaction writing temporal facts.
+func FreezeSiteTimezoneTx(ctx context.Context, tx *sql.Tx, at int64) error {
+	if _, err := ResolveSiteTimezoneTx(ctx, tx); err != nil {
+		return err
+	}
+	return freezeTimezoneTx(ctx, tx, at)
+}
 
 // ValidSiteTimezoneOffset reports whether minutes is an allowed explicit
 // offset: a multiple of 30 within [-720, +840]. Zero is valid and means UTC.

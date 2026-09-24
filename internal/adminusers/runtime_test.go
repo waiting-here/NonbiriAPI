@@ -55,7 +55,7 @@ func (auth *testAdminAuth) AuthorizeStewardMutation(ctx context.Context, tx *sql
 	if err := tx.QueryRowContext(ctx, "SELECT is_admin,COALESCE(level,auto_level),is_banned,banned_until FROM users WHERE id=?", actorID).Scan(&admin, &level, &banned, &until); err != nil {
 		return authz.ErrUnauthorized
 	}
-	if admin != 0 || level != 5 || banned == 1 && (!until.Valid || until.Int64 > adminUsersTestNow) {
+	if admin != 0 || level != 6 || banned == 1 && (!until.Valid || until.Int64 > adminUsersTestNow) {
 		return authz.ErrForbidden
 	}
 	return nil

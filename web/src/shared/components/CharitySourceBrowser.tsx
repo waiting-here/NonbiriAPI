@@ -3,6 +3,7 @@ import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
+import { DonationKeyNotes } from './DonationControlFacts';
 import { clearStationSession } from '@shared/charityManagement';
 import { charityKeys } from '@shared/operations/charity';
 import {
@@ -28,6 +29,7 @@ import '@shared/operations/operations.css';
 import './CharitySourceBrowser.css';
 
 export interface CharitySourceBrowserProps {
+  charityModelID?: string;
   role: DonationPageRole;
   accountId: string;
   enabled: boolean;
@@ -77,8 +79,8 @@ function stationForRole(role: DonationPageRole): 'admin' | 'user' {
   return role === 'admin' ? 'admin' : 'user';
 }
 
-function sourceBrowserKeys(role: DonationPageRole, accountId: string) {
-  const root = [...charityKeys.root(role), 'source-browser', accountId] as const;
+function sourceBrowserKeys(role: DonationPageRole, accountId: string, modelID?: string) {
+  const root = [...charityKeys.root(role), 'source-browser', accountId, modelID ?? ''] as const;
   return {
     root,
     sources: (
@@ -367,6 +369,11 @@ function KeySummary({
           label={t(keyStateLabel[keyValue.charity_state])}
         />
       </header>
+      <DonationKeyNotes
+        note={keyValue.safe_note}
+        donor={keyValue.donation_note}
+        approval={keyValue.approval_note}
+      />
       <dl className="ops-kv">
         <dt>{t('common.operations.charity.sourceBrowser.donation')}</dt>
         <dd className="ops-id">{keyValue.donation_id}</dd>
@@ -459,6 +466,7 @@ function KeySummary({
 export function CharitySourceBrowser({
   role,
   accountId,
+  charityModelID,
   enabled,
   onOpenDonation,
   onCapabilityLoss,
@@ -502,7 +510,7 @@ export function CharitySourceBrowser({
     pageParam: SOURCE_KEYS_PAGE_PARAM,
     pageSizeParam: SOURCE_KEYS_PAGE_SIZE_PARAM,
   });
-  const browserKeys = sourceBrowserKeys(role, accountId);
+  const browserKeys = sourceBrowserKeys(role, accountId, charityModelID);
   const readEnabled = enabled && accountId.length > 0 && !identityTransitioning && !revoked;
   const sourceFilters: DonationSourcePageFilters = {
     q: sourceSearch.value,
@@ -524,7 +532,14 @@ export function CharitySourceBrowser({
       sourcePager.pageSize,
     ),
     queryFn: ({ signal }) =>
-      getDonationSourcesPage(role, sourceFilters, sourcePager.page, sourcePager.pageSize, signal),
+      getDonationSourcesPage(
+        role,
+        sourceFilters,
+        sourcePager.page,
+        sourcePager.pageSize,
+        signal,
+        charityModelID,
+      ),
     enabled: readEnabled,
     retry: false,
     placeholderData: (previous, previousQuery) =>
@@ -560,6 +575,7 @@ export function CharitySourceBrowser({
         sourceKeysPager.page,
         sourceKeysPager.pageSize,
         signal,
+        charityModelID,
       ),
     enabled: readEnabled && sourceKey !== '',
     retry: false,

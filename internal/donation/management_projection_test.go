@@ -49,7 +49,7 @@ func TestIdleCountsBindingsToDisabledModelsAndChangesImmediately(t *testing.T) {
 func TestProcessedHandlingSurvivesActorDeletionWithoutAnIdentitySnapshot(t *testing.T) {
 	env := newDonationTestEnv(t)
 	owner := env.seedUser(t, "handling-owner", nil, false)
-	level := int64(5)
+	level := int64(6)
 	actor := env.seedUser(t, "handling-actor", &level, false)
 	env.seedUser(t, "", nil, true)
 	_, key := env.seedEndpointKey(t, owner, 'd')

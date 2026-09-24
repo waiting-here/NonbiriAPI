@@ -8,6 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type hintBody struct {
@@ -186,6 +187,9 @@ WHERE id=? AND user_id=? AND revision=? AND assists_remaining>0`, db.EncodeU128(
 	record.AssistsRemaining--
 	result := stateResult(stateFromRecord(record, now), http.StatusOK, false)
 	result.Hint, result.Reshuffled = hint, &reshuffled
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: input.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return Result{}, err
+	}
 	if err := completeResult(ctx, tx, decision, result); err != nil {
 		return Result{}, err
 	}

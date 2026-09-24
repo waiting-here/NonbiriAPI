@@ -136,8 +136,14 @@ interface ManagementSessionAuthority {
   elevated: boolean;
 }
 
-const managementRevocations = new WeakMap<object, Map<CharityManagementFrame, ManagementRevocation>>();
-const managementSessionAuthorities = new WeakMap<object, Map<CharityManagementFrame, ManagementSessionAuthority>>();
+const managementRevocations = new WeakMap<
+  object,
+  Map<CharityManagementFrame, ManagementRevocation>
+>();
+const managementSessionAuthorities = new WeakMap<
+  object,
+  Map<CharityManagementFrame, ManagementSessionAuthority>
+>();
 
 function stationQueryOwned(queryKey: readonly unknown[], frame: CharityManagementFrame): boolean {
   const stationRoot = frame === 'admin' ? 'admin' : 'user';
@@ -158,7 +164,8 @@ function evictStationQueries(
 ): void {
   const predicate = (query: { queryKey: readonly unknown[] }): boolean => {
     if (!stationQueryOwned(query.queryKey, frame)) return false;
-    if (preserveSession && query.queryKey.length === 2 && query.queryKey[1] === 'session') return false;
+    if (preserveSession && query.queryKey.length === 2 && query.queryKey[1] === 'session')
+      return false;
     return true;
   };
   void client.cancelQueries({ predicate }).catch(() => undefined);
@@ -210,7 +217,8 @@ function seedStationAuthorityFromCache(
 ): ManagementSessionAuthority {
   const authority = sessionAuthority(client, frame);
   if (authority.subject) return authority;
-  const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+  const sessionKey =
+    frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
   const identity = managementSessionIdentity(frame, client.getQueryData(sessionKey));
   if (!identity) return authority;
   authority.generation += 1;
@@ -275,7 +283,8 @@ export function clearManagementSession(
   // so a failed network logout cannot immediately fetch the old identity
   // back into the shell.
   clearStationSession(client, frame, true);
-  const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+  const sessionKey =
+    frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
   client.setQueryData(sessionKey, null);
 }
 
@@ -297,7 +306,8 @@ export function clearStationSession(
   // lets the existing observer publish its error/closed state without a
   // follow-up network read racing the station boundary.
   if (preserveSession) {
-    const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+    const sessionKey =
+      frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
     client.setQueryData(sessionKey, null);
   }
   // Logout and an unknown subject are closed states. A disabled observer must
@@ -322,7 +332,8 @@ export function failManagementSessionRequest(
   // before the error is delivered. Logout and explicit mutation auth failures
   // still use the default full removal path.
   clearStationSession(client, frame, true);
-  const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+  const sessionKey =
+    frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
   client.setQueryData(sessionKey, null);
   return true;
 }
@@ -339,7 +350,10 @@ function evictManagementProjection(
   }
 }
 
-function markRevoked(client: ReturnType<typeof useQueryClient>, frame: CharityManagementFrame): void {
+function markRevoked(
+  client: ReturnType<typeof useQueryClient>,
+  frame: CharityManagementFrame,
+): void {
   let frames = managementRevocations.get(client);
   if (!frames) {
     frames = new Map();
@@ -353,7 +367,10 @@ function markRevoked(client: ReturnType<typeof useQueryClient>, frame: CharityMa
   });
 }
 
-function clearRevoked(client: ReturnType<typeof useQueryClient>, frame: CharityManagementFrame): void {
+function clearRevoked(
+  client: ReturnType<typeof useQueryClient>,
+  frame: CharityManagementFrame,
+): void {
   managementRevocations.get(client)?.delete(frame);
 }
 
@@ -391,7 +408,8 @@ export function noteManagementSessionSuccess(
     // normalized value immediately after this authority transition. Clear the
     // previous identity first so a same-level account switch cannot render the
     // old profile during that hand-off.
-    const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+    const sessionKey =
+      frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
     client.setQueryData(sessionKey, null);
     // A subject transition is a station boundary, not merely a management
     // capability transition.  Do not leave endpoint/key/model/log/donation
@@ -403,10 +421,12 @@ export function noteManagementSessionSuccess(
     if (!identity.elevated) markRevoked(client, frame);
   }
   const marker = managementRevocations.get(client)?.get(frame);
-  if (marker
-    && marker.subject === identity.subject
-    && generation > marker.generation
-    && identity.elevated) {
+  if (
+    marker &&
+    marker.subject === identity.subject &&
+    generation > marker.generation &&
+    identity.elevated
+  ) {
     clearRevoked(client, frame);
     client.setQueryData(charityManagementKeys.capability(frame), false);
   }
@@ -455,7 +475,8 @@ export function useManagementCapability(frame: CharityManagementFrame) {
     staleTime: Infinity,
     retry: false,
   });
-  const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+  const sessionKey =
+    frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
   // Subscribe to the station session without creating an unsolicited read.
   // A real station session query, when mounted, shares this key and updates
   // this observer after login/role restoration.
@@ -477,7 +498,7 @@ export function useManagementCapability(frame: CharityManagementFrame) {
     // A mounted steward page can remain alive while the session query is
     // downgraded.  Treat that authoritative transition as a capability loss
     // even if no management request happened to race the downgrade.
-    if (previous === 5 && level !== 5) {
+    if ((previous === 5 || previous === 6) && level !== previous) {
       managementCapabilityLoss(client, frame);
     }
     previousEffectiveLevel.current = level;
@@ -486,10 +507,12 @@ export function useManagementCapability(frame: CharityManagementFrame) {
     const marker = managementRevocations.get(client)?.get(frame);
     const authority = sessionAuthority(client, frame);
     if (capability.data !== true || !marker || authority.generation <= marker.generation) return;
-    if (!session.error
-      && authority.subject === marker.subject
-      && authority.elevated
-      && authoritativeSessionRestored(frame, session.data)) {
+    if (
+      !session.error &&
+      authority.subject === marker.subject &&
+      authority.elevated &&
+      authoritativeSessionRestored(frame, session.data)
+    ) {
       clearRevoked(client, frame);
       client.setQueryData(charityManagementKeys.capability(frame), false);
     }
@@ -533,7 +556,10 @@ function assertManagementReadAllowed(
   snapshot?: ManagementReadSnapshot,
 ): void {
   const authority = sessionAuthority(client, frame);
-  if (snapshot && (authority.generation !== snapshot.generation || authority.subject !== snapshot.subject)) {
+  if (
+    snapshot &&
+    (authority.generation !== snapshot.generation || authority.subject !== snapshot.subject)
+  ) {
     throw new ManagementSessionChangedError();
   }
   if (client.getQueryData(charityManagementKeys.capability(frame)) === true) {
@@ -567,7 +593,8 @@ async function managementRead<T>(
   } catch (error) {
     // A rejected old request is just as stale as an old success. In
     // particular, its 401/403 must not revoke the subject that replaced it.
-    if (managementAuthorityChanged(client, frame, snapshot)) throw new ManagementSessionChangedError();
+    if (managementAuthorityChanged(client, frame, snapshot))
+      throw new ManagementSessionChangedError();
     throw error;
   }
 }
@@ -585,7 +612,8 @@ async function managementWrite<T>(
   } catch (error) {
     // Convert every late response, including a rejected 401/403, into the
     // non-authoritative session-changed error before mutation reconciliation.
-    if (managementAuthorityChanged(client, frame, snapshot)) throw new ManagementSessionChangedError();
+    if (managementAuthorityChanged(client, frame, snapshot))
+      throw new ManagementSessionChangedError();
     throw error;
   }
 }
@@ -652,8 +680,17 @@ function managementSessionIdentity(
   const identity = sessionUserIdentity(value);
   if (!identity) return undefined;
   return {
-    subject: JSON.stringify(['user', identity.user.id, identity.user.username]),
-    elevated: identity.effective_level === 5,
+    subject: JSON.stringify([
+      'user',
+      identity.user.id,
+      identity.user.username,
+      identity.effective_level === 6
+        ? 'steward'
+        : identity.effective_level === 5
+          ? 'trainee'
+          : 'user',
+    ]),
+    elevated: identity.effective_level === 5 || identity.effective_level === 6,
   };
 }
 
@@ -664,7 +701,8 @@ function authoritativeSessionRestored(frame: CharityManagementFrame, value: unkn
     const admin = asRecord(record.admin);
     return sessionUsername(admin?.username);
   }
-  return sessionUserIdentity(value)?.effective_level === 5;
+  const level = sessionUserIdentity(value)?.effective_level;
+  return level === 5 || level === 6;
 }
 
 function sessionEffectiveLevel(value: unknown): number | undefined {
@@ -672,20 +710,30 @@ function sessionEffectiveLevel(value: unknown): number | undefined {
 }
 
 function sessionUsername(value: unknown): value is string {
-  return typeof value === 'string'
-    && value.trim().length > 0
-    && value.length <= 128
-    && !hasControlCharacters(value);
+  return (
+    typeof value === 'string' &&
+    value.trim().length > 0 &&
+    value.length <= 128 &&
+    !hasControlCharacters(value)
+  );
 }
 
-function sessionUserIdentity(value: unknown): { user: UnknownRecord; effective_level: number } | undefined {
+function sessionUserIdentity(
+  value: unknown,
+): { user: UnknownRecord; effective_level: number } | undefined {
   const record = asRecord(value);
   const user = asRecord(record?.user);
   const id = opaqueID(user?.id);
   const effectiveLevel = user?.effective_level;
-  if (!id || !/^[1-9]\d*$/.test(id) || !sessionUsername(user?.username)
-    || typeof effectiveLevel !== 'number' || !Number.isSafeInteger(effectiveLevel)
-    || effectiveLevel < 1 || effectiveLevel > 5) {
+  if (
+    !id ||
+    !/^[1-9]\d*$/.test(id) ||
+    !sessionUsername(user?.username) ||
+    typeof effectiveLevel !== 'number' ||
+    !Number.isSafeInteger(effectiveLevel) ||
+    effectiveLevel < 1 ||
+    effectiveLevel > 6
+  ) {
     return undefined;
   }
   try {
@@ -722,12 +770,15 @@ async function refreshManagementSession(
   client: ReturnType<typeof useQueryClient>,
   frame: CharityManagementFrame,
 ): Promise<void> {
-  const sessionKey = frame === 'admin' ? ['admin', 'session'] as const : ['user', 'session'] as const;
+  const sessionKey =
+    frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
   const generation = beginManagementSessionRequest(client, frame);
   try {
     // Always issue one fresh session read. A cached/stale session projection
     // is not sufficient to reopen a latch that was closed by a 401/403.
-    const value = await apiFetch<unknown>(frame === 'admin' ? '/admin/api/session' : '/api/session');
+    const value = await apiFetch<unknown>(
+      frame === 'admin' ? '/admin/api/session' : '/api/session',
+    );
     const cacheValue = sessionCacheValue(frame, value);
     if (!cacheValue) {
       failManagementSessionRequest(client, frame, generation);
@@ -742,7 +793,10 @@ async function refreshManagementSession(
   }
 }
 
-export function managementCapabilityLoss(client: ReturnType<typeof useQueryClient>, frame: CharityManagementFrame): void {
+export function managementCapabilityLoss(
+  client: ReturnType<typeof useQueryClient>,
+  frame: CharityManagementFrame,
+): void {
   // A 403 during a write can mean that a live admin/L5 capability was revoked
   // after the page loaded.  Drop every sensitive management projection before
   // refreshing the session; the page then re-renders without write controls.
@@ -751,7 +805,9 @@ export function managementCapabilityLoss(client: ReturnType<typeof useQueryClien
   client.setQueryData(charityManagementKeys.capability(frame), true);
   // Abort before eviction so an in-flight observer cannot repopulate a
   // sensitive management projection while the capability/session changes.
-  void client.cancelQueries({ queryKey: charityManagementKeys.root(frame), exact: false }).catch(() => undefined);
+  void client
+    .cancelQueries({ queryKey: charityManagementKeys.root(frame), exact: false })
+    .catch(() => undefined);
   evictManagementProjection(client, frame);
   void refreshManagementSession(client, frame);
 }
@@ -778,7 +834,11 @@ async function reconcileManagementMutation(
 
 function validPatchResult(value: unknown, field: string): UnknownRecord {
   const record = asRecord(value);
-  if (!record || typeof record.key !== 'string' || !Object.prototype.hasOwnProperty.call(record, 'value')) {
+  if (
+    !record ||
+    typeof record.key !== 'string' ||
+    !Object.prototype.hasOwnProperty.call(record, 'value')
+  ) {
     return invalidResponse(field);
   }
   return record;
@@ -799,10 +859,13 @@ function requiredRecord(value: unknown, field: string): UnknownRecord {
 }
 
 function requiredText(value: unknown, max: number, field: string, allowEmpty = false): string {
-  if (typeof value !== 'string'
-    || value.length > max
-    || hasControlCharacters(value)
-    || (!allowEmpty && !value.trim())) return invalidResponse(field);
+  if (
+    typeof value !== 'string' ||
+    value.length > max ||
+    hasControlCharacters(value) ||
+    (!allowEmpty && !value.trim())
+  )
+    return invalidResponse(field);
   return value;
 }
 
@@ -893,18 +956,20 @@ function fragment(record: UnknownRecord): string | undefined {
 }
 
 function listPayload(value: unknown): { items: unknown[]; hasMore: boolean; total: number } {
-  if (!isListPayload(value)) throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
+  if (!isListPayload(value))
+    throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
   const record = asRecord(value);
   if (record) {
     if (!Array.isArray(record.data)) return invalidResponse('list data');
     if (typeof record.has_more !== 'boolean') return invalidResponse('list has_more');
-    if (!Number.isSafeInteger(record.total) || (record.total as number) < 0) return invalidResponse('list total');
+    if (!Number.isSafeInteger(record.total) || (record.total as number) < 0)
+      return invalidResponse('list total');
   }
   const result = listResult(value, 100);
   return {
     items: result.items,
-    hasMore: record ? record.has_more as boolean : result.hasNext,
-    total: record ? record.total as number : result.items.length,
+    hasMore: record ? (record.has_more as boolean) : result.hasNext,
+    total: record ? (record.total as number) : result.items.length,
   };
 }
 
@@ -913,9 +978,11 @@ function dataArrayPayload(value: unknown, field: string): unknown[] {
   // This management endpoint has one deliberately narrow wire shape. Do not
   // silently accept pagination/diagnostic fields that could be mistaken for a
   // different authorization or resource projection.
-  if (Object.keys(record).length !== 1
-    || !Object.prototype.hasOwnProperty.call(record, 'data')
-    || !Array.isArray(record.data)) {
+  if (
+    Object.keys(record).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(record, 'data') ||
+    !Array.isArray(record.data)
+  ) {
     return invalidResponse(`${field} data`);
   }
   return record.data;
@@ -926,22 +993,33 @@ export function normalizeManagementCharityModel(value: unknown): ManagementChari
   const rawPrices = requiredRecord(recordValue(record, 'prices'), 'charity model prices');
   const rawDiscount = requiredRecord(recordValue(record, 'discount'), 'charity model discount');
   const pricingMode = recordValue(record, 'pricing_mode');
-  if (pricingMode !== 'per_token' && pricingMode !== 'per_request') return invalidResponse('charity pricing mode');
+  if (pricingMode !== 'per_token' && pricingMode !== 'per_request')
+    return invalidResponse('charity pricing mode');
   const price = (key: string) => amount(recordValue(rawPrices, key));
   const start = optionalUnix(recordValue(rawDiscount, 'start_at'));
   const end = optionalUnix(recordValue(rawDiscount, 'end_at'));
-  const samples = requiredCount(recordValue(record, 'success_samples'), 'charity model success sample count');
-  const success = requiredCount(recordValue(record, 'success_count'), 'charity model success count');
+  const samples = requiredCount(
+    recordValue(record, 'success_samples'),
+    'charity model success sample count',
+  );
+  const success = requiredCount(
+    recordValue(record, 'success_count'),
+    'charity model success count',
+  );
   if (success > samples) return invalidResponse('charity model success count');
   return {
     id: requiredID(recordValue(record, 'id'), 'charity model id'),
     provider: requiredText(recordValue(record, 'provider'), 128, 'charity model provider'),
     model: requiredText(recordValue(record, 'model'), 256, 'charity model name'),
     full_name: requiredText(recordValue(record, 'full_name'), 512, 'charity model full name'),
-    enabled: typeof recordValue(record, 'enabled') === 'boolean'
-      ? recordValue(record, 'enabled') as boolean
-      : invalidResponse('charity model enabled'),
-    flatten_tool_calls: requiredPolicyBoolean(recordValue(record, 'flatten_tool_calls'), 'charity tool-call policy'),
+    enabled:
+      typeof recordValue(record, 'enabled') === 'boolean'
+        ? (recordValue(record, 'enabled') as boolean)
+        : invalidResponse('charity model enabled'),
+    flatten_tool_calls: requiredPolicyBoolean(
+      recordValue(record, 'flatten_tool_calls'),
+      'charity tool-call policy',
+    ),
     pricing_mode: pricingMode,
     prices: {
       request_user_price_milli: price('request_user_price_milli'),
@@ -956,10 +1034,16 @@ export function normalizeManagementCharityModel(value: unknown): ManagementChari
       output_donor_reward_milli: price('output_donor_reward_milli'),
     },
     discount: {
-      percent: boundedInteger(recordValue(rawDiscount, 'percent'), 0, 100, 'charity discount percent'),
-      enabled: typeof recordValue(rawDiscount, 'enabled') === 'boolean'
-        ? recordValue(rawDiscount, 'enabled') as boolean
-        : invalidResponse('charity discount enabled'),
+      percent: boundedInteger(
+        recordValue(rawDiscount, 'percent'),
+        0,
+        100,
+        'charity discount percent',
+      ),
+      enabled:
+        typeof recordValue(rawDiscount, 'enabled') === 'boolean'
+          ? (recordValue(rawDiscount, 'enabled') as boolean)
+          : invalidResponse('charity discount enabled'),
       ...(start !== undefined ? { start_at: start } : {}),
       ...(end !== undefined ? { end_at: end } : {}),
     },
@@ -976,14 +1060,20 @@ export function normalizeManagementDonationKey(value: unknown): ManagementDonati
     id: requiredID(recordValue(record, 'id'), 'donation key id'),
     ...(endpointKey ? { endpoint_key_id: endpointKey } : {}),
     ...(display ? { display } : {}),
-    max_concurrency: boundedInteger(recordValue(record, 'max_concurrency'), 0, 100_000, 'donation key concurrency'),
+    max_concurrency: boundedInteger(
+      recordValue(record, 'max_concurrency'),
+      0,
+      100_000,
+      'donation key concurrency',
+    ),
     rpm_limit: boundedInteger(recordValue(record, 'rpm_limit'), 0, 4_096, 'donation key RPM'),
     credits_usage_cap_milli: amount(recordValue(record, 'credits_usage_cap_milli')),
     credits_used_milli: amount(recordValue(record, 'credits_used_milli')),
     credits_reserved_milli: amount(recordValue(record, 'credits_reserved_milli')),
-    enabled: typeof recordValue(record, 'enabled') === 'boolean'
-      ? recordValue(record, 'enabled') as boolean
-      : invalidResponse('donation key enabled'),
+    enabled:
+      typeof recordValue(record, 'enabled') === 'boolean'
+        ? (recordValue(record, 'enabled') as boolean)
+        : invalidResponse('donation key enabled'),
     force_store_false: donationStorePolicy(recordValue(record, 'force_store_false')),
   };
 }
@@ -995,7 +1085,8 @@ export function normalizeManagementDonation(value: unknown, detailed: boolean): 
   const userID = optionalID(recordValue(record, 'user_id'), 'user id');
   const endpointID = optionalID(recordValue(record, 'endpoint_id'), 'endpoint id');
   if (detailed && !Array.isArray(rawKeys)) return invalidResponse('donation keys list');
-  if (detailed && rawReviews !== undefined && !Array.isArray(rawReviews)) return invalidResponse('donation review list');
+  if (detailed && rawReviews !== undefined && !Array.isArray(rawReviews))
+    return invalidResponse('donation review list');
   const status = donationStatus(recordValue(record, 'status'));
   const expiresAt = optionalUnix(recordValue(record, 'expires_at'));
   const reviewedAt = optionalUnix(recordValue(record, 'reviewed_at'));
@@ -1003,30 +1094,55 @@ export function normalizeManagementDonation(value: unknown, detailed: boolean): 
     id: requiredID(recordValue(record, 'id'), 'donation id'),
     ...(userID ? { user_id: userID } : {}),
     ...(endpointID ? { endpoint_id: endpointID } : {}),
-    endpoint_base_url: requiredText(recordValue(record, 'endpoint_base_url'), 2048, 'donation endpoint base URL'),
+    endpoint_base_url: requiredText(
+      recordValue(record, 'endpoint_base_url'),
+      2048,
+      'donation endpoint base URL',
+    ),
     status,
-    enabled: typeof recordValue(record, 'enabled') === 'boolean'
-      ? recordValue(record, 'enabled') as boolean
-      : invalidResponse('donation enabled'),
-    description: requiredText(recordValue(record, 'description'), 4096, 'donation description', true),
-    review_note: requiredText(recordValue(record, 'review_note'), 4096, 'donation review note', true),
+    enabled:
+      typeof recordValue(record, 'enabled') === 'boolean'
+        ? (recordValue(record, 'enabled') as boolean)
+        : invalidResponse('donation enabled'),
+    description: requiredText(
+      recordValue(record, 'description'),
+      4096,
+      'donation description',
+      true,
+    ),
+    review_note: requiredText(
+      recordValue(record, 'review_note'),
+      4096,
+      'donation review note',
+      true,
+    ),
     ...(expiresAt !== undefined ? { expires_at: expiresAt } : {}),
     ...(reviewedAt !== undefined ? { reviewed_at: reviewedAt } : {}),
-    created_at: requiredUnixSeconds(recordValue(record, 'created_at'), 'donation created timestamp'),
-    updated_at: requiredUnixSeconds(recordValue(record, 'updated_at'), 'donation updated timestamp'),
+    created_at: requiredUnixSeconds(
+      recordValue(record, 'created_at'),
+      'donation created timestamp',
+    ),
+    updated_at: requiredUnixSeconds(
+      recordValue(record, 'updated_at'),
+      'donation updated timestamp',
+    ),
     keys: detailed ? (rawKeys as unknown[]).map(normalizeManagementDonationKey) : [],
-    reviews: detailed && Array.isArray(rawReviews)
-      ? rawReviews.map((raw) => {
-          const item = requiredRecord(raw, 'donation review');
-          return {
-            id: requiredID(recordValue(item, 'id'), 'review id'),
-            reviewer_role: requiredText(recordValue(item, 'reviewer_role'), 32, 'reviewer role'),
-            action: requiredText(recordValue(item, 'action'), 32, 'review action'),
-            note: requiredText(recordValue(item, 'note'), 4096, 'review note', true),
-            created_at: requiredUnixSeconds(recordValue(item, 'created_at'), 'review created timestamp'),
-          };
-        })
-      : [],
+    reviews:
+      detailed && Array.isArray(rawReviews)
+        ? rawReviews.map((raw) => {
+            const item = requiredRecord(raw, 'donation review');
+            return {
+              id: requiredID(recordValue(item, 'id'), 'review id'),
+              reviewer_role: requiredText(recordValue(item, 'reviewer_role'), 32, 'reviewer role'),
+              action: requiredText(recordValue(item, 'action'), 32, 'review action'),
+              note: requiredText(recordValue(item, 'note'), 4096, 'review note', true),
+              created_at: requiredUnixSeconds(
+                recordValue(item, 'created_at'),
+                'review created timestamp',
+              ),
+            };
+          })
+        : [],
   };
 }
 
@@ -1042,46 +1158,78 @@ function normalizeBinding(value: unknown): ManagementBinding {
     id: requiredID(recordValue(record, 'id'), 'binding id'),
     charity_model_id: requiredID(recordValue(record, 'charity_model_id'), 'charity model id'),
     donation_key_id: requiredID(recordValue(record, 'donation_key_id'), 'donation key id'),
-    upstream_model_id: requiredText(recordValue(record, 'upstream_model_id'), 256, 'upstream model id'),
+    upstream_model_id: requiredText(
+      recordValue(record, 'upstream_model_id'),
+      256,
+      'upstream model id',
+    ),
     ord: boundedInteger(recordValue(record, 'ord'), 0, 1_000_000, 'binding order'),
-    endpoint_base_url: requiredText(recordValue(record, 'endpoint_base_url'), 2048, 'endpoint base URL'),
+    endpoint_base_url: requiredText(
+      recordValue(record, 'endpoint_base_url'),
+      2048,
+      'endpoint base URL',
+    ),
     ...(display ? { key_display: display } : {}),
-    donation_key_enabled: typeof recordValue(record, 'donation_key_enabled') === 'boolean'
-      ? recordValue(record, 'donation_key_enabled') as boolean
-      : invalidResponse('donation key enabled'),
+    donation_key_enabled:
+      typeof recordValue(record, 'donation_key_enabled') === 'boolean'
+        ? (recordValue(record, 'donation_key_enabled') as boolean)
+        : invalidResponse('donation key enabled'),
   };
 }
 
-export function useManagementDonations(frame: CharityManagementFrame, page: number, status: string) {
+export function useManagementDonations(
+  frame: CharityManagementFrame,
+  page: number,
+  status: string,
+) {
   const { client, enabled } = useManagementReadEnabled(frame, true);
   const query = useQuery({
     queryKey: charityManagementKeys.donations(frame, page, status),
     queryFn: async (): Promise<ManagementList<ManagementDonation>> => {
       const params = new URLSearchParams({ page: String(page), page_size: '20' });
       if (status) params.set('status', status);
-       const result = listPayload(await managementRead(client, frame, () => apiFetch<unknown>(path(frame, `/donations?${params}`))));
-      return { items: result.items.map((item) => normalizeManagementDonation(item, false)), hasMore: result.hasMore, total: result.total };
+      const result = listPayload(
+        await managementRead(client, frame, () =>
+          apiFetch<unknown>(path(frame, `/donations?${params}`)),
+        ),
+      );
+      return {
+        items: result.items.map((item) => normalizeManagementDonation(item, false)),
+        hasMore: result.hasMore,
+        total: result.total,
+      };
     },
     enabled,
     retry: false,
   });
-  useEffect(() => { handleManagementReadError(client, frame, query.error); }, [client, frame, query.error]);
+  useEffect(() => {
+    handleManagementReadError(client, frame, query.error);
+  }, [client, frame, query.error]);
   return query;
 }
 
 export function useManagementDonation(frame: CharityManagementFrame, id: string | undefined) {
   const { client, enabled } = useManagementReadEnabled(frame, Boolean(id));
   const query = useQuery({
-    queryKey: id ? charityManagementKeys.donation(frame, id) : [...charityManagementKeys.root(frame), 'donation', 'none'],
+    queryKey: id
+      ? charityManagementKeys.donation(frame, id)
+      : [...charityManagementKeys.root(frame), 'donation', 'none'],
     queryFn: async () => {
       if (!id) throw new ApiError('invalid_request', 'A donation id is required.', 400);
       const donationID = mutationID(id, 'donation id');
-       return normalizeManagementDonation(await managementRead(client, frame, () => apiFetch<unknown>(path(frame, `/donations/${encodeURIComponent(donationID)}`))), true);
+      return normalizeManagementDonation(
+        await managementRead(client, frame, () =>
+          apiFetch<unknown>(path(frame, `/donations/${encodeURIComponent(donationID)}`)),
+        ),
+        true,
+      );
     },
     enabled,
     retry: false,
   });
-  useEffect(() => { handleManagementReadError(client, frame, query.error); }, [client, frame, query.error]);
+  useEffect(() => {
+    handleManagementReadError(client, frame, query.error);
+  }, [client, frame, query.error]);
   return query;
 }
 
@@ -1090,25 +1238,35 @@ export function useManagementModels(frame: CharityManagementFrame) {
   const query = useQuery({
     queryKey: charityManagementKeys.models(frame),
     queryFn: async () => {
-       const result = listPayload(await managementRead(client, frame, () => apiFetch<unknown>(path(frame, '/charity-models?page=1&page_size=100'))));
+      const result = listPayload(
+        await managementRead(client, frame, () =>
+          apiFetch<unknown>(path(frame, '/charity-models?page=1&page_size=100')),
+        ),
+      );
       return result.items.map(normalizeManagementCharityModel);
     },
     enabled,
     retry: false,
   });
-  useEffect(() => { handleManagementReadError(client, frame, query.error); }, [client, frame, query.error]);
+  useEffect(() => {
+    handleManagementReadError(client, frame, query.error);
+  }, [client, frame, query.error]);
   return query;
 }
 
 export function useManagementBindings(frame: CharityManagementFrame, modelId: string | undefined) {
   const { client, enabled } = useManagementReadEnabled(frame, Boolean(modelId));
   const query = useQuery({
-    queryKey: modelId ? charityManagementKeys.bindings(frame, modelId) : [...charityManagementKeys.root(frame), 'bindings', 'none'],
+    queryKey: modelId
+      ? charityManagementKeys.bindings(frame, modelId)
+      : [...charityManagementKeys.root(frame), 'bindings', 'none'],
     queryFn: async () => {
       if (!modelId) return [];
       const modelID = mutationID(modelId, 'charity model id');
       const result = dataArrayPayload(
-        await managementRead(client, frame, () => apiFetch<unknown>(path(frame, `/charity-models/${encodeURIComponent(modelID)}/bindings`))),
+        await managementRead(client, frame, () =>
+          apiFetch<unknown>(path(frame, `/charity-models/${encodeURIComponent(modelID)}/bindings`)),
+        ),
         'charity bindings list',
       );
       return result.map(normalizeBinding);
@@ -1116,26 +1274,47 @@ export function useManagementBindings(frame: CharityManagementFrame, modelId: st
     enabled,
     retry: false,
   });
-  useEffect(() => { handleManagementReadError(client, frame, query.error); }, [client, frame, query.error]);
+  useEffect(() => {
+    handleManagementReadError(client, frame, query.error);
+  }, [client, frame, query.error]);
   return query;
 }
 
 export function useReviewDonation(frame: CharityManagementFrame) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string; action: string; note?: string; expires_at?: number | null; keys?: unknown[] }) => {
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+      action: string;
+      note?: string;
+      expires_at?: number | null;
+      keys?: unknown[];
+    }) => {
       const donationID = mutationID(id, 'donation id');
       return managementWrite(client, frame, async () => {
-        const payload = await apiFetch<unknown>(path(frame, `/donations/${encodeURIComponent(donationID)}`), { method: 'PATCH', json: body });
+        const payload = await apiFetch<unknown>(
+          path(frame, `/donations/${encodeURIComponent(donationID)}`),
+          { method: 'PATCH', json: body },
+        );
         return normalizeManagementDonation(payload, true);
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error, variables) => {
-      await reconcileManagementMutation(client, frame, [
-        { queryKey: managementDonationListKey(frame), exact: false },
-        { queryKey: charityManagementKeys.donation(frame, variables.id), exact: true },
-      ], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [
+          { queryKey: managementDonationListKey(frame), exact: false },
+          { queryKey: charityManagementKeys.donation(frame, variables.id), exact: true },
+        ],
+        error,
+      );
     },
   });
 }
@@ -1146,20 +1325,29 @@ export function useDeleteManagedDonation(frame: CharityManagementFrame) {
     mutationFn: async (id: string) => {
       const donationID = mutationID(id, 'donation id');
       return managementWrite(client, frame, async () => {
-        await apiFetch<void>(path(frame, `/donations/${encodeURIComponent(donationID)}`), { method: 'DELETE' });
+        await apiFetch<void>(path(frame, `/donations/${encodeURIComponent(donationID)}`), {
+          method: 'DELETE',
+        });
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error, id) => {
-      await reconcileManagementMutation(client, frame, [
-        { queryKey: managementDonationListKey(frame), exact: false },
-        {
-          queryKey: charityManagementKeys.donation(frame, id),
-          exact: true,
-          ignoreError: isNotFoundError,
-          removeOnIgnoredError: true,
-        },
-      ], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [
+          { queryKey: managementDonationListKey(frame), exact: false },
+          {
+            queryKey: charityManagementKeys.donation(frame, id),
+            exact: true,
+            ignoreError: isNotFoundError,
+            removeOnIgnoredError: true,
+          },
+        ],
+        error,
+      );
     },
   });
 }
@@ -1194,13 +1382,23 @@ export function useCreateManagedModel(frame: CharityManagementFrame) {
   return useMutation({
     mutationFn: async (body: CharityModelPayload) => {
       return managementWrite(client, frame, async () => {
-        const payload = await apiFetch<unknown>(path(frame, '/charity-models'), { method: 'POST', json: { ...body, prices: wirePrices(body.prices) } });
+        const payload = await apiFetch<unknown>(path(frame, '/charity-models'), {
+          method: 'POST',
+          json: { ...body, prices: wirePrices(body.prices) },
+        });
         return normalizeManagementCharityModel(payload);
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error) => {
-      await reconcileManagementMutation(client, frame, [{ queryKey: managementModelListKey(frame), exact: true }], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [{ queryKey: managementModelListKey(frame), exact: true }],
+        error,
+      );
     },
   });
 }
@@ -1208,16 +1406,29 @@ export function useCreateManagedModel(frame: CharityManagementFrame) {
 export function useUpdateManagedModel(frame: CharityManagementFrame) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string; } & Partial<CharityModelPayload>) => {
+    mutationFn: async ({ id, ...body }: { id: string } & Partial<CharityModelPayload>) => {
       const modelID = mutationID(id, 'charity model id');
       return managementWrite(client, frame, async () => {
-        const payload = await apiFetch<unknown>(path(frame, `/charity-models/${encodeURIComponent(modelID)}`), { method: 'PATCH', json: { ...body, ...(body.prices ? { prices: wirePrices(body.prices) } : {}) } });
+        const payload = await apiFetch<unknown>(
+          path(frame, `/charity-models/${encodeURIComponent(modelID)}`),
+          {
+            method: 'PATCH',
+            json: { ...body, ...(body.prices ? { prices: wirePrices(body.prices) } : {}) },
+          },
+        );
         return normalizeManagementCharityModel(payload);
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error) => {
-      await reconcileManagementMutation(client, frame, [{ queryKey: managementModelListKey(frame), exact: true }], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [{ queryKey: managementModelListKey(frame), exact: true }],
+        error,
+      );
     },
   });
 }
@@ -1228,25 +1439,38 @@ export function useDeleteManagedModel(frame: CharityManagementFrame) {
     mutationFn: async (id: string) => {
       const modelID = mutationID(id, 'charity model id');
       return managementWrite(client, frame, async () => {
-        await apiFetch<void>(path(frame, `/charity-models/${encodeURIComponent(modelID)}`), { method: 'DELETE' });
+        await apiFetch<void>(path(frame, `/charity-models/${encodeURIComponent(modelID)}`), {
+          method: 'DELETE',
+        });
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error, id) => {
-      await reconcileManagementMutation(client, frame, [
-        { queryKey: managementModelListKey(frame), exact: true },
-        {
-          queryKey: charityManagementKeys.bindings(frame, id),
-          exact: true,
-          ignoreError: isNotFoundError,
-          removeOnIgnoredError: true,
-        },
-      ], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [
+          { queryKey: managementModelListKey(frame), exact: true },
+          {
+            queryKey: charityManagementKeys.bindings(frame, id),
+            exact: true,
+            ignoreError: isNotFoundError,
+            removeOnIgnoredError: true,
+          },
+        ],
+        error,
+      );
     },
   });
 }
 
-export interface CharityBindingPayload { donation_key_id: string; upstream_model_id: string; ord?: number; }
+export interface CharityBindingPayload {
+  donation_key_id: string;
+  upstream_model_id: string;
+  ord?: number;
+}
 
 export function useCreateManagedBinding(frame: CharityManagementFrame) {
   const client = useQueryClient();
@@ -1256,21 +1480,37 @@ export function useCreateManagedBinding(frame: CharityManagementFrame) {
       const donationKeyID = mutationID(body.donation_key_id, 'donation key id');
       const numericDonationKeyID = positiveDecimalIDNumber(donationKeyID);
       if (numericDonationKeyID === undefined) return invalidResponse('donation key id');
-      if (body.ord !== undefined && (!Number.isSafeInteger(body.ord) || body.ord < 0 || body.ord > 1_000_000)) return invalidResponse('binding order');
+      if (
+        body.ord !== undefined &&
+        (!Number.isSafeInteger(body.ord) || body.ord < 0 || body.ord > 1_000_000)
+      )
+        return invalidResponse('binding order');
       return managementWrite(client, frame, async () => {
-        const payload = await apiFetch<unknown>(path(frame, `/charity-models/${encodeURIComponent(modelID)}/bindings`), { method: 'POST', json: { ...body, donation_key_id: numericDonationKeyID } });
+        const payload = await apiFetch<unknown>(
+          path(frame, `/charity-models/${encodeURIComponent(modelID)}/bindings`),
+          { method: 'POST', json: { ...body, donation_key_id: numericDonationKeyID } },
+        );
         return normalizeBinding(payload);
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error, variables) => {
-      await reconcileManagementMutation(client, frame, [
-        {
-          queryKey: charityManagementKeys.bindings(frame, variables.modelId), exact: true,
-          ignoreError: isNotFoundError, removeOnIgnoredError: true,
-        },
-        { queryKey: managementModelListKey(frame), exact: true },
-      ], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [
+          {
+            queryKey: charityManagementKeys.bindings(frame, variables.modelId),
+            exact: true,
+            ignoreError: isNotFoundError,
+            removeOnIgnoredError: true,
+          },
+          { queryKey: managementModelListKey(frame), exact: true },
+        ],
+        error,
+      );
     },
   });
 }
@@ -1278,24 +1518,52 @@ export function useCreateManagedBinding(frame: CharityManagementFrame) {
 export function useUpdateManagedBinding(frame: CharityManagementFrame) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async ({ modelId, bindingId, ...body }: { modelId: string; bindingId: string; ord?: number; upstream_model_id?: string }) => {
+    mutationFn: async ({
+      modelId,
+      bindingId,
+      ...body
+    }: {
+      modelId: string;
+      bindingId: string;
+      ord?: number;
+      upstream_model_id?: string;
+    }) => {
       const modelID = mutationID(modelId, 'charity model id');
       const bindingID = mutationID(bindingId, 'binding id');
-      if (body.ord !== undefined && (!Number.isSafeInteger(body.ord) || body.ord < 0 || body.ord > 1_000_000)) return invalidResponse('binding order');
+      if (
+        body.ord !== undefined &&
+        (!Number.isSafeInteger(body.ord) || body.ord < 0 || body.ord > 1_000_000)
+      )
+        return invalidResponse('binding order');
       return managementWrite(client, frame, async () => {
-        const payload = await apiFetch<unknown>(path(frame, `/charity-models/${encodeURIComponent(modelID)}/bindings/${encodeURIComponent(bindingID)}`), { method: 'PATCH', json: body });
+        const payload = await apiFetch<unknown>(
+          path(
+            frame,
+            `/charity-models/${encodeURIComponent(modelID)}/bindings/${encodeURIComponent(bindingID)}`,
+          ),
+          { method: 'PATCH', json: body },
+        );
         return normalizeBinding(payload);
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error, variables) => {
-      await reconcileManagementMutation(client, frame, [
-        {
-          queryKey: charityManagementKeys.bindings(frame, variables.modelId), exact: true,
-          ignoreError: isNotFoundError, removeOnIgnoredError: true,
-        },
-        { queryKey: managementModelListKey(frame), exact: true },
-      ], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [
+          {
+            queryKey: charityManagementKeys.bindings(frame, variables.modelId),
+            exact: true,
+            ignoreError: isNotFoundError,
+            removeOnIgnoredError: true,
+          },
+          { queryKey: managementModelListKey(frame), exact: true },
+        ],
+        error,
+      );
     },
   });
 }
@@ -1307,18 +1575,33 @@ export function useDeleteManagedBinding(frame: CharityManagementFrame) {
       const modelID = mutationID(modelId, 'charity model id');
       const bindingID = mutationID(bindingId, 'binding id');
       return managementWrite(client, frame, async () => {
-        await apiFetch<void>(path(frame, `/charity-models/${encodeURIComponent(modelID)}/bindings/${encodeURIComponent(bindingID)}`), { method: 'DELETE' });
+        await apiFetch<void>(
+          path(
+            frame,
+            `/charity-models/${encodeURIComponent(modelID)}/bindings/${encodeURIComponent(bindingID)}`,
+          ),
+          { method: 'DELETE' },
+        );
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, frame);
+    },
     onSettled: async (_value, error, variables) => {
-      await reconcileManagementMutation(client, frame, [
-        {
-          queryKey: charityManagementKeys.bindings(frame, variables.modelId), exact: true,
-          ignoreError: isNotFoundError, removeOnIgnoredError: true,
-        },
-        { queryKey: managementModelListKey(frame), exact: true },
-      ], error);
+      await reconcileManagementMutation(
+        client,
+        frame,
+        [
+          {
+            queryKey: charityManagementKeys.bindings(frame, variables.modelId),
+            exact: true,
+            ignoreError: isNotFoundError,
+            removeOnIgnoredError: true,
+          },
+          { queryKey: managementModelListKey(frame), exact: true },
+        ],
+        error,
+      );
     },
   });
 }
@@ -1328,12 +1611,19 @@ export function useCharityAdminSettings(enabled: boolean) {
   const query = useQuery({
     queryKey: charityManagementKeys.settings,
     queryFn: async () => {
-      const record = requiredRecord(await managementRead(read.client, 'admin', () => apiFetch<unknown>('/admin/api/site-config')), 'charity site settings');
-      if (typeof record.charity_enabled !== 'boolean'
-        || typeof record.donation_accept_enabled !== 'boolean'
-        || (record.charity_token_reserve_milli !== null
-          && (typeof record.charity_token_reserve_milli !== 'string'
-            || !/^(0|[1-9]\d*)$/.test(record.charity_token_reserve_milli)))) {
+      const record = requiredRecord(
+        await managementRead(read.client, 'admin', () =>
+          apiFetch<unknown>('/admin/api/site-config'),
+        ),
+        'charity site settings',
+      );
+      if (
+        typeof record.charity_enabled !== 'boolean' ||
+        typeof record.donation_accept_enabled !== 'boolean' ||
+        (record.charity_token_reserve_milli !== null &&
+          (typeof record.charity_token_reserve_milli !== 'string' ||
+            !/^(0|[1-9]\d*)$/.test(record.charity_token_reserve_milli)))
+      ) {
         return invalidResponse('charity site settings');
       }
       return record;
@@ -1342,7 +1632,9 @@ export function useCharityAdminSettings(enabled: boolean) {
     retry: false,
     staleTime: 0,
   });
-  useEffect(() => { handleManagementReadError(read.client, 'admin', query.error); }, [read.client, query.error]);
+  useEffect(() => {
+    handleManagementReadError(read.client, 'admin', query.error);
+  }, [read.client, query.error]);
   return query;
 }
 
@@ -1351,13 +1643,23 @@ export function usePatchCharityAdminSetting() {
   return useMutation({
     mutationFn: async ({ key, value }: { key: string; value: unknown }) => {
       return managementWrite(client, 'admin', async () => {
-        const payload = await apiFetch<unknown>(`/admin/api/site-config/${encodeURIComponent(key)}`, { method: 'PATCH', json: { value } });
+        const payload = await apiFetch<unknown>(
+          `/admin/api/site-config/${encodeURIComponent(key)}`,
+          { method: 'PATCH', json: { value } },
+        );
         return validPatchResult(payload, 'site configuration result');
       });
     },
-    onError: (error) => { if (isManagementCapabilityError(error)) managementCapabilityLoss(client, 'admin'); },
+    onError: (error) => {
+      if (isManagementCapabilityError(error)) managementCapabilityLoss(client, 'admin');
+    },
     onSettled: async (_value, error) => {
-      await reconcileManagementMutation(client, 'admin', [{ queryKey: charityManagementKeys.settings, exact: true }], error);
+      await reconcileManagementMutation(
+        client,
+        'admin',
+        [{ queryKey: charityManagementKeys.settings, exact: true }],
+        error,
+      );
     },
   });
 }

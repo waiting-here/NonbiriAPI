@@ -71,17 +71,18 @@ const (
 	// (only effective level >= 3 may check in) / disabled (the default). The
 	// two award bounds are a cross-validated pair: PATCHing either validates
 	// min <= max against the other key's current value in ONE transaction.
-	KeyCheckinMode              = "checkin_mode"
-	KeyCheckinAwardMinMilli     = "checkin_award_min_milli"
-	KeyCheckinAwardMaxMilli     = "checkin_award_max_milli"
-	KeyCreditsCapMilli          = "credits_cap_milli"
-	KeyGameCheckinMode          = "game_checkin_mode"
-	KeyGameCheckinAwardMinMilli = "game_checkin_award_min_milli"
-	KeyGameCheckinAwardMaxMilli = "game_checkin_award_max_milli"
-	KeyGameCreditsCapMilli      = "game_credits_cap_milli"
-	KeyGameFishingRakePlatform  = "game_fishing_rake_platform_bp"
-	KeyGameFishingRakeWelfare   = "game_fishing_rake_welfare_bp"
-	KeyGameFishingRakeThursday  = "game_fishing_rake_thursday_bp"
+	KeyCheckinMode                  = "checkin_mode"
+	KeyCheckinAwardMinMilli         = "checkin_award_min_milli"
+	KeyCheckinAwardMaxMilli         = "checkin_award_max_milli"
+	KeyCreditsCapMilli              = "credits_cap_milli"
+	KeyGameCheckinMode              = "game_checkin_mode"
+	KeyGameCheckinAwardMinMilli     = "game_checkin_award_min_milli"
+	KeyGameCheckinAwardMaxMilli     = "game_checkin_award_max_milli"
+	KeyGameCreditsCapMilli          = "game_credits_cap_milli"
+	KeyGameFishingRakePlatform      = "game_fishing_rake_platform_bp"
+	KeyGameFishingRakeWelfare       = "game_fishing_rake_welfare_bp"
+	KeyGameFishingRakeThursday      = "game_fishing_rake_thursday_bp"
+	KeyGameFishingBlueFishChanceBPS = "game_fishing_blue_fish_chance_bps"
 	// Charity / donation switches (implementation contract §4.1). Both default
 	// to off: the charity system and donation intake stay closed until the
 	// administrator opens them. They have no runtime singleton — every
@@ -100,6 +101,8 @@ const (
 	KeyLevelDisplayName3             = "level_display_name_3"
 	KeyLevelDisplayName4             = "level_display_name_4"
 	KeyLevelDisplayName5             = "level_display_name_5"
+	KeyLevelDisplayName6             = "level_display_name_6"
+	KeyRequestErrorBodyBudgetMiB     = "request_error_body_budget_mib"
 	KeyActivitiesEnabled             = "activities_enabled"
 	KeyActivityWelfareEnabled        = "activity_welfare_enabled"
 	KeyActivityWelfareThreshold      = "activity_welfare_threshold_milli"
@@ -292,6 +295,7 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyGameFishingRakePlatform:          {kind: kindInt, min: 0, max: 9999, def: 100},
 		KeyGameFishingRakeWelfare:           {kind: kindInt, min: 0, max: 9999, def: 100},
 		KeyGameFishingRakeThursday:          {kind: kindInt, min: 0, max: 9999, def: 100},
+		KeyGameFishingBlueFishChanceBPS:     {kind: kindInt, min: 0, max: 10000, def: 1000},
 		KeyCharityEnabled:                   {kind: kindBool, def: 0},
 		KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
 		KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
@@ -301,7 +305,9 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyLevelDisplayName2:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 2"},
 		KeyLevelDisplayName3:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 3"},
 		KeyLevelDisplayName4:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 4"},
-		KeyLevelDisplayName5:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 5"},
+		KeyLevelDisplayName5:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "见习协管"},
+		KeyLevelDisplayName6:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 6"},
+		KeyRequestErrorBodyBudgetMiB:        {kind: kindInt, min: 1, max: 65536, def: 1024},
 		KeyActivitiesEnabled:                {kind: kindBool},
 		KeyActivityWelfareEnabled:           {kind: kindBool},
 		KeyActivityWelfareThreshold:         {kind: kindAmount},

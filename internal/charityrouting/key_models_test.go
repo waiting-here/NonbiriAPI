@@ -16,7 +16,7 @@ import (
 func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	owner := env.seedUser(t, false, nil)
 	did, kid, physical := env.seedCandidate(t, owner, 'x', "upstream")
@@ -46,7 +46,7 @@ func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testi
 	}
 	ctx := context.Background()
 	for _, role := range []roleKind{roleAdmin, roleSteward} {
-		out, _, err := env.service.keyModelPages(ctx, role, steward, did, kid, 0, pagination.Request{Page: 99, Size: 10})
+		out, _, err := env.service.keyModelPages(ctx, role, testRoleActor(role, steward), did, kid, 0, pagination.Request{Page: 99, Size: 10})
 		if err != nil || out.Pagination.TotalItems != "23" || out.Pagination.Page != "3" || len(out.Data) != 3 {
 			t.Fatalf("%s: %+v %v", role, out, err)
 		}
@@ -59,7 +59,7 @@ func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testi
 				t.Fatalf("state: %+v", m)
 			}
 		}
-		_, bindings, err := env.service.keyModelPages(ctx, role, steward, did, kid, first, pagination.Default())
+		_, bindings, err := env.service.keyModelPages(ctx, role, testRoleActor(role, steward), did, kid, first, pagination.Default())
 		if err != nil || len(bindings.Data) != 2 || bindings.Data[0].Ord != 0 || bindings.Data[0].State != "available" {
 			t.Fatalf("bindings: %+v %v", bindings, err)
 		}

@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -113,7 +114,7 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 	}
-	mask := 31
+	mask := 63
 	if input.AllowedLevels != nil {
 		mask, err = charityaccess.Mask(input.AllowedLevels)
 		if err != nil {
@@ -160,6 +161,11 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	modelID, err := result.LastInsertId()
 	if err != nil || modelID <= 0 {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvariant
+	}
+	excluded, _ := openai.NormalizeExcludedRequestFields(input.ExcludedRequestFields)
+	encodedExcluded, _ := json.Marshal(excluded)
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), modelID); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize stats: %w", err)
@@ -245,6 +251,14 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		return resources.MutationResult[AdminCharityModel]{}, ErrConflict
 	}
 	updated := current
+	if input.IsMainstream != nil {
+		updated.isMainstream = *input.IsMainstream
+	}
+	if input.ExcludedRequestFields != nil {
+		excluded, _ := openai.NormalizeExcludedRequestFields(*input.ExcludedRequestFields)
+		encoded, _ := json.Marshal(excluded)
+		updated.excludedFields = string(encoded)
+	}
 	if input.AllowedLevels != nil {
 		updated.allowedMask, err = charityaccess.Mask(*input.AllowedLevels)
 		if err != nil {
@@ -323,6 +337,9 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, current.flatten == 1, updated.flatten == 1, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=? WHERE id=?`, updated.isMainstream, updated.excludedFields, modelID); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.TokenReserveCredits != nil {
 		if err := setModelTokenReserve(ctx, tx, modelID, *input.TokenReserveCredits); err != nil {
@@ -412,7 +429,12 @@ func (s *Service) GetAdmin(ctx context.Context, modelID int64) (AdminCharityMode
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 {
 		return AdminCharityModel{}, ErrInvalidRequest
 	}
-	return getAdminModelDB(ctx, s.db, modelID)
+	tx, _, err := s.beginManagementTx(ctx, roleAdmin, 0, modelID, false, true)
+	if err != nil {
+		return AdminCharityModel{}, err
+	}
+	defer tx.Rollback()
+	return getAdminModelTx(ctx, tx, modelID)
 }
 
 func (s *Service) GetSteward(ctx context.Context, actorUserID, modelID int64) (StewardCharityModel, error) {
@@ -424,8 +446,8 @@ func (s *Service) GetSteward(ctx context.Context, actorUserID, modelID int64) (S
 		return StewardCharityModel{}, fmt.Errorf("charity routing: begin steward model read: %w", err)
 	}
 	defer tx.Rollback()
-	if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
-		return StewardCharityModel{}, mapAuthorization(err)
+	if _, err := s.managementScope(ctx, tx, roleSteward, actorUserID, modelID, false); err != nil {
+		return StewardCharityModel{}, err
 	}
 	value, err := getAdminModelTx(ctx, tx, modelID)
 	if err != nil {
@@ -463,10 +485,11 @@ func (s *Service) listModelsForSteward(ctx context.Context, actorUserID int64, q
 		return nil, 0, fmt.Errorf("charity routing: begin steward list: %w", err)
 	}
 	defer tx.Rollback()
-	if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, actorUserID); err != nil {
-		return nil, 0, mapAuthorization(err)
+	scope, err := s.managementScope(ctx, tx, roleSteward, actorUserID, 0, true)
+	if err != nil {
+		return nil, 0, err
 	}
-	items, next, err := listModelsQuery(ctx, tx, query, enabled, afterID, limit)
+	items, next, err := listModelsQuery(ctx, tx, query, enabled, afterID, limit, scope.Trainee)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -481,7 +504,12 @@ func (s *Service) listModels(ctx context.Context, query string, enabled *bool, a
 		!utf8.ValidString(query) || utf8.RuneCountInString(query) > 128 {
 		return nil, 0, ErrInvalidRequest
 	}
-	return listModelsQuery(ctx, s.db, query, enabled, afterID, limit)
+	tx, _, err := s.beginManagementTx(ctx, roleAdmin, 0, 0, true, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer tx.Rollback()
+	return listModelsQuery(ctx, tx, query, enabled, afterID, limit)
 }
 
 type modelQueryer interface {
@@ -489,8 +517,11 @@ type modelQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, enabled *bool, afterID int64, limit int) ([]AdminCharityModel, int64, error) {
+func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, enabled *bool, afterID int64, limit int, trainee ...bool) ([]AdminCharityModel, int64, error) {
 	statement := `SELECT id FROM charity_models WHERE id>?`
+	if len(trainee) == 1 && trainee[0] {
+		statement += ` AND is_mainstream=1`
+	}
 	args := []any{afterID}
 	if query != "" {
 		statement += ` AND (provider LIKE ? ESCAPE '\' OR model LIKE ? ESCAPE '\' OR full_name LIKE ? ESCAPE '\')`
@@ -528,6 +559,8 @@ func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, en
 }
 
 type storedModel struct {
+	isMainstream                     bool
+	excludedFields                   string
 	allowedMask                      int
 	publicDescription                string
 	id, revision, bindingRevision    int64
@@ -546,11 +579,11 @@ request_user_price,request_donor_reward,uncached_user_price,cache_write_user_pri
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
 discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision,
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),
-(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id)
+(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields
 FROM charity_models WHERE id=?`, modelID).Scan(&value.id, &value.provider, &value.model, &value.enabled, &value.mode,
 		&value.requestUser, &value.requestReward, &value.user[0], &value.user[1], &value.user[2], &value.user[3],
 		&value.reward[0], &value.reward[1], &value.reward[2], &value.reward[3], &value.discountPercent,
-		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription)
+		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedModel{}, ErrNotFound
 	}
@@ -578,7 +611,7 @@ COALESCE(s.sample_count,0),COALESCE(s.success_count,0),cm.created_at,cm.updated_
 COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expiry_weighted'),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
 (SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
-(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id)
+(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -593,11 +626,12 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	var start, end, tokenReserve sql.NullInt64
 	var samples, successes int
 	var mask int
+	var excluded string
 	err := row.Scan(&id, &value.Provider, &value.Model, &value.FullName, &enabled, &mode,
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &mask, &value.PublicDescription, &tokenReserve)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -605,6 +639,10 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		return AdminCharityModel{}, fmt.Errorf("charity routing: scan model: %w", err)
 	}
 	value.ID = strconv.FormatInt(id, 10)
+	value.ExcludedRequestFields, err = decodeExcludedFields(excluded)
+	if err != nil {
+		return AdminCharityModel{}, err
+	}
 	if tokenReserve.Valid {
 		if tokenReserve.Int64 < 1 || tokenReserve.Int64 > db.MaxMoneyMilli {
 			return AdminCharityModel{}, ErrInvariant
@@ -672,6 +710,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		}
 	}
 	return StewardCharityModel{
+		IsMainstream: value.IsMainstream, ExcludedRequestFields: append([]string{}, value.ExcludedRequestFields...),
 		TokenReserveCredits: copyString(value.TokenReserveCredits),
 		AllowedLevels:       append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
 		RouteStrategy: defaultRouteStrategy(value.RouteStrategy),
@@ -693,6 +732,9 @@ type validatedPricing struct {
 }
 
 func validateModelCreate(input ModelCreate) (validatedPricing, error) {
+	if _, err := openai.NormalizeExcludedRequestFields(input.ExcludedRequestFields); err != nil {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	if !validModelTokenReserve(input.TokenReserveCredits) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
@@ -706,6 +748,11 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 }
 
 func validateModelPatch(input ModelPatch) bool {
+	if input.ExcludedRequestFields != nil {
+		if _, err := openai.NormalizeExcludedRequestFields(*input.ExcludedRequestFields); err != nil {
+			return false
+		}
+	}
 	if input.TokenReserveCredits != nil && !validModelTokenReserve(*input.TokenReserveCredits) {
 		return false
 	}
@@ -713,7 +760,7 @@ func validateModelPatch(input ModelPatch) bool {
 		return false
 	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||
@@ -907,10 +954,13 @@ func replayModel(decision idempotency.Decision) (resources.MutationResult[AdminC
 	if err != nil {
 		return result, err
 	}
+	if result.Value.ExcludedRequestFields == nil {
+		result.Value.ExcludedRequestFields = []string{}
+	}
 	if result.Value.AllowedLevels == nil {
 		// Receipts predating level restrictions describe the former all-level
 		// behavior. The stored immutable receipt and its existing fields stay intact.
-		result.Value.AllowedLevels = []int{1, 2, 3, 4, 5}
+		result.Value.AllowedLevels = []int{1, 2, 3, 4, 5, 6}
 		result.Value.PublicDescription = ""
 		result.Body, err = json.Marshal(result.Value)
 		if err != nil {

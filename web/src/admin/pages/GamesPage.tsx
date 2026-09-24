@@ -28,6 +28,7 @@ import {
   validateBlackjackConfiguration,
 } from '../features/games/BlackjackConfiguration';
 import { validateDuelConfigurations } from '../features/games/config';
+import { fishingChanceFromPercent, fishingChanceValid } from '../features/games/fishing';
 import { gameLabel, modeLabel, useGameAdminText } from '../features/games/copy';
 import '@shared/operations/operations.css';
 
@@ -291,7 +292,13 @@ function GamesEditor({
     const error =
       validateGamesDraft(draft, t) ??
       validateDuelConfigurations(draft, duelText) ??
-      validateBlackjackConfiguration(draft, duelText);
+      validateBlackjackConfiguration(draft, duelText) ??
+      (fishingChanceValid(draft.fishing.blue_fish_chance_bps)
+        ? null
+        : duelText(
+            '蓝色大肥鱼概率必须为0%至100%，最多两位小数。',
+            'Blue-fish probability must be between 0% and 100%, with at most two decimal places.',
+          ));
     setValidation(error);
     if (error === null && changed && !stale && !save.isPending) {
       void save
@@ -312,7 +319,13 @@ function GamesEditor({
     validation ??
     validateGamesDraft(draft, t) ??
     validateDuelConfigurations(draft, duelText) ??
-    validateBlackjackConfiguration(draft, duelText);
+    validateBlackjackConfiguration(draft, duelText) ??
+    (fishingChanceValid(draft.fishing.blue_fish_chance_bps)
+      ? null
+      : duelText(
+          '蓝色大肥鱼概率必须为0%至100%，最多两位小数。',
+          'Blue-fish probability must be between 0% and 100%, with at most two decimal places.',
+        ));
   const changed = JSON.stringify(canonicalGamesDraft(draft)) !== JSON.stringify(authority);
   const stale = draft.revision !== authority.revision;
 
@@ -395,6 +408,38 @@ function GamesEditor({
               />
             </label>
           ))}
+          <label>
+            <span>
+              {duelText(
+                '传奇鱼变为蓝色大肥鱼的概率（%）',
+                'Blue-fish probability after a legendary catch (%)',
+              )}
+            </span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="100"
+              step="0.01"
+              value={numberInput(draft.fishing.blue_fish_chance_bps / 100)}
+              disabled={save.isPending}
+              onChange={(event) =>
+                edit((current) => ({
+                  ...current,
+                  fishing: {
+                    ...current.fishing,
+                    blue_fish_chance_bps: fishingChanceFromPercent(event.target.value),
+                  },
+                }))
+              }
+            />
+            <small>
+              {duelText(
+                '只影响新受理的批次；0%关闭，100%必定变为蓝色大肥鱼。原鱼种奖励与长度分布保持不变。',
+                'Applies to newly accepted batches. 0% disables it; 100% always decorates a legendary catch. Original species rewards and length distribution remain unchanged.',
+              )}
+            </small>
+          </label>
           {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
             <label key={pump}>
               <span>{t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}</span>

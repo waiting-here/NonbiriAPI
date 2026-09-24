@@ -33,7 +33,7 @@ func TestManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T) {
 		return map[string]string{"Content-Type": "application/json", "Origin": "http://" + host, "Idempotency-Key": strings.Repeat(seed, 22)}
 	}
 	created := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/donations",
-		fmt.Sprintf(`{"description":"Model discovery fixture","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true}`, physical), f.cookies, headers(auditUserHost, "C"))
+		fmt.Sprintf(`{"description":"Model discovery fixture","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical), f.cookies, headers(auditUserHost, "C"))
 	var d struct {
 		ID, Revision string
 		Keys         []struct{ ID string }
@@ -58,7 +58,7 @@ func TestManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T) {
 			t.Fatalf("ordinary %s: %d %s", suffix, denied.Code, denied.Body)
 		}
 	}
-	exec(`UPDATE users SET level=5 WHERE id=?`, f.userID)
+	exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
 	selected := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/steward/donation-keys/models/refresh/selection", `{"donation_id":null,"cursor":null}`, f.cookies, headers(auditUserHost, "S"))
 	if selected.Code != 200 || !strings.Contains(selected.Body.String(), `"key_id":"`+key+`"`) {
 		t.Fatalf("select: %d %s", selected.Code, selected.Body)

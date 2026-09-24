@@ -12,7 +12,7 @@ func TestManualReviewerRolesRoundTripAcrossManagementProjections(t *testing.T) {
 	for _, role := range []string{"admin", "steward"} {
 		t.Run(role, func(t *testing.T) {
 			env := newDonationTestEnv(t)
-			level := int64(5)
+			level := int64(6)
 			owner := env.seedUser(t, "review-owner", &level, false)
 			env.seedUser(t, "", nil, true)
 			_, key := env.seedEndpointKey(t, owner, 's')

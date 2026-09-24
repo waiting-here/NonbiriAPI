@@ -55,6 +55,18 @@ export function TermsPage() {
             <p>{t('user.legal.terms.availabilityBody')}</p>
           </section>
           <section>
+            <h2>{t('user.legal.terms.donationTitle')}</h2>
+            <p>{t('user.legal.terms.donationBody')}</p>
+          </section>
+          <section>
+            <h2>{t('user.legal.terms.imageTitle')}</h2>
+            <p>{t('user.legal.terms.imageBody')}</p>
+          </section>
+          <section>
+            <h2>{t('user.legal.terms.inactivityTitle')}</h2>
+            <p>{t('user.legal.terms.inactivityBody')}</p>
+          </section>
+          <section>
             <h2>{t('user.legal.terms.dataTitle')}</h2>
             <p>{t('user.legal.terms.dataBody')}</p>
           </section>

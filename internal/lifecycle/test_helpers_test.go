@@ -72,6 +72,7 @@ type testExportAdapter struct {
 	activity         ActivityExport
 	rankings         RankingExport
 	penalties        []PenaltyExport
+	governance       GovernanceExport
 	donations        []DonationExport
 	charity          CharityExport
 	fishing          FishingExport
@@ -116,6 +117,10 @@ func (adapter *testExportAdapter) ExportIssues(_ context.Context, tx *sql.Tx, _ 
 
 func (adapter *testExportAdapter) ExportLedger(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]LedgerEntryExport, error) {
 	return adapter.ledger, adapter.record("ledger", tx)
+}
+
+func (adapter *testExportAdapter) ExportGovernance(_ context.Context, tx *sql.Tx, _ ExportRequest) (GovernanceExport, error) {
+	return adapter.governance, adapter.record("governance", tx)
 }
 
 func (adapter *testExportAdapter) ExportActivities(_ context.Context, tx *sql.Tx, _ ExportRequest) (ActivityExport, error) {
@@ -354,9 +359,10 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"},
 			Blackjack:  testDuelExport{owner: exports, name: "blackjack"},
 			Randomness: testDuelExport{owner: exports, name: "randomness"},
-			Rankings:   exports, Penalties: exports,
+			Rankings:   exports, Penalties: exports, Governance: exports,
 		},
 		Delete: DeleteAdapters{
+			Governance:           noopDelete("governance"),
 			AuthSessionCallerKey: noopDelete("auth"), Resources: noopDelete("resources"), ClaimLog: noopDelete("claim_log"),
 			IssuesAnnouncements: noopDelete("issues"), Donations: noopDelete("donations"), Activities: noopDelete("activities"),
 			Reports: noopDelete("reports"), Fishing: noopDelete("fishing"), LinkLink: noopDelete("linklink"),
@@ -364,13 +370,16 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopDelete("bidding"), Likes: noopDelete("likes"), Blackjack: noopDelete("blackjack"),
 		},
 		Recovery: RecoveryAdapters{
+			Governance:  noopRecovery("governance"),
 			Idempotency: noopRecovery("idempotency"), Discovery: noopRecovery("discovery"), Claims: noopRecovery("claims"),
 			Thursday: noopRecovery("thursday"), Reports: noopRecovery("reports"), Fishing: noopRecovery("fishing"),
 			LinkLink: noopRecovery("linklink"), RPS: noopRecovery("rps"), Donations: noopRecovery("donations"), Secrets: noopRecovery("secrets"),
 			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
-			Sessions: noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
+			Governance: noopRetention("governance"),
+			Sessions:   noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
+			Observability: noopRetention("observability"), RiskAudit: noopRetention("risk_audit"),
 			Issues: noopRetention("issues"), Fishing: noopRetention("fishing"), LinkLink: noopRetention("linklink"),
 			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Donations: noopRetention("donations"),
 			Bidding: noopRetention("bidding"), Likes: noopRetention("likes"), Blackjack: noopRetention("blackjack"),

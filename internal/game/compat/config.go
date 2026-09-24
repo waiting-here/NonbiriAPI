@@ -83,9 +83,10 @@ type LikesSnapshotModule struct {
 }
 
 type FishingSnapshotModule struct {
-	Enabled    bool                            `json:"enabled"`
-	Available  bool                            `json:"available"`
-	BaitPrices fishingconfig.FishingBaitPrices `json:"bait_prices"`
+	BlueFishChanceBPS int                             `json:"blue_fish_chance_bps"`
+	Enabled           bool                            `json:"enabled"`
+	Available         bool                            `json:"available"`
+	BaitPrices        fishingconfig.FishingBaitPrices `json:"bait_prices"`
 }
 type LinkLinkSnapshotModule struct {
 	Enabled bool                                       `json:"enabled"`

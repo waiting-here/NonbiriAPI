@@ -13,6 +13,9 @@ import (
 // Validate checks persistent counters before startup recovery or admission.
 // It is read-only: inconsistent state is never repaired into a zero balance.
 func ValidateState(ctx context.Context, tx *sql.Tx) error {
+	if err := validateTokenReservations(ctx, tx); err != nil {
+		return err
+	}
 	var used, held, actualRows, actualHeld int64
 	err := tx.QueryRowContext(ctx, `SELECT rows_used,rows_held,(SELECT COUNT(*) FROM donation_quota_periods)+(SELECT COUNT(*) FROM donation_quota_buckets),(SELECT COUNT(*) FROM donation_quota_receipts WHERE capacity_state='held') FROM donation_quota_capacity WHERE id=1`).Scan(&used, &held, &actualRows, &actualHeld)
 	if err != nil {
@@ -86,7 +89,7 @@ func validateEpoch(ctx context.Context, tx *sql.Tx, e epoch) error {
 		return err
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT r.state,r.reserved_mag,r.remaining_reserved_mag,r.actual_mag,r.success_at,r.period_start,r.capacity_state,c.state,c.purpose,c.donation_key_id,c.dispatched_at,m.started_at,c.reserved_calls,c.reserved_tokens,c.reserved_price_milli
+	rows, err := tx.QueryContext(ctx, `SELECT r.state,r.reserved_mag,r.remaining_reserved_mag,r.actual_mag,r.success_at,r.period_start,r.capacity_state,c.state,c.purpose,c.donation_key_id,c.dispatched_at,m.started_at,c.reserved_calls,c.reserved_tokens,c.reserved_price_milli,c.reserved_input_tokens,c.reserved_output_tokens
 FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id LEFT JOIN dispatch_response_starts m ON m.claim_id=c.id WHERE r.rule_id=? AND r.epoch=?`, e.id, e.number)
 	if err != nil {
 		return err
@@ -98,7 +101,8 @@ FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id LEFT JO
 		var reserved, remaining, actual []byte
 		var success, period, key, dispatched, marker sql.NullInt64
 		var calls, tokens, credits int64
-		if err := rows.Scan(&state, &reserved, &remaining, &actual, &success, &period, &capacity, &claimState, &purpose, &key, &dispatched, &marker, &calls, &tokens, &credits); err != nil {
+		var input, output sql.NullInt64
+		if err := rows.Scan(&state, &reserved, &remaining, &actual, &success, &period, &capacity, &claimState, &purpose, &key, &dispatched, &marker, &calls, &tokens, &credits, &input, &output); err != nil {
 			rows.Close()
 			return err
 		}
@@ -129,6 +133,16 @@ FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id LEFT JO
 				value = calls
 			} else if e.rule.Metric == "tokens" {
 				value = tokens
+			} else if e.rule.Metric == "input_tokens" {
+				if !input.Valid {
+					return bad()
+				}
+				value = input.Int64
+			} else if e.rule.Metric == "output_tokens" {
+				if !output.Valid {
+					return bad()
+				}
+				value = output.Int64
 			}
 			want, err := db.U128FromBig(big.NewInt(value))
 			if err != nil || reserve != want {

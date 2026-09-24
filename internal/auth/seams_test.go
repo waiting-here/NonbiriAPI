@@ -391,7 +391,7 @@ func newStewardActor(t *testing.T, fixture *runtimeFixture, code string) (int64,
 	t.Helper()
 	cookie := loginUser(t, fixture, code, "")
 	userID, actor := userSessionIdentity(t, fixture, cookie)
-	if _, err := fixture.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, userID); err != nil {
+	if _, err := fixture.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, userID); err != nil {
 		t.Fatalf("promote steward: %v", err)
 	}
 	return userID, actor

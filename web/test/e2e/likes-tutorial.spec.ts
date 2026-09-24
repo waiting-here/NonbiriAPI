@@ -150,6 +150,7 @@ test('an actual queue discovered while teaching takes precedence immediately', a
 test('Chinese rules support related reading and versions on a narrow dark screen', async ({
   page,
 }) => {
+  const errors = collectConsoleViolations(page);
   await page.addInitScript(() => {
     localStorage.setItem('nb.lang', 'zh');
     localStorage.setItem('nb.theme', 'dark');
@@ -171,6 +172,39 @@ test('Chinese rules support related reading and versions on a narrow dark screen
     'true',
   );
   await expect(reader.locator('.likes-flavor blockquote')).toBeVisible();
+  await expect(reader.locator('.likes-flavor figcaption')).toHaveCount(0);
+  await expect(reader).not.toContainText('玩梗台词');
   await expect(reader).not.toContainText('Buff ID');
   await page.screenshot({ path: '../tmp/player-guide-zh-mobile.png' });
+  await reader
+    .getByRole('navigation')
+    .getByRole('button', { name: '长效缓存', exact: true })
+    .click();
+  await expect(reader.locator('.likes-reader-main')).toContainText('本轮新获得的缓存不包括在内');
+  await expect(reader.locator('.likes-reader-main')).toContainText(
+    '持久层不会自然过期或因跳过／过载清空',
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await reader
+    .getByRole('navigation')
+    .getByRole('button', { name: '最强多模态', exact: true })
+    .click();
+  await expect(reader.locator('.likes-reader-related')).toHaveCount(0);
+  const layout = await reader.locator('.likes-reader-grid').evaluate((grid) => {
+    const main = grid.querySelector('.likes-reader-main')!;
+    const style = getComputedStyle(main);
+    return {
+      columnStart: style.gridColumnStart,
+      columnEnd: style.gridColumnEnd,
+      rightGap: grid.getBoundingClientRect().right - main.getBoundingClientRect().right,
+      mainWidth: main.getBoundingClientRect().width,
+      gridWidth: grid.getBoundingClientRect().width,
+    };
+  });
+  expect(layout.columnStart).toBe('2');
+  expect(layout.columnEnd).toBe('-1');
+  expect(Math.abs(layout.rightGap)).toBeLessThanOrEqual(1);
+  expect(layout.mainWidth).toBeGreaterThan(layout.gridWidth * 0.65);
+  await page.screenshot({ path: '../tmp/player-guide-zh-desktop-width.png' });
+  errors.assertNone();
 });

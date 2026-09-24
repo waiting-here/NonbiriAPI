@@ -240,9 +240,13 @@ export async function patchGameProfile(
 }
 
 const MAX_ACCOUNT_EXPORT_BYTES = 16 * 1024 * 1024;
-export async function patchCharityProfile(isPublic: boolean, operation: OperationIdentity): Promise<UserEnvelope> {
+export async function patchCharityProfile(
+  isPublic: boolean,
+  operation: OperationIdentity,
+): Promise<UserEnvelope> {
   const response = await coreRequest('/api/me', {
-    method: 'PATCH', headers: operationHeaders(operation),
+    method: 'PATCH',
+    headers: operationHeaders(operation),
     json: { charity_profile_public: exactBooleanInput(isPublic, 'charity profile visibility') },
   });
   expectedStatus(response.status, 200, 'profile update');
@@ -278,6 +282,9 @@ const ACCOUNT_EXPORT_KEYS = [
   'likes',
   'blackjack',
   'randomness',
+  'limited_activities',
+  'image_tasks',
+  'inactivity',
 ] as const;
 const ELEVATED_TOKEN = /^[A-Za-z0-9._-]{8,512}$/;
 
@@ -340,7 +347,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   const record = value as Record<string, unknown>;
   const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
   if (
-    record.schema_version !== 9 ||
+    record.schema_version !== 10 ||
     Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
     Object.keys(record).some((key) => !expected.has(key))
   ) {
@@ -348,7 +355,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   }
 }
 
-export async function exportAccountV9(
+export async function exportAccount(
   accountId: string,
   elevatedToken: string,
   signal?: AbortSignal,
@@ -364,7 +371,7 @@ export async function exportAccountV9(
   const disposition = response.headers.get('Content-Disposition') ?? '';
   if (
     !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v9.json"'
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v10.json"'
   ) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
@@ -374,7 +381,7 @@ export async function exportAccountV9(
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 9,
+    schemaVersion: 10,
   };
 }
 

@@ -1,13 +1,13 @@
 # Steward automation
 
-Administrators can give these instructions to selected level-5 stewards. These controls have no user-station menu or help entry. They run on the configured **user host**, using the steward's own site CallerKey:
+Administrators can give these instructions to selected level-6 stewards. These controls have no user-station menu or help entry. They run on the configured **user host**, using the steward's own site CallerKey:
 
 ```http
 Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY
 Content-Type: application/json
 ```
 
-The caller must remain an active level-5 steward. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog.
+The caller must remain an active level-6 steward. Level-5 trainees cannot use these automation routes. Session cookies cannot replace the CallerKey. Revocation, rotation, bans, deletion and loss of steward permission are checked again before writes. These controls grant no authority over another donor's private endpoint, key or model catalog. This document describes current development source; the published rc.2 tag has not changed.
 
 Creation and model binding accept only POST without query parameters. Failure-policy reads use GET with the two specified IDs; edits use PATCH without query parameters. Other methods, suffixes and path variants are rejected. JSON rejects unknown and duplicate fields. Each request is limited to 256 KiB, 100 keys, 16 recurring rules per key and 16,384 total object fields; responses are limited to 64 KiB. All controls share a maximum of four concurrent requests, with one per steward and no queue. A busy control returns HTTP 429. Maintenance admission and the existing resource, credential, discovery and outbound protections still apply. These management operations do not consume model-call credits or charity usage quotas.
 
@@ -25,6 +25,7 @@ Provide a fresh, unpredictable `Idempotency-Key` containing 22–128 ASCII lette
     "note": "Optional private endpoint note"
   },
   "description": "Donation description",
+  "discord_public_thanks": false,
   "review_note": "Optional approval note",
   "keys": [
     {
@@ -49,7 +50,7 @@ Provide a fresh, unpredictable `Idempotency-Key` containing 22–128 ASCII lette
 }
 ```
 
-Required fields are `endpoint.connector_type`, `endpoint.base_url`, a nonblank `description`, and one or more `keys` with a nonempty `secret`. Connector type must explicitly be `openai-compatible`, `anthropic-compatible` or `ai-sdk-gateway-v3`. All sources use the custom-URL form; channel IDs and the browser forms' ownership-confirmation fields are not accepted. Submitting the operation creates and donates resources owned by the caller.
+Required fields are `endpoint.connector_type`, `endpoint.base_url`, a nonblank `description`, the explicit boolean `discord_public_thanks`, and one or more `keys` with a nonempty `secret`. The thanks choice records consent for manual Discord public thanks, has no default, and cannot change after submission. Connector type must explicitly be `openai-compatible`, `anthropic-compatible` or `ai-sdk-gateway-v3`. All sources use the custom-URL form; channel IDs and the browser forms' ownership-confirmation fields are not accepted. Submitting the operation creates and donates resources owned by the caller.
 
 The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 
@@ -62,6 +63,8 @@ The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 | `authorized_expires_at` | `null`, meaning permanent authorization; otherwise a future Unix second. |
 | `expires_at` | Omission inherits authorized expiry. A supplied value may shorten it. Explicit `null` requires permanent authorization. |
 | `price_limit`, `calls_limit`, `tokens_limit` | `null`, meaning no cumulative limit. Credits use canonical decimal strings with up to three fractional digits; calls and Tokens use canonical nonnegative integer strings. Zero is a real limit. |
+| `input_tokens_limit`, `output_tokens_limit` | `null`, meaning unlimited in that dimension; canonical nonnegative integer strings through `9223372036854775807`. All configured total/input/output limits apply together. |
+| `input_token_reserve`, `output_token_reserve` | Both nullable when no split limit is enabled. A split lifetime or recurring limit requires both canonical nonnegative integer strings; their sum must be 1–`9223372036854775807`. The sum supplies the total reservation. |
 | `token_reserve` | `0`; unknown-usage Token reserve, as a whole number through 2147483647. |
 | `charity_enabled` | `true`; the donation-key switch, separate from physical-key `enabled`. |
 | `failure_disable_threshold` | `"10"`; canonical unsigned 128-bit decimal string. `"0"` never disables this key for errors; failures are still counted. The maximum is `"340282366920938463463374607431768211455"`. |
@@ -70,7 +73,9 @@ The endpoint optionally accepts `note` and `enabled`. Each key accepts:
 
 Descriptions and approval notes are limited to 1,024 Unicode code points. Keys are limited to 64 KiB each, within the total request budget. Secrets must be valid UTF-8 without control characters. Optional scalar fields cannot be `null` unless the table explicitly permits it; boolean and numeric fields do not accept strings. Exact existing domain limits still apply.
 
-The server creates one new endpoint and all its keys, submits **one donation**, approves it as the caller, and saves all settings in a single transaction. The donation owner and recorded level-5 reviewer are that steward. All resources, encrypted secrets, review records, recurring rules and the replay receipt either commit together or roll back together. Duplicate secrets in one request are rejected. Independent new requests create new resources, even for an existing URL, subject to current resource limits and credential-review protections.
+Recurring `metric` also supports `input_tokens` and `output_tokens`. Input includes uncached input, cache writes and cache reads once each. When a validated usage result exists, settlement replaces reservations with actual normalized usage; otherwise split reservations supply the conservative amounts. A legacy total-only key may retain `token_reserve` without inventing input/output usage. These cumulative/recurring budgets are not a TPM limiter. Physical `max_rpm` and `max_concurrency` continue to cover personal and charity use of the same key.
+
+The server creates one new endpoint and all its keys, submits **one donation**, approves it as the caller, and saves all settings in a single transaction. The donation owner and recorded level-6 reviewer are that steward. All resources, encrypted secrets, review records, recurring rules and the replay receipt either commit together or roll back together. Duplicate secrets in one request are rejected. Independent new requests create new resources, even for an existing URL, subject to current resource limits and credential-review protections.
 
 Success is HTTP 201:
 
@@ -125,7 +130,7 @@ Unlike creation, this endpoint has no whole-request replay receipt and does not 
 }
 ```
 
-The result order always matches the input. At least one success gives HTTP 200. If none succeeds, the response is 504 when any item is incomplete, otherwise 422. Invalid whole requests return 400; a missing target model returns 404; entry authorization failures return 401 or 403. Per-item `discovery_failed` includes a safe authentication, rate-limit, timeout, protocol, transport or interruption reason; raw upstream diagnostics are never exposed. If authority is lost during processing, subsequent items fail without further upstream requests.
+The result order always matches the input. At least one success gives HTTP 200. If none succeeds, the response is 504 when any item is incomplete, otherwise 422. Invalid whole requests return 400; a missing target model returns 404; entry authorization failures return 401 or 403. Per-item `discovery_failed` includes a safe authentication, rate-limit, timeout, protocol, transport or interruption reason; raw upstream diagnostics are never exposed by this response. Restricted browser-session diagnostics follow the separate 30-day/1-MiB policy in the [API contract](api-contract.md#11-restricted-diagnostics-and-manual-risk-auditing). If authority is lost during processing, subsequent items fail without further upstream requests.
 
 ## Read or edit one donation key's failure policy
 
@@ -166,4 +171,4 @@ Saving keeps the count and generation, immediately sets error-disablement when a
 
 PATCH uses the same 24-hour idempotency rules as creation, with a 30-second operation limit. Repeating the original key and body returns the original policy snapshot without another revision, audit or alert. Current permission and visibility are checked before replay. A stale revision or a reused key with a different request returns 409; re-read after a definite revision conflict and use a new key for the newly intended edit. An unknown result must first be resolved by retrying the original request. Invalid input returns 400, missing or no-longer-visible records 404, oversized input 413, and authentication or authority failures 401/403. Capacity and maintenance failures follow the shared controls.
 
-Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion, anonymization and retention rules apply; no new category of persisted request content is introduced.
+Creation, discovery and policy edits use existing account, donation, catalog, quota, review and replay records. Safe exports include the threshold. Policy audits contain no key secrets; alerts occur once per transition into error-disablement. Existing account export, deletion and anonymization rules apply. Discovery failures may also enter the restricted original-error store, which can contain content echoed by an upstream and is not part of an automation response or personal export.

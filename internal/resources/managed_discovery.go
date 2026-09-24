@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 )
 
 const (
@@ -29,16 +31,16 @@ func (ctx discoveryIdentityContext) Value(key any) any { return ctx.identity.Val
 
 func (r *Repository) RefreshManagedDiscovery(ctx context.Context, role string, actorID, donationID, donationKeyID int64, mutation ControlMutation) (MutationResult[DiscoveryAccepted], error) {
 	if r == nil || ctx == nil || isNilInterface(r.managedDiscovery) || actorID <= 0 || donationID <= 0 || donationKeyID <= 0 ||
-		(role != "admin" && role != "level5") || mutation.Method != http.MethodPost || mutation.Query != "" ||
+		(role != "admin" && role != "level6") || mutation.Method != http.MethodPost || mutation.Query != charityscope.Query(ctx) ||
 		!mutationPathIDs(mutation, donationID, donationKeyID) ||
-		(role == "admin" && mutation.Route != routeAdminDiscovery) || (role == "level5" && mutation.Route != routeStewardDiscovery) {
+		(role == "admin" && mutation.Route != routeAdminDiscovery) || (role == "level6" && mutation.Route != routeStewardDiscovery) {
 		return MutationResult[DiscoveryAccepted]{}, ErrInvalidRequest
 	}
 	return r.startDiscovery(ctx, actorID, 0, 0, mutation, false, &managedDiscoveryRequest{role: role, donationID: donationID, keyID: donationKeyID})
 }
 
 func (r *Repository) ManagedDiscoveryEvidence(ctx context.Context, role string, actorID, donationID, donationKeyID int64) (DiscoveryEvidence, error) {
-	if r == nil || ctx == nil || isNilInterface(r.managedDiscovery) || actorID <= 0 || donationID <= 0 || donationKeyID <= 0 || (role != "admin" && role != "level5") {
+	if r == nil || ctx == nil || isNilInterface(r.managedDiscovery) || actorID <= 0 || donationID <= 0 || donationKeyID <= 0 || (role != "admin" && role != "level6") {
 		return DiscoveryEvidence{}, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -73,7 +75,7 @@ func RegisterManagedDiscoveryRoutes(users UserRouteRegistrar, admins AdminRouteR
 	}
 	for _, route := range []struct{ method, path string }{{http.MethodPost, routeStewardDiscovery}, {http.MethodGet, routeStewardDiscoveryEvidence}} {
 		if err := users.RegisterUserRoute(route.method, route.path, func(w http.ResponseWriter, req *http.Request, principal UserPrincipal) {
-			api.managedDiscoveryHTTP(w, req, "level5", principal.UserID)
+			api.managedDiscoveryHTTP(w, req, "level6", principal.UserID)
 		}); err != nil {
 			return err
 		}
@@ -82,6 +84,12 @@ func RegisterManagedDiscoveryRoutes(users UserRouteRegistrar, admins AdminRouteR
 }
 
 func (api *httpAPI) managedDiscoveryHTTP(w http.ResponseWriter, req *http.Request, role string, actorID int64) {
+	selected, err := charityscope.SelectRequest(req)
+	if err != nil {
+		writeResourceError(w, ErrInvalidRequest)
+		return
+	}
+	req = selected
 	donationID, ok := parsePathID(w, req, "id")
 	if !ok {
 		return
@@ -104,13 +112,14 @@ func (api *httpAPI) managedDiscoveryHTTP(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	route := routeAdminDiscovery
-	if role == "level5" {
+	if role == "level6" {
 		route = routeStewardDiscovery
 	}
 	mutation, ok := noBodyMutation(w, req, route, donationID, keyID)
 	if !ok {
 		return
 	}
+	mutation.Query = charityscope.Query(req.Context())
 	result, err := api.repository.RefreshManagedDiscovery(req.Context(), role, actorID, donationID, keyID, mutation)
 	if err != nil {
 		writeResourceError(w, err)

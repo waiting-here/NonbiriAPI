@@ -110,7 +110,7 @@ func TestHTTPHandlerSecurityHeaders(t *testing.T) {
 			}
 		}
 		csp := rec.Header().Get("Content-Security-Policy")
-		if !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "script-src 'self'") {
+		if !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "script-src 'self';") || !strings.Contains(csp, "img-src 'self' data: blob: https:;") || !strings.Contains(csp, "connect-src 'self';") {
 			t.Errorf("%s CSP=%q", tc.path, csp)
 		}
 	}

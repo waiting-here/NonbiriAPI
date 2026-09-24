@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -104,6 +104,116 @@ afterEach(() => {
 });
 
 describe('credit history numbered page controls', () => {
+  it.each(['en', 'zh'] as const)(
+    'shows four independent assets and filters activity entries in %s',
+    async (locale) => {
+      const requests: string[] = [];
+      const exchange = entry(601, 'activity_exchange', '-2000');
+      const paper = { ...exchange, asset_type: 'sketch_paper', line: 2, delta: '2' };
+      const reserve = { ...entry(602, 'image_reserve', '-3'), asset_type: 'sketch_brush' };
+      const refund = { ...entry(603, 'image_refund', '3'), asset_type: 'sketch_brush' };
+      const decay = entry(604, 'inactivity_decay', '-0.125');
+      const game = { ...entry(605, 'checkin_award', '0.007'), asset_type: 'game' };
+      const all = [exchange, paper, reserve, refund, decay, game];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL | Request) => {
+          const path = requestPath(input);
+          requests.push(path);
+          if (path === '/api/time-zones')
+            return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+          if (path === '/api/credits/history?asset_type=all&page=1&page_size=20')
+            return jsonResponse(historyPage(all, '1', 20, all.length));
+          if (
+            path ===
+            '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book'
+          )
+            return jsonResponse(historyPage([paper], '1', 20, 1));
+          if (
+            path ===
+            '/api/credits/history?asset_type=sketch_brush&page=1&page_size=20&category=picture_book'
+          )
+            return jsonResponse(historyPage([reserve, refund], '1', 20, 2));
+          throw new Error(`Unexpected request: ${path}`);
+        }),
+      );
+      const view = await renderWithProviders(<CreditsPage />, {
+        station: 'user',
+        role: 'user',
+        locale,
+        route: '/credits',
+      });
+      const table = within(await screen.findByRole('table'));
+      const labels =
+        locale === 'zh'
+          ? {
+              general: '通用积分',
+              game: '游戏积分',
+              paper: '草稿纸',
+              brush: '画笔',
+              exchange: '活动币兑换',
+              reserve: '图像生成：预扣',
+              refund: '图像生成：退款',
+              decay: '低活跃积分衰减',
+              asset: '积分类型',
+              category: '变化原因',
+              apply: '筛选',
+            }
+          : {
+              general: 'General credits',
+              game: 'Game credits',
+              paper: 'Sketch paper',
+              brush: 'Paint brushes',
+              exchange: 'Activity currency exchange',
+              reserve: 'Image generation: funds reserved',
+              refund: 'Image generation: refund',
+              decay: 'Inactivity credit decay',
+              asset: 'Credit type',
+              category: 'Reason',
+              apply: 'Apply filters',
+            };
+      for (const [delta, asset, reason] of [
+        ['-2000', labels.general, labels.exchange],
+        ['+2', labels.paper, labels.exchange],
+        ['-3', labels.brush, labels.reserve],
+        ['+3', labels.brush, labels.refund],
+        ['-0.125', labels.general, labels.decay],
+        ['+0.007', labels.game, locale === 'zh' ? '签到奖励' : 'Check-in reward'],
+      ]) {
+        const row = table.getByText(delta).closest('tr')!;
+        expect(within(row).getByText(asset)).toBeVisible();
+        expect(within(row).getByText(reason)).toBeVisible();
+      }
+      const assets = screen.getByRole('combobox', { name: labels.asset });
+      expect(Array.from(assets.querySelectorAll('option')).map((option) => option.value)).toEqual([
+        'general',
+        'game',
+        'sketch_paper',
+        'sketch_brush',
+        'all',
+      ]);
+      await view.user.selectOptions(assets, 'sketch_paper');
+      await view.user.selectOptions(
+        screen.getByRole('combobox', { name: labels.category }),
+        'picture_book',
+      );
+      await view.user.click(screen.getByRole('button', { name: labels.apply }));
+      await waitFor(() => expect(table.queryByText('-2000')).not.toBeInTheDocument());
+      expect(table.getByText('+2')).toBeVisible();
+      await view.user.selectOptions(assets, 'sketch_brush');
+      await view.user.click(screen.getByRole('button', { name: labels.apply }));
+      await waitFor(() => expect(table.queryByText('+2')).not.toBeInTheDocument());
+      expect(table.getByText('-3')).toBeVisible();
+      expect(table.getByText('+3')).toBeVisible();
+      expect(requests).toContain(
+        '/api/credits/history?asset_type=sketch_paper&page=1&page_size=20&category=picture_book',
+      );
+      expect(requests).toContain(
+        '/api/credits/history?asset_type=sketch_brush&page=1&page_size=20&category=picture_book',
+      );
+    },
+  );
+
   it('shows both asset lines and resets the page and anchor when the asset changes', async () => {
     const requests: string[] = [];
     const general = entry(501, 'rps_queue_reserve', '-1');

@@ -16,7 +16,8 @@ var generationTwoWithoutBlackjackSchema = duelBootstrapSchema(generationTwoWitho
 var generationTwoWithoutRandomnessSchema = blackjackBootstrapSchema(generationTwoWithoutBlackjackSchema)
 var generationTwoWithoutGatewaySchema = generationTwoWithoutRandomnessSchema + gameRandomnessSchema
 var generationTwoWithoutProgressionSchema = gatewayBootstrapSchema(generationTwoWithoutGatewaySchema)
-var generationTwoSchema = progressionBootstrapSchema(generationTwoWithoutProgressionSchema)
+var generationTwoWithoutGovernanceSchema = progressionBootstrapSchema(generationTwoWithoutProgressionSchema)
+var generationTwoSchema = governanceBootstrapSchema(generationTwoWithoutGovernanceSchema)
 
 // Steward reads use their own audit so account deletion can remove the actor
 // link without changing immutable administrator audit identities.

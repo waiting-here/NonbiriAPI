@@ -27,7 +27,7 @@ export type CatalogAvailability =
   'feature_disabled' | 'model_disabled' | 'level_denied' | 'no_usable_key' | 'available';
 
 export type CatalogAccessFilter = 'all' | 'true' | 'false';
-export type CatalogLevelFilter = 'all' | '1' | '2' | '3' | '4' | '5';
+export type CatalogLevelFilter = 'all' | '1' | '2' | '3' | '4' | '5' | '6';
 export type CatalogAvailabilityFilter = CatalogAccessFilter;
 
 export interface CharityCatalogUrlFilters {
@@ -146,7 +146,7 @@ function catalogAccess(value: CatalogAccessFilter): CatalogAccessFilter {
 }
 
 function catalogLevel(value: CatalogLevelFilter): CatalogLevelFilter {
-  if (value !== 'all' && !/^[1-5]$/.test(value)) {
+  if (value !== 'all' && !/^[1-6]$/.test(value)) {
     invalidRequest('catalog allowed level filter');
   }
   return value;
@@ -212,7 +212,7 @@ function readCatalogLevelParam(params: URLSearchParams): {
       needsNormalization: single.needsNormalization,
     };
   }
-  if (single.value === 'all' || /^[1-5]$/.test(single.value)) {
+  if (single.value === 'all' || /^[1-6]$/.test(single.value)) {
     return {
       value: single.value as CatalogLevelFilter,
       needsNormalization: single.needsNormalization,
@@ -335,8 +335,8 @@ function normalizePublicDescription(value: unknown): string {
 }
 
 function normalizeAllowedLevels(value: unknown): number[] {
-  const raw = array(value, 'charity catalog allowed levels', 5);
-  const levels = raw.map((entry) => integer(entry, 'charity catalog allowed level', 1, 5));
+  const raw = array(value, 'charity catalog allowed levels', 6);
+  const levels = raw.map((entry) => integer(entry, 'charity catalog allowed level', 1, 6));
   for (let index = 1; index < levels.length; index += 1) {
     if (levels[index] <= levels[index - 1]) invalidResponse('charity catalog allowed levels');
   }
@@ -344,24 +344,21 @@ function normalizeAllowedLevels(value: unknown): number[] {
 }
 
 export function normalizeCatalogModel(value: unknown): CatalogModel {
-  const root = record(
-    value,
-    [
-      'id',
-      'provider',
-      'model',
-      'full_name',
-      'pricing',
-      'discount',
-      'public_description',
-      'enabled',
-      'allowed_levels',
-      'level_allowed',
-      'currently_available',
-      'availability',
-    ],
-    'charity catalog model',
-  );
+  const required = [
+    'id',
+    'provider',
+    'model',
+    'full_name',
+    'pricing',
+    'discount',
+    'public_description',
+    'enabled',
+    'allowed_levels',
+    'level_allowed',
+    'currently_available',
+    'availability',
+  ];
+  const root = record(value, [...required, 'recent_success'], 'charity catalog model', required);
   const capability = normalizeCharityCapabilityModel({
     id: root.id,
     provider: root.provider,
@@ -369,6 +366,7 @@ export function normalizeCatalogModel(value: unknown): CatalogModel {
     full_name: root.full_name,
     pricing: root.pricing,
     discount: root.discount,
+    ...(root.recent_success !== undefined ? { recent_success: root.recent_success } : {}),
   });
   const enabled = boolean(root.enabled, 'charity catalog enabled');
   const allowedLevels = normalizeAllowedLevels(root.allowed_levels);

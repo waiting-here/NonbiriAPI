@@ -55,7 +55,7 @@ func TestStewardAutomationFailurePolicyAuthorityAndReplay(t *testing.T) {
 		args  []any
 	}{
 		{"UPDATE users SET level=4 WHERE id=?", []any{f.userID}},
-		{"UPDATE users SET level=5,is_banned=1 WHERE id=?", []any{f.userID}},
+		{"UPDATE users SET level=6,is_banned=1 WHERE id=?", []any{f.userID}},
 		{"UPDATE users SET is_banned=0 WHERE id=?", []any{f.userID}},
 	} {
 		f.exec(t, blocked.query, blocked.args...)

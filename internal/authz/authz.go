@@ -63,10 +63,11 @@ const (
 	RoleUser Role = iota + 1
 	RoleSteward
 	RoleAdministrator
+	RoleTrainee
 )
 
 func (role Role) valid() bool {
-	return role == RoleUser || role == RoleSteward || role == RoleAdministrator
+	return role == RoleUser || role == RoleSteward || role == RoleAdministrator || role == RoleTrainee
 }
 
 // OwnershipResult deliberately makes a foreign resource indistinguishable
@@ -192,7 +193,7 @@ WHERE s.token_hash=? AND s.user_id=?
 	if manualLevel.Valid {
 		effectiveLevel = manualLevel.Int64
 	}
-	if effectiveLevel < 1 || effectiveLevel > 5 || autoLevel < 1 || autoLevel > 4 {
+	if effectiveLevel < 1 || effectiveLevel > 6 || autoLevel < 1 || autoLevel > 4 {
 		return Principal{}, fmt.Errorf("authorize final transaction: invalid live level state")
 	}
 
@@ -202,6 +203,10 @@ WHERE s.token_hash=? AND s.user_id=?
 			return Principal{}, ErrForbidden
 		}
 	case RoleSteward:
+		if actor.Kind != ActorUserSession || isAdmin != 0 || effectiveLevel != 6 {
+			return Principal{}, ErrForbidden
+		}
+	case RoleTrainee:
 		if actor.Kind != ActorUserSession || isAdmin != 0 || effectiveLevel != 5 {
 			return Principal{}, ErrForbidden
 		}

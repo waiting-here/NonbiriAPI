@@ -88,6 +88,11 @@ VALUES(?,?,?,?,'terminal',1,'failed',?,?,'none',0,'user',?,?,?,?,?,?,?)`, fact.I
 VALUES(?,?,?,?,'failed',?,?,?,?,?,?,?,?,?,?)`, fact.ID, user, model, route, fact.Status, fact.Code, fact.Status, fact.Code, at, at, fact.Stage, fact.Reason, fact.Method, fact.Path); err != nil {
 		return err
 	}
+	if s.observations != nil {
+		if err := s.observations.RecordSourceTx(ctx, tx, fact.ID, user, requestattempt.Kind(ctx), at); err != nil {
+			return err
+		}
+	}
 	return addRequestUsageTx(ctx, tx, fact.ID, &user, at)
 }
 

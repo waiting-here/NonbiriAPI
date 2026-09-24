@@ -389,7 +389,9 @@ export function AccountLifecyclePanel({
     if (
       intent &&
       token &&
-      (intent === 'export' ? adapter.capabilities.exportV9 : adapter.capabilities.deleteAccount)
+      (intent === 'export'
+        ? adapter.capabilities.exportAccount
+        : adapter.capabilities.deleteAccount)
     ) {
       tokenRef.current = token;
       dispatch({ type: 'confirm', accountId, intent });
@@ -517,7 +519,7 @@ export function AccountLifecyclePanel({
     try {
       const attachment =
         intent === 'export'
-          ? await adapter.exportV9({ accountId, elevatedToken })
+          ? await adapter.exportAccount({ accountId, elevatedToken })
           : await adapter
               .deleteAccount({ accountId, elevatedToken, confirmation: 'DELETE' })
               .then(() => null);
@@ -588,7 +590,7 @@ export function AccountLifecyclePanel({
           <h2>{t('account.exportTitle')}</h2>
         </div>
         <p>{t('account.exportBody')}</p>
-        {!adapter.capabilities.exportV9 ? (
+        {!adapter.capabilities.exportAccount ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
         {state.intent === 'export' && state.status === 'error' ? (
@@ -602,7 +604,7 @@ export function AccountLifecyclePanel({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!adapter.capabilities.exportV9 || busy}
+            disabled={!adapter.capabilities.exportAccount || busy}
             onClick={() => void begin('export')}
           >
             {state.intent === 'export' && state.status === 'elevating'

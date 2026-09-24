@@ -3,6 +3,7 @@ import { productionAccountLifecycleAdapter } from '../features/core/adapters';
 import { CoreUserGate } from '../features/core/components';
 import '../features/core/core.css';
 import { AutomaticRestrictions } from '@shared/components/AutomaticRestrictions';
+import { InactivityStatus } from '@shared/inactivity/InactivityStatus';
 
 export function AccountPage() {
   return (
@@ -18,6 +19,7 @@ export function AccountPage() {
             user={user}
             lifecycleAdapter={productionAccountLifecycleAdapter}
           />
+          <InactivityStatus key={`${user.id}-activity`} accountId={user.id} />
         </>
       )}
     </CoreUserGate>

@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type enqueueBody struct {
@@ -133,6 +134,9 @@ func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult,
 	if err != nil {
 		return MutationResult{}, err
 	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: in.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return MutationResult{}, err
+	}
 	result, err := finish(ctx, tx, d, 201, QueueReceipt{e.ID, strconv.FormatInt(position, 10), e.State})
 	if err == nil {
 		s.publish(ctx, facts)
@@ -179,6 +183,9 @@ func (s *Service) Leave(ctx context.Context, identity Identity, key, id string) 
 			return s.finishConflict(ctx, tx, d, facts)
 		}
 		if err := s.releaseEntry(ctx, tx, e, now); err != nil {
+			return MutationResult{}, err
+		}
+		if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: identity.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
 			return MutationResult{}, err
 		}
 		facts.AccountIDs = append(facts.AccountIDs, identity.UserID)
@@ -269,6 +276,9 @@ func (s *Service) Act(ctx context.Context, in ActionInput) (MutationResult, erro
 	if _, err := tx.ExecContext(ctx, `UPDATE game_blackjack_entries SET pending_json=?,pending_batch=? WHERE id=? AND pending_json IS NULL AND state='playing'`, string(body), now+1, e.ID); err != nil {
 		return MutationResult{}, err
 	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: in.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
+		return MutationResult{}, err
+	}
 	result, err := finish(ctx, tx, d, 202, ActionReceipt{v.ID, now + 1, in.Hand, in.Revision})
 	if err == nil {
 		s.publish(ctx, facts)
@@ -313,6 +323,9 @@ func (s *Service) Emote(ctx context.Context, identity Identity, key, id, emote s
 		return MutationResult{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE game_blackjack_entries SET emote=?,emote_at=? WHERE id=?`, emote, now, e.ID); err != nil {
+		return MutationResult{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: identity.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
 		return MutationResult{}, err
 	}
 	return finish(ctx, tx, d, 204, nil)

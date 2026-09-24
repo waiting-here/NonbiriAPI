@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -107,7 +108,7 @@ func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewe
 	if role == reviewerSteward {
 		route, actorKind = routeStewardFailurePolicy, string(role)
 	}
-	if ctx == nil || expected <= 0 || !validMutation(mutation, http.MethodPatch, route, donationID, keyID) {
+	if ctx == nil || expected <= 0 || !validScopedMutation(ctx, mutation, http.MethodPatch, route, donationID, keyID) {
 		return empty, ErrInvalidRequest
 	}
 	if _, err := db.ParseU128Decimal(threshold); err != nil {
@@ -115,10 +116,14 @@ func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewe
 	}
 	var tx *sql.Tx
 	var err error
+	var scope charityscope.Scope
+	auditRole := string(role)
 	if role == "" {
 		tx, err = s.beginOwnerTx(ctx, actorID)
 	} else {
-		tx, actorID, err = s.beginRoleTx(ctx, role, actorID)
+		tx, scope, err = s.beginScopedTx(ctx, role, actorID, false)
+		actorID, actorKind = scope.ActorID, scope.AuditRole(role == reviewerAdmin)
+		auditRole = actorKind
 	}
 	if err != nil {
 		return empty, err
@@ -141,6 +146,11 @@ func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewe
 	} else if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
 		return empty, err
 	}
+	if role != "" {
+		if err := scope.RequireKey(ctx, tx, donationID, keyID, now, false); err != nil {
+			return empty, scopeError(err)
+		}
+	}
 	if _, err := readFailurePolicyTx(ctx, tx, donationID, keyID); err != nil {
 		return empty, err
 	}
@@ -151,7 +161,7 @@ func (s *Service) failurePolicy(ctx context.Context, actorID int64, role reviewe
 	if decision.Kind == idempotency.Replay {
 		return replay[FailurePolicy](decision)
 	}
-	value, err := updateFailurePolicyTx(ctx, tx, actorID, string(role), donationID, keyID, expected, threshold, now)
+	value, err := updateFailurePolicyTx(ctx, tx, actorID, auditRole, donationID, keyID, expected, threshold, now)
 	if err != nil {
 		return empty, err
 	}

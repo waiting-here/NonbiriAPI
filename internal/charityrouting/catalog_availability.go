@@ -41,7 +41,7 @@ func catalogAvailableBindingSQL(bindingID string) string {
  AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>=nbi_u128(` + price + `)
  AND nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))>=nbi_u128(1)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
- AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(dk.token_reserve)
+ AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(` + donationquota.EffectiveTokenReserveSQL("dk.id", "dk.token_reserve") + `)
  AND ` + donationquota.AvailabilityPredicate("dk.id", "cx.decision_now", price, "dk.token_reserve") + `
  ` + scope + `
 	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) BETWEEN 1 AND ` + strconv.Itoa(MaxRuntimeCandidates) + ` ELSE 0 END)`

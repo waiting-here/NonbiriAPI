@@ -83,7 +83,7 @@ func CreateRPSQueueAccount(ctx context.Context, tx *sql.Tx, queueID string, at i
 }
 
 func CreateRPSQueueAssetAccount(ctx context.Context, tx *sql.Tx, queueID string, asset Asset, at int64) (Account, error) {
-	if !db.ValidateOpaqueID(queueID, "rpsq_") {
+	if !db.ValidateOpaqueID(queueID, "rpsq_") || !asset.credit() {
 		return Account{}, ErrInvalidPlan
 	}
 	return createCodedAccount(ctx, tx, AccountPlatform, "rps-queue:"+queueID, asset, at)
@@ -96,28 +96,28 @@ func CreateRPSSessionAccount(ctx context.Context, tx *sql.Tx, sessionID string, 
 }
 
 func CreateRPSSessionAssetAccount(ctx context.Context, tx *sql.Tx, sessionID string, asset Asset, at int64) (Account, error) {
-	if !db.ValidateOpaqueID(sessionID, "rps_") {
+	if !db.ValidateOpaqueID(sessionID, "rps_") || !asset.credit() {
 		return Account{}, ErrInvalidPlan
 	}
 	return createCodedAccount(ctx, tx, AccountPlatform, "rps-session:"+sessionID, asset, at)
 }
 
 func CreateDuelQueueAssetAccount(ctx context.Context, tx *sql.Tx, queueID string, asset Asset, at int64) (Account, error) {
-	if duelIDGame(queueID, true) == "" {
+	if duelIDGame(queueID, true) == "" || !asset.credit() {
 		return Account{}, ErrInvalidPlan
 	}
 	return createCodedAccount(ctx, tx, AccountPlatform, "duel-queue:"+queueID, asset, at)
 }
 
 func CreateBlackjackPaymentAccount(ctx context.Context, tx *sql.Tx, paymentID string, asset Asset, at int64) (Account, error) {
-	if !db.ValidateOpaqueID(paymentID, "bjp_") {
+	if !db.ValidateOpaqueID(paymentID, "bjp_") || !asset.credit() {
 		return Account{}, ErrInvalidPlan
 	}
 	return createCodedAccount(ctx, tx, AccountPlatform, "blackjack-payment:"+paymentID, asset, at)
 }
 
 func CreateDuelSessionAssetAccount(ctx context.Context, tx *sql.Tx, sessionID string, asset Asset, at int64) (Account, error) {
-	if duelIDGame(sessionID, false) == "" {
+	if duelIDGame(sessionID, false) == "" || !asset.credit() {
 		return Account{}, ErrInvalidPlan
 	}
 	return createCodedAccount(ctx, tx, AccountPlatform, "duel-session:"+sessionID, asset, at)
@@ -179,8 +179,11 @@ func CodedAssetAccount(ctx context.Context, tx *sql.Tx, code string, asset Asset
 	if !asset.valid() || asset == Game && (code == "forward_reserve" || code == "charity_reserve") {
 		return Account{}, ErrNotFound
 	}
+	if asset.IsActivity() && code != "external" && code != "image_activity_reserve" || !asset.IsActivity() && code == "image_activity_reserve" {
+		return Account{}, ErrNotFound
+	}
 	switch code {
-	case "platform", "external", "forward_reserve", "charity_reserve", "game_fishing_reserve":
+	case "platform", "external", "forward_reserve", "charity_reserve", "game_fishing_reserve", "image_activity_reserve":
 	default:
 		return Account{}, ErrNotFound
 	}
@@ -239,7 +242,7 @@ FROM credit_accounts WHERE id=?`, accountID).Scan(&kind, &user, &code, &asset, &
 		return Account{}, ErrInvariant
 	}
 	balance, err := amountFromParts(sign, mag)
-	if err != nil || (accountKind == AccountPool || accountKind == AccountPlatform) && balance.Sign() < 0 {
+	if err != nil || !validAssetAmount(asset, balance) || (accountKind == AccountPool || accountKind == AccountPlatform) && balance.Sign() < 0 {
 		return Account{}, ErrInvariant
 	}
 	account := Account{ID: accountID, Kind: accountKind, Asset: asset, Balance: balance, CreatedAt: createdAt, UpdatedAt: updatedAt}

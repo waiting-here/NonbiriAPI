@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -30,10 +31,11 @@ var (
 )
 
 type ServiceOptions struct {
-	Authorizer *authz.Authorizer
-	Gate       *Gate
-	Registry   *Registry
-	Now        func() time.Time
+	Authorizer      *authz.Authorizer
+	Gate            *Gate
+	Registry        *Registry
+	Now             func() time.Time
+	PrepareEnableTx func(context.Context, *sql.Tx, int64) (func(bool), error)
 }
 
 // AuthorizeChatAcceptance is the transaction-local final gate used by the
@@ -62,10 +64,11 @@ WHERE m.id=1`).Scan(&enabled, &mirror); err != nil {
 }
 
 type Service struct {
-	authorizer *authz.Authorizer
-	gate       *Gate
-	registry   *Registry
-	now        func() time.Time
+	authorizer    *authz.Authorizer
+	gate          *Gate
+	registry      *Registry
+	now           func() time.Time
+	prepareEnable func(context.Context, *sql.Tx, int64) (func(bool), error)
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -76,7 +79,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{authorizer: options.Authorizer, gate: options.Gate, registry: options.Registry, now: now}, nil
+	return &Service{authorizer: options.Authorizer, gate: options.Gate, registry: options.Registry, now: now, prepareEnable: options.PrepareEnableTx}, nil
 }
 
 // PrepareListener validates the committed singleton, freezes the continuation
@@ -102,8 +105,22 @@ func (service *Service) PrepareListener(ctx context.Context, database *sql.DB) (
 // Transition is a database mutation result awaiting caller-owned commit.
 // ObserveAfterCommit must be called only after tx.Commit succeeds.
 type Transition struct {
-	gate  *Gate
-	state State
+	gate      *Gate
+	state     State
+	finalizer *transitionFinalizer
+}
+
+type transitionFinalizer struct {
+	once   sync.Once
+	finish func(bool)
+}
+
+// Finalize publishes or discards prepared memory changes exactly once. The
+// transaction owner calls it after commit and defers the rollback alternative.
+func (transition Transition) Finalize(committed bool) {
+	if f := transition.finalizer; f != nil {
+		f.once.Do(func() { f.finish(committed) })
+	}
 }
 
 func (transition Transition) State() State { return transition.state }
@@ -122,6 +139,7 @@ func (transition Transition) ObserveAfterCommit(ctx context.Context, database *s
 	if committed.Revision == transition.state.Revision && committed != transition.state {
 		return ErrInvariant
 	}
+	transition.Finalize(true)
 	return transition.gate.observeCommitted(committed)
 }
 
@@ -248,9 +266,23 @@ VALUES('maintenance_enabled',?,?,?,?,0)`,
 	if err := mirrorMaintenanceConfig(ctx, tx, true, now); err != nil {
 		return Transition{}, err
 	}
+	var finalizer *transitionFinalizer
+	if service.prepareEnable != nil {
+		finish, err := service.prepareEnable(ctx, tx, now)
+		if err != nil {
+			if finish != nil {
+				finish(false)
+			}
+			return Transition{}, err
+		}
+		if finish == nil {
+			return Transition{}, ErrInvariant
+		}
+		finalizer = &transitionFinalizer{finish: finish}
+	}
 	return Transition{gate: service.gate, state: State{
 		Enabled: true, Revision: command.ExpectedRevision + 1, ChangedAt: now, CurrentEventID: command.OperationID,
-	}}, nil
+	}, finalizer: finalizer}, nil
 }
 
 // DisableTx is administrator-only. It resolves the open enable event and its

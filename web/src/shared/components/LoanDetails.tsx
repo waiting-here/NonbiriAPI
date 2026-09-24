@@ -15,9 +15,22 @@ import { ErrorState, LoadingState } from './States';
 import { useLoanText } from './loanCopy';
 import './loan.css';
 
-export function LoanFacts({ loan }: { loan: LoanQuote | LoanReceipt }) {
+export function LoanFacts({
+  loan,
+  projection,
+}: {
+  loan: LoanQuote | LoanReceipt;
+  projection: 'owner' | 'management';
+}) {
   const text = useLoanText();
-  const fields = [
+  const ownerFields = [
+    [text('本金', 'Principal'), loan.nominal],
+    [text('手续费', 'Fee'), loan.fee],
+    [text('游戏积分实到', 'Game credits received'), loan.disbursed],
+    [text('利息', 'Interest'), loan.interest],
+    [text('通用积分扣减', 'General credits deducted'), loan.repayment],
+  ];
+  const managementFields = [
     [text('名义借款', 'Nominal loan'), loan.nominal],
     [text('游戏积分到账', 'Game credits received'), loan.disbursed],
     [text('手续费', 'Fee'), loan.fee],
@@ -37,6 +50,7 @@ export function LoanFacts({ loan }: { loan: LoanQuote | LoanReceipt }) {
       `${loan.game_before} → ${loan.game_after}`,
     ],
   ];
+  const fields = projection === 'owner' ? ownerFields : managementFields;
   return (
     <dl className="loan-facts">
       {fields.map(([label, value]) => (
@@ -146,25 +160,27 @@ function LoanHistoryContent({
             query.data.data.map((loan) => (
               <article className="loan-record" key={loan.loan_id}>
                 <h3>{formatDateTime(loan.created_at)}</h3>
-                <LoanFacts loan={loan} />
-                <dl className="loan-facts">
-                  <div>
-                    <dt>{text('借款编号', 'Loan ID')}</dt>
-                    <dd>{loan.loan_id}</dd>
-                  </div>
-                  <div>
-                    <dt>{text('账务流水编号', 'Ledger operation')}</dt>
-                    <dd>{loan.operation_id}</dd>
-                  </div>
-                  <div>
-                    <dt>{text('流水序号', 'Sequence')}</dt>
-                    <dd>{loan.sequence}</dd>
-                  </div>
-                  <div>
-                    <dt>{text('配置版本', 'Configuration revision')}</dt>
-                    <dd>{loan.config_revision}</dd>
-                  </div>
-                </dl>
+                <LoanFacts loan={loan} projection={role === 'owner' ? 'owner' : 'management'} />
+                {role !== 'owner' ? (
+                  <dl className="loan-facts">
+                    <div>
+                      <dt>{text('借款编号', 'Loan ID')}</dt>
+                      <dd>{loan.loan_id}</dd>
+                    </div>
+                    <div>
+                      <dt>{text('账务流水编号', 'Ledger operation')}</dt>
+                      <dd>{loan.operation_id}</dd>
+                    </div>
+                    <div>
+                      <dt>{text('流水序号', 'Sequence')}</dt>
+                      <dd>{loan.sequence}</dd>
+                    </div>
+                    <div>
+                      <dt>{text('配置版本', 'Configuration revision')}</dt>
+                      <dd>{loan.config_revision}</dd>
+                    </div>
+                  </dl>
+                ) : null}
               </article>
             ))
           )}

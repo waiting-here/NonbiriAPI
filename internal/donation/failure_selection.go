@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -16,11 +17,12 @@ const failureSelectionScope = "donation-failure-reset-selection"
 const failureSelectionLifetime = 3600
 
 type failureSelection struct {
-	View       string
-	DonationID int64
-	SourceKey  string
-	Management ManagementFilter
-	Source     SourceFilter
+	scopeModelID int64
+	View         string
+	DonationID   int64
+	SourceKey    string
+	Management   ManagementFilter
+	Source       SourceFilter
 }
 type FailureResetSelection struct {
 	Items      []FailureResetRef `json:"items"`
@@ -31,11 +33,16 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 	var empty FailureResetSelection
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, actorID, err := s.beginBrowseActorTx(ctx, role, userID)
+	tx, scope, err := s.beginScopedTx(ctx, role, userID, true)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	actorID := scope.ActorID
+	if scope.Trainee {
+		selection.scopeModelID = scope.ModelID
+		selection.Source.traineeModelID = scope.ModelID
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return empty, err
@@ -53,7 +60,10 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 	if err != nil {
 		return empty, err
 	}
-	owner := fmt.Sprintf("%s:%d:%x", role, actorID, sha256.Sum256(canonical))
+	owner, err := scope.CursorOwner(ctx, s.roleAuth, fmt.Sprintf("%s:%x", role, sha256.Sum256(canonical)))
+	if err != nil {
+		return empty, scopeError(err)
+	}
 	started, maximum, after := now, int64(0), int64(0)
 	if token == "" {
 		err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM donation_keys`).Scan(&maximum)
@@ -80,7 +90,7 @@ func (s *Service) selectFailureReset(ctx context.Context, role reviewerRole, use
 		if err != nil {
 			return empty, err
 		}
-		if !visible {
+		if !visible && !scope.Trainee {
 			visible, err = s.managementHeldRead(ctx, tx, role, actorID, selection.DonationID, now)
 			if err != nil {
 				return empty, err
@@ -149,6 +159,10 @@ func failureSelectionSQL(selection failureSelection, now int64, ids []int64) (st
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		args[i] = id
+	}
+	if selection.scopeModelID > 0 {
+		query += ` AND ` + charityscope.KeyPredicate()
+		args = append(args, selection.scopeModelID, now)
 	}
 	if selection.View == "donation_keys" {
 		query += ` AND d.id=?`

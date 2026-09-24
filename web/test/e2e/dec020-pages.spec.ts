@@ -736,11 +736,15 @@ test.describe('donation expiry in UTC', () => {
     await composer
       .getByRole('textbox', { name: 'Donation description' })
       .fill('Per-key expiry fixture');
+    await composer
+      .getByRole('combobox', { name: 'Accept a public Discord thank-you' })
+      .selectOption('no');
     await composer.getByRole('button', { name: 'Submit for review' }).click();
     await expect(page.getByText('Donation submitted for review.')).toBeVisible();
     expect(donationPostBody).toMatchObject({
       description: 'Per-key expiry fixture',
       ownership_authorized: true,
+      discord_public_thanks: false,
       keys: [{ endpoint_key_id: '14', expires_at: 1_800_000_000 }],
     });
     await assertClean(page, guard);
@@ -905,7 +909,7 @@ test('user charity overview fails closed on an invalid numbered page and privacy
   await page.goto(`${USER_ORIGIN}/privacy`);
   await expect(page.getByRole('heading', { name: 'Privacy policy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Retention and deletion' })).toBeVisible();
-  await expect(page.locator('body')).toContainText('Export version 9');
+  await expect(page.locator('body')).toContainText('Export version 10');
   await expect(page.locator('body')).toContainText('up to 90 days');
   await assertClean(page, guard);
 });

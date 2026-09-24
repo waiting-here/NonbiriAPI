@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 const loanQuotePurpose = "activity-loan-quote/v1"
@@ -339,6 +340,9 @@ func (r *Repository) Borrow(ctx context.Context, user int64, mutation ControlMut
 	_, err = tx.ExecContext(ctx, `INSERT INTO activity_loans(id,user_id,quote_nonce,operation_id,ledger_seq,created_at,config_revision,principal,coefficient_a,coefficient_b,nominal_milli,disbursed_milli,fee_milli,repayment_milli,interest_milli,general_before_sign,general_before_mag,general_after_sign,general_after_mag,game_before_sign,game_before_mag,game_after_sign,game_after_mag) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, values...)
 	if err != nil {
 		return empty, PublishFacts{}, classifyDatabaseError("record loan", err)
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: user, At: now, Kind: "activity", Fresh: true}); err != nil {
+		return empty, PublishFacts{}, err
 	}
 	value := LoanReceipt{LoanTerms: projectLoanTerms(terms), LoanBalances: projectLoanBalances(general.Balance, game.Balance, generalAfter.Balance, gameAfter.Balance), ID: id, OperationID: op, Sequence: strconv.FormatInt(posted.LedgerSeq, 10), CreatedAt: now, ConfigRevision: p.Revision}
 	response, err := finishJSONMutation(ctx, tx, decision, http.StatusCreated, value)

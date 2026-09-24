@@ -272,6 +272,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			}
 			terminal = true
 		case "error":
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return failure("upstream stream reported an error", errorContext.Parse([]byte(event.Data)))
 		default:
 			return failure("upstream stream contained an unsupported event", upstreamerror.Detail{})

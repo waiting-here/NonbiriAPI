@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "shards": 12,
+  "shards": 16,
   "default_package_seconds": 60,
   "split_packages": [
     "github.com/waiting-here/NonbiriAPI/internal/db",
@@ -14,7 +14,12 @@
     "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime",
     "github.com/waiting-here/NonbiriAPI/internal/resources",
     "github.com/waiting-here/NonbiriAPI/internal/checkin",
-    "github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
+    "github.com/waiting-here/NonbiriAPI/internal/resourcebridge",
+    "github.com/waiting-here/NonbiriAPI",
+    "github.com/waiting-here/NonbiriAPI/internal/donation",
+    "github.com/waiting-here/NonbiriAPI/internal/lifecycle",
+    "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance",
+    "github.com/waiting-here/NonbiriAPI/internal/charityrouting"
   ],
   "split_test_counts": {
     "github.com/waiting-here/NonbiriAPI/internal/db": 80,
@@ -28,13 +33,21 @@
     "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime": 32,
     "github.com/waiting-here/NonbiriAPI/internal/resources": 49,
     "github.com/waiting-here/NonbiriAPI/internal/checkin": 18,
-    "github.com/waiting-here/NonbiriAPI/internal/resourcebridge": 33
+    "github.com/waiting-here/NonbiriAPI/internal/resourcebridge": 33,
+    "github.com/waiting-here/NonbiriAPI": 63,
+    "github.com/waiting-here/NonbiriAPI/internal/donation": 59,
+    "github.com/waiting-here/NonbiriAPI/internal/lifecycle": 28,
+    "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance": 4,
+    "github.com/waiting-here/NonbiriAPI/internal/charityrouting": 44
+  },
+  "split_group_caps": {
+    "github.com/waiting-here/NonbiriAPI/internal/db": 4
   },
   "test_seconds": {
     "github.com/waiting-here/NonbiriAPI/internal/db": {
       "TestBrowseExtensionPreservesPopulatedStateFromPreBrowse": 553.66,
       "TestBrowseExtensionPreservesPopulatedStateFromPreQuotaCleanup": 549.74,
-      "TestBrowseExtensionPreservesPopulatedStateFromPreStewardHoldRead": 444.670,
+      "TestBrowseExtensionPreservesPopulatedStateFromPreStewardHoldRead": 444.67,
       "TestBrowseExtensionPreservesPopulatedStateFromPreHourlyQuota": 555.09,
       "TestGenerationTwoUserDeleteRequiresEconomicHandoff": 289.37,
       "TestQuotaRejectsInvalidStateCombinations": 1156.04,
@@ -54,27 +67,31 @@
       "TestGenerationTwoHostileManifestDynamicRPSAccountIdentity": 904.76,
       "TestBetaTwoExtensionSeedsSidecarDefaultsFromBeta1": 549.75,
       "TestGenerationTwoCurrentRejectsExternallyMutatedValidDatabaseWithoutSourceWrite": 555.54,
-      "TestRetainedExtensionRollsBackWhenStorageFills": 1117.73,
+      "TestRetainedExtensionRollbackEarlyRoutingSources": 814.2857142857143,
+      "TestRetainedExtensionRollbackCoreAndRecurringSources": 542.8571428571429,
+      "TestRetainedExtensionRollbackBrowseAndQuotaSources": 542.8571428571429,
       "TestModelTokenReserveExtensionRollsBackAndRetries": 544.83,
       "TestCredentialRestartValidatesStoredURLsAndLiveTargets": 1044.1,
       "TestGenerationTwoCurrentRecoveryFailurePreservesStableClassification": 244.33,
       "TestRetainedExtensionRejectsMixedSourcesWithoutWriting": 492.82,
       "TestDuelBootstrapRollbackAndPartialSourceRejection": 561.23,
       "TestRoutingExtensionPreservesExistingGenerationTwoData": 552.18,
-      "TestRetainedBusinessDataAcrossEverySupportedSource": 1500
+      "TestRetainedBusinessDataEarlyRoutingSources": 642.8571428571429,
+      "TestRetainedBusinessDataCoreAndRecurringSources": 428.57142857142856,
+      "TestRetainedBusinessDataBrowseAndQuotaSources": 428.57142857142856
     },
     "github.com/waiting-here/NonbiriAPI/internal/activities": {
-      "TestAcceptedPeriodFinalizesAtCapacityMaximum": 3.260,
+      "TestAcceptedPeriodFinalizesAtCapacityMaximum": 3.26,
       "TestActivitiesProjectionAndGlobalPublisherAreCompleteAndPrivate": 3.242,
       "TestActivityExportAndDeleteDeidentifiesWithoutRecomputing": 4.012,
       "TestAmountIdempotencyDigestBindsOriginalPointsString": 8.998,
-      "TestExportUserTxUsesCallerSnapshotAndWrapper": 3.370,
+      "TestExportUserTxUsesCallerSnapshotAndWrapper": 3.37,
       "TestPoolNumberedPagesCountWindowAndStableOrder": 930.25,
       "TestPoolProjectionFormatsAggregateBeyondInt64": 44.173,
       "TestSettlementCheckpointRollbackReplaysExactlyOnce": 3.756,
-      "TestThursdayDestinationUsesExclusiveCloseAndRejectsConflictingDuplicate": 3.190,
+      "TestThursdayDestinationUsesExclusiveCloseAndRejectsConflictingDuplicate": 3.19,
       "TestThursdayPeriodCapacityFailureLeavesNoDomainRows": 3.077,
-      "TestWelfareLogicalHoldConversionCountsExactlyOnce": 3.370
+      "TestWelfareLogicalHoldConversionCountsExactlyOnce": 3.37
     },
     "github.com/waiting-here/NonbiriAPI/internal/game/linklink": {
       "TestLeaderboardHundredThousandSummariesUseWindowIndex": 374.61
@@ -85,12 +102,12 @@
   },
   "package_seconds": {
     "github.com/waiting-here/NonbiriAPI": 1333.935,
-    "github.com/waiting-here/NonbiriAPI/internal/accountstream": 2.120,
+    "github.com/waiting-here/NonbiriAPI/internal/accountstream": 2.12,
     "github.com/waiting-here/NonbiriAPI/internal/activities": 719.198,
     "github.com/waiting-here/NonbiriAPI/internal/adminalerts": 75.044,
     "github.com/waiting-here/NonbiriAPI/internal/adminapi": 502.517,
     "github.com/waiting-here/NonbiriAPI/internal/adminusers": 108.141,
-    "github.com/waiting-here/NonbiriAPI/internal/announcements": 218.790,
+    "github.com/waiting-here/NonbiriAPI/internal/announcements": 218.79,
     "github.com/waiting-here/NonbiriAPI/internal/antiabuse": 1.015,
     "github.com/waiting-here/NonbiriAPI/internal/applog": 1.015,
     "github.com/waiting-here/NonbiriAPI/internal/auth": 570.605,
@@ -98,7 +115,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/backend": 2.272,
     "github.com/waiting-here/NonbiriAPI/internal/charity": 120.481,
     "github.com/waiting-here/NonbiriAPI/internal/charityrouting": 535.11,
-    "github.com/waiting-here/NonbiriAPI/internal/checkin": 315.340,
+    "github.com/waiting-here/NonbiriAPI/internal/checkin": 315.34,
     "github.com/waiting-here/NonbiriAPI/internal/claim": 523.096,
     "github.com/waiting-here/NonbiriAPI/internal/config": 1.044,
     "github.com/waiting-here/NonbiriAPI/internal/connector": 1.052,
@@ -106,7 +123,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/connector/contract": 1.012,
     "github.com/waiting-here/NonbiriAPI/internal/connector/openai": 3.217,
     "github.com/waiting-here/NonbiriAPI/internal/credits": 1.012,
-    "github.com/waiting-here/NonbiriAPI/internal/db": 957.160,
+    "github.com/waiting-here/NonbiriAPI/internal/db": 957.16,
     "github.com/waiting-here/NonbiriAPI/internal/dbtest": 1,
     "github.com/waiting-here/NonbiriAPI/internal/debug": 3.161,
     "github.com/waiting-here/NonbiriAPI/internal/diagnostic": 1.993,
@@ -124,7 +141,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/httperr": 1.038,
     "github.com/waiting-here/NonbiriAPI/internal/httpmw": 1.092,
     "github.com/waiting-here/NonbiriAPI/internal/idempotency": 110.634,
-    "github.com/waiting-here/NonbiriAPI/internal/issues": 157.460,
+    "github.com/waiting-here/NonbiriAPI/internal/issues": 157.46,
     "github.com/waiting-here/NonbiriAPI/internal/ledger": 186.676,
     "github.com/waiting-here/NonbiriAPI/internal/lifecycle": 662.176,
     "github.com/waiting-here/NonbiriAPI/internal/lifecycle/adapters": 68.234,

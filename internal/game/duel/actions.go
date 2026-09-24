@@ -6,6 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
 type actionBody struct {
@@ -122,6 +123,9 @@ func (s *Service) act(ctx context.Context, in ActionInput, surrender bool) (Muta
 	}
 	d, err := s.replay(ctx, tx, in.Identity, in.IdempotencyKey, "POST", route, in.SessionID, body, now)
 	if err != nil {
+		return MutationResult{}, err
+	}
+	if err := useractivity.RecordActiveTx(ctx, tx, useractivity.ActiveEvent{UserID: in.UserID, At: now, Kind: "game", Fresh: true}); err != nil {
 		return MutationResult{}, err
 	}
 	result, err := finish(ctx, tx, d, 200, ActionReceipt{SessionID: v.ID, Revision: v.Revision.Decimal(), PhaseSeq: v.PhaseSeq.Decimal(), Locked: v.Seats[seat].Locked})

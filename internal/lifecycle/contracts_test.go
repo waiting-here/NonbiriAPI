@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 9 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 10 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -46,6 +46,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
+		"limited_activities", "image_tasks", "inactivity",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
 		"bidding", "likes", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
@@ -59,6 +60,10 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 }
 
 func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
+	assertClosedJSONKeys(t, GovernanceExport{}, "limited_activities", "image_tasks", "inactivity")
+	assertClosedJSONKeys(t, ImageTaskExport{}, "id", "status", "n", "created_at", "dispatched_at", "completed_at", "billing_state", "charge", "refund", "actual_images")
+	assertClosedJSONKeys(t, LimitedActivityExport{}, "wallet", "exchanges")
+	assertClosedJSONKeys(t, InactivityExport{}, "activity", "runs")
 	assertClosedJSONKeys(t, LoanExport{}, "loan_id", "operation_id", "created_at", "principal", "a", "b", "nominal", "disbursed", "fee", "repayment", "interest", "general_before", "general_after", "game_before", "game_after")
 	assertClosedJSONKeys(t, OnboardingExport{}, "game_key", "task_key", "award", "completed_at", "operation_id")
 	assertClosedJSONKeys(t, OnboardingHoldExport{}, "id", "game_key", "task_key", "created_at")

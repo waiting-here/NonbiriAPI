@@ -15,12 +15,13 @@ type presentationStep struct {
 }
 
 type effectCue struct {
-	Key        string `json:"key"`
-	Kind       string `json:"kind"`
-	BuffID     string `json:"buff_id"`
-	Layers     int64  `json:"layers"`
-	Remaining  int64  `json:"remaining"`
-	ActiveFrom int64  `json:"active_from"`
+	Key              string `json:"key"`
+	Kind             string `json:"kind"`
+	BuffID           string `json:"buff_id"`
+	Layers           int64  `json:"layers"`
+	Remaining        int64  `json:"remaining"`
+	ActiveFrom       int64  `json:"active_from"`
+	PersistentLayers *int64 `json:"persistent_layers,omitempty"`
 }
 type resourceCue struct {
 	Gold         int64            `json:"gold"`
@@ -54,7 +55,7 @@ func compactFrame(f engine.Frame) frameCue {
 	for seat, p := range f.Players {
 		v := resourceCue{Gold: p.Gold, Likes: p.Likes, Burst: p.Burst, BurstCap: p.BurstCap, Sub: p.Sub, SubCap: p.SubCap, API: p.API, Trial: p.Trial, Resources: p.Resources, ResourceCaps: p.ResourceCaps, Effects: []effectCue{}}
 		for _, effect := range p.Effects {
-			v.Effects = append(v.Effects, effectCue{Key: effect.Key, Kind: effect.Kind, BuffID: effect.BuffID, Layers: effect.Layers, Remaining: effect.Remaining, ActiveFrom: effect.ActiveFrom})
+			v.Effects = append(v.Effects, effectCue{Key: effect.Key, Kind: effect.Kind, BuffID: effect.BuffID, Layers: effect.Layers, Remaining: effect.Remaining, ActiveFrom: effect.ActiveFrom, PersistentLayers: effect.PersistentLayers})
 		}
 		c.Players[seat] = v
 	}

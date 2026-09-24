@@ -57,6 +57,19 @@ export function PrivacyPage() {
             <p>{t('user.legal.privacy.trafficBody')}</p>
           </section>
           <section>
+            <h2>{t('user.legal.privacy.diagnosticsTitle')}</h2>
+            <p>{t('user.legal.privacy.diagnosticsBody')}</p>
+            <p>{t('user.legal.privacy.sourcesBody')}</p>
+          </section>
+          <section>
+            <h2>{t('user.legal.privacy.auditTitle')}</h2>
+            <p>{t('user.legal.privacy.auditBody')}</p>
+          </section>
+          <section>
+            <h2>{t('user.legal.privacy.imageTitle')}</h2>
+            <p>{t('user.legal.privacy.imageBody')}</p>
+          </section>
+          <section>
             <h2>{t('user.legal.privacy.sharingTitle')}</h2>
             <p>{t('user.legal.privacy.sharingBody')}</p>
             <p>{t('user.legal.privacy.keyLimitsBody')}</p>

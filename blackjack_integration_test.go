@@ -157,7 +157,7 @@ func TestBlackjackHTTPRoutesPrivacyHistoryAndExport(t *testing.T) {
 		}
 		r = f.call(seat, "POST", "/api/account/export", nil, true)
 		var exported lifecycle.ExportDocument
-		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &exported) != nil || exported.SchemaVersion != 9 || len(exported.Blackjack.History) != 1 {
+		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &exported) != nil || exported.SchemaVersion != 10 || len(exported.Blackjack.History) != 1 {
 			t.Fatalf("export %d %s", r.Code, r.Body.String())
 		}
 	}
@@ -188,7 +188,7 @@ func TestBlackjackHTTPAccountLifecycleDoesNotCancelOtherSeats(t *testing.T) {
 				}
 				f.admin("POST", fmt.Sprintf("/admin/api/users/%d/ban", f.users[0]), body, 204)
 			case "steward":
-				if _, err := f.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, f.users[1]); err != nil {
+				if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, f.users[1]); err != nil {
 					t.Fatal(err)
 				}
 				r := f.call(1, "POST", fmt.Sprintf("/api/steward/users/%d/ban", f.users[0]), map[string]any{"expected_revision": f.userRevision(0), "reason": "Account restriction", "duration_seconds": 3600}, false)

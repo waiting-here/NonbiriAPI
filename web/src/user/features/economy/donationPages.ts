@@ -1,6 +1,7 @@
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
   array,
+  boolean,
   decimal,
   decimalID,
   invalidResponse,
@@ -31,6 +32,7 @@ export type OwnerDonationStateCounts = Record<DonationKey['charityState'], strin
 
 export interface OwnerDonationSummary {
   id: string;
+  discordPublicThanks?: boolean | null;
   status: DonationStatus;
   revision: string;
   description: string;
@@ -309,7 +311,12 @@ function normalizeOwnerDonation(
 ): OwnerDonationSummary {
   const label = `owner donation ${index + 1}`;
   rejectLoneSurrogates(value, label);
-  const root = record(value, OWNER_DONATION_FIELDS, label);
+  const root = record(
+    value,
+    [...OWNER_DONATION_FIELDS, 'discord_public_thanks'],
+    label,
+    OWNER_DONATION_FIELDS,
+  );
   const status = oneOf(root.status, OWNER_DONATION_STATUSES, `${label} status`);
   if (filters.status !== '' && filters.status !== status) invalidResponse(`${label} status filter`);
   const reviewResult = normalizeReviewResult(root.review_result, `${label} review`);
@@ -333,6 +340,10 @@ function normalizeOwnerDonation(
   validateSummaryState(status, reviewResult, keyCount, stateCounts, label);
   return {
     id: decimalID(root.id, `${label} id`),
+    discordPublicThanks:
+      root.discord_public_thanks == null
+        ? null
+        : boolean(root.discord_public_thanks, `${label} public thanks`),
     status,
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
     description: string(root.description, `${label} description`, { max: 1_024, bytes: 4_096 }),
@@ -353,7 +364,12 @@ function normalizeOwnerKey(
 ): OwnerDonationKeySummary {
   const label = `owner donation key ${index + 1}`;
   rejectLoneSurrogates(value, label);
-  const root = record(value, OWNER_KEY_FIELDS, label);
+  const root = record(
+    value,
+    [...OWNER_KEY_FIELDS, 'input_token_reserve', 'output_token_reserve', 'breakdown_started_at'],
+    label,
+    OWNER_KEY_FIELDS,
+  );
   const key = normalizeDonationKey({
     id: root.id,
     endpoint_key_id: root.endpoint_key_id,
@@ -365,6 +381,15 @@ function normalizeOwnerKey(
     limits: root.limits,
     usage: root.usage,
     token_reserve: root.token_reserve,
+    ...(root.input_token_reserve !== undefined
+      ? { input_token_reserve: root.input_token_reserve }
+      : {}),
+    ...(root.output_token_reserve !== undefined
+      ? { output_token_reserve: root.output_token_reserve }
+      : {}),
+    ...(root.breakdown_started_at !== undefined
+      ? { breakdown_started_at: root.breakdown_started_at }
+      : {}),
     failure_disable_threshold: root.failure_disable_threshold,
     expires_at: root.expires_at,
     streak: root.streak,

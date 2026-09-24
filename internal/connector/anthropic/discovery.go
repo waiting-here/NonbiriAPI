@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -122,6 +123,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 			return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "upstream response was unavailable")
 		}
 		if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
+			_ = (upstreamerror.Context{}).ReadResponse(ctx, response)
 			if response.Body != nil {
 				_ = response.Body.Close()
 			}
@@ -131,6 +133,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream response was unavailable")
 		}
 		if !validResponseMediaType(response, "application/json") {
+			_ = (upstreamerror.Context{}).ReadResponse(ctx, response)
 			_ = response.Body.Close()
 			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream response content type was invalid")
 		}
@@ -157,6 +160,9 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 		}
 		remaining -= int64(len(body))
 		entries, hasMore, lastID, parseErr := parseModelsPage(body)
+		if parseErr != nil {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
+		}
 		clear(body)
 		if parseErr != nil {
 			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")

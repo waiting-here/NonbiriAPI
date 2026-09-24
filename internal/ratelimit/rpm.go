@@ -121,9 +121,11 @@ const (
 )
 
 type rpmEvent struct {
-	at    time.Time
-	user  string
-	state atomic.Uint32
+	at       time.Time
+	user     string
+	state    atomic.Uint32
+	observer RPMObserver
+	decision RPMDecision
 }
 
 // RPM is a thread-safe, bounded sliding-window limiter. One instance must be
@@ -376,6 +378,10 @@ func (r *RPM) TryReserveWithLimit(userKey string, userLimit int) (*RPMReservatio
 }
 
 func (r *RPM) reserve(ctx context.Context, userKey string, userLimit int) (*RPMReservation, RPMDecision, error) {
+	return r.reserveObserved(ctx, userKey, userLimit, nil)
+}
+
+func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int, observer RPMObserver) (*RPMReservation, RPMDecision, error) {
 	if r == nil {
 		return nil, RPMDecision{}, ErrClosed
 	}
@@ -393,9 +399,9 @@ func (r *RPM) reserve(ctx context.Context, userKey string, userLimit int) (*RPMR
 	if err := ctx.Err(); err != nil {
 		return nil, RPMDecision{}, err
 	}
-	now := r.clock.Now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	now := r.clock.Now()
 	if err := ctx.Err(); err != nil {
 		return nil, RPMDecision{}, err
 	}
@@ -408,11 +414,13 @@ func (r *RPM) reserve(ctx context.Context, userKey string, userLimit int) (*RPMR
 	}
 	decision := r.decisionLocked(userKey, userLimit, now)
 	if !decision.Allowed {
+		r.observeLocked(observer, "denied", now, now, decision)
 		return nil, decision, nil
 	}
 	if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys {
 		decision.Allowed = false
 		decision.Reason = RPMCapacity
+		r.observeLocked(observer, "denied", now, now, decision)
 		return nil, decision, ErrCapacity
 	}
 	event := r.newEventLocked(userKey, now, rpmEventActive)
@@ -420,6 +428,8 @@ func (r *RPM) reserve(ctx context.Context, userKey string, userLimit int) (*RPMR
 	decision.UserCount++
 	decision.Reason = RPMAllowed
 	decision.RetryAfter = 0
+	event.observer, event.decision = observer, decision
+	r.observeLocked(observer, "reserve", now, now, decision)
 	return &RPMReservation{limiter: r, event: event}, decision, nil
 }
 
@@ -534,7 +544,7 @@ func (p *RPMReservation) Commit() bool {
 	if p == nil || p.event == nil {
 		return false
 	}
-	return p.event.state.CompareAndSwap(uint32(rpmEventActive), uint32(rpmEventCommitted))
+	return p.limiter.transition(p.event, rpmEventCommitted)
 }
 
 // Release removes an active reservation without consuming the window budget.
@@ -543,11 +553,7 @@ func (p *RPMReservation) Release() bool {
 	if p == nil || p.event == nil {
 		return false
 	}
-	if !p.event.state.CompareAndSwap(uint32(rpmEventActive), uint32(rpmEventReleased)) {
-		return false
-	}
-	p.limiter.releaseEvent(p.event)
-	return true
+	return p.limiter.transition(p.event, rpmEventReleased)
 }
 
 // Cancel is an alias for Release for callers that model a failed or

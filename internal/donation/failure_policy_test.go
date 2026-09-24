@@ -28,7 +28,7 @@ func TestFailurePolicyImmediateRecomputeAndReplay(t *testing.T) {
 	owner := e.seedUser(t, "policy-owner", nil, false)
 	foreign := e.seedUser(t, "policy-foreign", nil, false)
 	e.seedUser(t, "", nil, true)
-	level := int64(5)
+	level := int64(6)
 	steward := e.seedUser(t, "policy-steward", &level, false)
 	_, physical := e.seedEndpointKey(t, owner, 'p')
 	d := approvedResetDonation(t, e, owner, physical)

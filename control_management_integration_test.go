@@ -56,10 +56,10 @@ func TestStewardManagementRealSessionsAndFinalRoleChecks(t *testing.T) {
 			t.Fatalf("admin cookie crossed station %s: %d", path, status)
 		}
 	}
-	if _, err := f.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", f.userID); err != nil {
+	if _, err := f.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", f.userID); err != nil {
 		t.Fatal(err)
 	}
-	list := testApplicationRequest(t, f.app.handler, "GET", auditUserHost, users+"?level=5&page=1", "", f.cookies, nil)
+	list := testApplicationRequest(t, f.app.handler, "GET", auditUserHost, users+"?level=6&page=1", "", f.cookies, nil)
 	if list.Code != 200 || !strings.Contains(list.Body.String(), `"total_items":"1"`) {
 		t.Fatalf("steward level list: %d %s", list.Code, list.Body)
 	}
@@ -76,7 +76,7 @@ func TestStewardManagementRealSessionsAndFinalRoleChecks(t *testing.T) {
 	if adjusted.Code != 200 || !strings.Contains(adjusted.Body.String(), `"game_balance":"-0.005"`) {
 		t.Fatalf("game adjustment: %d %s", adjusted.Code, adjusted.Body)
 	}
-	if _, err := f.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", target); err != nil {
+	if _, err := f.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", target); err != nil {
 		t.Fatal(err)
 	}
 	replay := testApplicationRequest(t, f.app.handler, "PATCH", auditUserHost, path, economy, f.cookies, headers)

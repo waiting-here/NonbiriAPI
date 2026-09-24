@@ -45,8 +45,10 @@ const (
 // held for the whole operation so Close waits for every credential-bearing
 // attempt and no new attempt can race safety-key zeroization.
 type Service struct {
-	lifecycle sync.RWMutex
-	closed    bool
+	errorScope func(context.Context, string, int) context.Context
+	classify   func(context.Context, int64, string)
+	lifecycle  sync.RWMutex
+	closed     bool
 
 	personal       PersonalRouter
 	charity        CharityRouter
@@ -137,6 +139,7 @@ func NewService(config Config) (*Service, error) {
 	}
 
 	return &Service{
+		errorScope: config.ErrorScope, classify: config.Classify,
 		personal: config.Personal, charity: config.Charity, claims: config.Claims,
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
 		connectors: instances, safety: config.Safety, observer: config.Observer,
@@ -247,6 +250,15 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
 		return
 	}
+	bound, filtered, cleanup, policyErr := service.bindDirectPolicy(ctx, userID, request, body)
+	if policyErr != nil {
+		service.writePreAcceptanceFailure(ctx, writer, nil, nil, policyErr, strings.HasPrefix(request.Model, charityModelPrefix), language)
+		return
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	request, body = bound, filtered
 	service.lifecycle.RLock()
 	defer service.lifecycle.RUnlock()
 	if service.closed {
@@ -372,8 +384,20 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 }
 
 func (service *Service) preflight(ctx context.Context, userID int64, request *validatedRequest) (logicalAdmission, *validatedRequest, func(), error) {
+	kind := "self"
 	if strings.HasPrefix(request.Model, charityModelPrefix) {
-		now, err := service.nowUnix()
+		kind = "charity"
+	}
+	requestattempt.Classify(ctx, kind)
+	if service.classify != nil {
+		service.classify(ctx, userID, kind)
+	}
+	if strings.HasPrefix(request.Model, charityModelPrefix) {
+		now := request.policyDecisionNow
+		var err error
+		if request.policyModelID == 0 {
+			now, err = service.nowUnix()
+		}
 		if err != nil {
 			return logicalAdmission{charity: true}, request, nil, err
 		}
@@ -385,6 +409,9 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		}
 		if err != nil {
 			return logicalAdmission{charity: true}, request, nil, err
+		}
+		if request.policyModelID != 0 && value.ModelID != request.policyModelID {
+			return logicalAdmission{charity: true}, request, nil, charityrouting.ErrNotFound
 		}
 		admission := logicalAdmission{
 			charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
@@ -432,7 +459,7 @@ func (service *Service) snapshot(
 		if len(connectorTypes) == 0 {
 			return executionPlan{}, openai.ErrInvalidRequest
 		}
-		value, err := service.charity.Snapshot(ctx, admission.modelID, admission.decisionNow, connectorTypes)
+		value, err := service.charity.Snapshot(ctx, userID, admission.modelID, admission.decisionNow, connectorTypes)
 		if err != nil {
 			return executionPlan{}, err
 		}
@@ -639,7 +666,11 @@ func (service *Service) runAttempts(
 			run.completeSynthetic(parent, service, handle, "connector unavailable")
 			break
 		}
-		result := protocolConnector.Attempt(executionContext, connector.AttemptInput{
+		attemptContext := executionContext
+		if service.errorScope != nil {
+			attemptContext = service.errorScope(attemptContext, accepted.ID, index+1)
+		}
+		result := protocolConnector.Attempt(attemptContext, connector.AttemptInput{
 			Operation: attemptRequest.operation,
 			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding,
 			Policy: policy, Sink: sink, Observer: service.observer,
@@ -1102,6 +1133,8 @@ func failureForError(err error, charity bool) wireFailure {
 	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity),
 		errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
 		return platformFailure(httperr.CodeInvalidRequest, "invalid request")
+	case errors.Is(err, openai.ErrPayloadTooLarge):
+		return platformFailure(httperr.CodePayloadTooLarge, "request body too large")
 	case errors.Is(err, charityrouting.ErrEntropyUnavailable):
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, donationquota.ErrLimited):

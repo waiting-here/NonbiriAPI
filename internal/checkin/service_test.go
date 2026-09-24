@@ -175,6 +175,9 @@ func TestCheckinCommitsLedgerActivityAndLocalDayAtomically(t *testing.T) {
 		t.Fatalf("duplicate changed check-in count to %d", got)
 	}
 
+	if got := fixture.scalar(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, userID); got != 1 {
+		t.Fatalf("duplicate checkin refreshed activity: %d", got)
+	}
 	fixture.clock.Store(beforeBoundary + 1)
 	second, err := fixture.service.Checkin(context.Background(), userID)
 	if err != nil {
@@ -185,6 +188,9 @@ func TestCheckinCommitsLedgerActivityAndLocalDayAtomically(t *testing.T) {
 	}
 	if got := fixture.scalar(`SELECT COUNT(*) FROM checkins WHERE user_id=?`, userID); got != 2 {
 		t.Fatalf("next local day count = %d", got)
+	}
+	if got := fixture.scalar(`SELECT activity_seq FROM user_activity_state WHERE user_id=?`, userID); got != 2 {
+		t.Fatalf("fresh checkin activity count: %d", got)
 	}
 	status, err := fixture.service.Status(context.Background(), userID)
 	if err != nil || !status.CheckedInToday || status.Balance != "3" {
