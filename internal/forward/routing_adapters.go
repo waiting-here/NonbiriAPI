@@ -161,11 +161,22 @@ func (adapter *CharityRoutingAdapter) PreflightEmbedding(ctx context.Context, us
 	}, nil
 }
 
-func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, modelID, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
+func (adapter *CharityRoutingAdapter) RequestPolicy(ctx context.Context, userID int64, fullName string, now int64) (CharityRequestPolicy, error) {
+	if adapter == nil || adapter.service == nil {
+		return CharityRequestPolicy{}, ErrInternal
+	}
+	policy, err := adapter.service.RequestPolicy(ctx, userID, fullName, now)
+	if err != nil {
+		return CharityRequestPolicy{}, err
+	}
+	return CharityRequestPolicy{ModelID: policy.ModelID, FullName: policy.FullName, ExcludedRequestFields: append([]string(nil), policy.ExcludedRequestFields...)}, nil
+}
+
+func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, modelID, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
 	if adapter == nil || adapter.service == nil {
 		return CharitySnapshot{}, ErrInternal
 	}
-	value, err := adapter.service.Snapshot(ctx, modelID, now, connectorTypes)
+	value, err := adapter.service.SnapshotForCaller(ctx, userID, modelID, now, connectorTypes)
 	if err != nil {
 		return CharitySnapshot{}, err
 	}

@@ -66,6 +66,14 @@ type CharityPreflight struct {
 	ReservedMilli    int64
 }
 
+// CharityRequestPolicy contains no physical candidates or credentials.
+// Exclusions are frozen before optional request fields are interpreted.
+type CharityRequestPolicy struct {
+	ModelID               int64
+	FullName              string
+	ExcludedRequestFields []string
+}
+
 // RouteCandidate is one credential-free physical candidate frozen before
 // request acceptance. Its routine formatting is always redacted.
 type RouteCandidate struct {
@@ -113,9 +121,10 @@ type PersonalRouter interface {
 // CharityRouter is the two-stage charity routing boundary. Preflight owns
 // caller/content/credit policy but not candidate health or quota inspection.
 type CharityRouter interface {
+	RequestPolicy(context.Context, int64, string, int64) (CharityRequestPolicy, error)
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
-	Snapshot(context.Context, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
+	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)
 }
 

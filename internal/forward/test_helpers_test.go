@@ -51,19 +51,33 @@ func (router *fakePersonalRouter) ListRoutableModels(_ context.Context, _ int64,
 }
 
 type fakeCharityRouter struct {
-	preflight CharityPreflight
-	snapshot  CharitySnapshot
-	models    []ListedModel
-	preErr    error
-	snapErr   error
-	listErr   error
-	preCalls  int
-	snapCalls int
-	listCalls int
-	listUsers []int64
-	preTimes  []int64
-	snapTimes []int64
-	snapTypes [][]connectorcontract.Type
+	policyFields  []string
+	policyErr     error
+	policyModelID int64
+	policyCalls   int
+	snapUsers     []int64
+	preflight     CharityPreflight
+	snapshot      CharitySnapshot
+	models        []ListedModel
+	preErr        error
+	snapErr       error
+	listErr       error
+	preCalls      int
+	snapCalls     int
+	listCalls     int
+	listUsers     []int64
+	preTimes      []int64
+	snapTimes     []int64
+	snapTypes     [][]connectorcontract.Type
+}
+
+func (router *fakeCharityRouter) RequestPolicy(_ context.Context, _ int64, model string, _ int64) (CharityRequestPolicy, error) {
+	router.policyCalls++
+	id := router.preflight.ModelID
+	if router.policyModelID != 0 {
+		id = router.policyModelID
+	}
+	return CharityRequestPolicy{ModelID: id, FullName: model, ExcludedRequestFields: append([]string(nil), router.policyFields...)}, router.policyErr
 }
 
 func (router *fakeCharityRouter) Preflight(_ context.Context, _ int64, _ string, _ *openai.ChatRequest, now int64) (CharityPreflight, error) {
@@ -72,8 +86,9 @@ func (router *fakeCharityRouter) Preflight(_ context.Context, _ int64, _ string,
 	return router.preflight, router.preErr
 }
 
-func (router *fakeCharityRouter) Snapshot(_ context.Context, _ int64, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
+func (router *fakeCharityRouter) Snapshot(_ context.Context, userID int64, _ int64, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
 	router.snapCalls++
+	router.snapUsers = append(router.snapUsers, userID)
 	router.snapTimes = append(router.snapTimes, now)
 	router.snapTypes = append(router.snapTypes, append([]connectorcontract.Type(nil), connectorTypes...))
 	return router.snapshot, router.snapErr
@@ -93,10 +108,12 @@ type fakeDebugCapture struct {
 	decision debug.CaptureDecision
 	err      error
 	calls    int
+	body     []byte
 }
 
-func (capture *fakeDebugCapture) DecideAfterAdmission(_ context.Context, _ debug.CaptureInput) (debug.CaptureDecision, error) {
+func (capture *fakeDebugCapture) DecideAfterAdmission(_ context.Context, input debug.CaptureInput) (debug.CaptureDecision, error) {
 	capture.calls++
+	capture.body = append([]byte(nil), input.Body...)
 	return capture.decision, capture.err
 }
 

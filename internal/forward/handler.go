@@ -1,7 +1,6 @@
 package forward
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"mime"
@@ -90,16 +89,17 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	defer clear(body)
-	decoded, err := decodeRequest(bytes.NewReader(body), requestkind.OperationForPath(request.URL.Path))
+	decoded, filtered, charity, err := handler.service.decodeIngress(request.Context(), userID, body, requestkind.OperationForPath(request.URL.Path))
 	if err != nil {
 		if request.Context().Err() == nil {
-			writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
+			handler.service.writePreAcceptanceFailure(request.Context(), writer, nil, nil, err, charity, request.Header.Get("Accept-Language"))
 		}
 		return
 	}
 	defer decoded.Clear()
+	defer clear(filtered)
 	requestattempt.Model(request.Context(), decoded.Model)
-	handler.service.execute(request.Context(), writer, userID, decoded, body, mediaType, request.Header.Get("Accept-Language"))
+	handler.service.execute(request.Context(), writer, userID, decoded, filtered, mediaType, request.Header.Get("Accept-Language"))
 }
 
 func validateChatMedia(request *http.Request) (string, bool) {
