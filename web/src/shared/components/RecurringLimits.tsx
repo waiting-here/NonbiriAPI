@@ -24,6 +24,7 @@ import {
   type RecurringLimitsWriteReceipt,
 } from '@shared/operations/recurringLimits';
 import { browserTimeZone, fetchTimeZones, type TimeStation } from '@shared/time';
+import { useCharityModelScope } from './charityModelScopeContext';
 import { formatDateTime } from '@shared/utils/datetime';
 import { ErrorState, LoadingState } from './States';
 import { copyForRecurringLimits, type RecurringLimitsCopy } from './recurringLimitsCopy';
@@ -312,6 +313,11 @@ function RuleUsage({
       : timeValue(view.next_transition_at, view.time_zone, locale, copy, 'transition');
   return (
     <div className="recurring-limits__usage" aria-label={copy.usage}>
+      {view.effective_at !== undefined ? (
+        <p>
+          {locale === 'zh' ? '统计起点' : 'Tracking started'}: {formatDateTime(view.effective_at)}
+        </p>
+      ) : null}
       <dl className="recurring-limits__metrics">
         <div>
           <dt>{copy.used}</dt>
@@ -418,7 +424,13 @@ function RuleCard({
     ? ['first_success']
     : ['first_success', 'calendar'];
   const intervalOptions: RecurringLimitInterval[] = ['1h', '5h', 'day', 'week', 'month'];
-  const metricOptions: RecurringLimitMetric[] = ['calls', 'tokens', 'credits'];
+  const metricOptions: RecurringLimitMetric[] = [
+    'calls',
+    'tokens',
+    'input_tokens',
+    'output_tokens',
+    'credits',
+  ];
   const modeOptions: RecurringLimitMode[] = ['reset', 'sliding'];
   const firstSuccess = draft.alignment === 'first_success';
   const calendarWeek =
@@ -749,14 +761,27 @@ function readOrWriteError(error: unknown): boolean {
 }
 
 function scopeChanged(
-  previous: { role: RecurringLimitRole; accountId: string; donationId: string; keyId: string },
-  current: { role: RecurringLimitRole; accountId: string; donationId: string; keyId: string },
+  previous: {
+    role: RecurringLimitRole;
+    accountId: string;
+    donationId: string;
+    keyId: string;
+    modelID?: string;
+  },
+  current: {
+    role: RecurringLimitRole;
+    accountId: string;
+    donationId: string;
+    keyId: string;
+    modelID?: string;
+  },
 ): boolean {
   return (
     previous.role !== current.role ||
     previous.accountId !== current.accountId ||
     previous.donationId !== current.donationId ||
-    previous.keyId !== current.keyId
+    previous.keyId !== current.keyId ||
+    previous.modelID !== current.modelID
   );
 }
 
@@ -769,16 +794,18 @@ export function RecurringLimits({
   onSaved,
   onCapabilityLoss,
 }: RecurringLimitsProps) {
+  const modelID = useCharityModelScope();
   const { i18n } = useTranslation();
   const copy = copyForRecurringLimits(i18n.language);
   const locale: 'en' | 'zh' = i18n.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
   const editable = !readOnly && (role === 'admin' || role === 'steward');
   const client = useQueryClient();
-  const scope = recurringLimitsDraftKey(role, accountId, donationId, keyId);
+  const accountScope = modelID ? `${accountId}:model:${modelID}` : accountId;
+  const scope = recurringLimitsDraftKey(role, accountScope, donationId, keyId);
   const [renderedScope, setRenderedScope] = useState(scope);
   const identity = useMemo(
-    () => ({ role, accountId, donationId, keyId }),
-    [accountId, donationId, keyId, role],
+    () => ({ role, accountId, donationId, keyId, modelID }),
+    [accountId, donationId, keyId, role, modelID],
   );
   const scopeRef = useRef(identity);
   const loadedDataRef = useRef<RecurringLimitsResponse | null>(null);
@@ -805,8 +832,8 @@ export function RecurringLimits({
   } | null>(null);
   const notifiedReceiptRef = useRef<RecurringLimitsWriteReceipt | null>(null);
   const read = useQuery({
-    queryKey: recurringLimitsKeys.detail(role, accountId, donationId, keyId),
-    queryFn: ({ signal }) => getRecurringLimits(role, donationId, keyId, signal),
+    queryKey: recurringLimitsKeys.detail(role, accountScope, donationId, keyId),
+    queryFn: ({ signal }) => getRecurringLimits(role, donationId, keyId, signal, modelID),
     enabled:
       !capabilityRevoked &&
       role !== undefined &&
@@ -906,7 +933,7 @@ export function RecurringLimits({
     (payload, idempotencyKey) => {
       if (role === 'owner')
         return Promise.reject(new ApiError('forbidden', 'This action is read-only.', 403));
-      return putRecurringLimits(role, donationId, keyId, payload, idempotencyKey);
+      return putRecurringLimits(role, donationId, keyId, payload, idempotencyKey, modelID);
     },
     reconcile,
     authorityRoot,

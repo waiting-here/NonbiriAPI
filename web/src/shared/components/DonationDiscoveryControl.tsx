@@ -17,6 +17,7 @@ import {
   type DiscoveryTarget,
 } from '@shared/operations/donationDiscovery';
 import { DonationDiscoveryRun } from '@shared/operations/donationDiscoveryRun';
+import { useCharityModelScope } from './charityModelScopeContext';
 import { ErrorState } from './States';
 import './DonationDiscoveryControl.css';
 
@@ -27,6 +28,7 @@ interface Props {
   onCapabilityLoss?: () => void;
 }
 export function DonationDiscoveryControl({ role, target, disabled, onCapabilityLoss }: Props) {
+  const modelID = useCharityModelScope();
   const { t } = useTranslation();
   const client = useQueryClient();
   const id = useId();
@@ -74,9 +76,9 @@ export function DonationDiscoveryControl({ role, target, disabled, onCapabilityL
     };
     const run = new DonationDiscoveryRun(target, {
       select: (donationID, cursor) =>
-        send(() => selectDonationDiscoveries(role, donationID, cursor)),
-      start: (item, key) => send(() => startDonationDiscovery(role, item, key)),
-      read: (item) => send(() => readDonationDiscovery(role, item)),
+        send(() => selectDonationDiscoveries(role, donationID, cursor, modelID)),
+      start: (item, key) => send(() => startDonationDiscovery(role, item, key, modelID)),
+      read: (item) => send(() => readDonationDiscovery(role, item, modelID)),
       guard,
       wait: () => new Promise((resolve) => setTimeout(resolve, 1500)),
       progress: () => {

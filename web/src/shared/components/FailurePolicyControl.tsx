@@ -6,6 +6,7 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import { saveFailurePolicy, validFailureThreshold } from '@shared/operations/failurePolicy';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ErrorState } from './States';
+import { useCharityModelScope } from './charityModelScopeContext';
 import './FailurePolicyControl.css';
 
 export function FailurePolicyWarning() {
@@ -65,10 +66,11 @@ export function FailurePolicyControl({
   const { t } = useTranslation();
   const client = useQueryClient();
   const [draft, setDraft] = useState(threshold);
+  const modelID = useCharityModelScope();
   const root = role === 'owner' ? ['user', 'economy', 'donations'] : charityKeys.root(role);
   const save = useRetainedOperation(
     (input: { expected_revision: string; failure_disable_threshold: string }, key) =>
-      saveFailurePolicy(role, donationID, keyID, input, key),
+      saveFailurePolicy(role, donationID, keyID, input, key, modelID),
     () => (refresh ? refresh() : client.invalidateQueries({ queryKey: root })),
     root,
   );

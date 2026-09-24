@@ -12,6 +12,7 @@ import { isStationSessionChanged } from '@shared/charityManagement';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { copyForRecurringLimits } from '@shared/components/recurringLimitsCopy';
 import { DonationKeyPanel } from './CharityPanels';
+import { DonationThanks } from '@shared/components/DonationControlFacts';
 import { economyKeys, economySessionRequest } from './queries';
 import {
   getOwnerDonationsPage,
@@ -279,6 +280,7 @@ function DonationSummary({
         />
       </div>
       <p>{item.description}</p>
+      <DonationThanks value={item.discordPublicThanks} />
       <p className="item-meta">{formatDateTime(item.createdAt)}</p>
       <p>{t('user.charity.ownerPages.keyCount', { count: item.keyCount })}</p>
       <div className="economy-status-stack">

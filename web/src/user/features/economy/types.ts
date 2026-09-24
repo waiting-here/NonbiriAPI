@@ -28,6 +28,7 @@ export interface CharityCapabilityDiscount {
 }
 
 export interface CharityCapabilityModel {
+  recentSuccess?: import('@shared/operations/charitySuccess').CharitySuccess;
   id: string;
   provider: string;
   model: string;
@@ -54,12 +55,19 @@ export type DonationKeyEndedReason =
   'member_removed' | 'withdrawn' | 'terminated' | 'expired' | 'account_deleted';
 
 export interface DonationLimits {
+  inputTokens?: string | null;
+  outputTokens?: string | null;
   price: string | null;
   calls: string | null;
   tokens: string | null;
 }
 
 export interface DonationUsage {
+  inputTokensUsed?: string;
+  outputTokensUsed?: string;
+  inputTokensInflight?: string;
+  outputTokensInflight?: string;
+  unattributedTotalTokens?: string;
   priceUsed: string;
   priceInflight: string;
   callsUsed: string;
@@ -103,6 +111,9 @@ export interface EndpointOriginMainstream {
 export type EndpointOrigin = EndpointOriginCustom | EndpointOriginMainstream;
 
 export interface DonationKey {
+  inputTokenReserve?: string | null;
+  outputTokenReserve?: string | null;
+  breakdownStartedAt?: number;
   failureDisableThreshold: string;
   id: string;
   endpointKeyId: string | null;
@@ -126,6 +137,7 @@ export interface DonationReviewResult {
 }
 
 export interface Donation {
+  discordPublicThanks?: boolean | null;
   id: string;
   status: DonationStatus;
   revision: string;

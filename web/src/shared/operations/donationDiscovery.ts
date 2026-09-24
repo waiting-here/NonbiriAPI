@@ -1,4 +1,5 @@
 import { decoded, idempotentOptions } from './api';
+import { charityScopePath } from './charityScope';
 import {
   array,
   decimal,
@@ -77,10 +78,11 @@ export function selectDonationDiscoveries(
   role: CharityRole,
   donationID: string | null,
   cursor: string | null,
+  modelID?: string,
 ): Promise<DiscoverySelection> {
   if (donationID !== null) decimalID(donationID, 'donation id');
   return decoded(
-    `${base(role)}/donation-keys/models/refresh/selection`,
+    charityScopePath(`${base(role)}/donation-keys/models/refresh/selection`, modelID),
     (value) => {
       const body = record(value, ['items', 'next_cursor'], 'discovery selection');
       const items = array(body.items, 'discovery references', 100).map((value) => {
@@ -115,9 +117,10 @@ export function startDonationDiscovery(
   role: CharityRole,
   item: DiscoveryRef,
   key: string,
+  modelID?: string,
 ): Promise<DiscoveryEvidence> {
   return decoded(
-    `${path(role, item)}/refresh`,
+    charityScopePath(`${path(role, item)}/refresh`, modelID),
     (value) => {
       const body = record(value, ['operation_id', 'evidence'], 'accepted discovery');
       if (!/^op_[A-Za-z0-9_-]{21}[AQgw]$/.test(string(body.operation_id, 'operation id')))
@@ -133,8 +136,13 @@ export function startDonationDiscovery(
 export function readDonationDiscovery(
   role: CharityRole,
   item: DiscoveryRef,
+  modelID?: string,
 ): Promise<DiscoveryEvidence> {
-  return decoded(`${path(role, item)}/discovery`, normalizeManagedDiscovery, {
-    signal: AbortSignal.timeout(10000),
-  });
+  return decoded(
+    charityScopePath(`${path(role, item)}/discovery`, modelID),
+    normalizeManagedDiscovery,
+    {
+      signal: AbortSignal.timeout(10000),
+    },
+  );
 }

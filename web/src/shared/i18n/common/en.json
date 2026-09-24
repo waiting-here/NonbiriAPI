@@ -427,7 +427,7 @@
         "levelLabel": "L{{level}}",
         "selectAllLevels": "Select all levels",
         "clearAllLevels": "Clear all levels",
-        "noAllowedLevels": "No ordinary user can call this model (including level 5 users).",
+        "noAllowedLevels": "No ordinary user can call this model (including level 6 users).",
         "publicDescription": "Public description (plain text, optional)",
         "publicDescriptionHelp": "Line breaks are shown as entered. Markdown, HTML, and links are displayed as plain text.",
         "endedReason": "Ended",

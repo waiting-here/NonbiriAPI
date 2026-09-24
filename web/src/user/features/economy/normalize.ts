@@ -1,5 +1,6 @@
 import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { ApiError } from '@shared/query/http';
+import { normalizeCharitySuccess } from '@shared/operations/charitySuccess';
 import type {
   ActivitiesMaster,
   ActivitiesSnapshot,
@@ -343,14 +344,12 @@ function requireDiscountProjection(
 }
 
 export function normalizeCharityCapabilityModel(value: unknown): CharityCapabilityModel {
-  const item = record(value, 'charity model', [
-    'id',
-    'provider',
-    'model',
-    'full_name',
-    'pricing',
-    'discount',
-  ]);
+  const item = record(
+    value,
+    'charity model',
+    ['id', 'provider', 'model', 'full_name', 'pricing', 'discount'],
+    ['recent_success'],
+  );
   const provider = charityModelName(item.provider, 'charity model provider');
   const model = charityModelName(item.model, 'charity model name');
   const fullName = text(item.full_name, 'charity model full name', 133, false);
@@ -424,6 +423,9 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
     provider,
     model,
     fullName,
+    ...(item.recent_success === undefined
+      ? {}
+      : { recentSuccess: normalizeCharitySuccess(item.recent_success) }),
     pricing: normalizedPricing,
     discount: {
       enabled: discountEnabled,
@@ -542,32 +544,53 @@ function validateUsageDimension(
 }
 
 export function normalizeDonationKey(value: unknown): DonationKey {
-  const item = record(value, 'donation key', [
-    'failure_disable_threshold',
-    'id',
-    'endpoint_key_id',
-    'display_head',
-    'display_tail',
-    'safe_source',
-    'physical_enabled',
-    'charity_state',
-    'limits',
-    'usage',
-    'token_reserve',
-    'expires_at',
-    'streak',
-    'ended_reason',
-  ]);
+  const item = record(
+    value,
+    'donation key',
+    [
+      'failure_disable_threshold',
+      'id',
+      'endpoint_key_id',
+      'display_head',
+      'display_tail',
+      'safe_source',
+      'physical_enabled',
+      'charity_state',
+      'limits',
+      'usage',
+      'token_reserve',
+      'expires_at',
+      'streak',
+      'ended_reason',
+    ],
+    ['input_token_reserve', 'output_token_reserve', 'breakdown_started_at'],
+  );
   const source = normalizeDonationSafeSource(item.safe_source);
-  const limits = record(item.limits, 'donation key limits', ['price', 'calls', 'tokens']);
-  const usage = record(item.usage, 'donation key usage', [
-    'price_used',
-    'price_inflight',
-    'calls_used',
-    'calls_inflight',
-    'tokens_used',
-    'tokens_inflight',
-  ]);
+  const limits = record(
+    item.limits,
+    'donation key limits',
+    ['price', 'calls', 'tokens'],
+    ['input_tokens', 'output_tokens'],
+  );
+  const usage = record(
+    item.usage,
+    'donation key usage',
+    [
+      'price_used',
+      'price_inflight',
+      'calls_used',
+      'calls_inflight',
+      'tokens_used',
+      'tokens_inflight',
+    ],
+    [
+      'input_tokens_used',
+      'output_tokens_used',
+      'input_tokens_inflight',
+      'output_tokens_inflight',
+      'unattributed_total_tokens',
+    ],
+  );
   const streak = record(item.streak, 'donation key streak', [
     'generation',
     'count',
@@ -591,6 +614,18 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       price: nullableDecimal(limits.price, 'donation price limit', true, MAX_MONEY_MILLI),
       calls: nullableDecimal(limits.calls, 'donation call limit', false, MAX_MONEY_MILLI),
       tokens: nullableDecimal(limits.tokens, 'donation token limit', false, MAX_MONEY_MILLI),
+      inputTokens: nullableDecimal(
+        limits.input_tokens ?? null,
+        'donation input token limit',
+        false,
+        MAX_INT64,
+      ),
+      outputTokens: nullableDecimal(
+        limits.output_tokens ?? null,
+        'donation output token limit',
+        false,
+        MAX_INT64,
+      ),
     },
     usage: {
       priceUsed: creditAmount(usage.price_used, 'donation price used'),
@@ -599,8 +634,35 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       callsInflight: decimal(usage.calls_inflight, 'donation calls inflight'),
       tokensUsed: decimal(usage.tokens_used, 'donation tokens used'),
       tokensInflight: decimal(usage.tokens_inflight, 'donation tokens inflight'),
+      inputTokensUsed: decimal(usage.input_tokens_used ?? '0', 'donation input tokens used'),
+      outputTokensUsed: decimal(usage.output_tokens_used ?? '0', 'donation output tokens used'),
+      inputTokensInflight: decimal(
+        usage.input_tokens_inflight ?? '0',
+        'donation input tokens inflight',
+      ),
+      outputTokensInflight: decimal(
+        usage.output_tokens_inflight ?? '0',
+        'donation output tokens inflight',
+      ),
+      unattributedTotalTokens: decimal(
+        usage.unattributed_total_tokens ?? usage.tokens_used,
+        'donation unattributed tokens',
+      ),
     },
     tokenReserve: integer(item.token_reserve, 'donation token reserve', 0, 2_147_483_647),
+    inputTokenReserve: nullableDecimal(
+      item.input_token_reserve ?? null,
+      'donation input reserve',
+      false,
+      MAX_INT64,
+    ),
+    outputTokenReserve: nullableDecimal(
+      item.output_token_reserve ?? null,
+      'donation output reserve',
+      false,
+      MAX_INT64,
+    ),
+    breakdownStartedAt: timestamp(item.breakdown_started_at ?? 0, 'donation token breakdown start'),
     expiresAt: nullableTimestamp(item.expires_at, 'donation key expiry'),
     streak: {
       generation: positiveDecimal(streak.generation, 'donation streak generation', MAX_U128),
@@ -698,16 +760,21 @@ export function normalizeDonationKey(value: unknown): DonationKey {
 }
 
 export function normalizeDonation(value: unknown): Donation {
-  const item = record(value, 'donation', [
-    'id',
-    'status',
-    'revision',
-    'description',
-    'review_result',
-    'keys',
-    'created_at',
-    'updated_at',
-  ]);
+  const item = record(
+    value,
+    'donation',
+    [
+      'id',
+      'status',
+      'revision',
+      'description',
+      'review_result',
+      'keys',
+      'created_at',
+      'updated_at',
+    ],
+    ['discord_public_thanks'],
+  );
   const status = enumValue(item.status, 'donation status', DONATION_STATUSES);
   const reviewResult = normalizeReviewResult(item.review_result);
   if (status === 'pending' && reviewResult !== null) invalid('pending donation review result');
@@ -783,6 +850,8 @@ export function normalizeDonation(value: unknown): Donation {
     id: decimalID(item.id, 'donation id'),
     status,
     revision: positiveDecimal(item.revision, 'donation revision'),
+    discordPublicThanks:
+      item.discord_public_thanks == null ? null : bool(item.discord_public_thanks, 'public thanks'),
     description: text(item.description, 'donation description', 1024),
     reviewResult,
     keys,

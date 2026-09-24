@@ -1,5 +1,6 @@
 import { apiFetch } from '@shared/query/http';
 import { decoded, idempotentOptions, queryPath } from './api';
+import { excludedFields } from './charityScope';
 import {
   amount,
   array,
@@ -76,7 +77,13 @@ export interface ManagedDonationKey {
   safe_source: ManagedSafeSource;
   physical_enabled: boolean;
   charity_state: CharityState;
-  limits: { price: string | null; calls: string | null; tokens: string | null };
+  limits: {
+    price: string | null;
+    calls: string | null;
+    tokens: string | null;
+    input_tokens?: string | null;
+    output_tokens?: string | null;
+  };
   usage: {
     price_used: string;
     price_inflight: string;
@@ -84,8 +91,16 @@ export interface ManagedDonationKey {
     calls_inflight: string;
     tokens_used: string;
     tokens_inflight: string;
+    input_tokens_used?: string;
+    output_tokens_used?: string;
+    input_tokens_inflight?: string;
+    output_tokens_inflight?: string;
+    unattributed_total_tokens?: string;
   };
   token_reserve: number;
+  input_token_reserve?: string | null;
+  output_token_reserve?: string | null;
+  breakdown_started_at?: number;
   authorized_expires_at: number | null;
   expires_at: number | null;
   streak: { generation: string; count: string; failure_disabled: boolean };
@@ -96,6 +111,7 @@ export interface ManagedDonationKey {
 }
 
 interface DonationCommon {
+  discord_public_thanks?: boolean | null;
   handling: DonationHandling;
   id: string;
   status: DonationStatus;
@@ -186,6 +202,12 @@ export function normalizeManagedSource(
   return mainstream;
 }
 
+function nullableTokenCount(value: unknown, label: string): string | null {
+  const result = nullableDecimal(value, label);
+  if (result !== null && BigInt(result) > 9_223_372_036_854_775_807n) invalidResponse(label);
+  return result;
+}
+
 export function normalizeManagedKey(
   value: unknown,
   label: string,
@@ -211,11 +233,36 @@ export function normalizeManagedKey(
     'authorized_expires_at',
     'safe_note',
   ];
-  const root = record(value, [...required, 'max_concurrency', 'max_rpm'], label, required);
+  const root = record(
+    value,
+    [
+      ...required,
+      'max_concurrency',
+      'max_rpm',
+      'input_token_reserve',
+      'output_token_reserve',
+      'breakdown_started_at',
+    ],
+    label,
+    required,
+  );
   const bindingCount = decimal(root.binding_count, `${label} binding count`);
   const idle = boolean(root.idle, `${label} idle`);
   if (idle !== (bindingCount === '0')) invalidResponse(`${label} idle state`);
-  const limits = record(root.limits, ['price', 'calls', 'tokens'], `${label} limits`);
+  const limits = record(
+    root.limits,
+    ['price', 'calls', 'tokens', 'input_tokens', 'output_tokens'],
+    `${label} limits`,
+    ['price', 'calls', 'tokens'],
+  );
+  const usageFields = [
+    'price_used',
+    'price_inflight',
+    'calls_used',
+    'calls_inflight',
+    'tokens_used',
+    'tokens_inflight',
+  ];
   const usage = record(
     root.usage,
     [
@@ -225,8 +272,14 @@ export function normalizeManagedKey(
       'calls_inflight',
       'tokens_used',
       'tokens_inflight',
+      'input_tokens_used',
+      'output_tokens_used',
+      'input_tokens_inflight',
+      'output_tokens_inflight',
+      'unattributed_total_tokens',
     ],
     `${label} usage`,
+    usageFields,
   );
   const streak = record(
     root.streak,
@@ -283,6 +336,11 @@ export function normalizeManagedKey(
       price: nullableAmount(limits.price, `${label} price limit`),
       calls: nullableDecimal(limits.calls, `${label} call limit`),
       tokens: nullableDecimal(limits.tokens, `${label} token limit`),
+      input_tokens: nullableTokenCount(limits.input_tokens ?? null, `${label} input token limit`),
+      output_tokens: nullableTokenCount(
+        limits.output_tokens ?? null,
+        `${label} output token limit`,
+      ),
     },
     usage: {
       price_used: amount(usage.price_used, `${label} price used`, false),
@@ -291,8 +349,31 @@ export function normalizeManagedKey(
       calls_inflight: decimal(usage.calls_inflight, `${label} calls inflight`),
       tokens_used: decimal(usage.tokens_used, `${label} tokens used`),
       tokens_inflight: decimal(usage.tokens_inflight, `${label} tokens inflight`),
+      input_tokens_used: decimal(usage.input_tokens_used ?? '0', `${label} input tokens used`),
+      output_tokens_used: decimal(usage.output_tokens_used ?? '0', `${label} output tokens used`),
+      input_tokens_inflight: decimal(
+        usage.input_tokens_inflight ?? '0',
+        `${label} input tokens inflight`,
+      ),
+      output_tokens_inflight: decimal(
+        usage.output_tokens_inflight ?? '0',
+        `${label} output tokens inflight`,
+      ),
+      unattributed_total_tokens: decimal(
+        usage.unattributed_total_tokens ?? usage.tokens_used,
+        `${label} unattributed tokens`,
+      ),
     },
     token_reserve: integer(root.token_reserve, `${label} token reserve`, 0),
+    input_token_reserve: nullableTokenCount(
+      root.input_token_reserve ?? null,
+      `${label} input reservation`,
+    ),
+    output_token_reserve: nullableTokenCount(
+      root.output_token_reserve ?? null,
+      `${label} output reservation`,
+    ),
+    breakdown_started_at: unixSecond(root.breakdown_started_at ?? 0, `${label} breakdown start`),
     authorized_expires_at: authorizedExpiresAt,
     expires_at: expiresAt,
     streak: {
@@ -426,6 +507,10 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
   return {
     id: decimalID(root.id, `${label} id`),
     status,
+    discord_public_thanks:
+      root.discord_public_thanks == null
+        ? null
+        : boolean(root.discord_public_thanks, `${label} public thanks`),
     handling: normalizeDonationHandling(root.handling),
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
     description: string(root.description, `${label} donor description`, {
@@ -445,6 +530,7 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
 
 export function normalizeAdminDonation(value: unknown): AdminDonation {
   const fields = [
+    'discord_public_thanks',
     'handling',
     'id',
     'status',
@@ -457,7 +543,12 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     'created_at',
     'updated_at',
   ] as const;
-  const root = record(value, fields, 'administrator donation');
+  const root = record(
+    value,
+    fields,
+    'administrator donation',
+    fields.filter((field) => field !== 'discord_public_thanks'),
+  );
   const common = normalizeDonationCommon(root, 'administrator donation');
   let owner: AdminDonation['owner'] = null;
   if (root.owner !== null) {
@@ -485,6 +576,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
 
 export function normalizeStewardDonation(value: unknown): StewardDonation {
   const fields = [
+    'discord_public_thanks',
     'handling',
     'id',
     'status',
@@ -497,7 +589,12 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
     'created_at',
     'updated_at',
   ] as const;
-  const root = record(value, fields, 'steward donation');
+  const root = record(
+    value,
+    fields,
+    'steward donation',
+    fields.filter((field) => field !== 'discord_public_thanks'),
+  );
   const common = normalizeDonationCommon(root, 'steward donation');
   if (root.owner === null) return { ...common, owner: null };
   const item = record(
@@ -524,6 +621,8 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
 }
 
 export interface CharityModel {
+  is_mainstream?: boolean;
+  excluded_request_fields?: string[];
   route_strategy: 'ordered' | 'random' | 'expiry_weighted';
   id: string;
   provider: string;
@@ -575,6 +674,8 @@ export interface BindingDonation {
   key_count: number;
 }
 export interface BindingSourceKey {
+  donation_note?: string;
+  approval_note?: string | null;
   donation_key_id: string;
   source: CharityBinding['source'];
   note: string;
@@ -605,7 +706,13 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   ];
   const root = record(
     value,
-    [...required, 'route_strategy', 'token_reserve_credits'],
+    [
+      ...required,
+      'route_strategy',
+      'token_reserve_credits',
+      'is_mainstream',
+      'excluded_request_fields',
+    ],
     label,
     required,
   );
@@ -687,6 +794,9 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   return {
     id: decimalID(root.id, `${label} id`),
     provider,
+    is_mainstream:
+      root.is_mainstream === undefined ? false : boolean(root.is_mainstream, `${label} mainstream`),
+    excluded_request_fields: normalizeExcludedFields(root.excluded_request_fields, label),
     model,
     full_name: fullName,
     route_strategy:
@@ -730,13 +840,23 @@ function normalizeTokenReserveCredits(value: unknown, label: string): string | n
 }
 
 function normalizeAllowedLevels(value: unknown, label: string): number[] {
-  const levels = array(value, label, 5).map((entry, index) =>
+  const levels = array(value, label, 6).map((entry, index) =>
     integer(entry, `${label} item ${index + 1}`, 1, 6),
   );
   if (levels.some((level, index) => index > 0 && levels[index - 1] >= level)) {
     invalidResponse(`${label} order`);
   }
   return levels;
+}
+
+function normalizeExcludedFields(value: unknown, label: string): string[] {
+  if (value === undefined) return [];
+  const fields = array(value, `${label} excluded fields`, 32).map((item) =>
+    string(item, `${label} excluded field`, { min: 1, max: 64, ascii: true }),
+  );
+  const valid = excludedFields(fields.join(','));
+  if (!valid || valid.length !== fields.length) invalidResponse(`${label} excluded fields`);
+  return valid;
 }
 
 export function normalizePublicDescription(value: unknown, label: string): string {
@@ -1104,11 +1224,29 @@ export const getBindingSourceKeys = (
     ),
     (value) =>
       page<BindingSourceKey>(value, 'binding source keys', (entry) => {
-        const root = record(entry, ['donation_key_id', 'source', 'note'], 'binding source key');
+        const root = record(
+          entry,
+          ['donation_key_id', 'source', 'note', 'donation_note', 'approval_note'],
+          'binding source key',
+          ['donation_key_id', 'source', 'note'],
+        );
         return {
           donation_key_id: decimalID(root.donation_key_id, 'donation key id'),
           source: normalizeSource(root.source, 'shared source'),
           note: string(root.note, 'shared note', { max: 256, bytes: 1024, multiline: true }),
+          donation_note: string(root.donation_note ?? '', 'donor note', {
+            max: 1024,
+            bytes: 4096,
+            multiline: true,
+          }),
+          approval_note:
+            root.approval_note == null
+              ? null
+              : string(root.approval_note, 'approval note', {
+                  max: 1024,
+                  bytes: 4096,
+                  multiline: true,
+                }),
         };
       }),
   );

@@ -166,7 +166,7 @@ describe('failure reset controls', () => {
       { station: 'user', locale: 'en' },
     );
     view.queryClient.setQueryData(['user', 'session'], {
-      user: { id: '3', username: 'fixture', effective_level: 5 },
+      user: { id: '3', username: 'fixture', effective_level: 6 },
     });
     await view.user.click(screen.getByText('Reset failure count', { selector: 'summary' }));
     await view.user.click(screen.getByRole('button', { name: 'Reset all matching keys' }));

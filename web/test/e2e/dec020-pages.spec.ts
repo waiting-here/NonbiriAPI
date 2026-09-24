@@ -736,11 +736,15 @@ test.describe('donation expiry in UTC', () => {
     await composer
       .getByRole('textbox', { name: 'Donation description' })
       .fill('Per-key expiry fixture');
+    await composer
+      .getByRole('combobox', { name: 'Accept a public Discord thank-you' })
+      .selectOption('no');
     await composer.getByRole('button', { name: 'Submit for review' }).click();
     await expect(page.getByText('Donation submitted for review.')).toBeVisible();
     expect(donationPostBody).toMatchObject({
       description: 'Per-key expiry fixture',
       ownership_authorized: true,
+      discord_public_thanks: false,
       keys: [{ endpoint_key_id: '14', expires_at: 1_800_000_000 }],
     });
     await assertClean(page, guard);

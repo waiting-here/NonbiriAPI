@@ -1,5 +1,6 @@
 import { ApiError } from '@shared/query/http';
 import { decoded, idempotentOptions } from './api';
+import { charityScopePath } from './charityScope';
 import { boolean, decimal, decimalID, invalidResponse, record } from './wire';
 
 export function validFailureThreshold(value: string): boolean {
@@ -19,12 +20,16 @@ export function saveFailurePolicy(
   keyID: string,
   input: { expected_revision: string; failure_disable_threshold: string },
   idempotencyKey: string,
+  modelID?: string,
 ): Promise<FailurePolicy> {
   if (!validFailureThreshold(input.failure_disable_threshold))
     throw new ApiError('invalid_request', 'Invalid failure threshold.', 400);
   const base = role === 'admin' ? '/admin/api' : role === 'steward' ? '/api/steward' : '/api';
   return decoded(
-    `${base}/donations/${decimalID(donationID, 'donation id')}/keys/${decimalID(keyID, 'key id')}/failure-policy`,
+    charityScopePath(
+      `${base}/donations/${decimalID(donationID, 'donation id')}/keys/${decimalID(keyID, 'key id')}/failure-policy`,
+      modelID,
+    ),
     (value) => {
       const fields = record(
         value,

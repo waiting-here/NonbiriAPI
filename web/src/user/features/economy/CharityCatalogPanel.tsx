@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { CopyValue } from '@shared/components/CopyValue';
+import { RecentCharitySuccess } from '@shared/components/DonationControlFacts';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -144,6 +145,7 @@ function CatalogModelCard({
         serverNow={serverNow}
         discount={discountProps(model)}
       />
+      <RecentCharitySuccess value={model.recentSuccess} />
       {description ? (
         <div className="economy-catalog-item__description-block">
           <p className={`economy-catalog-item__description${expanded ? ' is-expanded' : ''}`}>
@@ -234,6 +236,7 @@ function CatalogFilters({
           <option value="3">{t('user.charity.catalog.level', { level: 3 })}</option>
           <option value="4">{t('user.charity.catalog.level', { level: 4 })}</option>
           <option value="5">{t('user.charity.catalog.level', { level: 5 })}</option>
+          <option value="6">{t('user.charity.catalog.level', { level: 6 })}</option>
         </select>
         {filter.allowedLevel !== 'all' ? (
           <span className="economy-catalog-filter__applied">{appliedLabel}</span>
