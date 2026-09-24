@@ -54,7 +54,7 @@ func insertMaintenancePrincipal(t *testing.T, database *sql.DB, discord, token s
 	}
 	var manualLevel any
 	if steward {
-		manualLevel = int64(5)
+		manualLevel = int64(6)
 	}
 	var discordValue any = discord
 	if discord == "" {

@@ -69,7 +69,7 @@ func requireTestUser(ctx context.Context, tx *sql.Tx, userID int64, steward bool
 	if err != nil {
 		return err
 	}
-	if admin == 1 || banned == 1 || steward && (!level.Valid || level.Int64 != 5) {
+	if admin == 1 || banned == 1 || steward && (!level.Valid || level.Int64 != 6) {
 		return ErrForbidden
 	}
 	return nil
@@ -486,7 +486,7 @@ WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 
 func TestReviewSuspensionPrivacyAndFinalTransactionAuthorization(t *testing.T) {
 	environment := newDonationTestEnv(t)
-	ownerLevel := int64(5)
+	ownerLevel := int64(6)
 	owner := environment.seedUser(t, "123456789", &ownerLevel, false)
 	environment.seedUser(t, "", nil, true)
 	_, endpointKeyID := environment.seedEndpointKey(t, owner, 'd')
@@ -662,9 +662,9 @@ func testU128Decimal(t *testing.T, value []byte) string {
 
 func TestStewardCrossDonorExpiryPrecedesMutationAcceptance(t *testing.T) {
 	environment := newDonationTestEnv(t)
-	levelFive := int64(5)
-	owner := environment.seedUser(t, "due-owner", &levelFive, false)
-	foreignSteward := environment.seedUser(t, "foreign-steward", &levelFive, false)
+	levelSix := int64(6)
+	owner := environment.seedUser(t, "due-owner", &levelSix, false)
+	foreignSteward := environment.seedUser(t, "foreign-steward", &levelSix, false)
 	environment.seedUser(t, "", nil, true)
 	_, endpointKeyID := environment.seedEndpointKey(t, owner, 'i')
 	donation := environment.createDonationWithSeed(t, owner, 'M', endpointKeyID)

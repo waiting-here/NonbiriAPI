@@ -50,7 +50,7 @@ func (auth *routingTestAuth) AuthorizeStewardMutation(ctx context.Context, tx *s
 	if err := tx.QueryRowContext(ctx, `SELECT level,is_banned FROM users WHERE id=?`, userID).Scan(&level, &banned); err != nil {
 		return ErrUnauthorized
 	}
-	if banned != 0 || !level.Valid || level.Int64 != 5 {
+	if banned != 0 || !level.Valid || level.Int64 != 6 {
 		return ErrForbidden
 	}
 	return nil
@@ -296,7 +296,7 @@ END`); err != nil {
 func TestModelRevisionNestedDiscountAndRoleAuthorization(t *testing.T) {
 	environment := newRoutingTestEnv(t)
 	environment.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := environment.seedUser(t, false, &level)
 	input := testModelCreate()
 	mutation := routingMutation(t, 'A', http.MethodPost, routeAdminModels, nil, map[string]any{"create": true})

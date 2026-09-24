@@ -910,7 +910,7 @@ func replayModel(decision idempotency.Decision) (resources.MutationResult[AdminC
 	if result.Value.AllowedLevels == nil {
 		// Receipts predating level restrictions describe the former all-level
 		// behavior. The stored immutable receipt and its existing fields stay intact.
-		result.Value.AllowedLevels = []int{1, 2, 3, 4, 5}
+		result.Value.AllowedLevels = []int{1, 2, 3, 4, 5, 6}
 		result.Value.PublicDescription = ""
 		result.Body, err = json.Marshal(result.Value)
 		if err != nil {

@@ -66,7 +66,7 @@ func TestFailureResetRegisteredRoutesUseCurrentSessions(t *testing.T) {
 	if denied.Code != 403 {
 		t.Fatalf("ordinary selection: %d %s", denied.Code, denied.Body)
 	}
-	exec(`UPDATE users SET level=5 WHERE id=?`, f.userID)
+	exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
 	selected := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, stewardPath+"/selection", selection, f.cookies, headers(auditUserHost, "S"))
 	if selected.Code != 200 || !strings.Contains(selected.Body.String(), `"expected_revision":"3"`) {
 		t.Fatalf("steward selection: %d %s", selected.Code, selected.Body)

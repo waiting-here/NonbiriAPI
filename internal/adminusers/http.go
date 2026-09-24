@@ -99,7 +99,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	query := UserListQuery{}
 	if raw, set := singleQuery(values, "level"); set {
 		value, err := strconv.Atoi(raw)
-		if err != nil || strconv.Itoa(value) != raw || value < 1 || value > 5 {
+		if err != nil || strconv.Itoa(value) != raw || value < 1 || value > 6 {
 			writeError(writer, ErrInvalidRequest)
 			return
 		}
@@ -398,7 +398,7 @@ func decodeProfileMutation(object map[string]json.RawMessage) (ProfileMutation, 
 	if raw, set := object["level"]; set {
 		input.LevelSet = true
 		value, ok := nullableInteger(raw)
-		if !ok || value != nil && (*value < 1 || *value > 5) {
+		if !ok || value != nil && (*value < 1 || *value > 6) {
 			return ProfileMutation{}, false
 		}
 		if value != nil {

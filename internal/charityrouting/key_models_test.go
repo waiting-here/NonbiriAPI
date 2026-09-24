@@ -16,7 +16,7 @@ import (
 func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	owner := env.seedUser(t, false, nil)
 	did, kid, physical := env.seedCandidate(t, owner, 'x', "upstream")

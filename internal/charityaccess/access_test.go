@@ -6,7 +6,7 @@ import (
 )
 
 func TestEveryLevelSubsetHasExactMembership(t *testing.T) {
-	for subset := 0; subset < 32; subset++ {
+	for subset := 0; subset < 64; subset++ {
 		levels, err := Levels(subset)
 		if err != nil || levels == nil {
 			t.Fatalf("subset %d: %v", subset, err)
@@ -22,7 +22,7 @@ func TestEveryLevelSubsetHasExactMembership(t *testing.T) {
 			}
 			previous = level
 		}
-		for level := 0; level <= 6; level++ {
+		for level := 0; level <= 7; level++ {
 			want := false
 			for _, member := range levels {
 				want = want || member == level
@@ -32,12 +32,12 @@ func TestEveryLevelSubsetHasExactMembership(t *testing.T) {
 			}
 		}
 	}
-	for _, levels := range [][]int{{0}, {6}, {-1}, {1, 1}, {1, 2, 3, 4, 5, 5}} {
+	for _, levels := range [][]int{{0}, {7}, {-1}, {1, 1}, {1, 2, 3, 4, 5, 5}} {
 		if _, err := Mask(levels); err == nil {
 			t.Fatalf("invalid set accepted: %v", levels)
 		}
 	}
-	for _, mask := range []int{-1, 32, 255} {
+	for _, mask := range []int{-1, 64, 255} {
 		if _, err := Levels(mask); err == nil || Allows(mask, 1) {
 			t.Fatalf("invalid mask accepted: %d", mask)
 		}

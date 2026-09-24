@@ -377,7 +377,7 @@ type reviewerRole string
 
 const (
 	reviewerAdmin   reviewerRole = "admin"
-	reviewerSteward reviewerRole = "level5"
+	reviewerSteward reviewerRole = "level6"
 )
 
 func (s *Service) ReviewAdmin(

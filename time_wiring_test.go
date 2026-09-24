@@ -181,7 +181,7 @@ func TestTimeRoutesThroughProductionStationAndSessionBoundary(t *testing.T) {
 			t.Fatalf("%s %s%s=%d want=%d: %s", test.method, test.hostname, test.path, response.Code, test.want, response.Body.String())
 		}
 	}
-	if _, err := store.DB().Exec(`UPDATE users SET level=5 WHERE discord_id='time-test-user'`); err != nil {
+	if _, err := store.DB().Exec(`UPDATE users SET level=6 WHERE discord_id='time-test-user'`); err != nil {
 		t.Fatal(err)
 	}
 	if response := request(http.MethodGet, cfg.UserHost, "/api/time-zones", "", userCookie); response.Code != 200 {

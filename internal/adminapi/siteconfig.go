@@ -100,6 +100,8 @@ const (
 	KeyLevelDisplayName3             = "level_display_name_3"
 	KeyLevelDisplayName4             = "level_display_name_4"
 	KeyLevelDisplayName5             = "level_display_name_5"
+	KeyLevelDisplayName6             = "level_display_name_6"
+	KeyRequestErrorBodyBudgetMiB     = "request_error_body_budget_mib"
 	KeyActivitiesEnabled             = "activities_enabled"
 	KeyActivityWelfareEnabled        = "activity_welfare_enabled"
 	KeyActivityWelfareThreshold      = "activity_welfare_threshold_milli"
@@ -301,7 +303,9 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyLevelDisplayName2:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 2"},
 		KeyLevelDisplayName3:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 3"},
 		KeyLevelDisplayName4:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 4"},
-		KeyLevelDisplayName5:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 5"},
+		KeyLevelDisplayName5:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "见习协管"},
+		KeyLevelDisplayName6:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 6"},
+		KeyRequestErrorBodyBudgetMiB:        {kind: kindInt, min: 1, max: 65536, def: 1024},
 		KeyActivitiesEnabled:                {kind: kindBool},
 		KeyActivityWelfareEnabled:           {kind: kindBool},
 		KeyActivityWelfareThreshold:         {kind: kindAmount},

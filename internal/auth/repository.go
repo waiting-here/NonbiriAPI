@@ -373,7 +373,7 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 	if u.manualLevel.Valid {
 		effective = int(u.manualLevel.Int64)
 	}
-	if effective < 1 || effective > 5 {
+	if effective < 1 || effective > 6 {
 		return UserEnvelope{}, fmt.Errorf("invalid effective level")
 	}
 	display, err := configTx(ctx, tx, fmt.Sprintf("level_display_name_%d", effective))
@@ -382,6 +382,9 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 	}
 	if display == "" {
 		display = fmt.Sprintf("Lv. %d", effective)
+		if effective == 5 {
+			display = "见习协管"
+		}
 	}
 	donation, err := decodeU128(u.donation)
 	if err != nil {

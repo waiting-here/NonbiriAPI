@@ -427,7 +427,7 @@ type roleKind string
 
 const (
 	roleAdmin   roleKind = "admin"
-	roleSteward roleKind = "level5"
+	roleSteward roleKind = "level6"
 )
 
 type roleContext struct {

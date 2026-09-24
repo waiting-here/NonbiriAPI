@@ -44,7 +44,7 @@ func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilte
 	if s == nil || s.db == nil || ctx == nil || userID <= 0 || !page.Valid() ||
 		!utf8.ValidString(filter.Query) || utf8.RuneCountInString(filter.Query) > 128 ||
 		len(filter.Query) > 512 || strings.ContainsRune(filter.Query, 0) ||
-		(filter.AllowedLevel != nil && (*filter.AllowedLevel < 1 || *filter.AllowedLevel > 5)) {
+		(filter.AllowedLevel != nil && (*filter.AllowedLevel < 1 || *filter.AllowedLevel > 6)) {
 		return Catalog{}, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

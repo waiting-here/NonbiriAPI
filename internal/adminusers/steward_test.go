@@ -43,7 +43,7 @@ func newStewardUsersFixture(t *testing.T) (*adminUsersFixture, int64) {
 	t.Helper()
 	f := newAdminUsersFixture(t)
 	actor := f.seedUser("steward", false)
-	if _, err := f.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", actor); err != nil {
+	if _, err := f.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", actor); err != nil {
 		t.Fatal(err)
 	}
 	if err := RegisterStewardRoutes(f.registrar, f.service); err != nil {
@@ -62,7 +62,7 @@ func TestUserLevelFilteringIncludesLazyPromotionsAndHighWater(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := map[int][]string{1: {}, 2: {}, 3: {}, 4: {}, 5: {strconv.FormatInt(actor, 10)}}
+	want := map[int][]string{1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {strconv.FormatInt(actor, 10)}}
 	for index, row := range []struct {
 		donation string
 		auto     int
@@ -90,7 +90,7 @@ func TestUserLevelFilteringIncludesLazyPromotionsAndHighWater(t *testing.T) {
 		}
 		want[4] = append(want[4], strconv.FormatInt(id, 10))
 	}
-	for level := 1; level <= 5; level++ {
+	for level := 1; level <= 6; level++ {
 		for _, role := range []managementRole{roleAdmin, roleSteward} {
 			actorID := actor
 			if role == roleAdmin {
@@ -138,7 +138,7 @@ func TestUserLevelFilteringIncludesLazyPromotionsAndHighWater(t *testing.T) {
 	if _, err := f.service.listUsers(context.Background(), f.adminID, roleAdmin, UserListQuery{Level: 4, Q: "level-four-", Limit: 1, Cursor: *page.NextCursor}); err == nil {
 		t.Fatal("cursor crossed role/actor boundary")
 	}
-	for _, query := range []string{"?level=", "?level=0", "?level=6", "?level=01", "?level=1&level=2", "?level=1.0"} {
+	for _, query := range []string{"?level=", "?level=0", "?level=7", "?level=01", "?level=1&level=2", "?level=1.0"} {
 		if got := stewardUserRequest(t, f, actor, 0, "GET", routeUsers, query, "", ""); got.Code != 400 {
 			t.Fatalf("level query %s: %d", query, got.Code)
 		}
@@ -186,7 +186,7 @@ func TestStewardUserMutationsProtectRoleTargetAndReplay(t *testing.T) {
 	f, actor := newStewardUsersFixture(t)
 	target := f.seedUser("target", false)
 	peer := f.seedUser("peer", false)
-	if _, err := f.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", peer); err != nil {
+	if _, err := f.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", peer); err != nil {
 		t.Fatal(err)
 	}
 	for _, user := range []int64{actor, peer} {
@@ -209,7 +209,7 @@ func TestStewardUserMutationsProtectRoleTargetAndReplay(t *testing.T) {
 		t.Fatalf("administrator exposed: %d", got.Code)
 	}
 	for i, body := range []string{
-		`{"mode":"profile","expected_revision":"1","level":5}`,
+		`{"mode":"profile","expected_revision":"1","level":6}`,
 		`{"mode":"economy","expected_revision":"1","target":"donation_credit","direction":"increase","amount":"1","reason":"Correction"}`,
 	} {
 		if got := stewardUserRequest(t, f, actor, target, "PATCH", routeUser, "", body, strings.Repeat(string(rune('c'+i)), 22)); got.Code != 403 {
@@ -235,7 +235,7 @@ func TestStewardUserMutationsProtectRoleTargetAndReplay(t *testing.T) {
 		t.Fatalf("actual game entries: %d %v", entries, err)
 	}
 	// Promotion after the original success blocks replay and a new mutation.
-	if _, err := f.store.DB().Exec("UPDATE users SET level=5 WHERE id=?", target); err != nil {
+	if _, err := f.store.DB().Exec("UPDATE users SET level=6 WHERE id=?", target); err != nil {
 		t.Fatal(err)
 	}
 	if got := stewardUserRequest(t, f, actor, target, "PATCH", routeUser, "", body, key); got.Code != 403 {

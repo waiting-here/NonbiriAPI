@@ -31,7 +31,7 @@ func createBrowseDonation(t *testing.T, e *donationTestEnv, owner int64, suffix 
 func TestDonationNumberedSummariesOwnerIsolationAndLogicalExpiry(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	owner := e.seedUser(t, "private-donor-a", nil, false)
 	foreign := e.seedUser(t, "private-donor-b", nil, false)
 	steward := e.seedUser(t, "page-steward", &level, false)
@@ -108,7 +108,7 @@ func TestDonationNumberedSummariesOwnerIsolationAndLogicalExpiry(t *testing.T) {
 func TestDonationSourcesAggregateAcrossDonorsAndFilteredCollections(t *testing.T) {
 	e := newDonationTestEnv(t)
 	ctx := context.Background()
-	level := int64(5)
+	level := int64(6)
 	a := e.seedUser(t, "private-source-a", nil, false)
 	b := e.seedUser(t, "private-source-b", nil, false)
 	steward := e.seedUser(t, "source-steward", &level, false)

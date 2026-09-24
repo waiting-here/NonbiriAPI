@@ -78,11 +78,13 @@ const (
 type Asset string
 
 const (
-	General Asset = "general"
-	Game    Asset = "game"
+	General     Asset = "general"
+	Game        Asset = "game"
+	SketchPaper Asset = "sketch_paper"
+	SketchBrush Asset = "sketch_brush"
 )
 
-func (a Asset) valid() bool { return a == General || a == Game }
+func (a Asset) valid() bool { return a == General || a == Game || a == SketchPaper || a == SketchBrush }
 
 // AccountKind is a persisted account classification. Account creation is
 // exposed only through the closed constructors in accounts.go.

@@ -22,7 +22,7 @@ func TestModelTokenReserveManagementHTTP(t *testing.T) {
 		t.Run(fmt.Sprintf("steward-%v", steward), func(t *testing.T) {
 			env := newRoutingTestEnv(t)
 			env.seedUser(t, true, nil)
-			actor := env.seedUser(t, false, pointerInt64(5))
+			actor := env.seedUser(t, false, pointerInt64(6))
 			api := &httpAPI{service: env.service}
 			sequence := 0
 			send := func(method string, body any, id, key string) *httptest.ResponseRecorder {

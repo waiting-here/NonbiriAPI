@@ -1100,6 +1100,20 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 			}
 		}
 	}
+	governancePresent, err := GovernanceStoragePresent(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !governancePresent {
+		for key := range governanceConfigDefaults() {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM site_config WHERE key=?`, key); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE site_config SET value='' WHERE key='level_display_name_5'`); err != nil {
+			return err
+		}
+	}
 	for _, domain := range []string{"site", "activities", "games"} {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO config_revisions(domain,revision,updated_at) VALUES(?,?,0)`, domain, 1); err != nil {
 			return err
@@ -1155,7 +1169,10 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_capacity(id,rows_used,rows_held) VALUES(1,0,0)`); err != nil {
 		return err
 	}
-	return seedProgressionState(ctx, tx, time.Now().Unix())
+	if err := seedProgressionState(ctx, tx, time.Now().Unix()); err != nil {
+		return err
+	}
+	return seedGovernanceState(ctx, tx, time.Now().Unix())
 }
 
 func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {

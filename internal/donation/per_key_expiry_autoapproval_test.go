@@ -142,8 +142,8 @@ func requireJSONFields(t *testing.T, value any, want ...string) {
 
 func TestMainstreamDonationAutoApprovalAndRoleSafeSources(t *testing.T) {
 	environment := newDonationTestEnv(t)
-	levelFive := int64(5)
-	owner := environment.seedUser(t, "donation-mainstream-owner", &levelFive, false)
+	levelSix := int64(6)
+	owner := environment.seedUser(t, "donation-mainstream-owner", &levelSix, false)
 	environment.seedUser(t, "", nil, true)
 	channelID := seedMainstreamChannel(t, environment, "Current Channel", "subscription")
 	firstSource := &donationEndpointSource{channelID: channelID, revision: 1, name: "Snapshot One", category: "subscription"}

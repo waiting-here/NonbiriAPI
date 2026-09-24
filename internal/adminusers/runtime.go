@@ -39,7 +39,7 @@ const (
 type projectionConfig struct {
 	endpointDefault, rpmDefault, concurrencyDefault int64
 	thresholds                                      [5]int64
-	display                                         [6]string
+	display                                         [7]string
 }
 
 type userRow struct {
@@ -104,12 +104,15 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 		}
 		*item.dst = value
 	}
-	for level := 1; level <= 5; level++ {
+	for level := 1; level <= 6; level++ {
 		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, fmt.Sprintf("level_display_name_%d", level)).Scan(&config.display[level]); err != nil {
 			return projectionConfig{}, classifyDatabaseError("read level display configuration", err)
 		}
 		if config.display[level] == "" {
 			config.display[level] = fmt.Sprintf("Lv. %d", level)
+			if level == 5 {
+				config.display[level] = "见习协管"
+			}
 		}
 	}
 	return config, nil
@@ -192,7 +195,7 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	effective := automatic
 	var manual *int
 	if row.manualLevel.Valid {
-		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 5 {
+		if row.manualLevel.Int64 < 1 || row.manualLevel.Int64 > 6 {
 			return AdminUser{}, fmt.Errorf("%w: invalid manual level", ErrInvariant)
 		}
 		value := int(row.manualLevel.Int64)
@@ -231,7 +234,7 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 
 func (service *Service) listUsers(ctx context.Context, adminID int64, role managementRole, query UserListQuery) (Page[AdminUser], error) {
 	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
-	if limit == 0 || query.Level < 0 || query.Level > 5 {
+	if limit == 0 || query.Level < 0 || query.Level > 6 {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
 	if query.Page != nil {
@@ -713,7 +716,7 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 5 {
+	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 6 {
 		return MutationResult[AdminUser]{}, ErrForbidden
 	}
 	if decision.Kind == idempotency.Replay {

@@ -52,6 +52,15 @@ func get(ctx context.Context) *attempt {
 	a, _ := ctx.Value(key{}).(*attempt)
 	return a
 }
+
+// CurrentID returns the existing server-owned identity without creating one.
+func CurrentID(ctx context.Context) string {
+	if a := get(ctx); a != nil {
+		return a.fact.ID
+	}
+	return ""
+}
+
 func Identity(ctx context.Context, user int64) (string, error) {
 	if a := get(ctx); a != nil {
 		if a.user != user {

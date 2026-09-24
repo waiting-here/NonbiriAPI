@@ -17,7 +17,7 @@ import (
 func TestManagementModelPagesCountFilteredSetAndAuthorizeBeforeEmpty(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	for i := 0; i < 23; i++ {
 		input := testModelCreate()
@@ -62,7 +62,7 @@ func TestManagementModelPagesCountFilteredSetAndAuthorizeBeforeEmpty(t *testing.
 func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	donor := env.seedUser(t, false, nil)
 	model := env.createModel(t, 'A')
@@ -150,7 +150,7 @@ func TestManagementBindingPagesShareExpiryFiltersWithoutWrites(t *testing.T) {
 func TestManagementPageHTTPRejectsMixedWindowsAndPreservesCursor(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	model := env.createModel(t, 'H')
 	api := &httpAPI{service: env.service}

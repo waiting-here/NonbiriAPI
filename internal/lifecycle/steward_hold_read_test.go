@@ -11,7 +11,7 @@ type currentStewardHeldRead struct{}
 
 func (currentStewardHeldRead) AuthorizeStewardRead(ctx context.Context, tx *sql.Tx, userID int64) error {
 	var allowed bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND is_banned=0 AND level=5)`, userID).Scan(&allowed); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND is_banned=0 AND level=6)`, userID).Scan(&allowed); err != nil {
 		return err
 	}
 	if !allowed {
@@ -25,7 +25,7 @@ func TestStewardHeldReadAuditsRevocationAndAccountDeletion(t *testing.T) {
 	admin := seedLifecycleUser(t, f.store.DB(), "held-admin", true, 100)
 	user := seedLifecycleUser(t, f.store.DB(), "held-steward", false, 100)
 	owner := seedLifecycleUser(t, f.store.DB(), "held-caller", false, 100)
-	if _, err := f.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, user); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, user); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.store.DB().Exec(`INSERT INTO logical_requests(id,user_id,route_kind,state,attempt_limit,accounting_state,settlement_destination,ledger_rows_remaining,created_at)
@@ -92,7 +92,7 @@ VALUES(?,?,'openai_chat_completions','accepted',1,'none','user',zeroblob(16),100
 	if allowed, err := read(113, true); !errors.Is(err, ErrForbidden) || allowed {
 		t.Fatal("revoked read", allowed, err)
 	}
-	if _, err := f.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, user); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, user); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := f.store.DB().BeginTx(context.Background(), nil)

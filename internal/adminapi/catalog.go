@@ -153,7 +153,8 @@ func init() {
 		}
 	}
 	add(KeyAnnouncementEpoch, "announcements", "公告代次", "Announcement epoch", "fresh 数据库生成的只读公告代次，用于客户端缓存隔离。", "Read-only epoch generated for a fresh database and used to isolate announcement caches.", unitNone)
-	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5} {
+	add(KeyRequestErrorBodyBudgetMiB, "limits", "错误原文容量上限", "Raw error storage budget", "错误原文的全站容量上限；达到上限后继续处理请求并保存安全摘要。", "Site-wide raw error budget; requests continue with safe summaries when full.", catalogText("MiB", "MiB"))
+	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5, KeyLevelDisplayName6} {
 		label := strconv.Itoa(level + 1)
 		add(key, "economy", "等级 "+label+" 显示名", "Level "+label+" display name", "覆盖该等级的纯文本显示名；留空使用内置名称。", "Plain-text display override for this level; empty uses the built-in name.", unitNone)
 	}
@@ -265,6 +266,9 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 		maximum := spec.max
 		if spec.maxRunes > 0 {
 			maximum = spec.maxRunes
+		}
+		if key == KeyLevelDisplayName5 {
+			return spec.defStr, effective, 0, maximum, false
 		}
 		return "", effective, 0, maximum, false
 	case kindMultilineText:
@@ -391,7 +395,7 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		empty = catalogTextPtr("恢复使用对应语言的内置捐赠说明。", "Restores the corresponding built-in donation notice.")
 	case KeyLegalAuthoritativeLocale:
 		empty = catalogTextPtr("不声明中英文冲突时的权威语言；PATCH null 仍被拒绝。", "Declares no authoritative language for bilingual conflicts; PATCH null remains rejected.")
-	case KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5:
+	case KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5, KeyLevelDisplayName6:
 		empty = catalogTextPtr("使用对应等级的内置显示名。", "Uses the built-in display name for this level.")
 	}
 	if strings.HasSuffix(key, "_bp") {

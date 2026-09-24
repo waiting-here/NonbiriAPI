@@ -75,7 +75,7 @@ func approveDiscoveryDonation(t *testing.T, env *donationTestEnv, donation Donat
 func newDiscoveryFixture(t *testing.T, blocked bool) *discoveryFixture {
 	t.Helper()
 	env := newDonationTestEnv(t)
-	level := int64(5)
+	level := int64(6)
 	f := &discoveryFixture{donationTestEnv: env, owner: env.seedUser(t, "discovery-donor", nil, false), admin: env.seedUser(t, "", nil, true), steward: env.seedUser(t, "discovery-steward", &level, false)}
 	f.endpoint, f.key = env.seedEndpointKey(t, f.owner, 'q')
 	expires := donationTestNow + 3600
@@ -112,7 +112,7 @@ func newDiscoveryFixture(t *testing.T, blocked bool) *discoveryFixture {
 func (f *discoveryFixture) start(t *testing.T, role string, actor int64, seed byte) (resources.MutationResult[resources.DiscoveryAccepted], error) {
 	t.Helper()
 	route := "/admin/api/donations/{id}/keys/{keyId}/models/refresh"
-	if role == "level5" {
+	if role == "level6" {
 		route = "/api/steward/donations/{id}/keys/{keyId}/models/refresh"
 	}
 	return f.repository.RefreshManagedDiscovery(context.Background(), role, actor, f.donation, f.donationKey, donationMutation(t, seed, http.MethodPost, route, []int64{f.donation, f.donationKey}, nil))
@@ -135,11 +135,11 @@ func (f *discoveryFixture) wait(t *testing.T, operation string) {
 }
 
 func TestManagedDiscoveryPermissionsReplayAndEmptyCatalog(t *testing.T) {
-	for _, role := range []string{"admin", "level5"} {
+	for _, role := range []string{"admin", "level6"} {
 		t.Run(role, func(t *testing.T) {
 			f := newDiscoveryFixture(t, false)
 			actor := f.admin
-			if role == "level5" {
+			if role == "level6" {
 				actor = f.steward
 			}
 			if _, err := f.start(t, role, f.owner, 'C'); !errors.Is(err, resources.ErrForbidden) {
@@ -256,7 +256,7 @@ func TestManagedDiscoveryConcurrentAcceptanceAndRevokedCompletion(t *testing.T) 
 	results := make(chan resources.MutationResult[resources.DiscoveryAccepted], 8)
 	for range 8 {
 		group.Go(func() {
-			value, err := f.start(t, "level5", f.steward, 'H')
+			value, err := f.start(t, "level6", f.steward, 'H')
 			if err != nil {
 				t.Errorf("concurrent: %v", err)
 			}
@@ -293,7 +293,7 @@ func TestDiscoverySelectionScansAllPagesWithBoundScope(t *testing.T) {
 	env := newDonationTestEnv(t)
 	owner := env.seedUser(t, "selection-donor", nil, false)
 	env.seedUser(t, "", nil, true)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, "selection-steward", &level, false)
 	if _, err := env.store.DB().Exec(`UPDATE site_config SET value='110' WHERE key='default_endpoint_key_limit'`); err != nil {
 		t.Fatal(err)

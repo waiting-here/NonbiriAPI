@@ -878,7 +878,7 @@ func TestLoggedReportFinalAuthorizationAndPrivacy(t *testing.T) {
 	if _, err := environment.repository.Badge(context.Background(), admin); err != nil {
 		t.Fatalf("admin badge: %v", err)
 	}
-	steward := environment.seedActor(t, false, 5)
+	steward := environment.seedActor(t, false, 6)
 	if _, err := environment.repository.Badge(context.Background(), steward); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("L5 badge error=%v", err)
 	}

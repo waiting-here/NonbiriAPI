@@ -9,7 +9,7 @@ import (
 )
 
 // ValidateAssetLedger validates monetary facts before committing an upgrade.
-// It streams entries and uses independent sums for the two assets.
+// It streams entries and independently conserves every supported asset.
 func ValidateAssetLedger(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, `
 SELECT e.operation_id,e.asset_type,e.delta_sign,e.delta_mag,a.asset_type
@@ -20,7 +20,15 @@ ORDER BY o.ledger_seq,e.line_no`)
 		return err
 	}
 	operation := ""
-	totals := map[string]*big.Int{"general": new(big.Int), "game": new(big.Int)}
+	totals := map[string]*big.Int{"general": new(big.Int), "game": new(big.Int), "sketch_paper": new(big.Int), "sketch_brush": new(big.Int)}
+	balanced := func() bool {
+		for _, total := range totals {
+			if total.Sign() != 0 {
+				return false
+			}
+		}
+		return true
+	}
 	for rows.Next() {
 		var id, asset string
 		var accountAsset sql.NullString
@@ -31,12 +39,13 @@ ORDER BY o.ledger_seq,e.line_no`)
 			return err
 		}
 		if id != operation {
-			if totals["general"].Sign() != 0 || totals["game"].Sign() != 0 {
+			if !balanced() {
 				rows.Close()
 				return errors.New("ledger asset conservation mismatch")
 			}
-			totals["general"].SetInt64(0)
-			totals["game"].SetInt64(0)
+			for _, total := range totals {
+				total.SetInt64(0)
+			}
 			operation = id
 		}
 		delta, err := NewSM128(sign, raw)
@@ -44,6 +53,10 @@ ORDER BY o.ledger_seq,e.line_no`)
 		if err != nil || !valid || accountAsset.Valid && asset != accountAsset.String {
 			rows.Close()
 			return errors.New("invalid ledger entry asset")
+		}
+		if (asset == "sketch_paper" || asset == "sketch_brush") && new(big.Int).Mod(delta.Big(), big.NewInt(1000)).Sign() != 0 {
+			rows.Close()
+			return errors.New("fractional activity ledger entry")
 		}
 		total.Add(total, delta.Big())
 	}
@@ -54,7 +67,7 @@ ORDER BY o.ledger_seq,e.line_no`)
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	if totals["general"].Sign() != 0 || totals["game"].Sign() != 0 {
+	if !balanced() {
 		return errors.New("ledger asset conservation mismatch")
 	}
 	return ValidateAssetBalances(ctx, tx)
@@ -64,7 +77,7 @@ ORDER BY o.ledger_seq,e.line_no`)
 // balance, including signed user debt, without collecting the ledger in RAM.
 func ValidateAssetBalances(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, `
-SELECT a.id,a.kind,a.balance_sign,a.balance_mag,
+SELECT a.id,a.kind,a.asset_type,a.balance_sign,a.balance_mag,
  e.delta_sign,e.delta_mag,e.balance_after_sign,e.balance_after_mag
 FROM credit_accounts a
 LEFT JOIN credit_entries e ON e.account_id=a.id
@@ -78,11 +91,11 @@ ORDER BY a.id,o.ledger_seq,e.line_no`)
 	running, expected := new(big.Int), new(big.Int)
 	for rows.Next() {
 		var id int64
-		var kind string
+		var kind, asset string
 		var sign int
 		var raw, deltaRaw, afterRaw []byte
 		var deltaSign, afterSign sql.NullInt64
-		if err := rows.Scan(&id, &kind, &sign, &raw, &deltaSign, &deltaRaw, &afterSign, &afterRaw); err != nil {
+		if err := rows.Scan(&id, &kind, &asset, &sign, &raw, &deltaSign, &deltaRaw, &afterSign, &afterRaw); err != nil {
 			return err
 		}
 		if id != previous {
@@ -94,6 +107,9 @@ ORDER BY a.id,o.ledger_seq,e.line_no`)
 				return err
 			}
 			expected.Set(balance.Big())
+			if (asset == "sketch_paper" || asset == "sketch_brush") && new(big.Int).Mod(expected, big.NewInt(1000)).Sign() != 0 {
+				return errors.New("fractional activity balance")
+			}
 			running.SetInt64(0)
 			previous = id
 		}
@@ -115,6 +131,9 @@ ORDER BY a.id,o.ledger_seq,e.line_no`)
 			after, err := NewSM128(int(afterSign.Int64), afterRaw)
 			if err != nil || after.Big().Cmp(running) != 0 {
 				return errors.New("ledger balance snapshot mismatch")
+			}
+			if (asset == "sketch_paper" || asset == "sketch_brush") && new(big.Int).Mod(after.Big(), big.NewInt(1000)).Sign() != 0 {
+				return errors.New("fractional activity balance snapshot")
 			}
 		}
 	}
@@ -155,6 +174,13 @@ func validateAssetCapacity(ctx context.Context, tx *sql.Tx) error {
 	}
 	if blackjackPresent {
 		tables = append(tables, "game_blackjack_payments")
+	}
+	governancePresent, err := GovernanceStoragePresent(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if governancePresent {
+		tables = append(tables, "image_activity_tasks")
 	}
 	for _, table := range tables {
 		rows, err := tx.QueryContext(ctx, `SELECT ledger_rows_remaining FROM `+quoteSQLiteIdentifier(table))

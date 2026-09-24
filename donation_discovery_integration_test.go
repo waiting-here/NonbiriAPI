@@ -58,7 +58,7 @@ func TestManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T) {
 			t.Fatalf("ordinary %s: %d %s", suffix, denied.Code, denied.Body)
 		}
 	}
-	exec(`UPDATE users SET level=5 WHERE id=?`, f.userID)
+	exec(`UPDATE users SET level=6 WHERE id=?`, f.userID)
 	selected := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/steward/donation-keys/models/refresh/selection", `{"donation_id":null,"cursor":null}`, f.cookies, headers(auditUserHost, "S"))
 	if selected.Code != 200 || !strings.Contains(selected.Body.String(), `"key_id":"`+key+`"`) {
 		t.Fatalf("select: %d %s", selected.Code, selected.Body)

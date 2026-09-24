@@ -226,9 +226,13 @@ func TestBetaCatalogRawDefaultsAndSpecializedEndpoints(t *testing.T) {
 	if byKey[KeyAnnouncementEpoch].RawDefault != nil || byKey[KeyAnnouncementEpoch].WriteEndpoint != "" {
 		t.Fatalf("announcement epoch catalog=%+v", byKey[KeyAnnouncementEpoch])
 	}
-	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5} {
+	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5, KeyLevelDisplayName6} {
 		entry := byKey[key]
-		if entry.RawDefault != "" || entry.EffectiveFallback != "Lv. "+strconv.Itoa(level+1) || entry.Maximum != 64 {
+		raw, fallback := "", "Lv. "+strconv.Itoa(level+1)
+		if key == KeyLevelDisplayName5 {
+			raw, fallback = "见习协管", "见习协管"
+		}
+		if entry.RawDefault != raw || entry.EffectiveFallback != fallback || entry.Maximum != 64 {
 			t.Fatalf("%s catalog=%+v", key, entry)
 		}
 	}

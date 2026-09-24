@@ -400,7 +400,7 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		out.Owner = &owner
 	}
 	if reviewRole != "" {
-		if reviewRole == string(reviewerSteward) {
+		if reviewRole == string(reviewerSteward) || reviewRole == "level5" {
 			reviewRole = "steward"
 		}
 		reviewer := DonationReviewer{Role: reviewRole}

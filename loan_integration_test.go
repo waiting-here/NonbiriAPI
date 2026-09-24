@@ -44,7 +44,7 @@ func TestLoanRealAuthorizationReceiptAndDebtGameAdmission(t *testing.T) {
 	if denied := f.call(0, http.MethodGet, path, nil, false); denied.Code != 403 {
 		t.Fatal("ordinary user management access", denied.Code, denied.Body)
 	}
-	if _, err := f.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, f.users[0]); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, f.users[0]); err != nil {
 		t.Fatal(err)
 	}
 	steward := f.call(0, http.MethodGet, path, nil, false)

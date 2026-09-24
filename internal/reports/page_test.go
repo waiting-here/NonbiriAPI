@@ -104,7 +104,7 @@ func TestReportNumberedNestedWindowsKeepProjectionAndParentAuthorization(t *test
 	e := newReportTestEnvironment(t)
 	_, keys, caseID := prepareReview(t, e, "nested-page-read", 23)
 	admin := e.seedActor(t, true, 1)
-	stranger := e.seedActor(t, false, 5)
+	stranger := e.seedActor(t, false, 6)
 	ip := netip.MustParseAddr("198.51.100.24").As16()
 	for i := 1; i < 23; i++ {
 		hash := sha256.Sum256([]byte(fmt.Sprintf("page-material-%d", i)))

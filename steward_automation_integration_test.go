@@ -129,7 +129,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	if err := f.store.DB().QueryRow(`SELECT user_id FROM caller_keys WHERE generation=1`).Scan(&f.userID); err != nil {
 		t.Fatal(err)
 	}
-	f.exec(t, `UPDATE users SET level=5 WHERE id=?`, f.userID)
+	f.exec(t, `UPDATE users SET level=6 WHERE id=?`, f.userID)
 	f.exec(t, `UPDATE site_config SET value='1' WHERE key IN ('donation_accept_enabled','charity_enabled')`)
 	f.exec(t, `UPDATE site_config SET value='1000' WHERE key IN ('default_endpoint_limit','default_endpoint_key_limit')`)
 	tx, err := f.store.DB().BeginTx(context.Background(), nil)
@@ -279,7 +279,7 @@ func TestStewardAutomationAtomicCreationAndManualBindings(t *testing.T) {
 	if err := f.store.DB().QueryRow(`SELECT user_id,reviewed_by_user_id,reviewed_by_role,status FROM donations WHERE id=?`, created.DonationID).Scan(&owner, &reviewer, &role, &status); err != nil {
 		t.Fatal(err)
 	}
-	if owner != f.userID || reviewer != f.userID || role != "level5" || status != "approved" {
+	if owner != f.userID || reviewer != f.userID || role != "level6" || status != "approved" {
 		t.Fatalf("audit actor = %d/%d/%s/%s", owner, reviewer, role, status)
 	}
 	var note, safeNote string
@@ -487,7 +487,7 @@ func TestStewardAutomationBoundsDefaultsAndEntryAuthority(t *testing.T) {
 	if response := f.call(t, stewardautomation.DonationsPath, strings.Repeat("N", 22), f.input(1)); response.Code != 403 {
 		t.Fatalf("non-steward: %d %s", response.Code, response.Body.String())
 	}
-	f.exec(t, `UPDATE users SET level=5,is_banned=1,banned_until=NULL WHERE id=?`, f.userID)
+	f.exec(t, `UPDATE users SET level=6,is_banned=1,banned_until=NULL WHERE id=?`, f.userID)
 	if response := f.call(t, stewardautomation.DonationsPath, strings.Repeat("N", 22), f.input(1)); response.Code != 401 {
 		t.Fatalf("banned: %d %s", response.Code, response.Body.String())
 	}

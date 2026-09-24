@@ -13,7 +13,7 @@ import (
 func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) {
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
-	level := int64(5)
+	level := int64(6)
 	steward := env.seedUser(t, false, &level)
 	donor := env.seedUser(t, false, nil)
 	model := env.createModel(t, 'a')

@@ -125,7 +125,7 @@ WHERE id=?`, caseID); err != nil {
 	if _, err := environment.repository.CaseDetail(context.Background(), firstOwner, caseID, "", 1); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("ordinary user detail error=%v", err)
 	}
-	steward := environment.seedActor(t, false, 5)
+	steward := environment.seedActor(t, false, 6)
 	if _, err := environment.repository.Targets(context.Background(), steward, caseID, "", 1); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("L5 targets error=%v", err)
 	}
@@ -135,7 +135,7 @@ func TestAdminFinalAuthorizationRechecksRoleAndCredentialGeneration(t *testing.T
 	environment := newReportTestEnvironment(t)
 	_, _, caseID := prepareReview(t, environment, "admin-final-authorization", 1)
 	admin := environment.seedActor(t, true, 1)
-	steward := environment.seedActor(t, false, 5)
+	steward := environment.seedActor(t, false, 6)
 	_, _, materialVersion, targetVersion := environment.caseState(t, caseID)
 	command := RejectCommand{
 		ExpectedMaterialVersion: materialVersion,
