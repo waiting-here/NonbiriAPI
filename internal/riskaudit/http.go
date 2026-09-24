@@ -120,6 +120,13 @@ func parseWindow(q url.Values, now int64, parseAfter bool) (Window, error) {
 	if err != nil {
 		return w, err
 	}
+	if q.Has("lookback_hours") {
+		hours, e := intQuery(q, "lookback_hours", 0)
+		if e != nil || hours < 1 || hours > 720 || q.Has("from") || q.Has("to") {
+			return w, ErrInvalid
+		}
+		w.From, w.To = max(0, now-hours*3600), now
+	}
 	limit, err := intQuery(q, "limit", 50)
 	if err != nil || limit > MaxPage {
 		return w, ErrInvalid
@@ -170,7 +177,7 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		auditError(w, ErrInvalid)
 		return
 	}
-	allowed := map[string]bool{"from": true, "to": true, "limit": true, "after": true, "kind": true, "signal": true, "revision": true, "model": true}
+	allowed := map[string]bool{"from": true, "to": true, "lookback_hours": true, "limit": true, "after": true, "kind": true, "signal": true, "revision": true, "model": true}
 	for key, values := range q {
 		if !allowed[key] || len(values) != 1 {
 			auditError(w, ErrInvalid)
@@ -296,7 +303,7 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		window, err = parseWindow(q, repository.now().Unix(), false)
 		if err == nil {
 			// Leave the omitted lower bound to the configured shared-IP window.
-			if !q.Has("from") {
+			if !q.Has("from") && !q.Has("lookback_hours") {
 				window.From = 0
 			}
 			output, err = repository.SharedIPs(ctx, actor, window, q.Get("after"))

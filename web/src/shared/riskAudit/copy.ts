@@ -123,7 +123,32 @@ const english = {
   gap: 'Last capture gap',
   partialAssociations: 'Only the first 100 user/type associations are shown.',
   policyRevision: 'Policy revision',
-  and: 'AND',
+  range: 'Time range',
+  defaultRange: 'Default window',
+  lastHour: 'Last hour',
+  lastDay: 'Last 24 hours',
+  lastWeek: 'Last 7 days',
+  custom: 'Custom range',
+  rangeHelp:
+    'Quick ranges use server time. The default is 24 hours, or the configured shared-IP window.',
+  invalidRange:
+    'Choose a valid past range of up to 30 days. Quick ranges avoid differences between your clock and the server.',
+  observations: 'Recorded minutes only; missing time is not treated as zero usage',
+  latestObservations:
+    'Latest 100 minute records; the summary uses all available records in this range',
+  sourcePage: 'This page of recorded requests',
+  candidatePage: 'This page of candidate accounts',
+  authenticatedCalls: 'Authenticated logical requests',
+  noGap: 'No capture gaps recorded',
+  ruleSteps:
+    'Create and enable a rule, then open Client matches to review matching requests. Saved rules are evaluated automatically when you view the selected period.',
+  ruleTemplate: 'Start with a matching pattern',
+  uaTemplate: 'Client name in User-Agent',
+  siteTemplate: 'Source website and application title',
+  templateHelp:
+    'Enter the observed values and save. Website and title must both match. These patterns cannot identify clients that hide or replace their headers.',
+  advanced: 'Risk classification and supporting evidence',
+  and: 'All of these',
   or: 'OR',
 };
 const chinese: typeof english = {
@@ -248,10 +273,64 @@ const chinese: typeof english = {
   gap: '最近采集缺口',
   partialAssociations: '仅显示前 100 条账号／类型关联。',
   policyRevision: '政策版本',
-  and: 'AND',
+  range: '时间范围',
+  defaultRange: '默认时间窗口',
+  lastHour: '最近 1 小时',
+  lastDay: '最近 24 小时',
+  lastWeek: '最近 7 天',
+  custom: '自定义时间',
+  rangeHelp: '快捷范围以服务器时间为准。默认查询 24 小时，共享 IP 使用审计阈值中设置的窗口。',
+  invalidRange: '请选择不超过 30 天的有效过去时间段。使用快捷范围可避免电脑与服务器的时钟偏差。',
+  observations: '仅统计已记录的分钟，缺失时段不按零占用计算',
+  latestObservations: '展示最近 100 条分钟记录；汇总仍使用此范围内全部可用记录',
+  sourcePage: '本页已记录的请求',
+  candidatePage: '本页候选账号',
+  authenticatedCalls: '已认证的逻辑请求',
+  noGap: '未记录到采集缺口',
+  ruleSteps:
+    '先新增并启用规则，再到“客户端命中”查看请求。查看所选时间段时，系统会自动匹配已保存的规则。',
+  ruleTemplate: '选择匹配方式',
+  uaTemplate: 'User-Agent 中的客户端名称',
+  siteTemplate: '来源网站与应用标题',
+  templateHelp:
+    '填写实际观察到的值并保存。“网站与标题”需要两项同时匹配；隐藏或改写请求头的客户端无法据此识别。',
+  advanced: '风险分类与依据',
+  and: '同时满足',
   or: 'OR',
 };
 export function riskCopy(language: string) {
   return language.startsWith('zh') ? chinese : english;
 }
 export type RiskCopy = typeof english;
+
+export function fieldLabel(field: string, c: RiskCopy): string {
+  const labels: Record<string, string> = {
+    effective_ip: c.ip,
+    user_agent: 'User-Agent',
+    origin: 'Origin',
+    referer: 'Referer',
+    http_referer: 'HTTP-Referer',
+    openrouter_title: 'X-OpenRouter-Title',
+    legacy_title: 'X-Title',
+    sdk_lang: 'X-Stainless-Lang',
+    sdk_version: 'X-Stainless-Package-Version',
+    sdk_runtime: 'X-Stainless-Runtime',
+    sdk_runtime_version: 'X-Stainless-Runtime-Version',
+  };
+  return labels[field] ?? field;
+}
+export function pathLabel(path: string): string {
+  return (
+    (
+      {
+        models: 'GET /v1/models',
+        billing_subscription: 'GET /dashboard/billing/subscription',
+        billing_usage: 'GET /dashboard/billing/usage',
+        v1_billing_subscription: 'GET /v1/dashboard/billing/subscription',
+        v1_billing_usage: 'GET /v1/dashboard/billing/usage',
+        sub2api_billing: 'GET /v1/sub2api/billing',
+        chat_head: 'HEAD /v1/chat/completions',
+      } as Record<string, string>
+    )[path] ?? path
+  );
+}

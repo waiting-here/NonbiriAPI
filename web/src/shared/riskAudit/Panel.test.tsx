@@ -110,3 +110,34 @@ describe('Risk audit access and evidence presentation', () => {
     expect(screen.getAllByLabelText('Match value')).toHaveLength(8);
   });
 });
+
+it('uses server-relative quick ranges even when the browser clock is ahead', async () => {
+  const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  await screen.findByText('9007199254740993');
+  expect(api.users.mock.calls[0][0]).not.toHaveProperty('to');
+  expect(api.users.mock.calls[0][0]).not.toHaveProperty('from');
+  await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
+  await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+  await waitFor(() => expect(api.users.mock.lastCall?.[0]).toMatchObject({ lookback_hours: 168 }));
+  expect(api.users.mock.lastCall?.[0]).not.toHaveProperty('to');
+});
+it('builds a two-condition website and title rule without silently saving it', async () => {
+  const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+  await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
+  await view.user.click(
+    screen.getByRole('button', { name: 'Source website and application title' }),
+  );
+  expect(screen.getAllByLabelText('Field').map((x) => (x as HTMLSelectElement).value)).toEqual([
+    'http_referer',
+    'openrouter_title',
+  ]);
+  expect(screen.getAllByLabelText('Match value')).toHaveLength(2);
+  expect(api.saveRule).not.toHaveBeenCalled();
+});

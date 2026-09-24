@@ -30,6 +30,8 @@ The changes below include development toward 1.0.0-rc.3. The published rc.2 tag 
 
 ### Fixed
 
+- Use server-relative audit windows, accept healthy capture summaries with no gaps, and provide working retries and guided client rules. Align audit and inactivity controls with the shared theme, with responsive layouts and ordinary credit/percentage inputs.
+
 - Keep game payments restricted to general/game accounts after introducing activity assets, and display whole activity-currency units correctly in personal credit history.
 - Preserve long-cache facts through battle presentation and distinguish persistent cache from short cache without changing game rules. Use the available glossary layout space and consistently name legendary fish in Chinese.
 

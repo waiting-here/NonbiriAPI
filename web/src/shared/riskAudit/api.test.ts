@@ -6,6 +6,36 @@ vi.mock('@shared/query/http', async (load) => ({
   apiFetch: fetcher,
 }));
 beforeEach(() => vi.clearAllMocks());
+it('accepts a healthy capture with no recorded gap and no generation samples', async () => {
+  fetcher.mockResolvedValue({
+    authenticated_events: 0,
+    anonymous_events: 2,
+    model_list_events: 0,
+    generation_requests: 0,
+    model_generation_ratio: null,
+    coverage: { capture_started_at: 1800000000, dropped: 0, last_gap_at: null },
+    paths: [],
+  });
+  await expect(riskAPI('admin').accessSummary({ lookback_hours: 24 })).resolves.toMatchObject({
+    coverage: { last_gap_at: null },
+    model_generation_ratio: null,
+  });
+  expect(fetcher.mock.calls[0][0]).toContain('lookback_hours=24');
+});
+it('still rejects malformed capture timestamps', async () => {
+  fetcher.mockResolvedValue({
+    model_generation_ratio: null,
+    authenticated_events: 0,
+    anonymous_events: 0,
+    model_list_events: 0,
+    generation_requests: 0,
+    coverage: { capture_started_at: 1, dropped: 0, last_gap_at: 'yesterday' },
+    paths: [],
+  });
+  await expect(riskAPI('admin').accessSummary({})).rejects.toMatchObject({
+    code: 'invalid_response',
+  });
+});
 it('rejects oversized audit result pages', async () => {
   fetcher.mockResolvedValue({
     items: Array(101).fill({}),

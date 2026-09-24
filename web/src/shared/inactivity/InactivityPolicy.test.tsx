@@ -6,8 +6,13 @@ import { InactivityStatus } from './InactivityStatus';
 import { credits, type Configuration } from './api';
 
 const requests = vi.hoisted(() => ({ apiFetch: vi.fn() }));
-vi.mock('@shared/query/http', () => ({ apiFetch: requests.apiFetch }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { resolvedLanguage: 'en' } }) }));
+vi.mock('@shared/query/http', async (load) => ({
+  ...(await load<typeof import('@shared/query/http')>()),
+  apiFetch: requests.apiFetch,
+}));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { resolvedLanguage: 'en' } }),
+}));
 afterEach(() => requests.apiFetch.mockReset());
 const configuration: Configuration = {
   enabled: false,
@@ -59,7 +64,7 @@ describe('inactivity policy', () => {
     );
     mount(<InactivityPolicyPage />);
     expect(await screen.findByLabelText('Enable inactivity policy')).not.toBeChecked();
-    expect(screen.getByLabelText('Inactive days')).toHaveValue(null);
+    expect(screen.queryByLabelText('Inactive days')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Preview accounts' }));
     expect(await screen.findByText('9007199254740994')).toBeInTheDocument();
     const preview = requests.apiFetch.mock.calls.find((call) =>
@@ -112,4 +117,37 @@ describe('inactivity policy', () => {
     );
     expect(requests.apiFetch.mock.calls.some((call) => call[1]?.method)).toBe(false);
   });
+});
+
+it('uses the returned revision immediately after saving without another reload', async () => {
+  const updated = { ...configuration, revision: '9007199254740994' };
+  requests.apiFetch.mockImplementation((_path: string, options?: { method?: string }) =>
+    Promise.resolve(options?.method === 'PUT' ? updated : configuration),
+  );
+  mount(<InactivityPolicyPage />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save policy' }));
+  expect(await screen.findByText('Policy saved.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Save policy' }));
+  await waitFor(() =>
+    expect(requests.apiFetch.mock.calls.filter((call) => call[1]?.method === 'PUT')).toHaveLength(
+      2,
+    ),
+  );
+  expect(
+    requests.apiFetch.mock.calls.filter((call) => call[1]?.method === 'PUT')[1][1].json
+      .expected_revision,
+  ).toBe(updated.revision);
+  expect(requests.apiFetch.mock.calls.filter((call) => !call[1]?.method)).toHaveLength(1);
+});
+it('validates enabled actions before previewing and reveals their required fields', async () => {
+  requests.apiFetch.mockResolvedValue(configuration);
+  mount(<InactivityPolicyPage />);
+  fireEvent.click(await screen.findByLabelText('Enable inactivity policy'));
+  fireEvent.click(screen.getByRole('button', { name: 'Preview accounts' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Enable credit decay or protective bans',
+  );
+  expect(requests.apiFetch.mock.calls.some((call) => call[1]?.method)).toBe(false);
+  fireEvent.click(screen.getByLabelText('Enable credit decay'));
+  expect(screen.getByLabelText('Inactive days')).toBeRequired();
 });

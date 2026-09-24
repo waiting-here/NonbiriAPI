@@ -177,6 +177,7 @@ async function clientRule(page: Page, name: string, editing = false) {
   } else await page.getByRole('button', { name: 'New rule', exact: true }).click();
   await page.getByLabel('Rule name', { exact: true }).fill(name);
   await page.getByLabel('Match value', { exact: true }).fill(fixture().source_client);
+  await page.getByText('Risk classification and supporting evidence', { exact: true }).click();
   await page
     .getByLabel('Evidence note')
     .fill('Synthetic review evidence; a self-reported clue only.');
