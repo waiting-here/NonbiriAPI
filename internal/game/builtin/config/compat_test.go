@@ -235,7 +235,7 @@ func FuzzCanonicalWireAmount(f *testing.F) {
 
 func TestSiteConfigKeysReturnsCopy(t *testing.T) {
 	first, second := SiteConfigKeys(), SiteConfigKeys()
-	if len(first) != 84 || len(second) != 84 {
+	if len(first) != 85 || len(second) != 85 {
 		t.Fatalf("key lengths = %d, %d", len(first), len(second))
 	}
 	first[0] = "mutated"
@@ -243,7 +243,7 @@ func TestSiteConfigKeysReturnsCopy(t *testing.T) {
 		t.Fatal("configuration keys leaked mutable storage")
 	}
 	joined := strings.Join(second, ",")
-	for _, key := range []string{linklinkconfig.LinkLinkSpecPriceKey(game.LinkLinkSpec10x10), rpsconfig.RPSModeTimeKey(game.RPSModeDeathmatch, "follower")} {
+	for _, key := range []string{fishingconfig.FishingBlueFishChanceBPSKey, linklinkconfig.LinkLinkSpecPriceKey(game.LinkLinkSpec10x10), rpsconfig.RPSModeTimeKey(game.RPSModeDeathmatch, "follower")} {
 		if !strings.Contains(joined, key) {
 			t.Fatalf("missing game config key %s", key)
 		}
