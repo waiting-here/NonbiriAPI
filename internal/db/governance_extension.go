@@ -15,6 +15,7 @@ const preGovernanceManifestHash = "cbab638c0f8c97efd0037f47cdcff58575de714dd4739
 var governanceChangedTables = []string{
 	"users", "charity_model_access", "donation_handling", "donations",
 	"donation_reviews", "policy_audits", "credit_accounts", "credit_entries", "credit_operations",
+	"game_rank_totals",
 }
 
 func governanceReplace(source, before, after string) (string, error) {
@@ -31,6 +32,12 @@ func governanceTableSQL(table, previous string) (string, error) {
 		changes = append(changes, [2]string{"level BETWEEN 1 AND 5", "level BETWEEN 1 AND 6"})
 	case "charity_model_access":
 		changes = append(changes, [2]string{"DEFAULT 31", "DEFAULT 63"}, [2]string{"allowed_level_mask BETWEEN 0 AND 31", "allowed_level_mask BETWEEN 0 AND 63"})
+	case "game_rank_totals":
+		changes = append(changes,
+			[2]string{"board IN ('game_charity','bidding','blackjack')", "board IN ('game_charity','bidding','blackjack','game_net_profit','fishing_net_profit','blackjack_net_profit')"},
+			[2]string{"board<>'game_charity' OR window='7d'", "board NOT IN ('game_charity','game_net_profit','fishing_net_profit','blackjack_net_profit') OR window='7d'"},
+			[2]string{"board='game_charity' OR amount_sign>=0", "board IN ('game_charity','game_net_profit','fishing_net_profit','blackjack_net_profit') OR amount_sign>=0"},
+		)
 	case "donation_handling", "donations", "donation_reviews", "policy_audits":
 		changes = append(changes, [2]string{"'level5'", "'level5','level6','trainee5'"})
 	case "credit_accounts":
@@ -98,8 +105,9 @@ func governanceBootstrapSchema(previous string) string {
 
 func governanceConfigDefaults() map[string]string {
 	return map[string]string{
-		"level_display_name_6":          "",
-		"request_error_body_budget_mib": "1024",
+		"level_display_name_6":              "",
+		"request_error_body_budget_mib":     "1024",
+		"game_fishing_blue_fish_chance_bps": "1000",
 	}
 }
 
@@ -110,14 +118,15 @@ func GovernanceStoragePresent(ctx context.Context, q queryer) (bool, error) {
  'anonymous_access_minutes','charity_request_outcomes','risk_audit_minutes','risk_audit_gaps','risk_audit_config',
  'risk_client_rules','economy_audit_checkpoint','economy_audit_buckets',
  'limited_activity_configs','limited_activity_revisions','activity_exchange_state','activity_exchange_receipts',
- 'inactivity_policy','user_activity_state','inactivity_runs','inactivity_audits')`).Scan(&count)
+ 'inactivity_policy','user_activity_state','inactivity_runs','inactivity_audits',
+ 'game_rank_net_rebuild','game_rank_net_rebuild_totals')`).Scan(&count)
 	if err != nil {
 		return false, err
 	}
-	if count != 0 && count != 21 {
+	if count != 0 && count != 23 {
 		return false, errors.New("partial governance storage")
 	}
-	return count == 21, nil
+	return count == 23, nil
 }
 
 func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
@@ -139,6 +148,9 @@ func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
 		}
 	}
 	if err := seedLimitedActivities(ctx, tx, at); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO game_rank_net_rebuild VALUES(1,0,NULL,zeroblob(16))`); err != nil {
 		return err
 	}
 	return seedInactivity(ctx, tx, at)
@@ -198,14 +210,14 @@ func applyGovernanceExtension(ctx context.Context, tx *sql.Tx) error {
  UPDATE charity_model_access SET allowed_level_mask=(allowed_level_mask & 15) | ((allowed_level_mask & 16)<<1) | ((allowed_level_mask & 8)<<1);
  INSERT INTO site_config(key,value,updated_at) SELECT 'level_display_name_6',value,updated_at FROM site_config WHERE key='level_display_name_5';
  UPDATE site_config SET value='见习协管' WHERE key='level_display_name_5';
- INSERT INTO site_config(key,value,updated_at) VALUES('request_error_body_budget_mib','1024',0);`); err != nil {
+ INSERT INTO site_config(key,value,updated_at) VALUES('request_error_body_budget_mib','1024',0),('game_fishing_blue_fish_chance_bps','1000',0);`); err != nil {
 		return err
 	}
 	return seedGovernanceState(ctx, tx, time.Now().Unix())
 }
 
 func governanceAdditiveSchema() string {
-	return governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema
+	return governanceTablesSchema + riskAuditSchema + economyAuditSchema + governanceGuardsSchema() + charityControlSchema + limitedActivitySchema + inactivitySchema + gameplayGovernanceSchema
 }
 
 // The modulo expression operates directly on all 128 bits; SQLite integer
