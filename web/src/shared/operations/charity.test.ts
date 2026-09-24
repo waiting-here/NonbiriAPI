@@ -96,6 +96,13 @@ const model = {
   updated_at: 1,
 };
 
+it('decodes historical model receipts without relabeling their recorded level mask', () => {
+  const historical = normalizeAdminCharityModel({ ...model, allowed_levels: [5] });
+  expect(historical.is_mainstream).toBe(false);
+  expect(historical.excluded_request_fields).toEqual([]);
+  expect(historical.allowed_levels).toEqual([5]);
+});
+
 const managedKey = {
   id: '11',
   binding_count: '0',
@@ -310,7 +317,7 @@ describe('charity model wire', () => {
       allowed_levels: [1, 3, 5],
       public_description: 'First\nSecond\t<b>literal</b>',
     });
-    for (const allowed_levels of [[0], [6], [1, 1], [2, 1]]) {
+    for (const allowed_levels of [[0], [7], [1, 1], [2, 1]]) {
       expect(() => normalizeAdminCharityModel({ ...model, allowed_levels })).toThrow(
         /allowed levels/i,
       );

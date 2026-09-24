@@ -418,7 +418,7 @@
         "levelLabel": "L{{level}}",
         "selectAllLevels": "全选等级",
         "clearAllLevels": "清空等级",
-        "noAllowedLevels": "所有普通用户均不可调用（包括 5 级用户）。",
+        "noAllowedLevels": "所有普通用户均不可调用（包括 6 级用户）。",
         "publicDescription": "公开说明（纯文本，可留空）",
         "publicDescriptionHelp": "会按输入内容显示换行；Markdown、HTML 和链接均按纯文本显示。",
         "endedReason": "终止原因",

@@ -18,6 +18,8 @@ export function DonationPendingBadge({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const session = client.getQueryData<{ user?: { effective_level?: number } }>(['user', 'session']);
+  const eligible = role === 'admin' || session?.user?.effective_level !== 5;
   const identity = `${role}:${accountID}`;
   const [revokedIdentity, setRevokedIdentity] = useState('');
   const revoked = revokedIdentity === identity;
@@ -33,7 +35,7 @@ export function DonationPendingBadge({
         throw error;
       }
     },
-    enabled: !revoked && accountID !== '',
+    enabled: eligible && !revoked && accountID !== '',
     retry: false,
     staleTime: 0,
     refetchInterval: revoked ? false : 30_000,
@@ -45,7 +47,7 @@ export function DonationPendingBadge({
     if (!revoked) return;
     clearStationSession(client, role);
   }, [revoked, client, role]);
-  if (revoked || lost) return null;
+  if (!eligible || revoked || lost) return null;
   const count = !badge.error ? badge.data?.pending_count : undefined;
   const label =
     count === undefined

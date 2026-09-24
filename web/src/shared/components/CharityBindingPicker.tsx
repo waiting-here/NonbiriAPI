@@ -32,6 +32,7 @@ import {
 import type { PageMetadata } from '@shared/operations/pageNumbers';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { DonationKeyNotes } from './DonationControlFacts';
 
 export type CharitySelection = CharityBindingCandidate & { note: string };
 
@@ -62,7 +63,7 @@ function sessionAccount(role: CharityRole, value: unknown): string | undefined {
   const userRoot = user as Record<string, unknown>;
   const id = userRoot.id;
   const level = userRoot.effective_level;
-  return typeof id === 'string' && id.length > 0 && level === 6 ? id : undefined;
+  return typeof id === 'string' && id.length > 0 && (level === 5 || level === 6) ? id : undefined;
 }
 
 function sourceTitle(source: DonationPageSafeSource, translate: TFunction): string {
@@ -313,6 +314,7 @@ function CharityBindingPickerBody({
           sourcePager.page,
           sourcePager.pageSize,
           signal,
+          role === 'steward' ? modelId : undefined,
         ),
       ),
     enabled: canRead,
@@ -337,6 +339,7 @@ function CharityBindingPickerBody({
           sourceKeyPager.page,
           sourceKeyPager.pageSize,
           signal,
+          role === 'steward' ? modelId : undefined,
         ),
       ),
     enabled: canRead && Boolean(selectedSource),
@@ -703,6 +706,10 @@ function CharityBindingPickerBody({
                                 <strong>
                                   {entry.safe_note || `${entry.display_head}…${entry.display_tail}`}
                                 </strong>
+                                <DonationKeyNotes
+                                  donor={entry.donation_note}
+                                  approval={entry.approval_note}
+                                />
                                 <span>
                                   {t('common.operations.charity.donationNumber', {
                                     id: entry.donation_id,

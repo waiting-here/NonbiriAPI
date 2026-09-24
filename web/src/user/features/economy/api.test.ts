@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
+import { normalizeDonationKey } from './normalize';
 import {
   createDonation,
   contributeThursday,
@@ -56,6 +57,24 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe('economy mutation boundary', () => {
+  it('preserves legacy unsplit totals and accepts the full split-token range', () => {
+    const original = DONATION_RESPONSE.keys[0];
+    const value = {
+      ...original,
+      limits: { ...original.limits, input_tokens: '9223372036854775807', output_tokens: null },
+      input_token_reserve: '9223372036854775807',
+      output_token_reserve: '0',
+      usage: { ...original.usage, tokens_used: '42' },
+    };
+    const result = normalizeDonationKey(value);
+    expect(result.limits.inputTokens).toBe('9223372036854775807');
+    expect(result.inputTokenReserve).toBe('9223372036854775807');
+    expect(result.usage.unattributedTotalTokens).toBe('42');
+    expect(result.usage.inputTokensUsed).toBe('0');
+    expect(() =>
+      normalizeDonationKey({ ...value, input_token_reserve: '9223372036854775808' }),
+    ).toThrow();
+  });
   it('rejects a donation detail returned for a different requested identity', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(DONATION_RESPONSE));
     vi.stubGlobal('fetch', fetchMock);
@@ -84,6 +103,7 @@ describe('economy mutation boundary', () => {
         { endpointKeyId: '62', expiresAt: 1_900_000_000 },
       ],
       ownershipAuthorized: true,
+      discordPublicThanks: false,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0];
@@ -96,6 +116,7 @@ describe('economy mutation boundary', () => {
         { endpoint_key_id: '62', expires_at: 1_900_000_000 },
       ],
       ownership_authorized: true,
+      discord_public_thanks: false,
     });
     expect(String(init?.body)).not.toMatch(/secret|base_url|connector_type/i);
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(
@@ -111,6 +132,7 @@ describe('economy mutation boundary', () => {
         description: 'One intent',
         keys: [{ endpointKeyId: '61', expiresAt: null }],
         ownershipAuthorized: true,
+        discordPublicThanks: false,
       }),
     ).rejects.toMatchObject({ code: 'network_error', status: 0 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -131,6 +153,7 @@ describe('economy mutation boundary', () => {
           { endpointKeyId: '61', expiresAt: null },
         ],
         ownershipAuthorized: true,
+        discordPublicThanks: false,
       }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();

@@ -9,8 +9,10 @@ import {
   type ManagedDonationKey,
 } from './charity';
 import { decoded, queryPath } from './api';
+import { charityScopePath } from './charityScope';
 import {
   array,
+  boolean,
   decimal,
   decimalID,
   invalidResponse,
@@ -98,6 +100,7 @@ export type DonationState =
 export type DonationStateCounts = Record<DonationState, string>;
 
 interface DonationPageCommon {
+  discord_public_thanks?: boolean | null;
   id: string;
   status: DonationStatus;
   revision: string;
@@ -122,6 +125,15 @@ export interface StewardDonationPageItem extends DonationPageCommon {
 }
 
 export interface ManagedDonationKeySummary extends ManagedDonationKey {
+  donation_note?: string;
+  approval_note?: string | null;
+  visible_models?: {
+    model_id: string;
+    full_name: string;
+    enabled: boolean;
+    binding_count: string;
+  }[];
+  visible_models_truncated?: boolean;
   donation_id: string;
   key_id: string;
   donation_revision: string;
@@ -159,6 +171,7 @@ const HANDLING_FIELDS = [
 ] as const;
 
 const DONATION_COMMON_FIELDS = [
+  'discord_public_thanks',
   'id',
   'status',
   'revision',
@@ -175,6 +188,9 @@ const DONATION_COMMON_FIELDS = [
 ] as const;
 
 const DONATION_KEY_FIELDS = [
+  'input_token_reserve',
+  'output_token_reserve',
+  'breakdown_started_at',
   'failure_disable_threshold',
   'binding_count',
   'idle',
@@ -198,6 +214,10 @@ const DONATION_KEY_FIELDS = [
 ] as const;
 
 const KEY_SUMMARY_FIELDS = [
+  'donation_note',
+  'approval_note',
+  'visible_models',
+  'visible_models_truncated',
   ...DONATION_KEY_FIELDS,
   'donation_id',
   'key_id',
@@ -407,6 +427,10 @@ function donationCommon(
     invalidResponse(`${label} source identities`);
   }
   return {
+    discord_public_thanks:
+      root.discord_public_thanks == null
+        ? null
+        : boolean(root.discord_public_thanks, `${label} public thanks`),
     id: decimalID(root.id, `${label} id`),
     status,
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
@@ -461,7 +485,10 @@ function normalizeAdminDonationPageItem(
   filters: Required<ManagedDonationPageFilters>,
 ): AdminDonationPageItem {
   const label = `administrator donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner'], label);
+  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner'], label, [
+    ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
+    'owner',
+  ]);
   return {
     ...donationCommon(root, label, filters),
     owner: adminOwner(root.owner, `${label} owner`),
@@ -474,7 +501,10 @@ function normalizeStewardDonationPageItem(
   filters: Required<ManagedDonationPageFilters>,
 ): StewardDonationPageItem {
   const label = `steward donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner'], label);
+  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner'], label, [
+    ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
+    'owner',
+  ]);
   return {
     ...donationCommon(root, label, filters),
     owner: stewardOwner(root.owner, `${label} owner`),
@@ -485,9 +515,25 @@ function unique<T>(values: T[], label: string): void {
   if (new Set(values).size !== values.length) invalidResponse(label);
 }
 
-function normalizeKeySummary(value: unknown, index: number): ManagedDonationKeySummary {
+export function normalizeKeySummary(value: unknown, index: number): ManagedDonationKeySummary {
   const label = `managed donation key ${index + 1}`;
-  const root = record(value, KEY_SUMMARY_FIELDS, label);
+  const root = record(
+    value,
+    KEY_SUMMARY_FIELDS,
+    label,
+    KEY_SUMMARY_FIELDS.filter(
+      (field) =>
+        ![
+          'donation_note',
+          'approval_note',
+          'visible_models',
+          'visible_models_truncated',
+          'input_token_reserve',
+          'output_token_reserve',
+          'breakdown_started_at',
+        ].includes(field),
+    ),
+  );
   const key = normalizeManagedKey(
     {
       binding_count: root.binding_count,
@@ -503,6 +549,9 @@ function normalizeKeySummary(value: unknown, index: number): ManagedDonationKeyS
       limits: root.limits,
       usage: root.usage,
       token_reserve: root.token_reserve,
+      input_token_reserve: root.input_token_reserve,
+      output_token_reserve: root.output_token_reserve,
+      breakdown_started_at: root.breakdown_started_at,
       expires_at: root.expires_at,
       streak: root.streak,
       ended_reason: root.ended_reason,
@@ -540,6 +589,42 @@ function normalizeKeySummary(value: unknown, index: number): ManagedDonationKeyS
   }
   return {
     ...key,
+    donation_note:
+      root.donation_note === undefined
+        ? ''
+        : string(root.donation_note, `${label} donor note`, {
+            max: 1024,
+            bytes: 4096,
+            multiline: true,
+          }),
+    approval_note:
+      root.approval_note == null
+        ? null
+        : string(root.approval_note, `${label} approval note`, {
+            max: 1024,
+            bytes: 4096,
+            multiline: true,
+          }),
+    visible_models:
+      root.visible_models === undefined
+        ? []
+        : array(root.visible_models, `${label} visible models`, 20).map((item) => {
+            const model = record(
+              item,
+              ['model_id', 'full_name', 'enabled', 'binding_count'],
+              `${label} visible model`,
+            );
+            return {
+              model_id: decimalID(model.model_id, 'model id'),
+              full_name: string(model.full_name, 'model name', { max: 256 }),
+              enabled: boolean(model.enabled, 'model enabled'),
+              binding_count: decimal(model.binding_count, 'model binding count'),
+            };
+          }),
+    visible_models_truncated:
+      root.visible_models_truncated === undefined
+        ? false
+        : boolean(root.visible_models_truncated, `${label} truncated models`),
     donation_id: donationID,
     key_id: keyID,
     donation_revision: donationRevision,
@@ -764,12 +849,16 @@ export function getManagedDonationKeysPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  charityModelID?: string,
 ): Promise<DonationPageResult<ManagedDonationKeySummary>> {
   const root = basePath(role);
   const id = decimalID(donationID, 'donation id');
   pageArguments(page, pageSize);
   return decoded(
-    queryPath(`${root}/donations/${encodeURIComponent(id)}/keys`, { page, page_size: pageSize }),
+    charityScopePath(
+      queryPath(`${root}/donations/${encodeURIComponent(id)}/keys`, { page, page_size: pageSize }),
+      charityModelID,
+    ),
     (value) => normalizeManagedDonationKeysPage(value, id, page, pageSize),
     { signal },
   );
@@ -781,18 +870,22 @@ export function getDonationSourcesPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  charityModelID?: string,
 ): Promise<DonationPageResult<DonationSourceSummary>> {
   const root = basePath(role);
   const normalizedFilters = sourceFilters(filters, false);
   pageArguments(page, pageSize);
   return decoded(
-    queryPath(`${root}/donation-sources`, {
-      q: normalizedFilters.q || undefined,
-      scope: normalizedFilters.scope || undefined,
-      handling: normalizedFilters.handling || undefined,
-      page,
-      page_size: pageSize,
-    }),
+    charityScopePath(
+      queryPath(`${root}/donation-sources`, {
+        q: normalizedFilters.q || undefined,
+        scope: normalizedFilters.scope || undefined,
+        handling: normalizedFilters.handling || undefined,
+        page,
+        page_size: pageSize,
+      }),
+      charityModelID,
+    ),
     (value) => normalizeDonationSourcesPage(value, role, filters, page, pageSize),
     { signal },
   );
@@ -805,20 +898,24 @@ export function getDonationSourceKeysPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  charityModelID?: string,
 ): Promise<DonationPageResult<ManagedDonationKeySummary>> {
   const root = basePath(role);
   const normalizedSourceKey = canonicalSourceKey(sourceKey, 'source page key');
   const normalizedFilters = sourceFilters(filters, true);
   pageArguments(page, pageSize);
   return decoded(
-    queryPath(`${root}/donation-sources/${encodeURIComponent(normalizedSourceKey)}/keys`, {
-      q: normalizedFilters.q || undefined,
-      scope: normalizedFilters.scope || undefined,
-      handling: normalizedFilters.handling || undefined,
-      idle: normalizedFilters.idle || undefined,
-      page,
-      page_size: pageSize,
-    }),
+    charityScopePath(
+      queryPath(`${root}/donation-sources/${encodeURIComponent(normalizedSourceKey)}/keys`, {
+        q: normalizedFilters.q || undefined,
+        scope: normalizedFilters.scope || undefined,
+        handling: normalizedFilters.handling || undefined,
+        idle: normalizedFilters.idle || undefined,
+        page,
+        page_size: pageSize,
+      }),
+      charityModelID,
+    ),
     (value) => normalizeDonationSourceKeysPage(value, normalizedSourceKey, filters, page, pageSize),
     { signal },
   );

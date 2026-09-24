@@ -264,6 +264,11 @@ test.describe('donation resource submission', () => {
         });
       }
       const submit = page.getByRole('button', { name: copy.submit, exact: true });
+      await page
+        .getByRole('combobox', {
+          name: locale === 'en' ? 'Accept a public Discord thank-you' : '是否接受 Discord 公屏感谢',
+        })
+        .selectOption('no');
       await expect(submit).toBeEnabled();
       await submit.click();
       await expect(page.getByText(copy.submitted, { exact: true })).toBeVisible();
@@ -271,6 +276,7 @@ test.describe('donation resource submission', () => {
         {
           description: 'Cross-page contribution',
           ownership_authorized: true,
+          discord_public_thanks: false,
           keys: [
             { endpoint_key_id: '101', expires_at: EXPIRY, failure_disable_threshold: '10' },
             { endpoint_key_id: '121', expires_at: null, failure_disable_threshold: '10' },

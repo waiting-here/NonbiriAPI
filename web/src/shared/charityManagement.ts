@@ -680,8 +680,17 @@ function managementSessionIdentity(
   const identity = sessionUserIdentity(value);
   if (!identity) return undefined;
   return {
-    subject: JSON.stringify(['user', identity.user.id, identity.user.username]),
-    elevated: identity.effective_level === 6,
+    subject: JSON.stringify([
+      'user',
+      identity.user.id,
+      identity.user.username,
+      identity.effective_level === 6
+        ? 'steward'
+        : identity.effective_level === 5
+          ? 'trainee'
+          : 'user',
+    ]),
+    elevated: identity.effective_level === 5 || identity.effective_level === 6,
   };
 }
 
@@ -692,7 +701,8 @@ function authoritativeSessionRestored(frame: CharityManagementFrame, value: unkn
     const admin = asRecord(record.admin);
     return sessionUsername(admin?.username);
   }
-  return sessionUserIdentity(value)?.effective_level === 6;
+  const level = sessionUserIdentity(value)?.effective_level;
+  return level === 5 || level === 6;
 }
 
 function sessionEffectiveLevel(value: unknown): number | undefined {

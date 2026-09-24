@@ -1,5 +1,6 @@
 import { ApiError } from '@shared/query/http';
 import { decoded, idempotentOptions } from './api';
+import { charityScopePath } from './charityScope';
 import {
   amount,
   array,
@@ -19,7 +20,8 @@ export type RecurringLimitRole = 'owner' | 'steward' | 'admin';
 export type RecurringLimitMode = 'reset' | 'sliding';
 export type RecurringLimitInterval = '1h' | '5h' | 'day' | 'week' | 'month';
 export type RecurringLimitAlignment = 'first_success' | 'calendar';
-export type RecurringLimitMetric = 'calls' | 'tokens' | 'credits';
+export type RecurringLimitMetric =
+  'calls' | 'tokens' | 'input_tokens' | 'output_tokens' | 'credits';
 export type RecurringLimitState = 'limited' | 'waiting_first_success' | 'available';
 
 export function isHourlyInterval(interval: RecurringLimitInterval): boolean {
@@ -45,6 +47,7 @@ export interface RecurringLimitRuleView extends RecurringLimitRuleInput {
   period_start: number | null;
   period_end: number | null;
   next_transition_at: number | null;
+  effective_at?: number;
 }
 
 export interface RecurringLimitsResponse {
@@ -136,7 +139,11 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
       : oneOf(root.alignment, ['first_success', 'calendar'] as const, `${label} alignment`);
   const weekStartsOn = nullableInteger(root.week_starts_on, `${label} week start`, 1, 7);
   validateCombination(mode, interval, alignment, weekStartsOn, label);
-  const metric = oneOf(root.metric, ['calls', 'tokens', 'credits'] as const, `${label} metric`);
+  const metric = oneOf(
+    root.metric,
+    ['calls', 'tokens', 'input_tokens', 'output_tokens', 'credits'] as const,
+    `${label} metric`,
+  );
   const limit =
     metric === 'credits'
       ? canonicalCredits(root.limit, `${label} credit limit`)
@@ -160,6 +167,23 @@ function metricValue(value: unknown, metric: RecurringLimitMetric, label: string
 }
 
 export function normalizeRuleView(value: unknown, label: string): RecurringLimitRuleView {
+  const required = [
+    'id',
+    'mode',
+    'interval',
+    'alignment',
+    'time_zone',
+    'week_starts_on',
+    'metric',
+    'limit',
+    'used',
+    'reserved',
+    'remaining',
+    'state',
+    'period_start',
+    'period_end',
+    'next_transition_at',
+  ];
   const root = record(
     value,
     [
@@ -178,8 +202,10 @@ export function normalizeRuleView(value: unknown, label: string): RecurringLimit
       'period_start',
       'period_end',
       'next_transition_at',
+      'effective_at',
     ],
     label,
+    required,
   );
   const input = normalizeRuleInput(
     {
@@ -208,6 +234,10 @@ export function normalizeRuleView(value: unknown, label: string): RecurringLimit
     period_start: periodSecond(root.period_start, `${label} period start`),
     period_end: periodSecond(root.period_end, `${label} period end`),
     next_transition_at: periodSecond(root.next_transition_at, `${label} next transition`),
+    effective_at:
+      root.effective_at === undefined
+        ? undefined
+        : integer(root.effective_at, `${label} effective time`, 0, MAX_PERIOD_SECOND),
   };
 }
 
@@ -295,10 +325,15 @@ export function getRecurringLimits(
   donationId: string,
   keyId: string,
   signal?: AbortSignal,
+  modelID?: string,
 ): Promise<RecurringLimitsResponse> {
-  return decoded(recurringLimitsPath(role, donationId, keyId), normalizeRecurringLimits, {
-    signal,
-  });
+  return decoded(
+    charityScopePath(recurringLimitsPath(role, donationId, keyId), modelID),
+    normalizeRecurringLimits,
+    {
+      signal,
+    },
+  );
 }
 
 export function putRecurringLimits(
@@ -307,13 +342,14 @@ export function putRecurringLimits(
   keyId: string,
   payload: RecurringLimitsWritePayload,
   idempotencyKey: string,
+  modelID?: string,
 ): Promise<RecurringLimitsWriteReceipt> {
   if (role === 'owner') {
     throw new ApiError('forbidden', 'Recurring limits are read-only for key owners.', 403);
   }
   const body = normalizeWritePayload(payload);
   return decoded(
-    recurringLimitsPath(role, donationId, keyId),
+    charityScopePath(recurringLimitsPath(role, donationId, keyId), modelID),
     (value) => {
       const root = record(
         value,

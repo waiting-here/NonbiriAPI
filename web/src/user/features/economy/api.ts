@@ -273,6 +273,7 @@ export async function getEndpointChoices(
 }
 
 export interface CreateDonationInput {
+  discordPublicThanks: boolean;
   description: string;
   keys: { endpointKeyId: string; expiresAt: number | null; failureDisableThreshold?: string }[];
   ownershipAuthorized: true;
@@ -282,6 +283,7 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
   requireDonationDescription(input.description);
   if (
     input.ownershipAuthorized !== true ||
+    typeof input.discordPublicThanks !== 'boolean' ||
     !Array.isArray(input.keys) ||
     input.keys.length < 1 ||
     input.keys.length > 100 ||
@@ -313,6 +315,7 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
             : { failure_disable_threshold: key.failureDisableThreshold }),
         })),
         ownership_authorized: input.ownershipAuthorized,
+        discord_public_thanks: input.discordPublicThanks,
       },
     }),
   );

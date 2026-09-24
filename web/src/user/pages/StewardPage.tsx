@@ -10,6 +10,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { RoleLogPanel } from '@shared/components/log';
+import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
 import { RiskAuditPanel } from '@shared/riskAudit/Panel';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
@@ -23,13 +24,15 @@ export function StewardPage() {
   const refetchAuthority = authority.refetch;
   const [searchParams, setSearchParams] = useSearchState();
   const location = useLocation();
+  const trainee = authority.data?.effective_level === 5;
   const requestedTab = searchParams.get('tab');
-  const section =
-    requestedTab === 'charity' ||
-    requestedTab === 'maintenance' ||
-    requestedTab === 'users' ||
-    requestedTab === 'risk' ||
-    requestedTab === 'announcements'
+  const section = trainee
+    ? 'charity'
+    : requestedTab === 'charity' ||
+        requestedTab === 'maintenance' ||
+        requestedTab === 'users' ||
+        requestedTab === 'risk' ||
+        requestedTab === 'announcements'
       ? requestedTab
       : 'logs';
   const announcement = searchParams.get('announcement') ?? '';
@@ -52,7 +55,7 @@ export function StewardPage() {
   }, [clearSensitiveQueries, refetchAuthority, setSection]);
 
   const allowed = Boolean(
-    authority.data && authority.data.effective_level === 6 && !authority.data.is_banned,
+    authority.data && [5, 6].includes(authority.data.effective_level) && !authority.data.is_banned,
   );
   useEffect(() => {
     if (!authority.isPending && !allowed) clearSensitiveQueries();
@@ -84,65 +87,75 @@ export function StewardPage() {
         title={t('user.steward.title')}
         description={t('user.steward.operationsDescription')}
       />
-      <div className="ops-tabs" role="tablist" aria-label={t('user.steward.sectionsLabel')}>
-        <button
-          className={section === 'risk' ? 'btn btn-primary' : 'btn btn-secondary'}
-          type="button"
-          role="tab"
-          aria-selected={section === 'risk'}
-          onClick={() => setSection('risk')}
-        >
-          {t('common.audit.risk')}
-        </button>
-        <button
-          className={section === 'logs' ? 'btn btn-primary' : 'btn btn-secondary'}
-          type="button"
-          role="tab"
-          aria-selected={section === 'logs'}
-          onClick={() => setSection('logs')}
-        >
-          {t('user.steward.logsTab')}
-        </button>
-        <button
-          className={section === 'charity' ? 'btn btn-primary' : 'btn btn-secondary'}
-          type="button"
-          role="tab"
-          aria-selected={section === 'charity'}
-          onClick={() => setSection('charity')}
-        >
-          {t('user.steward.charityTab')}
-        </button>
-        {(['users', 'announcements'] as const).map((tab) => (
+      {!trainee ? (
+        <div className="ops-tabs" role="tablist" aria-label={t('user.steward.sectionsLabel')}>
           <button
-            key={tab}
-            className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
+            className={section === 'risk' ? 'btn btn-primary' : 'btn btn-secondary'}
             type="button"
             role="tab"
-            aria-selected={section === tab}
-            onClick={() => setSection(tab)}
+            aria-selected={section === 'risk'}
+            onClick={() => setSection('risk')}
           >
-            {tab === 'users' ? t('user.steward.usersTab') : t('user.steward.announcementsTab')}
+            {t('common.audit.risk')}
           </button>
-        ))}
-        <button
-          className={section === 'maintenance' ? 'btn btn-danger' : 'btn btn-secondary'}
-          type="button"
-          role="tab"
-          aria-selected={section === 'maintenance'}
-          onClick={() => setSection('maintenance')}
-        >
-          {t('user.steward.maintenanceTab')}
-        </button>
-      </div>
-      {section === 'logs' ? (
-        <RoleLogPanel
-          key={`logs:${authority.data.id}`}
-          role="steward"
-          accountId={authority.data.id}
-          scopeReady={allowed}
-          enabled
-          onAuthorityLoss={authorityLoss}
-        />
+          <button
+            className={section === 'logs' ? 'btn btn-primary' : 'btn btn-secondary'}
+            type="button"
+            role="tab"
+            aria-selected={section === 'logs'}
+            onClick={() => setSection('logs')}
+          >
+            {t('user.steward.logsTab')}
+          </button>
+          <button
+            className={section === 'charity' ? 'btn btn-primary' : 'btn btn-secondary'}
+            type="button"
+            role="tab"
+            aria-selected={section === 'charity'}
+            onClick={() => setSection('charity')}
+          >
+            {t('user.steward.charityTab')}
+          </button>
+          {(['users', 'announcements'] as const).map((tab) => (
+            <button
+              key={tab}
+              className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
+              type="button"
+              role="tab"
+              aria-selected={section === tab}
+              onClick={() => setSection(tab)}
+            >
+              {tab === 'users' ? t('user.steward.usersTab') : t('user.steward.announcementsTab')}
+            </button>
+          ))}
+          <button
+            className={section === 'maintenance' ? 'btn btn-danger' : 'btn btn-secondary'}
+            type="button"
+            role="tab"
+            aria-selected={section === 'maintenance'}
+            onClick={() => setSection('maintenance')}
+          >
+            {t('user.steward.maintenanceTab')}
+          </button>
+        </div>
+      ) : null}
+      {!trainee && section === 'logs' ? (
+        <>
+          <RoleLogPanel
+            key={`logs:${authority.data.id}`}
+            role="steward"
+            accountId={authority.data.id}
+            scopeReady={allowed}
+            enabled
+            onAuthorityLoss={authorityLoss}
+          />
+          <IndependentDiagnostics
+            role="steward"
+            accountId={authority.data.id}
+            scopeReady={allowed}
+            enabled
+          />
+        </>
       ) : null}
       {section === 'risk' ? (
         <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} />
@@ -151,6 +164,7 @@ export function StewardPage() {
         <CharityManagement
           key={`charity:${authority.data.id}`}
           frame="steward"
+          trainee={trainee}
           accountId={authority.data.id}
           onCapabilityLoss={authorityLoss}
         />
