@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
@@ -221,7 +222,7 @@ func TestHandlerIngressMatrix(t *testing.T) {
 func TestHandlerBodyAndModelRuneBoundaries(t *testing.T) {
 	fixture := newServiceFixture(t, &fakeDebugCapture{decision: debug.CaptureDecision{Active: true, Mode: debug.ModeDry, Language: "en"}})
 	handler := NewHandler(fixture.service)
-	oversized := bytes.Repeat([]byte{'x'}, int(1<<20)+1)
+	oversized := bytes.Repeat([]byte{'x'}, int(requestbody.DefaultBytes)+1)
 	request := httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", bytes.NewReader(oversized))
 	request = withCallerIdentity(request, resources.CallerIdentity{UserID: 1})
 	recorder := httptest.NewRecorder()

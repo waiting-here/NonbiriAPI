@@ -31,6 +31,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -178,6 +179,7 @@ func newPublicForwardRuntime(
 		_ = service.Close()
 		return fail(fmt.Errorf("create forward flow middleware: %w", err))
 	}
+	flowHandler = requestbody.WithProvider(flowHandler, modelRequestBodyLimitProvider(store))
 	callerKey, err := forward.NewCallerKeyMiddleware(resourcesRepository, lifecycle, claims.RecordRejection)
 	if err != nil {
 		_ = service.Close()

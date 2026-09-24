@@ -8,14 +8,16 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
 // RequestEnvelope retains bounded ingress JSON before optional parameter
 // validation. It exposes no input value to policy lookup or ordinary logging.
 type RequestEnvelope struct {
-	fields []jsonField
-	Model  string
-	Stream bool
+	bodyLimit int64
+	fields    []jsonField
+	Model     string
+	Stream    bool
 }
 
 func (*RequestEnvelope) String() string   { return "[redacted request envelope]" }
@@ -62,9 +64,7 @@ func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Opera
 	if body == nil || operation != contract.OperationChatCompletions && operation != contract.OperationEmbeddings {
 		return nil, ErrInvalidRequest
 	}
-	if limit <= 0 || limit > MaxRequestBodyBytes {
-		limit = MaxRequestBodyBytes
-	}
+	limit = requestbody.DecoderLimit(limit)
 	data, err := readBounded(body, limit)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func DecodeRequestEnvelope(body io.Reader, limit int64, operation contract.Opera
 	if err != nil {
 		return nil, ErrInvalidRequest
 	}
-	result := &RequestEnvelope{fields: fields}
+	result := &RequestEnvelope{fields: fields, bodyLimit: limit}
 	valid := false
 	defer func() {
 		if !valid {
@@ -159,7 +159,7 @@ func (r *RequestEnvelope) WithoutFields(names []string) ([]byte, error) {
 		wrote = true
 	}
 	out.WriteByte('}')
-	if int64(out.Len()) > MaxRequestBodyBytes {
+	if int64(out.Len()) > requestbody.DecoderLimit(r.bodyLimit) {
 		clear(out.Bytes())
 		return nil, ErrPayloadTooLarge
 	}

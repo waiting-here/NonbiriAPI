@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -25,6 +26,23 @@ type anthropicDefaultMaxTokensProvider struct {
 }
 
 type gatewayAttributionProvider struct{ store *db.Store }
+
+func modelRequestBodyLimitProvider(store *db.Store) requestbody.Provider {
+	return func(ctx context.Context) (int64, error) {
+		raw, err := store.GetSiteConfigValueContext(ctx, requestbody.ConfigKey)
+		if err != nil {
+			return 0, err
+		}
+		if raw == "" {
+			return requestbody.DefaultBytes, nil
+		}
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value < 1 || value > requestbody.MaximumMiB || strconv.FormatInt(value, 10) != raw {
+			return 0, errors.New("model request body limit invalid")
+		}
+		return value * requestbody.MiB, nil
+	}
+}
 
 func (provider gatewayAttributionProvider) GatewayUserAttributionEnabled(ctx context.Context) (bool, error) {
 	if provider.store == nil || ctx == nil {

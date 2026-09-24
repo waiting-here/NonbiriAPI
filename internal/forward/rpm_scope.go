@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
@@ -58,7 +58,7 @@ func CharityRPMDenial(ctx context.Context, userID int64) bool {
 	}
 	scope.once.Do(func() {
 		r := scope.request
-		if r.URL.RawQuery != "" || r.URL.ForceQuery || r.ContentLength > openai.MaxRequestBodyBytes || r.Body == nil {
+		if r.URL.RawQuery != "" || r.URL.ForceQuery || r.Body == nil {
 			return
 		}
 		if _, ok := validateChatMedia(r); !ok {
@@ -79,8 +79,14 @@ func CharityRPMDenial(ctx context.Context, userID int64) bool {
 			return
 		}
 		defer func() { _ = control.SetReadDeadline(time.Time{}) }()
+		bounded, cancel := context.WithDeadline(ctx, deadline)
+		defer cancel()
+		limit, err := requestbody.Limit(bounded)
+		if err != nil || r.ContentLength > limit {
+			return
+		}
 		defer r.Body.Close()
-		request, err := decodeRequest(r.Body, requestkind.OperationForPath(r.URL.Path))
+		request, err := decodeRequest(r.Body, requestkind.OperationForPath(r.URL.Path), limit)
 		if err != nil {
 			return
 		}

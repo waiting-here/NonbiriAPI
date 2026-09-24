@@ -26,6 +26,7 @@ import (
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
 // Known site_config keys (the authoritative set enforced by the handler).
@@ -45,6 +46,7 @@ const (
 	KeyDefaultBindingLimit       = "default_binding_limit"
 	KeyDefaultRPMPerUser         = "default_rpm_per_user"
 	KeyGlobalRPM                 = "global_rpm"
+	KeyModelRequestBodyLimitMiB  = requestbody.ConfigKey
 	KeyDefaultPerEndpointConc    = "default_per_endpoint_concurrency"
 	KeyEgressGlobalConc          = "egress_global_concurrency"
 	KeyDiscordGuildID            = "discord_guild_id"
@@ -268,6 +270,7 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyDefaultBindingLimit:           {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
 		KeyDefaultRPMPerUser:             {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
 		KeyGlobalRPM:                     {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
+		KeyModelRequestBodyLimitMiB:      {kind: kindInt, min: 1, max: requestbody.MaximumMiB, def: requestbody.DefaultMiB},
 		KeyDefaultPerEndpointConc:        {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
 		KeyEgressGlobalConc:              {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
 		KeyDiscordGuildID:                {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},

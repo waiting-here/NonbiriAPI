@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
 const MaxEmbeddingBatch = 2048
@@ -16,6 +18,7 @@ const MaxEmbeddingBatch = 2048
 // EmbeddingRequest owns one validated protocol snapshot. It never represents
 // a chat message or guesses model capabilities from a model name.
 type EmbeddingRequest struct {
+	bodyLimit      int64
 	fields         []jsonField
 	excluded       []string
 	Model          string
@@ -46,9 +49,7 @@ func DecodeEmbeddingRequest(body io.Reader, limit int64) (*EmbeddingRequest, err
 	if body == nil {
 		return nil, ErrInvalidRequest
 	}
-	if limit <= 0 || limit > MaxRequestBodyBytes {
-		limit = MaxRequestBodyBytes
-	}
+	limit = requestbody.DecoderLimit(limit)
 	data, err := readBounded(body, limit)
 	if err != nil {
 		if errors.Is(err, ErrPayloadTooLarge) {
@@ -64,7 +65,7 @@ func DecodeEmbeddingRequest(body io.Reader, limit int64) (*EmbeddingRequest, err
 	if !ok {
 		return nil, ErrInvalidRequest
 	}
-	r := &EmbeddingRequest{EncodingFormat: "float"}
+	r := &EmbeddingRequest{EncodingFormat: "float", bodyLimit: limit}
 	for _, field := range fields {
 		switch field.name {
 		case "model":
@@ -244,7 +245,7 @@ func (r *EmbeddingRequest) marshalUpstream(upstreamModel, identifier string) ([]
 		out.Write(identifierJSON)
 	}
 	out.WriteByte('}')
-	if int64(out.Len()) > maxForwardBodyBytes {
+	if int64(out.Len()) > r.RequestBodyLimit()+(16<<10) {
 		clear(out.Bytes())
 		return nil, ErrPayloadTooLarge
 	}

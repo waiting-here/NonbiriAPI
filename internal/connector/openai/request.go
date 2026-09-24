@@ -14,18 +14,18 @@ import (
 	"unicode/utf8"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
 const (
-	// MaxRequestBodyBytes is the caller request ceiling for chat completions.
-	MaxRequestBodyBytes int64 = 1 << 20
+	// MaxRequestBodyBytes is the default caller limit; each request may carry an administrator override.
+	MaxRequestBodyBytes int64 = requestbody.DefaultBytes
 	// MaxPlatformModelRunes covers personal names (64 provider runes + "/" +
 	// 64 model runes = 129) and charity names ("[公益]" + personal = 133).
 	// The value remains opaque here.
 	MaxPlatformModelRunes = 133
 	maxTopLevelFields     = 1024
 	maxFieldNameRunes     = 256
-	maxForwardBodyBytes   = MaxRequestBodyBytes + (16 << 10)
 )
 
 var (
@@ -45,6 +45,7 @@ type jsonField struct {
 // and safety_identifier values are replaced at dispatch time. Values are
 // private so they cannot accidentally enter a metadata hook or formatter.
 type ChatRequest struct {
+	bodyLimit    int64
 	fields       []jsonField
 	excluded     []string
 	requirements CapabilityRequirements
@@ -131,9 +132,7 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 	if body == nil {
 		return nil, ErrInvalidRequest
 	}
-	if limit <= 0 || limit > MaxRequestBodyBytes {
-		limit = MaxRequestBodyBytes
-	}
+	limit = requestbody.DecoderLimit(limit)
 	data, err := readBounded(body, limit)
 	if err != nil {
 		if errors.Is(err, ErrPayloadTooLarge) {
@@ -148,7 +147,7 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 		clearFields(fields)
 		return nil, ErrInvalidRequest
 	}
-	request := &ChatRequest{fields: fields}
+	request := &ChatRequest{fields: fields, bodyLimit: limit}
 	modelSeen := false
 	streamSeen := false
 	for _, field := range fields {
@@ -212,8 +211,9 @@ func (r *ChatRequest) CloneForAttempt() *ChatRequest {
 		return nil
 	}
 	clone := &ChatRequest{
-		fields:   make([]jsonField, len(r.fields)),
-		excluded: append([]string(nil), r.excluded...),
+		bodyLimit: r.bodyLimit,
+		fields:    make([]jsonField, len(r.fields)),
+		excluded:  append([]string(nil), r.excluded...),
 		requirements: CapabilityRequirements{
 			capabilities: r.requirements.capabilities,
 			topLevel:     append([]string(nil), r.requirements.topLevel...),
@@ -391,7 +391,8 @@ func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier 
 	policy.ForceStoreFalse = policy.ForceStoreFalse && !r.FieldExcluded("store")
 
 	var out bytes.Buffer
-	out.Grow(min(int(maxForwardBodyBytes), 4096))
+	limit := r.RequestBodyLimit() + (16 << 10)
+	out.Grow(min(int(limit), 4096))
 	out.WriteByte('{')
 	wrote := 0
 	safetySeen := false
@@ -444,7 +445,7 @@ func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier 
 			wrote++
 			storeSeen = true
 		}
-		if int64(out.Len()) > maxForwardBodyBytes {
+		if int64(out.Len()) > limit {
 			clear(out.Bytes())
 			return nil, ErrPayloadTooLarge
 		}
@@ -473,7 +474,7 @@ func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier 
 		out.WriteString(`"stream_options":{"include_usage":true}`)
 	}
 	out.WriteByte('}')
-	if int64(out.Len()) > maxForwardBodyBytes {
+	if int64(out.Len()) > limit {
 		clear(out.Bytes())
 		return nil, ErrPayloadTooLarge
 	}
