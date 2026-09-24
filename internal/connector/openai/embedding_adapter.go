@@ -71,13 +71,14 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	}
 	if response.StatusCode != http.StatusOK {
 		result = upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
-		result.ErrorDetail = errorContext.Read(response.Body, a.maxEmbeddingResponseBytes)
+		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxEmbeddingResponseBytes)
 		if ctx.Err() != nil {
 			return canceledFailure()
 		}
 		return result
 	}
 	if !validResponseMediaType(response, "application/json") {
+		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
 	if response.ContentLength > a.maxEmbeddingResponseBytes {
@@ -94,6 +95,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	projected, usage, err := projectEmbeddingResponse(raw, request)
 	if err != nil {
 		result = upstreamFailure("upstream response was invalid", response.StatusCode)
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		result.ErrorDetail = errorContext.Parse(raw)
 		return result
 	}

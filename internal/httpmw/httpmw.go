@@ -158,8 +158,13 @@ func (p *policy) requestInfo(r *http.Request) requestInfo {
 	trusted := peerOK && p.isTrustedProxy(peer)
 	secure := r.TLS != nil
 	client := peerText
+	quality := "direct_peer"
+	if !peerOK {
+		quality = "peer_fallback"
+	}
 
 	if trusted {
+		quality = "peer_fallback"
 		if proto, present, valid := oneHeader(r, "X-Forwarded-Proto", maxForwardedProtoLen); present && valid {
 			proto = strings.TrimSpace(proto)
 			if strings.EqualFold(proto, "https") {
@@ -171,16 +176,18 @@ func (p *policy) requestInfo(r *http.Request) requestInfo {
 			if valid {
 				if forwarded, ok := parseForwardedFor(value, p.isTrustedProxy); ok {
 					client = forwarded.String()
+					quality = "trusted_forwarded"
 				}
 			}
 		} else if value, present, valid := oneHeader(r, "X-Real-IP", maxRealIPLen); present && valid {
 			if addr, ok := parseForwardedAddress(value); ok {
 				client = addr.String()
+				quality = "trusted_forwarded"
 			}
 		}
 	}
 
-	return requestInfo{clientIP: client, peerIP: peerText, https: secure, trustedProxy: trusted}
+	return requestInfo{clientIP: client, peerIP: peerText, https: secure, trustedProxy: trusted, ipQuality: quality}
 }
 
 type requestInfo struct {
@@ -188,6 +195,7 @@ type requestInfo struct {
 	peerIP       string
 	https        bool
 	trustedProxy bool
+	ipQuality    string
 }
 
 func parsePeer(raw string) (netip.Addr, bool) {
@@ -488,6 +496,20 @@ func ClientIP(r *http.Request) string {
 		return peer.String()
 	}
 	return "unknown"
+}
+
+// ClientIPQuality describes the provenance of ClientIP without reinterpreting
+// headers after the edge has removed them.
+func ClientIPQuality(r *http.Request) string {
+	if r != nil {
+		if info, ok := requestInfoFromContext(r.Context()); ok {
+			return info.ipQuality
+		}
+		if _, ok := parsePeer(r.RemoteAddr); ok {
+			return "direct_peer"
+		}
+	}
+	return "peer_fallback"
 }
 
 // PeerIP returns the immediate TCP peer selected by the HTTP server.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
 // Site identifies one of the two embedded SPAs.
@@ -78,6 +79,7 @@ func SPAHandler(site Site) http.Handler {
 			clean = "index.html"
 		}
 		if _, err := fs.Stat(fsys, clean); err != nil {
+			observability.MarkResponseCategory(r.Context(), "spa_fallback")
 			serveIndexNoStore(w, fsys)
 			return
 		}

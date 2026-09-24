@@ -251,7 +251,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
 		result := upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
-		result.ErrorDetail = errorContext.Read(response.Body, a.maxJSONResponseBytes)
+		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)
 		if ctx.Err() != nil {
 			return canceledFailure()
 		}
@@ -259,11 +259,13 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	}
 	if request.Stream {
 		if !validResponseMediaType(response, "text/event-stream") {
+			_ = errorContext.ReadResponse(ctx, response)
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
 		return a.stream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext)
 	}
 	if !validResponseMediaType(response, "application/json") {
+		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
 	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext)
@@ -282,19 +284,23 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 	}
 	defer clear(body)
 	if upstreamerror.IsEvent(body) {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		result := upstreamFailure("upstream response reported an error", response.StatusCode)
 		result.ErrorDetail = errorContext.Parse(body)
 		return result
 	}
 	reflected, scanErr := semanticGuard.ContainsJSONStrings(body)
 	if scanErr != nil {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
 	if reflected {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
 	translated, usage, _, err := translateNonStream(body, publicModel, attemptStarted)
 	if err != nil {
+		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		clear(translated)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
