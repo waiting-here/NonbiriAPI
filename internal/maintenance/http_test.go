@@ -2,12 +2,74 @@ package maintenance
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestMaintenancePreparedChangesFollowCommitAndReplay(t *testing.T) {
+	store := openMaintenanceStore(t)
+	service, gate := newMaintenanceService(t, NewRegistry())
+	if _, err := service.PrepareListener(context.Background(), store.DB()); err != nil {
+		t.Fatal(err)
+	}
+	admin := insertMaintenancePrincipal(t, store.DB(), "", "prepared-admin", true, false)
+	capture := &maintenanceRouteCapture{}
+	if err := RegisterRoutes(capture, capture, HTTPOptions{Database: store.DB(), Service: service}); err != nil {
+		t.Fatal(err)
+	}
+	disable := maintenanceHTTPResponse(t, capture.admin[http.MethodPost+" "+adminDisableRoute], http.MethodPost, adminDisableRoute,
+		`{"expected_revision":"1","reason":"open"}`, strings.Repeat("F", 22), admin)
+	if disable.Code != http.StatusOK {
+		t.Fatalf("disable: %d %s", disable.Code, disable.Body.String())
+	}
+	if _, err := store.DB().Exec(`CREATE TABLE prepared_probe(value INTEGER NOT NULL); INSERT INTO prepared_probe VALUES(0)`); err != nil {
+		t.Fatal(err)
+	}
+	prepared, held := 0, false
+	var finalized []bool
+	service.prepareEnable = func(ctx context.Context, tx *sql.Tx, at int64) (func(bool), error) {
+		if held || at != maintenanceTestNow {
+			t.Fatal("invalid preparation state")
+		}
+		prepared++
+		held = true
+		finish := func(committed bool) { held = false; finalized = append(finalized, committed) }
+		_, err := tx.ExecContext(ctx, "UPDATE prepared_probe SET value=value+1")
+		return finish, err
+	}
+	// Fail after the callback has changed transaction-local state and retained
+	// its memory lock, exercising the HTTP transaction owner's abort path.
+	if _, err := store.DB().Exec(`CREATE TRIGGER reject_prepared_completion BEFORE UPDATE ON idempotency_records
+WHEN NEW.state='completed' BEGIN SELECT RAISE(ABORT,'fixture failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"expected_revision":"2","reason":"pause","confirmation":true}`
+	key := strings.Repeat("G", 22)
+	handler := capture.admin[http.MethodPost+" "+adminEnableRoute]
+	failed := maintenanceHTTPResponse(t, handler, http.MethodPost, adminEnableRoute, body, key, admin)
+	var value int
+	if err := store.DB().QueryRow("SELECT value FROM prepared_probe").Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	if failed.Code != http.StatusInternalServerError || held || prepared != 1 || len(finalized) != 1 || finalized[0] || value != 0 || gate.Enabled() {
+		t.Fatalf("abort: status=%d held=%v prepared=%d finalized=%v value=%d gate=%v", failed.Code, held, prepared, finalized, value, gate.Enabled())
+	}
+	if _, err := store.DB().Exec("DROP TRIGGER reject_prepared_completion"); err != nil {
+		t.Fatal(err)
+	}
+	committed := maintenanceHTTPResponse(t, handler, http.MethodPost, adminEnableRoute, body, key, admin)
+	replayed := maintenanceHTTPResponse(t, handler, http.MethodPost, adminEnableRoute, body, key, admin)
+	if err := store.DB().QueryRow("SELECT value FROM prepared_probe").Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	if committed.Code != http.StatusOK || replayed.Code != http.StatusOK || committed.Body.String() != replayed.Body.String() || held || prepared != 2 || len(finalized) != 2 || !finalized[1] || value != 1 || !gate.Enabled() {
+		t.Fatalf("commit/replay: status=%d/%d held=%v prepared=%d finalized=%v value=%d gate=%v", committed.Code, replayed.Code, held, prepared, finalized, value, gate.Enabled())
+	}
+}
 
 type maintenanceRouteCapture struct {
 	steward map[string]AuthorizedHTTPHandler

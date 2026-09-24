@@ -36,6 +36,7 @@ type ExportAdapters struct {
 	Randomness RandomnessExporter
 	Rankings   RankingExporter
 	Penalties  PenaltyExporter
+	Governance GovernanceExporter
 }
 
 // DeleteAdapters is the closed account-deletion registry. Each adapter owns
@@ -55,6 +56,7 @@ type DeleteAdapters struct {
 	Likes                DeleteAdapter
 	Blackjack            DeleteAdapter
 	DebugAccountStream   DeleteAdapter
+	Governance           DeleteAdapter
 }
 
 func (adapters DeleteAdapters) ordered() []DeleteAdapter {
@@ -73,6 +75,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 		adapters.Likes,
 		adapters.Blackjack,
 		adapters.DebugAccountStream,
+		adapters.Governance,
 	}
 }
 
@@ -93,6 +96,7 @@ type RecoveryAdapters struct {
 	Blackjack   RecoveryAdapter
 	Donations   RecoveryAdapter
 	Secrets     RecoveryAdapter
+	Governance  RecoveryAdapter
 }
 
 func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
@@ -110,6 +114,7 @@ func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
 		adapters.Blackjack,
 		adapters.Donations,
 		adapters.Secrets,
+		adapters.Governance,
 	}
 }
 
@@ -133,6 +138,7 @@ type RetentionAdapters struct {
 	Charity       RetentionAdapter
 	Idempotency   RetentionAdapter
 	Secrets       RetentionAdapter
+	Governance    RetentionAdapter
 }
 
 func (adapters RetentionAdapters) ordered() []RetentionAdapter {
@@ -154,6 +160,7 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.Charity,
 		adapters.Idempotency,
 		adapters.Secrets,
+		adapters.Governance,
 	}
 }
 
@@ -250,7 +257,7 @@ func completeExportAdapters(a ExportAdapters) bool {
 	return a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
 		a.Activities != nil && a.Donations != nil && a.Charity != nil && a.Fishing != nil &&
 		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil &&
-		a.Rankings != nil && a.Penalties != nil
+		a.Rankings != nil && a.Penalties != nil && a.Governance != nil
 }
 
 func completeDeleteAdapters(a DeleteAdapters) bool {
@@ -392,6 +399,12 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if document.Penalties, err = coordinator.export.Penalties.ExportPenalties(ctx, tx, request); err != nil {
 		return nil, err
 	}
+	if document.GovernanceExport, err = coordinator.export.Governance.ExportGovernance(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if len(document.LimitedActivities.Exchanges) > CollectionLimit || len(document.ImageTasks) > CollectionLimit || len(document.Inactivity.Runs) > CollectionLimit {
+		return nil, ErrTooLarge
+	}
 	normalizeExportDocument(&document)
 	if err := validateExportCollectionBounds(document); err != nil {
 		return nil, err
@@ -414,6 +427,15 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 }
 
 func normalizeExportDocument(document *ExportDocument) {
+	if document.LimitedActivities.Exchanges == nil {
+		document.LimitedActivities.Exchanges = []ActivityExchangeExport{}
+	}
+	if document.ImageTasks == nil {
+		document.ImageTasks = []ImageTaskExport{}
+	}
+	if document.Inactivity.Runs == nil {
+		document.Inactivity.Runs = []InactivityRunExport{}
+	}
 	if document.GameOnboardingHolds == nil {
 		document.GameOnboardingHolds = []OnboardingHoldExport{}
 	}

@@ -21,7 +21,7 @@ func readPersonalExport(t *testing.T, f *duelWireFixture, seat int) lifecycle.Ex
 	t.Helper()
 	r := f.call(seat, "POST", "/api/account/export", nil, true)
 	var document lifecycle.ExportDocument
-	if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &document) != nil || document.SchemaVersion != 9 || r.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v9.json"` {
+	if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &document) != nil || document.SchemaVersion != 10 || r.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v10.json"` {
 		t.Fatal("invalid personal export", r.Code, r.Body.String())
 	}
 	return document

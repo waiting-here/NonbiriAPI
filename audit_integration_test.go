@@ -41,6 +41,7 @@ func TestAuditHTTPDispatchSourceAndPrivilegedReaders(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/admin/api/logs/" + requestID + "/source", "/admin/api/logs/diagnostic-capacity",
+		"/admin/api/diagnostics",
 		"/admin/api/abuse-audit/users", "/admin/api/abuse-audit/access-summary", "/admin/api/economy-audit/summary",
 	} {
 		read := testApplicationRequest(t, f.app.handler, "GET", auditAdminHost, path, "", cookies, nil)

@@ -157,7 +157,7 @@ func TestBlackjackHTTPRoutesPrivacyHistoryAndExport(t *testing.T) {
 		}
 		r = f.call(seat, "POST", "/api/account/export", nil, true)
 		var exported lifecycle.ExportDocument
-		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &exported) != nil || exported.SchemaVersion != 9 || len(exported.Blackjack.History) != 1 {
+		if r.Code != 200 || json.Unmarshal(r.Body.Bytes(), &exported) != nil || exported.SchemaVersion != 10 || len(exported.Blackjack.History) != 1 {
 			t.Fatalf("export %d %s", r.Code, r.Body.String())
 		}
 	}

@@ -319,6 +319,7 @@ type application struct {
 	forward         *publicForwardRuntime
 	games           *gameRuntimeBundle
 	audits          *auditRuntime
+	activityRuntime *activityRuntime
 	failures        <-chan error
 	authorizer      *authz.Authorizer
 	elevation       *elevation.Manager
@@ -373,6 +374,11 @@ func (a *application) Close() error {
 		}
 		if a.lifecycle != nil {
 			if err := a.lifecycle.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.activityRuntime != nil {
+			if err := a.activityRuntime.Close(); err != nil {
 				closeErrors = append(closeErrors, err)
 			}
 		}
@@ -436,6 +442,10 @@ type roleFinalTxAuthorizer struct {
 	authorizer *authz.Authorizer
 }
 
+func (authorizer *roleFinalTxAuthorizer) SessionActor(ctx context.Context) (authz.Actor, bool) {
+	return auth.ActorFromContext(ctx)
+}
+
 var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ activities.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ announcements.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
@@ -463,6 +473,10 @@ func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardMutation(ctx context.Co
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardRead(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeTraineeMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleTrainee)
 }
 
 func (authorizer *roleFinalTxAuthorizer) authorize(
@@ -748,13 +762,26 @@ func (activityPublishReporter) ReportActivitiesPublishError(err error) {
 }
 
 func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
-	return buildApplicationWithGameClock(cfg, store, vault, nil)
+	return buildApplicationWithRuntimeOptions(cfg, store, vault, applicationRuntimeOptions{})
 }
 
 func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *secret.Vault, gameNow func() time.Time) (*application, error) {
+	return buildApplicationWithRuntimeOptions(cfg, store, vault, applicationRuntimeOptions{GameNow: gameNow})
+}
+
+// Runtime options are supplied only by the process composition root. Request
+// data and persisted configuration cannot replace the outbound policy.
+type applicationRuntimeOptions struct {
+	Egress      *egress.Stack
+	GameNow     func() time.Time
+	ActivityNow func() time.Time
+}
+
+func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vault *secret.Vault, options applicationRuntimeOptions) (*application, error) {
 	if cfg == nil || store == nil || vault == nil {
 		return nil, errors.New("application dependencies are required")
 	}
+	gameNow := options.GameNow
 
 	elevationManager, err := elevation.NewManager()
 	if err != nil {
@@ -763,20 +790,27 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	authorizer := authz.New(authz.Options{Elevation: elevationManager})
 	gate := maintenance.NewGate()
 	registry := maintenance.NewRegistry()
+	var activityEngines *activityRuntime
 	maintenanceService, err := maintenance.NewService(maintenance.ServiceOptions{
 		Authorizer: authorizer,
 		Gate:       gate,
 		Registry:   registry,
+		PrepareEnableTx: func(ctx context.Context, tx *sql.Tx, at int64) (func(bool), error) {
+			return activityEngines.PrepareMaintenanceTx(ctx, tx, at)
+		},
 	})
 	if err != nil {
 		_ = elevationManager.Close()
 		return nil, fmt.Errorf("create maintenance service: %w", err)
 	}
 
-	outbound, err := egress.NewStack(egress.StackOptions{})
-	if err != nil {
-		_ = elevationManager.Close()
-		return nil, fmt.Errorf("create egress stack: %w", err)
+	outbound := options.Egress
+	if outbound == nil {
+		outbound, err = egress.NewStack(egress.StackOptions{})
+		if err != nil {
+			_ = elevationManager.Close()
+			return nil, fmt.Errorf("create egress stack: %w", err)
+		}
 	}
 	var bridgeRuntime *resourcebridge.Runtime
 	var discoveryWorker *resources.DiscoveryWorkerPool
@@ -791,6 +825,9 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	var gameRuntimes *gameRuntimeBundle
 	var audits *auditRuntime
 	cleanup := func() {
+		if activityEngines != nil {
+			_ = activityEngines.Close()
+		}
 		if accountConnections != nil {
 			_ = accountConnections.Close()
 		}
@@ -1122,9 +1159,15 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		cleanup()
 		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
 	}
+	activityEngines, err = newActivityRuntime(store, vault, authRuntime, roleAuthorizer,
+		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, options.ActivityNow)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create limited activity runtimes: %w", err)
+	}
 	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
 		Database: store.DB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
-		CancelUserDuelsTx: gameRuntimes.CancelUserDuelsTx,
+		CancelUserDuelsTx: activityEngines.CancelUserTx,
 	})
 	if err != nil {
 		cleanup()
@@ -1132,7 +1175,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
 		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
-		connectorRegistry, localBackend, debugHub, gate, rpmLimits, gameRuntimes.CancelUserDuelsTx, audits, userInvalidations.InvalidateUserAuthority,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits, activityEngines.CancelUserTx, audits, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
 		cleanup()
@@ -1153,7 +1196,7 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		claimService, resourceRepository, issueService, logRepository,
 		activityService, activityRepository, donationService, charityService,
 		reportRepository, announcementRepository, maintenanceService,
-		activityEvents, debugHub, gameNow, audits,
+		activityEvents, debugHub, gameNow, audits, activityEngines,
 	)
 	if err != nil {
 		cleanup()
@@ -1268,6 +1311,10 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 		cleanup()
 		return nil, fmt.Errorf("register audit routes: %w", err)
 	}
+	if err := activityEngines.RegisterRoutes(authRuntime); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register limited activity routes: %w", err)
+	}
 	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
 	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
 		cleanup()
@@ -1333,8 +1380,10 @@ func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *s
 	rankingDone := make(chan struct{})
 	go func() { defer close(rankingDone); rankingService.Run(rankingContext) }()
 	audits.Start()
+	activityEngines.Start(failures)
 	return &application{
 		audits:          audits,
+		activityRuntime: activityEngines,
 		handler:         handler,
 		authRuntime:     authRuntime,
 		bridge:          bridgeRuntime,

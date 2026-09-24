@@ -306,6 +306,7 @@ func newLifecycleCoordinator(
 	debugHub *debug.Hub,
 	now func() time.Time,
 	audits *auditRuntime,
+	activityEngines *activityRuntime,
 ) (*lifecycle.Coordinator, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
 		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil ||
@@ -313,7 +314,7 @@ func newLifecycleCoordinator(
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
 		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
 		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
-		activityEvents == nil || debugHub == nil || audits == nil {
+		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil {
 		return nil, lifecycle.ErrInvalid
 	}
 
@@ -368,7 +369,8 @@ func newLifecycleCoordinator(
 		},
 		Ledger: ledgerAdapter,
 		Export: lifecycle.ExportAdapters{
-			Identity: accountResources, Resources: accountResources, Issues: accountResources,
+			Governance: activityEngines,
+			Identity:   accountResources, Resources: accountResources, Issues: accountResources,
 			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
@@ -376,6 +378,7 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			Governance:           activityEngines,
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,
 			IssuesAnnouncements: lifecycleadapters.NewIssueAnnouncementDelete(issueService.Sources()),
 			Donations:           donationAdapter, Activities: activityAdapter, Reports: reportAdapter,
@@ -384,6 +387,7 @@ func newLifecycleCoordinator(
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
+			Governance:  activityEngines,
 			Idempotency: idempotencyAdapter,
 			Discovery:   lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
 			Claims:      lifecycleadapters.NewClaimRecovery(claimService),
@@ -399,6 +403,7 @@ func newLifecycleCoordinator(
 			Secrets:     secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
+			Governance:    activityEngines,
 			Sessions:      lifecycleadapters.NewAuthSessionRetention(authRuntime),
 			RequestLogs:   lifecycleadapters.NewRequestLogRetention(logRepository),
 			Audits:        lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),

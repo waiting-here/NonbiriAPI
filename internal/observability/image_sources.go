@@ -49,3 +49,16 @@ func (r *Repository) DeleteImageSourcesTx(ctx context.Context, tx *sql.Tx, userI
 	_, err := tx.ExecContext(ctx, `DELETE FROM image_task_sources WHERE user_id=?`, userID)
 	return err
 }
+
+// DeleteImageTaskDataTx clears diagnostic roots before a task is retired.
+// The canonical delete trigger releases the stored-body budget in this tx.
+func (r *Repository) DeleteImageTaskDataTx(ctx context.Context, tx *sql.Tx, taskID string) error {
+	if tx == nil || !db.ValidateOpaqueID(taskID, "img_") {
+		return ErrInvalid
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM request_error_bodies WHERE task_id=?`, taskID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM image_task_sources WHERE task_id=?`, taskID)
+	return err
+}

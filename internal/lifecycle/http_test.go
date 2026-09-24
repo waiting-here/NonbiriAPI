@@ -52,7 +52,7 @@ func TestRegisterRoutesAndAccountLifecycleHTTP(t *testing.T) {
 			exportResponse.Code, exportResponse.Header(), exportResponse.Body.String())
 	}
 	var exported map[string]any
-	if err := json.Unmarshal(exportResponse.Body.Bytes(), &exported); err != nil || exported["schema_version"] != float64(9) {
+	if err := json.Unmarshal(exportResponse.Body.Bytes(), &exported); err != nil || exported["schema_version"] != float64(10) {
 		t.Fatalf("export body=%v error=%v", exported, err)
 	}
 

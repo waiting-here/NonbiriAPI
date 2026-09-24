@@ -25,6 +25,7 @@ import (
 // request identity. They never create a second request or consume an API quota.
 type auditRuntime struct {
 	observations *observability.Repository
+	diagnostics  *observability.DiagnosticReader
 	risk         *riskaudit.Repository
 	collector    *riskaudit.Collector
 	economy      *economyaudit.Service
@@ -40,6 +41,10 @@ func newAuditRuntime(store *db.Store, vault *secret.Vault, authorizer *roleFinal
 	a := &auditRuntime{}
 	var err error
 	a.observations, err = observability.NewRepository(store.DB())
+	if err != nil {
+		return nil, err
+	}
+	a.diagnostics, err = observability.NewDiagnosticReader(observability.DiagnosticReaderConfig{Database: store.DB(), FinalAuth: authorizer})
 	if err != nil {
 		return nil, err
 	}
@@ -136,6 +141,12 @@ func (a *auditRuntime) registerRoutes(runtime *auth.Runtime, logs *logapi.Reposi
 	for _, register := range []func() error{
 		func() error { return logapi.RegisterAdminDiagnosticRoutes(runtime, logs, authorizer) },
 		func() error { return logapi.RegisterStewardDiagnosticRoutes(runtime, logs, authorizer) },
+		func() error {
+			return observability.RegisterAdminIndependentDiagnosticRoutes(independentDiagnosticRegistrar{runtime}, a.diagnostics)
+		},
+		func() error {
+			return observability.RegisterStewardIndependentDiagnosticRoutes(independentDiagnosticRegistrar{runtime}, a.diagnostics)
+		},
 		func() error { return riskaudit.RegisterAdminRoutes(runtime, a.risk) },
 		func() error { return riskaudit.RegisterStewardRoutes(runtime, a.risk) },
 		func() error { return economyaudit.RegisterRoutes(economyRouteRegistrar{runtime}, a.economy) },
@@ -148,6 +159,30 @@ func (a *auditRuntime) registerRoutes(runtime *auth.Runtime, logs *logapi.Reposi
 }
 
 type economyRouteRegistrar struct{ runtime *auth.Runtime }
+
+type independentDiagnosticRegistrar struct{ runtime *auth.Runtime }
+
+func (r independentDiagnosticRegistrar) wrap(handler observability.AuthorizedDiagnosticHandler, kind authz.ActorKind) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != kind {
+			httperr.WriteError(w, httperr.New(httperr.CodeForbidden, "session required"))
+			return
+		}
+		handler(w, request, observability.DiagnosticPrincipal{UserID: actor.UserID})
+	})
+}
+
+func (r independentDiagnosticRegistrar) RegisterAdminRoute(method, path string, handler observability.AuthorizedDiagnosticHandler) error {
+	return r.runtime.RegisterAdminRoute(method, path, r.wrap(handler, authz.ActorAdminSession))
+}
+
+func (r independentDiagnosticRegistrar) RegisterUserRoute(method, path string, handler observability.AuthorizedDiagnosticHandler) error {
+	wrapped := r.wrap(handler, authz.ActorUserSession)
+	return r.runtime.RegisterUserRoute(method, path, func(w http.ResponseWriter, request *http.Request, _ resources.UserPrincipal) {
+		wrapped.ServeHTTP(w, request)
+	})
+}
 
 func (r economyRouteRegistrar) RegisterAdminRoute(method, path string, handler economyaudit.AuthorizedAdminHandler) error {
 	return r.runtime.RegisterAdminRoute(method, path, http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
