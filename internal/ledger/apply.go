@@ -215,6 +215,9 @@ func validatePlan(plan Plan) error {
 		if _, err := amountFromScalar(entry.delta.value); err != nil {
 			return ErrInvalidPlan
 		}
+		if !validAssetAmount(entry.role.asset, entry.delta) {
+			return ErrInvalidPlan
+		}
 	}
 	for accountID := range spec.requireZeroAfter {
 		if _, exists := seenAccounts[accountID]; !exists {
@@ -359,7 +362,7 @@ func materializeEntries(plan Plan, accounts map[int64]Account) ([]entrySpec, err
 		copy(out, plan.spec.entries)
 		return out, nil
 	}
-	if plan.spec.dynamic != dynamicAccountDelete || len(plan.spec.entries) != 2 && len(plan.spec.entries) != 4 {
+	if plan.spec.dynamic != dynamicAccountDelete || len(plan.spec.entries) < 2 || len(plan.spec.entries) > 8 || len(plan.spec.entries)%2 != 0 {
 		return nil, ErrInvalidPlan
 	}
 	var entries []entrySpec
@@ -384,7 +387,7 @@ func validateConservation(kind Kind, entries []entrySpec) error {
 	if len(entries) == 0 && kind != KindAdminUserAdjustment && kind != KindAntiAbusePenalty && kind != KindAccountDeleteZero {
 		return ErrInvalidPlan
 	}
-	totals := map[Asset]*big.Int{General: new(big.Int), Game: new(big.Int)}
+	totals := assetTotals()
 	for _, entry := range entries {
 		total, ok := totals[entry.role.asset]
 		if !ok {
@@ -392,7 +395,7 @@ func validateConservation(kind Kind, entries []entrySpec) error {
 		}
 		total.Add(total, entry.delta.Big())
 	}
-	if totals[General].Sign() != 0 || totals[Game].Sign() != 0 {
+	if !conserved(totals) {
 		return ErrInvalidPlan
 	}
 	return nil
@@ -610,7 +613,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 		return Result{}, classifySQLError("load ledger entries", err)
 	}
 	defer rows.Close()
-	totals := map[Asset]*big.Int{General: new(big.Int), Game: new(big.Int)}
+	totals := assetTotals()
 	expectedLine := 0
 	for rows.Next() {
 		var (
@@ -637,7 +640,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 			entry.AccountID = accountID.Int64
 		}
 		entry.Delta, err = amountFromParts(deltaSign, deltaMag)
-		if err != nil {
+		if err != nil || !validAssetAmount(entry.Asset, entry.Delta) {
 			return Result{}, ErrInvariant
 		}
 		if entry.AccountKind == AccountUser {
@@ -649,7 +652,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 				return Result{}, ErrInvariant
 			}
 			value, decodeErr := amountFromParts(int(afterSign.Int64), afterMag)
-			if decodeErr != nil || (entry.AccountKind == AccountPool || entry.AccountKind == AccountPlatform) && value.Sign() < 0 {
+			if decodeErr != nil || !validAssetAmount(entry.Asset, value) || (entry.AccountKind == AccountPool || entry.AccountKind == AccountPlatform) && value.Sign() < 0 {
 				return Result{}, ErrInvariant
 			}
 			entry.BalanceAfter = &value
@@ -661,7 +664,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 	if err := rows.Err(); err != nil {
 		return Result{}, classifySQLError("iterate ledger entries", err)
 	}
-	if totals[General].Sign() != 0 || totals[Game].Sign() != 0 || len(result.Entries) == 1 || len(result.Entries) == 0 && result.Kind != KindAdminUserAdjustment && result.Kind != KindAntiAbusePenalty && result.Kind != KindAccountDeleteZero {
+	if !conserved(totals) || len(result.Entries) == 1 || len(result.Entries) == 0 && result.Kind != KindAdminUserAdjustment && result.Kind != KindAntiAbusePenalty && result.Kind != KindAccountDeleteZero {
 		return Result{}, ErrInvariant
 	}
 	return result, nil
