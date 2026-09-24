@@ -11,6 +11,7 @@ import {
   HISTORY_CATEGORIES,
   MAX_HISTORY_UNIX_SECOND,
   isHistoryAnchor,
+  isHistoryAssetFilter,
   isHistoryPage,
   type HistoryFilter,
 } from './data';
@@ -112,10 +113,6 @@ function serializeHistoryValues(values: {
   return params.toString();
 }
 
-function validAsset(value: string | undefined): value is NonNullable<HistoryFilter['asset_type']> {
-  return value === 'general' || value === 'game' || value === 'all';
-}
-
 function validCategory(value: string | undefined): value is HistoryCategory {
   return value !== undefined && HISTORY_CATEGORIES.some((category) => category === value);
 }
@@ -173,7 +170,7 @@ export function parseCreditHistorySearch(
 
   const assetParam = singleValue(params, 'asset_type');
   const asset_type =
-    !assetParam.invalid && validAsset(assetParam.value) ? assetParam.value : undefined;
+    !assetParam.invalid && isHistoryAssetFilter(assetParam.value) ? assetParam.value : undefined;
   const categoryParam = singleValue(params, 'category');
   const category =
     !categoryParam.invalid && validCategory(categoryParam.value) ? categoryParam.value : undefined;
@@ -222,7 +219,7 @@ export function parseCreditHistorySearch(
 }
 
 function validDraft(draft: CreditHistoryFilterDraft): boolean {
-  if (draft.asset_type !== undefined && !validAsset(draft.asset_type)) return false;
+  if (draft.asset_type !== undefined && !isHistoryAssetFilter(draft.asset_type)) return false;
   if (draft.category !== undefined && !validCategory(draft.category)) return false;
   if (draft.direction !== undefined && !validDirection(draft.direction)) return false;
   if (

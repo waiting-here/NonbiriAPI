@@ -10,6 +10,7 @@ import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
 import { coreSessionMatchesAccount } from '../features/core/queries';
 import {
+  HISTORY_ASSET_FILTERS,
   HISTORY_CATEGORIES,
   MAX_HISTORY_PAGE,
   loadHistory,
@@ -148,7 +149,7 @@ function CreditHistory({
                 })
               }
             >
-              {(['general', 'game', 'all'] as const).map((asset) => (
+              {HISTORY_ASSET_FILTERS.map((asset) => (
                 <option key={asset} value={asset}>
                   {copy[asset]}
                 </option>
