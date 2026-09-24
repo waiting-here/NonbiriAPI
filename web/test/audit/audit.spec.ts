@@ -74,14 +74,17 @@ async function api(
 function safeResponses(page: Page) {
   const bodies: string[] = [];
   const pending: Promise<void>[] = [];
-  page.on('response', (response) => {
-    const path = new URL(response.url()).pathname;
+  // Navigation can cancel a response after its headers arrive. Only collect
+  // completed requests, so an abandoned response body cannot stall the audit.
+  page.on('requestfinished', (request) => {
+    const path = new URL(request.url()).pathname;
     if (path.startsWith('/api/') || path.startsWith('/admin/api/')) {
       pending.push(
-        response
-          .text()
+        request
+          .response()
+          .then((response) => response?.text())
           .then((body) => {
-            bodies.push(body);
+            if (body !== undefined) bodies.push(body);
           })
           .catch(() => {}),
       );
