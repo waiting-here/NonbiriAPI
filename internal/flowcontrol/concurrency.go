@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -23,6 +24,8 @@ type userConcurrencyLimiter struct {
 	users      map[int64]*userConcurrencyState
 	maxTracked int
 	closed     bool
+	observer   Observer
+	now        func() time.Time
 }
 
 const userAdmissionGateStripes = 4096
@@ -82,10 +85,12 @@ type userConcurrencyState struct {
 }
 
 type userConcurrencyPermit struct {
-	limiter  *userConcurrencyLimiter
-	userID   int64
-	state    *userConcurrencyState
-	released atomic.Bool
+	limiter   *userConcurrencyLimiter
+	userID    int64
+	state     *userConcurrencyState
+	requestID string
+	limit     int
+	released  atomic.Bool
 }
 
 func newUserConcurrencyLimiter(maxTracked int) (*userConcurrencyLimiter, error) {
@@ -98,10 +103,15 @@ func newUserConcurrencyLimiter(maxTracked int) (*userConcurrencyLimiter, error) 
 	return &userConcurrencyLimiter{
 		users:      make(map[int64]*userConcurrencyState),
 		maxTracked: maxTracked,
+		now:        time.Now,
 	}, nil
 }
 
 func (l *userConcurrencyLimiter) tryAcquire(userID int64, limit int) (*userConcurrencyPermit, error) {
+	return l.tryAcquireObserved(userID, limit, "")
+}
+
+func (l *userConcurrencyLimiter) tryAcquireObserved(userID int64, limit int, requestID string) (*userConcurrencyPermit, error) {
 	if l == nil {
 		return nil, errConcurrencyClosed
 	}
@@ -116,19 +126,22 @@ func (l *userConcurrencyLimiter) tryAcquire(userID int64, limit int) (*userConcu
 	state := l.users[userID]
 	if state == nil {
 		if len(l.users) >= l.maxTracked {
+			l.observeLocked("concurrency_denied", userID, requestID, limit, 0)
 			return nil, ErrConcurrencyLimited
 		}
 		state = &userConcurrencyState{}
 		l.users[userID] = state
 	}
 	if state.retiring || state.active >= limit {
+		l.observeLocked("concurrency_denied", userID, requestID, limit, state.active)
 		if state.active == 0 {
 			delete(l.users, userID)
 		}
 		return nil, ErrConcurrencyLimited
 	}
 	state.active++
-	return &userConcurrencyPermit{limiter: l, userID: userID, state: state}, nil
+	l.observeLocked("concurrency_acquire", userID, requestID, limit, state.active)
+	return &userConcurrencyPermit{limiter: l, userID: userID, state: state, requestID: requestID, limit: limit}, nil
 }
 
 func (p *userConcurrencyPermit) Release() bool {
@@ -150,6 +163,7 @@ func (p *userConcurrencyPermit) Release() bool {
 		panic("flowcontrol: user concurrency permit accounting underflow")
 	}
 	p.state.active--
+	l.observeLocked("concurrency_release", p.userID, p.requestID, p.limit, p.state.active)
 	if p.state.active == 0 {
 		delete(l.users, p.userID)
 	}
@@ -191,6 +205,9 @@ func (l *userConcurrencyLimiter) close() {
 		return
 	}
 	l.mu.Lock()
+	if !l.closed && l.observer != nil {
+		l.observer.Observe(Observation{Event: "closed", At: l.now()})
+	}
 	l.closed = true
 	l.users = make(map[int64]*userConcurrencyState)
 	l.mu.Unlock()

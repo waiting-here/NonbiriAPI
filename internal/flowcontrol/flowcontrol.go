@@ -118,6 +118,7 @@ type Config struct {
 	// callers must only attribute RPMUserLimit to the user; global, capacity,
 	// and other shared-resource denials are not user violations.
 	OnDenied func(context.Context, int64, ratelimit.RPMReason) error
+	Observer Observer
 }
 
 // Controller is the shared, process-wide concurrency and RPM admission
@@ -129,6 +130,7 @@ type Controller struct {
 	userAdmissions  *userAdmissionGate
 	userLimits      UserLimitResolver
 	onDenied        func(context.Context, int64, ratelimit.RPMReason) error
+	observer        Observer
 }
 
 // New constructs one shared Controller.
@@ -164,10 +166,15 @@ func newWithClock(config Config, clock ratelimit.Clock) (*Controller, error) {
 		_ = limiter.Close()
 		return nil, err
 	}
+	concurrency.observer = config.Observer
+	if clock != nil {
+		concurrency.now = clock.Now
+	}
 	return &Controller{
 		limiter: limiter, userConcurrency: concurrency,
 		userAdmissions: &userAdmissionGate{},
 		userLimits:     config.UserLimits, onDenied: config.OnDenied,
+		observer: config.Observer,
 	}, nil
 }
 
@@ -224,7 +231,8 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 			return nil, 0, ErrInvalidUser
 		}
 	}
-	permit, err := c.userConcurrency.tryAcquire(userID, limits.ConcurrencyLimit)
+	requestID := requestattempt.CurrentID(ctx)
+	permit, err := c.userConcurrency.tryAcquireObserved(userID, limits.ConcurrencyLimit, requestID)
 	if err != nil {
 		if errors.Is(err, errConcurrencyClosed) {
 			return nil, 0, ErrClosed
@@ -242,12 +250,12 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 	var reservation *ratelimit.RPMReservation
 	var decision ratelimit.RPMDecision
 	if limits.RPMLimitSet {
-		reservation, decision, err = c.limiter.ReserveWithLimit(ctx, userKey(userID), limits.RPMLimit)
+		reservation, decision, err = c.limiter.ReserveObserved(ctx, userKey(userID), limits.RPMLimit, c.rpmObserver(userID, requestID))
 	} else {
 		// NULL uses the current site default inside the RPM limiter's own lock.
 		// Do not take a separate Limits snapshot: SetLimits and Reserve must not
 		// have a TOCTOU gap.
-		reservation, decision, err = c.limiter.Reserve(ctx, userKey(userID))
+		reservation, decision, err = c.limiter.ReserveObserved(ctx, userKey(userID), 0, c.rpmObserver(userID, requestID))
 	}
 	if err != nil {
 		permit.Release()
@@ -361,7 +369,7 @@ func (c *Controller) SetLimits(limits ratelimit.RPMLimits) error {
 	if c == nil || c.limiter == nil {
 		return ErrClosed
 	}
-	return c.limiter.SetLimits(limits)
+	return c.limiter.SetLimitsObserved(limits, c.rpmObserver(0, ""))
 }
 
 // Limits returns a consistent snapshot of the current caps.
