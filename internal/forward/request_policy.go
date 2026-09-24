@@ -8,6 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
 func (s *Service) ingressPolicy(ctx context.Context, user int64, model string) (CharityRequestPolicy, int64, error) {
@@ -31,7 +32,11 @@ func (s *Service) ingressPolicy(ctx context.Context, user int64, model string) (
 // parameters. Debug and every dispatch receive the same independently filtered
 // body; unfiltered request data remains confined to this call's memory.
 func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, operation contract.Operation) (*validatedRequest, []byte, bool, error) {
-	envelope, err := openai.DecodeRequestEnvelope(bytes.NewReader(body), openai.MaxRequestBodyBytes, operation)
+	limit, err := requestbody.Limit(ctx)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	envelope, err := openai.DecodeRequestEnvelope(bytes.NewReader(body), limit, operation)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -50,7 +55,7 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 			return nil, nil, true, err
 		}
 	}
-	request, err := decodeRequest(bytes.NewReader(filtered), operation)
+	request, err := decodeRequest(bytes.NewReader(filtered), operation, limit)
 	if err == nil && charity {
 		err = request.excludeFields(policy.ExcludedRequestFields)
 		request.policyModelID, request.policyDecisionNow = policy.ModelID, now
@@ -86,7 +91,7 @@ func (s *Service) bindDirectPolicy(ctx context.Context, user int64, request *val
 	}
 	filtered := body
 	if len(policy.ExcludedRequestFields) > 0 {
-		envelope, decodeErr := openai.DecodeRequestEnvelope(bytes.NewReader(body), openai.MaxRequestBodyBytes, request.operation)
+		envelope, decodeErr := openai.DecodeRequestEnvelope(bytes.NewReader(body), request.bodyLimit(), request.operation)
 		if decodeErr != nil {
 			copy.Clear()
 			return nil, nil, nil, decodeErr

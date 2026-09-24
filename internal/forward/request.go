@@ -39,13 +39,13 @@ func embeddingRequest(request *openai.EmbeddingRequest) *validatedRequest {
 	return &validatedRequest{operation: contract.OperationEmbeddings, embedding: request, Model: request.Model}
 }
 
-func decodeRequest(body io.Reader, operation contract.Operation) (*validatedRequest, error) {
+func decodeRequest(body io.Reader, operation contract.Operation, limit int64) (*validatedRequest, error) {
 	switch operation {
 	case contract.OperationChatCompletions:
-		request, err := openai.DecodeChatRequest(body, openai.MaxRequestBodyBytes)
+		request, err := openai.DecodeChatRequest(body, limit)
 		return chatRequest(request), err
 	case contract.OperationEmbeddings:
-		request, err := openai.DecodeEmbeddingRequest(body, openai.MaxRequestBodyBytes)
+		request, err := openai.DecodeEmbeddingRequest(body, limit)
 		return embeddingRequest(request), err
 	default:
 		return nil, openai.ErrInvalidRequest
@@ -101,4 +101,11 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 
 func (r *validatedRequest) supports(registry *connector.Registry, kind contract.Type) bool {
 	return r.valid() && registry.SupportsOperationRequest(kind, r.operation, r.chat, r.embedding)
+}
+
+func (r *validatedRequest) bodyLimit() int64 {
+	if r.chat != nil {
+		return r.chat.RequestBodyLimit()
+	}
+	return r.embedding.RequestBodyLimit()
 }

@@ -78,6 +78,7 @@ export interface UserCharityLogRow extends LogRowCommon {
 export type UserLogRow = UserSelfLogRow | UserCharityLogRow;
 
 export interface AdminLogRow extends LogRowCommon {
+  charity_model?: string | null;
   role: 'admin';
   user_id: string | null;
   caller_identity: CallerIdentity | null;
@@ -85,6 +86,7 @@ export interface AdminLogRow extends LogRowCommon {
 }
 
 export interface StewardLogRow extends LogRowCommon {
+  charity_model?: string | null;
   role: 'steward';
   user_id: string | null;
   caller_identity: CallerIdentity | null;
@@ -367,8 +369,9 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
 export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   const root = record(
     value,
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'charity_model'],
     'administrator log row',
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
@@ -380,8 +383,19 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
     role: 'admin',
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
+    charity_model: managementCharityModel(root, common.route_kind),
     attempt_count: decimal(root.attempt_count, 'attempt count'),
   };
+}
+
+function managementCharityModel(root: WireRecord, route: LogRouteKind): string | null {
+  const model = nullableString(root.charity_model ?? null, 'requested charity model', {
+    min: 1,
+    max: 512,
+    bytes: 512,
+  });
+  if (!isCharityRoute(route) && model !== null) invalidResponse('non-charity model projection');
+  return model;
 }
 
 function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
@@ -404,8 +418,9 @@ function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
 export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   const root = record(
     value,
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'charity_model'],
     'steward log row',
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
@@ -417,6 +432,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
     role: 'steward',
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
+    charity_model: managementCharityModel(root, common.route_kind),
     attempt_count: decimal(root.attempt_count, 'attempt count'),
   };
 }

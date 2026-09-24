@@ -123,7 +123,10 @@ func commitTransaction(tx *sql.Tx, committed *bool) error {
 	return nil
 }
 
-func alertCursorOwner(resolved *bool) string {
+func alertCursorOwner(resolved *bool, kinds ...Kind) string {
+	if len(kinds) > 0 && kinds[0] != "" {
+		return alertCursorOwner(resolved) + ":kind:" + string(kinds[0])
+	}
 	if resolved == nil {
 		return "all"
 	}
@@ -145,7 +148,7 @@ func (repository *Repository) deriveCursorKey() ([]byte, error) {
 	return key, nil
 }
 
-func (repository *Repository) decodeCursor(token string, resolved *bool, now int64) (int64, error) {
+func (repository *Repository) decodeCursor(token string, resolved *bool, now int64, kinds ...Kind) (int64, error) {
 	if token == "" || len(token) > maxCursorBytes {
 		return 0, ErrInvalidRequest
 	}
@@ -155,7 +158,7 @@ func (repository *Repository) decodeCursor(token string, resolved *bool, now int
 	}
 	defer clear(key)
 	cursor, err := db.DecodePaginationCursorWithDerivedKey(
-		key, token, alertCursorScope, alertCursorOwner(resolved), uint64(now),
+		key, token, alertCursorScope, alertCursorOwner(resolved, kinds...), uint64(now),
 	)
 	if err != nil || len(cursor.Atoms) != 1 || cursor.Atoms[0].Kind != db.CursorUint ||
 		cursor.Atoms[0].Uint == 0 || cursor.Atoms[0].Uint > uint64(math.MaxInt64) {
@@ -164,7 +167,7 @@ func (repository *Repository) decodeCursor(token string, resolved *bool, now int
 	return int64(cursor.Atoms[0].Uint), nil
 }
 
-func (repository *Repository) encodeCursor(id int64, resolved *bool, now int64) (string, error) {
+func (repository *Repository) encodeCursor(id int64, resolved *bool, now int64, kinds ...Kind) (string, error) {
 	if id <= 0 || now > maxUnixSecond-cursorLifetimeSeconds {
 		return "", fmt.Errorf("%w: invalid pagination state", ErrInvariant)
 	}
@@ -174,7 +177,7 @@ func (repository *Repository) encodeCursor(id int64, resolved *bool, now int64) 
 	}
 	defer clear(key)
 	token, err := db.EncodePaginationCursorWithDerivedKey(
-		key, alertCursorScope, alertCursorOwner(resolved), uint64(now+cursorLifetimeSeconds),
+		key, alertCursorScope, alertCursorOwner(resolved, kinds...), uint64(now+cursorLifetimeSeconds),
 		[]db.CursorAtom{{Kind: db.CursorUint, Uint: uint64(id)}},
 	)
 	if err != nil || token == "" || len(token) > maxCursorBytes {
@@ -246,7 +249,7 @@ func projectAlert(row rawAlert) (AdminAlert, error) {
 
 func (repository *Repository) List(ctx context.Context, adminID int64, query ListQuery) (Page[AdminAlert], error) {
 	empty := Page[AdminAlert]{Data: []AdminAlert{}}
-	if ctx == nil || repository == nil || !validLimit(query.Limit) || len(query.Cursor) > maxCursorBytes ||
+	if ctx == nil || repository == nil || (query.Kind != "" && !validKind(string(query.Kind))) || !validLimit(query.Limit) || len(query.Cursor) > maxCursorBytes ||
 		(query.Numbered != nil && (!query.Numbered.Valid() || query.Cursor != "" || query.Limit != 0)) {
 		return empty, ErrInvalidRequest
 	}
@@ -273,8 +276,12 @@ func (repository *Repository) List(ctx context.Context, adminID int64, query Lis
 			arguments = append(arguments, 0)
 		}
 	}
+	if query.Kind != "" {
+		where = append(where, "kind=?")
+		arguments = append(arguments, string(query.Kind))
+	}
 	if query.Cursor != "" {
-		cursorID, err := repository.decodeCursor(query.Cursor, query.Resolved, now)
+		cursorID, err := repository.decodeCursor(query.Cursor, query.Resolved, now, query.Kind)
 		if err != nil {
 			return empty, err
 		}
@@ -334,10 +341,16 @@ func (repository *Repository) List(ctx context.Context, adminID int64, query Lis
 		if err != nil {
 			return empty, err
 		}
+		if value.Kind == KindAccountDeleted {
+			value.AccountDeletion, err = deletionSnapshot(ctx, tx, row.id)
+			if err != nil {
+				return empty, err
+			}
+		}
 		page.Data = append(page.Data, value)
 	}
 	if hasMore && len(rawRows) != 0 {
-		cursor, err := repository.encodeCursor(rawRows[len(rawRows)-1].id, query.Resolved, now)
+		cursor, err := repository.encodeCursor(rawRows[len(rawRows)-1].id, query.Resolved, now, query.Kind)
 		if err != nil {
 			return empty, err
 		}
@@ -383,6 +396,12 @@ FROM admin_alerts WHERE id=?`, alertID))
 	value, err := projectAlert(row)
 	if err != nil {
 		return AdminAlert{}, err
+	}
+	if value.Kind == KindAccountDeleted {
+		value.AccountDeletion, err = deletionSnapshot(ctx, tx, row.id)
+		if err != nil {
+			return AdminAlert{}, err
+		}
 	}
 	if err := commitTransaction(tx, &committed); err != nil {
 		return AdminAlert{}, err

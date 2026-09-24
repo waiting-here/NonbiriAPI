@@ -19,8 +19,9 @@ import {
   type Stats,
   type Summary,
 } from './api';
-import { riskCopy, type RiskCopy } from './copy';
+import { fieldLabel, pathLabel, riskCopy, type RiskCopy } from './copy';
 import '@shared/operations/operations.css';
+import './audit.css';
 
 interface Scope {
   role: RiskRole;
@@ -35,16 +36,15 @@ const queryOptions = {
   staleTime: 0,
   refetchOnWindowFocus: false,
 } as const;
-function stamp(n: number) {
-  return n > 0 ? new Date(n * 1000).toLocaleString() : '—';
+function stamp(n: number | null) {
+  return n !== null && n > 0 ? new Date(n * 1000).toLocaleString() : '—';
 }
 function localTime(n: number) {
   const d = new Date(n * 1000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 function initialWindow(): Filters {
-  const to = Math.floor(Date.now() / 1000);
-  return { from: to - 86400, to, kind: 'total', limit: 100 };
+  return { kind: 'total', limit: 100 };
 }
 function usePager() {
   const [cursors, setCursors] = useState(['']);
@@ -71,10 +71,20 @@ function Pager({
 }) {
   return (
     <div className="ops-actions">
-      <button type="button" disabled={!pager.hasBack || pending} onClick={pager.back}>
+      <button
+        className="btn btn-secondary"
+        type="button"
+        disabled={!pager.hasBack || pending}
+        onClick={pager.back}
+      >
         {c.back}
       </button>
-      <button type="button" disabled={!more || !next || pending} onClick={() => pager.next(next)}>
+      <button
+        className="btn btn-secondary"
+        type="button"
+        disabled={!more || !next || pending}
+        onClick={() => pager.next(next)}
+      >
         {c.next}
       </button>
     </div>
@@ -84,7 +94,16 @@ function Coverage({ value, c }: { value: string; c: RiskCopy }) {
   return (
     <p>
       <strong>{c.coverage}: </strong>
-      {value}
+      {(
+        {
+          observed_minutes: c.observations,
+          latest_100_observations: c.latestObservations,
+          source_page: c.sourcePage,
+          candidate_page: c.candidatePage,
+          authenticated_logical_calls: c.authenticatedCalls,
+          bounded_scan: c.partial,
+        } as Record<string, string>
+      )[value] ?? c.partial}
     </p>
   );
 }
@@ -97,7 +116,7 @@ function SourceView({ source, c }: { source: Source; c: RiskCopy }) {
         <dd>{source.ip_quality || c.unknown}</dd>
         {sourceFields.map((field) => (
           <div key={field}>
-            <dt>{field}</dt>
+            <dt>{fieldLabel(field, c)}</dt>
             <dd className="ops-wrap">
               {source[field] || c.unknown}
               {source.quality[field] && Object.values(source.quality[field]!).some(Boolean)
@@ -127,7 +146,7 @@ function RequestView({
       <div className="ops-actions">
         <strong>{item.request_id}</strong>
         {inspect ? (
-          <button onClick={() => inspect(item.user_id)}>
+          <button className="btn btn-secondary" onClick={() => inspect(item.user_id)}>
             {c.inspect} {item.user_id}
           </button>
         ) : null}
@@ -294,7 +313,9 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
   });
   return (
     <div className="ops-stack">
-      <button onClick={back}>{c.back}</button>
+      <button className="btn btn-secondary" onClick={back}>
+        {c.back}
+      </button>
       <h2>
         {c.user}: {userID}
       </h2>
@@ -309,7 +330,7 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
           {c.model}
           <input maxLength={512} value={model} onChange={(e) => setModel(e.target.value)} />
         </label>
-        <button>{c.apply}</button>
+        <button className="btn btn-secondary">{c.apply}</button>
       </form>
       {query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
@@ -405,7 +426,9 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
                       <td>{v.complete_minutes}</td>
                       <td>{v.incomplete_minutes}</td>
                       <td>
-                        <button onClick={() => inspect(v.user_id)}>{c.inspect}</button>
+                        <button className="btn btn-secondary" onClick={() => inspect(v.user_id)}>
+                          {c.inspect}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -463,9 +486,11 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
                 <h3>{c.related}</h3>
                 {ip.associations.map((a) => (
                   <p key={a.user_id + a.call_kind}>
-                    <button onClick={() => inspect(a.user_id)}>{a.user_id}</button> · {a.call_kind}{' '}
-                    · {c.count}: {a.requests} · {c.dispatched}: {a.dispatched} · {c.rejected}:{' '}
-                    {a.rejected}
+                    <button className="btn btn-secondary" onClick={() => inspect(a.user_id)}>
+                      {a.user_id}
+                    </button>{' '}
+                    · {a.call_kind} · {c.count}: {a.requests} · {c.dispatched}: {a.dispatched} ·{' '}
+                    {c.rejected}: {a.rejected}
                     <br />
                     {stamp(a.first_seen)} — {stamp(a.last_seen)}
                   </p>
@@ -504,6 +529,7 @@ function Clients({ inspect, ...scope }: Scope & { inspect: (id: string) => void 
     <div className="ops-stack">
       <p>{c.scanHelp}</p>
       <button
+        className="btn btn-secondary"
         onClick={() => {
           if (!paused) void client.cancelQueries({ queryKey: key });
           setPaused((v) => !v);
@@ -574,6 +600,41 @@ function RuleEditor({
         save(value);
       }}
     >
+      {!rule && (
+        <div className="audit-patterns">
+          <strong>{c.ruleTemplate}</strong>
+          <div className="ops-actions">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setValue((v) => ({ ...v, conditions: emptyRule().conditions }))}
+            >
+              {c.uaTemplate}
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() =>
+                setValue((v) => ({
+                  ...v,
+                  conditions: [
+                    { field: 'http_referer', operator: 'equals', value: '', case_sensitive: false },
+                    {
+                      field: 'openrouter_title',
+                      operator: 'equals',
+                      value: '',
+                      case_sensitive: false,
+                    },
+                  ],
+                }))
+              }
+            >
+              {c.siteTemplate}
+            </button>
+          </div>
+          <small>{c.templateHelp}</small>
+        </div>
+      )}
       <label>
         {c.name}
         <input
@@ -584,18 +645,6 @@ function RuleEditor({
         />
       </label>
       <label>
-        {c.status}
-        <select
-          value={value.status}
-          onChange={(e) =>
-            setValue((v) => ({ ...v, status: e.target.value as RuleInput['status'] }))
-          }
-        >
-          <option value="suspected">{c.suspected}</option>
-          <option value="confirmed">{c.confirmed}</option>
-        </select>
-      </label>
-      <label>
         <input
           type="checkbox"
           checked={value.enabled}
@@ -604,7 +653,7 @@ function RuleEditor({
         {c.enabled}
       </label>
       {value.conditions.map((item, i) => (
-        <fieldset key={i}>
+        <fieldset className="ops-field-grid audit-condition" key={i}>
           <legend>
             {c.and} {i + 1}
           </legend>
@@ -615,7 +664,9 @@ function RuleEditor({
               onChange={(e) => condition(i, { field: e.target.value as Condition['field'] })}
             >
               {sourceFields.map((f) => (
-                <option key={f}>{f}</option>
+                <option key={f} value={f}>
+                  {fieldLabel(f, c)}
+                </option>
               ))}
             </select>
           </label>
@@ -650,6 +701,7 @@ function RuleEditor({
             {c.sensitive}
           </label>
           <button
+            className="btn btn-secondary"
             type="button"
             disabled={value.conditions.length < 2}
             onClick={() =>
@@ -661,6 +713,7 @@ function RuleEditor({
         </fieldset>
       ))}
       <button
+        className="btn btn-secondary"
         type="button"
         disabled={value.conditions.length >= 8}
         onClick={() =>
@@ -669,26 +722,43 @@ function RuleEditor({
       >
         {c.add}
       </button>
-      <label>
-        {c.evidence}
-        <textarea
-          maxLength={4096}
-          value={value.evidence_note}
-          onChange={(e) => setValue((v) => ({ ...v, evidence_note: e.target.value }))}
-        />
-      </label>
-      <label>
-        {c.link}
-        <input
-          type="url"
-          maxLength={2048}
-          value={value.evidence_url}
-          onChange={(e) => setValue((v) => ({ ...v, evidence_url: e.target.value }))}
-        />
-      </label>
+      <details className="audit-details">
+        <summary>{c.advanced}</summary>
+        <label>
+          {c.status}
+          <select
+            value={value.status}
+            onChange={(e) =>
+              setValue((v) => ({ ...v, status: e.target.value as RuleInput['status'] }))
+            }
+          >
+            <option value="suspected">{c.suspected}</option>
+            <option value="confirmed">{c.confirmed}</option>
+          </select>
+        </label>
+        <label>
+          {c.evidence}
+          <textarea
+            maxLength={4096}
+            value={value.evidence_note}
+            onChange={(e) => setValue((v) => ({ ...v, evidence_note: e.target.value }))}
+          />
+        </label>
+        <label>
+          {c.link}
+          <input
+            type="url"
+            maxLength={2048}
+            value={value.evidence_url}
+            onChange={(e) => setValue((v) => ({ ...v, evidence_url: e.target.value }))}
+          />
+        </label>
+      </details>
       <div className="ops-actions">
-        <button disabled={busy}>{c.save}</button>
-        <button type="button" disabled={busy} onClick={cancel}>
+        <button className="btn btn-primary" disabled={busy}>
+          {c.save}
+        </button>
+        <button className="btn btn-secondary" type="button" disabled={busy} onClick={cancel}>
           {c.cancel}
         </button>
       </div>
@@ -718,22 +788,42 @@ function Rules({ role, scopeKey, c }: Scope) {
   });
   return (
     <Card>
-      <p>{c.ruleHelp}</p>
-      {mutation.error ? <ErrorState error={mutation.error} /> : null}
+      <p>{c.ruleSteps}</p>
+      <p className="audit-muted">{c.ruleHelp}</p>
+      {mutation.error ? (
+        <ErrorState
+          error={mutation.error}
+          onRetry={() => {
+            mutation.reset();
+            void query.refetch();
+          }}
+        />
+      ) : null}
       {editing ? (
         <RuleEditor
           key={editing === 'new' ? 'new' : editing.id}
           rule={editing === 'new' ? undefined : editing}
           c={c}
           busy={mutation.isPending}
-          cancel={() => setEditing(null)}
+          cancel={() => {
+            mutation.reset();
+            setEditing(null);
+          }}
           save={(input) =>
             mutation.mutate({ input, rule: editing === 'new' ? undefined : editing })
           }
         />
       ) : (
         <>
-          <button onClick={() => setEditing('new')}>{c.create}</button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              mutation.reset();
+              setEditing('new');
+            }}
+          >
+            {c.create}
+          </button>
           {query.error ? (
             <ErrorState error={query.error} onRetry={() => void query.refetch()} />
           ) : query.data ? (
@@ -750,8 +840,8 @@ function Rules({ role, scopeKey, c }: Scope) {
                   </p>
                   <p>
                     {rule.conditions
-                      .map((v) => `${v.field} ${v.operator} ${v.value}`)
-                      .join(' AND ')}
+                      .map((v) => `${fieldLabel(v.field, c)} ${c[v.operator]} ${v.value}`)
+                      .join(' · ')}
                   </p>
                   <p>{rule.evidence_note}</p>
                   <p>{rule.evidence_url}</p>
@@ -759,10 +849,21 @@ function Rules({ role, scopeKey, c }: Scope) {
                     {stamp(rule.updated_at)} · {rule.updated_by_role}{' '}
                     {rule.updated_by_user_id ?? ''}
                   </p>
-                  <button disabled={mutation.isPending} onClick={() => setEditing(rule)}>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={mutation.isPending}
+                    onClick={() => {
+                      mutation.reset();
+                      setEditing(rule);
+                    }}
+                  >
                     {c.edit}
                   </button>
-                  <button disabled={mutation.isPending} onClick={() => mutation.mutate({ rule })}>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={mutation.isPending}
+                    onClick={() => mutation.mutate({ rule })}
+                  >
                     {c.remove}
                   </button>
                 </Card>
@@ -823,7 +924,13 @@ function ConfigForm({
       <p>
         {c.policyRevision}: {value.revision}
       </p>
-      {readonly ? <p>{c.adminOnly}</p> : <button disabled={busy}>{c.save}</button>}
+      {readonly ? (
+        <p>{c.adminOnly}</p>
+      ) : (
+        <button className="btn btn-primary" disabled={busy}>
+          {c.save}
+        </button>
+      )}
     </form>
   );
 }
@@ -843,7 +950,15 @@ function Configuration({ role, scopeKey, c }: Scope) {
   return (
     <Card>
       <p>{c.configHelp}</p>
-      {mutation.error ? <ErrorState error={mutation.error} /> : null}
+      {mutation.error ? (
+        <ErrorState
+          error={mutation.error}
+          onRetry={() => {
+            mutation.reset();
+            void query.refetch();
+          }}
+        />
+      ) : null}
       {query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.data ? (
@@ -870,7 +985,12 @@ function Access({ role, scopeKey, c, filters }: Scope) {
       status_class: '',
     }),
     [selected, setSelected] = useState(draft);
-  const f = { from: filters.from, to: filters.to, ...selected };
+  const f = {
+    from: filters.from,
+    to: filters.to,
+    lookback_hours: filters.lookback_hours,
+    ...selected,
+  };
   const events = useQuery({
     queryKey: ['risk', role, scopeKey, 'access', f, pager.after],
     queryFn: ({ signal }) =>
@@ -892,13 +1012,15 @@ function Access({ role, scopeKey, c, filters }: Scope) {
           pager.reset();
         }}
       >
-        <div className="ops-form-grid">
+        <div className="ops-field-grid">
           <label>
             {c.user}
             <input
               pattern="[1-9][0-9]*"
               value={draft.user_id}
-              onChange={(e) => setDraft((v) => ({ ...v, user_id: e.target.value }))}
+              onChange={(e) =>
+                setDraft((v) => ({ ...v, user_id: e.target.value, key_generation: '' }))
+              }
             />
           </label>
           <label>
@@ -919,7 +1041,9 @@ function Access({ role, scopeKey, c, filters }: Scope) {
             >
               <option value="">{c.all}</option>
               {accessPaths.map((v) => (
-                <option key={v}>{v}</option>
+                <option key={v} value={v}>
+                  {pathLabel(v)}
+                </option>
               ))}
             </select>
           </label>
@@ -938,7 +1062,7 @@ function Access({ role, scopeKey, c, filters }: Scope) {
             </select>
           </label>
         </div>
-        <button>{c.apply}</button>
+        <button className="btn btn-secondary">{c.apply}</button>
       </form>
       {summary.error ? (
         <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
@@ -954,7 +1078,12 @@ function Access({ role, scopeKey, c, filters }: Scope) {
                 [c.ratio, summary.data.model_generation_ratio ?? c.unknown],
                 [c.capture, stamp(summary.data.coverage.capture_started_at)],
                 [c.dropped, summary.data.coverage.dropped],
-                [c.gap, stamp(summary.data.coverage.last_gap_at)],
+                [
+                  c.gap,
+                  summary.data.coverage.last_gap_at === null
+                    ? c.noGap
+                    : stamp(summary.data.coverage.last_gap_at),
+                ],
               ] as const
             ).map(([label, value]) => (
               <div key={label}>
@@ -1039,10 +1168,13 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
     c = riskCopy(i18n.language);
   const [tab, setTab] = useState<Tab>('users'),
     [selectedUser, setSelectedUser] = useState('');
+  const client = useQueryClient();
+  const [range, setRange] = useState('default');
+  const [rangeError, setRangeError] = useState(false);
   const [filters, setFilters] = useState<Filters>(initialWindow),
     [draft, setDraft] = useState(() => ({
-      from: localTime(Number(filters.from)),
-      to: localTime(Number(filters.to)),
+      from: localTime(Math.floor(Date.now() / 1000) - 86400),
+      to: localTime(Math.floor(Date.now() / 1000)),
       kind: 'total',
     }));
   const [customRange, setCustomRange] = useState(false);
@@ -1052,22 +1184,35 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   );
   function apply(e: FormEvent) {
     e.preventDefault();
+    setRangeError(false);
+    if (range !== 'custom') {
+      setFilters({
+        lookback_hours: range === 'default' ? undefined : Number(range),
+        kind: draft.kind,
+        limit: 100,
+      });
+      setCustomRange(range !== 'default');
+      void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
+      return;
+    }
     const from = new Date(draft.from).getTime() / 1000,
       to = new Date(draft.to).getTime() / 1000;
     if (Number.isFinite(from) && to > from && to - from <= 30 * 86400 && to <= Date.now() / 1000) {
       setFilters({ from, to, kind: draft.kind, limit: 100 });
       setCustomRange(true);
-    }
+      void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
+    } else setRangeError(true);
   }
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
-    <div className="page ops-page">
+    <div className="page ops-page audit-page">
       <PageHeader title={c.title} description={c.description} />
       <Card>
         <p>{c.caveat}</p>
-        <div className="ops-actions" role="group" aria-label={c.title}>
+        <div className="ops-tabs audit-tabs" role="group" aria-label={c.title}>
           {(['users', 'ips', 'clients', 'rules', 'config', 'access'] as Tab[]).map((v) => (
             <button
+              className={tab === v && !selectedUser ? 'btn btn-primary' : 'btn btn-secondary'}
               key={v}
               aria-pressed={tab === v && !selectedUser}
               onClick={() => {
@@ -1080,41 +1225,76 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
           ))}
         </div>
         {tab !== 'rules' && tab !== 'config' ? (
-          <form onSubmit={apply}>
-            <div className="ops-form-grid">
+          <form className="ops-stack" onSubmit={apply}>
+            <div className="ops-field-grid">
               <label>
-                {c.from}
-                <input
-                  type="datetime-local"
-                  required
-                  value={draft.from}
-                  onChange={(e) => setDraft((v) => ({ ...v, from: e.target.value }))}
-                />
-              </label>
-              <label>
-                {c.to}
-                <input
-                  type="datetime-local"
-                  required
-                  value={draft.to}
-                  onChange={(e) => setDraft((v) => ({ ...v, to: e.target.value }))}
-                />
-              </label>
-              <label>
-                {c.kind}
+                {c.range}
                 <select
-                  value={draft.kind}
-                  onChange={(e) => setDraft((v) => ({ ...v, kind: e.target.value }))}
+                  value={range}
+                  onChange={(e) => {
+                    setRange(e.target.value);
+                    setRangeError(false);
+                  }}
                 >
-                  {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
-                    <option key={v} value={v}>
-                      {c[v]}
-                    </option>
-                  ))}
+                  <option value="default">{c.defaultRange}</option>
+                  <option value="1">{c.lastHour}</option>
+                  <option value="24">{c.lastDay}</option>
+                  <option value="168">{c.lastWeek}</option>
+                  <option value="custom">{c.custom}</option>
                 </select>
               </label>
+              {range === 'custom' && (
+                <>
+                  <label>
+                    {c.from}
+                    <input
+                      type="datetime-local"
+                      required
+                      value={draft.from}
+                      onChange={(e) => setDraft((v) => ({ ...v, from: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    {c.to}
+                    <input
+                      type="datetime-local"
+                      required
+                      value={draft.to}
+                      onChange={(e) => setDraft((v) => ({ ...v, to: e.target.value }))}
+                    />
+                  </label>
+                </>
+              )}
+              {tab !== 'access' && (
+                <label>
+                  {c.kind}
+                  <select
+                    value={draft.kind}
+                    onChange={(e) => setDraft((v) => ({ ...v, kind: e.target.value }))}
+                  >
+                    {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
+                      <option key={v} value={v}>
+                        {c[v]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
-            <button>{c.apply}</button>
+            <div className="ops-actions">
+              <button className="btn btn-primary">{c.apply}</button>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() =>
+                  void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] })
+                }
+              >
+                {c.refresh}
+              </button>
+            </div>
+            {rangeError && <p role="alert">{c.invalidRange}</p>}
+            <small className="audit-muted">{c.rangeHelp}</small>
           </form>
         ) : null}
       </Card>

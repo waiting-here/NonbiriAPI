@@ -45,7 +45,7 @@ func TestAdminExportGoldenOrderingFiltersAndPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export CSV: %v", err)
 	}
-	if len(parsed) != len(rows)+1 || len(parsed[0]) != 23 {
+	if len(parsed) != len(rows)+1 || len(parsed[0]) != 24 {
 		t.Fatalf("CSV dimensions = %dx%d", len(parsed), len(parsed[0]))
 	}
 

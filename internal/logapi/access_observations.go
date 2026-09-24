@@ -82,6 +82,11 @@ func parseAccessFilter(raw string, now int64) (observability.AccessFilter, error
 			return filter, ErrInvalid
 		}
 		switch key {
+		case "lookback_hours":
+			if n < 1 || n > 720 || values.Has("from") || values.Has("to") || strconv.FormatInt(n, 10) != value[0] {
+				return filter, ErrInvalid
+			}
+			filter.From = max(0, now-n*3600)
 		case "key_generation":
 			filter.KeyGeneration = &n
 		case "status_class":

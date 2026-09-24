@@ -103,7 +103,9 @@ describe('administrator alerts page', () => {
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
 
-    expect(await screen.findByText('This action is not allowed for the current account.')).toBeVisible();
+    expect(
+      await screen.findByText('This action is not allowed for the current account.'),
+    ).toBeVisible();
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -195,7 +197,12 @@ describe('administrator alerts page', () => {
       {
         method: 'GET',
         path: '/admin/api/alerts?resolved=false&page=999&page_size=20',
-        body: page([alert('21')], { page: '2', page_size: 20, total_items: '21', total_pages: '2' }),
+        body: page([alert('21')], {
+          page: '2',
+          page_size: 20,
+          total_items: '21',
+          total_pages: '2',
+        }),
       },
     ]);
 
@@ -265,7 +272,9 @@ describe('administrator alerts page', () => {
         input instanceof Request ? input.url : String(input),
         window.location.origin,
       );
-      return target.pathname === '/admin/api/alerts/41/resolve' && (init?.method ?? 'GET') === 'POST';
+      return (
+        target.pathname === '/admin/api/alerts/41/resolve' && (init?.method ?? 'GET') === 'POST'
+      );
     });
     expect(postCalls).toHaveLength(1);
     expect(postCalls[0]?.[0]).toBe('/admin/api/alerts/41/resolve');
@@ -290,50 +299,53 @@ describe('administrator alerts page', () => {
     ]);
   });
 
-  it.each([401, 403] as const)('clears old rows after a resolve mutation returns %s', async (status) => {
-    const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/admin/api/session', body: session() },
-      {
-        method: 'GET',
-        path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
-        body: page([alert('1')]),
-      },
-      {
-        method: 'POST',
-        path: '/admin/api/alerts/1/resolve',
-        status,
-        body: {
-          error: {
-            code: status === 401 ? 'unauthorized' : 'forbidden',
-            message: 'mutation denied',
+  it.each([401, 403] as const)(
+    'clears old rows after a resolve mutation returns %s',
+    async (status) => {
+      const fetchMock = installJsonFetchFixtures([
+        { method: 'GET', path: '/admin/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+          body: page([alert('1')]),
+        },
+        {
+          method: 'POST',
+          path: '/admin/api/alerts/1/resolve',
+          status,
+          body: {
+            error: {
+              code: status === 401 ? 'unauthorized' : 'forbidden',
+              message: 'mutation denied',
+            },
           },
         },
-      },
-    ]);
+      ]);
 
-    const rendered = await renderWithProviders(<AlertsPage />, {
-      station: 'admin',
-      role: 'admin',
-      route: '/alerts?resolved=false&page=1&page_size=20',
-    });
+      const rendered = await renderWithProviders(<AlertsPage />, {
+        station: 'admin',
+        role: 'admin',
+        route: '/alerts?resolved=false&page=1&page_size=20',
+      });
 
-    expect(await screen.findByText('Alert 1')).toBeVisible();
-    await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
-    await waitFor(() => expect(screen.queryByText('Alert 1')).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        status === 401
-          ? 'Your session is not active. Sign in to continue.'
-          : 'This action is not allowed for the current account.',
-      ),
-    ).toBeVisible();
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
-      '/admin/api/session',
-      '/admin/api/alerts?resolved=false&page=1&page_size=20',
-      '/admin/api/alerts/1/resolve',
-    ]);
-  });
+      expect(await screen.findByText('Alert 1')).toBeVisible();
+      await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
+      await waitFor(() => expect(screen.queryByText('Alert 1')).not.toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          status === 401
+            ? 'Your session is not active. Sign in to continue.'
+            : 'This action is not allowed for the current account.',
+        ),
+      ).toBeVisible();
+      expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+        '/admin/api/session',
+        '/admin/api/alerts?resolved=false&page=1&page_size=20',
+        '/admin/api/alerts/1/resolve',
+      ]);
+    },
+  );
 
   it('keeps the same account rows visible while a new page is busy, but disables row actions', async () => {
     const nextPage = deferred<Response>();
@@ -349,7 +361,9 @@ describe('administrator alerts page', () => {
       if (target.pathname === '/admin/api/session') return Promise.resolve(jsonResponse(session()));
       if (target.pathname === '/admin/api/alerts' && target.searchParams.get('page') === '1') {
         return Promise.resolve(
-          jsonResponse(page(firstRows, { page: '1', page_size: 20, total_items: '21', total_pages: '2' })),
+          jsonResponse(
+            page(firstRows, { page: '1', page_size: 20, total_items: '21', total_pages: '2' }),
+          ),
         );
       }
       if (target.pathname === '/admin/api/alerts' && target.searchParams.get('page') === '2') {
@@ -378,7 +392,9 @@ describe('administrator alerts page', () => {
 
     await act(async () => {
       nextPage.resolve(
-        jsonResponse(page([alert('21')], { page: '2', page_size: 20, total_items: '21', total_pages: '2' })),
+        jsonResponse(
+          page([alert('21')], { page: '2', page_size: 20, total_items: '21', total_pages: '2' }),
+        ),
       );
       await nextPage.promise;
     });
@@ -439,7 +455,8 @@ describe('administrator alerts page', () => {
         input instanceof Request ? input.url : String(input),
         window.location.origin,
       );
-      if (target.pathname === '/admin/api/session') return Promise.resolve(jsonResponse(session('A')));
+      if (target.pathname === '/admin/api/session')
+        return Promise.resolve(jsonResponse(session('A')));
       if (target.pathname === '/admin/api/alerts') {
         return currentAccount === 'A'
           ? oldPage.promise
@@ -455,9 +472,9 @@ describe('administrator alerts page', () => {
     });
 
     await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/admin/api/alerts'))).toBe(
-        true,
-      ),
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input).includes('/admin/api/alerts')),
+      ).toBe(true),
     );
     currentAccount = 'B';
     rendered.queryClient.setQueryData(adminKeys.session, session('B'));
@@ -470,4 +487,54 @@ describe('administrator alerts page', () => {
     await waitFor(() => expect(screen.queryByText('Alert A')).not.toBeInTheDocument());
     expect(screen.getByText('Alert B')).toBeVisible();
   });
+});
+
+it('filters deletion alerts and resolves only selected unresolved rows', async () => {
+  let bulkBody: unknown;
+  let done = false;
+  const snapshot = {
+    user_id: '99',
+    discord_id: '123456789012345678',
+    general_balance: '-2.5',
+    game_balance: '1',
+    donation_credit: '0',
+    sketch_paper: '0',
+    sketch_brush: '0',
+  };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const target = new URL(
+      input instanceof Request ? input.url : String(input),
+      window.location.origin,
+    );
+    if (target.pathname === '/admin/api/session') return jsonResponse(session());
+    if (target.pathname === '/admin/api/alerts/resolve') {
+      bulkBody = JSON.parse(String(init?.body));
+      done = true;
+      return jsonResponse({ resolved_count: 1 });
+    }
+    if (target.pathname === '/admin/api/alerts') {
+      expect(target.searchParams.get('kind')).toBe('account_deleted');
+      return jsonResponse(
+        page(
+          done ? [] : [alert('7', false, { kind: 'account_deleted', account_deletion: snapshot })],
+        ),
+      );
+    }
+    throw new Error('Unexpected request');
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const rendered = await renderWithProviders(<AlertsPage />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/alerts?resolved=false&kind=account_deleted',
+  });
+  expect(await screen.findByText('123456789012345678')).toBeVisible();
+  expect(screen.getByText('-2.5')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('checkbox', { name: 'Select alert 7' })).toBeEnabled(),
+  );
+  await rendered.user.click(screen.getByRole('checkbox', { name: 'Select alert 7' }));
+  await rendered.user.click(screen.getByRole('button', { name: 'Resolve selected (1)' }));
+  await waitFor(() => expect(bulkBody).toEqual({ ids: ['7'] }));
+  await waitFor(() => expect(screen.queryByText('123456789012345678')).not.toBeInTheDocument());
 });

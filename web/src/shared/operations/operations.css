@@ -502,3 +502,7 @@ fieldset.ops-field-grid {
 }
 
 .ops-break { overflow-wrap: anywhere; }
+
+.ops-action-button {
+  white-space: nowrap;
+}

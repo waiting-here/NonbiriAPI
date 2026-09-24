@@ -281,11 +281,15 @@ export type ModelInput = Pick<
 export function decodeRefresh(value: unknown) {
   const v = record(
     value,
-    ['id', 'state', 'created_at', 'completed_at', 'model_count', 'error_code'],
+    ['id', 'state', 'created_at', 'completed_at', 'model_count', 'error_code', 'http_status'],
     'model discovery',
+    ['id', 'state', 'created_at', 'completed_at', 'model_count', 'error_code'],
   );
   return {
     id: opaqueID(v.id, 'op_', 'discovery operation'),
+    ...(Object.hasOwn(v, 'http_status')
+      ? { http_status: integer(v.http_status, 'discovery HTTP status', 100, 599) }
+      : {}),
     state: oneOf(v.state, ['queued', 'running', 'succeeded', 'failed'], 'discovery state'),
     created_at: unixSecond(v.created_at, 'discovery acceptance'),
     completed_at: nullableUnixSecond(v.completed_at, 'discovery completion'),

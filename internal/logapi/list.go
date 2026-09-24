@@ -247,7 +247,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
@@ -378,7 +378,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})

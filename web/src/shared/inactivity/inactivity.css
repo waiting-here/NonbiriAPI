@@ -51,3 +51,77 @@
 .inactivity-summary p {
   margin-block: 0.4rem;
 }
+
+.inactivity-editor fieldset {
+  border-color: var(--nb-color-border);
+  background: var(--nb-color-surface);
+  border-radius: var(--nb-radius-md);
+  margin: 0;
+}
+.inactivity-editor legend {
+  font-size: 1rem;
+  font-weight: 650;
+  padding-inline: 0.4rem;
+}
+.inactivity-editor label {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+.inactivity-editor label:has(input[type='checkbox']) {
+  display: flex;
+  padding: 0.75rem;
+  background: var(--nb-color-surface-alt);
+  border-radius: var(--nb-radius-sm);
+}
+.inactivity-editor input:not([type='checkbox']) {
+  width: 100%;
+}
+.inactivity-editor form > fieldset {
+  padding: 1.25rem;
+  gap: 1.25rem;
+}
+.inactivity-editor > .inactivity-panel > section {
+  border: 1px solid var(--nb-color-border);
+  padding: 1.25rem;
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface);
+}
+.inactivity-editor summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.inactivity-editor h2 {
+  font-size: 1.15rem;
+  margin-top: 0;
+}
+.inactivity-editor pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inactivity-editor .inactivity-actions {
+  padding-top: 0.5rem;
+}
+.inactivity-editor .btn {
+  width: fit-content;
+}
+.inactivity-editor [role='alert'] {
+  color: var(--nb-color-danger);
+}
+
+.inactivity-editor .inactivity-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+.inactivity-editor .inactivity-panel > * {
+  min-width: 0;
+}
+.inactivity-editor .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+@media (max-width: 600px) {
+  .inactivity-editor fieldset,
+  .inactivity-editor form > fieldset {
+    padding: 0.75rem;
+  }
+}

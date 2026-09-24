@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
@@ -76,7 +77,16 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 		writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
 		return
 	}
-	body, err := readBoundedBody(request.Body, openai.MaxRequestBodyBytes)
+	limit, err := requestbody.Limit(request.Context())
+	if err != nil {
+		writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "request configuration unavailable"))
+		return
+	}
+	if request.ContentLength > limit {
+		writeFailure(writer, platformFailure(httperr.CodePayloadTooLarge, "request body too large"))
+		return
+	}
+	body, err := readBoundedBody(request.Body, limit)
 	if err != nil {
 		if request.Context().Err() != nil {
 			return

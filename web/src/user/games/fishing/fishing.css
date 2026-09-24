@@ -176,12 +176,6 @@
 .fishing-outcome--treasure {
   background: color-mix(in srgb, var(--nb-color-warning) 8%, var(--nb-color-surface));
 }
-.fishing-leaderboards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
 .fishing-board-switch {
   display: grid;
   min-width: 0;
@@ -284,8 +278,7 @@
   }
 }
 @media (max-width: 820px) {
-  .fishing-layout,
-  .fishing-leaderboards {
+  .fishing-layout {
     grid-template-columns: 1fr;
   }
 }

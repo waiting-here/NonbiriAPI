@@ -48,13 +48,14 @@ func TestGenerationTwoConfigCatalogSeparatesRequiredAndOptionalRows(t *testing.T
 		"site_timezone_offset_minutes",
 		"charity_token_reserve_milli",
 		"anthropic_default_max_tokens",
+		"model_request_body_limit_mib",
 	} {
 		if requiredSet[key] || !knownSet[key] {
 			t.Fatalf("optional key %q required=%v known=%v", key, requiredSet[key], knownSet[key])
 		}
 	}
-	if len(known) != len(required)+3 {
-		t.Fatalf("known=%d required=%d, want exactly three optional fixed rows", len(known), len(required))
+	if len(known) != len(required)+4 {
+		t.Fatalf("known=%d required=%d, want exactly four optional fixed rows", len(known), len(required))
 	}
 	if knownSet["default_locale"] || requiredSet["default_locale"] {
 		t.Fatal("deleted default_locale remains in Generation 2 catalog")

@@ -38,6 +38,7 @@ func RegisterRoutes(registrar AdminRouteRegistrar, repository *Repository) error
 	}{
 		{method: http.MethodGet, pattern: routeAlerts, handler: api.list},
 		{method: http.MethodPost, pattern: routeResolveAlert, handler: api.resolve},
+		{method: http.MethodPost, pattern: "/admin/api/alerts/resolve", handler: api.resolveMany},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
@@ -86,11 +87,18 @@ func parseListRequest(writer http.ResponseWriter, request *http.Request) (ListQu
 	if !ok {
 		return ListQuery{}, false
 	}
-	if !exactQuery(values, "resolved", "cursor", "limit", "page", "page_size") {
+	if !exactQuery(values, "kind", "resolved", "cursor", "limit", "page", "page_size") {
 		writeError(writer, ErrInvalidRequest)
 		return ListQuery{}, false
 	}
 	query := ListQuery{}
+	if entries, set := values["kind"]; set {
+		if !validKind(entries[0]) {
+			writeError(writer, ErrInvalidRequest)
+			return ListQuery{}, false
+		}
+		query.Kind = Kind(entries[0])
+	}
 	page, numbered, err := pagination.Parse(values)
 	if err != nil {
 		writeError(writer, ErrInvalidRequest)

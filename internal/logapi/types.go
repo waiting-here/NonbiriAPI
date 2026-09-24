@@ -144,6 +144,7 @@ func (UserSelfLogDetail) userLogDetail()    {}
 func (UserCharityLogDetail) userLogDetail() {}
 
 type AdminLogRow struct {
+	CharityModel *string `json:"charity_model,omitempty"`
 	RejectionFields
 	ID                string          `json:"id"`
 	RouteKind         RouteKind       `json:"route_kind"`
@@ -182,6 +183,7 @@ type AdminLogDetail struct {
 // Management projections expose the same facts to administrators and stewards.
 // Separate DTOs retain explicit role boundaries and independently bound cursors.
 type StewardLogRow struct {
+	CharityModel *string `json:"charity_model,omitempty"`
 	RejectionFields
 	ID                string          `json:"id"`
 	RouteKind         RouteKind       `json:"route_kind"`

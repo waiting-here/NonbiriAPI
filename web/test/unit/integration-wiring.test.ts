@@ -46,6 +46,7 @@ describe('central route and navigation wiring', () => {
       'function',
     );
     for (const path of [
+      'blacklist',
       'inactivity-policy',
       'limited-activities',
       'abuse-audit',
@@ -70,6 +71,7 @@ describe('central route and navigation wiring', () => {
       '/abuse-audit:admin-risk-audit',
       '/economy-audit:admin-economy-audit',
       '/:admin-home',
+      '/blacklist:admin-blacklist',
       '/users:admin-users',
       '/logs:admin-logs',
       '/endpoints:admin-endpoints',

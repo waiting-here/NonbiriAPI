@@ -195,7 +195,7 @@ export interface AccessSummary {
   model_list_events: number;
   generation_requests: number;
   model_generation_ratio: number | null;
-  coverage: { capture_started_at: number; dropped: number; last_gap_at: number };
+  coverage: { capture_started_at: number; dropped: number; last_gap_at: number | null };
   paths: { path_kind: string; response_kind: string; authenticated: number; anonymous: number }[];
 }
 export type Filters = Record<string, string | number | undefined>;
@@ -371,7 +371,7 @@ function detail(v: unknown): Detail {
     source_distribution: list(o.source_distribution, (v) => {
       const s = obj(v);
       return {
-        user_agent: text(s.user_agent, 1024),
+        user_agent: text(s.user_agent, 2048),
         ip_quality: text(s.ip_quality, 32),
         count: num(s.count),
       };
@@ -481,7 +481,7 @@ function accessSummary(v: unknown): AccessSummary {
     coverage: {
       capture_started_at: num(c.capture_started_at),
       dropped: num(c.dropped),
-      last_gap_at: num(c.last_gap_at),
+      last_gap_at: c.last_gap_at === null ? null : num(c.last_gap_at),
     },
     paths: list(o.paths, (v) => {
       const p = obj(v);

@@ -324,3 +324,14 @@ describe('role log wire', () => {
     ).toBe(unicodeID);
   });
 });
+
+it('accepts requested charity models only on management charity projections', () => {
+  for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
+    expect(normalize({ ...charityStewardRow, charity_model: 'Public model' }).charity_model).toBe(
+      'Public model',
+    );
+    expect(normalize(stewardRow).charity_model).toBeNull();
+    expect(() => normalize({ ...stewardRow, charity_model: 'Private alias' })).toThrow();
+  }
+  expect(() => normalizeUserLogRow({ ...userRow, charity_model: 'Public model' })).toThrow();
+});

@@ -5,6 +5,7 @@ import "github.com/waiting-here/NonbiriAPI/internal/pagination"
 type Kind string
 
 const (
+	KindAccountDeleted            Kind = "account_deleted"
 	KindFetchFailed               Kind = "fetch_failed"
 	KindForwardError              Kind = "forward_error"
 	KindRegistrationRejected      Kind = "registration_rejected"
@@ -20,7 +21,7 @@ const (
 
 func validKind(value string) bool {
 	switch Kind(value) {
-	case KindFetchFailed, KindForwardError, KindRegistrationRejected,
+	case KindAccountDeleted, KindFetchFailed, KindForwardError, KindRegistrationRejected,
 		KindMaintenanceEnabled, KindDonationFailureDisabled,
 		KindIssueProjectionIncomplete, KindReportRetryExhausted,
 		KindFishingRetryExhausted, KindRPSTerminalRetrying,
@@ -32,14 +33,15 @@ func validKind(value string) bool {
 }
 
 type AdminAlert struct {
-	ID            string  `json:"id"`
-	Kind          Kind    `json:"kind"`
-	Message       string  `json:"message"`
-	Ref           *string `json:"ref"`
-	SubjectUserID *string `json:"subject_user_id"`
-	CreatedAt     int64   `json:"created_at"`
-	Resolved      bool    `json:"resolved"`
-	ResolvedAt    *int64  `json:"resolved_at"`
+	AccountDeletion *AccountDeletion `json:"account_deletion,omitempty"`
+	ID              string           `json:"id"`
+	Kind            Kind             `json:"kind"`
+	Message         string           `json:"message"`
+	Ref             *string          `json:"ref"`
+	SubjectUserID   *string          `json:"subject_user_id"`
+	CreatedAt       int64            `json:"created_at"`
+	Resolved        bool             `json:"resolved"`
+	ResolvedAt      *int64           `json:"resolved_at"`
 }
 
 type Page[T any] struct {
@@ -49,6 +51,7 @@ type Page[T any] struct {
 }
 
 type ListQuery struct {
+	Kind     Kind
 	Resolved *bool
 	Cursor   string
 	Limit    int

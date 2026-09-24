@@ -140,7 +140,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 	}
 	attempts, err := repository.listAdminAttemptsTx(ctx, tx, record.rowID, requestID, filter)
 	if err != nil {
@@ -212,7 +212,7 @@ func (repository *Repository) GetSteward(
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 	}
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {

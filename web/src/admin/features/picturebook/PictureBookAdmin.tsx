@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
-import { taskErrorLabel, usePictureBookText } from '@shared/picturebook/copy';
+import { usePictureBookText } from '@shared/picturebook/copy';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { useAdminSession } from '../../data';
 import {
@@ -16,6 +16,7 @@ import {
 import { UpstreamForm } from './UpstreamForm';
 import { ModelEditor } from './ModelEditor';
 import { RecoveryPanel } from './RecoveryPanel';
+import { discoveryError } from './discoveryError';
 import '@shared/picturebook/picturebook.css';
 
 function Catalog({ account }: { readonly account: string }) {
@@ -43,7 +44,10 @@ function Catalog({ account }: { readonly account: string }) {
     enabled: !!operationID,
     retry: false,
     refetchInterval: (query) =>
-      query.state.data && ['succeeded', 'failed'].includes(query.state.data.state) ? false : 2000,
+      query.state.error ||
+      (query.state.data && ['succeeded', 'failed'].includes(query.state.data.state))
+        ? false
+        : 2000,
   });
   const state = operation.data?.state;
   useEffect(() => {
@@ -56,23 +60,26 @@ function Catalog({ account }: { readonly account: string }) {
         <h2>{t('图像模型目录', 'Image model catalog')}</h2>
         <p>
           {t(
-            '拉取目录不会自动向用户开放模型。逐个设置用户名称、价格和支持参数后再开放。',
-            'Refreshing the catalog does not expose models to users. Configure each display name, price and supported parameters before enabling it.',
+            '拉取使用已保存的服务地址、密钥和适配配置；修改后请先保存。拉取目录不会自动向用户开放模型，需逐个设置名称、价格和支持参数。',
+            'Discovery uses the saved URL, key and adapter settings; save edits first. Refreshing does not expose models to users. Set their display names, prices and supported parameters before enabling them.',
           )}
         </p>
         <button
           className="btn btn-primary"
           disabled={discovery.pending || state === 'queued' || state === 'running'}
-          onClick={() =>
+          onClick={() => {
+            if (!discovery.uncertain) setOperationID('');
             void discovery.run(discovery.input ?? {}, (result) => {
               client.setQueryData(['admin', 'picture-book', account, 'refresh', result.id], result);
               setOperationID(result.id);
-            })
-          }
+            });
+          }}
         >
           {discovery.uncertain
             ? t('重试同一次模型拉取', 'Retry the same model refresh')
-            : t('拉取模型目录', 'Refresh model catalog')}
+            : state === 'failed'
+              ? t('重新拉取模型目录', 'Start a new model refresh')
+              : t('拉取模型目录', 'Refresh model catalog')}
         </button>
         {discovery.uncertain ? (
           <p role="status">
@@ -86,14 +93,34 @@ function Catalog({ account }: { readonly account: string }) {
         {operation.error ? (
           <ErrorState error={operation.error} onRetry={() => void operation.refetch()} />
         ) : null}
-        {operation.data ? (
+        {operation.data?.state === 'failed' ? (
+          <section role="alert" className="picturebook-discovery-error">
+            <h3>{t('模型拉取失败', 'Model discovery failed')}</h3>
+            <p>{discoveryError(operation.data.error_code, operation.data.http_status, t)}</p>
+            {operation.data.http_status ? <p>HTTP {operation.data.http_status}</p> : null}
+            <details>
+              <summary>{t('诊断信息', 'Diagnostic information')}</summary>
+              <p>
+                {t('错误类别：', 'Error class: ')}
+                <code>{operation.data.error_code ?? 'unknown'}</code>
+              </p>
+              <p>
+                {t('操作编号：', 'Operation ID: ')}
+                <code>{operation.data.id}</code>
+              </p>
+            </details>
+          </section>
+        ) : operation.data ? (
           <p role="status">
             {state === 'succeeded'
-              ? t('目录已更新，模型数：', 'Catalog updated. Models: ') + operation.data.model_count
-              : state === 'failed'
-                ? taskErrorLabel(operation.data.error_code, t) ||
-                  t('模型拉取失败。', 'Model discovery failed.')
-                : t('正在等待或拉取模型目录。', 'Model discovery is queued or running.')}
+              ? operation.data.model_count === 0
+                ? t(
+                    '服务返回了空模型目录。请核对服务地址和模型目录字段路径。',
+                    'The service returned an empty catalog. Check the service URL and discovery field paths.',
+                  )
+                : t('目录已更新，模型数：', 'Catalog updated. Models: ') +
+                  operation.data.model_count
+              : t('正在等待或拉取模型目录。', 'Model discovery is queued or running.')}
           </p>
         ) : null}
         {models.isPending ? (

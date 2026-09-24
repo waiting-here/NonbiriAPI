@@ -139,7 +139,7 @@ func effectiveLevelTx(ctx context.Context, tx *sql.Tx, userID, now int64, persis
 		return 0, ErrForbidden
 	}
 	if manual.Valid {
-		if manual.Int64 < 1 || manual.Int64 > 5 {
+		if manual.Int64 < 1 || manual.Int64 > 6 {
 			return 0, ErrInvariant
 		}
 		return int(manual.Int64), nil

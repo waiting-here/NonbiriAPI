@@ -101,8 +101,20 @@
         "fishingRetryExhausted": "Fishing recovery retries exhausted",
         "rpsTerminalRetrying": "RPS terminal recovery retrying",
         "workerCheckpointFailed": "Worker checkpoint failed",
-        "invariantViolation": "Invariant violation"
-      }
+        "invariantViolation": "Invariant violation",
+        "accountDeleted": "Account deleted by user"
+      },
+      "filterKind": "Alert type",
+      "select": "Select",
+      "selectPage": "Select unresolved alerts on this page",
+      "selectAlert": "Select alert {{id}}",
+      "resolveSelected": "Resolve selected ({{count}})",
+      "deletionSnapshot": "Snapshot before wallet zeroing, after pending work was settled. A negative credit balance requires review.",
+      "deletedUser": "Former user ID",
+      "generalBalance": "General credits",
+      "gameBalance": "Game credits",
+      "donationCredit": "Donation credit",
+      "sketchAssets": "Paper / brushes"
     },
     "settings": {
       "nav": "Site settings",
@@ -778,6 +790,26 @@
         "window": "Window"
       },
       "title": "Legal holds"
+    },
+    "blacklist": {
+      "title": "Discord blacklist",
+      "description": "Listed Discord IDs cannot register. Existing accounts are permanently banned and lose sessions and caller keys. Removing an entry does not unban an existing account.",
+      "addTitle": "Add to blacklist",
+      "reason": "Reason",
+      "add": "Add and permanently ban",
+      "added": "Added to the blacklist. Any existing account is permanently banned.",
+      "removed": "Removed from the blacklist. Unban existing accounts separately in user management if needed.",
+      "invalid": "Enter a valid Discord ID and a reason of up to 1,024 characters.",
+      "invalidID": "Enter a valid numeric Discord ID.",
+      "search": "Exact Discord ID (blank shows all)",
+      "applySearch": "Search",
+      "empty": "No matching blacklist entries",
+      "emptyBody": "Use the form above to add a Discord ID.",
+      "account": "Account",
+      "noAccount": "No current account",
+      "created": "Added",
+      "action": "Action",
+      "remove": "Remove from blacklist"
     }
   },
   "user": {

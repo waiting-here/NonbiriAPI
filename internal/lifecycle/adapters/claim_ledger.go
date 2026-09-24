@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -178,6 +179,9 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 			return fmt.Errorf("lifecycle adapters: read deletion external account: %w", err)
 		}
 		wallets = append(wallets, ledger.AssetWallet{Asset: asset, WalletID: wallet.ID, ExternalID: external.ID})
+	}
+	if err := adminalerts.RecordAccountDeletionTx(ctx, tx, request.UserID, request.DecisionNow); err != nil {
+		return fmt.Errorf("lifecycle adapters: record deletion alert: %w", err)
 	}
 	plan, err := ledger.NewAssetWalletsDeleteZero(ledger.Meta{
 		OperationID: deletionOperationID,

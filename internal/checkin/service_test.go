@@ -199,7 +199,7 @@ func TestCheckinCommitsLedgerActivityAndLocalDayAtomically(t *testing.T) {
 }
 
 func TestBalanceCapRejectsEveryLevelWithoutSideEffects(t *testing.T) {
-	for _, level := range []int{1, 2, 3, 4, 5} {
+	for _, level := range []int{1, 2, 3, 4, 5, 6} {
 		t.Run(fmt.Sprintf("level %d", level), func(t *testing.T) {
 			fixture := newCheckinFixture(t)
 			fixture.configure(db.CheckinModeEnabled, "0", 250, 250, 1_000)

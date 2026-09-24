@@ -525,8 +525,8 @@ const copy = {
   'account.exportConfirm': ['Create export', '创建导出'],
   'account.deleteTitle': ['Delete account', '删除账户'],
   'account.deleteBody': [
-    'Deletion is irreversible and removes access to account-owned resources. Shared records keep only the necessary information without your identity.',
-    '删除不可逆，并会移除账户所拥有资源的访问权；共享记录只保留不含个人身份的必要信息。',
+    'Deletion is irreversible and removes access to account-owned resources. Shared records retain necessary de-identified information. Administrators retain a deletion alert with your Discord ID and economic balances; blacklist entries also survive deletion.',
+    '删除不可逆，并会移除账户所拥有资源的访问权；共享记录保留必要的去身份信息。管理员会保留含 Discord ID 和经济余额的删号告警；黑名单记录也不会随删号移除。',
   ],
   'account.delete': ['Delete account', '删除账户'],
   'account.deleteConfirm': ['Permanently delete account', '永久删除账户'],

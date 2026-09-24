@@ -97,8 +97,8 @@ function RankingPanel({
     charity: [t('真·慈善榜', 'True Charity'), t('匿名真·慈善家', 'Anonymous true philanthropist')],
     game_charity: [t('游戏慈善榜', 'Game Charity'), t('匿名慈善家', 'Anonymous philanthropist')],
     bidding: [t('竞标利润榜', 'Bidding profits'), t('匿名竞标者', 'Anonymous bidder')],
-    blackjack: [t('二十一点利润榜', 'Blackjack profits'), t('匿名牌手', 'Anonymous card player')],
-    game_net_profit: [t('暴富榜', 'Fortune leaderboard'), t('匿名玩家', 'Anonymous player')],
+    blackjack: [t('利润榜', 'Profit leaderboard'), t('匿名牌手', 'Anonymous card player')],
+    game_net_profit: [t('游戏暴富榜', 'Game fortune leaderboard'), t('匿名玩家', 'Anonymous player')],
     fishing_net_profit: [t('锦鲤榜', 'Lucky catch leaderboard'), t('匿名钓友', 'Anonymous angler')],
     blackjack_net_profit: [
       t('赌神榜', 'Card master leaderboard'),

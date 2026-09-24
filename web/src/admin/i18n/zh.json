@@ -101,8 +101,20 @@
         "fishingRetryExhausted": "钓鱼恢复重试已耗尽",
         "rpsTerminalRetrying": "猜拳终局恢复正在重试",
         "workerCheckpointFailed": "Worker 检查点失败",
-        "invariantViolation": "数据不变量异常"
-      }
+        "invariantViolation": "数据不变量异常",
+        "accountDeleted": "用户主动删号"
+      },
+      "filterKind": "告警类型",
+      "select": "选择",
+      "selectPage": "选择本页未解决告警",
+      "selectAlert": "选择告警 {{id}}",
+      "resolveSelected": "标记已选 {{count}} 条为已解决",
+      "deletionSnapshot": "删除前经济快照（未完成业务已结算，余额尚未清零）。任一积分余额为负时需人工核查。",
+      "deletedUser": "原用户 ID",
+      "generalBalance": "通用悠哉积分余额",
+      "gameBalance": "游戏悠哉积分余额",
+      "donationCredit": "捐赠额度",
+      "sketchAssets": "画纸 / 画笔"
     },
     "settings": {
       "nav": "站点参数",
@@ -778,6 +790,26 @@
         "window": "保留期限"
       },
       "title": "法律保留"
+    },
+    "blacklist": {
+      "title": "Discord 黑名单",
+      "description": "名单中的 Discord ID 无法注册；已有账号会立即永久封禁并撤销登录会话与调用密钥。移除名单不会自动解封已有账号。",
+      "addTitle": "加入黑名单",
+      "reason": "原因",
+      "add": "加入并永久封禁",
+      "added": "已加入黑名单，已有账号已永久封禁。",
+      "removed": "已移除黑名单；已有账号如需恢复，请在用户管理中单独解封。",
+      "invalid": "请填写有效 Discord ID 和封禁原因（最多 1024 字）。",
+      "invalidID": "请填写有效的纯数字 Discord ID。",
+      "search": "按完整 Discord ID 查找（留空显示全部）",
+      "applySearch": "查询",
+      "empty": "没有匹配的黑名单记录",
+      "emptyBody": "可以通过上方表单添加 Discord ID。",
+      "account": "站内账号",
+      "noAccount": "当前无账号",
+      "created": "加入时间",
+      "action": "操作",
+      "remove": "移除黑名单"
     }
   },
   "user": {

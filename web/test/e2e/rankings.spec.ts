@@ -113,7 +113,22 @@ for (const scenario of [
     for (const path of ['/games', '/games/bidding', '/games/blackjack']) {
       await page.goto(`${USER_ORIGIN}${path}`);
       const cards = page.locator('.progression-ranking');
-      await expect(cards).toHaveCount(path === '/games/bidding' ? 1 : 2);
+      await expect(cards).toHaveCount(path === '/games' ? 2 : 1);
+      if (path === '/games/blackjack') {
+        await expect(cards.first().getByRole('heading')).toHaveText(
+          zh ? '赌神榜' : 'Card master leaderboard',
+        );
+        await expect(cards.first().locator('select')).toHaveCount(0);
+        const tabs = page.getByRole('tablist', {
+          name: zh ? '选择排行榜' : 'Choose a leaderboard',
+        });
+        await expect(tabs.getByRole('tab').first()).toHaveAttribute('aria-selected', 'true');
+        await tabs.getByRole('tab').first().press('End');
+        await expect(tabs.getByRole('tab').last()).toBeFocused();
+        await expect(cards.first().getByRole('heading')).toHaveText(
+          zh ? '利润榜' : 'Profit leaderboard',
+        );
+      }
       const card = cards.first();
       await expect(card.locator('tbody tr')).toHaveCount(21);
       await expect(card.locator('[data-own-rank]')).toContainText('17.125');
@@ -126,12 +141,14 @@ for (const scenario of [
         await expect(card.locator('time')).toBeVisible();
       }
       if (path !== '/games/bidding') {
+        if (path === '/games/blackjack')
+          await page.getByRole('tab', { name: zh ? '赌神榜' : 'Card master leaderboard' }).click();
         const profit = cards.last();
         await expect(profit.getByRole('heading')).toHaveText(
           path === '/games'
             ? zh
-              ? '暴富榜'
-              : 'Fortune leaderboard'
+              ? '游戏暴富榜'
+              : 'Game fortune leaderboard'
             : zh
               ? '赌神榜'
               : 'Card master leaderboard',
@@ -141,6 +158,10 @@ for (const scenario of [
         await expect(profit).toContainText('7×24');
       }
       await card.scrollIntoViewIfNeeded();
+      if (path === '/games/blackjack')
+        await page
+          .locator('.rank-switcher')
+          .screenshot({ path: '../tmp/blackjack-rankings-' + scenario.width + '.png' });
       expect(
         await card
           .locator('.rank-table-scroll')

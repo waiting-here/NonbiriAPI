@@ -104,3 +104,20 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
+
+.picturebook-discovery-error {
+  border: 1px solid var(--nb-color-danger, #b43e52);
+  border-radius: var(--nb-radius-sm);
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+.picturebook-discovery-error h3 {
+  margin-top: 0;
+}
+.picturebook-help {
+  color: var(--nb-color-text-muted);
+  font-size: 0.92rem;
+}
+.picturebook-help code {
+  overflow-wrap: anywhere;
+}

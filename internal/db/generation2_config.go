@@ -148,9 +148,11 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"gateway_user_attribution_enabled": boolSpec("0"),
 		// These three inherited keys have a real raw-null state. They are known,
 		// but intentionally have no required seed row.
-		"site_timezone_offset_minutes":      {kind: generationTwoConfigTimezone},
-		"charity_token_reserve_milli":       {kind: generationTwoConfigAmount, minimum: 1, maximum: uint64(MaxMoneyMilli)},
-		"anthropic_default_max_tokens":      {kind: generationTwoConfigUint, minimum: 1, maximum: 2147483647},
+		"site_timezone_offset_minutes": {kind: generationTwoConfigTimezone},
+		"charity_token_reserve_milli":  {kind: generationTwoConfigAmount, minimum: 1, maximum: uint64(MaxMoneyMilli)},
+		"anthropic_default_max_tokens": {kind: generationTwoConfigUint, minimum: 1, maximum: 2147483647},
+		// Missing in existing databases: the runtime and admin catalog use 10 MiB.
+		"model_request_body_limit_mib":      {kind: generationTwoConfigUint, minimum: 1, maximum: 64},
 		"level_threshold_2_milli":           amountSpec("0", 0),
 		"level_threshold_3_milli":           amountSpec("0", 0),
 		"level_threshold_4_milli":           amountSpec("0", 0),

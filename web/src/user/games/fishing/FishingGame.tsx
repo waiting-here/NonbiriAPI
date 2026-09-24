@@ -28,6 +28,7 @@ import blueFatFish from '@shared/assets/game-fishing/blue-fat-fish.png';
 import fishingScene from '@shared/assets/game-heroes/fishing.webp';
 import { GamePrivacyLink } from '../common/GamePrivacyControl';
 import { Leaderboard as NetProfitLeaderboard } from '../ranking/Leaderboard';
+import { LeaderboardTabs } from '../ranking/LeaderboardTabs';
 import {
   acknowledgeFishing,
   fishingKeys,
@@ -536,7 +537,7 @@ function FishingSingleBoards({
 }
 
 export function FishingGame() {
-  const { text } = useGameCopy();
+  const { text, language } = useGameCopy();
   const sound = useGameSound('fishing');
   const playSound = sound.play;
   const queryClient = useQueryClient();
@@ -1045,11 +1046,25 @@ export function FishingGame() {
         </Card>
       </div>
       <GamePrivacyLink />
-      <section className="fishing-leaderboards" aria-label={text('fishing.leaderboard.single')}>
-        <FishingSingleBoards historical={single} recent={recentSingle} />
-        <LeaderboardCard board="total" query={total} />
-        <NetProfitLeaderboard board="fishing_net_profit" />
-      </section>
+      <LeaderboardTabs
+        items={[
+          {
+            id: 'catch',
+            label: text('fishing.leaderboard.single'),
+            content: <FishingSingleBoards historical={single} recent={recentSingle} />,
+          },
+          {
+            id: 'total',
+            label: text('fishing.leaderboard.total'),
+            content: <LeaderboardCard board="total" query={total} />,
+          },
+          {
+            id: 'profit',
+            label: language === 'zh' ? '锦鲤榜' : 'Lucky catch leaderboard',
+            content: <NetProfitLeaderboard board="fishing_net_profit" />,
+          },
+        ]}
+      />
       {rulesDialog}
     </main>
   );

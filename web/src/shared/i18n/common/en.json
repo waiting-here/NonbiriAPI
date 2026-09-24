@@ -569,6 +569,7 @@
     }
   },
   "logs": {
+    "charityModel": "Requested charity model",
     "phase": "Request stage",
     "phaseAll": "All stages",
     "phasePreHandler": "Rejected before a call",
