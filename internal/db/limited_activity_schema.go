@@ -16,7 +16,7 @@ CREATE TABLE limited_activity_configs (
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
  CHECK((starts_at IS NULL AND ends_at IS NULL) OR (starts_at IS NOT NULL AND ends_at IS NOT NULL AND starts_at<ends_at))
-);
+) STRICT;
 CREATE TABLE limited_activity_revisions (
  activity_key TEXT NOT NULL REFERENCES limited_activity_configs(activity_key),
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
@@ -29,7 +29,7 @@ CREATE TABLE limited_activity_revisions (
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  PRIMARY KEY(activity_key,revision),
  CHECK((starts_at IS NULL AND ends_at IS NULL) OR (starts_at IS NOT NULL AND ends_at IS NOT NULL AND starts_at<ends_at))
-);
+) STRICT;
 CREATE TRIGGER limited_activity_revisions_immutable BEFORE UPDATE ON limited_activity_revisions
 WHEN NEW.activity_key<>OLD.activity_key OR NEW.revision<>OLD.revision OR NEW.visible<>OLD.visible
  OR NEW.starts_at IS NOT OLD.starts_at OR NEW.ends_at IS NOT OLD.ends_at OR NEW.paused<>OLD.paused
@@ -46,7 +46,7 @@ CREATE TABLE activity_exchange_state (
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
  PRIMARY KEY(activity_key,asset_type),
  CHECK((asset_type='sketch_paper' AND cap_mag IS NULL) OR (asset_type='sketch_brush' AND cap_mag IS NOT NULL))
-);
+) STRICT;
 CREATE TRIGGER activity_exchange_state_monotone BEFORE UPDATE ON activity_exchange_state
 WHEN NEW.activity_key<>OLD.activity_key OR NEW.asset_type<>OLD.asset_type OR NEW.total_exchanged_mag<OLD.total_exchanged_mag OR NEW.revision<=OLD.revision
 BEGIN SELECT RAISE(ABORT,'invalid activity exchange state transition'); END;
@@ -64,7 +64,7 @@ CREATE TABLE activity_exchange_receipts (
  ledger_seq INTEGER NOT NULL CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  FOREIGN KEY(activity_key,config_revision) REFERENCES limited_activity_revisions(activity_key,revision)
-);
+) STRICT;
 CREATE INDEX idx_activity_exchange_receipts_user_time ON activity_exchange_receipts(user_id,created_at,operation_id);
 CREATE TRIGGER activity_exchange_receipts_immutable BEFORE UPDATE ON activity_exchange_receipts
 WHEN NEW.operation_id<>OLD.operation_id OR NEW.activity_key<>OLD.activity_key OR NEW.config_revision<>OLD.config_revision
