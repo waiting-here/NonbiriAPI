@@ -121,8 +121,8 @@ func TestBetaTwoExtensionSeedsSidecarDefaultsFromBeta1(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT allowed_level_mask, public_description FROM charity_model_access`).Scan(&mask, &desc); err != nil {
 		t.Fatalf("read charity_model_access: %v", err)
 	}
-	if mask != 31 || desc != "" {
-		t.Fatalf("charity_model_access = (%d,%q), want (31,'')", mask, desc)
+	if mask != 63 || desc != "" {
+		t.Fatalf("charity_model_access = (%d,%q), want (63,'')", mask, desc)
 	}
 	var capID, rowsUsed, rowsHeld int
 	if err := store.DB().QueryRow(`SELECT id, rows_used, rows_held FROM donation_quota_capacity`).Scan(&capID, &rowsUsed, &rowsHeld); err != nil {
@@ -209,8 +209,8 @@ func TestBetaTwoSidecarHostileConstraints(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO donation_handling(donation_id, state, revision, processed_at, processed_by_user_id, processed_by_role, closed_at, closed_reason, created_at, updated_at) VALUES(?, 'processed', 1, NULL, NULL, '', NULL, '', 1000, 1000)`, donationID); err == nil {
 		t.Fatal("donation_handling accepted processed state without processed_at/role")
 	}
-	if _, err := db.Exec(`INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description) VALUES(?, 32, '')`, modelID); err == nil {
-		t.Fatal("charity_model_access accepted mask=32")
+	if _, err := db.Exec(`INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description) VALUES(?, 64, '')`, modelID); err == nil {
+		t.Fatal("charity_model_access accepted mask=64")
 	}
 	if _, err := db.Exec(`INSERT INTO donation_quota_capacity(id, rows_used, rows_held) VALUES(2, 0, 0)`); err == nil {
 		t.Fatal("capacity accepted id=2")
