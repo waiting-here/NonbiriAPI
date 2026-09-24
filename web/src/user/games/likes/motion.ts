@@ -74,6 +74,7 @@ export function viewFrame(view: LikesView): Frame {
         layers: s.layers,
         remaining: s.remaining,
         active_from: s.activeFrom,
+        persistent_layers: s.persistentLayers,
       })),
     })) as [Resources, Resources],
   };

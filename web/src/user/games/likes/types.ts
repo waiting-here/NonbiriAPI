@@ -110,6 +110,7 @@ export interface EffectCue {
   layers: number;
   remaining: number;
   active_from: number;
+  persistent_layers?: number;
 }
 export interface Resources {
   gold: number;
