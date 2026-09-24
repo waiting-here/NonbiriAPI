@@ -271,8 +271,8 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		byKey[entry.Key] = entry
 	}
 	registryKeys := builtinconfig.SiteConfigKeys()
-	if len(registryKeys) != 84 {
-		t.Fatalf("game registry keys=%d, want 84", len(registryKeys))
+	if len(registryKeys) != 85 {
+		t.Fatalf("game registry keys=%d, want 85", len(registryKeys))
 	}
 	for _, key := range registryKeys {
 		entry, ok := byKey[key]
@@ -289,6 +289,7 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		fishingconfig.FishingPremiumPriceMilliKey:        defaults.BaitPricesMilli[fishing.BaitPremium],
 		fishingconfig.FishingStandardRTPKey:              defaults.StandardRTPPercent,
 		fishingconfig.FishingPremiumRTPKey:               defaults.PremiumRTPPercent,
+		fishingconfig.FishingBlueFishChanceBPSKey:        defaults.BlueFishChanceBPS,
 		fishingconfig.FishingRakePlatformBPKey:           defaults.RakeBP.Platform,
 		fishingconfig.FishingRakeWelfareBPKey:            defaults.RakeBP.Welfare,
 		fishingconfig.FishingRakeThursdayBPKey:           defaults.RakeBP.Thursday,
@@ -313,6 +314,10 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 		if entry.Minimum != fishing.MinimumRTPPercent || entry.Maximum != fishing.MaximumRTPPercent {
 			t.Fatalf("%s range=%v..%v", key, entry.Minimum, entry.Maximum)
 		}
+	}
+	blueFish := byKey[fishingconfig.FishingBlueFishChanceBPSKey]
+	if blueFish.Minimum != 0 || blueFish.Maximum != fishing.MaximumBlueFishChanceBPS || blueFish.Step != 1 {
+		t.Fatalf("blue-fish probability range/step=%v..%v/%v", blueFish.Minimum, blueFish.Maximum, blueFish.Step)
 	}
 	for _, key := range []string{
 		fishingconfig.FishingTreasureBottleMultiplierKey,

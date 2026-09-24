@@ -34,7 +34,7 @@ func TestFailureResetRegisteredRoutesUseCurrentSessions(t *testing.T) {
 		return map[string]string{"Content-Type": "application/json", "Origin": "http://" + host, "Idempotency-Key": strings.Repeat(key, 22)}
 	}
 	created := testApplicationRequest(t, f.app.handler, "POST", auditUserHost, "/api/donations",
-		fmt.Sprintf(`{"description":"Reset route fixture","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true}`, physical),
+		fmt.Sprintf(`{"description":"Reset route fixture","keys":[{"endpoint_key_id":"%d","expires_at":null}],"ownership_authorized":true,"discord_public_thanks":false}`, physical),
 		f.cookies, headers(auditUserHost, "C"))
 	var d struct {
 		ID, Revision string

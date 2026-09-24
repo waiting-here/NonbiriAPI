@@ -148,7 +148,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 		t.Fatal(err)
 	}
 	f.modelID = strconv.FormatInt(f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,revision,binding_revision,created_at,updated_at) VALUES('fixture','automation','[公益]fixture/automation',1,'per_request',1,1,?,?)`, time.Now().Unix(), time.Now().Unix()), 10)
-	f.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, f.modelID)
+	f.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,63,'')`, f.modelID)
 	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func (f *automationFixture) input(count int) map[string]any {
 	for i := range keys {
 		keys[i] = map[string]any{"secret": fmt.Sprintf("donated-fixture-%d", i)}
 	}
-	return map[string]any{"endpoint": map[string]any{"connector_type": "openai-compatible", "base_url": f.baseURL}, "description": "fixture donation", "keys": keys}
+	return map[string]any{"endpoint": map[string]any{"connector_type": "openai-compatible", "base_url": f.baseURL}, "description": "fixture donation", "discord_public_thanks": false, "keys": keys}
 }
 
 func (f *automationFixture) call(t *testing.T, path, key string, input any) *httptest.ResponseRecorder {
@@ -269,6 +269,7 @@ func TestStewardAutomationAtomicCreationAndManualBindings(t *testing.T) {
 	keys[0]["token_reserve"] = 42
 	keys[0]["recurring_limits"] = []map[string]any{{"mode": "reset", "interval": "1h", "alignment": "first_success", "time_zone": "Asia/Shanghai", "metric": "tokens", "limit": "300"}}
 	input["review_note"] = "approved by fixture steward"
+	input["discord_public_thanks"] = true
 	idem := strings.Repeat("A", 22)
 	created := f.create(t, idem, input)
 	if len(created.Keys) != 2 || f.count(t, "donations") != 1 || f.count(t, "donation_reviews") != 1 || f.count(t, "donation_quota_rules") != 1 {
@@ -276,11 +277,15 @@ func TestStewardAutomationAtomicCreationAndManualBindings(t *testing.T) {
 	}
 	var owner, reviewer int64
 	var role, status string
-	if err := f.store.DB().QueryRow(`SELECT user_id,reviewed_by_user_id,reviewed_by_role,status FROM donations WHERE id=?`, created.DonationID).Scan(&owner, &reviewer, &role, &status); err != nil {
+	var thanks bool
+	if err := f.store.DB().QueryRow(`SELECT user_id,reviewed_by_user_id,reviewed_by_role,status,discord_public_thanks FROM donations WHERE id=?`, created.DonationID).Scan(&owner, &reviewer, &role, &status, &thanks); err != nil {
 		t.Fatal(err)
 	}
 	if owner != f.userID || reviewer != f.userID || role != "level6" || status != "approved" {
 		t.Fatalf("audit actor = %d/%d/%s/%s", owner, reviewer, role, status)
+	}
+	if !thanks {
+		t.Fatal("explicit public-thanks consent was not retained")
 	}
 	var note, safeNote string
 	var reserve, effective, authorized, concurrency, rpm int64
@@ -440,6 +445,8 @@ func TestStewardAutomationBoundsDefaultsAndEntryAuthority(t *testing.T) {
 		{"null enabled", func(in map[string]any) { in["endpoint"].(map[string]any)["enabled"] = nil }},
 		{"channel field", func(in map[string]any) { in["endpoint"].(map[string]any)["channel_id"] = "channel" }},
 		{"ownership field", func(in map[string]any) { in["ownership_authorized"] = true }},
+		{"missing thanks", func(in map[string]any) { delete(in, "discord_public_thanks") }},
+		{"null thanks", func(in map[string]any) { in["discord_public_thanks"] = nil }},
 		{"duplicate secrets", func(in map[string]any) {
 			in["keys"].([]map[string]any)[1]["secret"] = in["keys"].([]map[string]any)[0]["secret"]
 		}},
@@ -508,6 +515,10 @@ func TestStewardAutomationBoundsDefaultsAndEntryAuthority(t *testing.T) {
 	}
 	if enabled != 1 || physical != 1 || policy != 0 || expires.Valid {
 		t.Fatal("defaults differ from contract")
+	}
+	var thanks bool
+	if err := f.store.DB().QueryRow(`SELECT discord_public_thanks FROM donations WHERE id=?`, created.DonationID).Scan(&thanks); err != nil || thanks {
+		t.Fatalf("explicit public-thanks refusal was not retained: %t %v", thanks, err)
 	}
 	login := testApplicationRequest(t, f.handler, http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
 	cookie := responseCookieNamed(t, login, auth.AdminSessionCookieName)
@@ -602,7 +613,7 @@ func TestStewardAutomationOwnKeysOnlyAndLiveDemotion(t *testing.T) {
 	f := newAutomationFixture(t)
 	own := f.create(t, strings.Repeat("I", 22), f.input(2))
 	zero := make([]byte, 16)
-	foreignID := f.exec(t, `INSERT INTO users(discord_id,username,level,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES('foreign-fixture','foreign fixture',5,?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero, zero, zero, time.Now().Unix(), time.Now().Unix())
+	foreignID := f.exec(t, `INSERT INTO users(discord_id,username,level,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES('foreign-fixture','foreign fixture',6,?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero, zero, zero, time.Now().Unix(), time.Now().Unix())
 	keyBody := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x62}, 32))
 	foreignCaller := "nbk_" + keyBody
 	hash := sha256.Sum256([]byte(foreignCaller))
