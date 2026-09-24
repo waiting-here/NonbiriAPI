@@ -12,6 +12,7 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -120,7 +121,12 @@ func TestImageBrowserFixture(t *testing.T) {
 	})
 	users := httptest.NewUnstartedServer(proxy)
 	admins := httptest.NewUnstartedServer(proxy)
-	f.cfg.UserHost, f.cfg.AdminHost = users.Listener.Addr().String(), admins.Listener.Addr().String()
+	f.cfg.UserHost = users.Listener.Addr().String()
+	_, adminPort, err := net.SplitHostPort(admins.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.cfg.AdminHost = net.JoinHostPort("localhost", adminPort)
 	f.cfg.ListenAddr, f.cfg.SiteBaseURL = f.cfg.UserHost, "http://"+f.cfg.UserHost
 	f.cfg.DBPath = f.path
 	if err := f.open(); err != nil {
@@ -128,6 +134,7 @@ func TestImageBrowserFixture(t *testing.T) {
 	}
 	users.Start()
 	admins.Start()
+	admins.URL = "http://" + f.cfg.AdminHost
 	defer func() {
 		if err := f.closeApplication(); err != nil {
 			t.Error(err)
