@@ -265,3 +265,21 @@ describe('steward caller identity', () => {
     },
   );
 });
+
+for (const role of ['admin', 'steward'] as const) {
+  it(`${role} shows the requested charity model in the list and detail as text`, async () => {
+    const model = 'Public model <example>';
+    const row = { ...stewardRow(null), charity_model: model };
+    installFixtures(role, row, { request: row, attempts: { data: [], next_cursor: null } });
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role: role === 'admin' ? 'admin' : 'level5',
+    });
+    expect(await screen.findByRole('cell', { name: model })).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Details' }));
+    const drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByText('Requested charity model')).toBeVisible();
+    expect(within(drawer).getByText(model)).toBeVisible();
+    expect(drawer.querySelector('example')).toBeNull();
+  });
+}

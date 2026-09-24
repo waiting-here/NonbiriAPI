@@ -30,6 +30,8 @@ The changes below include development toward 1.0.0-rc.3. The published rc.2 tag 
 
 ### Fixed
 
+- Show the requested charity model in administrator and full-steward log lists, details and exports, using the historical request snapshot while retaining private self-use model boundaries.
+
 - Use server-relative audit windows, accept healthy capture summaries with no gaps, and provide working retries and guided client rules. Align audit and inactivity controls with the shared theme, with responsive layouts and ordinary credit/percentage inputs.
 
 - Keep game payments restricted to general/game accounts after introducing activity assets, and display whole activity-currency units correctly in personal credit history.

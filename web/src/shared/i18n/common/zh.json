@@ -565,6 +565,7 @@
     }
   },
   "logs": {
+    "charityModel": "调用的公益模型",
     "phase": "请求阶段",
     "phaseAll": "全部阶段",
     "phasePreHandler": "调用前拒绝",

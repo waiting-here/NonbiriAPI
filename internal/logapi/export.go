@@ -125,7 +125,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			CallerResultClass: resultClassPointer(record.callerResultClass),
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-			UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+			UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -163,7 +163,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 		"uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens",
 		"output_tokens", "total_tokens", "usage_unknown", "charge",
 		"caller_discord_nickname", "caller_discord_id",
-		"phase", "rejection_stage", "rejection_reason", "request_method", "request_path",
+		"phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "charity_model",
 	}
 	if err := writer.Write(header); err != nil {
 		return nil, ErrUnavailable
@@ -180,7 +180,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 			row.Usage.UncachedInputTokens, row.Usage.CacheWriteInputTokens, row.Usage.CacheReadInputTokens,
 			row.Usage.OutputTokens, row.Usage.TotalTokens, strconv.FormatBool(row.Usage.UsageUnknown), row.Usage.Charge,
 			csvString(nickname), csvString(discordID),
-			csvSafe(row.Phase), csvString(row.RejectionStage), csvString(row.RejectionReason), csvString(row.RequestMethod), csvString(row.RequestPath),
+			csvSafe(row.Phase), csvString(row.RejectionStage), csvString(row.RejectionReason), csvString(row.RequestMethod), csvString(row.RequestPath), csvString(row.CharityModel),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, ErrUnavailable

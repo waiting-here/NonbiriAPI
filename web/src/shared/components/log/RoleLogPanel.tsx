@@ -519,6 +519,12 @@ function ScopedRoleLogPanel({
     ...(role !== 'user'
       ? [
           {
+            key: 'charity_model',
+            header: t('logs.charityModel'),
+            render: (row: RoleLogRow) =>
+              'charity_model' in row ? (row.charity_model ?? '—') : '—',
+          },
+          {
             key: 'user',
             header: t('common.userId'),
             render: (row: RoleLogRow) => ('user_id' in row ? (row.user_id ?? '—') : '—'),
@@ -576,6 +582,10 @@ function ScopedRoleLogPanel({
           ...(role !== 'user' &&
           (detailRequest.role === 'admin' || detailRequest.role === 'steward')
             ? [
+                {
+                  label: t('logs.charityModel'),
+                  value: detailRequest.charity_model ?? '—',
+                },
                 {
                   label: t('common.userId'),
                   value: detailRequest.user_id ?? '—',
