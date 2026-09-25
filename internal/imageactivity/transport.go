@@ -3,9 +3,11 @@ package imageactivity
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -81,8 +83,8 @@ func (s *Service) perform(ctx context.Context, snapshot upstreamSnapshot, method
 	req = req.WithContext(ctx)
 	response, err := client.Do(req)
 	if err != nil {
-		out.err = err
-		upstreamerror.CaptureEvent(ctx, 0, "", nil)
+		out.err = &transportFailure{cause: err}
+		captureTransportFailure(ctx, err)
 		return out
 	}
 	defer response.Body.Close()
@@ -310,10 +312,52 @@ func readFailure(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "execution_timeout"
 	}
+	var transport *transportFailure
+	if errors.As(err, &transport) {
+		return "upstream_failed"
+	}
 	if errors.Is(err, io.ErrUnexpectedEOF) {
 		return "invalid_result"
 	}
 	return "invalid_result"
+}
+
+type transportFailure struct{ cause error }
+
+func (*transportFailure) Error() string   { return "image upstream transport failed" }
+func (e *transportFailure) Unwrap() error { return e.cause }
+
+// Transport errors may contain private URLs, certificate names or peer bytes.
+// Persist only a fixed category; never serialize the original error string.
+func captureTransportFailure(ctx context.Context, err error) {
+	reason := "request_failed"
+	var dns *net.DNSError
+	var certificate *tls.CertificateVerificationError
+	var record tls.RecordHeaderError
+	var network *net.OpError
+	var timeout net.Error
+	switch {
+	case errors.Is(err, context.Canceled):
+		reason = "request_cancelled"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
+		reason = "request_timeout"
+	case errors.Is(err, egress.ErrRedirectBlocked):
+		reason = "redirect_blocked"
+	case errors.As(err, &dns):
+		reason = "dns_failed"
+	case errors.As(err, &certificate):
+		reason = "tls_certificate_invalid"
+	case errors.As(err, &record):
+		reason = "tls_protocol_failed"
+	case errors.As(err, &network):
+		reason = "connection_failed"
+	}
+	body, _ := json.Marshal(struct {
+		Category          string `json:"category"`
+		Reason            string `json:"reason"`
+		OriginalBodySaved bool   `json:"original_body_saved"`
+	}{"image_transport_failed", reason, false})
+	upstreamerror.CaptureEvent(ctx, 0, "application/vnd.nonbiriapi.image-diagnostic+json", body)
 }
 
 // A rejected success-shaped response may contain generated images. Store a

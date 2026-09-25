@@ -1,6 +1,7 @@
 package egress
 
 import (
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"strconv"
@@ -61,6 +62,13 @@ func (s *Stack) NewImageClient(baseURL string, profile ImageProfile) (*Client, e
 		transport.ForceAttemptHTTP2 = false
 		transport.Protocols = new(http.Protocols)
 		transport.Protocols.SetHTTP1(true)
+		// Clone initializes the default transport's HTTP/2 support and can
+		// inherit its ALPN list. Keep TLS negotiation aligned with HTTP/1-only
+		// dispatch without changing certificate verification or shared defaults.
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		}
+		transport.TLSClientConfig.NextProtos = []string{"http/1.1"}
 		httpClient = &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrRedirectBlocked }}
 		s.clients[cacheKey] = httpClient
 	}

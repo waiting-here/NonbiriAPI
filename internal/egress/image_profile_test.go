@@ -2,15 +2,107 @@ package egress
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestImageProfilesNegotiateHTTP1OverTLS(t *testing.T) {
+	for _, enableHTTP2 := range []bool{false, true} {
+		t.Run(fmt.Sprintf("http2=%v", enableHTTP2), func(t *testing.T) {
+			var posts atomic.Int32
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.ProtoMajor != 1 || r.TLS == nil || (r.TLS.NegotiatedProtocol != "" && r.TLS.NegotiatedProtocol != "http/1.1") {
+					t.Errorf("unexpected protocol: %s, TLS=%+v", r.Proto, r.TLS)
+				}
+				if r.URL.Path == "/lost-response" {
+					posts.Add(1)
+					_, _ = io.Copy(io.Discard, r.Body)
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err == nil {
+						_ = conn.Close()
+					}
+					return
+				}
+				_, _ = w.Write([]byte("ok"))
+			}))
+			server.EnableHTTP2 = enableHTTP2
+			server.StartTLS()
+			defer server.Close()
+			roots := x509.NewCertPool()
+			roots.AddCert(server.Certificate())
+			// Force initialization of the shared transport, including inherited ALPN.
+			defaults := http.DefaultTransport.(*http.Transport).Clone()
+			alpn := func(transport *http.Transport) []string {
+				if transport.TLSClientConfig == nil {
+					return nil
+				}
+				return transport.TLSClientConfig.NextProtos
+			}
+			protos := slices.Clone(alpn(defaults))
+			stack := newLoopbackStack(t, []string{server.URL}, nil)
+			for _, profile := range []ImageProfile{ImageJSON, ImageDownload, ImageMetadata} {
+				client, err := stack.NewImageClient(server.URL, profile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				transport := client.httpClient.Transport.(*http.Transport)
+				transport.TLSClientConfig.RootCAs = roots
+				if transport.TLSClientConfig.InsecureSkipVerify {
+					t.Fatal("certificate verification disabled")
+				}
+				req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+				response, err := client.Do(req)
+				if err != nil {
+					t.Fatalf("profile %d: %v", profile, err)
+				}
+				body, err := io.ReadAll(response.Body)
+				_ = response.Body.Close()
+				if err != nil || response.ProtoMajor != 1 || string(body) != "ok" {
+					t.Fatalf("profile %d: response=%s body=%q err=%v", profile, response.Proto, body, err)
+				}
+			}
+			client, err := stack.NewImageClient(server.URL, ImageJSON)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req, _ := http.NewRequest(http.MethodPost, server.URL+"/lost-response", strings.NewReader("one generation"))
+			if _, err = client.Do(req); err == nil || posts.Load() != 1 {
+				t.Fatalf("response loss: err=%v posts=%d", err, posts.Load())
+			}
+			if !slices.Equal(alpn(http.DefaultTransport.(*http.Transport)), protos) {
+				t.Fatal("shared default transport ALPN changed")
+			}
+		})
+	}
+}
+
+func TestImageProfileRejectsUntrustedTLSCertificate(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
+	defer server.Close()
+	stack := newLoopbackStack(t, []string{server.URL}, nil)
+	for _, profile := range []ImageProfile{ImageJSON, ImageDownload, ImageMetadata} {
+		client, err := stack.NewImageClient(server.URL, profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+		_, err = client.Do(req)
+		var untrusted x509.UnknownAuthorityError
+		if !errors.As(err, &untrusted) || calls.Load() != 0 {
+			t.Fatalf("untrusted server reached: profile=%d calls=%d err=%v", profile, calls.Load(), err)
+		}
+	}
+}
 
 func TestImageSubmissionNeverReplaysOnResponseLoss(t *testing.T) {
 	var posts atomic.Int32

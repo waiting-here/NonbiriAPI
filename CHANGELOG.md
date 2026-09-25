@@ -37,6 +37,8 @@ Source prerelease for Linux/amd64, without official precompiled attachments. Sup
 
 ### Fixed
 
+- Image-service HTTPS requests now align TLS ALPN with their non-replayable HTTP/1.1 transport. Connection failures retain bounded, safe diagnostic categories instead of being reported as malformed model catalogs; certificate verification and uncertain-submission protections remain intact.
+
 - Keep credit-audit entries on an ordered ledger query and batch their entry reads, preserving asset filters and exact amounts. Economy charts now show axes, units, data points, tooltips, keyboard-selected values and an exact data table through an administrator-only Chart.js module.
 - Use browser-local time on ordinary user pages and site time in administrator/steward forms and displays. Group time-zone notices and clearly identify a different browser zone. Donation and charity-model forms use the available desktop width and collapse coherently on narrow screens.
 - Apply SQLite foreign-key and busy-wait settings on every physical connection, including replacements. Complete bounded ranking backfill and expiry settlement before game recovery, preserving committed progress across interruption.

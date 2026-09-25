@@ -30,6 +30,11 @@ export function discoveryError(
       '图片服务暂时出错。请检查服务状态，稍后重新拉取。',
       'The image service returned a server error. Check its status and retry later.',
     );
+  if (code === 'upstream_failed' && !status)
+    return t(
+      '未收到有效的 HTTP 响应。请检查服务连通性、TLS 证书和接口地址，并展开保留诊断查看连接失败类别。',
+      'No valid HTTP response was received. Check connectivity, TLS certificates and the endpoint, then open retained diagnostics for the connection failure category.',
+    );
   if (code === 'invalid_result')
     return t(
       '未取得有效的模型目录。请核对返回的是 JSON 模型列表，以及 discovery.items_pointer 和 id_pointer 对应的字段；目录最多 1,000 个模型，ID 不能重复。若未收到 HTTP 响应，也请检查服务连通性。',
