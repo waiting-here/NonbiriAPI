@@ -65,12 +65,30 @@
 .economy-audit .audit-chart {
   margin: 0.75rem 0;
 }
-.economy-audit .audit-chart svg {
+.economy-audit .audit-chart-canvas {
+  height: min(22rem, 55vw);
+  min-height: 15rem;
+  outline: 0;
+}
+.economy-audit .audit-chart-canvas canvas:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 0.25rem;
+}
+.economy-audit .audit-chart canvas {
   width: 100%;
-  max-height: 16rem;
+  height: 100%;
 }
 .economy-audit .audit-chart figcaption {
   font-size: 0.9rem;
+}
+.economy-audit .audit-chart-selection {
+  display: block;
+  margin-block: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: 0.4rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .economy-audit .audit-operation {
   padding-block: 0.75rem;
