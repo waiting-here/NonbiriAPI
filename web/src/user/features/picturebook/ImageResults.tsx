@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ErrorState } from '@shared/components/States';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { getImage } from '@shared/picturebook/publicApi';
 import type { ImageInfo, ImageTask } from '@shared/picturebook/publicTypes';
@@ -17,6 +18,7 @@ export function ImageResults({
   readonly task: ImageTask;
   readonly account: string;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const t = usePictureBookText(),
     client = useQueryClient();
   const [images, setImages] = useState<LocalImage[]>([]),
@@ -104,11 +106,8 @@ export function ImageResults({
       ) : null}
       {task.result_expires_at !== null && task.result_available ? (
         <p>
-          {t('领取截止', 'Collect by')}:{' '}
-          {new Date(task.result_expires_at * 1000)
-            .toISOString()
-            .replace('T', ' ')
-            .replace('.000Z', ' UTC')}
+          {t('领取截止', 'Collect by')}: {formatDateTime(task.result_expires_at)} ·{' '}
+          {t('本地时间', 'Local time')}
         </p>
       ) : null}
       {error ? (

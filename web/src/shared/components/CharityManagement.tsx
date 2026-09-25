@@ -2127,7 +2127,7 @@ function ModelForm({
       </fieldset>
       <fieldset className="ops-form-section">
         <legend>{copy.discountSettings}</legend>
-        <div className="ops-field-grid">
+        <div className="ops-field-grid ops-paired-fields">
           <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
           <label className="checkbox-label">
             <input

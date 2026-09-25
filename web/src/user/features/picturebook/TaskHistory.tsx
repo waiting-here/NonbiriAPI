@@ -7,6 +7,7 @@ import { cancelTask } from '@shared/picturebook/publicApi';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { useImageReconcile, useImageTask, useImageTasks } from './queries';
 import { ImageResults } from './ImageResults';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 
 export function TaskDetail({ id, account }: { readonly id: string; readonly account: string }) {
   const t = usePictureBookText(),
@@ -93,6 +94,7 @@ export function TaskHistory({
   readonly account: string;
   readonly onSelect: (id: string) => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const t = usePictureBookText();
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]),
     [page, setPage] = useState(0);
@@ -100,6 +102,7 @@ export function TaskHistory({
   return (
     <Card>
       <h2>{t('近30天任务', 'Tasks from the last 30 days')}</h2>
+      <p className="field-help">{t('本地时间', 'Local time')}</p>
       <p>
         {t(
           '任务记录不包含提示词或图片存档。兑换和收费流水可在账号导出中查看。',
@@ -116,11 +119,8 @@ export function TaskHistory({
         {query.data?.data.map((task) => (
           <article className="picturebook-card" key={task.id}>
             <p>
-              {new Date(task.created_at * 1000)
-                .toISOString()
-                .replace('T', ' ')
-                .replace('.000Z', ' UTC')}{' '}
-              · {taskStatusLabel(task.status, t)} · {task.n} {t('张', 'images')}
+              {formatDateTime(task.created_at)} · {taskStatusLabel(task.status, t)} · {task.n}{' '}
+              {t('张', 'images')}
             </p>
             <button className="btn btn-secondary" onClick={() => onSelect(task.id)}>
               {t('查看任务', 'View task')}

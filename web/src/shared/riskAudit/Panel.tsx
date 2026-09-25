@@ -3,6 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { ClientScans } from './ClientScans';
+import { TimeInput } from '@shared/components/TimeInput';
+import { TimeContextNotice } from '@shared/components/TimeContext';
+import { createTimeDraft, timeDraftValue } from '@shared/time';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import {
@@ -38,12 +42,9 @@ const queryOptions = {
   staleTime: 0,
   refetchOnWindowFocus: false,
 } as const;
-function stamp(n: number | null) {
-  return n !== null && n > 0 ? new Date(n * 1000).toLocaleString() : '—';
-}
-function localTime(n: number) {
-  const d = new Date(n * 1000);
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function useStamp() {
+  const format = useDateTimeFormatter();
+  return (n: number | null) => (n !== null && n > 0 ? format(n) : '—');
 }
 const filterFields = ['from', 'to', 'lookback_hours', 'kind', 'model'] as const;
 function initialWindow(params?: URLSearchParams): Filters {
@@ -253,6 +254,7 @@ function Samples({ value, c }: { value: Stats; c: RiskCopy }) {
   );
 }
 function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
+  const stamp = useStamp();
   return (
     <>
       <Card>
@@ -465,6 +467,7 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
   );
 }
 function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
+  const stamp = useStamp();
   const { role, scopeKey, c, filters } = scope,
     pager = usePager();
   const query = useQuery({
@@ -766,6 +769,7 @@ function RuleEditor({
   );
 }
 function Rules({ role, scopeKey, c }: Scope) {
+  const stamp = useStamp();
   const pager = usePager(),
     client = useQueryClient();
   const [editing, setEditing] = useState<Rule | 'new' | null>(null);
@@ -977,6 +981,7 @@ function Configuration({ role, scopeKey, c }: Scope) {
   );
 }
 function Access({ role, scopeKey, c, filters }: Scope) {
+  const stamp = useStamp();
   const pager = usePager();
   const [draft, setDraft] = useState({
       user_id: '',
@@ -1199,8 +1204,8 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
       return p;
     });
   const [draft, setDraft] = useState(() => ({
-    from: localTime(Number(filters.from ?? Math.floor(Date.now() / 1000) - 86400)),
-    to: localTime(Number(filters.to ?? Math.floor(Date.now() / 1000))),
+    from: createTimeDraft(Number(filters.from ?? Math.floor(Date.now() / 1000) - 86400)),
+    to: createTimeDraft(Number(filters.to ?? Math.floor(Date.now() / 1000))),
     kind: String(filters.kind ?? 'total'),
   }));
   const customRange = filters.from !== undefined || filters.lookback_hours !== undefined;
@@ -1220,9 +1225,15 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
       void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
       return;
     }
-    const from = new Date(draft.from).getTime() / 1000,
-      to = new Date(draft.to).getTime() / 1000;
-    if (Number.isFinite(from) && to > from && to - from <= 30 * 86400 && to <= Date.now() / 1000) {
+    const from = timeDraftValue(draft.from),
+      to = timeDraftValue(draft.to);
+    if (
+      typeof from === 'number' &&
+      typeof to === 'number' &&
+      to > from &&
+      to - from <= 30 * 86400 &&
+      to <= Date.now() / 1000
+    ) {
       setFilters({ from, to, kind: draft.kind, limit: 100 });
       void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
     } else setRangeError(true);
@@ -1250,6 +1261,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
         </div>
         {tab !== 'rules' && tab !== 'config' ? (
           <form className="ops-stack" onSubmit={apply}>
+            {range === 'custom' && <TimeContextNotice station={role} />}
             <div className="ops-field-grid">
               <label>
                 {c.range}
@@ -1271,20 +1283,22 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
                 <>
                   <label>
                     {c.from}
-                    <input
-                      type="datetime-local"
+                    <TimeInput
+                      station={role}
+                      showZoneHint={false}
                       required
-                      value={draft.from}
-                      onChange={(e) => setDraft((v) => ({ ...v, from: e.target.value }))}
+                      draft={draft.from}
+                      onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
                     />
                   </label>
                   <label>
                     {c.to}
-                    <input
-                      type="datetime-local"
+                    <TimeInput
+                      station={role}
+                      showZoneHint={false}
                       required
-                      value={draft.to}
-                      onChange={(e) => setDraft((v) => ({ ...v, to: e.target.value }))}
+                      draft={draft.to}
+                      onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
                     />
                   </label>
                 </>
@@ -1306,7 +1320,15 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
               )}
             </div>
             <div className="ops-actions">
-              <button className="btn btn-primary">{c.apply}</button>
+              <button
+                className="btn btn-primary"
+                disabled={
+                  range === 'custom' &&
+                  (timeDraftValue(draft.from) == null || timeDraftValue(draft.to) == null)
+                }
+              >
+                {c.apply}
+              </button>
               <button
                 className="btn btn-secondary"
                 type="button"

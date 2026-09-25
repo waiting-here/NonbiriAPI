@@ -75,12 +75,20 @@ for (const scenario of cases) {
       await page.emulateMedia({ reducedMotion: 'reduce' });
     });
 
-    test('administrator preserves an unchanged instant, sees clock adjustment, saves and reloads', async ({
+    test('administrator preserves an unchanged instant in site time, saves and reloads', async ({
       page,
     }) => {
       const guard = collectConsoleViolations(page);
       await mockPublicConfig(page, 'admin');
       await mockRoleSession(page, 'admin', 'admin');
+      const siteOffset = scenario.zone === 'UTC' ? 0 : scenario.zone === 'Asia/Kolkata' ? 330 : 480;
+      const originalSiteText = new Date((originalEpoch + siteOffset * 60) * 1000)
+        .toISOString()
+        .slice(0, 16);
+      const editedEpoch = Date.parse(inputLocal + 'Z') / 1000 - siteOffset * 60;
+      await page.route('**/admin/api/time-context', (route) =>
+        route.fulfill({ json: { mode: 'site', offset_minutes: siteOffset } }),
+      );
       const browserZone = await page.evaluate(
         () => Intl.DateTimeFormat().resolvedOptions().timeZone,
       );
@@ -136,21 +144,9 @@ for (const scenario of cases) {
         } else await route.fallback();
       });
       await page.route('**/admin/api/time/resolve?**', async (route) => {
-        const params = new URL(route.request().url()).searchParams;
-        expect(params.get('time_zone')).toBe(browserZone);
-        if (params.get('local') !== inputLocal) {
-          await route.abort();
-          return;
-        }
-        await route.fulfill({
-          json: {
-            instant: scenario.instant,
-            local: scenario.local,
-            time_zone: browserZone,
-            offset_seconds: scenario.offset,
-            adjustment: scenario.adjustment,
-          },
-        });
+        throw new Error(
+          'Site time must not use the browser-zone resolver: ' + route.request().url(),
+        );
       });
       await page.goto(`${ADMIN_ORIGIN}/announcements`);
       await page
@@ -163,20 +159,15 @@ for (const scenario of cases) {
         name: scenario.locale === 'en' ? 'Save private draft' : '保存私有草稿',
         exact: true,
       });
-      await expect(expiry).toHaveValue(scenario.original);
+      await expect(expiry).toHaveValue(originalSiteText);
       await page
         .getByLabel(scenario.locale === 'en' ? 'Chinese title' : '中文标题', { exact: true })
         .fill('时间测试更新');
       await save.click();
       await expect.poll(() => submitted).toEqual([originalEpoch]);
       await page.reload();
-      await expect(expiry).toHaveValue(scenario.original);
+      await expect(expiry).toHaveValue(originalSiteText);
       await expiry.fill(inputLocal.slice(0, 16));
-      await expect(save).toBeDisabled();
-      if (scenario.adjustment !== 'none')
-        await expect(
-          page.getByText(scenario.local.replace('T', ' '), { exact: false }),
-        ).toBeVisible();
       await expect(save).toBeEnabled();
       await expiry.scrollIntoViewIfNeeded();
       await page.screenshot({
@@ -187,9 +178,9 @@ for (const scenario of cases) {
         true,
       );
       await save.click();
-      await expect.poll(() => submitted).toEqual([originalEpoch, scenario.instant]);
+      await expect.poll(() => submitted).toEqual([originalEpoch, editedEpoch]);
       await page.reload();
-      await expect(expiry).toHaveValue(scenario.local.slice(0, 16));
+      await expect(expiry).toHaveValue(inputLocal.slice(0, 16));
       guard.assertNone();
     });
 

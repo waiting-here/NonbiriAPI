@@ -1498,7 +1498,7 @@ for (const scenario of [
       await page.goto(setup.origin + base + 'charity_section=donations&donation_id=1');
       const key = page.locator('.donation-key-editor');
       await expect(key).toHaveCount(1);
-      for (const width of [1440, 390]) {
+      for (const width of [1440, 1920, 2560, 3440, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
@@ -1508,7 +1508,19 @@ for (const scenario of [
             .locator('.ops-field-grid')
             .first()
             .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
-        ).toBe(width === 1440 ? 3 : 1);
+        ).toBe(width > 960 ? 3 : width > 640 ? 2 : 1);
+        if (width >= 1440) {
+          const dimensions = await key.evaluate((el) => ({
+            editor: el.getBoundingClientRect().width,
+            groups: [...el.querySelectorAll('.ops-field-grid')].map(
+              (group) => group.getBoundingClientRect().width,
+            ),
+          }));
+          for (const group of dimensions.groups)
+            expect(group, 'key groups use the available form width').toBeGreaterThan(
+              dimensions.editor - 100,
+            );
+        }
         expect(
           await key
             .locator('input:not([type=checkbox]),select')
@@ -1563,9 +1575,14 @@ for (const scenario of [
       await editor
         .getByLabel(locale === 'en' ? 'Pricing mode' : '计价模式')
         .selectOption('per_token');
-      for (const width of [1440, 390]) {
+      for (const width of [1440, 1920, 2560, 3440, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         await expect(editor.locator('.charity-price-row')).toHaveCount(4);
+        expect(
+          await editor
+            .locator('.ops-paired-fields')
+            .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
+        ).toBe(width > 640 ? 2 : 1);
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
           .toBe(true);
@@ -1574,7 +1591,16 @@ for (const scenario of [
             .locator('.charity-price-row')
             .first()
             .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length),
-        ).toBe(width === 1440 ? 2 : 1);
+        ).toBe(width > 640 ? 2 : 1);
+        if (width >= 1440) {
+          const dimensions = await editor.evaluate((el) => ({
+            editor: el.getBoundingClientRect().width,
+            pricing: el.querySelector('.charity-price-grid')!.getBoundingClientRect().width,
+          }));
+          expect(dimensions.pricing, 'pricing uses the available model form width').toBeGreaterThan(
+            dimensions.editor - 100,
+          );
+        }
         await saveScreenshot(page, 'grouped-model-' + station + '-' + locale + '-' + width);
         if (EVIDENCE_DIR)
           await editor.screenshot({

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber, isPageSize } from '@shared/operations/pageNumbers';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { riskAPI, type ClientScan, type Filters, type Request, type RiskRole } from './api';
 
 const running = (scan?: ClientScan) => scan?.state === 'running' || scan?.state === 'queued';
@@ -22,6 +22,7 @@ export function ClientScans({
   filters: Filters;
   renderItem: (item: Request) => ReactNode;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { i18n } = useTranslation();
   const t = (zh: string, en: string) => (i18n.language.startsWith('zh') ? zh : en);
   const [params, setParams] = useSearchParams();

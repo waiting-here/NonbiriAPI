@@ -72,6 +72,8 @@ describe('administrator economy audit', () => {
           window.location.origin,
         ).pathname;
         if (path === '/admin/api/session') return response({ admin: { username: 'audit-admin' } });
+        if (path === '/admin/api/time-context')
+          return response({ mode: 'site', offset_minutes: 330 });
         if (path.endsWith('/summary')) return response(summary);
         if (path.endsWith('/series')) return response({ metadata, bucket: 'hour', data: [] });
         if (path.endsWith('/operations'))
@@ -105,7 +107,11 @@ describe('administrator economy audit', () => {
     expect(await screen.findByRole('heading', { name: 'Current stock' })).toBeVisible();
     expect(screen.getAllByText('9,007,199,254,740,993.123').length).toBeGreaterThan(0);
     expect(screen.getByText('Negative user balances')).toBeVisible();
-    expect(screen.getByLabelText('From (UTC+05:30)')).toBeVisible();
+    expect(screen.getByLabelText('From')).toBeVisible();
+    expect(container.querySelectorAll('.time-context-notice')).toHaveLength(1);
+    await waitFor(() =>
+      expect(container.querySelector('.time-context-notice')).toHaveTextContent('UTC+05:30'),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Ledger' }));
     const text = await screen.findByText(hostile);
     expect(text.tagName).toBe('CODE');
