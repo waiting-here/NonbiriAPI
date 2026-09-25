@@ -85,6 +85,9 @@ function installAdminFixtures(
       if (url.pathname === '/admin/api/time-zones') {
         return json({ version: 'go1.26.6-zoneinfo', zones: [zone] });
       }
+      if (url.pathname === '/admin/api/time-context') {
+        return json({ mode: 'site', offset_minutes: 0 });
+      }
       if (url.pathname === '/admin/api/time/resolve') {
         const local = url.searchParams.get('local');
         const timeZone = url.searchParams.get('time_zone');
@@ -187,7 +190,7 @@ describe('administrator time forms', () => {
     );
 
     const title = await screen.findByLabelText('Chinese title');
-    expect(dateTimeInput()).toHaveValue('2030-01-01T00:00');
+    await waitFor(() => expect(dateTimeInput()).toHaveValue('2030-01-01T00:00'));
     await view.user.clear(title);
     await view.user.type(title, 'Changed title');
     await view.user.click(screen.getByRole('button', { name: 'Save private draft' }));

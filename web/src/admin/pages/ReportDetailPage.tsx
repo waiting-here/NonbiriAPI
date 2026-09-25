@@ -16,7 +16,7 @@ import {
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { useAdminSession } from '../data';
 import {
@@ -57,6 +57,7 @@ export function ReportDetailPage() {
 }
 
 function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchState();

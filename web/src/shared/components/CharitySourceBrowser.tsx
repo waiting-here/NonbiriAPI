@@ -19,7 +19,7 @@ import {
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { DonationHandlingStatus } from './DonationHandling';
 import { KeyLimitSummary } from './KeyRoutingLimits';
 import { FailureResetControl } from './FailureResetControl';
@@ -340,6 +340,7 @@ function KeySummary({
   onOpenDonation: CharitySourceBrowserProps['onOpenDonation'];
   disabled: boolean;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const reason = keyReason(keyValue, t);
   return (

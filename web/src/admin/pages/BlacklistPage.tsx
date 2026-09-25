@@ -9,7 +9,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { operationKey } from '@shared/operations/api';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { clearStationSession } from '@shared/charityManagement';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useAdminSession } from '../data';
 import {
   addBlacklist,
@@ -21,6 +21,7 @@ import {
 import '@shared/operations/operations.css';
 
 export function BlacklistPage() {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const client = useQueryClient();
   const session = useAdminSession();

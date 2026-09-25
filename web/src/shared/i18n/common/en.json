@@ -127,7 +127,13 @@
     },
     "time": {
       "zone": "Time zone: {{zone}}",
+      "localZone": "Local time ({{zone}})",
       "zoneChanged": "Your browser time zone changed. Check the time before saving.",
+      "siteOffsetChanged": "The site time zone changed. Re-enter this time before saving.",
+      "contextLoading": "Loading the site's fixed time zone…",
+      "contextFailed": "The site's fixed time zone could not be loaded. Retry before saving.",
+      "siteUnavailable": "The site's fixed time zone is not configured. Configure it before saving.",
+      "siteBrowserNotice": "Your browser time zone differs; the site's fixed UTC offset controls this time.",
       "fallback": "Your browser time zone is unavailable. Confirm UTC to enter a new time.",
       "confirmUTC": "Use UTC",
       "invalid": "Enter a complete, valid date and time.",

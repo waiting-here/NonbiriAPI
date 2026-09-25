@@ -17,7 +17,7 @@ import {
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import {
   managedAnnouncementKeys,
@@ -62,6 +62,7 @@ export function AnnouncementManagement({
   sessionError?: unknown;
   onAuthorityLoss?: () => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -259,7 +260,7 @@ export function AnnouncementManagement({
               </select>
             </label>
             <TimeInput
-              station={role === 'admin' ? 'admin' : 'user'}
+              station={role === 'admin' ? 'admin' : 'steward'}
               label={t('management.announcements.expiryOptional')}
               draft={draft.expires}
               onChange={(update) =>

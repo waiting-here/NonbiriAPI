@@ -17,7 +17,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber } from '@shared/operations/pageNumbers';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import {
   banManagedUser,
   mutateManagedUser,
@@ -84,6 +84,7 @@ function UserAuthority({
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);

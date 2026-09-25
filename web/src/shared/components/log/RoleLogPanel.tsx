@@ -12,7 +12,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { isApiError } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -132,6 +132,7 @@ function AttemptTable({
   onPageChange: (page: string) => void;
   onPageSizeChange: (size: PageSize) => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   if (!('attempts' in detail)) return null;
   const attempts = detail.attempts;
@@ -289,10 +290,13 @@ function ScopedRoleLogPanel({
   scopeReady: boolean;
   sessionError: unknown;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
-  const station = role === 'admin' ? 'admin' : 'user';
+  const station = role === 'admin' ? 'admin' : role === 'steward' ? 'steward' : 'user';
+  // Preserve pagination storage while time inputs use the steward context.
+  const pageStation = role === 'admin' ? 'admin' : 'user';
   const keyParams = searchParams.getAll('endpoint_key_id');
   const invalidKeyFilter =
     role !== 'user' &&
@@ -332,7 +336,7 @@ function ScopedRoleLogPanel({
   }, [role, urlState.filters, urlState.fromUnix, urlState.toUnix]);
   const filterKey = useMemo(() => JSON.stringify(filter), [filter]);
   const pager = useUrlPagePager({
-    station,
+    station: pageStation,
     listType: 'logs',
     scopeKey: accountID,
     scopeReady,
@@ -355,7 +359,7 @@ function ScopedRoleLogPanel({
     setSelectedID(requestID);
   }, [requestID]);
   const attemptPager = useUrlPagePager({
-    station,
+    station: pageStation,
     listType: 'log-attempts',
     // Opening a request clears its nested URL window below. Deep links and
     // browser history already carry that request's window; closing the drawer

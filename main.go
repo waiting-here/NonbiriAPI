@@ -455,6 +455,64 @@ var _ adminusers.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ logapi.StewardAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ resources.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
+// timeContextResolver is the narrow bridge from the station-aware time API
+// to the authoritative site offset. Each request is authorized and reads the
+// offset in one transaction; the resolver never returns the broader site
+// configuration snapshot.
+type timeContextResolver struct {
+	store     *db.Store
+	authority *roleFinalTxAuthorizer
+}
+
+var _ timeapi.ContextResolver = (*timeContextResolver)(nil)
+
+func (resolver *timeContextResolver) AdminTimeContext(ctx context.Context, userID int64) (timeapi.TimeContext, error) {
+	return resolver.read(ctx, userID, func(ctx context.Context, tx *sql.Tx, userID int64) error {
+		return resolver.authority.AuthorizeAdmin(ctx, tx, userID)
+	})
+}
+
+func (resolver *timeContextResolver) StewardTimeContext(ctx context.Context, userID int64) (timeapi.TimeContext, error) {
+	return resolver.read(ctx, userID, func(ctx context.Context, tx *sql.Tx, userID int64) error {
+		var level int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(level,auto_level) FROM users WHERE id=?`, userID).Scan(&level); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return authz.ErrUnauthorized
+			}
+			return err
+		}
+		if level == 5 {
+			return resolver.authority.AuthorizeTraineeMutation(ctx, tx, userID)
+		}
+		if level == 6 {
+			return resolver.authority.AuthorizeStewardRead(ctx, tx, userID)
+		}
+		return authz.ErrForbidden
+	})
+}
+
+func (resolver *timeContextResolver) read(ctx context.Context, userID int64, authorize func(context.Context, *sql.Tx, int64) error) (timeapi.TimeContext, error) {
+	if resolver == nil || resolver.store == nil || resolver.authority == nil || authorize == nil || userID <= 0 {
+		return timeapi.TimeContext{}, authz.ErrUnauthorized
+	}
+	tx, err := resolver.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return timeapi.TimeContext{}, err
+	}
+	defer tx.Rollback()
+	if err := authorize(ctx, tx, userID); err != nil {
+		return timeapi.TimeContext{}, err
+	}
+	offset, err := db.ResolveSiteTimezoneTx(ctx, tx)
+	if err != nil {
+		if errors.Is(err, db.ErrTimezoneUnavailable) {
+			return timeapi.TimeContext{Configured: false}, nil
+		}
+		return timeapi.TimeContext{}, err
+	}
+	return timeapi.TimeContext{Configured: true, OffsetMinutes: offset}, nil
+}
+
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
 }
@@ -1323,7 +1381,11 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		cleanup()
 		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
 	}
-	if err := timeapi.RegisterRoutes(authRuntime, resourceAdminRouteRegistrar{runtime: authRuntime}); err != nil {
+	if err := timeapi.RegisterRoutes(
+		authRuntime,
+		resourceAdminRouteRegistrar{runtime: authRuntime},
+		&timeContextResolver{store: store, authority: roleAuthorizer},
+	); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register time API routes: %w", err)
 	}

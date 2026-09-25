@@ -2,6 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { useSiteTimeOffset } from '@shared/components/timeContextValue';
+import { TimeContextNotice } from '@shared/components/TimeContext';
+import { resolveFixedLocalTime } from '@shared/time';
 import {
   gameLabel,
   modeLabel,
@@ -33,7 +37,7 @@ const initialFilter: Filter = {
   from: '',
   to: '',
 };
-function selectionFor(f: Filter): Selection {
+function selectionFor(f: Filter, offsetMinutes: number | null): Selection {
   const selection: Selection = {};
   if (f.mode) selection.mode = f.mode;
   if (f.version) {
@@ -44,8 +48,17 @@ function selectionFor(f: Filter): Selection {
   }
   if (f.outcome) selection.outcome = f.outcome;
   if (f.dataset === 'recent') {
-    if (f.from) selection.from = Math.floor(new Date(f.from).valueOf() / 1000);
-    if (f.to) selection.to = Math.floor(new Date(f.to).valueOf() / 1000);
+    if ((f.from || f.to) && offsetMinutes === null) throw new Error('site time unavailable');
+    if (f.from)
+      selection.from = resolveFixedLocalTime(
+        f.from.length === 16 ? `${f.from}:00` : f.from,
+        offsetMinutes!,
+      ).instant;
+    if (f.to)
+      selection.to = resolveFixedLocalTime(
+        f.to.length === 16 ? `${f.to}:00` : f.to,
+        offsetMinutes!,
+      ).instant;
     if (
       [selection.from, selection.to].some(
         (v) => v !== undefined && (!Number.isSafeInteger(v) || v < 0),
@@ -65,6 +78,7 @@ function HistoryResults({
   dataset: Dataset;
   selection: Selection;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const t = useGameAdminText(),
     [cursors, setCursors] = useState<(string | null)[]>([null]),
     [selected, setSelected] = useState<string | null>(null),
@@ -127,7 +141,7 @@ function HistoryResults({
                       </p>
                       {item.recent && (
                         <>
-                          <p>{new Date(item.recent.terminal_at * 1000).toLocaleString()}</p>
+                          <p>{formatDateTime(item.recent.terminal_at)}</p>
                           <p>
                             {item.recent.participants
                               .map((p) =>
@@ -193,6 +207,7 @@ function HistoryResults({
   );
 }
 export function DuelHistoryPage() {
+  const siteOffset = useSiteTimeOffset();
   const t = useGameAdminText(),
     [draft, setDraft] = useState(initialFilter),
     [applied, setApplied] = useState({
@@ -208,7 +223,11 @@ export function DuelHistoryPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     try {
-      setApplied({ game: draft.game, dataset: draft.dataset, selection: selectionFor(draft) });
+      setApplied({
+        game: draft.game,
+        dataset: draft.dataset,
+        selection: selectionFor(draft, siteOffset),
+      });
       setError(false);
     } catch {
       setError(true);
@@ -283,17 +302,19 @@ export function DuelHistoryPage() {
             {draft.dataset === 'recent' && (
               <>
                 <label>
-                  <span>{t('结束时间从（本地时间）', 'Ended from (local time)')}</span>
+                  <span>{t('结束时间从', 'Ended from')}</span>
                   <input
                     type="datetime-local"
+                    disabled={siteOffset === null}
                     value={draft.from}
                     onChange={(e) => edit({ from: e.target.value })}
                   />
                 </label>
                 <label>
-                  <span>{t('结束时间至（本地时间）', 'Ended through (local time)')}</span>
+                  <span>{t('结束时间至', 'Ended through')}</span>
                   <input
                     type="datetime-local"
+                    disabled={siteOffset === null}
                     value={draft.to}
                     onChange={(e) => edit({ to: e.target.value })}
                   />
@@ -301,6 +322,7 @@ export function DuelHistoryPage() {
               </>
             )}
           </div>
+          {draft.dataset === 'recent' && <TimeContextNotice station="admin" />}
           {error && (
             <p className="field-error" role="alert">
               {t('请检查版本号和时间范围。', 'Check the version and time range.')}

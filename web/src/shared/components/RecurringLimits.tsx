@@ -25,7 +25,8 @@ import {
 } from '@shared/operations/recurringLimits';
 import { browserTimeZone, fetchTimeZones, type TimeStation } from '@shared/time';
 import { useCharityModelScope } from './charityModelScopeContext';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { ErrorState, LoadingState } from './States';
 import { copyForRecurringLimits, type RecurringLimitsCopy } from './recurringLimitsCopy';
 import {
@@ -272,13 +273,15 @@ function timeValue(
   locale: 'en' | 'zh',
   copy: RecurringLimitsCopy,
   kind: 'period' | 'transition',
+  formatDateTime: ReturnType<typeof useDateTimeFormatter>,
+  displayLabel: string,
 ): string {
   if (epoch === null) return copy.noPeriod;
   const business = `${localInZone(epoch, zone, locale)} (${zone} ${offsetAt(epoch, zone) ?? copy.offsetUnavailable})`;
-  const browser = `${copy.browserTime}: ${formatDateTime(epoch)}`;
+  const displayed = `${displayLabel}: ${formatDateTime(epoch)}`;
   return kind === 'period'
-    ? copy.periodValue(business, browser)
-    : copy.transitionValue(business, browser);
+    ? copy.periodValue(business, displayed)
+    : copy.transitionValue(business, displayed);
 }
 
 function stateClass(state: string | undefined): string {
@@ -298,19 +301,24 @@ function RuleUsage({
   draft: DraftRule;
   locale: 'en' | 'zh';
 }) {
+  const formatDateTime = useDateTimeFormatter();
+  const context = useDisplayTimeContext();
+  const displayLabel = context.mode === 'site'
+    ? locale === 'zh' ? '站点时间' : 'Site time'
+    : copy.browserTime;
   if (!view) {
     return <p className="recurring-limits__new-note">{copy.preserveUsage}</p>;
   }
   const period =
     view.period_start !== null && view.period_end !== null
-      ? `${timeValue(view.period_start, view.time_zone, locale, copy, 'period')} — ${timeValue(view.period_end, view.time_zone, locale, copy, 'period')}`
+      ? `${timeValue(view.period_start, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel)} — ${timeValue(view.period_end, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel)}`
       : copy.noPeriod;
   const next =
     view.next_transition_at === null
       ? draft.mode === 'sliding'
         ? copy.slidingRecovery
         : copy.noPeriod
-      : timeValue(view.next_transition_at, view.time_zone, locale, copy, 'transition');
+      : timeValue(view.next_transition_at, view.time_zone, locale, copy, 'transition', formatDateTime, displayLabel);
   return (
     <div className="recurring-limits__usage" aria-label={copy.usage}>
       {view.effective_at !== undefined ? (

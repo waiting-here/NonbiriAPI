@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { RawErrorViewer } from './RequestDiagnostics';
 import type { DiagnosticRole } from './api';
 import {
@@ -26,6 +27,7 @@ function useWords() {
   return (en: string, zh: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
 }
 function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
+  const formatDateTime = useDateTimeFormatter();
   const words = useWords();
   const [kind, setKind] = useState<IndependentKind>('all');
   const [user, setUser] = useState('');
@@ -150,7 +152,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
           <details key={entry.id}>
             <summary>
               {labels[entry.kind]} · {entry.subject_id} · {words('User', '用户')} {entry.user_id} ·{' '}
-              {new Date(entry.created_at * 1000).toLocaleString()}
+              {formatDateTime(entry.created_at)}
               {' · '}
               {words('Attempt', '尝试')} {entry.attempt_seq} / {entry.event_seq} · HTTP{' '}
               {entry.http_status ?? '—'}

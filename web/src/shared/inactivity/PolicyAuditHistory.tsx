@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorState } from '@shared/components/States';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { getAudits } from './api';
 
 export function PolicyAuditHistory({ zh, locale }: { zh: boolean; locale?: string }) {
+  const formatDateTime = useDateTimeFormatter();
   const [enabled, setEnabled] = useState(false);
   const [cursor, setCursor] = useState<string>();
   const query = useQuery({
@@ -33,7 +35,7 @@ export function PolicyAuditHistory({ zh, locale }: { zh: boolean; locale?: strin
               <li key={item.id}>
                 <details>
                   <summary>
-                    {new Date(item.created_at * 1000).toLocaleString(locale)} ·{' '}
+                    {formatDateTime(item.created_at, locale === 'zh' ? 'zh' : 'en')} ·{' '}
                     {item.action === 'configure'
                       ? zh
                         ? '配置变更'

@@ -19,6 +19,7 @@ import { PolicyAuditHistory } from './PolicyAuditHistory';
 import './inactivity.css';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { AmountInput } from './AmountInput';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import '@shared/operations/operations.css';
 
 function AssetEditor({
@@ -129,6 +130,7 @@ function Editor({
   zh: boolean;
   locale?: string;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const [policy, setPolicy] = useState<Policy>(() => policyOnly(configuration));
   const [preview, setPreview] = useState<Preview>();
   const [runs, setRuns] = useState<Runs>();
@@ -137,7 +139,7 @@ function Editor({
   const form = useRef<HTMLFormElement>(null);
   const [retry, setRetry] = useState<{ policy: Policy; key: string; revision: string }>();
   const date = (at: number | null) =>
-    at === null || at === 0 ? '—' : new Date(at * 1000).toLocaleString(locale);
+    at === null || at === 0 ? '—' : formatDateTime(at, locale === 'zh' ? 'zh' : 'en');
   const actionLabel = (value: string) =>
     ({
       decay: zh ? '积分衰减' : 'Decay',

@@ -5,7 +5,10 @@ import {
   fetchTimeZones,
   formatOffset,
   localInputText,
+  fetchTimeContext,
   rezoneTimeDraft,
+  rezoneSiteTimeDraft,
+  resolveFixedLocalTime,
   resolveLocalTime,
   timeDraftKey,
   timeDraftLocal,
@@ -68,8 +71,18 @@ describe('time drafts', () => {
   });
   it('formats half-hour zones, seconds and historical offset seconds', () => {
     expect(localInputText(1781526607, 'Asia/Kolkata', 'second')).toBe('2026-06-15T18:00:07');
+    expect(localInputText(1781526607, 'UTC+05:30', 'second')).toBe('2026-06-15T18:00:07');
     expect(formatOffset(-12600)).toBe('-03:30');
     expect(formatOffset(20776)).toBe('+05:46:16');
+  });
+  it('keeps fixed site offsets independent of the browser and blocks an unset site', () => {
+    const fixed = rezoneSiteTimeDraft(createTimeDraft(0, 'minute', zone), 330);
+    expect(fixed.text).toBe('1970-01-01T05:30');
+    expect(timeDraftValue(editTimeDraft(fixed, '1970-01-01T05:30'), zone)).toBe(0);
+    expect(resolveFixedLocalTime('1970-01-01T05:30:00', 330).instant).toBe(0);
+    const unavailable = rezoneSiteTimeDraft(createTimeDraft(0, 'minute', zone), null);
+    expect(unavailable.text).toBe('');
+    expect(timeDraftValue(unavailable, zone)).toBeUndefined();
   });
 });
 
@@ -125,5 +138,21 @@ describe('same-station time responses', () => {
       },
     ]);
     await expect(resolveLocalTime('user', local, 'UTC')).rejects.toThrow();
+  });
+});
+
+describe('fixed site time context', () => {
+  it('accepts a configured half-hour offset and preserves the narrow response shape', async () => {
+    installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: '/admin/api/time-context',
+        body: { mode: 'site', offset_minutes: 330 },
+      },
+    ]);
+    await expect(fetchTimeContext('admin')).resolves.toEqual({
+      mode: 'site',
+      offset_minutes: 330,
+    });
   });
 });

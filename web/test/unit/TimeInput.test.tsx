@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe('wall-clock input', () => {
-  it.each(['user', 'admin'] as const)(
+  it.each(['user'] as const)(
     'shows the adjustment before a %s save and keeps unrelated edits',
     async (station) => {
       let complete: ((response: Response) => void) | undefined;
@@ -92,12 +92,74 @@ describe('wall-clock input', () => {
       await view.user.click(screen.getByRole('button', { name: 'Save' }));
       expect(screen.getByLabelText('Saved')).toHaveTextContent(String(gap.instant));
       expect(screen.getByLabelText('Note')).toHaveValue('keep this');
-      const base = station === 'admin' ? '/admin/api' : '/api';
+      const base = '/api';
       expect(fetchMock.mock.calls.map(([path]) => path)).toContain(
         `${base}/time/resolve?local=2026-03-08T02%3A30%3A00&time_zone=America%2FNew_York`,
       );
     },
   );
+
+  it('uses the fixed site offset for administrator edits without browser-zone resolution', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((path: string) =>
+        path.endsWith('/time-context')
+          ? Promise.resolve(json({ mode: 'site', offset_minutes: 0 }))
+          : Promise.reject(new Error(`unexpected request: ${path}`)),
+      ),
+    );
+    const epoch = Date.parse('2030-01-01T00:00:00Z') / 1000;
+    const view = await renderWithProviders(<Harness epoch={epoch} station="admin" />, {
+      station: 'admin',
+    });
+    await waitFor(() => expect(screen.getByLabelText('End time')).toHaveValue('2030-01-01T00:00'));
+    fireEvent.change(screen.getByLabelText('End time'), {
+      target: { value: '2030-01-01T01:00' },
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByLabelText('Saved')).toHaveTextContent(String(epoch + 3_600));
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/admin/api/time-context',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('blocks unknown site time, then preserves a half-hour offset and an unsaved edit across context refresh', async () => {
+    let complete!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; })));
+    const epoch = Date.parse('2030-01-01T00:00:00Z') / 1000;
+    const view = await renderWithProviders(<Harness epoch={epoch} station="steward" />, {
+      station: 'user',
+    });
+    const input = screen.getByLabelText('End time');
+    expect(input).toBeDisabled();
+    await waitFor(() => expect(complete).toBeTypeOf('function'));
+    await act(async () => complete(json({ mode: 'site', offset_minutes: null })));
+    expect(input).toBeDisabled();
+    expect(await screen.findByText(/not configured/)).toBeVisible();
+
+    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: 330 }));
+    await waitFor(() => expect(input).toHaveValue('2030-01-01T05:30'));
+    expect(input).toBeEnabled();
+    fireEvent.change(input, { target: { value: '2030-01-01T06:00' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+
+    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: null }));
+    await waitFor(() => expect(input).toBeDisabled());
+    expect(input).toHaveValue('2030-01-01T06:00');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: 330 }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+    await view.user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByLabelText('Saved')).toHaveTextContent(String(epoch + 1800));
+
+    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: 0 }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+    expect(screen.getByText(/site time zone changed/)).toBeVisible();
+    fireEvent.change(input, { target: { value: '2030-01-01T06:01' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+  });
 
   it('discards a late result after text is restored and preserves the original earlier fold and seconds', async () => {
     let complete: ((response: Response) => void) | undefined;
@@ -162,7 +224,7 @@ describe('wall-clock input', () => {
     );
     const epoch = Date.parse('2026-11-01T05:30:47Z') / 1000;
     const view = await renderWithProviders(<Harness epoch={epoch} />, { station: 'user' });
-    await waitFor(() => expect(screen.getByText('Time zone: America/New_York')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('Local time (America/New_York)')).toBeVisible());
     browserZone = 'Asia/Tokyo';
     fireEvent.focus(window);
     await waitFor(() => expect(screen.getByLabelText('End time')).toHaveValue('2026-11-01T14:30'));

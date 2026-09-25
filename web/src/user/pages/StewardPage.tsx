@@ -14,10 +14,15 @@ import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnos
 import { RiskAuditPanel } from '@shared/riskAudit/Panel';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
+import { TimeContextProvider } from '@shared/components/TimeContext';
 import { operationsKeys, useUserAuthority } from '../features/operations/data';
 import '@shared/operations/operations.css';
 
 export function StewardPage() {
+  return <StewardPageContent />;
+}
+
+function StewardPageContent() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const authority = useUserAuthority();
@@ -82,133 +87,135 @@ export function StewardPage() {
     );
 
   return (
-    <div className="page ops-page">
-      <PageHeader
-        title={t('user.steward.title')}
-        description={t('user.steward.operationsDescription')}
-      />
-      {!trainee ? (
-        <div className="ops-tabs" role="tablist" aria-label={t('user.steward.sectionsLabel')}>
-          <button
-            className={section === 'risk' ? 'btn btn-primary' : 'btn btn-secondary'}
-            type="button"
-            role="tab"
-            aria-selected={section === 'risk'}
-            onClick={() => setSection('risk')}
-          >
-            {t('common.audit.risk')}
-          </button>
-          <button
-            className={section === 'logs' ? 'btn btn-primary' : 'btn btn-secondary'}
-            type="button"
-            role="tab"
-            aria-selected={section === 'logs'}
-            onClick={() => setSection('logs')}
-          >
-            {t('user.steward.logsTab')}
-          </button>
-          <button
-            className={section === 'charity' ? 'btn btn-primary' : 'btn btn-secondary'}
-            type="button"
-            role="tab"
-            aria-selected={section === 'charity'}
-            onClick={() => setSection('charity')}
-          >
-            {t('user.steward.charityTab')}
-          </button>
-          {(['users', 'announcements'] as const).map((tab) => (
+    <TimeContextProvider station="steward">
+      <div className="page ops-page">
+        <PageHeader
+          title={t('user.steward.title')}
+          description={t('user.steward.operationsDescription')}
+        />
+        {!trainee ? (
+          <div className="ops-tabs" role="tablist" aria-label={t('user.steward.sectionsLabel')}>
             <button
-              key={tab}
-              className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
+              className={section === 'risk' ? 'btn btn-primary' : 'btn btn-secondary'}
               type="button"
               role="tab"
-              aria-selected={section === tab}
-              onClick={() => setSection(tab)}
+              aria-selected={section === 'risk'}
+              onClick={() => setSection('risk')}
             >
-              {tab === 'users' ? t('user.steward.usersTab') : t('user.steward.announcementsTab')}
+              {t('common.audit.risk')}
             </button>
-          ))}
-          <button
-            className={section === 'maintenance' ? 'btn btn-danger' : 'btn btn-secondary'}
-            type="button"
-            role="tab"
-            aria-selected={section === 'maintenance'}
-            onClick={() => setSection('maintenance')}
-          >
-            {t('user.steward.maintenanceTab')}
-          </button>
-        </div>
-      ) : null}
-      {!trainee && section === 'logs' ? (
-        <>
-          <RoleLogPanel
-            key={`logs:${authority.data.id}`}
-            role="steward"
+            <button
+              className={section === 'logs' ? 'btn btn-primary' : 'btn btn-secondary'}
+              type="button"
+              role="tab"
+              aria-selected={section === 'logs'}
+              onClick={() => setSection('logs')}
+            >
+              {t('user.steward.logsTab')}
+            </button>
+            <button
+              className={section === 'charity' ? 'btn btn-primary' : 'btn btn-secondary'}
+              type="button"
+              role="tab"
+              aria-selected={section === 'charity'}
+              onClick={() => setSection('charity')}
+            >
+              {t('user.steward.charityTab')}
+            </button>
+            {(['users', 'announcements'] as const).map((tab) => (
+              <button
+                key={tab}
+                className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
+                type="button"
+                role="tab"
+                aria-selected={section === tab}
+                onClick={() => setSection(tab)}
+              >
+                {tab === 'users' ? t('user.steward.usersTab') : t('user.steward.announcementsTab')}
+              </button>
+            ))}
+            <button
+              className={section === 'maintenance' ? 'btn btn-danger' : 'btn btn-secondary'}
+              type="button"
+              role="tab"
+              aria-selected={section === 'maintenance'}
+              onClick={() => setSection('maintenance')}
+            >
+              {t('user.steward.maintenanceTab')}
+            </button>
+          </div>
+        ) : null}
+        {!trainee && section === 'logs' ? (
+          <>
+            <RoleLogPanel
+              key={`logs:${authority.data.id}`}
+              role="steward"
+              accountId={authority.data.id}
+              scopeReady={allowed}
+              enabled
+              onAuthorityLoss={authorityLoss}
+            />
+            <IndependentDiagnostics
+              role="steward"
+              accountId={authority.data.id}
+              scopeReady={allowed}
+              enabled
+            />
+          </>
+        ) : null}
+        {section === 'risk' ? (
+          <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} />
+        ) : null}
+        {section === 'charity' ? (
+          <CharityManagement
+            key={`charity:${authority.data.id}`}
+            frame="steward"
+            trainee={trainee}
             accountId={authority.data.id}
-            scopeReady={allowed}
-            enabled
-            onAuthorityLoss={authorityLoss}
+            onCapabilityLoss={authorityLoss}
           />
-          <IndependentDiagnostics
-            role="steward"
-            accountId={authority.data.id}
-            scopeReady={allowed}
-            enabled
-          />
-        </>
-      ) : null}
-      {section === 'risk' ? (
-        <RiskAuditPanel role="steward" scopeKey={authority.data.id} enabled={allowed} />
-      ) : null}
-      {section === 'charity' ? (
-        <CharityManagement
-          key={`charity:${authority.data.id}`}
-          frame="steward"
-          trainee={trainee}
-          accountId={authority.data.id}
-          onCapabilityLoss={authorityLoss}
-        />
-      ) : null}
-      {section === 'users' ? (
-        <UserManagement
-          key={`users:${authority.data.id}`}
-          role="steward"
-          account={authority.data.id}
-          scopeReady={allowed}
-          sessionError={authority.error}
-          onAuthorityLoss={authorityLoss}
-        />
-      ) : null}
-      {section === 'announcements' ? (
-        announcement ? (
-          <AnnouncementEditor
-            key={`announcement:${authority.data.id}:${announcement}`}
+        ) : null}
+        {section === 'users' ? (
+          <UserManagement
+            key={`users:${authority.data.id}`}
             role="steward"
             account={authority.data.id}
-            announcementId={announcement}
-            backTo={
-              listReturnPath(location.state, '/steward') === '/steward'
-                ? '/steward?tab=announcements'
-                : listReturnPath(location.state, '/steward')
-            }
+            scopeReady={allowed}
+            sessionError={authority.error}
             onAuthorityLoss={authorityLoss}
           />
-        ) : (
-          <AnnouncementManagement
-            key={`announcements:${authority.data.id}`}
+        ) : null}
+        {section === 'announcements' ? (
+          announcement ? (
+            <AnnouncementEditor
+              key={`announcement:${authority.data.id}:${announcement}`}
+              role="steward"
+              account={authority.data.id}
+              announcementId={announcement}
+              backTo={
+                listReturnPath(location.state, '/steward') === '/steward'
+                  ? '/steward?tab=announcements'
+                  : listReturnPath(location.state, '/steward')
+              }
+              onAuthorityLoss={authorityLoss}
+            />
+          ) : (
+            <AnnouncementManagement
+              key={`announcements:${authority.data.id}`}
+              role="steward"
+              account={authority.data.id}
+              onAuthorityLoss={authorityLoss}
+            />
+          )
+        ) : null}
+        {section === 'maintenance' ? (
+          <MaintenancePanel
+            key={`maintenance:${authority.data.id}`}
             role="steward"
-            account={authority.data.id}
             onAuthorityLoss={authorityLoss}
           />
-        )
-      ) : null}
-      {section === 'maintenance' ? (
-        <MaintenancePanel
-          key={`maintenance:${authority.data.id}`}
-          role="steward"
-          onAuthorityLoss={authorityLoss}
-        />
-      ) : null}
-    </div>
+        ) : null}
+      </div>
+    </TimeContextProvider>
   );
 }

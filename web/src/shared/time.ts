@@ -1,7 +1,11 @@
 import { apiFetch } from './query/http';
 
-export type TimeStation = 'user' | 'admin';
+export type TimeStation = 'user' | 'admin' | 'steward';
 export type TimePrecision = 'minute' | 'second';
+export interface TimeContext {
+  mode: 'browser' | 'site';
+  offset_minutes: number | null;
+}
 export interface TimeZoneRegistry {
   version: string;
   zones: string[];
@@ -16,10 +20,58 @@ export interface ResolvedTime {
 
 const MAX_INSTANT = 253402300799;
 const LOCAL_SECONDS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
-const prefix = (station: TimeStation) => (station === 'admin' ? '/admin/api' : '/api');
+const prefix = (station: TimeStation) =>
+  station === 'admin' ? '/admin/api' : station === 'steward' ? '/api/steward' : '/api';
 const invalidResponse = () => new Error('Invalid time response');
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
+
+export async function fetchTimeContext(
+  station: Exclude<TimeStation, 'user'>,
+  signal?: AbortSignal,
+): Promise<TimeContext> {
+  const value = await apiFetch<unknown>(`${prefix(station)}/time-context`, { signal });
+  if (!object(value) || value.mode !== 'site') throw invalidResponse();
+  const offset = value.offset_minutes;
+  if (
+    offset !== null &&
+    (typeof offset !== 'number' ||
+      !Number.isInteger(offset) ||
+      offset < -720 ||
+      offset > 840 ||
+      offset % 30 !== 0)
+  )
+    throw invalidResponse();
+  return { mode: 'site', offset_minutes: offset as number | null };
+}
+
+export const browserTimeContext = (): TimeContext => ({ mode: 'browser', offset_minutes: null });
+
+// Keep privileged context queries under their station's session cache root so
+// the existing logout and authority-loss eviction also removes the offset.
+export const timeContextQueryKey = (station: TimeStation) =>
+  station === 'admin'
+    ? (['admin', 'time-context'] as const)
+    : (['user', 'steward', 'time-context'] as const);
+
+export function fixedOffsetZone(offsetMinutes: number): string {
+  if (
+    !Number.isInteger(offsetMinutes) ||
+    offsetMinutes < -720 ||
+    offsetMinutes > 840 ||
+    offsetMinutes % 30 !== 0
+  )
+    throw new Error('Invalid site timezone offset');
+  const absolute = Math.abs(offsetMinutes);
+  return `UTC${offsetMinutes < 0 ? '-' : '+'}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`;
+}
+
+export function fixedOffsetMinutes(zone: string): number | undefined {
+  const match = /^UTC([+-])(\d{2}):(\d{2})$/.exec(zone);
+  if (!match) return undefined;
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return (match[1] === '-' ? -1 : 1) * minutes;
+}
 
 // UTC parsing here only validates calendar text and response arithmetic. The
 // server remains the sole authority for resolving a wall clock in a zone.
@@ -96,6 +148,40 @@ export function browserTimeZone(): string | null {
   }
 }
 
+/** The browser zone's offset at one instant; null leaves differences unknown. */
+export function browserOffsetMinutes(zone: string | null, atMillis = Date.now()): number | null {
+  if (!zone || !Number.isFinite(atMillis)) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(new Date(atMillis));
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((item) => item.type === type)?.value);
+    const wall = Date.UTC(
+      part('year'),
+      part('month') - 1,
+      part('day'),
+      part('hour'),
+      part('minute'),
+      part('second'),
+    );
+    return Number.isFinite(wall)
+      ? Math.round((wall - Math.floor(atMillis / 1000) * 1000) / 60_000)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function formatOffset(seconds: number): string {
   const absolute = Math.abs(seconds);
   const pad = (number: number) => String(number).padStart(2, '0');
@@ -109,6 +195,12 @@ export function localInputText(
 ): string {
   if (epoch === null) return '';
   const date = new Date(epoch * 1000);
+  const offsetMinutes = fixedOffsetMinutes(zone);
+  if (offsetMinutes !== undefined) {
+    return new Date(date.getTime() + offsetMinutes * 60_000)
+      .toISOString()
+      .slice(0, precision === 'second' ? 19 : 16);
+  }
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: zone,
@@ -145,6 +237,10 @@ export interface TimeDraft {
   browserZone: string | null;
   zone: string;
   precision: TimePrecision;
+  mode: 'browser' | 'site';
+  siteOffsetMinutes: number | null;
+  lastSiteOffsetMinutes: number | null;
+  siteOffsetChanged: boolean;
   needsUTCConfirmation: boolean;
   zoneChanged: boolean;
   invalidInput: boolean;
@@ -166,6 +262,10 @@ export function createTimeDraft(
     browserZone,
     zone,
     precision,
+    mode: 'browser',
+    siteOffsetMinutes: null,
+    lastSiteOffsetMinutes: null,
+    siteOffsetChanged: false,
     needsUTCConfirmation: !browserZone,
     zoneChanged: false,
     invalidInput: false,
@@ -176,6 +276,7 @@ export function editTimeDraft(draft: TimeDraft, text: string, invalidInput = fal
   return {
     ...draft,
     text: canonicalText(text, draft.precision),
+    siteOffsetChanged: false,
     invalidInput,
     resolved: undefined,
     errorKey: undefined,
@@ -188,10 +289,15 @@ export function rezoneTimeDraft(
   supported: boolean,
 ): TimeDraft {
   const zone = supported && browserZone ? browserZone : 'UTC';
-  if (draft.browserZone === browserZone && draft.zone === zone) return draft;
+  if (draft.mode === 'browser' && draft.browserZone === browserZone && draft.zone === zone)
+    return draft;
   const originalText = localInputText(draft.originalEpoch, zone, draft.precision);
   return {
     ...draft,
+    mode: 'browser',
+    siteOffsetMinutes: null,
+    lastSiteOffsetMinutes: null,
+    siteOffsetChanged: false,
     browserZone,
     zone,
     originalText,
@@ -203,14 +309,58 @@ export function rezoneTimeDraft(
   };
 }
 
+/** Re-render a draft in the configured fixed site offset without touching its epoch. */
+export function rezoneSiteTimeDraft(draft: TimeDraft, offsetMinutes: number | null): TimeDraft {
+  const zone = offsetMinutes === null ? 'site-unconfigured' : fixedOffsetZone(offsetMinutes);
+  if (draft.mode === 'site' && draft.siteOffsetMinutes === offsetMinutes && draft.zone === zone)
+    return draft;
+  const edited = draft.text !== draft.originalText;
+  const changed =
+    offsetMinutes !== null &&
+    draft.lastSiteOffsetMinutes !== null &&
+    draft.lastSiteOffsetMinutes !== offsetMinutes;
+  const originalText =
+    offsetMinutes === null ? '' : localInputText(draft.originalEpoch, zone, draft.precision);
+  return {
+    ...draft,
+    mode: 'site',
+    siteOffsetMinutes: offsetMinutes,
+    lastSiteOffsetMinutes: offsetMinutes ?? draft.lastSiteOffsetMinutes,
+    siteOffsetChanged: draft.siteOffsetChanged || (changed && edited),
+    browserZone: browserTimeZone(),
+    zone,
+    originalText,
+    text: edited ? draft.text : originalText,
+    needsUTCConfirmation: false,
+    zoneChanged: false,
+    resolved: undefined,
+    errorKey: undefined,
+  };
+}
+
 export function timeDraftLocal(draft: TimeDraft): string | undefined {
   if (draft.invalidInput) return undefined;
   const local = draft.precision === 'minute' ? `${draft.text}:00` : draft.text;
   return wallSeconds(local) === undefined ? undefined : local;
 }
 
+export function resolveFixedLocalTime(local: string, offsetMinutes: number): ResolvedTime {
+  if (wallSeconds(local) === undefined || !Number.isInteger(offsetMinutes))
+    throw new Error('Invalid local time');
+  const instant = wallSeconds(local)! - offsetMinutes * 60;
+  if (!Number.isSafeInteger(instant) || instant < 0 || instant > MAX_INSTANT)
+    throw new Error('Invalid local time');
+  return {
+    instant,
+    local,
+    time_zone: fixedOffsetZone(offsetMinutes),
+    offset_seconds: offsetMinutes * 60,
+    adjustment: 'none',
+  };
+}
+
 export function timeDraftKey(draft: TimeDraft): string {
-  return `${draft.zone}|${draft.text}`;
+  return `${draft.mode}|${draft.zone}|${draft.text}`;
 }
 
 // undefined means unresolved/invalid; null retains the field's empty semantics.
@@ -218,7 +368,10 @@ export function timeDraftValue(
   draft: TimeDraft,
   currentBrowserZone = browserTimeZone(),
 ): number | null | undefined {
-  if (draft.invalidInput || draft.browserZone !== currentBrowserZone) return undefined;
+  if (draft.invalidInput || (draft.mode === 'browser' && draft.browserZone !== currentBrowserZone))
+    return undefined;
+  if (draft.mode === 'site' && (draft.siteOffsetMinutes === null || draft.siteOffsetChanged))
+    return undefined;
   if (draft.text === draft.originalText) return draft.originalEpoch;
   if (draft.text === '') return null;
   if (draft.needsUTCConfirmation) return undefined;
