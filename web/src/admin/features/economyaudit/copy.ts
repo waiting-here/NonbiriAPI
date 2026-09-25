@@ -1,8 +1,10 @@
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Asset } from './api';
 export function useEconomyText() {
   const { i18n } = useTranslation();
-  return (zh: string, en: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false;
+  return useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]);
 }
 export type Text = ReturnType<typeof useEconomyText>;
 export function assetLabel(asset: Asset, t: Text) {

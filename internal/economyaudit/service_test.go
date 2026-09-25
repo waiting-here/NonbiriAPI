@@ -1,10 +1,12 @@
 package economyaudit
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -469,6 +471,97 @@ func TestOperationsCursorAnchorsBindsFiltersAndRejectsTampering(t *testing.T) {
 	}
 }
 
+func TestOperationsFilterAssetsBeforePagingAndBatchEntriesKeepExactAmounts(t *testing.T) {
+	f := newAuditFixture(t)
+	f.fund(t, 102, auditNow-500)
+	f.tx(t, func(tx *sql.Tx) {
+		p, err := ledger.NewAdminGameAdjustment(f.meta(t, auditNow-20), f.wallets[ledger.Game], f.external[ledger.Game], ledger.AmountFromMilli(9_000_000_000_000_000), "game funding")
+		applyAuditPlan(t, tx, p, err)
+		p, err = ledger.NewActivityExchange(f.meta(t, auditNow-19), f.wallets[ledger.General], f.external[ledger.General], f.wallets[ledger.SketchPaper], f.external[ledger.SketchPaper], ledger.SketchPaper, ledger.AmountFromMilli(1000), ledger.AmountFromMilli(2000))
+		applyAuditPlan(t, tx, p, err)
+	})
+
+	game, err := f.service.Operations(f.ctx, f.admin, auditFilter(ledger.Game))
+	if err != nil || len(game.Data) != 1 || game.Data[0].Kind != "admin_user_adjustment" || game.NextCursor != nil || len(game.Data[0].Entries) != 2 {
+		t.Fatalf("game asset page: %+v, %v", game, err)
+	}
+	if game.Data[0].Entries[0].Delta != "9000000000000000" && game.Data[0].Entries[1].Delta != "9000000000000000" {
+		t.Fatalf("batch lost integer precision: %+v", game.Data[0].Entries)
+	}
+	paper, err := f.service.Operations(f.ctx, f.admin, auditFilter(ledger.SketchPaper))
+	if err != nil || len(paper.Data) != 1 || paper.Data[0].Kind != "activity_exchange" || len(paper.Data[0].Entries) != 4 {
+		t.Fatalf("cross-asset operation: %+v, %v", paper, err)
+	}
+	general, err := f.service.Operations(f.ctx, f.admin, auditFilter(ledger.General))
+	if err != nil || len(general.Data) != 100 || general.NextCursor == nil || general.Data[0].Kind != "activity_exchange" {
+		t.Fatalf("general page: %+v, %v", general, err)
+	}
+	filter := auditFilter(ledger.General)
+	filter.Cursor = *general.NextCursor
+	second, err := f.service.Operations(f.ctx, f.admin, filter)
+	if err != nil || len(second.Data) != 3 || second.NextCursor != nil || second.Data[0].LedgerSeq != "3" {
+		t.Fatalf("general second page: %+v, %v", second, err)
+	}
+}
+
+func TestOperationsSparseFiltersAndSequenceOrderedPlan(t *testing.T) {
+	f := newAuditFixture(t)
+	f.fund(t, 300, auditNow-1000)
+	filter := auditFilter(ledger.General)
+	filter.From = auditNow - 400
+	filter.To = auditNow - 300
+	noTimeMatch, err := f.service.Operations(f.ctx, f.admin, filter)
+	if err != nil || len(noTimeMatch.Data) != 0 || noTimeMatch.NextCursor != nil {
+		t.Fatalf("sparse time range: %+v, %v", noTimeMatch, err)
+	}
+	filter = auditFilter(ledger.Game)
+	noAssetMatch, err := f.service.Operations(f.ctx, f.admin, filter)
+	if err != nil || len(noAssetMatch.Data) != 0 || noAssetMatch.NextCursor != nil {
+		t.Fatalf("sparse asset: %+v, %v", noAssetMatch, err)
+	}
+	filter = auditFilter(ledger.General)
+	filter.Kind = "welfare_claim"
+	filter.Channel = "welfare"
+	noKindMatch, err := f.service.Operations(f.ctx, f.admin, filter)
+	if err != nil || len(noKindMatch.Data) != 0 || noKindMatch.NextCursor != nil {
+		t.Fatalf("sparse kind/channel: %+v, %v", noKindMatch, err)
+	}
+	for _, scenario := range []struct {
+		filter Filter
+		before int64
+	}{
+		{auditFilter(ledger.Game), 0},
+		{filter, 100},
+	} {
+		query, args := operationPageQuery(scenario.filter, 300, scenario.before)
+		rows, err := f.database.Query("EXPLAIN QUERY PLAN "+query, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var details []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			details = append(details, detail)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		plan := strings.Join(details, "\n")
+		if !strings.Contains(plan, "ledger_seq<") || strings.Contains(plan, "USE TEMP B-TREE") || strings.Contains(plan, "idx_credit_operations_created") {
+			t.Fatalf("operation page lost ordered sequence plan: %s", plan)
+		}
+	}
+}
+
 func TestConcurrentLedgerWritesAndAuditReadsUseSameWatermark(t *testing.T) {
 	f := newAuditFixture(t)
 	ctx := context.Background()
@@ -557,8 +650,12 @@ func TestHTTPQueryBoundsAndSafeErrors(t *testing.T) {
 		}
 	}
 	w := httptest.NewRecorder()
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(previousLogger)
 	writeError(w, fmt.Errorf("secret database detail"))
-	if strings.Contains(w.Body.String(), "secret") || w.Code != 503 {
+	if strings.Contains(w.Body.String(), "secret") || w.Code != 503 || strings.Contains(logs.String(), "secret") || !strings.Contains(logs.String(), "category=internal") {
 		t.Fatal("internal error leaked")
 	}
 }

@@ -145,4 +145,24 @@ describe('administrator economy audit', () => {
     );
     expect(screen.queryByRole('heading', { name: 'Current stock' })).not.toBeInTheDocument();
   });
+
+  it('shows a localized audit failure without exposing the server message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        if (path === '/admin/api/session') return response({ admin: { username: 'audit-admin' } });
+        return response(
+          { error: { code: 'service_unavailable', message: 'private database detail' } },
+          503,
+        );
+      }),
+    );
+    await renderWithProviders(<EconomyAuditPage />, { station: 'admin', locale: 'zh' });
+    expect(await screen.findAllByText('账务审计暂时无法加载，请重试。')).not.toHaveLength(0);
+    expect(screen.queryByText(/private database detail/)).toBeNull();
+  });
 });

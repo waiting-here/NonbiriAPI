@@ -1,8 +1,10 @@
 package economyaudit
 
 import (
+	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -107,6 +109,18 @@ func writeError(w http.ResponseWriter, err error) {
 		code, message = httperr.CodeForbidden, "Accounting audits require administrator access."
 	case errors.Is(err, db.ErrTimezoneUnavailable):
 		code, message = httperr.CodeFeatureDisabled, "Configure the site time zone before viewing accounting audits."
+	default:
+		category := "internal"
+		switch {
+		case errors.Is(err, ErrInvariant):
+			category = "invariant"
+		case errors.Is(err, ErrUnavailable):
+			category = "unavailable"
+		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+			category = "timeout_or_cancel"
+		}
+		// Do not log the raw error: SQLite text can include private row content.
+		slog.Error("economy audit read failed", "category", category)
 	}
 	httperr.WriteError(w, httperr.New(code, message))
 }

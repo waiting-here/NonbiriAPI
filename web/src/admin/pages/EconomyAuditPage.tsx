@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { ApiError } from '@shared/query/http';
 import { useAdminSession } from '../data';
 import {
   assets,
@@ -14,11 +15,11 @@ import {
   type AuditFilter,
   type Metadata,
   type Metrics,
-  type Series,
   type Summary,
   type View,
 } from '../features/economyaudit/api';
 import { assetLabel, channelLabel, useEconomyText, type Text } from '../features/economyaudit/copy';
+import { EconomyTrendChart } from '../features/economyaudit/EconomyTrendChart';
 import '../features/economyaudit/economy.css';
 
 function time(at: number, offset: number) {
@@ -42,6 +43,47 @@ function metricLabel(key: (typeof metricKeys)[number], t: Text) {
     user_expense: t('用户支出', 'User spending'),
     internal_transfer: t('内部转账', 'Internal transfers'),
   }[key];
+}
+
+function AuditErrorState({
+  error,
+  onRetry,
+}: {
+  readonly error: unknown;
+  readonly onRetry: () => void;
+}) {
+  const t = useEconomyText();
+  if (
+    !(error instanceof ApiError) ||
+    !['invalid_request', 'feature_disabled', 'service_unavailable'].includes(error.code)
+  ) {
+    return <ErrorState error={error} onRetry={onRetry} />;
+  }
+  const message = {
+    invalid_request: t(
+      '请检查资产、时间区间和筛选条件。',
+      'Check the asset, time range and filters.',
+    ),
+    feature_disabled: t(
+      '请先配置站点时区，再查看账务审计。',
+      'Configure the site time zone before viewing the audit.',
+    ),
+    service_unavailable: t(
+      '账务审计暂时无法加载，请重试。',
+      'The accounting audit could not be loaded. Please try again.',
+    ),
+  }[error.code];
+  return (
+    <div className="state-panel error-state nb-state nb-state--error" role="alert">
+      <div>
+        <h2>{t('账务审计无法加载', 'Accounting audit unavailable')}</h2>
+        <p>{message}</p>
+        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          {t('重试', 'Retry')}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function Coverage({ meta }: { readonly meta: Metadata }) {
@@ -164,50 +206,6 @@ function Stock({ summary }: { readonly summary: Summary }) {
   );
 }
 
-function TrendChart({ series }: { readonly series: Series }) {
-  const t = useEconomyText();
-  const maximum = series.data.reduce(
-    (n, p) =>
-      [BigInt(p.metrics.issued), BigInt(p.metrics.reclaimed)].reduce((a, b) => (a > b ? a : b), n),
-    1n,
-  );
-  const points = (key: 'issued' | 'reclaimed') =>
-    series.data
-      .map(
-        (p, i) =>
-          `${20 + (i * 760) / Math.max(1, series.data.length - 1)},${180 - Number((BigInt(p.metrics[key]) * 16000n) / maximum) / 100}`,
-      )
-      .join(' ');
-  return (
-    <figure className="audit-chart">
-      <svg
-        viewBox="0 0 800 210"
-        role="img"
-        aria-label={t(
-          '发行与回收趋势；精确数据见下表。',
-          'Issuance and retirement trend; exact values are in the following table.',
-        )}
-      >
-        <line x1="20" y1="180" x2="780" y2="180" stroke="currentColor" opacity="0.25" />
-        <polyline fill="none" stroke="#34765c" strokeWidth="2" points={points('issued')} />
-        <polyline
-          fill="none"
-          stroke="#b36a25"
-          strokeWidth="2"
-          strokeDasharray="5 3"
-          points={points('reclaimed')}
-        />
-      </svg>
-      <figcaption>
-        {t(
-          '绿色实线：新增发行；橙色虚线：永久回收。',
-          'Green solid line: new issuance. Orange dashed line: permanent retirement.',
-        )}
-      </figcaption>
-    </figure>
-  );
-}
-
 function Trend({ filter }: { readonly filter: AuditFilter }) {
   const t = useEconomyText(),
     session = useAdminSession();
@@ -219,13 +217,13 @@ function Trend({ filter }: { readonly filter: AuditFilter }) {
       q.state.data?.metadata.coverage.status === 'catching_up' ? 1000 : false,
   });
   if (q.isPending) return <LoadingState />;
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
       <Coverage meta={q.data.metadata} />
       {q.data.metadata.coverage.status !== 'catching_up' && (
         <>
-          <TrendChart series={q.data} />
+          <EconomyTrendChart series={q.data} />
           <div className="audit-table">
             <table>
               <caption>{t('分时段收支', 'Flows by time bucket')}</caption>
@@ -272,7 +270,7 @@ function ChannelDetails({
       q.state.data?.metadata.coverage.status === 'catching_up' ? 1000 : false,
   });
   if (q.isPending) return <LoadingState />;
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
       <Coverage meta={q.data.metadata} />
@@ -328,7 +326,7 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
     retry: false,
   });
   if (q.isPending) return <LoadingState />;
-  if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
       <Coverage meta={q.data.metadata} />
@@ -527,7 +525,7 @@ export function EconomyAuditPage() {
         {summary.isPending ? (
           <LoadingState />
         ) : summary.error ? (
-          <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
+          <AuditErrorState error={summary.error} onRetry={() => void summary.refetch()} />
         ) : (
           <>
             <h2>{assetLabel(filter.asset, t)}</h2>
