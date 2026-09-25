@@ -262,6 +262,14 @@ export async function mockRoleSession(
     });
     return;
   }
+  if (station === 'admin' || role === 'level5' || role === 'level6') {
+    await mockJson(page, {
+      origin,
+      method: 'GET',
+      path: station === 'admin' ? '/admin/api/time-context' : '/api/steward/time-context',
+      body: { mode: 'site', offset_minutes: 480 },
+    });
+  }
   await mockJson(page, {
     origin,
     method: 'GET',

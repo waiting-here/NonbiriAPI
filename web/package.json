@@ -1,6 +1,6 @@
 {
   "name": "nonbiriapi-web",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "private": true,
   "type": "module",
   "description": "NonbiriAPI web frontend: admin and user stations",
@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
+    "chart.js": "4.5.1",
     "dompurify": "3.4.14",
     "i18next": "26.3.6",
     "marked": "18.0.11",

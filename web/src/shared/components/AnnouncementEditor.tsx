@@ -9,7 +9,7 @@ import { TimeInput } from '@shared/components/TimeInput';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { SafeAnnouncementBody } from '../../user/features/operations/SafeAnnouncementBody';
 import {
   managedAnnouncementKeys,
@@ -73,6 +73,7 @@ export function AnnouncementEditor({
   backTo: string;
   onAuthorityLoss?: () => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const root = managementRoot(role);
   const navigate = useNavigate();
@@ -368,7 +369,7 @@ export function AnnouncementEditor({
             </select>
           </label>
           <TimeInput
-            station={role === 'admin' ? 'admin' : 'user'}
+            station={role === 'admin' ? 'admin' : 'steward'}
             label={t('management.announcements.expiry')}
             draft={draft.expires_at}
             onChange={(updateTime) =>

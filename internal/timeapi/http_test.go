@@ -1,6 +1,7 @@
 package timeapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,6 +14,72 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
+
+type stubContextResolver struct {
+	admin   TimeContext
+	steward TimeContext
+	err     error
+}
+
+func (resolver stubContextResolver) AdminTimeContext(context.Context, int64) (TimeContext, error) {
+	return resolver.admin, resolver.err
+}
+
+func (resolver stubContextResolver) StewardTimeContext(context.Context, int64) (TimeContext, error) {
+	return resolver.steward, resolver.err
+}
+
+func TestGetTimeContextReturnsOnlyFixedSiteOffset(t *testing.T) {
+	offset := 330
+	resolver := stubContextResolver{
+		admin:   TimeContext{Configured: true, OffsetMinutes: offset},
+		steward: TimeContext{Configured: false},
+	}
+	tests := []struct {
+		name  string
+		admin bool
+		want  string
+	}{
+		{name: "admin configured", admin: true, want: `{"mode":"site","offset_minutes":330}`},
+		{name: "steward unconfigured", admin: false, want: `{"mode":"site","offset_minutes":null}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/time-context", nil)
+			getTimeContext(recorder, request, resolver, 7, test.admin)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status=%d, body=%s", recorder.Code, recorder.Body.String())
+			}
+			if got := strings.TrimSpace(recorder.Body.String()); got != test.want {
+				t.Fatalf("body=%s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestGetTimeContextRejectsUnauthorizedAndInvalidOffset(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolver ContextResolver
+		userID   int64
+		wantCode int
+	}{
+		{name: "missing resolver", userID: 7, wantCode: http.StatusUnauthorized},
+		{name: "missing user", resolver: stubContextResolver{}, wantCode: http.StatusUnauthorized},
+		{name: "invalid offset", resolver: stubContextResolver{admin: TimeContext{Configured: true, OffsetMinutes: 15}}, userID: 7, wantCode: http.StatusOK},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/time-context", nil)
+			getTimeContext(recorder, request, test.resolver, test.userID, true)
+			if recorder.Code != test.wantCode {
+				t.Fatalf("status=%d, want %d; body=%s", recorder.Code, test.wantCode, recorder.Body.String())
+			}
+		})
+	}
+}
 
 type timeEndpoint struct {
 	name   string

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { credits, getStatus, type Policy } from './api';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import './inactivity.css';
 
 export function PolicySummary({ policy, zh }: { policy: Policy; zh: boolean }) {
@@ -46,6 +47,7 @@ export function PolicySummary({ policy, zh }: { policy: Policy; zh: boolean }) {
 }
 
 export function InactivityStatus({ accountId }: { readonly accountId: string }) {
+  const formatDateTime = useDateTimeFormatter();
   const { i18n } = useTranslation();
   const zh = Boolean(i18n.resolvedLanguage?.startsWith('zh'));
   const query = useQuery({
@@ -54,7 +56,7 @@ export function InactivityStatus({ accountId }: { readonly accountId: string }) 
     staleTime: 60_000,
   });
   const date = (at: number | null) =>
-    at === null ? '—' : new Date(at * 1000).toLocaleString(i18n.resolvedLanguage);
+    at === null ? '—' : formatDateTime(at, i18n.resolvedLanguage === 'zh' ? 'zh' : 'en');
   if (query.isPending)
     return <p role="status">{zh ? '正在读取活跃政策…' : 'Loading inactivity policy…'}</p>;
   if (query.isError)

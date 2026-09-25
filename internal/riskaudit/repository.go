@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -26,6 +27,7 @@ type Repository struct {
 	now           func() time.Time
 	configChanged func(Config)
 	finalAuth     FinalAuthorizer
+	scanWorker    sync.Mutex
 }
 
 func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, error) {
@@ -196,7 +198,11 @@ func (r *Repository) CleanupBatch(ctx context.Context, now time.Time, limit int)
 	}
 	defer tx.Rollback()
 	cutoff := now.Add(-Retention).Unix()
-	result, err := tx.ExecContext(ctx, `DELETE FROM risk_audit_minutes WHERE rowid IN (SELECT rowid FROM risk_audit_minutes WHERE minute<? ORDER BY minute LIMIT ?)`, cutoff, limit)
+	scans, err := cleanupScansTx(ctx, tx, now.Unix(), limit)
+	if err != nil {
+		return CleanupResult{}, ErrUnavailable
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM risk_audit_minutes WHERE rowid IN (SELECT rowid FROM risk_audit_minutes WHERE minute<? ORDER BY minute LIMIT ?)`, cutoff, limit-scans.Deleted)
 	if err != nil {
 		return CleanupResult{}, ErrUnavailable
 	}
@@ -204,6 +210,7 @@ func (r *Repository) CleanupBatch(ctx context.Context, now time.Time, limit int)
 	if err != nil {
 		return CleanupResult{}, ErrUnavailable
 	}
+	deleted += int64(scans.Deleted)
 	if remaining := int64(limit) - deleted; remaining > 0 {
 		result, err = tx.ExecContext(ctx, `DELETE FROM risk_audit_gaps WHERE rowid IN (SELECT rowid FROM risk_audit_gaps WHERE minute<? ORDER BY minute LIMIT ?)`, cutoff, remaining)
 		if err != nil {
@@ -222,7 +229,7 @@ func (r *Repository) CleanupBatch(ctx context.Context, now time.Time, limit int)
 	if tx.Commit() != nil {
 		return CleanupResult{}, ErrUnavailable
 	}
-	return CleanupResult{Processed: int(deleted), Deleted: int(deleted), More: more}, nil
+	return CleanupResult{Processed: int(deleted), Deleted: int(deleted), More: more || scans.More}, nil
 }
 
 type scanner interface{ Scan(...any) error }

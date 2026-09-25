@@ -1,7 +1,96 @@
 import { ApiError, apiFetch } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
+import {
+  normalizePageMetadata,
+  validatePageResponse,
+  type PageMetadata,
+  type PageSize,
+} from '@shared/operations/pageNumbers';
 
 export type RiskRole = 'admin' | 'steward';
+export interface ClientScan {
+  id: string;
+  state: 'queued' | 'running' | 'completed' | 'cancelled' | 'limited' | 'failed';
+  reason: string;
+  from: number;
+  to: number;
+  kind: string;
+  model: string;
+  candidates: string;
+  scanned: string;
+  matched: number;
+  created_at: number;
+  updated_at: number;
+  expires_at: number;
+  rule_count: number;
+}
+export interface ScanResults extends PageMetadata {
+  scan: ClientScan;
+  items: Request[];
+}
+export interface ScanInput {
+  request_token: string;
+  from?: number;
+  to?: number;
+  lookback_hours?: number;
+  kind?: string;
+  model?: string;
+}
+
+function clientScan(value: unknown): ClientScan {
+  const o = obj(value);
+  const state = text(o.state, 20);
+  if (!['queued', 'running', 'completed', 'cancelled', 'limited', 'failed'].includes(state))
+    return invalid();
+  const count = (value: unknown) => {
+    if (
+      typeof value !== 'string' ||
+      !/^(0|[1-9][0-9]{0,18})$/.test(value) ||
+      BigInt(value) > 9223372036854775807n
+    )
+      return invalid();
+    return value;
+  };
+  const result: ClientScan = {
+    id: text(o.id, 26),
+    state: state as ClientScan['state'],
+    reason: text(o.reason, 64),
+    from: num(o.from),
+    to: num(o.to),
+    kind: text(o.kind, 32),
+    model: text(o.model, 512),
+    candidates: count(o.candidates),
+    scanned: count(o.scanned),
+    matched: num(o.matched),
+    created_at: num(o.created_at),
+    updated_at: num(o.updated_at),
+    expires_at: num(o.expires_at),
+    rule_count: num(o.rule_count),
+  };
+  if (
+    !/^scn_[A-Za-z0-9_-]{21}[AQgw]$/.test(result.id) ||
+    result.matched > 100000 ||
+    result.rule_count > 1000 ||
+    result.to <= result.from
+  )
+    return invalid();
+  return result;
+}
+
+function scanResults(value: unknown, id: string, page: string, size: PageSize): ScanResults {
+  const o = obj(value);
+  const metadata = normalizePageMetadata({
+    page: o.page,
+    page_size: o.page_size,
+    total_items: o.total_items,
+    total_pages: o.total_pages,
+  });
+  const items = list(o.items, request, 100);
+  const scan = clientScan(o.scan);
+  validatePageResponse(metadata, page, size, items.length);
+  if (scan.id !== id || BigInt(metadata.total_items) > 100000n) return invalid();
+  return { ...metadata, scan, items };
+}
 export const sourceFields = [
   'effective_ip',
   'user_agent',
@@ -503,6 +592,30 @@ export function riskAPI(role: RiskRole) {
     signal?: AbortSignal,
   ) => decode(await apiFetch<unknown>(queryPath(base + path, filters), { signal }));
   return {
+    createScan: async (input: ScanInput) =>
+      clientScan(await apiFetch<unknown>(base + '/client-scans', { method: 'POST', json: input })),
+    recentScans: async (signal?: AbortSignal) =>
+      list(obj(await apiFetch<unknown>(base + '/client-scans', { signal })).items, clientScan, 10),
+    scanResults: async (scanID: string, page: string, size: PageSize, signal?: AbortSignal) =>
+      scanResults(
+        await apiFetch<unknown>(
+          queryPath(base + '/client-scans/' + encodeURIComponent(scanID) + '/results', {
+            page,
+            page_size: size,
+          }),
+          { signal },
+        ),
+        scanID,
+        page,
+        size,
+      ),
+    cancelScan: async (scanID: string) =>
+      clientScan(
+        await apiFetch<unknown>(base + '/client-scans/' + encodeURIComponent(scanID) + '/cancel', {
+          method: 'POST',
+          json: {},
+        }),
+      ),
     users: (f: Filters, s?: AbortSignal) => get('/users', (v) => page(v, summary), f, s),
     clients: (f: Filters, s?: AbortSignal) =>
       get('/users', (v) => page(v, request), { ...f, signal: 'client' }, s),

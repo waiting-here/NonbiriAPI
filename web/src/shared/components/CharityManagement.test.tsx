@@ -13,6 +13,8 @@ function jsonResponse(value: unknown): Response {
   });
 }
 
+const siteTimeContext = { mode: 'site', offset_minutes: 0 };
+
 function numberedPage<T>(rows: readonly T[], url: URL) {
   const pageSize = Number(url.searchParams.get('page_size') ?? '20');
   const requestedPage = Number(url.searchParams.get('page') ?? '1');
@@ -243,6 +245,8 @@ function installDonationFetch(initial: AdminDonation) {
     const method = init?.method ?? 'GET';
     if (method === 'GET' && path === '/api/session') return jsonResponse(stewardSession);
     if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+    if (method === 'GET' && path === '/admin/api/time-context')
+      return jsonResponse(siteTimeContext);
     if (method === 'GET' && (path === '/admin/api/time-zones' || path === '/api/time-zones'))
       return jsonResponse({
         version: 'go1.26.6-zoneinfo',
@@ -332,11 +336,7 @@ const charityModel = (start: number, end: number): CharityModel => ({
   updated_at: 1,
 });
 
-const datePart = (value: number) => String(value).padStart(2, '0');
-function localDateTime(epoch: number): string {
-  const date = new Date(epoch * 1_000);
-  return `${date.getFullYear()}-${datePart(date.getMonth() + 1)}-${datePart(date.getDate())}T${datePart(date.getHours())}:${datePart(date.getMinutes())}:${datePart(date.getSeconds())}`;
-}
+const siteDateTime = (epoch: number) => `${new Date(epoch * 1_000).toISOString().slice(0, 19)}.000`;
 
 describe('CharityManagement corrective controls', () => {
   it('explains unavailable historical key IDs instead of linking all logs', async () => {
@@ -643,7 +643,7 @@ describe('CharityManagement corrective controls', () => {
     expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
   });
 
-  it('renders local discount seconds and preserves untouched epochs', async () => {
+  it('renders site discount seconds and preserves untouched epochs', async () => {
     const start = 1_735_689_845;
     const end = 1_735_693_507;
     let current = charityModel(start, end);
@@ -654,6 +654,8 @@ describe('CharityManagement corrective controls', () => {
       const path = url.pathname;
       const method = init?.method ?? 'GET';
       if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-context')
+        return jsonResponse(siteTimeContext);
       if (method === 'GET' && path === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -706,8 +708,10 @@ describe('CharityManagement corrective controls', () => {
     const card = heading.closest('.card');
     if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
     const editor = within(card);
-    expect(editor.getByLabelText('Start (optional)')).toHaveValue(`${localDateTime(start)}.000`);
-    expect(editor.getByLabelText('End (optional)')).toHaveValue(`${localDateTime(end)}.000`);
+    await waitFor(() =>
+      expect(editor.getByLabelText('Start (optional)')).toHaveValue(siteDateTime(start)),
+    );
+    expect(editor.getByLabelText('End (optional)')).toHaveValue(siteDateTime(end));
 
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
 
@@ -792,6 +796,8 @@ describe('CharityManagement corrective controls', () => {
         const path = url.pathname;
         const method = init?.method ?? 'GET';
         if (method === 'GET' && path === fixture.sessionPath) return jsonResponse(fixture.session);
+        if (method === 'GET' && path === `${fixture.prefix}/time-context`)
+          return jsonResponse(siteTimeContext);
         if (method === 'GET' && path === `${fixture.prefix}/time-zones`)
           return jsonResponse({
             version: 'go1.26.6-zoneinfo',
@@ -894,6 +900,8 @@ describe('CharityManagement corrective controls', () => {
       const method = init?.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/admin/api/session')
         return jsonResponse(adminSession);
+      if (method === 'GET' && url.pathname === '/admin/api/time-context')
+        return jsonResponse(siteTimeContext);
       if (method === 'GET' && url.pathname === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -979,6 +987,8 @@ describe('CharityManagement corrective controls', () => {
       const method = init?.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/admin/api/session')
         return jsonResponse(adminSession);
+      if (method === 'GET' && url.pathname === '/admin/api/time-context')
+        return jsonResponse(siteTimeContext);
       if (method === 'GET' && url.pathname === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -1064,6 +1074,8 @@ describe('CharityManagement corrective controls', () => {
         const method = init?.method ?? 'GET';
         if (method === 'GET' && url.pathname === '/admin/api/session')
           return jsonResponse(adminSession);
+        if (method === 'GET' && url.pathname === '/admin/api/time-context')
+          return jsonResponse(siteTimeContext);
         if (method === 'GET' && url.pathname === '/admin/api/time-zones')
           return jsonResponse({
             version: 'go1.26.6-zoneinfo',
@@ -1153,6 +1165,7 @@ describe('CharityManagement corrective controls', () => {
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input), 'https://example.test');
       if (url.pathname === '/api/session') return jsonResponse(stewardSession);
+      if (url.pathname === '/api/steward/time-context') return jsonResponse(siteTimeContext);
       if (url.pathname === '/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',

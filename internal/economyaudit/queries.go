@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -294,19 +295,34 @@ func channelsWire(values map[dimension]*measures) []Channel {
 	return out
 }
 
-func readOperationEntries(ctx context.Context, tx *sql.Tx, id string) ([]OperationEntry, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT e.asset_type,e.account_kind_snapshot,a.user_id,e.delta_sign,e.delta_mag FROM credit_entries e LEFT JOIN credit_accounts a ON a.id=e.account_id WHERE e.operation_id=? ORDER BY e.line_no`, id)
+// readOperationEntriesBatch keeps the immutable entry lookup bounded while
+// avoiding one query per operation in the administrator ledger view.
+func readOperationEntriesBatch(ctx context.Context, tx *sql.Tx, ids []string) (map[string][]OperationEntry, error) {
+	out := make(map[string][]OperationEntry, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	query := `SELECT e.operation_id,e.asset_type,e.account_kind_snapshot,a.user_id,e.delta_sign,e.delta_mag
+FROM credit_entries e LEFT JOIN credit_accounts a ON a.id=e.account_id
+WHERE e.operation_id IN (` + strings.Join(placeholders, ",") + `) ORDER BY e.operation_id,e.line_no`
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []OperationEntry{}
 	for rows.Next() {
+		var id string
 		var e OperationEntry
 		var user sql.NullInt64
 		var sign int
 		var raw []byte
-		if err := rows.Scan(&e.Asset, &e.AccountKind, &user, &sign, &raw); err != nil {
+		if err := rows.Scan(&id, &e.Asset, &e.AccountKind, &user, &sign, &raw); err != nil {
 			return nil, err
 		}
 		amount, err := db.NewSM128(sign, raw)
@@ -321,10 +337,14 @@ func readOperationEntries(ctx context.Context, tx *sql.Tx, id string) ([]Operati
 			value := strconv.FormatInt(user.Int64, 10)
 			e.UserID = &value
 		}
-		out = append(out, e)
-		if len(out) > 256 {
+		entries := out[id]
+		if len(entries) >= 256 {
 			return nil, ErrInvariant
 		}
+		out[id] = append(entries, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, rows.Close()
 }

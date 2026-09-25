@@ -302,8 +302,7 @@ export async function renderWithProviders(
         value={{
           theme: currentTheme,
           setTheme: setCurrentTheme,
-          toggleTheme: () =>
-            setCurrentTheme((current) => (current === 'light' ? 'dark' : 'light')),
+          toggleTheme: () => setCurrentTheme((current) => (current === 'light' ? 'dark' : 'light')),
           density: currentDensity,
           setDensity: setCurrentDensity,
           fontSize: currentFontSize,
@@ -380,6 +379,19 @@ export function installJsonFetchFixtures(fixtures: readonly JsonFetchFixture[]):
       parsed.origin === window.location.origin
         ? registry.get(fixtureKey(method, parsed))
         : undefined;
+    // Management time inputs always read the narrow site-context endpoint.
+    // Keep older page fixtures focused on their own API calls while giving
+    // those inputs a deterministic configured context.
+    const implicitTimeContext =
+      method === 'GET' &&
+      (parsed.pathname === '/admin/api/time-context' ||
+        parsed.pathname === '/api/steward/time-context');
+    if (!fixture && implicitTimeContext) {
+      return new Response(JSON.stringify({ mode: 'site', offset_minutes: 0 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+      });
+    }
     if (!fixture) {
       throw new Error(`Unregistered test request: ${fixtureRequestLabel(method, parsed)}.`);
     }

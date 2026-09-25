@@ -99,6 +99,8 @@ function install(handler: (call: Call) => unknown | Promise<unknown>) {
       let body: unknown;
       if (call.path.endsWith('/time-zones'))
         body = { version: 'go1.26.6-zoneinfo', zones: ['UTC'] };
+      else if (call.path === '/admin/api/time-context' || call.path === '/api/steward/time-context')
+        body = { mode: 'site', offset_minutes: 330 };
       else body = await handler(call);
       return body instanceof Response ? body : json(body);
     }),

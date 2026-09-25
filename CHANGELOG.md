@@ -4,11 +4,14 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## [1.0.0-rc.3] - 2026-09-25
 
-The changes below include development toward 1.0.0-rc.3. The published rc.2 tag remains unchanged; no new release or deployment is implied. Supported data-preserving upgrade sources include the prior governance schema and rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c`, preserving business data, configuration and instance legal text.
+Source prerelease for Linux/amd64, without official precompiled attachments. Supported data-preserving upgrade sources include rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c` and the complete administration maintenance schema at `84018acbd594765c563cc0ee4083d206e0bd6a77`, preserving business data, configuration and instance legal text. Unknown intermediate schemas remain unsupported; a downgrade requires a complete matching stopped snapshot.
 
 ### Added
+
+- Resumable, cancellable client-clue scans with frozen rules and filters, visible progress, numbered result pages, adjustable page sizes and URL restoration. Temporary results expire after 24 hours and never trigger automatic penalties.
+- Exact internal user-ID search combined with existing management filters, and retained image-discovery request metadata alongside the bounded original response diagnostics.
 
 - Configurable model-request body size in administrator settings, defaulting to 10 MiB, with a finite 1–64 MiB range shared by chat and embedding calls.
 - Administrator account-deletion alerts with retained Discord identity and economic balances, unresolved negative-balance review, alert-type filters and bulk resolution.
@@ -33,6 +36,10 @@ The changes below include development toward 1.0.0-rc.3. The published rc.2 tag 
 - Administrators and stewards can fetch model lists for one available donated key, all available keys in one donation, or all available donated keys across pages and filters. Batches show progress and support pausing and resuming uncertain requests; live permission and eligibility checks protect dispatch and catalog updates.
 
 ### Fixed
+
+- Keep credit-audit entries on an ordered ledger query and batch their entry reads, preserving asset filters and exact amounts. Economy charts now show axes, units, data points, tooltips, keyboard-selected values and an exact data table through an administrator-only Chart.js module.
+- Use browser-local time on ordinary user pages and site time in administrator/steward forms and displays. Group time-zone notices and clearly identify a different browser zone. Donation and charity-model forms use the available desktop width and collapse coherently on narrow screens.
+- Apply SQLite foreign-key and busy-wait settings on every physical connection, including replacements. Complete bounded ranking backfill and expiry settlement before game recovery, preserving committed progress across interruption.
 
 - Group Fishing and Blackjack leaderboards into accessible tabs. Show Card master first in Blackjack, followed by Profit, and name the global net-profit board Game fortune.
 - Explain image-download origins and adapter mappings, and show dedicated model-discovery failures with retained HTTP status, actionable guidance and a fresh retry.

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { readLoginRestrictions, type AutomaticRestriction } from '@shared/operations/restrictions';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 
 export function AutomaticRestrictions({ restrictions }: { restrictions: AutomaticRestriction[] }) {
+  const formatDateTime = useDateTimeFormatter();
   const { i18n } = useTranslation();
   const en = i18n.language.startsWith('en');
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -45,7 +47,7 @@ export function AutomaticRestrictions({ restrictions }: { restrictions: Automati
               ? en
                 ? 'No scheduled end'
                 : '未设定结束时间'
-              : new Date(r.ends_at * 1000).toLocaleString(en ? 'en-US' : 'zh-CN')}
+              : formatDateTime(r.ends_at, en ? 'en' : 'zh')}
           </p>
         </div>
       ))}

@@ -38,8 +38,9 @@ import {
   validManagementSearch,
 } from '@shared/operations/charityModelPages';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { TimeInput } from './TimeInput';
+import { TimeContextNotice } from './TimeContext';
 import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import {
@@ -394,6 +395,7 @@ function KeyExpiryEditor({
     ) => Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>,
   ) => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   return (
     <div className="ops-form-field">
@@ -514,6 +516,7 @@ function DonationKeyEditor({
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const modelID = useCharityModelScope();
   const copy = charityControlCopy(useTranslation().i18n.language);
@@ -717,7 +720,7 @@ function DonationKeyEditor({
                 </select>
               </label>
               <KeyExpiryEditor
-                station={role === 'admin' ? 'admin' : 'user'}
+                station={role === 'admin' ? 'admin' : 'steward'}
                 draft={draft}
                 authorizedExpiresAt={item.authorized_expires_at}
                 onChange={(update) => setDraft((current) => ({ ...current, ...update(current) }))}
@@ -803,6 +806,7 @@ function DonationReview({
 }: DonationDetailProps & {
   onPendingChange: (pending: boolean) => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const reviewPager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -1002,7 +1006,7 @@ function DonationReview({
                         />
                       </label>
                       <KeyExpiryEditor
-                        station={role === 'admin' ? 'admin' : 'user'}
+                        station={role === 'admin' ? 'admin' : 'steward'}
                         draft={draft}
                         authorizedExpiresAt={entry.authorized_expires_at}
                         onChange={(update) =>
@@ -2123,7 +2127,8 @@ function ModelForm({
       </fieldset>
       <fieldset className="ops-form-section">
         <legend>{copy.discountSettings}</legend>
-        <div className="ops-field-grid">
+        <div className="ops-field-grid ops-paired-fields">
+          <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
           <label className="checkbox-label">
             <input
               type="checkbox"
@@ -2146,16 +2151,18 @@ function ModelForm({
           </label>
           <TimeInput
             label={t(charityCopyKey(role, 'discountStart'))}
-            station={role === 'admin' ? 'admin' : 'user'}
+            station={role === 'admin' ? 'admin' : 'steward'}
             draft={draft.discountStart}
+            showZoneHint={false}
             onChange={(update) =>
               setDraft((current) => ({ ...current, discountStart: update(current.discountStart) }))
             }
           />
           <TimeInput
             label={t(charityCopyKey(role, 'discountEnd'))}
-            station={role === 'admin' ? 'admin' : 'user'}
+            station={role === 'admin' ? 'admin' : 'steward'}
             draft={draft.discountEnd}
+            showZoneHint={false}
             onChange={(update) =>
               setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
             }

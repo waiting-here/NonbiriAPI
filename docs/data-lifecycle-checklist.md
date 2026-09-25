@@ -128,6 +128,10 @@ wire/export until they are deliberately added to the relevant whitelist and test
 
 ## Linearization and lifecycle acceptance
 
+Client scan tasks (`risk_client_scans`, `risk_client_scan_matches`) are temporary management state excluded from personal exports. They retain the creating actor, frozen filter/rule metadata, progress and references to existing logical requests for 24 hours, bounded by 32 retained tasks and 100,000 matches per task. A task is accessible only to its still-authorized creator; role or active-ban changes invalidate completed and unfinished tasks. Account deletion cascades the actor's tasks; nulling a source owner or deleting source facts removes matching references in the same transaction. The worker and cancellation serialize through database transactions, and expiry/revocation cleanup shares a bounded row budget. No prompt or request body is collected; original source retention remains authoritative.
+
+Image model discovery stores a bounded dispatch sidecar (`image_discovery_dispatches`) owned by the refresh operation: actual GET method/URL, empty request body/content type and dispatch time. It is written with the dispatch transition, survives later configuration edits, cascades with the refresh root and appears only through existing live diagnostic projections. It is excluded from personal exports and retains no Authorization headers or generation payload. Historical missing snapshots remain explicitly unavailable.
+
 Account deletion and late callback/ACK/settlement writes must be linearized by one
 single-writer transaction. If the late write wins, deletion cascades or explicitly
 cleans it; if deletion wins, the conditional late write inserts zero rows. Neither
@@ -151,7 +155,7 @@ historical snapshots.
 
 Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
 existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. The supported source is the complete rc.2 maintenance database at db959c64674afc531046a63066de0464725d439c. Unreleased intermediate schemas are outside this guarantee. Existing economic facts, accounts, donations, model bindings, saved games, configuration and instance legal text are preserved. The old manual level-5 role moves to level 6, historical audit roles keep their meaning, and new split Token counters never reconstruct old totals. New activity assets are separate, and old accounts begin inactivity observation at upgrade. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
+envelope/config, or an unsafe path fails closed. Supported sources include the complete rc.2 maintenance database at db959c64674afc531046a63066de0464725d439c and the administration maintenance database at 84018acbd594765c563cc0ee4083d206e0bd6a77. Unreleased intermediate schemas are outside this guarantee. Existing economic facts, accounts, donations, model bindings, saved games, configuration and instance legal text are preserved. The old manual level-5 role moves to level 6, historical audit roles keep their meaning, and new split Token counters never reconstruct old totals. New activity assets are separate, and old accounts begin inactivity observation at upgrade. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
 data import are unsupported. Current and supported predecessor databases are validated
 before any source write and before writable open. Destructive fresh starts with
 maintenance on and registration/game/activity off, and does not merge a source

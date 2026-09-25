@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Amount, formatAmount } from '@shared/components/Amount';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 
 export interface CharityPriceRow {
   label: string;
@@ -62,6 +62,7 @@ function timestampISO(value: number): string | undefined {
  * Donor rewards, when a management view supplies them, are never discounted.
  */
 export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPriceTableProps) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const [now, setNow] = useState(serverNow);
   useEffect(() => {

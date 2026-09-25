@@ -1,6 +1,10 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
+import {
+  installJsonFetchFixtures,
+  renderWithProviders,
+  type JsonFetchFixture,
+} from '../../../../test/unit/support';
 import { LogFilters, type LogFilterField } from './LogFilters';
 
 const nativeOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
@@ -14,13 +18,21 @@ const statusFields: readonly LogFilterField[] = [
 
 function installTimeZoneFixture(station: 'user' | 'admin') {
   const prefix = station === 'admin' ? '/admin/api' : '/api';
-  return installJsonFetchFixtures([
+  const fixtures: JsonFetchFixture[] = [
     {
       method: 'GET',
       path: `${prefix}/time-zones`,
       body: { version: 'go1.26.6-zoneinfo', zones: ['UTC'] },
     },
-  ]);
+  ];
+  if (station === 'admin') {
+    fixtures.push({
+      method: 'GET',
+      path: '/admin/api/time-context',
+      body: { mode: 'site', offset_minutes: 0 },
+    });
+  }
+  return installJsonFetchFixtures(fixtures);
 }
 
 beforeEach(() => {
@@ -139,7 +151,9 @@ describe('shared log time filters', () => {
     );
 
     await waitFor(() =>
-      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain('/admin/api/time-zones'),
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        '/admin/api/time-context',
+      ),
     );
     expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain('/api/time-zones');
     await view.user.click(screen.getByRole('button', { name: 'Last hour' }));

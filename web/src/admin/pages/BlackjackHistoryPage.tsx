@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useAdminSession } from '../data';
 import { useGameAdminText } from '../features/games/copy';
 import {
@@ -175,6 +176,7 @@ function Export({ dataset }: { readonly dataset: BlackjackDataset }) {
   );
 }
 export function BlackjackHistoryPage() {
+  const formatDateTime = useDateTimeFormatter();
   const t = useGameAdminText();
   const session = useAdminSession();
   const [dataset, setDataset] = useState<BlackjackDataset>('recent');
@@ -231,11 +233,7 @@ export function BlackjackHistoryPage() {
                     key={h.id}
                     onClick={() => setSelected(h.id)}
                   >
-                    <span>
-                      {h.started_at === null
-                        ? h.id
-                        : new Date(h.started_at * 1000).toLocaleString()}
-                    </span>
+                    <span>{h.started_at === null ? h.id : formatDateTime(h.started_at)}</span>
                     <span>
                       {h.seats} {t('席', 'seats')} ·{' '}
                       {h.phase === 'cancelled'

@@ -177,7 +177,9 @@ describe('steward caller identity', () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
     const copy = await screen.findByRole('button', { name: 'Copy Discord ID' });
     await view.user.click(copy);
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Copy failed'));
+    await waitFor(() =>
+      expect(screen.getByText(/^Copy failed\./)).toHaveAttribute('role', 'status'),
+    );
     expect(writeText).toHaveBeenCalledWith(discordID);
   });
 

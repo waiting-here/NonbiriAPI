@@ -224,11 +224,9 @@ function SessionBackedManagement({
   ) : null;
 }
 
-const datePart = (value: number) => String(value).padStart(2, '0');
-function localDateTime(epoch: number): string {
-  const date = new Date(epoch * 1_000);
-  return `${date.getFullYear()}-${datePart(date.getMonth() + 1)}-${datePart(date.getDate())}T${datePart(date.getHours())}:${datePart(date.getMinutes())}:${datePart(date.getSeconds())}`;
-}
+const siteOffsetMinutes = 330;
+const siteDateTime = (epoch: number) =>
+  `${new Date((epoch + siteOffsetMinutes * 60) * 1_000).toISOString().slice(0, 19)}.000`;
 
 function approve(current: AdminDonation, body: Record<string, unknown>): AdminDonation {
   const settings = body.key_settings as { donation_key_id: string; expires_at: number | null }[];
@@ -264,6 +262,8 @@ describe('Generation 2 charity management policy', () => {
       const path = url.pathname;
       const method = init?.method ?? 'GET';
       if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-context')
+        return jsonResponse({ mode: 'site', offset_minutes: siteOffsetMinutes });
       if (method === 'GET' && path === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -295,8 +295,8 @@ describe('Generation 2 charity management policy', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    expect(await screen.findByLabelText('Effective expiry')).toHaveValue(
-      `${localDateTime(expiresAt)}.000`,
+    await waitFor(() =>
+      expect(screen.getByLabelText('Effective expiry')).toHaveValue(siteDateTime(expiresAt)),
     );
     await view.user.type(screen.getByLabelText('Reason'), 'approved with retained expiry');
     await view.user.click(
@@ -324,6 +324,8 @@ describe('Generation 2 charity management policy', () => {
       const path = url.pathname;
       const method = init?.method ?? 'GET';
       if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-context')
+        return jsonResponse({ mode: 'site', offset_minutes: siteOffsetMinutes });
       if (method === 'GET' && path === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -429,6 +431,8 @@ describe('Generation 2 charity management policy', () => {
       const path = url.pathname;
       const method = init?.method ?? 'GET';
       if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-context')
+        return jsonResponse({ mode: 'site', offset_minutes: siteOffsetMinutes });
       if (method === 'GET' && path === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',

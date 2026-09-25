@@ -215,7 +215,14 @@ async function riskEvidence(page: Page, sustained = true) {
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
   await expect(page.getByText('Users: 4', { exact: false })).toBeVisible();
   await group.getByRole('button', { name: 'Client matches', exact: true }).click();
-  await expect(page.getByText('Matched rules: 4', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Page 1 of 1 · Total: 4', { exact: true })).toBeVisible();
+  const savedURL = page.url();
+  expect(new URL(savedURL).searchParams.get('audit_scan')).toMatch(/^scn_/);
+  await page.reload();
+  await expect(page.getByText('Page 1 of 1 · Total: 4', { exact: true })).toBeVisible();
+  expect(page.url()).toBe(savedURL);
   const sources = page.locator('summary').filter({ hasText: 'Source information' });
   await sources.first().click();
   await expect(page.getByText(f.source_client, { exact: true }).first()).toBeVisible();
@@ -235,6 +242,9 @@ test('administrator reviews raw diagnostics, human audit evidence and all four a
   const context = await session(browser, 'admin');
   try {
     const page = await context.newPage();
+    const timeContext = await api(context, '/admin/api/time-context', true);
+    expect(timeContext.status()).toBe(200);
+    expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
     await requestDiagnostics(page, true);
     await discoveryDiagnostics(page, true);
     await page.goto(f.admin_url + '/abuse-audit');
@@ -297,6 +307,49 @@ test('administrator reviews raw diagnostics, human audit evidence and all four a
       await expect(
         page.getByRole('table', { name: 'Flows by time bucket', exact: true }),
       ).toBeVisible();
+      const chart = page.getByRole('slider', { name: 'Issuance and retirement time bucket' });
+      await chart.focus();
+      await page.keyboard.press('Home');
+      await expect(chart).toHaveAttribute('aria-valuenow', '1');
+      await expect(page.locator('.audit-chart-selection')).toContainText('New issuance');
+      await page.keyboard.press('End');
+      await expect(chart).not.toHaveAttribute('aria-valuenow', '1');
+      if (asset === 'general') {
+        for (const width of [1440, 1920, 2560, 3440, 390]) {
+          await page.setViewportSize({ width, height: 1000 });
+          await expect
+            .poll(() =>
+              chart.evaluate((element) => {
+                const canvas = element as HTMLCanvasElement;
+                const box = canvas.getBoundingClientRect();
+                const parent = canvas.parentElement!.getBoundingClientRect();
+                return (
+                  box.left >= 0 &&
+                  box.right <= innerWidth + 1 &&
+                  Math.abs(box.width - parent.width) <= 1 &&
+                  Math.abs(canvas.width - box.width * devicePixelRatio) <= 1 &&
+                  Math.abs(canvas.height - box.height * devicePixelRatio) <= 1
+                );
+              }),
+            )
+            .toBe(true);
+          await page
+            .locator('.audit-chart')
+            .screenshot({ path: `test-results/audit/chart-${width}.png` });
+        }
+        await page.evaluate(() => {
+          document.documentElement.dataset.theme = 'dark';
+        });
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        await page
+          .locator('.audit-chart')
+          .screenshot({ path: 'test-results/audit/chart-dark.png' });
+      }
       if (asset === 'game')
         await expect(
           stock
@@ -334,6 +387,9 @@ test('full steward reads sources and activity diagnostics and edits rules but no
   const f = fixture();
   const context = await session(browser, 6, true);
   try {
+    const timeContext = await api(context, '/api/steward/time-context');
+    expect(timeContext.status()).toBe(200);
+    expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
     const page = await context.newPage();
     await requestDiagnostics(page, false, true);
     await discoveryDiagnostics(page, false);
@@ -381,6 +437,10 @@ for (const level of [5, 1] as const) {
       const f = fixture();
       const context = await session(browser, level);
       try {
+        const timeContext = await api(context, '/api/steward/time-context');
+        expect(timeContext.status()).toBe(level === 5 ? 200 : 403);
+        if (level === 5)
+          expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
         const page = await context.newPage();
         const noLeaks = safeResponses(page);
         await page.goto(f.user_url + '/steward?tab=risk');
@@ -391,6 +451,7 @@ for (const level of [5, 1] as const) {
         for (const path of [
           '/api/steward/abuse-audit/users',
           '/api/steward/abuse-audit/client-rules',
+          '/api/steward/abuse-audit/client-scans',
           '/api/steward/diagnostics',
           '/api/steward/diagnostics/' + f.diagnostic_id,
           '/api/steward/logs/' + f.request_ids[0] + '/source',

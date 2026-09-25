@@ -44,12 +44,20 @@ type DiagnosticFilter struct {
 }
 type DiagnosticItem struct {
 	ErrorMetadata
-	ID         string `json:"id"`
-	Kind       string `json:"kind"`
-	SubjectID  string `json:"subject_id"`
-	UserID     string `json:"user_id"`
-	AttemptSeq int    `json:"attempt_seq"`
-	Synthetic  bool   `json:"synthetic"`
+	ID         string              `json:"id"`
+	Kind       string              `json:"kind"`
+	SubjectID  string              `json:"subject_id"`
+	UserID     string              `json:"user_id"`
+	AttemptSeq int                 `json:"attempt_seq"`
+	Synthetic  bool                `json:"synthetic"`
+	Dispatch   *DiagnosticDispatch `json:"dispatch,omitempty"`
+}
+type DiagnosticDispatch struct {
+	Method       string `json:"method"`
+	URL          string `json:"url"`
+	RequestBody  string `json:"request_body"`
+	ContentType  string `json:"content_type"`
+	DispatchedAt int64  `json:"dispatched_at"`
 }
 type DiagnosticPage struct {
 	Data       []DiagnosticItem `json:"data"`
@@ -154,6 +162,7 @@ const diagnosticJoins = `
  LEFT JOIN image_activity_tasks t ON t.id=e.task_id
  LEFT JOIN accepted_operations o ON o.id=e.operation_id
  LEFT JOIN image_model_refreshes f ON f.operation_id=o.id
+ LEFT JOIN image_discovery_dispatches d ON d.operation_id=f.operation_id
 `
 const diagnosticLive = `
  e.expires_at>? AND (
@@ -164,7 +173,7 @@ const diagnosticLive = `
 const diagnosticKindExpr = "CASE WHEN l.id IS NOT NULL THEN 'model_discovery' WHEN t.id IS NOT NULL THEN 'image_task' ELSE 'image_discovery' END"
 const diagnosticSubjectExpr = "COALESCE(l.logical_request_id,t.id,o.id)"
 const diagnosticUserExpr = "COALESCE(l.user_id,t.user_id,o.actor_user_id)"
-const diagnosticColumns = "e.id," + diagnosticKindExpr + "," + diagnosticSubjectExpr + "," + diagnosticUserExpr + ",e.attempt_seq,e.event_seq,e.http_status,e.content_type,e.bytes_saved,e.truncated,e.save_state,e.created_at,e.expires_at"
+const diagnosticColumns = "e.id," + diagnosticKindExpr + "," + diagnosticSubjectExpr + "," + diagnosticUserExpr + ",e.attempt_seq,e.event_seq,e.http_status,e.content_type,e.bytes_saved,e.truncated,e.save_state,e.created_at,e.expires_at,d.method,d.url,d.request_body,d.request_content_type,d.dispatched_at"
 
 type diagnosticScanner interface{ Scan(...any) error }
 
@@ -172,7 +181,9 @@ func scanDiagnostic(row diagnosticScanner, body *[]byte) (DiagnosticItem, error)
 	var out DiagnosticItem
 	var id, user int64
 	var status sql.NullInt64
-	values := []any{&id, &out.Kind, &out.SubjectID, &user, &out.AttemptSeq, &out.EventSeq, &status, &out.ContentType, &out.BytesSaved, &out.Truncated, &out.SaveState, &out.CreatedAt, &out.ExpiresAt}
+	var method, dispatchURL, requestBody, requestContentType sql.NullString
+	var dispatchedAt sql.NullInt64
+	values := []any{&id, &out.Kind, &out.SubjectID, &user, &out.AttemptSeq, &out.EventSeq, &status, &out.ContentType, &out.BytesSaved, &out.Truncated, &out.SaveState, &out.CreatedAt, &out.ExpiresAt, &method, &dispatchURL, &requestBody, &requestContentType, &dispatchedAt}
 	if body != nil {
 		values = append(values, body)
 	}
@@ -186,6 +197,9 @@ func scanDiagnostic(row diagnosticScanner, body *[]byte) (DiagnosticItem, error)
 		out.HTTPStatus = &v
 	}
 	out.Synthetic = out.ContentType == imageDiagnosticMIME
+	if method.Valid && dispatchURL.Valid && dispatchedAt.Valid {
+		out.Dispatch = &DiagnosticDispatch{Method: method.String, URL: dispatchURL.String, RequestBody: requestBody.String, ContentType: requestContentType.String, DispatchedAt: dispatchedAt.Int64}
+	}
 	return out, nil
 }
 func (r *DiagnosticReader) List(ctx context.Context, actor DiagnosticActor, filter DiagnosticFilter) (DiagnosticPage, error) {

@@ -269,23 +269,12 @@ func (s *Service) Operations(ctx context.Context, admin int64, f Filter) (Operat
 			}
 		}
 		out.AnchorSeq = strconv.FormatInt(head, 10)
-		query := `SELECT o.id,o.ledger_seq,o.kind,o.source_type,o.source_id,o.created_at FROM credit_operations o WHERE o.ledger_seq<=? AND o.created_at>=? AND o.created_at<? AND EXISTS(SELECT 1 FROM credit_entries e WHERE e.operation_id=o.id AND e.asset_type=?)`
-		args := []any{head, f.From, f.To, string(f.Asset)}
-		if before > 0 {
-			query += ` AND o.ledger_seq<?`
-			args = append(args, before)
-		}
-		if f.Kind != "" {
-			query += ` AND o.kind=?`
-			args = append(args, f.Kind)
-		}
-		query += operationChannelCondition(f, "o.source_id")
-		query += ` ORDER BY o.ledger_seq DESC LIMIT 101`
+		query, args := operationPageQuery(f, head, before)
 		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
 		}
-		batch := []operation{}
+		batch := make([]operation, 0, 101)
 		for rows.Next() {
 			var o operation
 			if err := rows.Scan(&o.id, &o.seq, &o.kind, &o.source, &o.sourceID, &o.at); err != nil {
@@ -305,10 +294,18 @@ func (s *Service) Operations(ctx context.Context, admin int64, f Filter) (Operat
 		if more {
 			batch = batch[:100]
 		}
+		ids := make([]string, 0, len(batch))
 		for _, o := range batch {
-			entries, err := readOperationEntries(ctx, tx, o.id)
-			if err != nil {
-				return err
+			ids = append(ids, o.id)
+		}
+		entriesByID, err := readOperationEntriesBatch(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
+		for _, o := range batch {
+			entries := entriesByID[o.id]
+			if len(entries) == 0 {
+				return ErrInvariant
 			}
 			out.Data = append(out.Data, Operation{o.id, strconv.FormatInt(o.seq, 10), o.kind, o.source, o.sourceID, o.at, ledger.ClassifyForAudit(ledger.Kind(o.kind), o.sourceID), entries})
 		}
@@ -322,6 +319,26 @@ func (s *Service) Operations(ctx context.Context, admin int64, f Filter) (Operat
 		return nil
 	})
 	return out, err
+}
+
+// Unary + on created_at and kind keeps this bounded page on the ledger sequence
+// index. Their other indexes can otherwise win and sort a large sparse range.
+func operationPageQuery(f Filter, head, before int64) (string, []any) {
+	query := `SELECT o.id,o.ledger_seq,o.kind,o.source_type,o.source_id,o.created_at
+FROM credit_operations o WHERE o.ledger_seq<=? AND +o.created_at>=? AND +o.created_at<?
+AND EXISTS(SELECT 1 FROM credit_entries e WHERE e.operation_id=o.id AND e.asset_type=?)`
+	args := []any{head, f.From, f.To, string(f.Asset)}
+	if before > 0 {
+		query += ` AND o.ledger_seq<?`
+		args = append(args, before)
+	}
+	if f.Kind != "" {
+		query += ` AND +o.kind=?`
+		args = append(args, f.Kind)
+	}
+	query += operationChannelCondition(f, "o.source_id")
+	query += ` ORDER BY o.ledger_seq DESC LIMIT 101`
+	return query, args
 }
 
 func cursorOwner(admin int64, f Filter) string {

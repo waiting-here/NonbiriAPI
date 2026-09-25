@@ -5,6 +5,15 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
 }
+.charity-management .ops-paired-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.charity-management .ops-field-grid > :is(.field-help, .muted, p) {
+  grid-column: 1 / -1;
+}
+.charity-management .ops-model-description {
+  grid-column: 1 / -1;
+}
 .charity-management :is(.ops-field-grid label, .ops-form-field, .ops-model-settings > label) {
   align-content: start;
 }
@@ -21,7 +30,7 @@
   margin-bottom: 1rem;
 }
 .charity-management :is(.charity-model-editor, .donation-key-editor) {
-  max-width: 90rem;
+  width: 100%;
 }
 .charity-management .donation-key-editor h5 {
   font-size: 1rem;
@@ -115,10 +124,10 @@
   align-items: center;
 }
 .charity-management .charity-settings .config-control {
-  min-width: min(28rem, 100%);
+  min-width: 0;
 }
 .charity-management .charity-settings input {
-  max-width: 20rem;
+  max-width: none;
 }
 .charity-management .ops-model-settings {
   display: grid;

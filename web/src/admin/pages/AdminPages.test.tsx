@@ -1,5 +1,5 @@
 import { act, screen, waitFor } from '@testing-library/react';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { ActivitiesPage } from './ActivitiesPage';
 import { EndpointsPage } from './EndpointsPage';
@@ -106,6 +106,20 @@ function LocationProbe() {
   return <output data-testid="location">{useLocation().search}</output>;
 }
 
+function UserIDNavigationProbe() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/users?user_id=9223372036854775808')}>
+        Overflow URL
+      </button>
+      <button type="button" onClick={() => navigate('/users?user_id=9223372036854775807')}>
+        Maximum URL
+      </button>
+    </>
+  );
+}
+
 function ancillaryResponse(url: URL): unknown {
   if (url.pathname === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
   if (url.pathname === '/admin/api/time-zones')
@@ -114,7 +128,10 @@ function ancillaryResponse(url: URL): unknown {
     return {
       revision: '1',
       master_enabled: true,
-      loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
+      loan_enabled: false,
+      loan_tiers: ['10000', '100000', '1000000'],
+      loan_a: '0.9',
+      loan_b: '1.3',
       welfare: { enabled: false, threshold: '1', cap: '2' },
       thursday: { enabled: false },
     };
@@ -194,6 +211,7 @@ describe('administrator paged operation pages', () => {
       if (method === 'GET' && url.pathname === '/admin/api/users') {
         expect(url.searchParams.get('is_banned')).toBe('true');
         expect(url.searchParams.get('q')).toBe('alice');
+        expect(url.searchParams.get('user_id')).toBe('7');
         expect(['999', '2']).toContain(url.searchParams.get('page'));
         expect(url.searchParams.get('page_size')).toBe('50');
         expect(url.searchParams.has('cursor')).toBe(false);
@@ -212,7 +230,7 @@ describe('administrator paged operation pages', () => {
       {
         station: 'admin',
         role: 'admin',
-        route: '/users?page=999&page_size=50&q=alice&is_banned=true',
+        route: '/users?page=999&page_size=50&q=alice&is_banned=true&user_id=7',
       },
     );
     await screen.findByText('alice');
@@ -225,7 +243,52 @@ describe('administrator paged operation pages', () => {
     expect(restored.get('page')).toBe('2');
     expect(restored.get('page_size')).toBe('50');
     expect(restored.get('q')).toBe('alice');
+    expect(restored.get('user_id')).toBe('7');
     expect(restored.has('user')).toBe(false);
+  });
+
+  it('keeps overflow user IDs visible and blocks unfiltered requests through form and navigation', async () => {
+    const requests = installFetch((url) => {
+      if (url.pathname === '/admin/api/users')
+        return page([], '1', Number(url.searchParams.get('page_size')), 0);
+      return ancillaryResponse(url);
+    });
+    const view = await renderWithProviders(
+      <>
+        <UsersPage />
+        <UserIDNavigationProbe />
+      </>,
+      { station: 'admin', role: 'admin', route: '/users?user_id=7' },
+    );
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (url) => url.pathname === '/admin/api/users' && url.searchParams.get('user_id') === '7',
+        ),
+      ).toBe(true),
+    );
+    const listCount = () => requests.filter((url) => url.pathname === '/admin/api/users').length;
+    const before = listCount();
+    const input = screen.getByRole('textbox', { name: 'User ID' });
+    await view.user.clear(input);
+    await view.user.type(input, '9223372036854775808');
+    expect(input).toHaveValue('9223372036854775808');
+    expect(screen.getByRole('alert')).toHaveTextContent(/positive user ID/);
+    expect(screen.getByRole('button', { name: 'Apply filter' })).toBeDisabled();
+    expect(listCount()).toBe(before);
+    await view.user.click(screen.getByRole('button', { name: 'Overflow URL' }));
+    await waitFor(() => expect(input).toHaveValue('9223372036854775808'));
+    expect(listCount()).toBe(before);
+    await view.user.click(screen.getByRole('button', { name: 'Maximum URL' }));
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (url) =>
+            url.pathname === '/admin/api/users' &&
+            url.searchParams.get('user_id') === '9223372036854775807',
+        ),
+      ).toBe(true),
+    );
   });
 
   it('loads expanded endpoint users from the exact base URL page endpoint', async () => {
@@ -283,7 +346,10 @@ describe('administrator paged operation pages', () => {
         return {
           revision: '1',
           master_enabled: true,
-          loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
+          loan_enabled: false,
+          loan_tiers: ['10000', '100000', '1000000'],
+          loan_a: '0.9',
+          loan_b: '1.3',
           welfare: { enabled: false, threshold: '1', cap: '2' },
           thursday: { enabled: false },
         };

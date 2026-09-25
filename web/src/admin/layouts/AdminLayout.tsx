@@ -8,6 +8,7 @@ import { Brand, useBrandFavicon } from '@shared/components/Brand';
 import { AccountMenu } from '@shared/components/AccountMenu';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
 import { PublicShell } from '@shared/components/PublicShell';
+import { TimeContextProvider } from '@shared/components/TimeContext';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { ErrorState, LoadingState, PageFooter } from '@shared/components/States';
 import { Icon } from '@shared/components/Icon';
@@ -411,7 +412,9 @@ export function AdminLayout() {
         <main id="main" className="admin-content nb-admin-content" tabIndex={-1}>
           {logoutError ? <ErrorState error={logoutError} /> : null}
           {/* Keep route-local mutation and form state scoped to one admin. */}
-          <Outlet key={session.data.admin.username} />
+          <TimeContextProvider station="admin">
+            <Outlet key={session.data.admin.username} />
+          </TimeContextProvider>
           <PageFooter copyright={t('common.copyright', { year: new Date().getFullYear() })} />
         </main>
       </div>

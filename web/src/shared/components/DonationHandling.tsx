@@ -9,7 +9,7 @@ import {
   type DonationHandlingReceipt,
 } from '@shared/operations/charity';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { ErrorState, StatusBadge } from './States';
 import {
   donationHandlingStateKey,
@@ -41,6 +41,7 @@ export function DonationHandlingControl({
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const process = useRetainedOperation<{ revision: string }, DonationHandlingReceipt>(
     (input, key) => processManagedDonation(role, donationID, input.revision, key),

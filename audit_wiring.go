@@ -116,9 +116,10 @@ func (a *auditRuntime) Wrap(next http.Handler) http.Handler {
 func (a *auditRuntime) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
-	a.workers.Add(2)
+	a.workers.Add(3)
 	go func() { defer a.workers.Done(); a.collector.Run(ctx) }()
 	go func() { defer a.workers.Done(); a.economy.Run(ctx) }()
+	go func() { defer a.workers.Done(); a.risk.RunScans(ctx) }()
 }
 
 func (a *auditRuntime) Close() error {

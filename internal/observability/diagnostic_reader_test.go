@@ -137,6 +137,9 @@ func (f *diagnosticFixture) imageRoots(t *testing.T) (string, string) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := r.db.Exec("INSERT INTO image_discovery_dispatches(operation_id,method,url,request_body,request_content_type,dispatched_at) VALUES(?,'GET','https://fixture.invalid/v1/models','','',?)", operation, now); err != nil {
+		t.Fatal(err)
+	}
 	return task, operation
 }
 func TestIndependentDiagnosticsFinalAuthorityAndBoundedPagination(t *testing.T) {
@@ -216,6 +219,24 @@ func TestIndependentDiagnosticsImageRootsExpiryAndAnonymization(t *testing.T) {
 	page, err := f.reader.List(diagContext(f.steward), diagActor(f.steward), DiagnosticFilter{Kind: "image_discovery", SubjectID: operation})
 	if err != nil || len(page.Data) != 1 || page.Data[0].ID != operationEvent {
 		t.Fatalf("operation %+v %v", page, err)
+	}
+	if page.Data[0].Dispatch == nil || page.Data[0].Dispatch.Method != "GET" || page.Data[0].Dispatch.URL != "https://fixture.invalid/v1/models" || page.Data[0].Dispatch.RequestBody != "" {
+		t.Fatalf("dispatch projection %+v", page.Data[0].Dispatch)
+	}
+	if _, err := f.repository.db.Exec(`INSERT INTO image_upstream_revisions(revision,control_id,base_url,secret_context,secret_ciphertext,adapter_json,image_origins_json,per_user_limit,global_limit,queue_timeout_seconds,execution_timeout_seconds,memory_budget_mib,created_at)
+		SELECT 2,control_id,'https://replacement.invalid',secret_context,secret_ciphertext,adapter_json,image_origins_json,per_user_limit,global_limit,queue_timeout_seconds,execution_timeout_seconds,memory_budget_mib,created_at+1 FROM image_upstream_revisions WHERE revision=1`); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := f.reader.Detail(diagContext(f.admin), diagActor(f.admin), operationEvent)
+	if err != nil || detail.Item.Dispatch == nil || detail.Item.Dispatch.ContentType != "" || detail.Item.Dispatch.URL != "https://fixture.invalid/v1/models" {
+		t.Fatalf("dispatch detail %+v %v", detail.Item.Dispatch, err)
+	}
+	if _, err := f.repository.db.Exec("DELETE FROM image_discovery_dispatches WHERE operation_id=?", operation); err != nil {
+		t.Fatal(err)
+	}
+	historical, err := f.reader.Detail(diagContext(f.admin), diagActor(f.admin), operationEvent)
+	if err != nil || historical.Item.Dispatch != nil {
+		t.Fatalf("historical dispatch %+v %v", historical.Item.Dispatch, err)
 	}
 	// Even if body cleanup lags, null owners and missing operation roots cannot reopen data.
 	if _, err = f.repository.db.Exec("UPDATE image_activity_tasks SET user_id=NULL,finance_state='deleted',model_id=NULL,model_revision=NULL,n=NULL,paper_charge_mag=NULL,brush_charge_mag=NULL WHERE id=?", task); err != nil {

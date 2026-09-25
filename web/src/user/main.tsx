@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@shared/theme/ThemeProvider';
 import { ToastProvider } from '@shared/components/Toast';
+import { TimeContextProvider } from '@shared/components/TimeContext';
 import { createQueryClient } from '@shared/query/client';
 import '@shared/styles/index.css';
 import '@shared/styles/stations/user-shell.css';
@@ -20,7 +21,9 @@ createRoot(root).render(
     <ThemeProvider>
       <ToastProvider>
         <QueryClientProvider client={createQueryClient()}>
-          <RouterProvider router={router} />
+          <TimeContextProvider station="user">
+            <RouterProvider router={router} />
+          </TimeContextProvider>
         </QueryClientProvider>
       </ToastProvider>
     </ThemeProvider>

@@ -17,7 +17,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber } from '@shared/operations/pageNumbers';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import {
   banManagedUser,
   mutateManagedUser,
@@ -84,6 +84,7 @@ function UserAuthority({
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
@@ -513,28 +514,45 @@ export function UserManagement({
     rawBanned === 'true' || rawBanned === 'false' ? rawBanned : '';
   const query = searchParams.get('q') ?? '';
   const rawLevel = searchParams.get('level') ?? '';
-  const level = ['1', '2', '3', '4', '5'].includes(rawLevel) ? rawLevel : '';
+  const level = ['1', '2', '3', '4', '5', '6'].includes(rawLevel) ? rawLevel : '';
+  const rawUserID = searchParams.get('user_id') ?? '';
+  const userID = rawUserID;
+  const invalidCommittedUserID = userID !== '' && !isPageNumber(userID, 9_223_372_036_854_775_807n);
   const selectedValue = searchParams.get('user');
   const selected = isPageNumber(selectedValue, 9_223_372_036_854_775_807n) ? selectedValue : '';
   const [queryDraft, setQueryDraft] = useState(query);
+  const [userIDDraft, setUserIDDraft] = useState(userID);
+  const invalidUserIDDraft =
+    userIDDraft !== '' && !isPageNumber(userIDDraft, 9_223_372_036_854_775_807n);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: `${role}.users`,
     scopeKey: account,
     scopeReady,
-    resetKey: `${banned}|${query}|${level}`,
+    resetKey: `${banned}|${query}|${level}|${userID}`,
   });
   const users = useQuery({
-    queryKey: managedUserKeys.list(role, account, banned, query, level, pager.page, pager.pageSize),
+    queryKey: managedUserKeys.list(
+      role,
+      account,
+      banned,
+      query,
+      level,
+      userID,
+      pager.page,
+      pager.pageSize,
+    ),
     queryFn: ({ signal }) =>
-      getManagedUsersPage(role, banned, query, level, pager.page, pager.pageSize, signal),
+      getManagedUsersPage(role, banned, query, level, pager.page, pager.pageSize, signal, userID),
     retry: false,
-    enabled: scopeReady,
+    enabled: scopeReady && !invalidCommittedUserID,
     placeholderData: (previous, previousQuery) =>
+      !invalidCommittedUserID &&
       previousQuery?.queryKey[3] === account &&
       previousQuery.queryKey[4] === banned &&
       previousQuery.queryKey[5] === query &&
-      previousQuery.queryKey[6] === level
+      previousQuery.queryKey[6] === level &&
+      previousQuery.queryKey[7] === userID
         ? previous
         : undefined,
   });
@@ -542,7 +560,7 @@ export function UserManagement({
     queryKey: managedUserKeys.detail(role, account, selected),
     queryFn: ({ signal }) => getManagedUserDetail(role, selected, signal),
     retry: false,
-    enabled: Boolean(selected) && scopeReady,
+    enabled: Boolean(selected) && scopeReady && !invalidCommittedUserID,
   });
   const detailUnavailable =
     isUnauthorized(users.error) ||
@@ -557,6 +575,11 @@ export function UserManagement({
     setQueryDraft(query);
   }, [query]);
   useEffect(() => {
+    // Keep the ID field aligned when browser history changes the URL.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUserIDDraft(userID);
+  }, [userID]);
+  useEffect(() => {
     if (
       isUnauthorized(users.error) ||
       isForbidden(users.error) ||
@@ -567,7 +590,13 @@ export function UserManagement({
       else clearStationSession(client, role);
     }
   }, [client, detail.error, users.error, role, onAuthorityLoss]);
-  const commitListState = (nextQuery: string, nextBanned: typeof banned, nextLevel = level) => {
+  const commitListState = (
+    nextQuery: string,
+    nextBanned: typeof banned,
+    nextLevel = level,
+    nextUserID = userID,
+  ) => {
+    if (nextUserID !== '' && !isPageNumber(nextUserID, 9_223_372_036_854_775_807n)) return;
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       if (nextQuery) next.set('q', nextQuery);
@@ -576,6 +605,8 @@ export function UserManagement({
       else next.delete('is_banned');
       if (nextLevel) next.set('level', nextLevel);
       else next.delete('level');
+      if (nextUserID) next.set('user_id', nextUserID);
+      else next.delete('user_id');
       next.delete('page');
       next.set('page', '1');
       next.delete('page_size');
@@ -611,9 +642,20 @@ export function UserManagement({
           className="ops-toolbar"
           onSubmit={(event) => {
             event.preventDefault();
-            commitListState(queryDraft.trim(), banned);
+            commitListState(queryDraft.trim(), banned, level, userIDDraft);
           }}
         >
+          <label>
+            <span>{t('management.users.userId')}</span>
+            <input
+              aria-label={t('management.users.userId')}
+              aria-invalid={invalidUserIDDraft}
+              inputMode="numeric"
+              maxLength={64}
+              value={userIDDraft}
+              onChange={(event) => setUserIDDraft(event.target.value)}
+            />
+          </label>
           <label>
             <span>{t('common.search')}</span>
             <input
@@ -627,7 +669,9 @@ export function UserManagement({
             <span>{t('management.users.filterStatus')}</span>
             <select
               value={banned}
-              onChange={(event) => commitListState(query, event.target.value as typeof banned)}
+              onChange={(event) =>
+                commitListState(query, event.target.value as typeof banned, level, userIDDraft)
+              }
             >
               <option value="">{t('common.all')}</option>
               <option value="false">{t('management.users.active')}</option>
@@ -638,7 +682,7 @@ export function UserManagement({
             <span>{t('management.users.level')}</span>
             <select
               value={level}
-              onChange={(event) => commitListState(query, banned, event.target.value)}
+              onChange={(event) => commitListState(query, banned, event.target.value, userIDDraft)}
             >
               <option value="">{t('common.all')}</option>
               {[1, 2, 3, 4, 5, 6].map((value) => (
@@ -648,14 +692,21 @@ export function UserManagement({
               ))}
             </select>
           </label>
-          <button className="btn btn-secondary" type="submit">
+          {invalidUserIDDraft ? (
+            <p className="field-error" role="alert">
+              {t('management.users.userIdInvalid')}
+            </p>
+          ) : null}
+          <button className="btn btn-secondary" type="submit" disabled={invalidUserIDDraft}>
             {t('common.applyFilter')}
           </button>
         </form>
       </Card>
       <Card>
         <h2>{t('management.users.listTitle')}</h2>
-        {sessionError ? (
+        {invalidCommittedUserID ? (
+          <p role="status">{t('management.users.userIdInvalid')}</p>
+        ) : sessionError ? (
           <ErrorState error={sessionError} />
         ) : users.isPending ? (
           <LoadingState />
@@ -743,7 +794,7 @@ export function UserManagement({
           />
         ) : null}
       </Card>
-      {scopeReady && !sessionError && selected && !detailUnavailable ? (
+      {scopeReady && !sessionError && !invalidCommittedUserID && selected && !detailUnavailable ? (
         detail.isPending ? (
           <LoadingState />
         ) : detail.error ? (

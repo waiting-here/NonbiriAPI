@@ -106,6 +106,7 @@ type UserListQuery struct {
 	Level    int
 	IsBanned *bool
 	Q        string
+	UserID   int64
 	Cursor   string
 	Limit    int
 	Page     *pagination.Request
