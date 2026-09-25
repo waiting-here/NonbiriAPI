@@ -86,5 +86,5 @@ func usersCursorOwner(query UserListQuery, role managementRole, actorID int64) s
 	if query.IsBanned != nil {
 		filter = strconv.FormatBool(*query.IsBanned)
 	}
-	return filterOwner("users", role.actorKind(), strconv.FormatInt(actorID, 10), filter, query.Q, strconv.Itoa(query.Level))
+	return filterOwner("users", role.actorKind(), strconv.FormatInt(actorID, 10), filter, query.Q, strconv.Itoa(query.Level), strconv.FormatInt(query.UserID, 10))
 }

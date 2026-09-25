@@ -145,6 +145,50 @@ func TestUserLevelFilteringIncludesLazyPromotionsAndHighWater(t *testing.T) {
 	}
 }
 
+func TestUserIDFilterIsExactAndComposesWithExistingFilters(t *testing.T) {
+	f, actor := newStewardUsersFixture(t)
+	match := f.seedUser("same-name", false)
+	other := f.seedUser("same-name-other", false)
+	if _, err := f.store.DB().Exec("UPDATE users SET level=5,is_banned=1,banned_until=? WHERE id=?", adminUsersTestNow+3600, other); err != nil {
+		t.Fatal(err)
+	}
+	page, err := f.service.listUsers(context.Background(), actor, roleSteward, UserListQuery{
+		UserID: match,
+		Q:      "same-name",
+		Limit:  20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Data) != 1 || page.Data[0].ID != strconv.FormatInt(match, 10) {
+		t.Fatalf("exact user filter returned %+v", page.Data)
+	}
+	page, err = f.service.listUsers(context.Background(), actor, roleSteward, UserListQuery{
+		UserID:   match,
+		IsBanned: boolPointer(true),
+		Limit:    20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Data) != 0 {
+		t.Fatalf("user id did not compose with status filter: %+v", page.Data)
+	}
+	for _, query := range []string{
+		"?user_id=0",
+		"?user_id=01",
+		"?user_id=9223372036854775808",
+		"?user_id=not-a-number",
+		"?user_id=1&user_id=2",
+	} {
+		if got := stewardUserRequest(t, f, actor, 0, "GET", routeUsers, query, "", ""); got.Code != 400 {
+			t.Fatalf("user_id query %s: %d", query, got.Code)
+		}
+	}
+}
+
+func boolPointer(value bool) *bool { return &value }
+
 func TestManagedUserLimitsRemainDecimalStrings(t *testing.T) {
 	f, actor := newStewardUsersFixture(t)
 	target := f.seedUser("limits", false)

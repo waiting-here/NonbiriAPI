@@ -672,6 +672,7 @@
       "deleteRefreshOnlyBody": "Enter your password to confirm. If the user record changes or the outcome is unclear, the page refreshes and you must confirm again.",
       "deleteTypeConfirmation": "Type {{token}} to confirm immediate account deletion",
       "userId": "User ID",
+      "userIdInvalid": "Enter a positive user ID no greater than 9223372036854775807.",
       "discordId": "Discord ID",
       "discordUnlinked": "Discord not linked",
       "economyDecrease": "Decrease",

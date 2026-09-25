@@ -16,6 +16,7 @@ import {
 import { UpstreamForm } from './UpstreamForm';
 import { ModelEditor } from './ModelEditor';
 import { RecoveryPanel } from './RecoveryPanel';
+import { DiscoveryFailureDiagnostics } from './DiscoveryFailureDiagnostics';
 import { discoveryError } from './discoveryError';
 import '@shared/picturebook/picturebook.css';
 
@@ -98,6 +99,7 @@ function Catalog({ account }: { readonly account: string }) {
             <h3>{t('模型拉取失败', 'Model discovery failed')}</h3>
             <p>{discoveryError(operation.data.error_code, operation.data.http_status, t)}</p>
             {operation.data.http_status ? <p>HTTP {operation.data.http_status}</p> : null}
+            <DiscoveryFailureDiagnostics operationID={operation.data.id} />
             <details>
               <summary>{t('诊断信息', 'Diagnostic information')}</summary>
               <p>

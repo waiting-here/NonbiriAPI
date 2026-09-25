@@ -8,7 +8,9 @@ import {
 } from './independentApi';
 const request = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock('@shared/query/http', () => ({ apiFetch: request.apiFetch }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { resolvedLanguage: 'en' } }) }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ i18n: { resolvedLanguage: 'en' }, t: (key: string) => key }),
+}));
 afterEach(() => request.apiFetch.mockReset());
 function entry(id = '3', body = '<script>untrusted</script>') {
   return {
@@ -116,6 +118,75 @@ describe('independent management diagnostics', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
     await screen.findByRole('alert');
     expect(screen.queryByText('<script>untrusted</script>')).toBeNull();
+  });
+  it('clears all loaded bodies after a detail read fails', async () => {
+    const first = entry('3');
+    const second = entry('2');
+    request.apiFetch
+      .mockResolvedValueOnce(page([first, second]))
+      .mockResolvedValueOnce({
+        item: first,
+        body: { ...first, encoding: 'utf-8', body: '<script>untrusted</script>' },
+        source: null,
+      })
+      .mockRejectedValueOnce(new Error('Access changed'));
+    render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    await waitFor(() => expect(screen.getAllByText(/img_AAAAA.*Attempt 3/)).toHaveLength(2));
+    fireEvent.click(screen.getAllByText(/img_AAAAA.*Attempt 3/)[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Load error details and source' })[0]);
+    expect(await screen.findByText('<script>untrusted</script>')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText(/img_AAAAA.*Attempt 3/)[1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Load error details and source' }));
+    await screen.findByRole('alert');
+    expect(screen.queryByText('<script>untrusted</script>')).toBeNull();
+    expect(screen.queryByText(/img_AAAAA.*Attempt 3/)).toBeNull();
+  });
+  it('shows the saved dispatch only in detail and labels historical omissions', async () => {
+    const current = {
+      ...entry('3', 'failure'),
+      kind: 'image_discovery',
+      subject_id: 'op_AAAAAAAAAAAAAAAAAAAAAA',
+      dispatch: {
+        method: 'GET',
+        url: 'https://sent.example.invalid/models?revision=1',
+        request_body: '',
+        content_type: '',
+        dispatched_at: 1800000000,
+      },
+    };
+    const historical = {
+      ...entry('2', 'failure'),
+      kind: 'image_discovery',
+      subject_id: `op_${'B'.repeat(21)}A`,
+    };
+    request.apiFetch
+      .mockResolvedValueOnce(page([current, historical]))
+      .mockResolvedValueOnce({
+        item: current,
+        body: { ...current, encoding: 'utf-8', body: 'failure' },
+        source: null,
+      })
+      .mockResolvedValueOnce({
+        item: historical,
+        body: { ...historical, encoding: 'utf-8', body: 'failure' },
+        source: null,
+      });
+    render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
+    fireEvent.click(screen.getByRole('button', { name: 'Search diagnostics' }));
+    fireEvent.click(await screen.findByText(/op_AAAAA.*Attempt 3/));
+    expect(screen.queryByText('https://sent.example.invalid/models?revision=1')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Load error details and source' })[0]);
+    expect(
+      await screen.findByText('https://sent.example.invalid/models?revision=1'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Actual upstream dispatch' })).toHaveLength(1);
+    expect(screen.getByText('Empty (GET request)')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/op_BBBBB.*Attempt 3/));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Load error details and source' })[0]);
+    expect(
+      await screen.findByText('The actual upstream dispatch was not recorded for this operation.'),
+    ).toBeInTheDocument();
   });
   it('rejects oversized pages, invalid cursor ordering, foreign roots and corrupt body counts', () => {
     expect(() => decodeIndependentPage(page(Array.from({ length: 21 }, () => entry())))).toThrow();

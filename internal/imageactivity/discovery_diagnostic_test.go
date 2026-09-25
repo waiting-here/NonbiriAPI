@@ -22,6 +22,13 @@ func TestDiscoveryStatusIsVisibleOnlyToAdministratorsAndWithinRetention(t *testi
 				current, err := f.service.GetRefresh(f.ctx(f.admin), f.admin, id)
 				return err == nil && current.State == "failed"
 			})
+			var method, target, body, contentType string
+			if err := f.database.QueryRow("SELECT method,url,request_body,request_content_type FROM image_discovery_dispatches WHERE operation_id=?", id).Scan(&method, &target, &body, &contentType); err != nil {
+				t.Fatal(err)
+			}
+			if method != "GET" || target != f.upstream.server.URL+"/models" || body != "" || contentType != "" {
+				t.Fatalf("dispatch snapshot method=%q target=%q body=%q content_type=%q", method, target, body, contentType)
+			}
 			// The diagnostic repository uses wall time; align its fixture timestamps
 			// with the activity clock before exercising retention projection.
 			if _, err := f.database.Exec("UPDATE request_error_bodies SET created_at=?,expires_at=? WHERE operation_id=?", testNow, testNow+30*86400, id); err != nil {

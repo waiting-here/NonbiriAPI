@@ -14,6 +14,14 @@ export interface IndependentItem extends ErrorMetadata {
   user_id: string;
   attempt_seq: number;
   synthetic: boolean;
+  dispatch?: DiagnosticDispatch;
+}
+export interface DiagnosticDispatch {
+  method: 'GET';
+  url: string;
+  request_body: string;
+  content_type: string;
+  dispatched_at: number;
 }
 export interface IndependentPage {
   data: IndependentItem[];
@@ -55,6 +63,13 @@ function positiveID(value: unknown): string {
   )
     invalid();
   return value;
+}
+function hasControl(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0)!;
+    if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
+  }
+  return false;
 }
 function metadata(value: unknown): ErrorMetadata {
   const v = object(value);
@@ -106,6 +121,33 @@ function item(value: unknown): IndependentItem {
   if (v.synthetic !== (meta.content_type === syntheticImageMIME)) invalid();
   const attempt = integer(v.attempt_seq, 2147483647);
   if (attempt < 1) invalid();
+  let dispatch: DiagnosticDispatch | undefined;
+  if (v.dispatch !== undefined) {
+    if (v.kind !== 'image_discovery') invalid();
+    const d = object(v.dispatch);
+    if (
+      d.method !== 'GET' ||
+      typeof d.url !== 'string' ||
+      d.url.length < 1 ||
+      d.url.length > 8192 ||
+      hasControl(d.url) ||
+      typeof d.request_body !== 'string' ||
+      d.request_body !== '' ||
+      typeof d.content_type !== 'string' ||
+      d.content_type !== '' ||
+      typeof d.dispatched_at !== 'number' ||
+      !Number.isSafeInteger(d.dispatched_at) ||
+      d.dispatched_at < 0
+    )
+      invalid();
+    dispatch = {
+      method: 'GET',
+      url: d.url,
+      request_body: '',
+      content_type: '',
+      dispatched_at: d.dispatched_at,
+    };
+  }
   return {
     ...meta,
     id: positiveID(v.id),
@@ -114,6 +156,7 @@ function item(value: unknown): IndependentItem {
     subject_id: v.subject_id,
     attempt_seq: attempt,
     synthetic: v.synthetic,
+    ...(dispatch ? { dispatch } : {}),
   };
 }
 export function decodeIndependentPage(value: unknown): IndependentPage {

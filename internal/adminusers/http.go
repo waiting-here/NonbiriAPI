@@ -95,7 +95,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "is_banned", "level", "q", "cursor", "limit", "page", "page_size")
+	values, ok := strictQuery(writer, request, "is_banned", "level", "q", "user_id", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -122,6 +122,14 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 			return
 		}
 		query.Q = raw
+	}
+	if raw, set := singleQuery(values, "user_id"); set {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value <= 0 || strconv.FormatInt(value, 10) != raw {
+			writeError(writer, ErrInvalidRequest)
+			return
+		}
+		query.UserID = value
 	}
 	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
