@@ -151,6 +151,10 @@ func (s *Service) stepRefresh(ctx context.Context, now int64) error {
 	if err != nil {
 		return err
 	}
+	target, err := requestURL(snapshot.baseURL, snapshot.adapter.Discovery.Path, "")
+	if err != nil {
+		return err
+	}
 	budget, err := s.memoryBudget(ctx, snapshot.memoryMiB)
 	if err != nil {
 		return err
@@ -184,6 +188,12 @@ func (s *Service) stepRefresh(ctx context.Context, now int64) error {
 		return nil
 	}
 	if err = requireOne(tx.ExecContext(ctx, "UPDATE image_model_refreshes SET state='running',http_seq=1 WHERE operation_id=? AND state='queued'", id)); err != nil {
+		return err
+	}
+	// Keep the exact dispatch projection beside the refresh root. The saved
+	// upstream revision remains the source of configuration identity, while
+	// this URL records what the worker actually handed to the HTTP client.
+	if _, err = tx.ExecContext(ctx, `INSERT INTO image_discovery_dispatches(operation_id,method,url,request_body,request_content_type,dispatched_at) VALUES(?,?,?,?,?,?)`, id, http.MethodGet, target, "", "", now); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE accepted_operations SET state='running' WHERE id=? AND state='accepted'", id); err != nil {

@@ -206,9 +206,10 @@ export const managedUserKeys = {
     banned: string,
     query: string,
     level: string,
+    userID: string,
     page: string,
     size: PageSize,
-  ) => [...managementRoot(role), 'users', account, banned, query, level, page, size] as const,
+  ) => [...managementRoot(role), 'users', account, banned, query, level, userID, page, size] as const,
   detail: (role: ManagementRole, account: string, id: string) =>
     [...managementRoot(role), 'user', account, id] as const,
 };
@@ -221,16 +222,22 @@ export async function getManagedUsersPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  userID = '',
 ): Promise<NumberedPage<AdminUser>> {
   validateWindow(page, pageSize);
   validateText(query, 512, true);
-  if (!['', 'true', 'false'].includes(banned) || !['', '1', '2', '3', '4', '5'].includes(level))
+  if (
+    !['', 'true', 'false'].includes(banned) ||
+    !['', '1', '2', '3', '4', '5', '6'].includes(level) ||
+    (userID !== '' && !isPageNumber(userID, 9_223_372_036_854_775_807n))
+  )
     invalidRequest();
   return decoded(
     queryPath(base(role), {
       is_banned: banned || undefined,
       q: query || undefined,
       level: level || undefined,
+      user_id: userID || undefined,
       page,
       page_size: pageSize,
     }),

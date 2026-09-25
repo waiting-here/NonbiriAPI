@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CopyValue } from '@shared/components/CopyValue';
 import { RawErrorViewer } from './RequestDiagnostics';
 import type { DiagnosticRole } from './api';
 import {
@@ -47,6 +48,8 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
+    // Unmount all detail readers before a refresh can reuse the same row IDs.
+    setPage(undefined);
     setBusy(true);
     setFailed(false);
     const to = Math.floor(Date.now() / 1000);
@@ -158,7 +161,15 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
               {entry.synthetic ? words(' · safe diagnostic', ' · 安全诊断') : ''}
             </summary>
             {entry.save_state !== 'saved' && <OmittedBody state={entry.save_state} />}
-            <Detail role={role} id={entry.id} synthetic={entry.synthetic} />
+            <Detail
+              role={role}
+              id={entry.id}
+              synthetic={entry.synthetic}
+              onReadFailure={() => {
+                setPage(undefined);
+                setFailed(true);
+              }}
+            />
           </details>
         ))}
       </div>
@@ -175,7 +186,7 @@ function ScopedDiagnostics({ role }: { role: DiagnosticRole }) {
     </section>
   );
 }
-function OmittedBody({ state }: { state: string }) {
+export function OmittedBody({ state }: { state: string }) {
   const words = useWords();
   return (
     <p role="status">
@@ -188,11 +199,20 @@ function OmittedBody({ state }: { state: string }) {
     </p>
   );
 }
-function Detail({ role, id, synthetic }: { role: DiagnosticRole; id: string; synthetic: boolean }) {
+function Detail({
+  role,
+  id,
+  synthetic,
+  onReadFailure,
+}: {
+  role: DiagnosticRole;
+  id: string;
+  synthetic: boolean;
+  onReadFailure: () => void;
+}) {
   const words = useWords();
   const [detail, setDetail] = useState<IndependentDetail>();
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   async function load() {
@@ -200,12 +220,12 @@ function Detail({ role, id, synthetic }: { role: DiagnosticRole; id: string; syn
     const request = new AbortController();
     controller.current = request;
     setBusy(true);
-    setFailed(false);
+    setDetail(undefined);
     try {
       const result = await getIndependentDiagnostic(role, id, request.signal);
       if (!request.signal.aborted) setDetail(result);
     } catch {
-      if (!request.signal.aborted) setFailed(true);
+      if (!request.signal.aborted) onReadFailure();
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }
@@ -224,16 +244,11 @@ function Detail({ role, id, synthetic }: { role: DiagnosticRole; id: string; syn
             : words('Load error details and source', '加载错误详情与来源')}
         </button>
       )}
-      {failed && (
-        <p role="alert">
-          {words(
-            'This diagnostic is unavailable or access has changed.',
-            '诊断已不可用，或访问权限已变化。',
-          )}
-        </p>
-      )}
       {detail && (
         <>
+          {detail.item.kind === 'image_discovery' && (
+            <DispatchDetails dispatch={detail.item.dispatch} />
+          )}
           {detail.body.save_state === 'saved' ? (
             <RawErrorViewer key={id} body={detail.body} />
           ) : (
@@ -257,5 +272,61 @@ function Detail({ role, id, synthetic }: { role: DiagnosticRole; id: string; syn
         </>
       )}
     </div>
+  );
+}
+
+export function DispatchDetails({
+  dispatch,
+}: {
+  dispatch?: {
+    method: string;
+    url: string;
+    request_body: string;
+    content_type: string;
+    dispatched_at: number;
+  };
+}) {
+  const words = useWords();
+  return (
+    <section aria-label={words('Actual upstream dispatch', '实际上游派发')}>
+      <h4>{words('Actual upstream dispatch', '实际上游派发')}</h4>
+      {!dispatch ? (
+        <p>
+          {words(
+            'The actual upstream dispatch was not recorded for this operation.',
+            '此操作未记录实际上游派发。',
+          )}
+        </p>
+      ) : (
+        <dl>
+          <div>
+            <dt>{words('Method', '方法')}</dt>
+            <dd>
+              <code>{dispatch.method}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>{words('URL', 'URL')}</dt>
+            <dd>
+              <CopyValue value={dispatch.url} label="URL" />
+            </dd>
+          </div>
+          <div>
+            <dt>{words('Request body', '请求体')}</dt>
+            <dd>
+              {dispatch.request_body === '' ? (
+                words('Empty (GET request)', '空（GET 请求）')
+              ) : (
+                <CopyValue value={dispatch.request_body} label={words('request body', '请求体')} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{words('Request content type', '请求类型')}</dt>
+            <dd>{dispatch.content_type || '—'}</dd>
+          </div>
+        </dl>
+      )}
+    </section>
   );
 }

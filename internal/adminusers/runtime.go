@@ -265,7 +265,7 @@ func (service *Service) listUsers(ctx context.Context, adminID int64, role manag
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
-	args := []any{query.Q, query.Q, query.Q, after}
+	args := []any{query.Q, query.Q, query.Q, query.UserID, query.UserID, after}
 	filter := ""
 	if query.IsBanned != nil {
 		filter = " AND (CASE WHEN is_banned=1 AND (banned_until IS NULL OR banned_until>?) THEN 1 ELSE 0 END)=?"
@@ -291,6 +291,7 @@ func (service *Service) listUsers(ctx context.Context, adminID int64, role manag
 SELECT id FROM users
 WHERE is_admin=0
  AND (?='' OR instr(username,?)>0 OR instr(COALESCE(discord_id,''),?)>0)
+ AND (?=0 OR id=?)
  AND id>?`+filter, ` ORDER BY id ASC`, args, query.Page, limit)
 	if err != nil {
 		return Page[AdminUser]{}, err

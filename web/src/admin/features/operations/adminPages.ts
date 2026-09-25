@@ -83,7 +83,7 @@ function adminPagePath(
 
 export const adminPageKeys = {
   users: (account: string, banned: string, query: string, page: string, size: PageSize, level = '') =>
-    managedUserKeys.list('admin', account, banned, query, level, page, size),
+    managedUserKeys.list('admin', account, banned, query, level, '', page, size),
   user: (account: string, id: string) => ['admin', 'operations', 'user', account, id] as const,
   endpoints: (account: string, query: string, page: string, size: PageSize) =>
     ['admin', 'operations', 'endpoints', account, query, page, size] as const,
