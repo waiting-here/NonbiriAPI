@@ -266,6 +266,13 @@ function createManagedSourceFixture(setup: StationSetup): ManagedSourceFixture {
           url.pathname === donationKeysPath ||
           url.pathname === donationKeyPatchPath;
         if (!businessPath) {
+          if (url.pathname === `${setup.apiPrefix}/time-context`) {
+            if (request.method() !== 'GET' || url.search !== '') {
+              throw new Error(`Unexpected time-context request: ${request.method()} ${url.href}`);
+            }
+            await route.fallback();
+            return;
+          }
           if (url.pathname.startsWith(setup.apiPrefix) && !supportPaths.has(url.pathname)) {
             throw new Error(`Unexpected business request: ${request.method()} ${url.href}`);
           }
