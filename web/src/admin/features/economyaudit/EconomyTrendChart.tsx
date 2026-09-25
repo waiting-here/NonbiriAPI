@@ -129,6 +129,7 @@ export function EconomyTrendChart({ series }: { readonly series: Series }) {
         color: colors.foreground,
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
         interaction: { mode: 'index', intersect: false },
         onClick: (_event, elements) => {
           if (elements[0]) setSelected(elements[0].index);
@@ -151,7 +152,13 @@ export function EconomyTrendChart({ series }: { readonly series: Series }) {
         scales: {
           x: {
             grid: { color: colors.grid },
-            ticks: { color: colors.muted, maxTicksLimit: 12, maxRotation: 0 },
+            ticks: {
+              color: colors.muted,
+              maxTicksLimit: 12,
+              maxRotation: 0,
+              autoSkipPadding: 16,
+              callback: (value) => labels[Number(value)]?.split(' ') ?? '',
+            },
             title: { display: true, color: colors.foreground, text: t('业务时间', 'Site time') },
           },
           y: {

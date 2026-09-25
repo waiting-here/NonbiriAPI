@@ -317,15 +317,38 @@ test('administrator reviews raw diagnostics, human audit evidence and all four a
       if (asset === 'general') {
         for (const width of [1440, 1920, 2560, 3440, 390]) {
           await page.setViewportSize({ width, height: 1000 });
-          expect(
-            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
-          ).toBe(true);
-          await chart.screenshot({ path: `test-results/audit/chart-${width}.png` });
+          await expect
+            .poll(() =>
+              chart.evaluate((element) => {
+                const canvas = element as HTMLCanvasElement;
+                const box = canvas.getBoundingClientRect();
+                const parent = canvas.parentElement!.getBoundingClientRect();
+                return (
+                  box.left >= 0 &&
+                  box.right <= innerWidth + 1 &&
+                  Math.abs(box.width - parent.width) <= 1 &&
+                  Math.abs(canvas.width - box.width * devicePixelRatio) <= 1 &&
+                  Math.abs(canvas.height - box.height * devicePixelRatio) <= 1
+                );
+              }),
+            )
+            .toBe(true);
+          await page
+            .locator('.audit-chart')
+            .screenshot({ path: `test-results/audit/chart-${width}.png` });
         }
         await page.evaluate(() => {
           document.documentElement.dataset.theme = 'dark';
         });
-        await chart.screenshot({ path: 'test-results/audit/chart-dark.png' });
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+            ),
+        );
+        await page
+          .locator('.audit-chart')
+          .screenshot({ path: 'test-results/audit/chart-dark.png' });
       }
       if (asset === 'game')
         await expect(
