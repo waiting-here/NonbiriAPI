@@ -22,7 +22,7 @@ import { usePagePager, type PagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import type { PageMetadata } from '@shared/operations/pageNumbers';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { HistoryDialog } from './LoanDetails';
 import { useLoanText } from './loanCopy';
 import { ErrorState, LoadingState } from './States';
@@ -128,6 +128,7 @@ function Pagination({
   );
 }
 function PenaltyFacts({ value }: { value: Penalty }) {
+  const formatDateTime = useDateTimeFormatter();
   const text = useLoanText(),
     name = useName();
   return (
@@ -200,6 +201,7 @@ function Evidence({
   action: PenaltyAction;
   onBack: () => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const text = useLoanText(),
     name = useName();
   const pager = usePagePager({
@@ -321,6 +323,7 @@ function CaseHistory({
   caseID: string;
   onBack: () => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const text = useLoanText(),
     name = useName();
   const [action, setAction] = useState<PenaltyAction | null>(null);

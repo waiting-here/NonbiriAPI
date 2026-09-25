@@ -11,13 +11,13 @@ import {
   getDetail,
   getDirectory,
   getWallet,
-  utcInput,
   type ActivityAsset,
   type ActivityDetail,
   type ExchangeInput,
   type ExchangeResult,
 } from '@shared/limitedactivities/api';
 import { currencyLabel, statusLabel, useActivityText } from '@shared/limitedactivities/copy';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useUserSession } from '../../data';
 import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
@@ -67,8 +67,7 @@ function ActivityInformation({ detail }: { readonly detail: ActivityDetail }) {
       <p>{statusLabel(detail.status, t)}</p>
       {detail.starts_at !== null && detail.ends_at !== null ? (
         <p>
-          {utcInput(detail.starts_at).replace('T', ' ')} —{' '}
-          {utcInput(detail.ends_at).replace('T', ' ')} UTC
+          {formatDateTime(detail.starts_at)} — {formatDateTime(detail.ends_at)}
         </p>
       ) : null}
       <p>

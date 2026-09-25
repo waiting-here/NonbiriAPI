@@ -21,7 +21,7 @@ import { conflictOrUnknown } from '@shared/operations/api';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { ApiError, isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { adminKeys, useAdminSession } from '../../data';
 import {
   adminMainstreamChannelKeys,
@@ -241,6 +241,7 @@ function ChannelForm({
 }
 
 function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   return (
     <dl className="ops-kv">
@@ -273,6 +274,7 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
 }
 
 export function MainstreamChannelsPanel() {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();

@@ -123,7 +123,13 @@
     },
     "time": {
       "zone": "时区：{{zone}}",
+      "localZone": "本地时间（{{zone}}）",
       "zoneChanged": "浏览器时区已改变，请在保存前核对时间。",
+      "siteOffsetChanged": "站点时区已改变，请重新输入此时间后再保存。",
+      "contextLoading": "正在加载站点固定时区…",
+      "contextFailed": "无法加载站点固定时区，请重试后再保存。",
+      "siteUnavailable": "站点固定时区尚未配置，请配置后再保存。",
+      "siteBrowserNotice": "浏览器时区与站点不同；此时间按站点固定 UTC 偏移计算。",
       "fallback": "无法使用浏览器时区，输入新时间前请确认使用 UTC。",
       "confirmUTC": "使用 UTC",
       "invalid": "请输入完整、有效的日期和时间。",

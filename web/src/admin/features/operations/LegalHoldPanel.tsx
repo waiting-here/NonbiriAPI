@@ -14,7 +14,7 @@ import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared
 import { PagePagination } from '@shared/operations/PagePagination';
 import { elevateAdmin } from '@shared/operations/api';
 import { ApiError, isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useAdminSession } from '../../data';
 import { createLegalHold, releaseLegalHold, type HeldObjectKind } from './core';
@@ -136,6 +136,7 @@ function LegalHoldSessionPanel({
   session: ReturnType<typeof useAdminSession>;
   onAuthorityLoss: (error: unknown) => void;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();

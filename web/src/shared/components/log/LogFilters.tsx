@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
+import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import type { LogUrlState } from './useLogUrlState';
 
@@ -167,9 +168,11 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
           </button>
         ))}
       </div>
+      <TimeContextNotice station={station} />
       <TimeInput
         station={station}
         label={t('common.from')}
+        showZoneHint={false}
         draft={draftFrom}
         onChange={setDraftFrom}
         aria-label={t('common.filterFromAria')}
@@ -177,6 +180,7 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
       <TimeInput
         station={station}
         label={t('common.to')}
+        showZoneHint={false}
         draft={draftTo}
         onChange={setDraftTo}
         aria-label={t('common.filterToAria')}

@@ -10,6 +10,36 @@ function reply(body: unknown, status = 200) {
   });
 }
 describe('limited activity configuration', () => {
+  it('shows the site offset and preserves original epochs until the schedule is edited', async () => {
+    const epoch = Date.parse('2030-01-01T00:00:00Z') / 1000;
+    const detail = limitedActivity({ starts_at: epoch, ends_at: epoch + 3600 });
+    const writes: Record<string, unknown>[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith('/session')) return reply({ admin: { username: 'fixture-admin' } });
+      if (path.endsWith('/time-context')) return reply({ mode: 'site', offset_minutes: 330 });
+      if (init?.method === 'PUT') {
+        writes.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return reply(detail);
+      }
+      return reply(detail);
+    }));
+    const view = await renderWithProviders(<LimitedActivitiesPage />, {
+      station: 'admin', role: 'admin',
+    });
+    const opening = await screen.findByLabelText('Opening time');
+    await waitFor(() => expect(opening).toHaveValue('2030-01-01T05:30'));
+    expect(screen.getByLabelText('Closing time (exclusive)')).toHaveValue('2030-01-01T06:30');
+    await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({ starts_at: epoch, ends_at: epoch + 3600 });
+
+    fireEvent.change(opening, { target: { value: '2030-01-01T06:00' } });
+    await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]).toMatchObject({ starts_at: epoch + 1800, ends_at: epoch + 3600 });
+  });
+
   it('retains the original version and key after an uncertain save', async () => {
     const writes: { key: string | null; body: string }[] = [];
     vi.stubGlobal(
@@ -17,6 +47,7 @@ describe('limited activity configuration', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = String(input);
         if (path.endsWith('/session')) return reply({ admin: { username: 'fixture-admin' } });
+        if (path.endsWith('/time-context')) return reply({ mode: 'site', offset_minutes: 0 });
         if (init?.method === 'PUT') {
           writes.push({
             key: new Headers(init.headers).get('Idempotency-Key'),
@@ -54,6 +85,8 @@ describe('limited activity configuration', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         if (String(input).endsWith('/session'))
           return reply({ admin: { username: 'fixture-admin' } });
+        if (String(input).endsWith('/time-context'))
+          return reply({ mode: 'site', offset_minutes: 0 });
         if (init?.method === 'PUT') writes++;
         return reply(limitedActivity());
       }),

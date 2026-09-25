@@ -187,7 +187,13 @@ function CreditHistory({
             draft={fromTimeDraft}
             onChange={setFromTimeDraft}
           />
-          <TimeInput station="user" label={copy.to} draft={toTimeDraft} onChange={setToTimeDraft} />
+          <TimeInput
+            station="user"
+            label={copy.to}
+            draft={toTimeDraft}
+            onChange={setToTimeDraft}
+            showZoneHint={false}
+          />
           <div className="credit-history__filter-actions">
             <button className="btn btn-primary" disabled={busy || !timeReady}>
               {copy.apply}

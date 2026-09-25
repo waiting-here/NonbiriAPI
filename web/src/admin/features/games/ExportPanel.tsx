@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ErrorState } from '@shared/components/States';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { gameLabel, modeLabel, useGameAdminText, type GameID } from './copy';
 import { HistoryExport, downloadPart, type ExportProgress } from './export';
 import type { Dataset, Selection } from './history';
@@ -13,6 +14,7 @@ export function ExportPanel({
   dataset: Dataset;
   selection: Selection;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const t = useGameAdminText(),
     job = useRef<HistoryExport | null>(null),
     controller = useRef<AbortController | null>(null);
@@ -74,13 +76,13 @@ export function ExportPanel({
           {scope.selection.from !== undefined && (
             <>
               {' '}
-              · {t('从', 'From')} {new Date(scope.selection.from * 1000).toLocaleString()}
+              · {t('从', 'From')} {formatDateTime(scope.selection.from)}
             </>
           )}
           {scope.selection.to !== undefined && (
             <>
               {' '}
-              · {t('至', 'Through')} {new Date(scope.selection.to * 1000).toLocaleString()}
+              · {t('至', 'Through')} {formatDateTime(scope.selection.to)}
             </>
           )}
         </p>

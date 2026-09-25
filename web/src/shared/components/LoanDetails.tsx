@@ -10,7 +10,7 @@ import { getLoans, type LoanQuote, type LoanReceipt } from '@shared/operations/l
 import { usePagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { ErrorState, LoadingState } from './States';
 import { useLoanText } from './loanCopy';
 import './loan.css';
@@ -114,6 +114,7 @@ function LoanHistoryContent({
   account: string;
   userID: string;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const text = useLoanText(),
     client = useQueryClient();
   const frame = role === 'admin' ? 'admin' : 'steward';

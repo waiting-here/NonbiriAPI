@@ -7,7 +7,7 @@ import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import {
   ADMIN_CHARITY_ENDED_REASONS,
   ADMIN_CHARITY_KEY_STATES,
@@ -143,6 +143,7 @@ function GroupKey({
   donationStatus: AdminCharityStatus;
   keyValue: AdminCharityKey;
 }) {
+  const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const blocked = blockingReason(keyValue, t);
   const endedReason = endedReasonLabel(keyValue.ended_reason, t);

@@ -6,13 +6,14 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import {
   getAdminConfig,
   updateConfig,
-  utcInput,
-  parseUTC,
   type ActivityDetail,
   type ActivityConfigInput,
 } from '@shared/limitedactivities/api';
 import { statusLabel, useActivityText } from '@shared/limitedactivities/copy';
 import { ApiError } from '@shared/query/http';
+import { TimeInput } from '@shared/components/TimeInput';
+import { TimeContextNotice } from '@shared/components/TimeContext';
+import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useAdminSession } from '../data';
 import '@shared/limitedactivities/limited.css';
 
@@ -22,8 +23,8 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
     client = useQueryClient();
   const [visible, setVisible] = useState(detail.visible),
     [paused, setPaused] = useState(detail.paused),
-    [start, setStart] = useState(utcInput(detail.starts_at)),
-    [end, setEnd] = useState(utcInput(detail.ends_at));
+    [start, setStart] = useState(() => createTimeDraft(detail.starts_at, 'second')),
+    [end, setEnd] = useState(() => createTimeDraft(detail.ends_at, 'second'));
   const [paper, setPaper] = useState(detail.module_config.paper_price),
     [brush, setBrush] = useState(detail.module_config.brush_price),
     [cap, setCap] = useState(detail.module_config.brush_cap),
@@ -40,15 +41,17 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
       let input: ActivityConfigInput;
       if (uncertain && save.variables) input = save.variables;
       else {
-        const starts_at = parseUTC(start),
-          ends_at = parseUTC(end);
+        const starts_at = timeDraftValue(start),
+          ends_at = timeDraftValue(end);
         if (
+          starts_at === undefined ||
+          ends_at === undefined ||
           (starts_at === null) !== (ends_at === null) ||
           (starts_at !== null && ends_at !== null && starts_at >= ends_at)
         )
           throw new ApiError(
             'invalid_request',
-            'Set both times, with the end after the start.',
+            'Set both times in the site time zone, with the end after the start.',
             400,
           );
         input = {
@@ -104,25 +107,22 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
             />
             {t('暂停活动', 'Pause activity')}
           </label>
+          <TimeContextNotice station="admin" />
           <div className="limited-grid">
-            <label>
-              {t('开启时间（UTC）', 'Opening time (UTC)')}
-              <input
-                type="datetime-local"
-                step="1"
-                value={start}
-                onChange={(event) => setStart(event.target.value)}
-              />
-            </label>
-            <label>
-              {t('结束时间（UTC，不含此时刻）', 'Closing time (UTC, exclusive)')}
-              <input
-                type="datetime-local"
-                step="1"
-                value={end}
-                onChange={(event) => setEnd(event.target.value)}
-              />
-            </label>
+            <TimeInput
+              label={t('开启时间', 'Opening time')}
+              station="admin"
+              draft={start}
+              showZoneHint={false}
+              onChange={setStart}
+            />
+            <TimeInput
+              label={t('结束时间（不含此时刻）', 'Closing time (exclusive)')}
+              station="admin"
+              draft={end}
+              showZoneHint={false}
+              onChange={setEnd}
+            />
           </div>
           <p>
             {t(

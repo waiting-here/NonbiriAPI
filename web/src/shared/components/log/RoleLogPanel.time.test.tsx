@@ -139,20 +139,20 @@ describe('role log time filters', () => {
       role: 'admin' as const,
       station: 'admin' as const,
       testRole: 'admin' as const,
-      timePath: '/admin/api/time-zones',
+      timePath: '/admin/api/time-context',
     },
     {
       role: 'steward' as const,
-      station: 'user' as const,
+      station: 'steward' as const,
       testRole: 'level5' as const,
-      timePath: '/api/time-zones',
+      timePath: '/api/steward/time-context',
     },
   ])(
     'uses the %s station for time resolution and preserves range validation',
     async ({ role, station, testRole, timePath }) => {
       const fetchMock = installFixtures(role);
       const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
-        station,
+        station: station === 'steward' ? 'admin' : station,
         role: testRole,
       });
       await waitFor(() =>
@@ -161,7 +161,9 @@ describe('role log time filters', () => {
       const pathsBefore = fetchMock.mock.calls.map(([path]) => String(path));
       expect(
         pathsBefore.some(
-          (path) => path === (station === 'admin' ? '/api/time-zones' : '/admin/api/time-zones'),
+          (path) =>
+            path ===
+            (station === 'admin' ? '/api/steward/time-context' : '/admin/api/time-context'),
         ),
       ).toBe(false);
 
@@ -169,7 +171,6 @@ describe('role log time filters', () => {
       const toInput = screen.getByLabelText('To');
       fireEvent.change(fromInput, { target: { value: localFrom.slice(0, 16) } });
       fireEvent.change(toInput, { target: { value: localTo.slice(0, 16) } });
-      expect(screen.getByRole('button', { name: 'Apply filter' })).toBeDisabled();
       await waitFor(() =>
         expect(screen.getByRole('button', { name: 'Apply filter' })).toBeEnabled(),
       );

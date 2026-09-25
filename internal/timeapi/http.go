@@ -5,6 +5,7 @@
 package timeapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -12,24 +13,41 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/calendar"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 const (
-	routeTimeZones        = "/api/time-zones"
-	routeTimeResolve      = "/api/time/resolve"
-	routeAdminTimeZones   = "/admin/api/time-zones"
-	routeAdminTimeResolve = "/admin/api/time/resolve"
+	routeTimeZones          = "/api/time-zones"
+	routeTimeResolve        = "/api/time/resolve"
+	routeAdminTimeZones     = "/admin/api/time-zones"
+	routeAdminTimeResolve   = "/admin/api/time/resolve"
+	routeAdminTimeContext   = "/admin/api/time-context"
+	routeStewardTimeContext = "/api/steward/time-context"
 
 	maxZoneBytes   = 64
 	maxUnixSeconds = int64(253402300799)
 )
 
+// ContextResolver supplies the fixed site offset after rechecking the live
+// station capability in the same transaction as the read. The time API keeps
+// this seam narrow so it cannot expose the rest of the site configuration.
+type ContextResolver interface {
+	AdminTimeContext(context.Context, int64) (TimeContext, error)
+	StewardTimeContext(context.Context, int64) (TimeContext, error)
+}
+
+type TimeContext struct {
+	Configured    bool
+	OffsetMinutes int
+}
+
 // RegisterRoutes mounts the time-zone and resolution endpoints on both
-// stations. The handlers are read-only and ignore the principal identity.
-func RegisterRoutes(users resources.UserRouteRegistrar, admins resources.AdminRouteRegistrar) error {
+// stations and, when supplied, the authorized site-context endpoints.
+func RegisterRoutes(users resources.UserRouteRegistrar, admins resources.AdminRouteRegistrar, resolvers ...ContextResolver) error {
 	if isNilInterface(users) || isNilInterface(admins) {
 		return errors.New("timeapi: route registrars are required")
 	}
@@ -45,6 +63,22 @@ func RegisterRoutes(users resources.UserRouteRegistrar, admins resources.AdminRo
 	if err := admins.RegisterAdminRoute(http.MethodGet, routeAdminTimeResolve, adminResolveTime); err != nil {
 		return err
 	}
+	if len(resolvers) > 1 {
+		return errors.New("timeapi: only one context resolver is supported")
+	}
+	if len(resolvers) == 1 && !isNilInterface(resolvers[0]) {
+		resolver := resolvers[0]
+		if err := admins.RegisterAdminRoute(http.MethodGet, routeAdminTimeContext, func(w http.ResponseWriter, r *http.Request, p resources.AdminPrincipal) {
+			getTimeContext(w, r, resolver, p.UserID, true)
+		}); err != nil {
+			return err
+		}
+		if err := users.RegisterUserRoute(http.MethodGet, routeStewardTimeContext, func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
+			getTimeContext(w, r, resolver, p.UserID, false)
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -59,6 +93,62 @@ type resolveResponse struct {
 	TimeZone      string `json:"time_zone"`
 	OffsetSeconds int    `json:"offset_seconds"`
 	Adjustment    string `json:"adjustment"`
+}
+
+type timeContextResponse struct {
+	Mode          string `json:"mode"`
+	OffsetMinutes *int   `json:"offset_minutes"`
+}
+
+func getTimeContext(writer http.ResponseWriter, request *http.Request, resolver ContextResolver, userID int64, admin bool) {
+	if !requireNoBody(writer, request) || !requireEmptyQuery(writer, request) {
+		return
+	}
+	if resolver == nil || userID <= 0 {
+		writeContextError(writer, authz.ErrUnauthorized)
+		return
+	}
+	var (
+		value TimeContext
+		err   error
+	)
+	if admin {
+		value, err = resolver.AdminTimeContext(request.Context(), userID)
+	} else {
+		value, err = resolver.StewardTimeContext(request.Context(), userID)
+	}
+	if err != nil {
+		writeContextError(writer, err)
+		return
+	}
+	if !value.Configured {
+		httperr.WriteJSON(writer, http.StatusOK, timeContextResponse{Mode: "site", OffsetMinutes: nil})
+		return
+	}
+	if !db.ValidSiteTimezoneOffset(value.OffsetMinutes) {
+		writeContextError(writer, db.ErrTimezoneUnavailable)
+		return
+	}
+	offset := value.OffsetMinutes
+	httperr.WriteJSON(writer, http.StatusOK, timeContextResponse{Mode: "site", OffsetMinutes: &offset})
+}
+
+func writeContextError(writer http.ResponseWriter, err error) {
+	status := http.StatusServiceUnavailable
+	code := httperr.CodeServiceUnavailable
+	message := "time context unavailable"
+	if errors.Is(err, authz.ErrUnauthorized) {
+		status, code, message = http.StatusUnauthorized, httperr.CodeUnauthorized, "authentication required"
+	} else if errors.Is(err, authz.ErrForbidden) {
+		status, code, message = http.StatusForbidden, httperr.CodeForbidden, "forbidden"
+	} else if errors.Is(err, db.ErrTimezoneUnavailable) {
+		status, code, message = http.StatusOK, "", ""
+	}
+	if status == http.StatusOK {
+		httperr.WriteJSON(writer, status, timeContextResponse{Mode: "site", OffsetMinutes: nil})
+		return
+	}
+	httperr.WriteError(writer, httperr.New(code, message))
 }
 
 func getTimeZones(writer http.ResponseWriter, request *http.Request, _ resources.UserPrincipal) {
