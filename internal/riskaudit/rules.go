@@ -145,13 +145,19 @@ type Match struct {
 // MatchRules uses a finite AND within each rule and OR between rules. A
 // truncated or absent field cannot establish a match, including equality.
 func MatchRules(source Source, rules []Rule) []Match {
+	return matchRules(source, rules, true)
+}
+
+// Frozen task rules were validated when the task was read. Avoid repeatedly
+// validating large evidence notes for every candidate in the same batch.
+func matchRules(source Source, rules []Rule, validate bool) []Match {
 	result := make([]Match, 0)
 	lower := make(map[string]string)
 	for i, r := range rules {
 		if i >= MaxRules {
 			break
 		}
-		if !r.Enabled || validateRule(r) != nil {
+		if !r.Enabled || (validate && validateRule(r) != nil) {
 			continue
 		}
 		matched := true

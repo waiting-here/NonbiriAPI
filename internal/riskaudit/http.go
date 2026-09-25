@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -22,6 +23,10 @@ type AdminRouteRegistrar interface {
 type route struct{ method, path, action string }
 
 var routes = []route{
+	{http.MethodPost, "/client-scans", "scan_create"}, {http.MethodGet, "/client-scans", "scan_recent"},
+	{http.MethodGet, "/client-scans/{id}", "scan_get"},
+	{http.MethodGet, "/client-scans/{id}/results", "scan_results"},
+	{http.MethodPost, "/client-scans/{id}/cancel", "scan_cancel"},
 	{http.MethodGet, "/users", "users"}, {http.MethodGet, "/users/{id}", "user"},
 	{http.MethodGet, "/shared-ips", "ips"}, {http.MethodGet, "/client-rules", "rules"},
 	{http.MethodPost, "/client-rules", "create_rule"}, {http.MethodPatch, "/client-rules/{id}", "update_rule"},
@@ -167,6 +172,10 @@ type ruleInput struct {
 }
 
 func serve(repository *Repository, action string, actor Actor, w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(action, "scan_") {
+		serveScans(repository, action, actor, w, r)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if len(r.URL.RawQuery) > 4096 || (r.Method == http.MethodGet && r.ContentLength != 0) {
 		auditError(w, ErrInvalid)

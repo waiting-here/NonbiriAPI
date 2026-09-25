@@ -215,7 +215,14 @@ async function riskEvidence(page: Page, sustained = true) {
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
   await expect(page.getByText('Users: 4', { exact: false })).toBeVisible();
   await group.getByRole('button', { name: 'Client matches', exact: true }).click();
-  await expect(page.getByText('Matched rules: 4', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Page 1 of 1 · Total: 4', { exact: true })).toBeVisible();
+  const savedURL = page.url();
+  expect(new URL(savedURL).searchParams.get('audit_scan')).toMatch(/^scn_/);
+  await page.reload();
+  await expect(page.getByText('Page 1 of 1 · Total: 4', { exact: true })).toBeVisible();
+  expect(page.url()).toBe(savedURL);
   const sources = page.locator('summary').filter({ hasText: 'Source information' });
   await sources.first().click();
   await expect(page.getByText(f.source_client, { exact: true }).first()).toBeVisible();
@@ -391,6 +398,7 @@ for (const level of [5, 1] as const) {
         for (const path of [
           '/api/steward/abuse-audit/users',
           '/api/steward/abuse-audit/client-rules',
+          '/api/steward/abuse-audit/client-scans',
           '/api/steward/diagnostics',
           '/api/steward/diagnostics/' + f.diagnostic_id,
           '/api/steward/logs/' + f.request_ids[0] + '/source',

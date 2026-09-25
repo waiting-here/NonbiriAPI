@@ -60,8 +60,9 @@ BEGIN DELETE FROM risk_client_scan_matches WHERE request_log_id=NEW.request_log_
 CREATE TRIGGER risk_scan_authority_changed AFTER UPDATE OF is_admin,level,auto_level,is_banned,banned_until ON users
 BEGIN
  UPDATE risk_client_scans SET state='cancelled',reason='permission_changed'
- WHERE user_id=NEW.id AND state IN ('queued','running')
- AND ((admin=1 AND NEW.is_admin<>1) OR (admin=0 AND (NEW.is_admin<>0 OR COALESCE(NEW.level,NEW.auto_level)<>6)) OR NEW.is_banned=1);
+ WHERE user_id=NEW.id
+ AND ((admin=1 AND NEW.is_admin<>1) OR (admin=0 AND (NEW.is_admin<>0 OR COALESCE(NEW.level,NEW.auto_level)<>6))
+ OR (NEW.is_banned=1 AND (NEW.banned_until IS NULL OR NEW.banned_until>unixepoch())));
 END;
 `
 

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
+import { ClientScans } from './ClientScans';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import {
@@ -43,8 +45,20 @@ function localTime(n: number) {
   const d = new Date(n * 1000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
-function initialWindow(): Filters {
-  return { kind: 'total', limit: 100 };
+const filterFields = ['from', 'to', 'lookback_hours', 'kind', 'model'] as const;
+function initialWindow(params?: URLSearchParams): Filters {
+  const result: Filters = { kind: 'total', limit: 100 };
+  if (!params) return result;
+  for (const key of ['from', 'to', 'lookback_hours'] as const) {
+    const raw = params.get('audit_' + key);
+    if (raw && /^[1-9][0-9]{0,11}$/.test(raw) && Number.isSafeInteger(Number(raw)))
+      result[key] = Number(raw);
+  }
+  const kind = params.get('audit_kind');
+  if (kind && ['total', 'self', 'charity', 'unclassified'].includes(kind)) result.kind = kind;
+  const model = params.get('audit_model');
+  if (model && model.length <= 512) result.model = model;
+  return result;
 }
 function usePager() {
   const [cursors, setCursors] = useState(['']);
@@ -514,52 +528,15 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
   );
 }
 function Clients({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
-  const { role, scopeKey, c, filters } = scope,
-    pager = usePager(),
-    client = useQueryClient();
-  const [paused, setPaused] = useState(false);
-  const key = ['risk', role, scopeKey, 'clients', filters, pager.after];
-  const query = useQuery({
-    queryKey: key,
-    queryFn: ({ signal }) => riskAPI(role).clients({ ...filters, after: pager.after }, signal),
-    enabled: !paused,
-    ...queryOptions,
-  });
   return (
-    <div className="ops-stack">
-      <p>{c.scanHelp}</p>
-      <button
-        className="btn btn-secondary"
-        onClick={() => {
-          if (!paused) void client.cancelQueries({ queryKey: key });
-          setPaused((v) => !v);
-        }}
-      >
-        {paused ? c.resume : c.stop}
-      </button>
-      {query.error ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : query.data ? (
-        <>
-          <p>
-            {c.sampled}: {query.data.scanned} · {c.matches}: {query.data.items.length}
-          </p>
-          <Coverage value={query.data.coverage} c={c} />
-          {query.data.items.map((item) => (
-            <RequestView key={item.log_id} item={item} c={c} inspect={inspect} />
-          ))}
-          <Pager
-            c={c}
-            pager={pager}
-            next={query.data.next}
-            more={query.data.has_more}
-            pending={query.isFetching || paused}
-          />
-        </>
-      ) : paused ? null : (
-        <LoadingState />
+    <ClientScans
+      role={scope.role}
+      scopeKey={scope.scopeKey}
+      filters={scope.filters}
+      renderItem={(item) => (
+        <RequestView key={item.log_id} item={item} c={scope.c} inspect={inspect} />
       )}
-    </div>
+    />
   );
 }
 function emptyRule(): RuleInput {
@@ -1189,18 +1166,44 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   const authorityError = useAuditAuthority(role, scopeKey);
   const { i18n } = useTranslation(),
     c = riskCopy(i18n.language);
-  const [tab, setTab] = useState<Tab>('users'),
-    [selectedUser, setSelectedUser] = useState('');
+  const [params, setParams] = useSearchParams();
+  const rawTab = params.get('audit_tab') ?? '';
+  const tab: Tab = (['users', 'ips', 'clients', 'rules', 'config', 'access'] as string[]).includes(
+    rawTab,
+  )
+    ? (rawTab as Tab)
+    : 'users';
+  const setTab = (next: Tab) =>
+    setParams((previous) => {
+      const p = new URLSearchParams(previous);
+      p.set('audit_tab', next);
+      return p;
+    });
+  const [selectedUser, setSelectedUser] = useState('');
   const client = useQueryClient();
-  const [range, setRange] = useState('default');
+  const [range, setRange] = useState(() =>
+    params.has('audit_from') ? 'custom' : (params.get('audit_lookback_hours') ?? 'default'),
+  );
   const [rangeError, setRangeError] = useState(false);
-  const [filters, setFilters] = useState<Filters>(initialWindow),
-    [draft, setDraft] = useState(() => ({
-      from: localTime(Math.floor(Date.now() / 1000) - 86400),
-      to: localTime(Math.floor(Date.now() / 1000)),
-      kind: 'total',
-    }));
-  const [customRange, setCustomRange] = useState(false);
+  const filters = useMemo(() => initialWindow(params), [params]);
+  const setFilters = (value: Filters) =>
+    setParams((previous) => {
+      const p = new URLSearchParams(previous);
+      for (const key of filterFields) {
+        p.delete('audit_' + key);
+        if (value[key] !== undefined && value[key] !== '')
+          p.set('audit_' + key, String(value[key]));
+      }
+      p.delete('audit_scan');
+      p.delete('audit_page');
+      return p;
+    });
+  const [draft, setDraft] = useState(() => ({
+    from: localTime(Number(filters.from ?? Math.floor(Date.now() / 1000) - 86400)),
+    to: localTime(Number(filters.to ?? Math.floor(Date.now() / 1000))),
+    kind: String(filters.kind ?? 'total'),
+  }));
+  const customRange = filters.from !== undefined || filters.lookback_hours !== undefined;
   const scope = useMemo(
     () => ({ role, scopeKey, c, filters, customRange }),
     [role, scopeKey, c, filters, customRange],
@@ -1214,7 +1217,6 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
         kind: draft.kind,
         limit: 100,
       });
-      setCustomRange(range !== 'default');
       void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
       return;
     }
@@ -1222,7 +1224,6 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
       to = new Date(draft.to).getTime() / 1000;
     if (Number.isFinite(from) && to > from && to - from <= 30 * 86400 && to <= Date.now() / 1000) {
       setFilters({ from, to, kind: draft.kind, limit: 100 });
-      setCustomRange(true);
       void client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
     } else setRangeError(true);
   }
@@ -1355,6 +1356,10 @@ export function RiskAuditPanel({
   scopeKey: string;
   enabled?: boolean;
 }) {
+  const [params] = useSearchParams();
+  const filterIdentity = filterFields.map((key) => params.get('audit_' + key)).join('/');
   if (!enabled || !scopeKey) return <LoadingState />;
-  return <RiskBody key={role + '/' + scopeKey} role={role} scopeKey={scopeKey} />;
+  return (
+    <RiskBody key={role + '/' + scopeKey + '/' + filterIdentity} role={role} scopeKey={scopeKey} />
+  );
 }
