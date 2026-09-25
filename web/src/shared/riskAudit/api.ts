@@ -79,7 +79,12 @@ function clientScan(value: unknown): ClientScan {
 
 function scanResults(value: unknown, id: string, page: string, size: PageSize): ScanResults {
   const o = obj(value);
-  const metadata = normalizePageMetadata(value);
+  const metadata = normalizePageMetadata({
+    page: o.page,
+    page_size: o.page_size,
+    total_items: o.total_items,
+    total_pages: o.total_pages,
+  });
   const items = list(o.items, request, 100);
   const scan = clientScan(o.scan);
   validatePageResponse(metadata, page, size, items.length);

@@ -47,6 +47,49 @@ it('rejects oversized audit result pages', async () => {
   });
   await expect(riskAPI('admin').clients({})).rejects.toMatchObject({ code: 'invalid_response' });
 });
+
+const completedScan = {
+  id: 'scn_AAAAAAAAAAAAAAAAAAAAAA',
+  state: 'completed',
+  reason: '',
+  from: 1800000000,
+  to: 1800086400,
+  kind: 'total',
+  model: '',
+  candidates: '257',
+  scanned: '257',
+  matched: 0,
+  rule_count: 1,
+  created_at: 1800086400,
+  updated_at: 1800086410,
+  expires_at: 1800172800,
+};
+it.each(['admin', 'steward'] as const)(
+  'decodes the flat scan results envelope for %s and preserves pagination validation',
+  async (role) => {
+    const result = {
+      scan: completedScan,
+      items: [],
+      page: '1',
+      page_size: 20,
+      total_items: '0',
+      total_pages: '1',
+    };
+    fetcher.mockResolvedValue(result);
+    await expect(riskAPI(role).scanResults(completedScan.id, '1', 20)).resolves.toEqual(result);
+    fetcher.mockResolvedValue({ ...result, total_items: '1' });
+    await expect(riskAPI(role).scanResults(completedScan.id, '1', 20)).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+    fetcher.mockResolvedValue({
+      ...result,
+      scan: { ...completedScan, id: 'scn_BBBBBBBBBBBBBBBBBBBBBQ' },
+    });
+    await expect(riskAPI(role).scanResults(completedScan.id, '1', 20)).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  },
+);
 it('sends only mutable rule fields and retains the revision', async () => {
   fetcher.mockResolvedValue({});
   await riskAPI('steward')
