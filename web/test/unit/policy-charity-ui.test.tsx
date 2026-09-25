@@ -1563,6 +1563,11 @@ describe('experimental policy and charity controls', () => {
       { method: 'GET', path: '/admin/api/session', body: { admin: { username: 'fixture-admin' } } },
       {
         method: 'GET',
+        path: '/admin/api/time-context',
+        body: { mode: 'site', offset_minutes: 330 },
+      },
+      {
+        method: 'GET',
         path: '/admin/api/time-zones',
         body: {
           version: 'go1.26.6-zoneinfo',
@@ -1643,6 +1648,8 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'GET' && requestURL.pathname === '/admin/api/session')
         return jsonResponse({ admin: { username: 'fixture-admin' } });
+      if (method === 'GET' && requestURL.pathname === '/admin/api/time-context')
+        return jsonResponse({ mode: 'site', offset_minutes: 330 });
       if (method === 'GET' && requestURL.pathname === '/admin/api/time-zones')
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -1719,6 +1726,11 @@ describe('experimental policy and charity controls', () => {
             frame === 'admin'
               ? { admin: { username: 'fixture-admin' } }
               : { ...session, user: { ...session.user, effective_level: 6 } },
+        },
+        {
+          method: 'GET',
+          path: `${basePath}/time-context`,
+          body: { mode: 'site', offset_minutes: 330 },
         },
         {
           method: 'GET',
@@ -1846,6 +1858,8 @@ describe('experimental policy and charity controls', () => {
           ? jsonResponse({ ...session, user: { ...session.user, effective_level: 6 } })
           : jsonResponse({ user: { effective_level: 6 } });
       }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/time-context')
+        return jsonResponse({ mode: 'site', offset_minutes: 330 });
       if (method === 'GET' && requestURL.pathname === '/api/time-zones') {
         return jsonResponse({
           version: 'go1.26.6-zoneinfo',
@@ -1966,6 +1980,11 @@ describe('experimental policy and charity controls', () => {
             frame === 'admin'
               ? { admin: { username: 'fixture-admin' } }
               : { ...session, user: { ...session.user, effective_level: 6 } },
+        },
+        {
+          method: 'GET',
+          path: `${basePath}/time-context`,
+          body: { mode: 'site', offset_minutes: 330 },
         },
         {
           method: 'GET',
