@@ -276,6 +276,31 @@ function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
     </>
   );
 }
+function UserModelFilter({
+  selectedModel,
+  c,
+  onApply,
+}: {
+  selectedModel: string;
+  c: RiskCopy;
+  onApply: (model: string) => void;
+}) {
+  const [model, setModel] = useState(selectedModel);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onApply(model);
+      }}
+    >
+      <label>
+        {c.model}
+        <input maxLength={512} value={model} onChange={(event) => setModel(event.target.value)} />
+      </label>
+      <button className="btn btn-secondary">{c.apply}</button>
+    </form>
+  );
+}
 function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: () => void }) {
   const { role, scopeKey, c } = scope;
   const [params, setParams] = useSearchParams();
@@ -284,29 +309,57 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
   const rawSize = Number(params.get('audit_user_size'));
   const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
   const selectedModel = params.get('audit_user_model') ?? '';
-  const [model, setModel] = useState(selectedModel);
   const from = Number(params.get('audit_user_from'));
   const to = Number(params.get('audit_user_to'));
   const watermark = params.get('audit_user_watermark') ?? undefined;
   const expectedTotal = params.get('audit_user_total') ?? undefined;
   const query = useQuery({
-    queryKey: ['risk', role, scopeKey, 'user', userID, from, to, selectedModel, page, size, watermark, expectedTotal],
+    queryKey: [
+      'risk',
+      role,
+      scopeKey,
+      'user',
+      userID,
+      from,
+      to,
+      selectedModel,
+      page,
+      size,
+      watermark,
+      expectedTotal,
+    ],
     enabled: from > 0 && to > from,
     queryFn: ({ signal }) =>
-      riskAPI(role).user(userID, { from, to, kind: scope.filters.kind, model: selectedModel, page, page_size: size, watermark, expected_total: expectedTotal }, signal),
+      riskAPI(role).user(
+        userID,
+        {
+          from,
+          to,
+          kind: scope.filters.kind,
+          model: selectedModel,
+          page,
+          page_size: size,
+          watermark,
+          expected_total: expectedTotal,
+        },
+        signal,
+      ),
     ...queryOptions,
   });
   useEffect(() => {
     const requests = query.data?.requests;
     if (!requests?.watermark || watermark !== undefined) return;
-    setParams((previous) => {
-      const next = new URLSearchParams(previous);
-      if (!next.has('audit_user_watermark')) {
-        next.set('audit_user_watermark', requests.watermark!);
-        next.set('audit_user_total', requests.total_items ?? '0');
-      }
-      return next;
-    }, { replace: true });
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (!next.has('audit_user_watermark')) {
+          next.set('audit_user_watermark', requests.watermark!);
+          next.set('audit_user_total', requests.total_items ?? '0');
+        }
+        return next;
+      },
+      { replace: true },
+    );
   }, [query.data, watermark, setParams]);
   return (
     <div className="ops-stack">
@@ -316,9 +369,11 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
       <h2>
         {c.user}: {userID}
       </h2>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
+      <UserModelFilter
+        key={`${userID}:${selectedModel}`}
+        selectedModel={selectedModel}
+        c={c}
+        onApply={(model) => {
           setParams((previous) => {
             const next = new URLSearchParams(previous);
             if (model) next.set('audit_user_model', model);
@@ -329,13 +384,7 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
             return next;
           });
         }}
-      >
-        <label>
-          {c.model}
-          <input maxLength={512} value={model} onChange={(e) => setModel(e.target.value)} />
-        </label>
-        <button className="btn btn-secondary">{c.apply}</button>
-      </form>
+      />
       {query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.data ? (
@@ -345,12 +394,42 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
             <RequestView key={item.log_id} item={item} c={c} />
           ))}
           <Coverage value={query.data.requests.coverage} c={c} />
-          {query.data.requests.page && query.data.requests.page_size && query.data.requests.total_items && query.data.requests.total_pages &&
-            <PagePagination metadata={{ page: query.data.requests.page, page_size: query.data.requests.page_size, total_items: query.data.requests.total_items, total_pages: query.data.requests.total_pages }}
-              requestedPage={page} pageSizes={[20, 50, 100]} busy={query.isFetching}
-              onPageChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_user_page', next); return p; })}
-              onPageSizeChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_user_size', String(next)); p.set('audit_user_page', '1'); return p; })} />}
-          {query.data.requests.changed && <p role="status">{c.partial}: {c.sourcePage}</p>}
+          {query.data.requests.page &&
+            query.data.requests.page_size &&
+            query.data.requests.total_items &&
+            query.data.requests.total_pages && (
+              <PagePagination
+                metadata={{
+                  page: query.data.requests.page,
+                  page_size: query.data.requests.page_size,
+                  total_items: query.data.requests.total_items,
+                  total_pages: query.data.requests.total_pages,
+                }}
+                requestedPage={page}
+                pageSizes={[20, 50, 100]}
+                busy={query.isFetching}
+                onPageChange={(next) =>
+                  setParams((previous) => {
+                    const p = new URLSearchParams(previous);
+                    p.set('audit_user_page', next);
+                    return p;
+                  })
+                }
+                onPageSizeChange={(next) =>
+                  setParams((previous) => {
+                    const p = new URLSearchParams(previous);
+                    p.set('audit_user_size', String(next));
+                    p.set('audit_user_page', '1');
+                    return p;
+                  })
+                }
+              />
+            )}
+          {query.data.requests.changed && (
+            <p role="status">
+              {c.partial}: {c.sourcePage}
+            </p>
+          )}
         </>
       ) : (
         <LoadingState />
@@ -366,31 +445,48 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
   return (
     <div className="ops-stack">
       <Card>
-      <p>{c.configHelp}</p>
-      <label>
-        {c.signal}
-        <select
-          value={signalFilter}
-          onChange={(e) => setParams((previous) => {
-            const next = new URLSearchParams(previous);
-            if (e.target.value) next.set('audit_signal', e.target.value);
-            else next.delete('audit_signal');
-            next.delete('audit_users_scan');
-            next.set('audit_users_page', '1');
-            return next;
-          })}
-        >
-          <option value="">{c.all}</option>
-          <option value="rpm">{c.rpm}</option>
-          <option value="concurrency">{c.concurrency}</option>
-        </select>
-      </label>
+        <p>{c.configHelp}</p>
+        <label>
+          {c.signal}
+          <select
+            value={signalFilter}
+            onChange={(e) =>
+              setParams((previous) => {
+                const next = new URLSearchParams(previous);
+                if (e.target.value) next.set('audit_signal', e.target.value);
+                else next.delete('audit_signal');
+                next.delete('audit_users_scan');
+                next.set('audit_users_page', '1');
+                return next;
+              })
+            }
+          >
+            <option value="">{c.all}</option>
+            <option value="rpm">{c.rpm}</option>
+            <option value="concurrency">{c.concurrency}</option>
+          </select>
+        </label>
       </Card>
-      <TaskScans<Summary> role={scope.role} scopeKey={scope.scopeKey} filters={filters} kind="users" signal={signalFilter}
-        renderItem={(value) => <Card key={value.user_id}>
-          <div className="ops-actions"><strong>{c.user}: {value.user_id}</strong><button className="btn btn-secondary" onClick={() => inspect(value.user_id)}>{c.inspect}</button></div>
-          <SummaryView value={value} c={c} />
-        </Card>} />
+      <TaskScans<Summary>
+        role={scope.role}
+        scopeKey={scope.scopeKey}
+        filters={filters}
+        kind="users"
+        signal={signalFilter}
+        renderItem={(value) => (
+          <Card key={value.user_id}>
+            <div className="ops-actions">
+              <strong>
+                {c.user}: {value.user_id}
+              </strong>
+              <button className="btn btn-secondary" onClick={() => inspect(value.user_id)}>
+                {c.inspect}
+              </button>
+            </div>
+            <SummaryView value={value} c={c} />
+          </Card>
+        )}
+      />
     </div>
   );
 }
@@ -400,29 +496,34 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
   return (
     <div className="ops-stack">
       <p>{c.ipHelp}</p>
-      <TaskScans<SharedIP> role={scope.role} scopeKey={scope.scopeKey} filters={filters} kind="shared_ips"
+      <TaskScans<SharedIP>
+        role={scope.role}
+        scopeKey={scope.scopeKey}
+        filters={filters}
+        kind="shared_ips"
         renderItem={(ip) => (
-              <Card key={ip.ip}>
-                <h2>{ip.ip}</h2>
-                <p>
-                  {c.users}: {ip.users} · {c.count}: {ip.requests} · {stamp(ip.first_seen)} —{' '}
-                  {stamp(ip.last_seen)}
-                </p>
-                <h3>{c.related}</h3>
-                {ip.associations.map((a) => (
-                  <p key={a.user_id + a.call_kind}>
-                    <button className="btn btn-secondary" onClick={() => inspect(a.user_id)}>
-                      {a.user_id}
-                    </button>{' '}
-                    · {a.call_kind} · {c.count}: {a.requests} · {c.dispatched}: {a.dispatched} ·{' '}
-                    {c.rejected}: {a.rejected}
-                    <br />
-                    {stamp(a.first_seen)} — {stamp(a.last_seen)}
-                  </p>
-                ))}
-                {ip.associations_truncated ? <p>{c.partialAssociations}</p> : null}
-              </Card>
-            )} />
+          <Card key={ip.ip}>
+            <h2>{ip.ip}</h2>
+            <p>
+              {c.users}: {ip.users} · {c.count}: {ip.requests} · {stamp(ip.first_seen)} —{' '}
+              {stamp(ip.last_seen)}
+            </p>
+            <h3>{c.related}</h3>
+            {ip.associations.map((a) => (
+              <p key={a.user_id + a.call_kind}>
+                <button className="btn btn-secondary" onClick={() => inspect(a.user_id)}>
+                  {a.user_id}
+                </button>{' '}
+                · {a.call_kind} · {c.count}: {a.requests} · {c.dispatched}: {a.dispatched} ·{' '}
+                {c.rejected}: {a.rejected}
+                <br />
+                {stamp(a.first_seen)} — {stamp(a.last_seen)}
+              </p>
+            ))}
+            {ip.associations_truncated ? <p>{c.partialAssociations}</p> : null}
+          </Card>
+        )}
+      />
     </div>
   );
 }
@@ -772,13 +873,16 @@ function Rules({ role, scopeKey, c }: Scope) {
   });
   useEffect(() => {
     const data = query.data;
-    if (!data || revision === data.revision && !data.changed) return;
-    setParams((previous) => {
-      const next = new URLSearchParams(previous);
-      next.set('audit_rules_revision', data.revision);
-      if (data.changed) next.set('audit_rules_page', '1');
-      return next;
-    }, { replace: true });
+    if (!data || (revision === data.revision && !data.changed)) return;
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('audit_rules_revision', data.revision);
+        if (data.changed) next.set('audit_rules_page', '1');
+        return next;
+      },
+      { replace: true },
+    );
   }, [query.data, revision, setParams]);
   const mutation = useMutation({
     mutationKey: ['risk', role, scopeKey, 'rules'],
@@ -789,7 +893,12 @@ function Rules({ role, scopeKey, c }: Scope) {
         : riskAPI(role).deleteRule(v.rule!.id, v.rule!.revision),
     onSuccess: async () => {
       setEditing(null);
-      setParams((previous) => { const next = new URLSearchParams(previous); next.delete('audit_rules_revision'); next.set('audit_rules_page', '1'); return next; });
+      setParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete('audit_rules_revision');
+        next.set('audit_rules_page', '1');
+        return next;
+      });
       await client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
     },
   });
@@ -887,10 +996,32 @@ function Rules({ role, scopeKey, c }: Scope) {
                   </button>
                 </Card>
               ))}
-              {query.data.changed && <p role="status">{c.partial}: {c.ruleHelp}</p>}
-              <PagePagination metadata={query.data} requestedPage={page} pageSizes={[20, 50, 100]} busy={query.isFetching}
-                onPageChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_rules_page', next); return p; })}
-                onPageSizeChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_rules_size', String(next)); p.set('audit_rules_page', '1'); return p; })} />
+              {query.data.changed && (
+                <p role="status">
+                  {c.partial}: {c.ruleHelp}
+                </p>
+              )}
+              <PagePagination
+                metadata={query.data}
+                requestedPage={page}
+                pageSizes={[20, 50, 100]}
+                busy={query.isFetching}
+                onPageChange={(next) =>
+                  setParams((previous) => {
+                    const p = new URLSearchParams(previous);
+                    p.set('audit_rules_page', next);
+                    return p;
+                  })
+                }
+                onPageSizeChange={(next) =>
+                  setParams((previous) => {
+                    const p = new URLSearchParams(previous);
+                    p.set('audit_rules_size', String(next));
+                    p.set('audit_rules_page', '1');
+                    return p;
+                  })
+                }
+              />
             </>
           ) : (
             <LoadingState />
@@ -1005,12 +1136,15 @@ function Access({ role, scopeKey, c, filters }: Scope) {
   const page = isPageNumber(rawPage) ? rawPage : '1';
   const rawSize = Number(params.get('audit_access_size'));
   const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
-  const selected = useMemo(() => ({
-    user_id: params.get('audit_access_user') ?? '',
-    key_generation: params.get('audit_access_key') ?? '',
-    path_kind: params.get('audit_access_path') ?? '',
-    status_class: params.get('audit_access_status') ?? '',
-  }), [params]);
+  const selected = useMemo(
+    () => ({
+      user_id: params.get('audit_access_user') ?? '',
+      key_generation: params.get('audit_access_key') ?? '',
+      path_kind: params.get('audit_access_path') ?? '',
+      status_class: params.get('audit_access_status') ?? '',
+    }),
+    [params],
+  );
   const selectedKey = JSON.stringify(selected);
   const [draftState, setDraftState] = useState({ key: selectedKey, value: selected });
   const draft = draftState.key === selectedKey ? draftState.value : selected;
@@ -1021,30 +1155,44 @@ function Access({ role, scopeKey, c, filters }: Scope) {
     }));
   const fixedFrom = params.get('audit_access_from');
   const fixedTo = params.get('audit_access_to');
-  const f = fixedFrom && fixedTo ? { from: fixedFrom, to: fixedTo, ...selected } : {
-    from: filters.from,
-    to: filters.to,
-    lookback_hours: filters.lookback_hours,
-    ...selected,
-  };
+  const f =
+    fixedFrom && fixedTo
+      ? { from: fixedFrom, to: fixedTo, ...selected }
+      : {
+          from: filters.from,
+          to: filters.to,
+          lookback_hours: filters.lookback_hours,
+          ...selected,
+        };
   const watermark = params.get('audit_access_watermark');
   const expectedTotal = params.get('audit_access_total');
   const events = useQuery({
     queryKey: ['risk', role, scopeKey, 'access', f, page, size, watermark, expectedTotal],
     queryFn: ({ signal }) =>
-      riskAPI(role).numberedAccess({ ...f, watermark: watermark ?? undefined, expected_total: expectedTotal ?? undefined }, page, size, signal),
+      riskAPI(role).numberedAccess(
+        { ...f, watermark: watermark ?? undefined, expected_total: expectedTotal ?? undefined },
+        page,
+        size,
+        signal,
+      ),
     ...queryOptions,
   });
   useEffect(() => {
-    if (!events.data || fixedFrom && fixedTo && watermark !== null) return;
-    setParams((previous) => {
-      const next = new URLSearchParams(previous);
-      if (!next.has('audit_access_from')) next.set('audit_access_from', String(events.data!.from));
-      if (!next.has('audit_access_to')) next.set('audit_access_to', String(events.data!.to));
-      if (!next.has('audit_access_watermark')) next.set('audit_access_watermark', events.data!.watermark);
-      if (!next.has('audit_access_total')) next.set('audit_access_total', events.data!.total_items);
-      return next;
-    }, { replace: true });
+    if (!events.data || (fixedFrom && fixedTo && watermark !== null)) return;
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (!next.has('audit_access_from'))
+          next.set('audit_access_from', String(events.data!.from));
+        if (!next.has('audit_access_to')) next.set('audit_access_to', String(events.data!.to));
+        if (!next.has('audit_access_watermark'))
+          next.set('audit_access_watermark', events.data!.watermark);
+        if (!next.has('audit_access_total'))
+          next.set('audit_access_total', events.data!.total_items);
+        return next;
+      },
+      { replace: true },
+    );
   }, [events.data, fixedFrom, fixedTo, watermark, setParams]);
   const summary = useQuery({
     queryKey: ['risk', role, scopeKey, 'access-summary', f],
@@ -1060,11 +1208,17 @@ function Access({ role, scopeKey, c, filters }: Scope) {
           setParams((previous) => {
             const next = new URLSearchParams(previous);
             for (const [key, value] of Object.entries(draft)) {
-              const queryKey = { user_id: 'audit_access_user', key_generation: 'audit_access_key', path_kind: 'audit_access_path', status_class: 'audit_access_status' }[key as keyof typeof draft];
+              const queryKey = {
+                user_id: 'audit_access_user',
+                key_generation: 'audit_access_key',
+                path_kind: 'audit_access_path',
+                status_class: 'audit_access_status',
+              }[key as keyof typeof draft];
               if (value) next.set(queryKey, value);
               else next.delete(queryKey);
             }
-            for (const key of ['from', 'to', 'watermark', 'total']) next.delete('audit_access_' + key);
+            for (const key of ['from', 'to', 'watermark', 'total'])
+              next.delete('audit_access_' + key);
             next.set('audit_access_page', '1');
             return next;
           });
@@ -1176,10 +1330,32 @@ function Access({ role, scopeKey, c, filters }: Scope) {
               <SourceView source={e.source} c={c} />
             </Card>
           ))}
-          {events.data.changed && <p role="status">{c.partial}: {c.sourcePage}</p>}
-          <PagePagination metadata={events.data} requestedPage={page} pageSizes={[20, 50, 100]} busy={events.isFetching}
-            onPageChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_access_page', next); return p; })}
-            onPageSizeChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_access_size', String(next)); p.set('audit_access_page', '1'); return p; })} />
+          {events.data.changed && (
+            <p role="status">
+              {c.partial}: {c.sourcePage}
+            </p>
+          )}
+          <PagePagination
+            metadata={events.data}
+            requestedPage={page}
+            pageSizes={[20, 50, 100]}
+            busy={events.isFetching}
+            onPageChange={(next) =>
+              setParams((previous) => {
+                const p = new URLSearchParams(previous);
+                p.set('audit_access_page', next);
+                return p;
+              })
+            }
+            onPageSizeChange={(next) =>
+              setParams((previous) => {
+                const p = new URLSearchParams(previous);
+                p.set('audit_access_size', String(next));
+                p.set('audit_access_page', '1');
+                return p;
+              })
+            }
+          />
         </>
       ) : (
         <LoadingState />
@@ -1228,22 +1404,28 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   )
     ? (rawTab as Tab)
     : 'users';
-  const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '') ? params.get('audit_user')! : '';
-  const setSelectedUser = useCallback((id: string) => setParams((previous) => {
-    const next = new URLSearchParams(previous);
-    if (id) {
-      next.set('audit_user', id);
-      const filter = initialWindow(previous);
-      const to = Number(filter.to ?? Math.floor(Date.now() / 1000));
-      const from = Number(filter.from ?? to - Number(filter.lookback_hours ?? 24) * 3600);
-      next.set('audit_user_from', String(from));
-      next.set('audit_user_to', String(to));
-    } else next.delete('audit_user');
-    next.delete('audit_user_watermark');
-    next.delete('audit_user_total');
-    next.set('audit_user_page', '1');
-    return next;
-  }), [setParams]);
+  const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '')
+    ? params.get('audit_user')!
+    : '';
+  const setSelectedUser = useCallback(
+    (id: string) =>
+      setParams((previous) => {
+        const next = new URLSearchParams(previous);
+        if (id) {
+          next.set('audit_user', id);
+          const filter = initialWindow(previous);
+          const to = Number(filter.to ?? Math.floor(Date.now() / 1000));
+          const from = Number(filter.from ?? to - Number(filter.lookback_hours ?? 24) * 3600);
+          next.set('audit_user_from', String(from));
+          next.set('audit_user_to', String(to));
+        } else next.delete('audit_user');
+        next.delete('audit_user_watermark');
+        next.delete('audit_user_total');
+        next.set('audit_user_page', '1');
+        return next;
+      }),
+    [setParams],
+  );
   const client = useQueryClient();
   const [range, setRange] = useState(() =>
     params.has('audit_from') ? 'custom' : (params.get('audit_lookback_hours') ?? 'default'),
