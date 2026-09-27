@@ -267,6 +267,37 @@ function validateFatFish(value: unknown): void {
   }
 }
 
+function validateCustomPresets(value: unknown): void {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) invalidExport();
+  const presets = (value as Record<string, unknown>).loadouts;
+  if (presets === undefined) return;
+  if (!Array.isArray(presets) || presets.length > 10) invalidExport();
+  const seen = new Set<number>();
+  for (const preset of presets) {
+    const item = closedObject(preset, ['slot', 'revision', 'mode', 'loadout', 'updated_at']);
+    const slot = item.slot;
+    if (
+      typeof slot !== 'number' ||
+      !Number.isInteger(slot) ||
+      slot < 1 ||
+      slot > 10 ||
+      seen.has(slot)
+    )
+      invalidExport();
+    seen.add(slot);
+    canonicalPositiveID(item.revision);
+    if (item.mode !== 'quick' && item.mode !== 'standard') invalidExport();
+    timestamp(item.updated_at, MAX_UNIX_SECONDS);
+    const loadout = closedObject(item.loadout, ['role', 'harness', 'skills']);
+    nonemptyString(loadout.role);
+    if (loadout.harness !== null) nonemptyString(loadout.harness);
+    const skills = boundedArray(loadout.skills);
+    if (!skills.length || skills.length > 6 || new Set(skills).size !== skills.length)
+      invalidExport();
+    skills.forEach(nonemptyString);
+  }
+}
+
 export function validateAccountExportV11(record: Record<string, unknown>, accountId: string): void {
   if (record.user === null || typeof record.user !== 'object' || Array.isArray(record.user))
     invalidExport();
@@ -276,4 +307,5 @@ export function validateAccountExportV11(record: Record<string, unknown>, accoun
   validateAdaptations(record.request_adaptations, record.endpoints);
   validateContinuity(record.continuity, generatedAt);
   validateFatFish(record.fat_fish);
+  validateCustomPresets(record.likes);
 }

@@ -210,6 +210,65 @@ describe('production account lifecycle adapter', () => {
     expect(JSON.parse(await attachment.blob.text())).toEqual(document);
   });
 
+  it('exports ten private custom presets with exact revisions and ordered skills', async () => {
+    const document = exportDocument();
+    document.likes = {
+      loadouts: Array.from({ length: 10 }, (_, index) => ({
+        slot: index + 1,
+        revision: '9007199254740993',
+        mode: index % 2 ? 'standard' : 'quick',
+        loadout: { role: 'tank', harness: index % 2 ? 'armor' : null, skills: ['guard', 'strike'] },
+        updated_at: 1_699_999_900,
+      })),
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () => exportResponse(document)),
+    );
+    const attachment = await productionAccountLifecycleAdapter.exportAccount({
+      accountId: '1',
+      elevatedToken: 'elevated_token',
+    });
+    expect(JSON.parse(await attachment.blob.text())).toEqual(document);
+  });
+
+  it.each([
+    'duplicate_slot',
+    'overflow_slot',
+    'unsafe_revision',
+    'extra_owner',
+    'duplicate_skill',
+    'too_many',
+  ])('rejects invalid custom preset export: %s', async (kind) => {
+    const document = exportDocument();
+    const item: Record<string, unknown> = {
+      slot: 1,
+      revision: '1',
+      mode: 'quick',
+      loadout: { role: 'tank', harness: null, skills: ['guard'] },
+      updated_at: 1_699_999_900,
+    };
+    const loadouts = [item];
+    if (kind === 'duplicate_slot') loadouts.push({ ...item });
+    if (kind === 'overflow_slot') item.slot = 11;
+    if (kind === 'unsafe_revision') item.revision = 9_007_199_254_740_992;
+    if (kind === 'extra_owner') item.user_id = '2';
+    if (kind === 'duplicate_skill')
+      item.loadout = { role: 'tank', harness: null, skills: ['guard', 'guard'] };
+    if (kind === 'too_many')
+      loadouts.push(...Array.from({ length: 10 }, (_, i) => ({ ...item, slot: i + 2 })));
+    document.likes = { loadouts };
+    const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      productionAccountLifecycleAdapter.exportAccount({
+        accountId: '1',
+        elevatedToken: 'elevated_token',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['abandoned', 'cancelled_refunded'])(
     'accepts a %s receipt terminated during the countdown',
     async (state) => {

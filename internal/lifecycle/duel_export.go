@@ -9,10 +9,18 @@ import (
 // These fields pin the personal projection independently of live response DTOs.
 // Rule JSON has already passed the game's participant-specific visibility filter.
 type DuelExport struct {
-	Queue         *DuelQueueExport  `json:"queue"`
-	Current       *DuelStateExport  `json:"current"`
-	CurrentRounds []DuelRoundExport `json:"current_rounds"`
-	History       []DuelMatchExport `json:"history"`
+	Queue         *DuelQueueExport    `json:"queue"`
+	Current       *DuelStateExport    `json:"current"`
+	CurrentRounds []DuelRoundExport   `json:"current_rounds"`
+	History       []DuelMatchExport   `json:"history"`
+	Loadouts      []DuelLoadoutExport `json:"loadouts,omitempty"`
+}
+type DuelLoadoutExport struct {
+	Slot      int             `json:"slot"`
+	Revision  string          `json:"revision"`
+	Mode      string          `json:"mode"`
+	Loadout   json.RawMessage `json:"loadout"`
+	UpdatedAt int64           `json:"updated_at"`
 }
 type DuelQueueExport struct {
 	ID           string            `json:"id"`

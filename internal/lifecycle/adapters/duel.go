@@ -87,6 +87,9 @@ func mapDuelRounds(values []duel.RoundView) []lifecycle.DuelRoundExport {
 }
 func mapDuelExport(v duel.Export) lifecycle.DuelExport {
 	out := lifecycle.DuelExport{CurrentRounds: mapDuelRounds(v.CurrentRounds), History: make([]lifecycle.DuelMatchExport, len(v.History))}
+	for _, item := range v.Loadouts {
+		out.Loadouts = append(out.Loadouts, lifecycle.DuelLoadoutExport{Slot: item.Slot, Revision: item.Revision, Mode: item.Mode, Loadout: append([]byte(nil), item.Loadout...), UpdatedAt: item.UpdatedAt})
+	}
 	if q := v.Queue; q != nil {
 		out.Queue = &lifecycle.DuelQueueExport{ID: q.ID, Revision: q.Revision, Mode: q.Mode, Deadline: q.Deadline, Ticket: q.Ticket, Payment: lifecycle.GamePaymentExport(q.Payment), TermsHash: q.TermsHash, RulesVersion: q.RulesVersion, Loadout: q.Loadout}
 	}
