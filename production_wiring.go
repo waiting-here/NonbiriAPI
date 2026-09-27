@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
@@ -40,11 +41,12 @@ import (
 )
 
 type publicForwardRuntime struct {
-	service   *forward.Service
-	flow      *flowcontrol.Controller
-	abuse     *antiabuse.Service
-	lifecycle *lifecyclegate.Gate
-	handler   http.Handler
+	service     *forward.Service
+	flow        *flowcontrol.Controller
+	abuse       *antiabuse.Service
+	clientGuard *clientguard.Service
+	lifecycle   *lifecyclegate.Gate
+	handler     http.Handler
 }
 
 func newStewardAutomationHandler(service *stewardautomation.Service, repository *resources.Repository, lifecycle *lifecyclegate.Gate, gate *maintenance.Gate) (http.Handler, error) {
@@ -137,6 +139,16 @@ func newPublicForwardRuntime(
 	if err != nil {
 		return fail(fmt.Errorf("create forward claim adapter: %w", err))
 	}
+	clientGuard, err := clientguard.New(clientguard.Config{
+		Database: store.DB(), Rejections: claims, OnBan: invalidate,
+		CancelUserGamesTx: cancelUserDuelsTx,
+		BeginUserRetirement: func(ctx context.Context, userID int64) (clientguard.Retirement, error) {
+			return beginRestrictionRetirement(ctx, lifecycle, flow, userID)
+		},
+	})
+	if err != nil {
+		return fail(fmt.Errorf("create client rule guard: %w", err))
+	}
 	routingStore, err := routing.New(store)
 	if err != nil {
 		return fail(fmt.Errorf("create forward routing store: %w", err))
@@ -169,6 +181,7 @@ func newPublicForwardRuntime(
 	forwardConfig := forward.Config{
 		Personal: personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
+		CharityGuard: clientGuard,
 	}
 	if audits != nil {
 		forwardConfig.ErrorScope = audits.observations.DiscoveryScope
@@ -201,7 +214,7 @@ func newPublicForwardRuntime(
 		closed.ServeHTTP(w, r)
 		return true
 	}))
-	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
+	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, lifecycle: lifecycle, handler: handler}, nil
 }
 
 type charityPolicyRouter struct {

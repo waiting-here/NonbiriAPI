@@ -27,6 +27,7 @@ CREATE TABLE risk_scan_results (
  row_no INTEGER NOT NULL CHECK(row_no BETWEEN 1 AND 100000),
  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
  request_log_id INTEGER REFERENCES request_source_facts(request_log_id) ON DELETE CASCADE,
+ published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
  result_json TEXT NOT NULL CHECK(json_valid(result_json) AND json_type(result_json)='object' AND length(CAST(result_json AS BLOB))<=16384),
  PRIMARY KEY(scan_id,row_no),
  CHECK(user_id IS NOT NULL OR request_log_id IS NOT NULL)
@@ -49,6 +50,10 @@ CREATE TABLE risk_scan_result_sources (
  FOREIGN KEY(scan_id,row_no) REFERENCES risk_scan_results(scan_id,row_no) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_risk_scan_result_sources_source ON risk_scan_result_sources(request_log_id,scan_id,row_no);
+INSERT INTO risk_scan_results(scan_id,row_no,request_log_id,published,result_json)
+ SELECT scan_id,ordinal,request_log_id,1,'{}' FROM risk_client_scan_matches;
+INSERT INTO risk_scan_result_sources(scan_id,row_no,request_log_id)
+ SELECT scan_id,ordinal,request_log_id FROM risk_client_scan_matches;
 CREATE TRIGGER risk_scan_user_retired BEFORE DELETE ON users
 BEGIN
  UPDATE risk_client_scans SET changed=1 WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE user_id=OLD.id
