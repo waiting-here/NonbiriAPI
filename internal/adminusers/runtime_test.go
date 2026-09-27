@@ -128,6 +128,11 @@ func newAdminUsersFixture(t *testing.T) *adminUsersFixture {
 		t.Fatal(err)
 	}
 	fixture.service = service
+	if err := service.AttachIdentityMutationBarrier(func(context.Context, string) (func(), error) {
+		return func() {}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	fixture.adminID = fixture.seedUser("administrator", true)
 	if err := RegisterRoutes(fixture.registrar, fixture.service); err != nil {
 		t.Fatal(err)
@@ -283,11 +288,12 @@ func responseCode(t *testing.T, recorder *httptest.ResponseRecorder) string {
 
 func TestRegisterRoutesOwnsOnlyFrozenCorrectiveSurface(t *testing.T) {
 	fixture := newAdminUsersFixture(t)
-	if len(fixture.registrar.routes) != 16 {
+	if len(fixture.registrar.routes) != 19 {
 		t.Fatalf("registered routes=%d", len(fixture.registrar.routes))
 	}
 	want := map[string]bool{
 		"GET " + routeBlacklist: true, "POST " + routeBlacklist: true, "POST " + routeBlacklistRemove: true,
+		"GET " + routeBlacklistEvents: true, "GET " + routeDeletedUser: true, "GET " + routeDeletionDuelAborts: true,
 		"GET " + routeUsers: true, "GET " + routeUser: true, "PATCH " + routeUser: true,
 		"POST " + routeBan: true, "POST " + routeUnban: true, "GET " + routeUsage: true,
 		"GET " + routeActivity: true, "GET " + routeEndpointOverview: true,
