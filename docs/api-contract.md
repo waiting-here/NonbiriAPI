@@ -15,6 +15,8 @@
 
 Host selection is a security boundary. A route on the wrong host is `404 not_found`, and a user, administrator, or steward credential never changes station. `GET /healthz` is an anonymous liveness probe on both hosts and returns `{"status":"ok"}` without opening the database.
 
+`GET /readyz` is an anonymous readiness probe. Once the HTTP listener is bound and serving, it returns HTTP 200 with the fixed JSON `{"status":"ready"}` only when fully initialized, or HTTP 503 with `{"status":"not_ready"}` during shutdown or after a critical application worker fails. Before initialization and listener binding, requests may be unreachable. Opening the database alone does not make the application ready. The response does not expose internal readiness details.
+
 User and administrator session cookies are host-only, HttpOnly, SameSite=Lax, and Secure on HTTPS. Unsafe cookie-authenticated methods require the same validated origin (and compatible Fetch Metadata when supplied). `/v1/*` accepts only `Authorization: Bearer nbk_<secret>`; an upstream credential is never a CallerKey.
 
 Account export/deletion and selected administrator legal-hold/user actions require a short-lived, single-use elevation capability bound to the active session. Current administrator/session authority and steward level are revalidated in sensitive read/write transactions. Levels 1–4 may be automatic; level 5 is a manually appointed trainee and level 6 a full steward. Administrators appoint or remove level 6; administrators and full stewards appoint or remove level 5. Full stewards cannot manage themselves, other level-6 users or administrators. Trainees have only the scoped charity permissions in §6.4.
