@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -3919,8 +3920,10 @@ func TestGenerationTwoHostileManifestDynamicRPSAccountIdentity(t *testing.T) {
 	// Fresh bootstrap has two pool accounts, both canonical zero SM128 values.
 	// The stricter fresh validator also has to tolerate a valid historical RPS
 	// platform account after its queue/session root has been cleaned up.
+	var image []byte
 	{
-		store := openTestStore(t, filepath.Join(privateDBDir(t), "manifest-rps-fresh.sqlite"))
+		freshPath := filepath.Join(privateDBDir(t), "manifest-rps-fresh.sqlite")
+		store := openTestStore(t, freshPath)
 		db := store.DB()
 		if err := validateGenerationTwoFreshSeedManifest(context.Background(), db); err != nil {
 			t.Fatalf("fresh seed manifest rejected canonical pools: %v", err)
@@ -3954,6 +3957,24 @@ ORDER BY p.pool_type`)
 		if poolCount != 2 {
 			t.Fatalf("fresh seed expected two pool accounts, got %d", poolCount)
 		}
+		var busy, logFrames, checkpointed int
+		if err := db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+			t.Fatalf("checkpoint fresh manifest fixture: %v", err)
+		}
+		if busy != 0 || logFrames < 0 || checkpointed < 0 || checkpointed > logFrames {
+			t.Fatalf("fresh manifest fixture checkpoint returned (%d,%d,%d)", busy, logFrames, checkpointed)
+		}
+		if err := store.Close(); err != nil {
+			t.Fatalf("close fresh manifest fixture: %v", err)
+		}
+		image, err = os.ReadFile(freshPath)
+		if err != nil {
+			t.Fatalf("read fresh manifest fixture: %v", err)
+		}
+	}
+	{
+		store := openTestStore(t, copyPrivateSQLiteTestImage(t, image))
+		db := store.DB()
 		validQueueID := hostileOIDVariant("rpsq_", 'H', 'Q')
 		validQueueCode := "rps-queue:" + validQueueID
 		hostileMustExec(t, db, `
@@ -3980,7 +4001,7 @@ VALUES(?,?,?,?,0,?,0,0)`, hostileNextPK64(t, db, "credit_accounts"), "platform",
 	} {
 		tc := tc
 		t.Run("fresh-corruption-"+tc.name, func(t *testing.T) {
-			store := openTestStore(t, filepath.Join(privateDBDir(t), "manifest-rps-corrupt-"+tc.name+".sqlite"))
+			store := openTestStore(t, copyPrivateSQLiteTestImage(t, image))
 			db := store.DB()
 			hostileMustExec(t, db, `PRAGMA ignore_check_constraints=ON`)
 			hostileMustExec(t, db, tc.query, tc.args...)
@@ -4006,8 +4027,15 @@ VALUES(?,?,?,?,0,?,0,0)`, hostileNextPK64(t, db, "credit_accounts"), "platform",
 	}
 	for i, code := range malformed {
 		t.Run(fmt.Sprintf("malformed-%02d", i), func(t *testing.T) {
-			store := openTestStore(t, filepath.Join(privateDBDir(t), fmt.Sprintf("manifest-rps-malformed-%02d.sqlite", i)))
+			store := openTestStore(t, copyPrivateSQLiteTestImage(t, image))
 			db := store.DB()
+			var dynamicCount int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM credit_accounts WHERE kind='platform' AND (code LIKE 'rps-queue:%' OR code LIKE 'rps-session:%')`).Scan(&dynamicCount); err != nil {
+				t.Fatal(err)
+			}
+			if dynamicCount != 0 {
+				t.Fatalf("manifest fixture copy contains %d prior dynamic accounts", dynamicCount)
+			}
 			hostileMustExec(t, db, `PRAGMA ignore_check_constraints=ON`)
 			id := hostileNextPK64(t, db, "credit_accounts")
 			hostileMustExec(t, db, `

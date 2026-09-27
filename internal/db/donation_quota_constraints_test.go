@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -59,6 +61,43 @@ func TestQuotaSameSecondAndPreUnixBoundaries(t *testing.T) {
 }
 
 func TestQuotaRejectsInvalidStateCombinations(t *testing.T) {
+	// Build the expensive DDL and seeded rule once. VACUUM INTO leaves a
+	// standalone image after the in-memory source is closed; every case gets
+	// an independent copy so one accepted mutation cannot mask another.
+	baseline, _ := quotaConstraintFixture(t)
+	baselinePath := filepath.Join(privateDBDir(t), "quota-baseline.sqlite")
+	if _, err := baseline.Exec(`VACUUM INTO ?`, baselinePath); err != nil {
+		t.Fatalf("snapshot quota fixture: %v", err)
+	}
+	if err := baseline.Close(); err != nil {
+		t.Fatalf("close quota fixture: %v", err)
+	}
+	if err := os.Chmod(baselinePath, 0o600); err != nil {
+		t.Fatalf("secure quota fixture snapshot: %v", err)
+	}
+	image, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("read quota fixture snapshot: %v", err)
+	}
+	openCopy := func(t *testing.T) *sql.DB {
+		t.Helper()
+		database, err := sql.Open("sqlite", copyPrivateSQLiteTestImage(t, image))
+		if err != nil {
+			t.Fatalf("open quota fixture copy: %v", err)
+		}
+		database.SetMaxOpenConns(1)
+		if _, err := database.Exec(`PRAGMA foreign_keys=ON`); err != nil {
+			_ = database.Close()
+			t.Fatalf("enable quota fixture foreign keys: %v", err)
+		}
+		var foreignKeys int
+		if err := database.QueryRow(`PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil || foreignKeys != 1 {
+			_ = database.Close()
+			t.Fatalf("quota fixture foreign keys=%d, err=%v", foreignKeys, err)
+		}
+		t.Cleanup(func() { _ = database.Close() })
+		return database
+	}
 	for _, tc := range []struct{ name, query string }{
 		{"reset-null-alignment", `UPDATE donation_quota_epochs SET alignment=NULL`},
 		{"calendar-week-null-start", `UPDATE donation_quota_epochs SET alignment='calendar',interval='week',week_starts_on=NULL`},
@@ -71,13 +110,20 @@ func TestQuotaRejectsInvalidStateCombinations(t *testing.T) {
 		{"fractional-epoch", `INSERT INTO donation_quota_epochs(rule_id,epoch,mode,interval,alignment,time_zone,metric,limit_mag,effective_at,pending_reserved) SELECT rule_id,1.5,mode,interval,alignment,time_zone,metric,limit_mag,effective_at,pending_reserved FROM donation_quota_epochs`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			database, _ := quotaConstraintFixture(t)
+			database := openCopy(t)
 			hostileMustFail(t, database, tc.query)
 		})
 	}
 	for day := 1; day <= 7; day++ {
 		t.Run(fmt.Sprintf("calendar-week-%d", day), func(t *testing.T) {
-			database, _ := quotaConstraintFixture(t)
+			database := openCopy(t)
+			var prior sql.NullInt64
+			if err := database.QueryRow(`SELECT week_starts_on FROM donation_quota_epochs`).Scan(&prior); err != nil {
+				t.Fatal(err)
+			}
+			if prior.Valid {
+				t.Fatalf("quota fixture copy retained another case's week start: %d", prior.Int64)
+			}
 			hostileMustExec(t, database, `UPDATE donation_quota_epochs SET alignment='calendar',interval='week',week_starts_on=?`, day)
 		})
 	}
