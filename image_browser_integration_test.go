@@ -366,6 +366,9 @@ func (f *imageBrowserFixture) seedUser(index, level int, admin int64) imageBrows
 		hex.EncodeToString(digest[:]), id, now, now+3600, now+7200, now, "image-fixture-generation"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := f.app.Load().authRuntime.IdentityContinuity().BindUserTx(ctx, tx, id); err != nil {
+		t.Fatal(err)
+	}
 	wallet, err := ledger.CreateUserAssetAccount(ctx, tx, id, ledger.General, now)
 	if err != nil {
 		t.Fatal(err)

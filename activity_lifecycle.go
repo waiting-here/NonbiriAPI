@@ -85,7 +85,9 @@ func (a *activityRuntime) RecoverBeforeListener(ctx context.Context, _ int64, li
 	if budget <= 0 {
 		return lifecycle.WorkResult{}, context.DeadlineExceeded
 	}
-	r, err := a.limited.RecoverBeforeListener(ctx, a.now().Unix(), limit, budget)
+	// Fat Fish has its own typed maintenance owner; the catalog remains the
+	// shared authority for pause, ban and delete handoffs, never a second sweep.
+	r, err := a.images.RecoverBeforeListener(ctx, a.now().Unix(), limit, budget)
 	if err == nil && !r.More {
 		a.recovered.Store(true)
 	}
@@ -107,7 +109,7 @@ func (a *activityRuntime) Retain(ctx context.Context, _ int64, limit int, deadli
 		r.More = true
 		return r, nil
 	}
-	i, err := a.limited.Retain(ctx, now, limit-r.Processed, budget)
+	i, err := a.images.Retain(ctx, now, limit-r.Processed, budget)
 	r.Processed += i.Processed
 	r.More = r.More || i.More
 	return r, err
