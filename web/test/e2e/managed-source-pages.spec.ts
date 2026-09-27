@@ -645,7 +645,120 @@ async function exerciseManagedSourceBrowser(
   await expect.poll(() => fixture.sourceKeyReads.length).toBeGreaterThan(0);
   expect(fixture.sourceKeyReads.at(-1)).toContain('scope=all');
   expect(fixture.sourceKeyReads.at(-1)).toContain('page=1');
-  await keysSection.getByRole('button', { name: setup.backToSources, exact: true }).click();
+  const backToSources = keysSection.getByRole('button', {
+    name: setup.backToSources,
+    exact: true,
+  });
+  if (setup.station === 'user') {
+    const samples: string[] = [];
+    let sampleCount = 0;
+    const onConsole = (message: { type(): string; text(): string }) => {
+      if (message.type() !== 'debug' || !message.text().startsWith('source-return-layout ')) return;
+      sampleCount += 1;
+      if (samples.length === 72) samples.shift();
+      samples.push(message.text());
+    };
+    page.on('console', onConsole);
+    await page.evaluate(() => {
+      const button = document.querySelector<HTMLElement>(
+        '.charity-source-browser__keys-header .btn',
+      );
+      if (!button) return;
+      let frames = 0;
+      let changes = 0;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      let minScrollY = Number.POSITIVE_INFINITY;
+      let maxScrollY = Number.NEGATIVE_INFINITY;
+      let previousRect = '';
+      const tick = () => {
+        if (!button.isConnected) return;
+        const rect = button.getBoundingClientRect();
+        const currentRect = [rect.x, rect.y, rect.width, rect.height].join(',');
+        if (currentRect !== previousRect) changes += 1;
+        previousRect = currentRect;
+        minY = Math.min(minY, rect.y);
+        maxY = Math.max(maxY, rect.y);
+        minScrollY = Math.min(minScrollY, scrollY);
+        maxScrollY = Math.max(maxScrollY, scrollY);
+        frames += 1;
+        requestAnimationFrame(tick);
+      };
+      tick();
+      const timer = window.setInterval(() => {
+        if (!button.isConnected) {
+          window.clearInterval(timer);
+          return;
+        }
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        const focus = document.activeElement;
+        console.debug(
+          `source-return-layout ${JSON.stringify({
+            frames,
+            changes,
+            yRange: [minY, maxY],
+            scrollYRange: [minScrollY, maxScrollY],
+            rect: [rect.x, rect.y, rect.width, rect.height],
+            clientRects: Array.from(button.getClientRects(), (part) => [
+              part.x,
+              part.y,
+              part.width,
+              part.height,
+            ]),
+            clientSize: [button.clientWidth, button.clientHeight],
+            scrollY,
+            viewport: [
+              innerWidth,
+              innerHeight,
+              document.documentElement.clientWidth,
+              document.documentElement.clientHeight,
+            ],
+            visualViewport: visualViewport
+              ? [visualViewport.width, visualViewport.height, visualViewport.offsetTop]
+              : null,
+            focus: focus instanceof HTMLElement ? [focus.tagName, focus.className] : null,
+            visibility: document.visibilityState,
+            fonts: document.fonts.status,
+            hovered: button.matches(':hover'),
+            loading: document.querySelectorAll('.charity-source-browser__keys [role="status"]')
+              .length,
+            cards: document.querySelectorAll('.charity-source-browser__key').length,
+            style: [
+              style.transform,
+              style.transitionDuration,
+              style.animationName,
+              style.animationDuration,
+            ],
+            scrollBehavior: [
+              getComputedStyle(document.documentElement).scrollBehavior,
+              getComputedStyle(document.body).scrollBehavior,
+            ],
+          })}`,
+        );
+        changes = 0;
+        minY = Number.POSITIVE_INFINITY;
+        maxY = Number.NEGATIVE_INFINITY;
+        minScrollY = Number.POSITIVE_INFINITY;
+        maxScrollY = Number.NEGATIVE_INFINITY;
+      }, 500);
+    });
+    try {
+      await backToSources.click();
+    } catch (error) {
+      process.stdout.write(
+        `Source return layout samples (${sampleCount} total):\n${[
+          ...samples.slice(0, 4),
+          ...samples.slice(-24),
+        ].join('\n')}\n`,
+      );
+      throw error;
+    } finally {
+      page.off('console', onConsole);
+    }
+  } else {
+    await backToSources.click();
+  }
   await expect(page).toHaveURL(/charity_section=sources/);
   const cancelledURL = new URL(page.url());
   expect(cancelledURL.searchParams.get('source_q')).toBe('source-needle');
