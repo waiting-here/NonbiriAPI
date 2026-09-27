@@ -355,9 +355,11 @@ export type HomeCapability<T> =
   { state: 'available'; load: (signal?: AbortSignal) => Promise<T> } | { state: 'unavailable' };
 
 export type HomeCheckinStatus =
-  | { enabled: false }
+  | { enabled: false; mutually_exclusive: boolean; blocked_by_other_checkin: boolean }
   | {
       enabled: true;
+      mutually_exclusive: boolean;
+      blocked_by_other_checkin: boolean;
       asset_type: CreditAsset;
       checked_in_today: boolean;
       balance: string;

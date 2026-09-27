@@ -284,7 +284,20 @@ function SettingField({
     preview = t('admin.settings.catalogMilliPreview', { credits: creditPreview(parsed.value) });
   }
   const control =
-    entry.type === 'boolean' || entry.type === 'enum' ? (
+    entry.key === 'checkin_mutually_exclusive' && entry.type === 'boolean' ? (
+      <label className="checkbox-label">
+        <input
+          id={inputID}
+          type="checkbox"
+          checked={draft.text === 'true'}
+          disabled={busy || draft.isNull}
+          onChange={(event) => change(String(event.target.checked))}
+        />
+        <span>
+          {draft.text === 'true' ? t('common.enabled') : t('common.disabled')}
+        </span>
+      </label>
+    ) : entry.type === 'boolean' || entry.type === 'enum' ? (
       <select
         id={inputID}
         value={draft.text}

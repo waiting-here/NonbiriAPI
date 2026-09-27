@@ -84,7 +84,16 @@ describe('core wire normalizers', () => {
 
   it('strictly decodes the frozen home check-in wire without numeric conversion', () => {
     const maximum = '340282366920938463463374607431768211.455';
-    expect(normalizeHomeCheckinStatus({ enabled: false })).toEqual({ enabled: false });
+    expect(normalizeHomeCheckinStatus({ enabled: false })).toEqual({
+      enabled: false,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
+    });
+    expect(normalizeHomeCheckinStatus({ enabled: false, mutually_exclusive: true })).toEqual({
+      enabled: false,
+      mutually_exclusive: true,
+      blocked_by_other_checkin: false,
+    });
     expect(
       normalizeHomeCheckinStatus({
         enabled: true,
@@ -95,7 +104,25 @@ describe('core wire normalizers', () => {
         award_max: maximum,
         balance_cap: maximum,
       }),
-    ).toMatchObject({ award_max: maximum, balance_cap: maximum });
+    ).toMatchObject({
+      award_max: maximum,
+      balance_cap: maximum,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
+    });
+    expect(
+      normalizeHomeCheckinStatus({
+        enabled: true,
+        asset_type: 'game',
+        checked_in_today: false,
+        balance: '1',
+        award_min: '0',
+        award_max: '2',
+        balance_cap: '0',
+        mutually_exclusive: true,
+        blocked_by_other_checkin: true,
+      }),
+    ).toMatchObject({ mutually_exclusive: true, blocked_by_other_checkin: true });
     expect(
       normalizeHomeCheckinResult({ asset_type: 'general', award: maximum, balance: '-1.5' }),
     ).toEqual({
@@ -107,6 +134,12 @@ describe('core wire normalizers', () => {
     expect(() => normalizeHomeCheckinStatus({ enabled: false, reason: 'hidden' })).toThrow(
       /check-in status/i,
     );
+    expect(() => normalizeHomeCheckinStatus({ enabled: false, mutually_exclusive: 'true' })).toThrow(
+      /mutual exclusion/i,
+    );
+    expect(() =>
+      normalizeHomeCheckinStatus({ enabled: false, blocked_by_other_checkin: 1 }),
+    ).toThrow(/other check-in block/i);
     expect(() =>
       normalizeHomeCheckinStatus({
         enabled: true,
