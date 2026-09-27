@@ -100,7 +100,7 @@ func TestStewardExportParityFinalAuthorizationAndCSVIdentitySafety(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rows[2][16] != "'=1+1" || rows[2][17] != "'@identity" {
+	if rows[2][17] != "'=1+1" || rows[2][18] != "'@identity" {
 		t.Fatalf("identity formula escaped incorrectly: %v", rows[2])
 	}
 	for _, format := range []string{"csv", "json"} {

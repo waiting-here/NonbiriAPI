@@ -6,9 +6,11 @@ package openai
 type cumulativeUsage struct {
 	value    Usage
 	poisoned bool
+	mismatch bool
 }
 
 func (u *cumulativeUsage) observe(next Usage, malformed bool) Usage {
+	u.mismatch = u.mismatch || next.TotalMismatch
 	if malformed || (next.Present && u.value.Present && (next.UncachedInputTokens != u.value.UncachedInputTokens ||
 		next.CacheWriteInputTokens != u.value.CacheWriteInputTokens ||
 		next.CacheReadInputTokens != u.value.CacheReadInputTokens ||
@@ -16,9 +18,10 @@ func (u *cumulativeUsage) observe(next Usage, malformed bool) Usage {
 		u.poisoned = true
 	}
 	if u.poisoned {
-		u.value = Usage{}
+		u.value = Usage{TotalMismatch: u.mismatch}
 	} else if next.Present {
 		u.value = next
 	}
+	u.value.TotalMismatch = u.mismatch
 	return u.value
 }

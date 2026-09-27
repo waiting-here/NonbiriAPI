@@ -98,6 +98,10 @@ type Usage struct {
 	CacheReadInputTokens  int64
 	OutputTokens          int64
 	Present               bool
+	// TotalMismatch records a comparable upstream total that disagreed with
+	// independently validated buckets. It remains meaningful when Present is
+	// false because another usage defect made the buckets unbillable.
+	TotalMismatch bool
 }
 
 // AttemptResult contains only bounded metadata. Diagnostic is a locally

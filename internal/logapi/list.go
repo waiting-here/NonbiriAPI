@@ -10,7 +10,7 @@ import (
 const commonListColumns = `l.id,l.logical_request_id,l.route_kind,l.caller_result_class,
 l.caller_status,l.caller_error_code,l.started_at,l.completed_at,
 l.uncached_input_tokens,l.cache_write_input_tokens,l.cache_read_input_tokens,l.output_tokens,
-l.usage_unknown,l.attempt_count,
+l.usage_unknown,l.usage_total_mismatch,l.attempt_count,
 COALESCE((SELECT ce.delta_mag
  FROM credit_operations co JOIN credit_entries ce ON ce.operation_id=co.id
  WHERE co.source_type='logical_request' AND co.source_id=l.logical_request_id
@@ -207,6 +207,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND l.caller_status=?`
 		args = append(args, *filter.Status)
 	}
+	if filter.UsageTotalMismatch != nil {
+		query += ` AND l.usage_total_mismatch=?`
+		args = append(args, *filter.UsageTotalMismatch)
+	}
 	if filter.From != nil {
 		query += ` AND l.started_at>=?`
 		args = append(args, *filter.From)
@@ -251,7 +255,8 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+				UsageTotalMismatch: record.usageTotalMismatch == 1,
+				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
@@ -339,6 +344,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND l.caller_status=?`
 		args = append(args, *filter.Status)
 	}
+	if filter.UsageTotalMismatch != nil {
+		query += ` AND l.usage_total_mismatch=?`
+		args = append(args, *filter.UsageTotalMismatch)
+	}
 	if filter.From != nil {
 		query += ` AND l.started_at>=?`
 		args = append(args, *filter.From)
@@ -386,7 +395,8 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+				UsageTotalMismatch: record.usageTotalMismatch == 1,
+				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})

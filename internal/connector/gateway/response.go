@@ -34,6 +34,10 @@ func parseUsage(raw []byte) (contract.Usage, error) {
 	if strictjson.ValidateObjectWithFieldLimit(raw, 16384) != nil || json.Unmarshal(raw, &value) != nil {
 		return out, errResponse
 	}
+	// Compare independently readable groups before rejecting another invalid
+	// bucket, so a known discrepancy remains observable even without billing.
+	out.TotalMismatch = componentTotalMismatch(value.Input.Total, value.Input.NoCache, value.Input.CacheRead, value.Input.CacheWrite) ||
+		componentTotalMismatch(value.Output.Total, value.Output.Text, value.Output.Reasoning)
 	for _, n := range []*int64{value.Input.Total, value.Input.NoCache, value.Input.CacheRead, value.Input.CacheWrite, value.Output.Total, value.Output.Text, value.Output.Reasoning} {
 		if n != nil && *n < 0 {
 			return out, errResponse
@@ -47,17 +51,21 @@ func parseUsage(raw []byte) (contract.Usage, error) {
 			continue
 		}
 		if *n > math.MaxInt64-sum {
+			if value.Input.Total != nil && value.Input.NoCache != nil &&
+				value.Input.CacheRead != nil && value.Input.CacheWrite != nil {
+				out.TotalMismatch = true
+			}
 			return out, errResponse
 		}
 		sum += *n
 	}
 	if value.Input.Total != nil {
-		if sum > *value.Input.Total {
+		if missing != 0 && sum > *value.Input.Total {
 			return out, errResponse
 		}
 		remaining := *value.Input.Total - sum
 		if missing == 0 && remaining != 0 {
-			return out, errResponse
+			out.TotalMismatch = true
 		}
 		if missing == 1 || remaining == 0 {
 			for i, n := range values {
@@ -69,28 +77,56 @@ func parseUsage(raw []byte) (contract.Usage, error) {
 			missing = 0
 		}
 	}
+	outputKnown := int64(0)
 	if value.Output.Total != nil {
-		outputKnown := int64(0)
 		for _, n := range []*int64{value.Output.Text, value.Output.Reasoning} {
 			if n != nil {
 				if *n > math.MaxInt64-outputKnown {
+					if value.Output.Text != nil && value.Output.Reasoning != nil {
+						out.TotalMismatch = true
+					}
 					return out, errResponse
 				}
 				outputKnown += *n
 			}
 		}
-		if outputKnown > *value.Output.Total {
+		if value.Output.Text != nil && value.Output.Reasoning != nil && outputKnown != *value.Output.Total {
+			out.TotalMismatch = true
+		} else if outputKnown > *value.Output.Total {
 			return out, errResponse
 		}
 	}
 	if missing != 0 || value.Output.Total == nil {
 		return out, nil
 	}
-	out = contract.Usage{UncachedInputTokens: *values[0], CacheReadInputTokens: *values[1], CacheWriteInputTokens: *values[2], OutputTokens: *value.Output.Total, Present: true}
+	outputTokens := *value.Output.Total
+	if value.Output.Text != nil && value.Output.Reasoning != nil {
+		outputTokens = outputKnown
+	}
+	out = contract.Usage{UncachedInputTokens: *values[0], CacheReadInputTokens: *values[1], CacheWriteInputTokens: *values[2], OutputTokens: outputTokens, Present: true, TotalMismatch: out.TotalMismatch}
 	if _, ok := usageTotal(out); !ok {
-		return contract.Usage{}, errResponse
+		return contract.Usage{TotalMismatch: out.TotalMismatch}, errResponse
 	}
 	return out, nil
+}
+
+func componentTotalMismatch(total *int64, components ...*int64) bool {
+	if total == nil || *total < 0 {
+		return false
+	}
+	for _, n := range components {
+		if n == nil || *n < 0 {
+			return false
+		}
+	}
+	sum := int64(0)
+	for _, n := range components {
+		if *n > math.MaxInt64-sum {
+			return true
+		}
+		sum += *n
+	}
+	return sum != *total
 }
 
 func usageTotal(value contract.Usage) (int64, bool) {

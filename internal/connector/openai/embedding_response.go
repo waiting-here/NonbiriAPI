@@ -146,8 +146,8 @@ func embeddingUsage(raw []byte) Usage {
 	root := fieldsByName(fields)
 	prompt, promptOK := embeddingInteger(root["prompt_tokens"])
 	total, totalOK := embeddingInteger(root["total_tokens"])
-	if !promptOK || !totalOK || prompt != total {
+	if !promptOK || !totalOK {
 		return Usage{}
 	}
-	return Usage{UncachedInputTokens: prompt, Present: true}
+	return Usage{UncachedInputTokens: prompt, Present: true, TotalMismatch: prompt != total}
 }
