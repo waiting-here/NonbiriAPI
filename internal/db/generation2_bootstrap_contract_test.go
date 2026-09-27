@@ -628,18 +628,22 @@ func TestGenerationTwoFreshConcurrentSingleOEXCLWinnerDoesNotDeleteWinner(t *tes
 	}
 	unblock()
 	var winner *Store
+	// The winner still has to build the full fresh schema after the hook is
+	// released. Its completion bound must cover the production startup budget.
+	winnerWait := DefaultStartupTimeout + bootstrapHookWait
 	select {
 	case outcome := <-results:
 		if outcome.err != nil {
 			t.Fatal(outcome.err)
 		}
 		winner = outcome.store
-	case <-time.After(bootstrapHookWait):
-		t.Fatal("exclusive owner did not finish initialization")
+	case <-time.After(winnerWait):
+		t.Fatalf("exclusive owner did not finish initialization within %s", winnerWait)
 	}
 	if winner == nil {
 		t.Fatal("no successful owner")
 	}
+	t.Cleanup(func() { _ = winner.Close() })
 	if epoch := queryBootstrapAnnouncementEpoch(t, winner); epoch == "" {
 		t.Fatal("winner database has no announcement epoch")
 	}
