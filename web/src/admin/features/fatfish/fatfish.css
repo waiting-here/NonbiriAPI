@@ -1,0 +1,32 @@
+.fatfish-admin { max-width: 1600px; }
+.fatfish-tabs, .fatfish-actions { display: flex; gap: .55rem; flex-wrap: wrap; align-items: center; margin: .75rem 0; }
+.fatfish-tabs button[aria-current="page"] { background: #125c78; color: white; }
+.fatfish-manager { display: grid; grid-template-columns: minmax(190px, 240px) minmax(0, 1fr); gap: 1.2rem; }
+.fatfish-directory { border-right: 1px solid #b8cbd2; padding-right: 1rem; overflow-wrap: anywhere; }
+.fatfish-directory ul, .fatfish-shelf ul, .fatfish-node-list { list-style: none; margin: .8rem 0; padding: 0; }
+.fatfish-directory li, .fatfish-shelf li, .fatfish-node-list li { margin: .45rem 0; }
+.fatfish-directory li button, .fatfish-node-list button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.fatfish-editor, .fatfish-period-editor { min-width: 0; }
+.fatfish-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .7rem; margin: .75rem 0; }
+.fatfish-fields label, .fatfish-inspector label, .fatfish-version-picker label, .fatfish-condition label { display: grid; gap: .25rem; }
+.fatfish-fields input, .fatfish-fields textarea, .fatfish-inspector input, .fatfish-inspector select, .fatfish-version-picker select, .fatfish-condition select, .fatfish-condition input { max-width: 100%; min-width: 0; }
+.fatfish-fields textarea { min-height: 4.5rem; }
+.fatfish-editor-body { display: grid; grid-template-columns: minmax(280px, 480px) minmax(240px, 1fr); align-items: start; gap: 1rem; }
+.fatfish-level-map { width: 100%; aspect-ratio: 480 / 560; border: 1px solid #78949c; touch-action: none; background: #f6fafb; }
+.fatfish-inspector { max-height: 740px; overflow-y: auto; padding: .75rem; border: 1px solid #afc5cc; border-radius: .5rem; }
+.fatfish-inspector fieldset { margin: .75rem 0; border: 1px solid #bcced3; }
+.fatfish-coordinate, .fatfish-vertex { display: flex; align-items: end; gap: .4rem; flex-wrap: wrap; margin: .25rem 0; }
+.fatfish-coordinate input { width: 5rem; }
+.fatfish-error { display: block; color: #aa1730; border: 1px solid #aa1730; margin: .5rem 0; text-align: left; }
+.fatfish-shelf, .fatfish-graph-preview, .fatfish-node-editor { border-top: 1px solid #b8cbd2; margin-top: 1rem; padding-top: 1rem; }
+.fatfish-node-map svg { width: 100%; max-width: 800px; height: auto; aspect-ratio: 8 / 5; border: 1px solid #78949c; touch-action: none; }
+.fatfish-node-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .4rem; }
+.fatfish-condition { border-left: 3px solid #aac8ce; margin: .5rem 0; padding: .5rem .75rem; }
+.fatfish-condition-children { margin-left: 1rem; }
+.fatfish-file { display: inline-grid; }
+@media (max-width: 850px) {
+  .fatfish-manager, .fatfish-editor-body { display: block; }
+  .fatfish-directory { border-right: 0; border-bottom: 1px solid #b8cbd2; margin-bottom: 1rem; padding-bottom: 1rem; }
+  .fatfish-inspector { max-height: none; margin-top: 1rem; }
+  .fatfish-node-map svg { min-width: 280px; }
+}

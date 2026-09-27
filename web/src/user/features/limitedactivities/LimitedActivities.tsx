@@ -64,9 +64,13 @@ export function LimitedActivitiesSection() {
                     height="540"
                   />
                 ) : (
-                  <span role="img" aria-label={t('水中的大肥鱼', 'A big fish in water')}>
-                    🐟
-                  </span>
+                  <img
+                    src="/assets/fatfish/cover.svg"
+                    alt={t('鱼缸中的大肥鱼与电脑器材', 'A big fish among aquarium and computer equipment')}
+                    width="960"
+                    height="540"
+                    loading="lazy"
+                  />
                 )}
               </div>
               <div className="limited-entry__copy">
