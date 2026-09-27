@@ -2813,7 +2813,7 @@ describe('experimental policy and charity controls', () => {
       await act(async () => {
         completion.resolve({
           blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 10,
+          schemaVersion: 11,
         });
         await completion.promise;
       });
