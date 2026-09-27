@@ -81,7 +81,7 @@ func TestEmbeddingExtensionPreservesReleasedDataAndStorage(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The final manifest checks every constraint. Separately prove that
-		// appended rejection fields did not reorder or alter the old columns.
+		// appended diagnostic fields did not reorder or alter the old columns.
 		for _, table := range []string{"logical_requests", "request_logs"} {
 			var previous, current []columnManifest
 			for _, object := range manifestBefore.Tables {
@@ -94,8 +94,17 @@ func TestEmbeddingExtensionPreservesReleasedDataAndStorage(t *testing.T) {
 					current = object.Columns
 				}
 			}
-			if len(previous) == 0 || len(current) != len(previous)+4 || !reflect.DeepEqual(current[:len(previous)], previous) {
+			added := []string{"rejection_stage", "rejection_reason", "request_method", "request_path"}
+			if table == "request_logs" {
+				added = append(added, "usage_total_mismatch")
+			}
+			if len(previous) == 0 || len(current) != len(previous)+len(added) || !reflect.DeepEqual(current[:len(previous)], previous) {
 				t.Fatalf("request table %s changed existing columns", table)
+			}
+			for i, name := range added {
+				if current[len(previous)+i].Name != name {
+					t.Fatalf("request table %s appended an unexpected column", table)
+				}
 			}
 		}
 		if err := store.Close(); err != nil {
