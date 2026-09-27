@@ -71,6 +71,10 @@ export function PrivacyPage() {
             <p>{t('user.legal.privacy.imageBody')}</p>
           </section>
           <section>
+            <h2>{t('user.legal.privacy.fatFishTitle')}</h2>
+            <p>{t('user.legal.privacy.fatFishBody')}</p>
+          </section>
+          <section>
             <h2>{t('user.legal.privacy.sharingTitle')}</h2>
             <p>{t('user.legal.privacy.sharingBody')}</p>
             <p>{t('user.legal.privacy.keyLimitsBody')}</p>
