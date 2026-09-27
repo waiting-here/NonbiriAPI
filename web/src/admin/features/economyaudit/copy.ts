@@ -36,6 +36,7 @@ export function channelLabel(channel: string, t: Text) {
         onboarding: t('新人奖励', 'Onboarding rewards'),
         loan: t('赛博网贷', 'Credit exchange loan'),
         picture_book: t('喵帕斯的绘本', 'Picture book'),
+        fat_fish: t('饲养大肥鱼', 'Feed the Fat Fish'),
         inactivity: t('低活跃衰减', 'Inactivity decay'),
         penalty: t('违规扣减', 'Penalties'),
         unclassified: t('未分类', 'Unclassified'),
