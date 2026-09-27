@@ -42,6 +42,28 @@ func privateDBDir(t *testing.T) string {
 	return dir
 }
 
+// copyPrivateSQLiteTestImage gives each case its own database file. Callers
+// must finish writing and close the source before passing its immutable image.
+func copyPrivateSQLiteTestImage(t *testing.T, image []byte) string {
+	t.Helper()
+	if len(image) < 100 {
+		t.Fatal("SQLite test image is too short")
+	}
+	path := filepath.Join(privateDBDir(t), "fixture.sqlite")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		t.Fatalf("create private SQLite test copy: %v", err)
+	}
+	if _, err := file.Write(image); err != nil {
+		_ = file.Close()
+		t.Fatalf("write private SQLite test copy: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close private SQLite test copy: %v", err)
+	}
+	return path
+}
+
 // seedUserRaw inserts the minimum valid Generation 2 identity row. It writes
 // the fixed-width counters and revision explicitly so a fixture cannot rely
 // on a retired schema default or silently bypass a NOT NULL contract.

@@ -10,6 +10,7 @@ import (
 // enter a personal export.
 type ExportDocument struct {
 	GovernanceExport
+	InteractionExport
 	Checkins            []CheckinExport         `json:"checkins"`
 	GameOnboarding      []OnboardingExport      `json:"game_onboarding"`
 	GameOnboardingHolds []OnboardingHoldExport  `json:"game_onboarding_holds"`

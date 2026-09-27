@@ -299,6 +299,10 @@ async function serveStation(request, response, station) {
   }
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (isAPIPath(url.pathname)) {
+    if (request.method === 'GET' && url.pathname === '/api/games/likes/loadouts') {
+      send(response, 200, 'application/json', JSON.stringify({ capacity: 10, slots: [] }));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/api/endpoint-create-options') {
       send(response, 200, 'application/json', JSON.stringify({
         base_connector_types: ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'],
@@ -306,12 +310,37 @@ async function serveStation(request, response, station) {
       }));
       return;
     }
+    // Unrelated layout/navigation fixtures use an empty, valid projection for
+    // the request-adaptation editor added to endpoint and charity-model details.
+    // Tests for adaptation itself intercept these exact reads with their own data.
+    if (
+      request.method === 'GET' &&
+      (/^\/api\/endpoints\/[1-9][0-9]*\/request-adaptation$/.test(url.pathname) ||
+        /^\/(?:admin\/api|api\/steward)\/charity-models\/[1-9][0-9]*\/request-adaptation$/.test(
+          url.pathname,
+        ))
+    ) {
+      send(
+        response,
+        200,
+        'application/json',
+        JSON.stringify({
+          revision: '0',
+          forward_headers: { mode: 'replace', values: [] },
+          fixed_headers: { mode: 'replace', values: {} },
+          body_defaults: { mode: 'replace', values: {} },
+          body_forced: { mode: 'replace', values: {} },
+          native_extension_paths: { mode: 'replace', values: [] },
+        }),
+      );
+      return;
+    }
     // Layout fixtures can omit ranking rows; ranking tests supply their own
     // ordered records, windows and privacy cases.
     if (
       request.method === 'GET' &&
       (/^\/api\/games\/(bidding|blackjack)\/leaderboard$/.test(url.pathname) ||
-        /^\/api\/games\/(leaderboards|fishing|blackjack)\/net-profit$/.test(url.pathname) ||
+        /^\/api\/games\/(leaderboards|fishing|blackjack|bidding)\/net-profit$/.test(url.pathname) ||
         url.pathname === '/api/games/leaderboards/charity' ||
         url.pathname === '/api/charity/leaderboard')
     ) {
@@ -328,6 +357,13 @@ async function serveStation(request, response, station) {
               : (url.searchParams.get('window') ?? '7d'),
           rows: [],
           me: null,
+          ...(url.pathname === '/api/games/bidding/net-profit'
+            ? {
+                rebuild_status: 'completed',
+                missing_events: '0',
+                history_coverage_start: 1800000000,
+              }
+            : {}),
           ...(url.pathname === '/api/charity/leaderboard'
             ? {
                 pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },

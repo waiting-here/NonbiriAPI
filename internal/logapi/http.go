@@ -290,6 +290,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		allowed["model"] = true
 	case "admin", "steward":
 		allowed["user_id"] = true
+		allowed["usage_total_mismatch"] = true
 		allowed["endpoint_key_id"] = true
 		allowed["endpoint_base_url"] = true
 		allowed["upstream_model"] = true
@@ -347,12 +348,17 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		case "error_code":
 			filter.ErrorCode = &value
 		case "status":
-			parsed, ok := parseCanonicalInt64(value, 100, 599)
-			if !ok {
+			status, err := strconv.Atoi(value)
+			if err != nil || status < 100 || status > 599 || strconv.Itoa(status) != value {
 				return ListFilter{}, ErrInvalid
 			}
-			status := int(parsed)
 			filter.Status = &status
+		case "usage_total_mismatch":
+			if value != "true" && value != "false" {
+				return ListFilter{}, ErrInvalid
+			}
+			mismatch := value == "true"
+			filter.UsageTotalMismatch = &mismatch
 		case "from":
 			parsed, ok := parseCanonicalInt64(value, 0, maxUnixSecond)
 			if !ok {

@@ -23,6 +23,8 @@ interface Fixture {
   discovery_id: string;
   diagnostic_id: string;
   image_task_id: string;
+  projection_alert_id: string;
+  issue_id: string;
   source_ip: string;
   source_client: string;
   json_body: string;
@@ -106,6 +108,90 @@ async function safeSink(page: Page) {
     0,
   );
 }
+
+test('custom presets persist across reloads without matchmaking, payment or cross-owner disclosure', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 1);
+  const other = await session(browser, 5);
+  try {
+    const page = await owner.newPage();
+    const failures: string[] = [];
+    page.on('pageerror', (error) => failures.push(error.message));
+    const beforeResponse = await api(owner, '/api/games');
+    expect(beforeResponse.status()).toBe(200);
+    const before = (await beforeResponse.json()) as {
+      balance: string;
+      game_balance: string;
+      likes: { plan_seconds: number };
+    };
+    expect(before.likes.plan_seconds).toBe(30);
+    await page.goto(fixture().user_url + '/games/likes');
+    const presets = page.getByRole('region', { name: 'Custom presets', exact: true });
+    await expect(presets.getByRole('button', { name: /^Save to Preset\d+$/ })).toHaveCount(10);
+    await page.locator('.likes-role-option').nth(1).click();
+    await page.locator('.likes-harness-option [data-guide^="harness:"]').first().click();
+    await presets.getByRole('button', { name: 'Save to Preset1', exact: true }).click();
+    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset1 saved.');
+    const savedResponse = await api(owner, '/api/games/likes/loadouts');
+    expect(savedResponse.status()).toBe(200);
+    const saved = (await savedResponse.json()) as {
+      capacity: number;
+      slots: {
+        slot: number;
+        revision: string;
+        loadout: { role: string; harness: string; skills: string[] };
+      }[];
+    };
+    expect(saved.capacity).toBe(10);
+    expect(saved.slots).toHaveLength(1);
+    expect(saved.slots[0].revision).toBe('1');
+    expect(saved.slots[0].loadout.harness).not.toBeNull();
+    await page.reload();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await presets.getByRole('button', { name: 'Load Preset1', exact: true }).click();
+    await expect(presets.getByRole('status')).toContainText(
+      'loaded. You have not joined matchmaking.',
+    );
+    const selected = page.locator('.likes-role-option[aria-pressed="true"]');
+    expect(await selected.getAttribute('data-guide')).toBe('role:' + saved.slots[0].loadout.role);
+    expect(
+      await page.locator('.likes-harness-option [aria-pressed="true"]').getAttribute('data-guide'),
+    ).toBe('harness:' + saved.slots[0].loadout.harness);
+    const selectedSkills = await page
+      .locator('.likes-skill-grid input:checked')
+      .evaluateAll((items) =>
+        items.map((item) => item.getAttribute('data-guide')!.slice('equip:'.length)),
+      );
+    expect(selectedSkills.sort()).toEqual([...saved.slots[0].loadout.skills].sort());
+    await presets.getByRole('button', { name: 'Save to Preset10', exact: true }).click();
+    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset10 saved.');
+    await presets.getByRole('button', { name: 'Overwrite Preset1', exact: true }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Overwrite custom presets', exact: true });
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect((await (await api(owner, '/api/games/likes/loadouts')).json()).slots[0].revision).toBe(
+      '1',
+    );
+    await presets.getByRole('button', { name: 'Overwrite Preset1', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Confirm overwrite', exact: true }).click();
+    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset1 overwritten.');
+    expect((await (await api(owner, '/api/games/likes/loadouts')).json()).slots[0].revision).toBe(
+      '2',
+    );
+    const privateResponse = await api(other, '/api/games/likes/loadouts');
+    expect(privateResponse.status()).toBe(200);
+    expect(await privateResponse.json()).toEqual({ capacity: 10, slots: [] });
+    const state = await (await api(owner, '/api/games/likes/state')).json();
+    expect(state.current).toBeFalsy();
+    expect(state.queue).toBeFalsy();
+    const after = await (await api(owner, '/api/games')).json();
+    expect([after.balance, after.game_balance]).toEqual([before.balance, before.game_balance]);
+    expect(failures).toEqual([]);
+  } finally {
+    await owner.close();
+    await other.close();
+  }
+});
 async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) {
   const f = fixture();
   const path = admin ? '/logs?' : '/steward?tab=logs&';
@@ -200,18 +286,29 @@ async function riskEvidence(page: Page, sustained = true) {
   const group = page.getByRole('group', { name: 'Abuse audit', exact: true });
   await group.getByRole('button', { name: 'Users', exact: true }).click();
   await page.getByLabel('Risk filter').selectOption('rpm');
+  await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   if (!sustained) {
-    await expect(page.getByText('No entries on this page', { exact: true })).toBeVisible();
+    await expect(page.getByText('Page 1 of 1 · Total: 0', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'No results yet', exact: true })).toBeVisible();
     await page.getByLabel('Risk filter').selectOption('');
+    await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+    await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   }
-  const row = page
-    .getByRole('row')
-    .filter({ has: page.getByRole('cell', { name: f.users[0].id, exact: true }) });
-  await expect(row).toContainText(sustained ? '5 · Yes' : '0 · No');
-  if (!sustained) await expect(row.getByRole('cell').nth(6)).toHaveText('5');
-  await row.getByRole('button', { name: 'Inspect', exact: true }).click();
+  const card = page.locator('.card').filter({
+    has: page.getByText('User ID: ' + f.users[0].id, { exact: true }),
+  });
+  await expect(
+    card.getByText(sustained ? '5 · Yes' : '0 · No', { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    card.locator('dt').filter({ hasText: 'Complete minutes / Incomplete minutes' }).locator('+ dd'),
+  ).toHaveText(sustained ? '5 / 0' : '0 / 5');
+  await card.getByRole('button', { name: 'Inspect', exact: true }).click();
   await expect(page.getByText('Minute observations', { exact: true })).toBeVisible();
   await group.getByRole('button', { name: 'Shared IPs', exact: true }).click();
+  await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
   await expect(page.getByText('Users: 4', { exact: false })).toBeVisible();
   await group.getByRole('button', { name: 'Client matches', exact: true }).click();
@@ -234,6 +331,41 @@ function amount(value: string) {
   return whole.toLocaleString('en-US');
 }
 test.describe.configure({ mode: 'serial' });
+
+test('an alert opens the exact retained issue context across refresh and mobile layout', async ({
+  browser,
+}) => {
+  const f = fixture();
+  const context = await session(browser, 'admin');
+  try {
+    const page = await context.newPage();
+    await page.goto(f.admin_url + '/alerts?alert_id=' + f.projection_alert_id);
+    await page.getByRole('button', { name: 'Issue projection', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Retained related issue IDs', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(f.issue_id, { exact: true })).toBeVisible();
+    const saved = page.url();
+    expect(new URL(saved).searchParams.get('target_kind')).toBe('issue_user');
+    expect(new URL(saved).searchParams.get('target_id')).toBe(f.users[0].id);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(page.getByText(f.issue_id, { exact: true })).toBeVisible();
+    expect(page.url()).toBe(saved);
+    await expect(page.locator('a[href="/users?user=' + f.users[0].id + '"]')).toBeVisible();
+    const response = await api(
+      context,
+      '/admin/api/alerts/targets/issue_user/' + f.users[0].id,
+      true,
+    );
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.related_issue_ids).toContain(f.issue_id);
+    expect(JSON.stringify(body)).not.toContain('synthetic retained issue');
+  } finally {
+    await context.close();
+  }
+});
 
 test('administrator reviews raw diagnostics, human audit evidence and all four asset ledgers', async ({
   browser,
@@ -491,3 +623,107 @@ for (const level of [5, 1] as const) {
     },
   );
 }
+
+test('administrator check-in choice persists and both cards follow real daily eligibility', async ({
+  browser,
+}) => {
+  const admin = await session(browser, 'admin');
+  const user = await session(browser, 1, true);
+  try {
+    const settings = await (await api(admin, '/admin/api/site-config', true)).json();
+    expect(settings.values.checkin_mutually_exclusive).toBe(false);
+    const enabled = await api(admin, '/admin/api/site-config', true, 'PATCH', {
+      expected_revision: settings.revision,
+      values: {
+        checkin_mode: 'enabled',
+        game_checkin_mode: 'enabled',
+        checkin_award_min_milli: '1',
+        checkin_award_max_milli: '1',
+        game_checkin_award_min_milli: '2',
+        game_checkin_award_max_milli: '2',
+        credits_cap_milli: '0',
+        game_credits_cap_milli: '0',
+      },
+    });
+    expect(enabled.status()).toBe(200);
+    const settingsPage = await admin.newPage();
+    await settingsPage.goto(fixture().admin_url + '/settings');
+    await settingsPage.getByRole('button', { name: /^Economy/ }).click();
+    const choice = settingsPage.locator('#site-setting-checkin_mutually_exclusive');
+    await expect(choice).not.toBeChecked();
+    await choice.check();
+    await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
+    await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
+    await settingsPage.reload();
+    await settingsPage.getByRole('button', { name: /^Economy/ }).click();
+    await expect(choice).toBeChecked();
+    const forbidden = await api(
+      user,
+      '/admin/api/site-config/checkin_mutually_exclusive',
+      true,
+      'PATCH',
+      { value: false },
+    );
+    expect(forbidden.status()).toBe(401);
+
+    const beforeGeneral = await (await api(user, '/api/checkin')).json();
+    const beforeGame = await (await api(user, '/api/checkin/game')).json();
+    expect(beforeGeneral.mutually_exclusive).toBe(true);
+    expect(beforeGame.mutually_exclusive).toBe(true);
+    const page = await user.newPage();
+    const failures: string[] = [];
+    page.on('pageerror', (error) => failures.push(error.message));
+    await page.goto(fixture().user_url + '/');
+    await expect(page.locator('.core-checkin-choice-note')).toContainText('Choose one check-in');
+    const general = page.locator('.core-checkin-card').filter({
+      has: page.getByRole('heading', { name: 'General-credit check-in', exact: true }),
+    });
+    const game = page.locator('.core-checkin-card').filter({
+      has: page.getByRole('heading', { name: 'Game-credit check-in', exact: true }),
+    });
+    const generalButton = general.getByRole('button', { name: 'Check in', exact: true });
+    const gameButton = game.getByRole('button', { name: 'Check in', exact: true });
+    await expect(generalButton).toBeEnabled();
+    await expect(gameButton).toBeEnabled();
+    const generalBox = await general.boundingBox();
+    const gameBox = await game.boundingBox();
+    expect(generalBox).not.toBeNull();
+    expect(gameBox).not.toBeNull();
+    expect(Math.abs(generalBox!.y - gameBox!.y)).toBeLessThan(1);
+    expect(generalBox!.x + generalBox!.width).toBeLessThan(gameBox!.x);
+    await generalButton.click();
+    await expect(general).toContainText('Checked in');
+    await expect(game).toContainText('Other check-in claimed');
+    await expect(generalButton).toBeDisabled();
+    await expect(gameButton).toBeDisabled();
+    const claimedGeneral = await (await api(user, '/api/checkin')).json();
+    const blockedGame = await (await api(user, '/api/checkin/game')).json();
+    expect(claimedGeneral.checked_in_today).toBe(true);
+    expect(Number(claimedGeneral.balance) - Number(beforeGeneral.balance)).toBe(1);
+    expect(blockedGame).toMatchObject({ checked_in_today: false, blocked_by_other_checkin: true });
+    expect(blockedGame.balance).toBe(beforeGame.balance);
+    const blocked = await api(user, '/api/checkin/game', false, 'POST');
+    expect(blocked.status()).toBe(409);
+    expect((await blocked.json()).error.code).toBe('already_checked_in');
+    await page.reload();
+    await expect(gameButton).toBeDisabled();
+
+    await choice.uncheck();
+    await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
+    await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.core-checkin-choice-note')).toHaveCount(0);
+    await expect(generalButton).toBeDisabled();
+    await expect(gameButton).toBeEnabled();
+    await gameButton.click();
+    await expect(game).toContainText('Checked in');
+    await expect(gameButton).toBeDisabled();
+    const claimedGame = await (await api(user, '/api/checkin/game')).json();
+    expect(claimedGame.checked_in_today).toBe(true);
+    expect(Number(claimedGame.balance) - Number(beforeGame.balance)).toBe(2);
+    expect(failures).toEqual([]);
+  } finally {
+    await admin.close();
+    await user.close();
+  }
+});

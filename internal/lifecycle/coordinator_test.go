@@ -28,9 +28,22 @@ func TestNewRequiresEveryClosedAdapterFamily(t *testing.T) {
 		{"ranking export", func(config *Config) { config.Export.Rankings = nil }},
 		{"penalty export", func(config *Config) { config.Export.Penalties = nil }},
 		{"governance export", func(config *Config) { config.Export.Governance = nil }},
+		{"adaptation export", func(config *Config) { config.Export.RequestAdaptation = nil }},
+		{"continuity export", func(config *Config) { config.Export.Continuity = nil }},
+		{"fish export", func(config *Config) { config.Export.FatFish = nil }},
+		{"fish delete", func(config *Config) { config.Delete.FatFish = nil }},
+		{"fish recovery", func(config *Config) { config.Recovery.FatFish = nil }},
+		{"fish retention", func(config *Config) { config.Retention.FatFish = nil }},
 		{"governance delete", func(config *Config) { config.Delete.Governance = nil }},
 		{"governance recovery", func(config *Config) { config.Recovery.Governance = nil }},
 		{"governance retention", func(config *Config) { config.Retention.Governance = nil }},
+		{"routing delete", func(config *Config) { config.Delete.CharityRouting = nil }},
+		{"routing recovery", func(config *Config) { config.Recovery.CharityRouting = nil }},
+		{"routing retention", func(config *Config) { config.Retention.CharityRouting = nil }},
+		{"continuity delete", func(config *Config) { config.Delete.Continuity = nil }},
+		{"continuity retention", func(config *Config) { config.Retention.Continuity = nil }},
+		{"adaptation delete", func(config *Config) { config.Delete.RequestAdaptation = nil }},
+		{"adaptation retention", func(config *Config) { config.Retention.RequestAdaptation = nil }},
 		{"delete", func(config *Config) { config.Delete.Reports = nil }},
 		{"recovery", func(config *Config) { config.Recovery.Claims = nil }},
 		{"retention", func(config *Config) { config.Retention.RequestLogs = nil }},
@@ -58,7 +71,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "blackjack", "randomness", "identity", "resources", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties", "governance"}
+	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "randomness", "identity", "resources", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties", "governance", "request_adaptation", "continuity"}
 	if !reflect.DeepEqual(fixture.exports.calls, wantOrder) {
 		t.Fatalf("export order = %v, want %v", fixture.exports.calls, wantOrder)
 	}
@@ -69,7 +82,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err := json.Unmarshal(body, &document); err != nil {
 		t.Fatalf("decode export: %v", err)
 	}
-	if document.SchemaVersion != 10 || document.GeneratedAt != 100 {
+	if document.SchemaVersion != 11 || document.GeneratedAt != 100 {
 		t.Fatalf("export header = version %d at %d", document.SchemaVersion, document.GeneratedAt)
 	}
 	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.Issues == nil ||
@@ -85,6 +98,9 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	}
 	if document.ImageTasks == nil || document.LimitedActivities.Exchanges == nil || document.Inactivity.Runs == nil {
 		t.Fatal("governance export arrays encoded as null")
+	}
+	if document.RequestAdaptations == nil || document.Continuity == nil || document.FatFish.Summaries == nil || document.FatFish.Progress == nil {
+		t.Fatal("interaction export arrays encoded as null")
 	}
 }
 
@@ -162,6 +178,14 @@ func TestPersonalExportCollectionsFailRatherThanTruncate(t *testing.T) {
 		seed func(*testExportAdapter, int)
 	}{
 		{"holds", func(a *testExportAdapter, n int) { a.activity.GameOnboardingHolds = make([]OnboardingHoldExport, n) }},
+		{"request adaptations", func(a *testExportAdapter, n int) {
+			a.interaction.RequestAdaptations = make([]RequestAdaptationExport, n)
+		}},
+		{"continuity", func(a *testExportAdapter, n int) { a.interaction.Continuity = make([]ContinuityEligibilityExport, n) }},
+		{"combined fish records", func(a *testExportAdapter, n int) {
+			a.interaction.FatFish.Summaries = make([]FatFishSummaryExport, n/2)
+			a.interaction.FatFish.Progress = make([]FatFishProgressExport, n-n/2)
+		}},
 		{"loans", func(a *testExportAdapter, n int) { a.activity.Loans = make([]LoanExport, n) }},
 		{"ranking totals", func(a *testExportAdapter, n int) { a.rankings.Totals = make([]RankingTotalExport, n) }},
 		{"ranking events", func(a *testExportAdapter, n int) { a.rankings.Events = make([]RankingEventExport, n) }},
@@ -232,6 +256,10 @@ func configuredDeleteAdapters(calls *[]string, finalizers []*testFinalizer, fail
 		return adapter
 	}
 	return DeleteAdapters{
+		FatFish:              makeAdapter(18, "fat_fish"),
+		RequestAdaptation:    makeAdapter(17, "request_adaptation"),
+		Continuity:           makeAdapter(16, "continuity"),
+		CharityRouting:       makeAdapter(15, "charity_routing"),
 		Governance:           makeAdapter(14, "governance"),
 		AuthSessionCallerKey: makeAdapter(0, "auth"), Resources: makeAdapter(1, "resources"), ClaimLog: makeAdapter(2, "claim_log"),
 		IssuesAnnouncements: makeAdapter(3, "issues"), Donations: makeAdapter(4, "donations"), Activities: makeAdapter(5, "activities"),
@@ -244,7 +272,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-success", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 15)
+	finalizers := make([]*testFinalizer, 19)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -264,7 +292,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	if err := coordinator.DeleteAccount(context.Background(), userID, 100); err != nil {
 		t.Fatalf("DeleteAccount: %v", err)
 	}
-	wantOrder := []string{"auth", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "debug", "governance", "ledger"}
+	wantOrder := []string{"continuity", "auth", "request_adaptation", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "debug", "governance", "charity_routing", "ledger"}
 	if !reflect.DeepEqual(calls, wantOrder) {
 		t.Fatalf("delete order = %v, want %v", calls, wantOrder)
 	}
@@ -289,7 +317,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-rollback", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 15)
+	finalizers := make([]*testFinalizer, 19)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -313,7 +341,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 		t.Fatalf("retirement commits=%d aborts=%d", retirement.commits, retirement.aborts)
 	}
 	for index, finalizer := range finalizers {
-		if index < 6 {
+		if index < 6 || index == 16 || index == 17 {
 			if finalizer.aborts != 1 || finalizer.commits != 0 {
 				t.Fatalf("prepared finalizer %d commits=%d aborts=%d", index, finalizer.commits, finalizer.aborts)
 			}

@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/fatfish"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
@@ -27,6 +28,7 @@ import (
 type activityRuntime struct {
 	limited     *limitedactivities.Service
 	images      *imageactivity.Service
+	fish        *fatfish.Service
 	inactivity  *inactivity.Service
 	cancelGames inactivity.CancelUserTx
 	now         func() time.Time
@@ -102,9 +104,17 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 	if err != nil {
 		return nil, err
 	}
+	a.fish, err = fatfish.New(fatfish.Config{
+		DB: store.DB(), Users: users, Admins: roles, Gate: admission,
+		Identity: sessions.IdentityContinuity(), Keys: vault, Now: now,
+	})
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	a.limited, err = limitedactivities.New(limitedactivities.Config{
 		Database: store.DB(), Users: users, Admins: roles, Gate: admission, Keys: vault,
-		Registry: limitedactivities.NewRegistry(a.images), Activity: activeActivityRecorder{}, Now: now,
+		Registry: limitedactivities.NewRegistry(a.images, a.fish.ActivityRuntime()), Activity: activeActivityRecorder{}, Now: now,
 	})
 	if err == nil {
 		a.inactivity, err = inactivity.New(inactivity.Config{
@@ -164,13 +174,19 @@ func (a *activityRuntime) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, 
 	}, nil
 }
 
-func (a *activityRuntime) Start(failures chan<- error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (a *activityRuntime) Start(parent context.Context, failures chan<- error, unavailable func()) {
+	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
 	a.workers.Add(2)
 	go func() {
 		defer a.workers.Done()
-		if err := a.images.Run(ctx); err != nil && ctx.Err() == nil {
+		if err := a.images.Run(ctx); ctx.Err() == nil {
+			if unavailable != nil {
+				unavailable()
+			}
+			if err == nil {
+				err = errors.New("image worker stopped unexpectedly")
+			}
 			select {
 			case failures <- err:
 			default:
@@ -205,12 +221,31 @@ func (a *activityRuntime) Close() error {
 		if a.images != nil {
 			_ = a.images.Close()
 		}
+		if a.fish != nil {
+			a.fish.Close()
+		}
 		a.workers.Wait()
 	})
 	return nil
 }
 
 type limitedRoutes struct{ sessions *auth.Runtime }
+
+// Only receipt reads and explicit completion routes bypass new-work gating.
+// Starting, preparing and unlocking a challenge retain normal admission.
+type fatFishRoutes struct{ limitedRoutes }
+
+func (r fatFishRoutes) RegisterUserRoute(method, path string, handler limitedactivities.AuthorizedUserHandler) error {
+	continuation := method == http.MethodGet || method == http.MethodPost &&
+		(path == "/api/limited-activities/fat-fish/challenges/{id}/submit" ||
+			path == "/api/limited-activities/fat-fish/challenges/{id}/abandon")
+	if continuation {
+		return r.sessions.RegisterContinuationUserRoute(method, path, func(w http.ResponseWriter, req *http.Request, p resources.ContinuationUserPrincipal) {
+			handler(w, req, limitedactivities.UserPrincipal{UserID: p.UserID})
+		})
+	}
+	return r.limitedRoutes.RegisterUserRoute(method, path, handler)
+}
 
 func (r limitedRoutes) RegisterUserRoute(method, path string, handler limitedactivities.AuthorizedUserHandler) error {
 	if method == http.MethodGet {
@@ -259,6 +294,13 @@ func registerActivityAdmin(sessions *auth.Runtime, method, path string, handler 
 
 func (a *activityRuntime) RegisterRoutes(sessions *auth.Runtime) error {
 	l, i := limitedRoutes{sessions}, imageRoutes{sessions}
+	f := fatFishRoutes{l}
+	if err := fatfish.RegisterUserRoutes(f, a.fish); err != nil {
+		return err
+	}
+	if err := fatfish.RegisterAdminRoutes(f, a.fish); err != nil {
+		return err
+	}
 	if err := limitedactivities.RegisterRoutes(l, l, a.limited); err != nil {
 		return err
 	}

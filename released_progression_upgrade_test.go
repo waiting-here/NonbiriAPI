@@ -79,7 +79,7 @@ func TestReleasedProgressionUpgrade(t *testing.T) {
 				t.Fatal(err)
 			}
 			for attempt := 0; attempt < 2; attempt++ {
-				app, err := buildApplicationWithGameClock(auditConfig(), store, vault, func() time.Time { return time.Unix(now, 0) })
+				app, err := buildApplicationWithGameClock(context.Background(), auditConfig(), store, vault, func() time.Time { return time.Unix(now, 0) })
 				if err != nil {
 					t.Fatal("released game recovery", err)
 				}

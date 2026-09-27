@@ -83,7 +83,7 @@ func main() {
 	}
 }
 
-func runCLI(args []string, stdout, stderr io.Writer) error {
+func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	goDefault := os.Getenv("GO")
 	if goDefault == "" {
 		goDefault = "go"
@@ -154,8 +154,15 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	groups := executionGroups(selected, *timeout, *workers)
 	fmt.Fprintf(stdout, "raceplan: shard %d/%d plan=%s estimated=%.1fs whole_packages=%d split_tests=%d workers=%d groups=%d\n",
 		index, total, digest, selected.EstimatedSeconds, len(selected.WholePackages), testCount, *workers, len(groups))
+	fixture, err := prepareRunnerFixture(*goTool, digest)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, fixture.cleanup()) }()
+	fmt.Fprintf(stdout, "raceplan: fixture built once in %s identity=%s sha256=%s bytes=%d\n", fixture.buildTime.Round(time.Millisecond), fixture.identity, fixture.sha256, fixture.size)
 	return executeGroups(groups, *workers, func(group commandGroup, commandOutput io.Writer) error {
 		command := exec.Command(*goTool, group.Args...)
+		command.Env = fixture.childEnvironment(os.Environ())
 		command.Stdout = commandOutput
 		command.Stderr = commandOutput
 		return command.Run()

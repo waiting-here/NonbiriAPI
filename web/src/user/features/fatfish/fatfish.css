@@ -1,0 +1,78 @@
+.fatfish-page { display: grid; gap: 1.4rem; min-width: 0; }
+.fatfish-page .btn { min-height: 2.75rem; }
+.fatfish-page .fatfish-periods {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: .65rem;
+}
+.fatfish-page :is(.fatfish-periods, .fatfish-node-list, .fatfish-pager, .fatfish-map-controls) button {
+  min-height: 2.75rem; padding: .55rem .8rem;
+  border: 1px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface); color: var(--nb-color-text);
+  font: inherit; font-weight: 600; line-height: 1.25;
+  cursor: pointer; transition: background-color var(--nb-transition), border-color var(--nb-transition);
+}
+.fatfish-page :is(.fatfish-periods, .fatfish-node-list, .fatfish-pager, .fatfish-map-controls) button:hover:not(:disabled) {
+  background: var(--nb-color-surface-emphasis); border-color: var(--nb-color-accent);
+}
+.fatfish-page :is(.fatfish-periods, .fatfish-node-list, .fatfish-pager, .fatfish-map-controls) button:focus-visible,
+.fatfish-page .fatfish-map button:focus-visible,
+.fatfish-page select:focus-visible {
+  outline: 2px solid var(--nb-color-focus); outline-offset: 2px; box-shadow: var(--nb-focus-ring);
+}
+.fatfish-page :is(.fatfish-periods, .fatfish-node-list, .fatfish-pager, .fatfish-map-controls) button:disabled {
+  border-color: var(--nb-color-border); background: var(--nb-color-surface-muted);
+  color: var(--nb-color-text-muted); cursor: not-allowed;
+}
+.fatfish-page .fatfish-periods button { display: grid; gap: .25rem; text-align: start; overflow-wrap: anywhere; }
+.fatfish-page .fatfish-periods button span { color: var(--nb-color-text-muted); font-size: .875rem; }
+.fatfish-page .fatfish-periods button.is-selected {
+  border-color: var(--nb-color-accent); background: var(--nb-color-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--nb-color-accent);
+}
+.fatfish-page .fatfish-map-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.fatfish-page .fatfish-map-viewport {
+  max-width: 40rem; width: 100%; overflow: auto;
+  border: 1px solid var(--nb-color-border-strong); border-radius: var(--nb-radius-md);
+}
+.fatfish-page .fatfish-map { position: relative; background: linear-gradient(135deg, #d4eff1, #e9f5e8); }
+.fatfish-page .fatfish-map__edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.fatfish-page .fatfish-map__edges line { stroke: #4d8393; stroke-width: .5; vector-effect: non-scaling-stroke; }
+.fatfish-page .fatfish-map button {
+  position: absolute; min-width: 2.75rem; min-height: 2.75rem; transform: translate(-50%, -50%);
+  border: 2px solid #547c8a; border-radius: 50%; background: #fff9e7; color: #233f48;
+  font: inherit; font-weight: 700; cursor: pointer;
+}
+.fatfish-page .fatfish-map button.is-selected { border-color: #184c74; box-shadow: 0 0 0 3px #fff, 0 0 0 5px #184c74; }
+.fatfish-page .fatfish-node-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  gap: .6rem; margin: 0; padding: 0; list-style: none;
+}
+.fatfish-page .fatfish-node-list li {
+  display: grid; gap: .3rem; min-width: 0; padding: .6rem;
+  border: 1px solid var(--nb-color-border); border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface-alt);
+}
+.fatfish-page .fatfish-node-list button { width: 100%; text-align: start; overflow-wrap: anywhere; }
+.fatfish-page .fatfish-node-list li span { color: var(--nb-color-text-muted); font-size: .875rem; }
+.fatfish-page .fatfish-facts { display: grid; grid-template-columns: minmax(7rem, auto) minmax(0, 1fr); gap: .4rem 1rem; }
+.fatfish-page .fatfish-facts dt { font-weight: 600; }
+.fatfish-page .fatfish-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.fatfish-page .fatfish-pager { display: flex; flex-wrap: wrap; gap: .7rem; align-items: center; margin-top: .6rem; }
+.fatfish-page select {
+  min-height: 2.75rem; max-width: 100%; padding: .45rem .7rem;
+  border: 1px solid var(--nb-color-border-strong); border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface); color: var(--nb-color-text);
+}
+.fatfish-page .fatfish-board, .fatfish-page .fatfish-history { padding-left: 1.5rem; }
+.fatfish-page .fatfish-board li, .fatfish-page .fatfish-history li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .35rem 1rem;
+  min-width: 0; padding: .65rem 0; border-bottom: 1px solid var(--nb-color-border);
+}
+.fatfish-page .fatfish-board strong { margin-left: auto; }
+.fatfish-page .fatfish-history code, .fatfish-page .fatfish-history span { overflow-wrap: anywhere; }
+.fatfish-page .fatfish-condition--met { color: var(--nb-color-success); }
+@media (max-width: 640px) {
+  .fatfish-page .fatfish-map-controls, .fatfish-page .fatfish-map-viewport { display: none; }
+  .fatfish-page .fatfish-facts { grid-template-columns: minmax(0, 1fr); }
+  .fatfish-page .fatfish-facts dd { margin-bottom: .4rem; }
+}

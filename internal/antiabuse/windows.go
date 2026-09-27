@@ -11,6 +11,7 @@ import (
 
 type windowEvent struct {
 	At        int64  `json:"occurred_at"`
+	Expires   int64  `json:"-"`
 	RequestID string `json:"request_id"`
 	Chars     *int   `json:"content_chars,omitempty"`
 }
@@ -86,7 +87,7 @@ func (s *Service) restore() error {
 	if len(windows) > MaxWindowUsers {
 		return charityrouting.ErrResourceLimit
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT user_id,violation_kind,seq,occurred_at,request_id,content_chars FROM abuse_window_events ORDER BY user_id,violation_kind,seq LIMIT ?`, MaxWindowUsers*MaxEventsPerUser+1)
+	rows, err = tx.QueryContext(ctx, `SELECT user_id,violation_kind,seq,occurred_at,request_id,content_chars,expires_at FROM abuse_window_events ORDER BY user_id,violation_kind,seq LIMIT ?`, MaxWindowUsers*MaxEventsPerUser+1)
 	if err != nil {
 		return err
 	}
@@ -97,7 +98,7 @@ func (s *Service) restore() error {
 		var seq int64
 		var e windowEvent
 		var chars sql.NullInt64
-		if err = rows.Scan(&k.userID, &kind, &seq, &e.At, &e.RequestID, &chars); err != nil {
+		if err = rows.Scan(&k.userID, &kind, &seq, &e.At, &e.RequestID, &chars, &e.Expires); err != nil {
 			rows.Close()
 			return err
 		}
@@ -139,7 +140,10 @@ func (s *Service) restore() error {
 
 func pruneWindowRows(ctx context.Context, tx *sql.Tx, now int64, cfg Config) error {
 	for _, k := range []windowKey{{charity: false}, {charity: true}} {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM abuse_window_events WHERE violation_kind=? AND occurred_at<=?`, k.kind(), now-windowDuration(k, cfg)); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE abuse_window_events SET expires_at=MIN(253402300799,occurred_at+?) WHERE violation_kind=? AND expires_at IS NULL`, windowDuration(k, cfg), k.kind()); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM abuse_window_events WHERE violation_kind=? AND (occurred_at<=? OR expires_at<=?)`, k.kind(), now-windowDuration(k, cfg), now); err != nil {
 			return err
 		}
 	}
@@ -163,8 +167,8 @@ func (s *Service) cleanupCopy(ctx context.Context, tx *sql.Tx, now int64, cfg Co
 		w := old
 		cut := now - windowDuration(k, cfg)
 		expired := false
-		for _, at := range old.events {
-			if at <= cut {
+		for i, at := range old.events {
+			if at <= cut || old.facts[i].Expires > 0 && old.facts[i].Expires <= now {
 				expired = true
 				break
 			}
@@ -173,7 +177,7 @@ func (s *Service) cleanupCopy(ctx context.Context, tx *sql.Tx, now int64, cfg Co
 			w.events = nil
 			w.facts = nil
 			for i, at := range old.events {
-				if at > cut {
+				if at > cut && (old.facts[i].Expires == 0 || old.facts[i].Expires > now) {
 					w.events = append(w.events, at)
 					w.facts = append(w.facts, old.facts[i])
 				}
@@ -216,7 +220,7 @@ func persistWindow(ctx context.Context, tx *sql.Tx, k windowKey, w *violationWin
 		return err
 	}
 	e := w.facts[len(w.facts)-1]
-	_, err := tx.ExecContext(ctx, `INSERT INTO abuse_window_events(user_id,violation_kind,seq,occurred_at,request_id,content_chars) VALUES(?,?,?,?,?,?)`, k.userID, k.kind(), w.next, e.At, e.RequestID, e.Chars)
+	_, err := tx.ExecContext(ctx, `INSERT INTO abuse_window_events(user_id,violation_kind,seq,occurred_at,request_id,content_chars,expires_at) VALUES(?,?,?,?,?,?,?)`, k.userID, k.kind(), w.next, e.At, e.RequestID, e.Chars, e.Expires)
 	if err == nil {
 		w.next++
 	}

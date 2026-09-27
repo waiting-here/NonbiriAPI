@@ -16,6 +16,12 @@ import {
 import { ApiError } from '@shared/query/http';
 import { currencyUnits, validScalar } from './parameters';
 import {
+  validPricingPolicy,
+  validSizeCapability,
+  type PricingPolicy,
+  type SizeCapability,
+} from './capabilities';
+import {
   parameterKeys,
   taskStatuses,
   type CombinationRule,
@@ -47,6 +53,94 @@ export function decodePrice(value: unknown): Price {
   if (currencyUnits(paper) === null || currencyUnits(brush) === null)
     invalidResponse('image price');
   return { paper, brush };
+}
+export function decodePricingPolicy(value: unknown): PricingPolicy {
+  const v = record(value, ['default', 'fallback', 'tiers', 'sizes'], 'image pricing policy');
+  const policy: PricingPolicy = {
+    default: decodePrice(v.default),
+    fallback: oneOf(v.fallback, ['default', 'unavailable'], 'price fallback'),
+    tiers: array(v.tiers, 'price tiers', 64).map((entry) => {
+      const row = record(entry, ['tier', 'paper', 'brush'], 'price tier');
+      return {
+        tier: string(row.tier, 'price tier', { min: 1, max: 128, bytes: 128 }),
+        ...decodePrice({ paper: row.paper, brush: row.brush }),
+      };
+    }),
+    sizes: array(v.sizes, 'size prices', 2048).map((entry) => {
+      const row = record(entry, ['width', 'height', 'paper', 'brush'], 'size price');
+      return {
+        width: integer(row.width, 'price width', 1, 65536),
+        height: integer(row.height, 'price height', 1, 65536),
+        ...decodePrice({ paper: row.paper, brush: row.brush }),
+      };
+    }),
+  };
+  if (!validPricingPolicy(policy)) invalidResponse('image pricing policy');
+  return policy;
+}
+export function decodeSizeCapability(value: unknown): SizeCapability {
+  const v = record(
+    value,
+    ['mode', 'combinations', 'width', 'height', 'max_pixels', 'auto'],
+    'size capability',
+    ['mode'],
+  );
+  const axis = (value: unknown) => {
+    const a = record(value, ['minimum', 'maximum', 'step'], 'size axis');
+    return {
+      minimum: integer(a.minimum, 'axis minimum', 1, 65536),
+      maximum: integer(a.maximum, 'axis maximum', 1, 65536),
+      step: integer(a.step, 'axis step', 1, 65536),
+    };
+  };
+  const capability: SizeCapability = {
+    mode: oneOf(
+      v.mode,
+      ['resolution_ratio_grid', 'ratio_size_map', 'ratio_resolution', 'width_height'],
+      'size mode',
+    ),
+    combinations: Object.hasOwn(v, 'combinations')
+      ? array(v.combinations, 'size combinations', 2048).map((entry) => {
+          const row = record(
+            entry,
+            ['ratio', 'resolution', 'width', 'height', 'tier'],
+            'size combination',
+            [],
+          );
+          return {
+            ...(Object.hasOwn(row, 'ratio')
+              ? { ratio: string(row.ratio, 'ratio', { min: 1, max: 128, bytes: 128 }) }
+              : {}),
+            ...(Object.hasOwn(row, 'resolution')
+              ? {
+                  resolution: string(row.resolution, 'resolution', {
+                    min: 1,
+                    max: 128,
+                    bytes: 128,
+                  }),
+                }
+              : {}),
+            ...(Object.hasOwn(row, 'width')
+              ? { width: integer(row.width, 'width', 1, 65536) }
+              : {}),
+            ...(Object.hasOwn(row, 'height')
+              ? { height: integer(row.height, 'height', 1, 65536) }
+              : {}),
+            ...(Object.hasOwn(row, 'tier')
+              ? { tier: string(row.tier, 'tier', { min: 1, max: 128, bytes: 128 }) }
+              : {}),
+          };
+        })
+      : [],
+    ...(Object.hasOwn(v, 'width') ? { width: axis(v.width) } : {}),
+    ...(Object.hasOwn(v, 'height') ? { height: axis(v.height) } : {}),
+    ...(Object.hasOwn(v, 'max_pixels')
+      ? { max_pixels: integer(v.max_pixels, 'max pixels', 0, 65536 ** 2) }
+      : {}),
+    ...(Object.hasOwn(v, 'auto') ? { auto: boolean(v.auto, 'auto size') } : {}),
+  };
+  if (!validSizeCapability(capability)) invalidResponse('size capability');
+  return capability;
 }
 function finite(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) invalidResponse('numeric constraint');
@@ -198,10 +292,22 @@ export function decodeCombinations(value: unknown): CombinationRule[] {
 export function decodeModel(value: unknown): ImageModel {
   const v = record(
     value,
-    ['id', 'display_name', 'description', 'revision', 'price', 'parameters', 'combinations'],
+    [
+      'id',
+      'display_name',
+      'description',
+      'revision',
+      'price',
+      'parameters',
+      'combinations',
+      'pricing_revision',
+      'pricing',
+      'size_capability',
+    ],
     'image model',
+    ['id', 'display_name', 'description', 'revision', 'price', 'parameters', 'combinations'],
   );
-  const model = {
+  const model: ImageModel = {
     id: opaqueID(v.id, 'imdl_', 'image model'),
     display_name: string(v.display_name, 'model display name', { min: 1, max: 128, bytes: 512 }),
     description: string(v.description, 'model description', {
@@ -213,7 +319,15 @@ export function decodeModel(value: unknown): ImageModel {
     price: decodePrice(v.price),
     parameters: decodeParameters(v.parameters),
     combinations: decodeCombinations(v.combinations),
+    ...(Object.hasOwn(v, 'pricing_revision') && Object.hasOwn(v, 'pricing')
+      ? { pricing_revision: revision(v.pricing_revision), pricing: decodePricingPolicy(v.pricing) }
+      : {}),
+    ...(Object.hasOwn(v, 'size_capability')
+      ? { size_capability: decodeSizeCapability(v.size_capability) }
+      : {}),
   };
+  if (Object.hasOwn(v, 'pricing_revision') !== Object.hasOwn(v, 'pricing'))
+    invalidResponse('image price revision');
   if (
     (model.price.paper === '0' && model.price.brush === '0') ||
     !model.parameters.some((r) => r.key === 'prompt' && r.supported && r.required)
@@ -348,6 +462,66 @@ export const getQueue = (signal?: AbortSignal) =>
   decoded(pictureBookBase + '/queue', decodeQueue, { signal });
 export const getTask = (id: string, signal?: AbortSignal) =>
   decoded(pictureBookBase + '/tasks/' + opaqueID(id, 'img_', 'task id'), decodeTask, { signal });
+export function decodeQuote(value: unknown) {
+  const v = record(
+    value,
+    [
+      'model_revision',
+      'pricing_revision',
+      'effective_selection',
+      'unit',
+      'total',
+      'basis',
+      'price_key',
+    ],
+    'image quote',
+  );
+  const effective = record(v.effective_selection, ['values', 'selection'], 'effective size');
+  const values = record(
+    effective.values,
+    ['size', 'aspect_ratio', 'resolution'],
+    'effective size values',
+    [],
+  );
+  const selection = record(
+    effective.selection,
+    ['width', 'height', 'tier', 'auto'],
+    'price selection',
+    [],
+  );
+  return {
+    model_revision: revision(v.model_revision),
+    pricing_revision: revision(v.pricing_revision),
+    effective_selection: {
+      values: Object.fromEntries(
+        Object.entries(values).map(([key, entry]) => [
+          key,
+          string(entry, key, { min: 1, max: 512, bytes: 512 }),
+        ]),
+      ),
+      selection: {
+        ...(Object.hasOwn(selection, 'width')
+          ? { width: integer(selection.width, 'quote width', 1, 65536) }
+          : {}),
+        ...(Object.hasOwn(selection, 'height')
+          ? { height: integer(selection.height, 'quote height', 1, 65536) }
+          : {}),
+        ...(Object.hasOwn(selection, 'tier')
+          ? { tier: string(selection.tier, 'quote tier', { min: 1, max: 128, bytes: 128 }) }
+          : {}),
+        ...(Object.hasOwn(selection, 'auto')
+          ? { auto: boolean(selection.auto, 'automatic size') }
+          : {}),
+      },
+    },
+    unit: decodePrice(v.unit),
+    total: decodePrice(v.total),
+    basis: oneOf(v.basis, ['default', 'tier', 'size', 'auto'], 'quote basis'),
+    price_key: string(v.price_key, 'price key', { max: 128, bytes: 128 }),
+  };
+}
+export const quoteTask = (input: SubmitInput, signal?: AbortSignal) =>
+  decoded(pictureBookBase + '/quote', decodeQuote, { method: 'POST', json: input, signal });
 function taskResult(value: unknown) {
   return decodeTask(record(value, ['task'], 'task receipt').task);
 }

@@ -165,7 +165,7 @@ func publicIdentity(public bool, username, nick, discordID, avatar, guildAvatar 
 		return Identity{Kind: "anonymous"}
 	}
 	var picture *string
-	if parsed, err := url.Parse(guildAvatar); err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil {
+	if parsed, err := url.Parse(guildAvatar); err == nil && len(guildAvatar) <= 2048 && parsed.Scheme == "https" && parsed.User == nil && parsed.Port() == "" && (parsed.Hostname() == "cdn.discordapp.com" || parsed.Hostname() == "media.discordapp.net") {
 		picture = &guildAvatar
 	} else if safePathAtom(discordID) && safePathAtom(avatar) {
 		value := "https://cdn.discordapp.com/avatars/" + discordID + "/" + avatar + ".png"

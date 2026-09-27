@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import type { ImageTask } from '../../src/shared/picturebook/publicTypes';
+import type { SizeCapability } from '../../src/shared/picturebook/capabilities';
 
 interface FixtureState {
   user_url: string;
@@ -119,6 +120,17 @@ function privacy(page: Page) {
     for (const marker of fixture().private_markers) expect(bodies.join('\n')).not.toContain(marker);
     expect(bodies.join('\n')).not.toContain('private-browser-prompt');
   };
+}
+
+async function chooseLinkedSize(page: Page, mode: SizeCapability['mode']) {
+  if (mode === 'width_height') {
+    await page.getByLabel('Width', { exact: true }).fill('1024');
+    await page.getByLabel('Height', { exact: true }).fill('768');
+  } else {
+    await page.getByLabel('Aspect ratio', { exact: true }).selectOption('4:3');
+    if (mode !== 'ratio_size_map')
+      await page.getByLabel('Resolution', { exact: true }).selectOption('standard');
+  }
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -346,5 +358,258 @@ test('real administrator editor and narrow bilingual user pages preserve role an
     } finally {
       await user.close();
     }
+  }
+});
+
+test('real linked size editors preserve drafts and quote all four modes without consumption', async ({
+  browser,
+}) => {
+  const admin = await context(browser, 0, 'en', true);
+  const user = await context(browser);
+  const adminBase = '/admin/api/limited-activities/picture-book';
+  try {
+    const page = await admin.newPage();
+    const userPage = await user.newPage();
+    const beforeStats = await control(user, 'stats');
+    const beforeWallet = await (await api(user, base + '/wallet')).json();
+    const beforeTasks = await (await api(user, base + '/tasks')).json();
+    const writes: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'GET') writes.push(new URL(request.url()).pathname);
+    });
+    const models = await (await api(admin, adminBase + '/models', 'GET', undefined, true)).json();
+    const model = models.data[0] as { id: string };
+    const parameters = [
+      {
+        key: 'prompt',
+        supported: true,
+        required: true,
+        type: 'string',
+        min_length: 1,
+        max_length: 65536,
+        length_unit: 'utf8_bytes',
+      },
+      {
+        key: 'n',
+        supported: true,
+        required: false,
+        type: 'integer',
+        minimum: 1,
+        maximum: 4,
+        default: 1,
+      },
+      ...['size', 'aspect_ratio', 'resolution'].map((key) => ({
+        key,
+        supported: true,
+        required: false,
+        type: 'string',
+        length_unit: 'utf8_bytes',
+      })),
+    ];
+    const mapping = {
+      model_pointer: '/model',
+      parameters: {
+        prompt: '/prompt',
+        n: '/n',
+        size: '/canvas',
+        aspect_ratio: '/ratio',
+        resolution: '/resolution',
+      },
+      constants: [],
+    };
+    const capabilities: SizeCapability[] = [
+      {
+        mode: 'resolution_ratio_grid',
+        combinations: [
+          { ratio: '4:3', resolution: 'standard', width: 1024, height: 768, tier: 'standard' },
+        ],
+      },
+      {
+        mode: 'ratio_size_map',
+        combinations: [{ ratio: '4:3', width: 1024, height: 768, tier: 'standard' }],
+      },
+      {
+        mode: 'ratio_resolution',
+        combinations: [{ ratio: '4:3', resolution: 'standard', tier: 'standard' }],
+      },
+      {
+        mode: 'width_height',
+        width: { minimum: 256, maximum: 2048, step: 256 },
+        height: { minimum: 256, maximum: 2048, step: 256 },
+      },
+    ];
+    await page.goto(fixture().admin_url + '/limited-activities');
+    await page.getByLabel('Choose a model to configure').selectOption(model.id);
+    for (const [index, capability] of capabilities.entries()) {
+      await page.setViewportSize({ width: index % 2 ? 390 : 1280, height: 900 });
+      await page.getByLabel('Parameter rules JSON').fill(JSON.stringify(parameters));
+      await page.getByLabel('Model-specific field mapping JSON').fill(JSON.stringify(mapping));
+      await page
+        .getByLabel('Linked size capability JSON (null if unknown)')
+        .fill(JSON.stringify(capability));
+      await page.getByText('Size tiers and exact-size prices', { exact: true }).click();
+      await page
+        .getByLabel('Per-image tier prices JSON')
+        .fill(JSON.stringify([{ tier: 'standard', paper: '4', brush: '2' }]));
+      await page
+        .getByLabel('Per-image width and height prices JSON')
+        .fill(JSON.stringify([{ width: 1024, height: 768, paper: '7', brush: '3' }]));
+      await page.getByRole('textbox', { name: /^Prompt/ }).fill('Synthetic no-charge preview');
+      await page.getByLabel('Image count').fill('2');
+      await chooseLinkedSize(page, capability.mode);
+      const checked = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === adminBase + '/models/check',
+      );
+      await page.getByRole('button', { name: 'Check draft', exact: true }).click();
+      const checkResponse = await checked;
+      expect(checkResponse.status()).toBe(200);
+      const check = await checkResponse.json();
+      expect(check.valid, JSON.stringify(check.issues)).toBe(true);
+      const price =
+        capability.mode === 'ratio_resolution'
+          ? { paper: '8', brush: '4' }
+          : { paper: '14', brush: '6' };
+      expect(check.quote.total).toEqual(price);
+      expect(check.quote.basis).toBe(capability.mode === 'ratio_resolution' ? 'tier' : 'size');
+      const saved = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === adminBase + '/models/' + model.id &&
+          response.request().method() === 'PUT',
+      );
+      const reread = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === adminBase + '/models/' + model.id &&
+          response.request().method() === 'GET',
+      );
+      await page.getByRole('button', { name: 'Save model settings', exact: true }).click();
+      expect((await saved).status()).toBe(200);
+      const accepted = await (await reread).json();
+      expect(accepted.size_capability).toEqual(capability);
+      await expect(
+        page.getByRole('button', { name: 'Save model settings', exact: true }),
+      ).toBeEnabled();
+      await userPage.setViewportSize({ width: index % 2 ? 1280 : 390, height: 844 });
+      await userPage.goto(fixture().user_url + '/activities/picture-book');
+      await userPage.getByRole('textbox', { name: /^Prompt/ }).fill('Synthetic no-charge preview');
+      await userPage.getByLabel('Image count').fill('2');
+      await chooseLinkedSize(userPage, capability.mode);
+      await expect(
+        userPage.getByText(`${price.paper} paper + ${price.brush} brushes`, { exact: true }),
+      ).toBeVisible();
+      const quote = await api(user, base + '/quote', 'POST', {
+        model_id: model.id,
+        ...check.effective_parameters,
+      });
+      expect(quote.status()).toBe(200);
+      expect((await quote.json()).total).toEqual(price);
+      expect(
+        await userPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      ).toBe(true);
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByLabel('catalog_type_pointer').fill('/kind');
+    await page.getByLabel('Public display name').fill('Saved browser canvas');
+    await page.locator('a[href="/"]').first().click();
+    await expect(page.getByRole('button', { name: 'Save and leave' })).toBeVisible();
+    await page.getByRole('button', { name: 'Continue editing' }).click();
+    await expect(page.getByLabel('Public display name')).toHaveValue('Saved browser canvas');
+    await page.locator('a[href="/"]').first().click();
+    await page.getByRole('button', { name: 'Save and leave' }).click();
+    await expect(page).toHaveURL(fixture().admin_url + '/');
+    const savedModel = await (
+      await api(admin, adminBase + '/models/' + model.id, 'GET', undefined, true)
+    ).json();
+    expect(savedModel.display_name).toBe('Saved browser canvas');
+    const savedProfile = await (
+      await api(admin, adminBase + '/upstream/capability-profile', 'GET', undefined, true)
+    ).json();
+    expect(savedProfile.profile.catalog_type_pointer).toBe('/kind');
+    expect(await control(user, 'stats')).toEqual(beforeStats);
+    expect(await (await api(user, base + '/wallet')).json()).toEqual(beforeWallet);
+    expect(await (await api(user, base + '/tasks')).json()).toEqual(beforeTasks);
+    expect(writes.filter((path) => /\/quote|\/tasks/.test(path))).toEqual([]);
+    expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toContain('/kind');
+  } finally {
+    await admin.close();
+    await user.close();
+  }
+});
+
+test('real endpoint adaptation hides saved values and blocks stale browser writes', async ({
+  browser,
+}) => {
+  const owner = await context(browser);
+  const other = await context(browser, 1);
+  try {
+    const created = await api(owner, '/api/endpoints', 'POST', {
+      source: 'custom',
+      connector_type: 'openai-compatible',
+      base_url: 'https://adaptation.example/v1',
+      note: 'Browser adaptation',
+      enabled: true,
+    });
+    expect(created.status()).toBe(201);
+    const endpoint = await created.json();
+    const path = '/api/endpoints/' + endpoint.id + '/request-adaptation';
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints/' + endpoint.id);
+    const fixed = page.getByRole('group', { name: 'Fixed outbound headers', exact: true });
+    await fixed.getByRole('button', { name: 'Add field' }).click();
+    await fixed.getByLabel('Header or path').fill('X-Synthetic-Header');
+    await fixed.getByLabel('Value', { exact: true }).fill('synthetic-private-header');
+    const forced = page.getByRole('group', { name: 'Forced body values', exact: true });
+    await forced.getByRole('button', { name: 'Add field' }).click();
+    await forced.getByLabel('Header or path').fill('/reasoning_effort');
+    await forced.getByLabel('Value', { exact: true }).fill('"medium"');
+    await page
+      .getByRole('group', { name: 'Client headers to forward', exact: true })
+      .getByRole('textbox')
+      .fill('X-Client-Tag');
+    const saved = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === path && response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Save request adaptation' }).click();
+    const receipt = await saved;
+    expect(receipt.status()).toBe(200);
+    expect(await receipt.text()).not.toContain('synthetic-private-header');
+    await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
+    await page.reload();
+    await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
+    await fixed.getByRole('combobox').selectOption('replace');
+    await expect(fixed.getByLabel('Value', { exact: true })).toHaveValue('');
+    await fixed.getByLabel('Value', { exact: true }).fill('synthetic-replacement');
+    const currentResponse = await api(owner, path);
+    expect(currentResponse.status()).toBe(200);
+    const current = await currentResponse.json();
+    expect(current.forward_headers.values).toEqual(['X-Client-Tag']);
+    expect(JSON.stringify(current)).not.toContain('synthetic-private-header');
+    expect((await api(other, path)).status()).toBe(404);
+    const concurrent = await api(owner, path, 'PUT', {
+      expected_revision: current.revision,
+      body_forced: {
+        mode: 'replace',
+        values: { '/reasoning_effort': { action: 'replace', value: 'low' } },
+      },
+    });
+    expect(concurrent.status()).toBe(200);
+    const stale = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === path && response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Save request adaptation' }).click();
+    expect((await stale).status()).toBe(409);
+    await expect(page.getByRole('button', { name: 'Save request adaptation' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Refresh configuration', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save request adaptation' })).toBeEnabled();
+    await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+      ),
+    ).not.toContain('synthetic-');
+  } finally {
+    await owner.close();
+    await other.close();
   }
 });

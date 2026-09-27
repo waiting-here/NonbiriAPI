@@ -2,6 +2,8 @@ package riskaudit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
@@ -23,6 +25,10 @@ type AdminRouteRegistrar interface {
 type route struct{ method, path, action string }
 
 var routes = []route{
+	{http.MethodPost, "/scans", "scan_create_v2"}, {http.MethodGet, "/scans", "scan_recent_v2"},
+	{http.MethodGet, "/scans/{id}", "scan_get_v2"},
+	{http.MethodGet, "/scans/{id}/results", "scan_results_v2"},
+	{http.MethodPost, "/scans/{id}/cancel", "scan_cancel_v2"},
 	{http.MethodPost, "/client-scans", "scan_create"}, {http.MethodGet, "/client-scans", "scan_recent"},
 	{http.MethodGet, "/client-scans/{id}", "scan_get"},
 	{http.MethodGet, "/client-scans/{id}/results", "scan_results"},
@@ -31,6 +37,7 @@ var routes = []route{
 	{http.MethodGet, "/shared-ips", "ips"}, {http.MethodGet, "/client-rules", "rules"},
 	{http.MethodPost, "/client-rules", "create_rule"}, {http.MethodPatch, "/client-rules/{id}", "update_rule"},
 	{http.MethodDelete, "/client-rules/{id}", "delete_rule"},
+	{http.MethodGet, "/client-rule-ban-receipts/{id}", "rule_ban_receipt"},
 	{http.MethodGet, "/config", "config"}, {http.MethodPut, "/config", "update_config"},
 }
 
@@ -58,6 +65,9 @@ func RegisterStewardRoutes(registrar resources.UserRouteRegistrar, repository *R
 		return ErrInvalid
 	}
 	for _, route := range routes {
+		if route.action == "rule_ban_receipt" {
+			continue
+		}
 		action := route.action
 		if err := registrar.RegisterUserRoute(route.method, "/api/steward/abuse-audit"+route.path, func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			actor, ok := auth.ActorFromContext(r.Context())
@@ -162,13 +172,48 @@ func decodeBody(w http.ResponseWriter, r *http.Request, value any) error {
 }
 
 type ruleInput struct {
-	Name         string      `json:"name"`
-	Status       string      `json:"status"`
-	Enabled      bool        `json:"enabled"`
-	Revision     int64       `json:"revision"`
-	Conditions   []Condition `json:"conditions"`
-	EvidenceNote string      `json:"evidence_note"`
-	EvidenceURL  string      `json:"evidence_url"`
+	Name         string          `json:"name"`
+	Status       string          `json:"status"`
+	Enabled      bool            `json:"enabled"`
+	Revision     int64           `json:"revision"`
+	Conditions   []Condition     `json:"conditions"`
+	EvidenceNote string          `json:"evidence_note"`
+	EvidenceURL  string          `json:"evidence_url"`
+	AutoBan      json.RawMessage `json:"auto_ban"`
+}
+
+func parseAction(raw json.RawMessage) (ActionMutation, error) {
+	if raw == nil {
+		return ActionMutation{}, nil
+	}
+	mutation := ActionMutation{Present: true}
+	if string(raw) == "null" {
+		return mutation, nil
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || len(fields) != 2 || fields["enabled"] == nil || fields["duration_seconds"] == nil {
+		return ActionMutation{}, ErrInvalid
+	}
+	var enabled bool
+	if value := strings.TrimSpace(string(fields["enabled"])); value != "true" && value != "false" {
+		return ActionMutation{}, ErrInvalid
+	}
+	if json.Unmarshal(fields["enabled"], &enabled) != nil {
+		return ActionMutation{}, ErrInvalid
+	}
+	action := &AutoBan{Enabled: enabled}
+	if string(fields["duration_seconds"]) != "null" {
+		var duration int64
+		if json.Unmarshal(fields["duration_seconds"], &duration) != nil {
+			return ActionMutation{}, ErrInvalid
+		}
+		action.DurationSeconds = &duration
+	}
+	if !action.valid() {
+		return ActionMutation{}, ErrInvalid
+	}
+	mutation.AutoBan = action
+	return mutation, nil
 }
 
 func serve(repository *Repository, action string, actor Actor, w http.ResponseWriter, r *http.Request) {
@@ -186,7 +231,7 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		auditError(w, ErrInvalid)
 		return
 	}
-	allowed := map[string]bool{"from": true, "to": true, "lookback_hours": true, "limit": true, "after": true, "kind": true, "signal": true, "revision": true, "model": true}
+	allowed := map[string]bool{"from": true, "to": true, "lookback_hours": true, "limit": true, "after": true, "kind": true, "signal": true, "revision": true, "model": true, "page": true, "page_size": true, "watermark": true, "expected_total": true}
 	for key, values := range q {
 		if !allowed[key] || len(values) != 1 {
 			auditError(w, ErrInvalid)
@@ -214,6 +259,43 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		var rules []Rule
 		rules, err = repository.Rules(ctx, actor)
 		if err != nil {
+			break
+		}
+		if q.Has("page") {
+			page, e := intQuery(q, "page", 1)
+			if e != nil || page < 1 || page > 2147483647 || q.Has("after") {
+				err = ErrInvalid
+				break
+			}
+			size, e := intQuery(q, "page_size", 20)
+			if e != nil || size != 20 && size != 50 && size != 100 {
+				err = ErrInvalid
+				break
+			}
+			raw, e := json.Marshal(rules)
+			if e != nil {
+				err = ErrUnavailable
+				break
+			}
+			hash := sha256.Sum256(raw)
+			revision := hex.EncodeToString(hash[:])
+			changed := q.Has("revision") && q.Get("revision") != revision
+			if changed {
+				page = 1
+			}
+			pages := max(int64(1), (int64(len(rules))+size-1)/size)
+			page = min(page, pages)
+			start := (page - 1) * size
+			end := min(int64(len(rules)), start+size)
+			output = struct {
+				Items      []Rule `json:"items"`
+				Page       string `json:"page"`
+				PageSize   int64  `json:"page_size"`
+				TotalItems string `json:"total_items"`
+				TotalPages string `json:"total_pages"`
+				Revision   string `json:"revision"`
+				Changed    bool   `json:"changed"`
+			}{rules[start:end], strconv.FormatInt(page, 10), size, strconv.Itoa(len(rules)), strconv.FormatInt(pages, 10), revision, changed}
 			break
 		}
 		limit, e := intQuery(q, "limit", 100)
@@ -253,7 +335,12 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 			break
 		}
 		rule := Rule{ID: r.PathValue("id"), Name: value.Name, Status: value.Status, Enabled: value.Enabled, Revision: value.Revision, Conditions: value.Conditions, EvidenceNote: value.EvidenceNote, EvidenceURL: value.EvidenceURL}
-		output, err = repository.PutRule(ctx, actor, rule, action == "create_rule")
+		var binding ActionMutation
+		binding, err = parseAction(value.AutoBan)
+		if err != nil {
+			break
+		}
+		output, err = repository.PutRuleWithAction(ctx, actor, rule, action == "create_rule", binding)
 		if action == "create_rule" {
 			status = http.StatusCreated
 		}
@@ -267,6 +354,12 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		output = struct {
 			Deleted bool `json:"deleted"`
 		}{true}
+	case "rule_ban_receipt":
+		if !actor.Admin {
+			err = ErrForbidden
+			break
+		}
+		output, err = repository.RuleBanReceipt(ctx, actor, r.PathValue("id"))
 	case "users":
 		var window Window
 		window, err = parseWindow(q, repository.now().Unix(), true)
@@ -302,8 +395,40 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 			err = ErrInvalid
 			break
 		}
+		if q.Has("watermark") && (!q.Has("page") || !q.Has("from") || !q.Has("to")) ||
+			q.Has("expected_total") && !q.Has("watermark") {
+			err = ErrInvalid
+			break
+		}
 		var window Window
 		window, err = parseWindow(q, repository.now().Unix(), true)
+		if err == nil {
+			if q.Has("page") {
+				window.Page, err = intQuery(q, "page", 1)
+				if err == nil && window.Page < 1 {
+					err = ErrInvalid
+				}
+				var size int64
+				if err == nil {
+					size, err = intQuery(q, "page_size", 20)
+					if err == nil {
+						if size < 1 || size > MaxPage {
+							err = ErrInvalid
+						} else {
+							window.Limit = int(size)
+						}
+					}
+				}
+				if err == nil && q.Has("watermark") {
+					window.Watermark, err = intQuery(q, "watermark", 0)
+					window.WatermarkSet = true
+				}
+				if err == nil && q.Has("expected_total") {
+					window.ExpectedTotal, err = intQuery(q, "expected_total", 0)
+					window.ExpectedSet = true
+				}
+			}
+		}
 		if err == nil {
 			output, err = repository.User(ctx, actor, user, window)
 		}

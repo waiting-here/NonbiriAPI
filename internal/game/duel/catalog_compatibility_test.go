@@ -113,3 +113,47 @@ func TestSavedLegacyCatalogSupportsRecoveryHistoryAndArchival(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviousLikesCatalogKeepsStoredDeadlineAndTwentySecondRounds(t *testing.T) {
+	current, err := likes.NewRules()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, err := catalog.PublicHistorical("quick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	historical, err := current.ResolveCatalog("quick", previous.ContentHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newFixture(t, "likes", historical)
+	state := f.matched()
+	if state.Deadline == nil || *state.Deadline != 120 {
+		t.Fatal("previous catalog changed initial timing", state.Deadline)
+	}
+	f.s.Close()
+	f.rules, f.options.Rules = current, current
+	f.s, err = duel.New(f.options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.ValidatePersistedState(f.ctx); err != nil {
+		t.Fatal("previous catalog rejected after upgrade", err)
+	}
+	active := f.read(0).Current
+	if active == nil || active.Deadline == nil || *active.Deadline != 120 || active.ContentHash != previous.ContentHash {
+		t.Fatal("stored deadline was rewritten", active)
+	}
+	f.action(0, *active, basicPlan)
+	f.action(1, *active, basicPlan)
+	settled := f.read(0).Current
+	if settled == nil || settled.Phase != "settlement" {
+		t.Fatal("historical settlement missing", settled)
+	}
+	f.clock.Store(*settled.Deadline)
+	next := f.read(0).Current
+	if next == nil || next.Phase != "plan" || next.Round != 2 || *next.Deadline != f.clock.Load()+20 {
+		t.Fatal("previous catalog's next round changed timing", next)
+	}
+}

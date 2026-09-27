@@ -53,7 +53,15 @@ joining. Quick mode has a 60-like target and at most 25 rounds; standard mode
 has a 300-like target and at most 75 rounds. The field guide gives the complete
 mode-specific skill, buff, harness, resource and upgrade values.
 
-Each round has a full 20-second planning period. Purchases and the cast are one
+You can save up to 10 private Custom presets to your account and use them across
+devices. Each preset stores the mode, character, optional harness and ordered
+skills. Saving over an occupied slot requires explicit confirmation. Loading a
+preset fills those pre-match choices only; it does not join a queue or spend
+credits. Only you can use your presets. If a saved loadout no longer follows the
+current rules, the service explains the problem instead of silently changing it.
+
+Each new match has a full 30-second planning period per round. Existing
+matches and historical replays retain their saved 20-second rules. Purchases and the cast are one
 frozen plan. Without stun, a main cast is required before confirmation. While
 stun remains after the proposed affordable purchases, the only submission
 button is **Skip casting**. If those purchases remove stun, select a main cast
@@ -66,7 +74,7 @@ shopping and charging, payment and overload, cleansing and buffs, awarded
 likes, additional effects and round-end changes. Numbers and bounded resource
 bars animate from the server's before/after facts. API reserve, gold and trial
 reserve have numeric feedback without capacity bars. Round-start refills also
-animate during the next planning period without shortening its 20 seconds.
+animate during the next planning period without shortening its 30 seconds.
 
 Only successful casts show a character action illustration. Failed or
 cancelled casts show their reason. Stun is a buff and overload is a separate
@@ -173,11 +181,11 @@ GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%�
 
 竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持有 Joker 的庄家有 10 秒决定使用或保留；Joker 只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。红方手牌使用红桃 ♥、奖励使用方块 ♦，黑方手牌使用黑桃 ♠、奖励使用梅花 ♣；花色由阵营决定，不随观看视角或主题翻转，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
 
-回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。每轮有完整 20 秒选择购物和出招；未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
+回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。你可以在账号中保存最多 10 个“自定义预设”并在不同设备上使用；每个预设记录模式、角色、可选 Harness 和有序技能。覆盖已保存槽位前须明确确认。加载预设只填入赛前选项，不会自动排队或扣费，且仅供本人使用。所存配装不再符合当前规则时，系统会明确提示，不会静默替换。新对局每轮有完整 30 秒选择购物和出招；既有对局后续回合及历史回放继续沿用原先 20 秒规则。未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
 竞标按顺序展示奖励抽取、双方亮牌、整个奖池的归属，滚动页面时演出仍保持可见；减少动态模式保留静态牌面和结果。回合制对战中，本人的倍速模式使用全页加速光线，过载使用独立警示，过载优先；对手状态不影响本人的全页效果，减少动态模式保留静态提示。
 
-双方锁定或超时后，服务端立即结算，并按内容依次展示方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。每一步单独确定时长，连续技能逐个展示，总时长不限；全部结束后才开始下一轮完整 20 秒。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
+双方锁定或超时后，服务端立即结算，并按内容依次展示方案、购物充电、费用过载、净化与 Buff、实得赞及轮末变化。每一步单独确定时长，连续技能逐个展示，总时长不限；全部结束后新一轮才开始完整 30 秒。资源由服务端提供前后值，界面播放数字和有上限的资源条；API 余量、金币和试用余量只用数字。轮初补充也有动效，不缩短下轮选招。成功施放才展示动作图；眩晕 Buff 和过载状态各有独立 Q 版图。角色、技能、终局和 Harness 使用随程序打包的透明插画。
 
 音乐和音效分别开关，默认关闭，按游戏记住当前浏览器的选择。回合制对战小游戏（测试）音乐按本人过载、倍速、普通对战的优先级播放，共用时间轴，下一拍开始、一拍完成交接。最后一轮完整演出结束后进入结果音乐；修改模式、配装或开始排队时回大厅音乐。失败切断背景，若音效开启则播放一次短片段后静音。账户页本机偏好提供轻量版和无损版音乐，下次开启或进入游戏时生效。页面进入后台暂停声音，离开游戏释放资源。
 

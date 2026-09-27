@@ -54,7 +54,7 @@ func profiles(ctx context.Context, tx *sql.Tx, v sessionRecord) (*[2]Profile, er
 		}
 		profile := Profile{Kind: "public", DisplayName: string(runes)}
 		parsed, err := url.Parse(guildAvatar)
-		if err == nil && len(guildAvatar) <= 2048 && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil {
+		if err == nil && len(guildAvatar) <= 2048 && parsed.Scheme == "https" && parsed.User == nil && parsed.Port() == "" && (parsed.Hostname() == "cdn.discordapp.com" || parsed.Hostname() == "media.discordapp.net") {
 			profile.AvatarURL = &guildAvatar
 		} else if profileAtom(id) && profileAtom(avatar) {
 			candidate := "https://cdn.discordapp.com/avatars/" + id + "/" + avatar + ".png"

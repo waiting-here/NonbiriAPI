@@ -16,6 +16,7 @@ export function UsersPage() {
         (previous) => {
           const next = new URLSearchParams(previous);
           next.delete('user');
+          next.delete('deleted');
           return next;
         },
         { replace: true },

@@ -18,6 +18,7 @@ interface PagePaginationProps {
   busy?: boolean;
   /** Some existing domain protocols accept the full positive int64 range. */
   maxPage?: bigint;
+  pageSizes?: readonly PageSize[];
 }
 
 export function PagePagination(props: PagePaginationProps) {
@@ -31,6 +32,7 @@ function PagePaginationControls({
   busy = false,
   requestedPage,
   maxPage = MAX_PAGE,
+  pageSizes = PAGE_SIZES,
 }: PagePaginationProps) {
   const { t } = useTranslation();
   const errorId = useId();
@@ -59,10 +61,10 @@ function PagePaginationControls({
             disabled={busy}
             onChange={(event) => {
               const size = Number(event.target.value);
-              if (isPageSize(size)) onPageSizeChange(size);
+              if (isPageSize(size) && pageSizes.includes(size)) onPageSizeChange(size);
             }}
           >
-            {PAGE_SIZES.map((size) => (
+            {pageSizes.map((size) => (
               <option key={size} value={size}>
                 {size}
               </option>

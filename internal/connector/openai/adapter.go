@@ -17,6 +17,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -235,6 +236,9 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	if err != nil {
 		return result
 	}
+	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil {
+		return result
+	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	if request.Stream {
 		httpRequest.Header.Set("Accept", "text/event-stream")
@@ -258,6 +262,11 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 			defer scanner.Clear()
 			return scanner.Contains(value)
 		},
+	}
+	if policy.HasAdaptation {
+		// Configured values may be echoed by an upstream error. Suppress the
+		// optional raw diagnostic instead of trying to infer every nesting.
+		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	var sourceGuard *responseGuard
 	if request.Stream && policy.FlattenToolCalls {
@@ -407,6 +416,8 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	seenChunk := false
 	usage := Usage{}
 	usageState := cumulativeUsage{}
+	var leadingUsageFrame []byte
+	defer func() { clear(leadingUsageFrame) }()
 
 	for {
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
@@ -424,7 +435,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
-		if event.Event != "message" {
+		if event.Event != "message" && !(event.Event == "done" && event.Data == "[DONE]") {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream event type was invalid")
 		}
 		if event.Data == "[DONE]" {
@@ -456,6 +467,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
 		}
+		hasChoices := chunkHasChoices(compact)
 		frame := make([]byte, 0, len(compact)+8)
 		frame = append(frame, "data: "...)
 		frame = append(frame, compact...)
@@ -467,6 +479,24 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream was rejected")
 		}
 		usage = usageState.observe(chunkUsage, chunkUsageMalformed)
+		if !seenChunk && !hasChoices {
+			// Retain only a bounded cumulative snapshot until a validated
+			// choice establishes output. A metadata-only stream cannot start
+			// the response, but metadata before real output remains compatible.
+			clear(leadingUsageFrame)
+			leadingUsageFrame = frame
+			continue
+		}
+		if len(leadingUsageFrame) != 0 {
+			wrote, writeErr := a.writeStreamFrame(writer, controller, leadingUsageFrame)
+			clear(leadingUsageFrame)
+			leadingUsageFrame = nil
+			committed = committed || wrote
+			if writeErr != nil {
+				clear(frame)
+				return sinkFailureWithCommit(committed, usage)
+			}
+		}
 		wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
 		clear(frame)
 		committed = committed || wrote
@@ -533,7 +563,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
-		if event.Event != "message" {
+		if event.Event != "message" && !(event.Event == "done" && event.Data == "[DONE]") {
 			return failure("upstream stream event type was invalid")
 		}
 		if event.Data == "[DONE]" {
@@ -668,11 +698,6 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			return failure("upstream stream chunk was invalid")
 		}
 		usage = usageState.observe(chunkUsage, chunkMalformed)
-		seenChunk = true
-		if err := connectorcontract.MarkResponseStarted(writer); err != nil {
-			clear(frame)
-			return sinkFailureWithCommit(committed, usage)
-		}
 		if len(choices) == 0 {
 			// Hold the latest usage until finish -> usage -> DONE. Empty
 			// keepalive chunks must not erase a previously received snapshot.
@@ -683,6 +708,11 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 				clear(frame)
 			}
 			continue
+		}
+		seenChunk = true
+		if err := connectorcontract.MarkResponseStarted(writer); err != nil {
+			clear(frame)
+			return sinkFailureWithCommit(committed, usage)
 		}
 		if !toolsSeen && !hasToolsSeen {
 			if _, writeErr := writeFrame(frame, []byte(event.Data)); writeErr != nil {

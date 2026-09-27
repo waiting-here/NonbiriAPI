@@ -41,7 +41,7 @@ function catalog() {
   );
   const mode = {
     rules_version: 1,
-    design_version: '0.18.0',
+    design_version: '0.18.1',
     schema_version: 16,
     content_hash: 'a'.repeat(64),
     config,

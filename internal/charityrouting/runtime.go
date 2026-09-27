@@ -341,7 +341,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 		return RuntimeSnapshot{}, ErrInvariant
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT b.donation_key_id,e.id,k.id,e.connector_type,e.base_url,b.upstream_model_id,
+	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.donation_key_id,e.id,k.id,e.connector_type,e.base_url,b.upstream_model_id,
 k.force_store_false,dk.token_reserve,dk.expires_at,
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved
@@ -375,7 +375,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 		var expiresAt sql.NullInt64
 		var priceLimit, callLimit, tokenLimit []byte
 		var priceUsed, priceInflight, callsUsed, callsInflight, tokensUsed, tokensInflight []byte
-		if err := rows.Scan(&candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
+		if err := rows.Scan(&candidate.BindingID, &candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
 			&connector, &candidate.CanonicalBaseURL, &candidate.UpstreamModelID, &forceStore, &tokenReserve, &expiresAt,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceInflight, &callsUsed, &callsInflight,
 			&tokensUsed, &tokensInflight); err != nil {
@@ -392,7 +392,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			}
 		}
 		sawSupportedCandidate = true
-		weight, eligible, err := runtimeCandidateWeight(decisionNow, expiresAt)
+		denominator, eligible, err := runtimeCandidateDenominator(decisionNow, expiresAt)
 		if err != nil {
 			return RuntimeSnapshot{}, err
 		}
@@ -445,7 +445,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			continue
 		}
 		candidate.Policy.FlattenToolCalls = snapshot.FlattenToolCalls
-		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, weight: weight})
+		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, denominator: denominator})
 		if len(weighted) > MaxRuntimeCandidates {
 			return RuntimeSnapshot{}, ErrResourceLimit
 		}
@@ -474,6 +474,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 		if strategyErr != nil {
 			return RuntimeSnapshot{}, strategyErr
 		}
+		snapshot.RouteStrategy = strategy
 		snapshot.candidates, err = orderRuntimeCandidates(s.entropy, weighted, strategy)
 		if err != nil {
 			return RuntimeSnapshot{}, err

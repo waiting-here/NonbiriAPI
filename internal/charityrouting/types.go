@@ -140,6 +140,7 @@ type AdminCharityModel struct {
 	AllowedLevels         []int               `json:"allowed_levels"`
 	PublicDescription     string              `json:"public_description"`
 	RouteStrategy         string              `json:"route_strategy"`
+	AffinityTTLSeconds    int                 `json:"affinity_ttl_seconds"`
 	ID                    string              `json:"id"`
 	Provider              string              `json:"provider"`
 	Model                 string              `json:"model"`
@@ -193,6 +194,7 @@ type StewardCharityModel struct {
 	AllowedLevels         []int                 `json:"allowed_levels"`
 	PublicDescription     string                `json:"public_description"`
 	RouteStrategy         string                `json:"route_strategy"`
+	AffinityTTLSeconds    int                   `json:"affinity_ttl_seconds"`
 	ID                    string                `json:"id"`
 	Provider              string                `json:"provider"`
 	Model                 string                `json:"model"`
@@ -309,6 +311,7 @@ type ModelCreate struct {
 	AllowedLevels         []int         `json:"allowed_levels,omitempty"`
 	PublicDescription     string        `json:"public_description,omitempty"`
 	RouteStrategy         string        `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds    *int          `json:"affinity_ttl_seconds,omitempty"`
 	Provider              string        `json:"provider"`
 	Model                 string        `json:"model"`
 	Enabled               bool          `json:"enabled"`
@@ -324,6 +327,7 @@ type ModelPatch struct {
 	AllowedLevels         *[]int        `json:"allowed_levels,omitempty"`
 	PublicDescription     *string       `json:"public_description,omitempty"`
 	RouteStrategy         *string       `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds    *int          `json:"affinity_ttl_seconds,omitempty"`
 	ExpectedRevision      string        `json:"expected_revision"`
 	Provider              *string       `json:"provider,omitempty"`
 	Model                 *string       `json:"model,omitempty"`
@@ -371,6 +375,7 @@ type CandidateQuery struct {
 // formatting is always redacted because its safe routing facts are still not a
 // caller projection.
 type RuntimeCandidate struct {
+	BindingID        int64
 	DonationKeyID    int64
 	EndpointID       int64
 	EndpointKeyID    int64
@@ -396,6 +401,7 @@ func (candidate RuntimeCandidate) ClaimCandidate() claim.Candidate {
 
 type RuntimeSnapshot struct {
 	ModelID          int64
+	RouteStrategy    string
 	Provider         string
 	Model            string
 	FullName         string

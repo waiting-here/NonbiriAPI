@@ -61,7 +61,7 @@ func (c *gatewayConnector) Attempt(ctx context.Context, input AttemptInput) cont
 	if input.Observer != nil {
 		input.Observer.TryObserve(Observation{Kind: ObservationAttemptStarted, Connector: c.Type(), TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
 	}
-	result = c.adapter.Attempt(ctx, input.Sink, input.Target, input.Credential, input.Ingress, input.Embedding, attribution)
+	result = c.adapter.AttemptWithPolicy(ctx, input.Sink, input.Target, input.Credential, input.Ingress, input.Embedding, attribution, input.Policy)
 	if input.Observer != nil {
 		input.Observer.TryObserve(Observation{Kind: ObservationAttemptFinished, Connector: c.Type(), TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
 			Success: result.Success, Committed: result.Committed, Failure: result.Failure, Usage: result.Usage, Diagnostic: result.Diagnostic, GatewayUserAttributionSent: result.GatewayUserAttributionSent != nil && *result.GatewayUserAttributionSent})

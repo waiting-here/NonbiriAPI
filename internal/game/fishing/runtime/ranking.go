@@ -427,7 +427,7 @@ func truncateRunes(value string, limit int) string {
 }
 func safeHTTPS(value string) bool {
 	parsed, err := url.Parse(value)
-	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil
+	return err == nil && len(value) <= 2048 && parsed.Scheme == "https" && parsed.User == nil && parsed.Port() == "" && (parsed.Hostname() == "cdn.discordapp.com" || parsed.Hostname() == "media.discordapp.net")
 }
 func safePathAtom(value string) bool {
 	if value == "" || len(value) > 128 {

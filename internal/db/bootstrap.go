@@ -42,6 +42,9 @@ const (
 	StartupCredentialReject StartupErrorKind = "credential_rejected"
 	StartupInitialization   StartupErrorKind = "initialization_failed"
 	StartupCleanupFailure   StartupErrorKind = "cleanup_failed"
+	StartupReadIO           StartupErrorKind = "read_io"
+	StartupWriteIO          StartupErrorKind = "write_io"
+	StartupSQLBusy          StartupErrorKind = "sql_busy"
 )
 
 var ErrDatabaseStartup = errors.New("database startup rejected")
@@ -53,6 +56,7 @@ type StartupError struct {
 	Kind               StartupErrorKind
 	ExpectedGeneration uint32
 	ActualGeneration   uint32
+	Reason             string
 }
 
 func (e *StartupError) Error() string {
@@ -76,6 +80,12 @@ func preserveStartupCategory(err error, fallback StartupErrorKind) error {
 	var startupErr *StartupError
 	if errors.As(err, &startupErr) {
 		return err
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if category, _, _ := StartupFailureDetails(err); category == "sql_busy" {
+		return startupError(StartupSQLBusy)
 	}
 	return startupError(fallback)
 }
@@ -102,71 +112,82 @@ type sourceSnapshotSet struct {
 	shm     *sourceFileSnapshot
 }
 
-func (s *sourceSnapshotSet) close() {
+func (s *sourceSnapshotSet) close() error {
 	if s == nil {
-		return
+		return nil
 	}
+	var result error
 	for _, item := range []*sourceFileSnapshot{s.main, s.journal, s.wal, s.shm} {
 		if item != nil && item.file != nil {
-			_ = item.file.Close()
+			if err := item.file.Close(); err != nil {
+				result = startupError(StartupCleanupFailure)
+			}
 			item.file = nil
 		}
 	}
+	return result
 }
 
-func captureSourceSet(path string) (*sourceSnapshotSet, error) {
+func captureSourceSet(ctx context.Context, path string) (*sourceSnapshotSet, error) {
 	set := &sourceSnapshotSet{}
 	var err error
-	if set.main, err = captureSourceFile(path, "database file"); err != nil {
-		set.close()
-		return nil, err
+	if set.main, err = captureSourceFile(ctx, path, "database file"); err != nil {
+		return nil, appendStartupError(err, set.close())
 	}
-	if set.journal, err = captureSourceFile(path+"-journal", "rollback journal file"); err != nil {
-		set.close()
-		return nil, err
+	if set.journal, err = captureSourceFile(ctx, path+"-journal", "rollback journal file"); err != nil {
+		return nil, appendStartupError(err, set.close())
 	}
-	if set.wal, err = captureSourceFile(path+"-wal", "wal file"); err != nil {
-		set.close()
-		return nil, err
+	if set.wal, err = captureSourceFile(ctx, path+"-wal", "wal file"); err != nil {
+		return nil, appendStartupError(err, set.close())
 	}
-	if set.shm, err = captureSourceFile(path+"-shm", "shm file"); err != nil {
-		set.close()
-		return nil, err
+	if set.shm, err = captureSourceFile(ctx, path+"-shm", "shm file"); err != nil {
+		return nil, appendStartupError(err, set.close())
 	}
 	return set, nil
 }
 
-func captureSourceFile(path, role string) (*sourceFileSnapshot, error) {
+func captureSourceFile(ctx context.Context, path, role string) (snapshot *sourceFileSnapshot, result error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	lstat, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
-	if err != nil || lstat.Mode()&os.ModeSymlink != 0 || !lstat.Mode().IsRegular() {
+	if err != nil {
+		return nil, startupIOError(ctx, err)
+	}
+	if lstat.Mode()&os.ModeSymlink != 0 || !lstat.Mode().IsRegular() {
 		return nil, startupError(StartupUnsafePath)
 	}
 	f, err := openReadOnlyNoFollow(path)
 	if err != nil {
-		return nil, startupError(StartupUnsafePath)
+		return nil, startupIOError(ctx, err)
 	}
 	closeOnFailure := true
 	defer func() {
 		if closeOnFailure {
-			_ = f.Close()
+			if err := f.Close(); err != nil {
+				result = appendStartupError(result, startupError(StartupCleanupFailure))
+			}
 		}
 	}()
 	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || !os.SameFile(lstat, info) {
+	if err != nil {
+		return nil, startupIOError(ctx, err)
+	}
+	if !info.Mode().IsRegular() || !os.SameFile(lstat, info) {
 		return nil, startupError(StartupUnsafePath)
 	}
 	if err := validateSourceFile(f, info); err != nil {
 		return nil, startupError(StartupUnsafePath)
 	}
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return nil, startupError(StartupSourceChanged)
+	if _, err := copyWithContext(ctx, h, f); err != nil {
+		return nil, startupIOError(ctx, err)
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, startupError(StartupSourceChanged)
+		return nil, startupIOError(ctx, err)
 	}
 	var digest [sha256.Size]byte
 	copy(digest[:], h.Sum(nil))
@@ -185,46 +206,48 @@ func equalSourceFile(a, b *sourceFileSnapshot) bool {
 		a.mode == b.mode && a.digest == b.digest
 }
 
-func recheckSourceSet(path string, original *sourceSnapshotSet) error {
-	current, err := captureSourceSet(path)
+func recheckSourceSet(ctx context.Context, path string, original *sourceSnapshotSet) (result error) {
+	RecordStartupStage(ctx, StageSourceRecheck)
+	current, err := captureSourceSet(ctx, path)
 	if err != nil {
-		return startupError(StartupSourceChanged)
+		return err
 	}
-	defer current.close()
-	if !equalSourceFile(original.main, current.main) ||
-		!equalSourceFile(original.journal, current.journal) ||
-		!equalSourceFile(original.wal, current.wal) ||
-		!equalSourceFile(original.shm, current.shm) {
-		return startupError(StartupSourceChanged)
+	defer func() { result = appendStartupError(result, current.close()) }()
+	for i, before := range []*sourceFileSnapshot{original.main, original.journal, original.wal, original.shm} {
+		after := []*sourceFileSnapshot{current.main, current.journal, current.wal, current.shm}[i]
+		if reason := sourceChangeReason(before, after); reason != "" {
+			return &StartupError{Kind: StartupSourceChanged, Reason: reason}
+		}
 	}
 	return nil
 }
 
-func openGenerationTwo(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
-	initial, err := captureSourceSet(path)
+func openGenerationTwo(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec) (store *Store, result error) {
+	initial, err := captureSourceSet(ctx, path)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { result = appendStartupError(result, initial.close()) }()
 	// A rollback journal may contain uncommitted dirty pages whose recovery
 	// would write the source database. Fresh-only startup never opens, copies,
 	// recovers, or deletes it, regardless of whether SQLite would call it hot.
 	if initial.journal != nil {
-		initial.close()
 		return nil, startupError(StartupRollbackJournal)
 	}
 	if initial.main == nil {
 		fresh := initial.journal == nil && initial.wal == nil && initial.shm == nil
-		initial.close()
+		if err := initial.close(); err != nil {
+			return nil, err
+		}
 		if !fresh {
 			return nil, startupError(StartupIncompleteFresh)
 		}
-		return createFreshGenerationTwo(path, secrets)
+		return createFreshGenerationTwo(ctx, path, secrets)
 	}
-	defer initial.close()
-	if err := validateCurrentSnapshot(path, initial, secrets); err != nil {
+	if err := validateCurrentSnapshot(ctx, path, initial, secrets); err != nil {
 		return nil, err
 	}
-	return openValidatedSource(path, initial, secrets)
+	return openValidatedSource(ctx, path, initial, secrets)
 }
 
 func validateHeader(main *sourceFileSnapshot) error {
@@ -243,7 +266,7 @@ func validateHeader(main *sourceFileSnapshot) error {
 	var header [100]byte
 	n, err := main.file.ReadAt(header[:], 0)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return startupError(StartupInvalidHeader)
+		return startupError(StartupReadIO)
 	}
 	if n != len(header) || string(header[:16]) != "SQLite format 3\x00" {
 		return startupError(StartupInvalidHeader)
@@ -387,16 +410,16 @@ func (w *validationWorkspace) cleanup() error {
 	return nil
 }
 
-func copySnapshot(source *sourceFileSnapshot, destination string) error {
+func copySnapshot(ctx context.Context, source *sourceFileSnapshot, destination string) (result error) {
 	if source == nil || source.file == nil {
 		return startupError(StartupSourceChanged)
 	}
 	if _, err := source.file.Seek(0, io.SeekStart); err != nil {
-		return startupError(StartupSourceChanged)
+		return startupIOError(ctx, err)
 	}
 	out, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return startupError(StartupInitialization)
+		return startupError(StartupWriteIO)
 	}
 	createdInfo, err := out.Stat()
 	if err != nil {
@@ -404,34 +427,54 @@ func copySnapshot(source *sourceFileSnapshot, destination string) error {
 		return startupError(StartupInitialization)
 	}
 	copyOK := false
+	outClosed := false
 	defer func() {
 		if !copyOK {
-			_ = out.Close()
+			if !outClosed {
+				if err := out.Close(); err != nil {
+					result = appendStartupError(result, startupError(StartupCleanupFailure))
+				}
+			}
 			if current, err := os.Lstat(destination); err == nil && current.Mode().IsRegular() &&
 				current.Mode()&os.ModeSymlink == 0 && os.SameFile(createdInfo, current) {
-				_ = os.Remove(destination)
+				if err := os.Remove(destination); err != nil {
+					result = appendStartupError(result, startupError(StartupCleanupFailure))
+				}
 			}
 		}
 	}()
-	written, err := io.Copy(out, source.file)
-	if err != nil || written != source.size {
-		return startupError(StartupSourceChanged)
+	written, err := copyWithContext(ctx, out, source.file)
+	if err != nil {
+		return startupIOError(ctx, err)
+	}
+	if written != source.size {
+		return &StartupError{Kind: StartupSourceChanged, Reason: "size"}
 	}
 	if err := out.Sync(); err != nil {
-		return startupError(StartupSourceChanged)
+		return startupError(StartupWriteIO)
 	}
+	outClosed = true
 	if err := out.Close(); err != nil {
-		return startupError(StartupSourceChanged)
+		return startupError(StartupCleanupFailure)
 	}
 	copied, err := os.Open(destination)
 	if err != nil {
-		return startupError(StartupInitialization)
+		return startupIOError(ctx, err)
 	}
 	h := sha256.New()
-	_, hashErr := io.Copy(h, copied)
+	_, hashErr := copyWithContext(ctx, h, copied)
 	closeErr := copied.Close()
-	if hashErr != nil || closeErr != nil || !equalDigest(h.Sum(nil), source.digest) {
-		return startupError(StartupSourceChanged)
+	if hashErr != nil {
+		if closeErr != nil {
+			return appendStartupError(startupIOError(ctx, hashErr), startupError(StartupCleanupFailure))
+		}
+		return startupIOError(ctx, hashErr)
+	}
+	if closeErr != nil {
+		return startupError(StartupCleanupFailure)
+	}
+	if !equalDigest(h.Sum(nil), source.digest) {
+		return &StartupError{Kind: StartupSourceChanged, Reason: "digest"}
 	}
 	copyOK = true
 	return nil
@@ -441,18 +484,19 @@ func equalDigest(sum []byte, expected [sha256.Size]byte) bool {
 	return len(sum) == len(expected) && string(sum) == string(expected[:])
 }
 
-func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) error {
+func validateCurrentSnapshot(ctx context.Context, path string, source *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) error {
+	RecordStartupStage(ctx, StageSnapshotCopy)
 	workspace, err := newValidationWorkspace()
 	if err != nil {
 		return err
 	}
 	var validationErr error
-	if err := copySnapshot(source.main, workspace.mainPath); err != nil {
+	if err := copySnapshot(ctx, source.main, workspace.mainPath); err != nil {
 		validationErr = err
 	} else if err := workspace.recordOwned(workspace.mainPath); err != nil {
 		validationErr = err
 	} else if source.wal != nil {
-		validationErr = copySnapshot(source.wal, workspace.mainPath+"-wal")
+		validationErr = copySnapshot(ctx, source.wal, workspace.mainPath+"-wal")
 		if validationErr == nil {
 			validationErr = workspace.recordOwned(workspace.mainPath + "-wal")
 		}
@@ -461,7 +505,7 @@ func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets sec
 		if afterSnapshotCopyHook != nil {
 			afterSnapshotCopyHook()
 		}
-		validationErr = recheckSourceSet(path, source)
+		validationErr = recheckSourceSet(ctx, path, source)
 	}
 	if validationErr == nil {
 		// The source path is never opened for a raw header read. Validate the
@@ -470,16 +514,17 @@ func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets sec
 		// private snapshot interval and ensures it cannot perform source writes.
 		validationErr = validateHeaderCopy(workspace.mainPath)
 	}
-	if validationErr == nil {
-		validationErr = validateReadOnlyCopy(workspace, secrets)
+	copyOwnsCleanup := validationErr == nil
+	if copyOwnsCleanup {
+		RecordStartupStage(ctx, StageSnapshotValidation)
+		validationErr = validateReadOnlyCopy(ctx, workspace, secrets)
 	}
-	// validateReadOnlyCopy closes SQLite before returning. The final source
-	// comparison therefore covers the complete copy validation interval.
-	if finalErr := recheckSourceSet(path, source); finalErr != nil {
-		validationErr = finalErr
-	}
-	if cleanupErr := workspace.cleanup(); cleanupErr != nil {
-		return cleanupErr
+	// On success SQLite and its private workspace have closed. On cancellation
+	// its registered close operation retains cleanup ownership until it finishes.
+	recordStartupFailure(ctx, validationErr)
+	validationErr = appendStartupError(validationErr, recheckSourceSet(ctx, path, source))
+	if !copyOwnsCleanup {
+		validationErr = appendStartupError(validationErr, workspace.cleanup())
 	}
 	return validationErr
 }
@@ -489,14 +534,21 @@ func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets sec
 // passed here: DEC-009 treats the local filesystem as trusted, while the
 // startup contract still requires header/generation classification before any
 // SQLite read-only open of the source data.
-func validateHeaderCopy(path string) error {
+func validateHeaderCopy(path string) (result error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return startupError(StartupInvalidHeader)
+		return startupError(StartupReadIO)
 	}
-	defer func() { _ = file.Close() }()
+	defer func() {
+		if err := file.Close(); err != nil {
+			result = appendStartupError(result, startupError(StartupCleanupFailure))
+		}
+	}()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil {
+		return startupError(StartupReadIO)
+	}
+	if !info.Mode().IsRegular() {
 		return startupError(StartupInvalidHeader)
 	}
 	return validateHeader(&sourceFileSnapshot{file: file, size: info.Size()})
@@ -536,22 +588,19 @@ func openSQLite(path, mode string) (*sql.DB, error) {
 	return d, nil
 }
 
-func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.GenerationTwoContextCodec) (result error) {
-	d, err := openSQLite(workspace.mainPath, "ro")
+func validateReadOnlyCopy(ctx context.Context, workspace *validationWorkspace, secrets secret.GenerationTwoContextCodec) (result error) {
+	d, err := openSQLiteContext(ctx, workspace.mainPath, "ro")
 	if err != nil {
-		return startupError(StartupCorruptDatabase)
+		return appendStartupError(startupSQLFailure(ctx, err, StartupCorruptDatabase), workspace.cleanup())
 	}
+	copyStore := &Store{db: d, afterClose: func() error {
+		return appendStartupError(workspace.recordSQLiteSidecars(), workspace.cleanup())
+	}}
 	defer func() {
-		if err := d.Close(); err != nil {
-			result = startupError(StartupCorruptDatabase)
-		}
-		if err := workspace.recordSQLiteSidecars(); err != nil {
-			result = err
-		}
+		result = appendStartupError(result, copyStore.CloseContext(ctx))
 	}()
-	ctx := context.Background()
-	if _, err := d.ExecContext(ctx, `PRAGMA query_only=ON; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;`); err != nil {
-		return startupError(StartupCorruptDatabase)
+	if _, err := d.ExecContext(ctx, `PRAGMA query_only=ON; PRAGMA foreign_keys=ON;`); err != nil {
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if err := workspace.recordSQLiteSidecars(); err != nil {
 		return err
@@ -560,43 +609,43 @@ func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Generat
 	// pre-SQLite gate; these PRAGMAs verify the merged main+WAL view.
 	var applicationID, userVersion uint32
 	if err := d.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&applicationID); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if applicationID != DatabaseApplicationID {
 		return startupError(StartupWrongIdentity)
 	}
 	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&userVersion); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if userVersion != DatabaseUserVersion {
 		return generationError(userVersion)
 	}
 	if err := foreignKeyCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if err := quickCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	prior, err := generationTwoExtensionNeeded(ctx, d)
 	if err != nil {
-		return startupError(StartupSchemaMismatch)
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	priorAssets := false
 	if prior {
 		var columns int
 		if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&columns); err != nil {
-			return startupError(StartupSchemaMismatch)
+			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 		}
 		priorAssets = columns == 0
 	}
 	if err := validateVersionSeedManifest(ctx, d, priorAssets, prior); err != nil {
-		return startupError(StartupSchemaMismatch)
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
-		return startupError(StartupCredentialReject)
+		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
 	if err := validateAssetSourceConfig(ctx, d, prior); err != nil {
-		return startupError(StartupSchemaMismatch)
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	return nil
 }
@@ -704,6 +753,7 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 		if openErr != nil {
 			return errors.New("invalid endpoint credential authentication")
 		}
+		recordStartupProgress(ctx, 1, 0)
 		if orphanedAt.Valid && (endpointKeyRefs != 0 || pendingClaimRefs != 0) {
 			return errors.New("orphaned endpoint credential remains referenced")
 		}
@@ -793,7 +843,7 @@ func reconcileEndpointKeySecretOrphans(ctx context.Context, d *sql.DB) error {
 		return errors.New("endpoint credential recovery: database unavailable")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return errors.New("endpoint credential recovery: context is required")
 	}
 	now := time.Now().Unix()
 	if now < 0 || now > generationTwoMaxUnixSeconds {
@@ -861,6 +911,8 @@ func reconcileEndpointKeySecretOrphans(ctx context.Context, d *sql.DB) error {
 			return batchFailure(fmt.Errorf("endpoint credential recovery: commit: %w", err))
 		}
 		committed = true
+		RecordStartupCheckpoint(ctx, StageDomainRecovery)
+		recordStartupProgress(ctx, deleted+marked, 0)
 		cancel()
 		if deleted+marked == 0 {
 			return nil
@@ -874,34 +926,34 @@ func validateWritableGenerationTwoState(ctx context.Context, d *sql.DB, secrets 
 	}
 	var applicationID, userVersion uint32
 	if err := d.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&applicationID); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if applicationID != DatabaseApplicationID {
 		return startupError(StartupWrongIdentity)
 	}
 	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&userVersion); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if userVersion != DatabaseUserVersion {
 		return generationError(userVersion)
 	}
 	if err := foreignKeyCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if err := quickCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
+		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
 	if err := validateGenerationTwoManifest(ctx, d); err != nil {
-		return startupError(StartupSchemaMismatch)
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
-		return startupError(StartupSchemaMismatch)
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if _, err := validateCurrentGenerationTwoSiteConfig(ctx, d); err != nil {
-		return startupError(StartupSchemaMismatch)
+		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
-		return startupError(StartupCredentialReject)
+		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
 	return nil
 }
@@ -922,16 +974,19 @@ func checkpointAndRecoverBeforeListener(ctx context.Context, d *sql.DB, secrets 
 	}
 	var busy, logFrames, checkpointed int
 	if err := d.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
-		return startupError(StartupInitialization)
+		return startupSQLFailure(ctx, err, StartupInitialization)
 	}
-	if busy != 0 || logFrames < 0 || checkpointed < 0 || checkpointed > logFrames {
+	if busy != 0 {
+		return startupError(StartupSQLBusy)
+	}
+	if logFrames < 0 || checkpointed < 0 || checkpointed > logFrames {
 		return startupError(StartupInitialization)
 	}
 	if err := foreignKeyCheck(ctx, d); err != nil {
-		return startupError(StartupInitialization)
+		return startupSQLFailure(ctx, err, StartupInitialization)
 	}
 	if err := quickCheck(ctx, d); err != nil {
-		return startupError(StartupInitialization)
+		return startupSQLFailure(ctx, err, StartupInitialization)
 	}
 	if writableRecoveryPhaseHook != nil {
 		if err := writableRecoveryPhaseHook(ctx, d); err != nil {
@@ -957,46 +1012,58 @@ func checkpointAndRecoverBeforeListener(ctx context.Context, d *sql.DB, secrets 
 	return nil
 }
 
-func openValidatedSource(path string, expected *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) (*Store, error) {
+func openValidatedSource(ctx context.Context, path string, expected *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	if beforeWritableOpenHook != nil {
 		beforeWritableOpenHook()
 	}
-	// Keep the original no-follow handles alive and capture one last complete
-	// set immediately before sql.Open. This is a low-cost static/source-change
-	// check under DEC-009; it does not bind SQLite's later xOpen to these
-	// descriptors or claim to close parent-directory/pathname races.
-	if err := recheckSourceSet(path, expected); err != nil {
+	// Finish every source descriptor operation before SQLite can take POSIX
+	// locks. Even a read-only descriptor's close could release those locks.
+	if err := recheckSourceSet(ctx, path, expected); err != nil {
 		return nil, err
 	}
-	d, err := openSQLite(path, "rw")
+	if err := secureDBFiles(path); err != nil {
+		return nil, startupError(StartupUnsafePath)
+	}
+	if err := expected.close(); err != nil {
+		return nil, err
+	}
+	RecordStartupStage(ctx, StageRawHandlesClosed)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	RecordStartupStage(ctx, StageSourceOpen)
+	d, err := openSQLiteContext(ctx, path, "rw")
 	if err != nil {
-		return nil, startupError(StartupInitialization)
+		return nil, startupSQLFailure(ctx, err, StartupInitialization)
 	}
-	fail := func() (*Store, error) {
-		_ = d.Close()
-		return nil, startupError(StartupInitialization)
-	}
+	opened := sourceStore(ctx, d, secrets)
 	failError := func(err error) (*Store, error) {
-		_ = d.Close()
-		return nil, preserveStartupCategory(err, StartupInitialization)
+		return nil, appendStartupError(preserveStartupCategory(err, StartupInitialization), opened.CloseContext(ctx))
 	}
-	if _, err := d.Exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;`); err != nil {
-		return fail()
+	if _, err := d.ExecContext(ctx, `PRAGMA foreign_keys=ON;`); err != nil {
+		return failError(startupSQLFailure(ctx, err, StartupInitialization))
 	}
 	var journalMode string
-	if err := d.QueryRow(`PRAGMA journal_mode=WAL`).Scan(&journalMode); err != nil || !strings.EqualFold(journalMode, "wal") {
-		return fail()
+	if err := d.QueryRowContext(ctx, `PRAGMA journal_mode=WAL`).Scan(&journalMode); err != nil || !strings.EqualFold(journalMode, "wal") {
+		if err == nil {
+			err = startupError(StartupInitialization)
+		}
+		return failError(startupSQLFailure(ctx, err, StartupInitialization))
 	}
-	if err := secureDBFiles(path); err != nil {
-		return fail()
+	RecordStartupCheckpoint(ctx, StageSourceOpen)
+	if err := inspectActiveDBFiles(path); err != nil {
+		return failError(startupError(StartupUnsafePath))
 	}
-	if err := extendKnownGenerationTwoSchema(context.Background(), d); err != nil {
-		return failError(startupError(StartupSchemaMismatch))
+	RecordStartupStage(ctx, StageSchemaUpgrade)
+	if err := extendKnownGenerationTwoSchema(ctx, d); err != nil {
+		return failError(startupSQLFailure(ctx, err, StartupSchemaMismatch))
 	}
-	if err := checkpointAndRecoverBeforeListener(context.Background(), d, secrets); err != nil {
+	RecordStartupCheckpoint(ctx, StageSchemaUpgrade)
+	RecordStartupStage(ctx, StageDomainRecovery)
+	if err := checkpointAndRecoverBeforeListener(ctx, d, secrets); err != nil {
 		return failError(err)
 	}
-	return &Store{db: d, secrets: secrets}, nil
+	return opened, nil
 }
 
 type freshOwnership struct {
@@ -1175,21 +1242,35 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if err := seedProgressionState(ctx, tx, time.Now().Unix()); err != nil {
 		return err
 	}
-	return seedGovernanceState(ctx, tx, time.Now().Unix())
+	if err := seedGovernanceState(ctx, tx, time.Now().Unix()); err != nil {
+		return err
+	}
+	var interactionPresent bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='fatfish_capacity')`).Scan(&interactionPresent); err != nil {
+		return err
+	}
+	if interactionPresent {
+		return seedInteractionStorage(ctx, tx)
+	}
+	return nil
 }
 
-func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
-	check, err := captureSourceSet(path)
+func createFreshGenerationTwo(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
+	check, err := captureSourceSet(ctx, path)
 	if err != nil {
 		return nil, err
 	}
 	if check.main != nil || check.journal != nil || check.wal != nil || check.shm != nil {
-		check.close()
-		return nil, startupError(StartupSourceChanged)
+		return nil, appendStartupError(startupError(StartupSourceChanged), check.close())
 	}
-	check.close()
+	if err := check.close(); err != nil {
+		return nil, err
+	}
 	if beforeFreshExclusiveCreateHook != nil {
 		beforeFreshExclusiveCreateHook()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	created, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -1204,6 +1285,9 @@ func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCo
 		return nil, startupError(StartupInitialization)
 	}
 	owned := newFreshOwnership(path, createdInfo)
+	if owner, ok := ctx.Value(databaseOwnerKey{}).(*databaseOwner); ok {
+		owner.record(createdInfo)
+	}
 	if err := requireFreshSidecarsAbsent(path); err != nil {
 		_ = owned.cleanup()
 		return nil, err
@@ -1212,45 +1296,42 @@ func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCo
 	// subsequent SQLite pathname open is intentionally the low-cost DEC-009
 	// boundary: it is not a custom-VFS descriptor binding and does not claim to
 	// resist a trusted local replacement between the two operations.
-	d, err := openSQLite(path, "rw")
+	if err := secureDBFiles(path); err != nil {
+		return nil, appendStartupError(startupError(StartupUnsafePath), owned.cleanup())
+	}
+	RecordStartupStage(ctx, StageRawHandlesClosed)
+	RecordStartupStage(ctx, StageSourceOpen)
+	d, err := openSQLiteContext(ctx, path, "rw")
 	if err != nil {
-		_ = owned.cleanup()
-		return nil, startupError(StartupInitialization)
+		return nil, appendStartupError(startupSQLFailure(ctx, err, StartupInitialization), owned.cleanup())
+	}
+	opened := sourceStore(ctx, d, secrets)
+	committed := false
+	failError := func(cause error) (*Store, error) {
+		primary := preserveStartupCategory(cause, StartupInitialization)
+		if !committed {
+			opened.afterClose = func() error {
+				return appendStartupError(owned.capturePresent(), owned.cleanup())
+			}
+		}
+		// The close worker keeps ownership through rollback and cleanup. A
+		// committed fresh database is retained for resumable recovery.
+		return nil, appendStartupError(primary, opened.CloseContext(ctx))
 	}
 	fail := func(kind StartupErrorKind) (*Store, error) {
-		_ = d.Close()
-		captureErr := owned.capturePresent()
-		if cleanupErr := owned.cleanup(); cleanupErr != nil {
-			return nil, cleanupErr
-		}
-		if captureErr != nil {
-			return nil, captureErr
-		}
-		return nil, startupError(kind)
+		return failError(startupContextCause(ctx, startupError(kind)))
 	}
-	failError := func(err error) (*Store, error) {
-		_ = d.Close()
-		captureErr := owned.capturePresent()
-		if cleanupErr := owned.cleanup(); cleanupErr != nil {
-			return nil, cleanupErr
-		}
-		if captureErr != nil {
-			return nil, captureErr
-		}
-		return nil, preserveStartupCategory(err, StartupInitialization)
-	}
-	if _, err := d.Exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;`); err != nil {
+	if _, err := d.ExecContext(ctx, `PRAGMA foreign_keys=ON;`); err != nil {
 		return fail(StartupInitialization)
 	}
 	if err := owned.capturePresent(); err != nil {
 		return fail(StartupCleanupFailure)
 	}
-	ctx := context.Background()
+	RecordStartupStage(ctx, StageSchemaUpgrade)
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return fail(StartupInitialization)
 	}
-	committed := false
 	defer func() {
 		if !committed {
 			_ = tx.Rollback()
@@ -1303,24 +1384,26 @@ func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCo
 		return fail(StartupInitialization)
 	}
 	committed = true
+	RecordStartupCheckpoint(ctx, StageSchemaUpgrade)
 	var applicationID, userVersion uint32
-	if err := d.QueryRow(`PRAGMA application_id`).Scan(&applicationID); err != nil || applicationID != DatabaseApplicationID {
+	if err := d.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&applicationID); err != nil || applicationID != DatabaseApplicationID {
 		return fail(StartupInitialization)
 	}
-	if err := d.QueryRow(`PRAGMA user_version`).Scan(&userVersion); err != nil || userVersion != DatabaseUserVersion {
+	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&userVersion); err != nil || userVersion != DatabaseUserVersion {
 		return fail(StartupInitialization)
 	}
 	var journalMode string
-	if err := d.QueryRow(`PRAGMA journal_mode=WAL`).Scan(&journalMode); err != nil || !strings.EqualFold(journalMode, "wal") {
+	if err := d.QueryRowContext(ctx, `PRAGMA journal_mode=WAL`).Scan(&journalMode); err != nil || !strings.EqualFold(journalMode, "wal") {
 		return fail(StartupInitialization)
 	}
-	if err := secureDBFiles(path); err != nil {
+	if err := inspectActiveDBFiles(path); err != nil {
 		return fail(StartupUnsafePath)
 	}
+	RecordStartupStage(ctx, StageDomainRecovery)
 	if err := checkpointAndRecoverBeforeListener(ctx, d, secrets); err != nil {
 		return failError(err)
 	}
-	return &Store{db: d, secrets: secrets}, nil
+	return opened, nil
 }
 
 // GenerationTwoSchemaHash is the externally reportable lock for the exact DDL

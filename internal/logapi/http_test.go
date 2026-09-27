@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -331,6 +332,8 @@ func TestLogQueryParsersRejectUnknownDuplicateAndNonCanonicalValues(t *testing.T
 		export bool
 	}{
 		{"bad=%zz", "user", false}, {"status=099", "user", false}, {"status=600", "admin", false},
+		{"status=-1", "admin", false}, {"status=%2B200", "admin", false}, {"status=0200", "admin", false},
+		{"status=4294967496", "admin", false}, {"status=9223372036854775808", "admin", false},
 		{"from=+1", "admin", false}, {"to=-1", "admin", false}, {"user_id=01", "admin", false},
 		{"model=x", "admin", false}, {"user_id=01", "steward", false}, {"cursor=x", "admin", true},
 		{"limit=1", "admin", true}, {"error_code=A", "user", false},
@@ -341,6 +344,12 @@ func TestLogQueryParsersRejectUnknownDuplicateAndNonCanonicalValues(t *testing.T
 		}
 		if !errors.Is(err, ErrInvalid) {
 			t.Fatalf("parseListFilter(%q,%q,%v) = %+v, %v", test.query, test.role, test.export, filter, err)
+		}
+	}
+	for _, status := range []int{100, 200, 599} {
+		filter, err := parseListFilter("status="+strconv.Itoa(status), "admin", false)
+		if err != nil || filter.Status == nil || *filter.Status != status {
+			t.Fatalf("valid status %d = %+v, %v", status, filter, err)
 		}
 	}
 	for _, query := range []string{

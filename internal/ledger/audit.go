@@ -62,6 +62,12 @@ func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 		channel, behavior = "picture_book", movementBehavior(kind)
 	case KindInactivityDecay:
 		channel, behavior = "inactivity", "decay"
+	case KindFatFishUnlock, KindFatFishTicket:
+		channel, behavior = "fat_fish", "fee"
+	case KindFatFishReward:
+		channel, behavior = "fat_fish", "reward"
+	case KindFatFishRefund:
+		channel, behavior = "fat_fish", "refund"
 	}
 	if channel == "" {
 		return AuditClassification{Channel: "unclassified", Behavior: "unclassified"}

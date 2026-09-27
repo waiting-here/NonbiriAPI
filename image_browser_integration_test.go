@@ -70,7 +70,7 @@ func (f *imageBrowserFixture) open() error {
 		_ = store.Close()
 		return err
 	}
-	app, err := buildApplicationWithRuntimeOptions(f.cfg, store, f.vault,
+	app, err := buildApplicationWithRuntimeOptions(context.Background(), f.cfg, store, f.vault,
 		applicationRuntimeOptions{Egress: stack, ActivityNow: f.now})
 	if err != nil {
 		_ = store.Close()
@@ -311,7 +311,8 @@ func (f *imageBrowserFixture) initialize() {
 	f.call("PUT", prefix+"/models/"+model["id"].(string), map[string]any{
 		"expected_revision": model["revision"], "display_name": "Browser canvas",
 		"description": "<img src=x onerror=alert(1)> is displayed as text.",
-		"enabled":     true, "price": map[string]string{"paper": "2", "brush": "1"},
+		"enabled":     true, "capability_confirmed": true, "catalog_type": "image",
+		"price": map[string]string{"paper": "2", "brush": "1"},
 		"parameters": []any{
 			map[string]any{"key": "prompt", "supported": true, "required": true, "type": "string",
 				"min_length": 1, "max_length": 65536, "length_unit": "utf8_bytes"},
@@ -363,6 +364,9 @@ func (f *imageBrowserFixture) seedUser(index, level int, admin int64) imageBrows
 	defer tx.Rollback()
 	if _, err := tx.Exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`,
 		hex.EncodeToString(digest[:]), id, now, now+3600, now+7200, now, "image-fixture-generation"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.app.Load().authRuntime.IdentityContinuity().BindUserTx(ctx, tx, id); err != nil {
 		t.Fatal(err)
 	}
 	wallet, err := ledger.CreateUserAssetAccount(ctx, tx, id, ledger.General, now)

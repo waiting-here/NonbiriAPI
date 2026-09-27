@@ -136,7 +136,8 @@ func sourceTypeForKind(kind Kind) (sourceType, bool) {
 	case KindAdminUserAdjustment, KindAdminPoolAdjustment, KindAccountDeleteZero,
 		KindCheckinAward, KindAntiAbusePenalty, KindWelfareClaim,
 		KindThursdayContribution, KindThursdayPayout, KindGameOnboardingReward, KindActivityLoan,
-		KindActivityExchange, KindInactivityDecay:
+		KindActivityExchange, KindInactivityDecay,
+		KindFatFishUnlock, KindFatFishTicket, KindFatFishReward, KindFatFishRefund:
 		return sourceOperation, true
 	case KindForwardReserve, KindForwardSettle, KindForwardRelease,
 		KindCharityReserve, KindCharitySettle, KindCharityRelease:

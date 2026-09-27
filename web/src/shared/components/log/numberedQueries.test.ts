@@ -51,6 +51,7 @@ const adminRow = {
   started_at: row.started_at,
   completed_at: row.completed_at,
   usage: row.usage,
+  usage_total_mismatch: false,
   user_id: '7',
   caller_identity: null,
   attempt_count: row.attempt_count,
@@ -74,6 +75,8 @@ const attempt = {
   started_at: 1,
   completed_at: 2,
 };
+
+const adminAttempt = { ...attempt, usage_total_mismatch: false };
 
 const userAttempt = {
   ...attempt,
@@ -106,7 +109,7 @@ function detail(overrides: Record<string, unknown> = {}, attemptMeta = paginatio
 function adminDetail(overrides: Record<string, unknown> = {}, attemptMeta = pagination()) {
   return {
     request: adminRow,
-    attempts: { data: [attempt], next_cursor: null },
+    attempts: { data: [adminAttempt], next_cursor: null },
     attempt_pagination: attemptMeta,
     ...overrides,
   };
@@ -273,6 +276,29 @@ describe('numbered log requests', () => {
       '/api/steward/logs?user_id=7&page=1&page_size=20',
       expect.objectContaining({ signal: undefined }),
     );
+  });
+
+  it.each([
+    ['admin', '/admin/api/logs'],
+    ['steward', '/api/steward/logs'],
+  ] as const)('sends the true usage-total mismatch filter for %s', async (role, path) => {
+    const requestPath = `${path}?usage_total_mismatch=true&page=1&page_size=20`;
+    const fetchMock = installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: requestPath,
+        body: list([{ ...adminRow, usage_total_mismatch: true }]),
+      },
+    ]);
+    await getRoleLogsPage(role, '1', 20, { usage_total_mismatch: true });
+    expect(fetchMock).toHaveBeenCalledWith(
+      requestPath,
+      expect.objectContaining({ signal: undefined }),
+    );
+    await expect(
+      getRoleLogsPage('user', '1', 20, { usage_total_mismatch: true }),
+    ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it.each([

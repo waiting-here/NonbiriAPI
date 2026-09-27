@@ -119,6 +119,8 @@ describe('home independent capability states', () => {
         state: 'available' as const,
         load: vi.fn(async (): Promise<HomeCheckinStatus> => ({
           enabled: true,
+          mutually_exclusive: false,
+          blocked_by_other_checkin: false,
           asset_type: asset,
           checked_in_today: checked,
           balance: asset === 'game' ? envelope.user.game_balance : envelope.user.balance,
@@ -150,6 +152,7 @@ describe('home independent capability states', () => {
     const gameButton = await within(card('Game-credit check-in')).findByRole('button', {
       name: 'Check in',
     });
+    expect(screen.queryByText(/Choose one check-in each site day/)).not.toBeInTheDocument();
     await view.user.click(gameButton);
     await waitFor(() => expect(gameButton).toBeDisabled());
     expect(generalButton).toBeEnabled();
@@ -164,6 +167,137 @@ describe('home independent capability states', () => {
         view.queryClient.getQueryData<UserEnvelope>(coreKeys.me(envelope.user.id))?.user,
       ).toMatchObject({ balance: '1', game_balance: '1.999' }),
     );
+  });
+
+  it('shows the choice rule even when one check-in endpoint is disabled', async () => {
+    const envelope = canonicalEnvelope();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    await renderHomeDashboard(envelope.user, {
+      checkin: {
+        state: 'available',
+        load: async () => ({
+          enabled: false,
+          mutually_exclusive: true,
+          blocked_by_other_checkin: false,
+        }),
+        submit: vi.fn(),
+      },
+      gameCheckin: { state: 'unavailable' },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
+    });
+    expect(await screen.findByRole('note')).toHaveTextContent('Choose one check-in each site day');
+    expect(screen.getByRole('heading', { name: 'General-credit check-in' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Game-credit check-in' })).toBeVisible();
+  });
+
+  it('shows a daily choice and blocks only the other wallet after a successful claim', async () => {
+    const envelope = canonicalEnvelope();
+    envelope.user.balance = '0';
+    envelope.user.game_balance = '0';
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    let chosen: 'general' | 'game' | null = null;
+    const makeCheckin = (asset: 'general' | 'game') => ({
+      state: 'available' as const,
+      load: vi.fn(async (): Promise<HomeCheckinStatus> => ({
+        enabled: true,
+        mutually_exclusive: true,
+        blocked_by_other_checkin: chosen !== null && chosen !== asset,
+        asset_type: asset,
+        checked_in_today: chosen === asset,
+        balance: asset === 'game' ? envelope.user.game_balance : envelope.user.balance,
+        award_min: '1',
+        award_max: '1',
+        balance_cap: '0',
+      })),
+      submit: vi.fn(async () => {
+        chosen = asset;
+        if (asset === 'general') envelope.user.balance = '1';
+        else envelope.user.game_balance = '1';
+        return { asset_type: asset, award: '1', balance: '1' };
+      }),
+    });
+    const general = makeCheckin('general');
+    const game = makeCheckin('game');
+    const view = await renderHomeDashboard(envelope.user, {
+      checkin: general,
+      gameCheckin: game,
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
+    });
+    const card = (title: string) =>
+      screen.getByRole('heading', { name: title }).closest('section')!;
+    const generalCard = card('General-credit check-in');
+    const gameCard = card('Game-credit check-in');
+    expect(await screen.findByRole('note')).toHaveTextContent('Choose one check-in each site day');
+    await view.user.click(await within(generalCard).findByRole('button', { name: 'Check in' }));
+
+    await waitFor(() => {
+      expect(within(generalCard).getByText('Checked in')).toBeVisible();
+      expect(within(gameCard).getByText('Other check-in claimed')).toBeVisible();
+      expect(within(gameCard).getByRole('button', { name: 'Check in' })).toBeDisabled();
+    });
+    expect(within(gameCard).queryByText('Checked in')).not.toBeInTheDocument();
+    expect(general.load).toHaveBeenCalledTimes(2);
+    expect(game.load).toHaveBeenCalledTimes(2);
+    expect(game.submit).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(view.queryClient.getQueryData<UserEnvelope>(coreKeys.me(envelope.user.id))?.user)
+        .toMatchObject({ balance: '1', game_balance: '0' }),
+    );
+  });
+
+  it('refreshes both wallet statuses and balances after a cross-wallet conflict', async () => {
+    const envelope = canonicalEnvelope();
+    envelope.user.balance = '0';
+    envelope.user.game_balance = '0';
+    let otherClaimed = false;
+    const fetchMe = vi.fn(async () => jsonResponse(envelope));
+    vi.stubGlobal('fetch', fetchMe);
+    const generalLoad = vi.fn(async (): Promise<HomeCheckinStatus> => ({
+      enabled: true,
+      mutually_exclusive: true,
+      blocked_by_other_checkin: false,
+      asset_type: 'general',
+      checked_in_today: otherClaimed,
+      balance: envelope.user.balance,
+      award_min: '1',
+      award_max: '1',
+      balance_cap: '0',
+    }));
+    const gameLoad = vi.fn(async (): Promise<HomeCheckinStatus> => ({
+      enabled: true,
+      mutually_exclusive: true,
+      blocked_by_other_checkin: otherClaimed,
+      asset_type: 'game',
+      checked_in_today: false,
+      balance: envelope.user.game_balance,
+      award_min: '1',
+      award_max: '1',
+      balance_cap: '0',
+    }));
+    const gameSubmit = vi.fn(async () => {
+      otherClaimed = true;
+      envelope.user.balance = '1';
+      throw new ApiError('already_checked_in', 'Already checked in today.', 409);
+    });
+    const view = await renderHomeDashboard(envelope.user, {
+      checkin: { state: 'available', load: generalLoad, submit: vi.fn() },
+      gameCheckin: { state: 'available', load: gameLoad, submit: gameSubmit },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
+    });
+    const gameCard = screen.getByRole('heading', { name: 'Game-credit check-in' }).closest('section')!;
+    await view.user.click(await within(gameCard).findByRole('button', { name: 'Check in' }));
+
+    await waitFor(() => {
+      expect(within(gameCard).getByText('Other check-in claimed')).toBeVisible();
+      expect(within(gameCard).getByRole('button', { name: 'Check in' })).toBeDisabled();
+    });
+    expect(gameSubmit).toHaveBeenCalledTimes(1);
+    expect(generalLoad).toHaveBeenCalledTimes(2);
+    expect(gameLoad).toHaveBeenCalledTimes(2);
+    expect(fetchMe.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('keeps confirmed profile, economy, usage, and announcement data when the game summary fails', async () => {
@@ -268,6 +402,8 @@ describe('home independent capability states', () => {
     const reconciliation = deferred<HomeCheckinStatus>();
     const initial: HomeCheckinStatus = {
       enabled: true,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
       asset_type: 'general',
       checked_in_today: false,
       balance: '-1.5',
@@ -321,6 +457,8 @@ describe('home independent capability states', () => {
     const maximum = '340282366920938463463374607431768211.455';
     const initial: HomeCheckinStatus = {
       enabled: true,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
       asset_type: 'general',
       checked_in_today: false,
       balance: '-1.5',
@@ -366,6 +504,8 @@ describe('home independent capability states', () => {
     );
     const load = vi.fn(async (): Promise<HomeCheckinStatus> => ({
       enabled: true,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
       asset_type: 'general',
       checked_in_today: false,
       balance: '10',
@@ -405,6 +545,8 @@ describe('home independent capability states', () => {
     );
     const initial: HomeCheckinStatus = {
       enabled: true,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
       asset_type: 'general',
       checked_in_today: false,
       balance: '10',
@@ -461,6 +603,8 @@ describe('home independent capability states', () => {
     );
     const initial: HomeCheckinStatus = {
       enabled: true,
+      mutually_exclusive: false,
+      blocked_by_other_checkin: false,
       asset_type: 'general',
       checked_in_today: false,
       balance: '10',
@@ -794,7 +938,7 @@ describe('account deletion confirmation', () => {
     const adapter: AccountLifecycleAdapter = {
       capabilities: { exportAccount: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 10 }) as const),
+      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 11 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -844,7 +988,7 @@ describe('account deletion confirmation', () => {
     const adapter: AccountLifecycleAdapter = {
       capabilities: { exportAccount: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 10 }) as const),
+      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 11 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -890,7 +1034,7 @@ describe('account deletion confirmation', () => {
     const adapter: AccountLifecycleAdapter = {
       capabilities: { exportAccount: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 10 }) as const),
+      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 11 }) as const),
       deleteAccount,
       readAccountAuthority,
     };

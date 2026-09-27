@@ -168,6 +168,7 @@ SELECT quote(id)||'|'||quote(logical_request_id)||'|'||quote(model)||'|'||quote(
        quote(attempt_count)||'|'||quote(status_code)||'|'||quote(duration_ms)||'|'||quote(started_at)||'|'||
        quote(completed_at)||'|'||quote(uncached_input_tokens)||'|'||quote(cache_write_input_tokens)||'|'||
        quote(cache_read_input_tokens)||'|'||quote(output_tokens)||'|'||quote(usage_unknown)||'|'||
+       quote(usage_total_mismatch)||'|'||
        quote(error_source)||'|'||quote(error_code)||'|'||quote(error_diag)||'|'||quote(legal_hold_consumed)
 FROM request_logs WHERE id=?`, logID).Scan(&snapshot.root)
 	if err != nil {
@@ -179,7 +180,7 @@ SELECT quote(claim_id)||'|'||quote(attempt_seq)||'|'||quote(endpoint_id_snapshot
        quote(upstream_model_id)||'|'||quote(result_kind)||'|'||quote(upstream_status)||'|'||
        quote(upstream_code)||'|'||quote(diag)||'|'||quote(input_tokens)||'|'||
        quote(cache_write_input_tokens)||'|'||quote(cache_read_input_tokens)||'|'||quote(output_tokens)||'|'||
-       quote(usage_unknown)||'|'||quote(started_at)||'|'||quote(completed_at)
+       quote(usage_unknown)||'|'||quote(usage_total_mismatch)||'|'||quote(started_at)||'|'||quote(completed_at)
 FROM request_attempts WHERE request_log_id=? ORDER BY attempt_seq`, logID)
 	if err != nil {
 		t.Fatal(err)

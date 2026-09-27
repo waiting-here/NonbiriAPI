@@ -1,35 +1,30 @@
 package charityrouting
 
 import (
+	"crypto/rand"
 	"database/sql"
-	"encoding/binary"
 	"io"
+	"math/big"
 )
 
 const (
-	weightWithinDay   uint64 = 8
-	weightWithinWeek  uint64 = 4
-	weightWithinMonth uint64 = 2
-	weightLater       uint64 = 1
-
-	secondsPerDay            = int64(86_400)
-	secondsPerWeek           = int64(604_800)
-	secondsPerMonth          = int64(2_592_000)
-	maxEntropyReadsPerSample = 8
+	minimumExpiryDenominator = int64(60)
 	maxRejectedSamples       = 64
 )
 
+// A zero denominator denotes an unlimited candidate until the complete
+// eligible set determines the smallest positive weight it should receive.
 type weightedRuntimeCandidate struct {
-	candidate RuntimeCandidate
-	weight    uint64
+	candidate   RuntimeCandidate
+	denominator int64
 }
 
-func runtimeCandidateWeight(decisionNow int64, expiresAt sql.NullInt64) (uint64, bool, error) {
+func runtimeCandidateDenominator(decisionNow int64, expiresAt sql.NullInt64) (int64, bool, error) {
 	if decisionNow < 0 || decisionNow > maxUnixSecond {
 		return 0, false, ErrInvariant
 	}
 	if !expiresAt.Valid {
-		return weightLater, true, nil
+		return 0, true, nil
 	}
 	if expiresAt.Int64 < 0 || expiresAt.Int64 > maxUnixSecond {
 		return 0, false, ErrInvariant
@@ -38,16 +33,51 @@ func runtimeCandidateWeight(decisionNow int64, expiresAt sql.NullInt64) (uint64,
 	if remaining <= 0 {
 		return 0, false, nil
 	}
-	switch {
-	case remaining <= secondsPerDay:
-		return weightWithinDay, true, nil
-	case remaining <= secondsPerWeek:
-		return weightWithinWeek, true, nil
-	case remaining <= secondsPerMonth:
-		return weightWithinMonth, true, nil
-	default:
-		return weightLater, true, nil
+	if remaining < minimumExpiryDenominator {
+		remaining = minimumExpiryDenominator
 	}
+	return remaining, true, nil
+}
+
+// integerCandidateWeights converts exact reciprocals to integer weights with
+// the same ratios. At most 100 bounded UTC-second denominators enter the LCM.
+func integerCandidateWeights(candidates []weightedRuntimeCandidate) ([]*big.Int, *big.Int, error) {
+	if len(candidates) == 0 || len(candidates) > MaxRuntimeCandidates {
+		return nil, nil, ErrInvariant
+	}
+	maxFinite := int64(1)
+	for _, item := range candidates {
+		if item.denominator < 0 || item.denominator > maxUnixSecond {
+			return nil, nil, ErrInvariant
+		}
+		if item.denominator > maxFinite {
+			maxFinite = item.denominator
+		}
+	}
+	denominators := make([]int64, len(candidates))
+	lcm := big.NewInt(1)
+	gcd := new(big.Int)
+	for index, item := range candidates {
+		d := item.denominator
+		if d == 0 {
+			d = maxFinite
+		}
+		denominators[index] = d
+		value := big.NewInt(d)
+		gcd.GCD(nil, nil, lcm, value)
+		lcm.Div(lcm, gcd)
+		lcm.Mul(lcm, value)
+	}
+	weights := make([]*big.Int, len(candidates))
+	total := new(big.Int)
+	for index, d := range denominators {
+		weights[index] = new(big.Int).Quo(lcm, big.NewInt(d))
+		if weights[index].Sign() <= 0 {
+			return nil, nil, ErrInvariant
+		}
+		total.Add(total, weights[index])
+	}
+	return weights, total, nil
 }
 
 func orderWeightedRuntimeCandidates(source io.Reader, candidates []weightedRuntimeCandidate) ([]RuntimeCandidate, error) {
@@ -57,105 +87,62 @@ func orderWeightedRuntimeCandidates(source io.Reader, candidates []weightedRunti
 	if len(candidates) == 0 {
 		return []RuntimeCandidate{}, nil
 	}
-	pool := append([]weightedRuntimeCandidate(nil), candidates...)
-	for _, candidate := range pool {
-		if !validRuntimeCandidateWeight(candidate.weight) {
-			return nil, ErrInvariant
-		}
+	weights, total, err := integerCandidateWeights(candidates)
+	if err != nil {
+		return nil, err
 	}
+	pool := append([]weightedRuntimeCandidate(nil), candidates...)
 	ordered := make([]RuntimeCandidate, 0, len(pool))
 	for len(pool) > 1 {
-		total, err := runtimeCandidateWeightTotal(pool)
+		draw, err := uniformBigIntn(source, total)
 		if err != nil {
 			return nil, err
 		}
-		draw, err := uniformUint64n(source, total)
-		if err != nil {
-			return nil, err
-		}
-		selected, err := weightedRuntimeCandidateIndex(pool, draw)
+		selected, err := weightedRuntimeCandidateIndex(weights, draw)
 		if err != nil {
 			return nil, err
 		}
 		ordered = append(ordered, pool[selected].candidate)
+		total.Sub(total, weights[selected])
 		copy(pool[selected:], pool[selected+1:])
-		pool[len(pool)-1] = weightedRuntimeCandidate{}
 		pool = pool[:len(pool)-1]
+		copy(weights[selected:], weights[selected+1:])
+		weights = weights[:len(weights)-1]
 	}
 	ordered = append(ordered, pool[0].candidate)
 	return ordered, nil
 }
 
-func runtimeCandidateWeightTotal(candidates []weightedRuntimeCandidate) (uint64, error) {
-	var total uint64
-	for _, candidate := range candidates {
-		if !validRuntimeCandidateWeight(candidate.weight) || total > ^uint64(0)-candidate.weight {
-			return 0, ErrInvariant
-		}
-		total += candidate.weight
-	}
-	if total == 0 {
+func weightedRuntimeCandidateIndex(weights []*big.Int, draw *big.Int) (int, error) {
+	if draw == nil || draw.Sign() < 0 {
 		return 0, ErrInvariant
 	}
-	return total, nil
-}
-
-func weightedRuntimeCandidateIndex(candidates []weightedRuntimeCandidate, draw uint64) (int, error) {
-	var cumulative uint64
-	for index, candidate := range candidates {
-		if !validRuntimeCandidateWeight(candidate.weight) || cumulative > ^uint64(0)-candidate.weight {
+	cumulative := new(big.Int)
+	for index, weight := range weights {
+		if weight == nil || weight.Sign() <= 0 {
 			return 0, ErrInvariant
 		}
-		cumulative += candidate.weight
-		if draw < cumulative {
+		cumulative.Add(cumulative, weight)
+		if draw.Cmp(cumulative) < 0 {
 			return index, nil
 		}
 	}
 	return 0, ErrInvariant
 }
 
-func validRuntimeCandidateWeight(weight uint64) bool {
-	return weight == weightWithinDay || weight == weightWithinWeek ||
-		weight == weightWithinMonth || weight == weightLater
-}
-
-func uniformUint64n(source io.Reader, upperExclusive uint64) (uint64, error) {
-	if upperExclusive == 0 {
-		return 0, ErrInvariant
+func uniformBigIntn(source io.Reader, upperExclusive *big.Int) (*big.Int, error) {
+	if upperExclusive == nil || upperExclusive.Sign() <= 0 {
+		return nil, ErrInvariant
 	}
 	if nilDependency(source) {
-		return 0, ErrEntropyUnavailable
+		return nil, ErrEntropyUnavailable
 	}
-	// Unsigned negation yields 2^64-upperExclusive. Its remainder is the
-	// short prefix that would make modulo reduction biased.
-	threshold := -upperExclusive % upperExclusive
-	for attempt := 0; attempt < maxRejectedSamples; attempt++ {
-		value, err := readEntropyUint64(source)
-		if err != nil {
-			return 0, ErrEntropyUnavailable
-		}
-		if value >= threshold {
-			return value % upperExclusive, nil
-		}
+	// crypto/rand.Int rejects values outside the requested range. Bound the
+	// injected reader so a broken source cannot stall a request indefinitely.
+	maxBytes := int64((upperExclusive.BitLen()+7)/8) * maxRejectedSamples
+	draw, err := rand.Int(io.LimitReader(source, maxBytes), upperExclusive)
+	if err != nil {
+		return nil, ErrEntropyUnavailable
 	}
-	return 0, ErrEntropyUnavailable
-}
-
-func readEntropyUint64(source io.Reader) (uint64, error) {
-	if nilDependency(source) {
-		return 0, ErrEntropyUnavailable
-	}
-	var block [8]byte
-	filled := 0
-	for reads := 0; filled < len(block) && reads < maxEntropyReadsPerSample; reads++ {
-		n, err := source.Read(block[filled:])
-		if n < 0 || n > len(block)-filled || err != nil || n == 0 {
-			return 0, ErrEntropyUnavailable
-		}
-		filled += n
-	}
-	if filled != len(block) {
-		return 0, ErrEntropyUnavailable
-	}
-	return binary.LittleEndian.Uint64(block[:]), nil
+	return draw, nil
 }

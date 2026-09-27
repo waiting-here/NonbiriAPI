@@ -50,20 +50,24 @@ func (api *httpAPI) status(writer http.ResponseWriter, request *http.Request, pr
 	}
 	if !status.Enabled {
 		writeJSON(writer, http.StatusOK, struct {
-			Enabled bool `json:"enabled"`
-		}{Enabled: false})
+			Enabled           bool `json:"enabled"`
+			MutuallyExclusive bool `json:"mutually_exclusive,omitempty"`
+		}{Enabled: false, MutuallyExclusive: status.MutuallyExclusive})
 		return
 	}
 	writeJSON(writer, http.StatusOK, struct {
-		Enabled        bool         `json:"enabled"`
-		CheckedInToday bool         `json:"checked_in_today"`
-		Asset          ledger.Asset `json:"asset_type"`
-		Balance        string       `json:"balance"`
-		AwardMinimum   string       `json:"award_min"`
-		AwardMaximum   string       `json:"award_max"`
-		BalanceCap     string       `json:"balance_cap"`
+		Enabled               bool         `json:"enabled"`
+		CheckedInToday        bool         `json:"checked_in_today"`
+		MutuallyExclusive     bool         `json:"mutually_exclusive,omitempty"`
+		BlockedByOtherCheckin bool         `json:"blocked_by_other_checkin,omitempty"`
+		Asset                 ledger.Asset `json:"asset_type"`
+		Balance               string       `json:"balance"`
+		AwardMinimum          string       `json:"award_min"`
+		AwardMaximum          string       `json:"award_max"`
+		BalanceCap            string       `json:"balance_cap"`
 	}{
 		Enabled: true, Asset: status.Asset, CheckedInToday: status.CheckedInToday, Balance: status.Balance,
+		MutuallyExclusive: status.MutuallyExclusive, BlockedByOtherCheckin: status.BlockedByOtherCheckin,
 		AwardMinimum: status.AwardMinimum, AwardMaximum: status.AwardMaximum, BalanceCap: status.BalanceCap,
 	})
 }
@@ -125,6 +129,8 @@ func writeError(writer http.ResponseWriter, err error) {
 		code, message = httperr.CodeFeatureDisabled, "check-in is unavailable"
 	case errors.Is(err, ErrAlreadyCheckedIn):
 		code, message = httperr.CodeAlreadyCheckedIn, "already checked in today"
+	case errors.Is(err, ErrOtherCheckedIn):
+		code, message = httperr.CodeAlreadyCheckedIn, "the other daily check-in has already been claimed"
 	case errors.Is(err, ErrBalanceCap):
 		code, message = httperr.CodeCheckinCapReached, "check-in balance cap reached"
 	case errors.Is(err, ErrMaintenance):

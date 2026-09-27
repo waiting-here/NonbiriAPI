@@ -56,7 +56,7 @@ export function duelSnapshotWire(game: 'bidding' | 'likes') {
     queue_capacity: 4096,
     ...(game === 'bidding'
       ? { joker_seconds: 10, bid_seconds: 20 }
-      : { plan_seconds: 20, settlement_seconds: 5 }),
+      : { plan_seconds: 30, settlement_seconds: 5 }),
     modes: Object.fromEntries(
       (game === 'bidding' ? ['tier1', 'tier2', 'tier3'] : ['quick', 'standard']).map((key) => [
         key,

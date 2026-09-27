@@ -7,8 +7,17 @@ import type {
   Scalar,
   SubmitInput,
 } from './publicTypes';
+import {
+  multipliedPrice,
+  parseDimensions,
+  quotePricing,
+  resolveSize,
+  type PriceSelection,
+  type ResolvedSize,
+} from './capabilities';
 
-export const maxCurrencyUnits = ((1n << 127n) - 1n) / 1000n;
+export { currencyUnits, maxCurrencyUnits, multipliedPrice, parseDimensions } from './capabilities';
+
 export const normalizeLines = (value: string) => value.replace(/\r\n?/g, '\n');
 export function textLength(value: string, unit: LengthUnit): number {
   const normalized = normalizeLines(value);
@@ -20,29 +29,6 @@ export function textLength(value: string, unit: LengthUnit): number {
 }
 export const promptBytes = (prompt: string, negative = '') =>
   textLength(prompt, 'utf8_bytes') + textLength(negative, 'utf8_bytes');
-export function currencyUnits(value: string): bigint | null {
-  if (!/^(0|[1-9][0-9]{0,38})$/.test(value)) return null;
-  const n = BigInt(value);
-  return n <= maxCurrencyUnits ? n : null;
-}
-export function multipliedPrice(paper: string, brush: string, count: number): Price | null {
-  const p = currencyUnits(paper),
-    b = currencyUnits(brush);
-  if (
-    p === null ||
-    b === null ||
-    (p === 0n && b === 0n) ||
-    !Number.isSafeInteger(count) ||
-    count < 1 ||
-    count > 16
-  )
-    return null;
-  const totalP = p * BigInt(count),
-    totalB = b * BigInt(count);
-  return totalP <= maxCurrencyUnits && totalB <= maxCurrencyUnits
-    ? { paper: String(totalP), brush: String(totalB) }
-    : null;
-}
 export type ParameterValues = Partial<Record<ParameterKey, string>>;
 export function initialValues(model: ImageModel): ParameterValues {
   const values: ParameterValues = { prompt: '' };
@@ -50,6 +36,14 @@ export function initialValues(model: ImageModel): ParameterValues {
     if (!rule.supported) continue;
     const initial = rule.default ?? (rule.key === 'n' ? 1 : undefined);
     if (initial !== undefined) values[rule.key] = String(initial);
+  }
+  if (model.size_capability) {
+    const first = model.size_capability.combinations?.[0];
+    if (first) {
+      if (first.ratio) values.aspect_ratio = first.ratio;
+      if (first.resolution) values.resolution = first.resolution;
+      if (first.width && first.height) values.size = `${first.width}x${first.height}`;
+    } else if (model.size_capability.auto) values.size = 'auto';
   }
   return values;
 }
@@ -60,11 +54,6 @@ function scalarValue(rule: ParameterRule, raw: string): Scalar | null {
   return Number.isFinite(number) && (rule.type !== 'integer' || Number.isSafeInteger(number))
     ? number
     : null;
-}
-export function parseDimensions(value: string): [number, number] | null {
-  if (!/^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}$/.test(value)) return null;
-  const [width, height] = value.split('x').map(Number);
-  return [width, height];
 }
 export function validScalar(rule: ParameterRule, value: Scalar): boolean {
   if (rule.type === 'string') {
@@ -122,14 +111,43 @@ export function validScalar(rule: ParameterRule, value: Scalar): boolean {
   return !rule.enum || rule.enum.some((option) => option === value);
 }
 export type InputProblem = ParameterKey | 'combination' | 'prompt_size' | 'price';
+function selectedSize(model: ImageModel, values: ParameterValues): ResolvedSize | null {
+  return model.size_capability
+    ? resolveSize(model.size_capability, {
+        aspect_ratio: values.aspect_ratio,
+        resolution: values.resolution,
+        size: values.size === 'auto' ? undefined : values.size,
+        auto: values.size === 'auto',
+      })
+    : { values: {}, selection: {} };
+}
+
+export function previewPrice(model: ImageModel, values: ParameterValues) {
+  const resolved = selectedSize(model, values);
+  if (!resolved) return null;
+  const countRule = model.parameters.find((rule) => rule.key === 'n' && rule.supported);
+  const count = Number(values.n || countRule?.default || 1);
+  if (model.pricing) return quotePricing(model.pricing, resolved.selection, count);
+  const total = multipliedPrice(model.price.paper, model.price.brush, count);
+  return total ? { unit: model.price, total, basis: 'default' as const, price_key: '' } : null;
+}
+
 export function prepareSubmission(
   model: ImageModel,
   values: ParameterValues,
-): { input: SubmitInput; price: Price } | { problem: InputProblem } {
+): { input: SubmitInput; price: Price; unit: Price; basis: string } | { problem: InputProblem } {
+  const effectiveValues = { ...values };
+  const resolved = selectedSize(model, values);
+  if (!resolved) return { problem: 'size' };
+  const selection: PriceSelection = resolved.selection;
+  if (model.size_capability) {
+    for (const [key, value] of Object.entries(resolved.values))
+      effectiveValues[key as ParameterKey] = String(value);
+  }
   const output: Partial<Record<ParameterKey, Scalar>> = {};
   for (const rule of model.parameters) {
     if (!rule.supported) continue;
-    const raw = values[rule.key];
+    const raw = effectiveValues[rule.key];
     const fallback = rule.default ?? (rule.key === 'n' ? 1 : undefined);
     const value = raw === undefined || raw === '' ? fallback : scalarValue(rule, raw);
     if (value === undefined) {
@@ -138,6 +156,12 @@ export function prepareSubmission(
     }
     if (value === null || !validScalar(rule, value)) return { problem: rule.key };
     output[rule.key] = value;
+  }
+  if (model.size_capability) {
+    if (
+      Object.entries(resolved.values).some(([key, value]) => output[key as ParameterKey] !== value)
+    )
+      return { problem: 'size' };
   }
   if (typeof output.prompt !== 'string' || !output.prompt.trim()) return { problem: 'prompt' };
   if (
@@ -156,14 +180,18 @@ export function prepareSubmission(
       return { problem: 'combination' };
   }
   const n = typeof output.n === 'number' ? output.n : 1;
-  const price = multipliedPrice(model.price.paper, model.price.brush, n);
+  const quote = model.pricing ? quotePricing(model.pricing, selection, n) : null;
+  const price = model.pricing
+    ? quote?.total
+    : multipliedPrice(model.price.paper, model.price.brush, n);
   if (!price) return { problem: 'price' };
   const input = {
     model_id: model.id,
     expected_model_revision: model.revision,
+    ...(model.pricing_revision ? { expected_pricing_revision: model.pricing_revision } : {}),
     ...output,
   } as SubmitInput;
   if (new TextEncoder().encode(JSON.stringify(input)).byteLength > 262144)
     return { problem: 'prompt_size' };
-  return { input, price };
+  return { input, price, unit: quote?.unit ?? model.price, basis: quote?.basis ?? 'legacy' };
 }

@@ -20,7 +20,9 @@ describe('limited activity exact values and projections', () => {
         brush_remaining: '1',
       },
     });
-    expect(decodeDetail(detail).module_config.brush_cap).toBe('9007199254740993123');
+    const decoded = decodeDetail(detail);
+    if (decoded.key !== 'picture-book') throw new Error('unexpected activity');
+    expect(decoded.module_config.brush_cap).toBe('9007199254740993123');
     expect(() => decodeSupply({ ...detail.module_config, brush_remaining: '2' })).toThrow();
   });
   it('rejects private fields and inconsistent receipt charges', () => {
@@ -47,5 +49,18 @@ describe('limited activity exact values and projections', () => {
     expect(parseUTC('')).toBeNull();
     expect(() => parseUTC('2026-02-30T10:00:00')).toThrow();
     expect(() => decodeDetail(limitedActivity({ starts_at: 10, ends_at: 10 }))).toThrow();
+  });
+  it('accepts only matching built-in cover keys and the empty fish module', () => {
+    const fish = {
+      ...limitedActivity(),
+      key: 'fat-fish',
+      cover_key: 'fat-fish',
+      module_config: {},
+    };
+    expect(decodeDetail(fish).key).toBe('fat-fish');
+    expect(() => decodeDetail({ ...fish, cover_key: 'picture-book' })).toThrow();
+    expect(() =>
+      decodeDetail({ ...fish, module_config: { upstream: 'https://invalid.test' } }),
+    ).toThrow();
   });
 });

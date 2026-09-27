@@ -72,7 +72,7 @@ function catalogFixture() {
         mode,
         {
           rules_version: 1,
-          design_version: '0.18.0',
+          design_version: '0.18.1',
           schema_version: 16,
           content_hash: createHash('sha256')
             .update('likes@2;step-likes;role-passives;layer-resistance;stable-sota\n' + source)
@@ -84,7 +84,7 @@ function catalogFixture() {
   );
   return {
     rules_version: 1,
-    design_version: '0.18.0',
+    design_version: '0.18.1',
     schema_version: 16,
     content_hash: 'a'.repeat(64),
     modes,

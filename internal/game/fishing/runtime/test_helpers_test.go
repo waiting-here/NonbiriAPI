@@ -15,6 +15,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -116,6 +117,7 @@ type gameFixture struct {
 	store     *db.Store
 	database  *sql.DB
 	service   *Service
+	identity  *continuity.Service
 	random    *scriptedSource
 	userAuth  *testUserAuthorizer
 	adminAuth *testAdminAuthorizer
@@ -142,6 +144,10 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 	fixture := &gameFixture{
 		t: t, store: store, database: store.DB(), random: source,
 		userAuth: &testUserAuthorizer{}, adminAuth: &testAdminAuthorizer{},
+	}
+	fixture.identity, err = continuity.New(store.DB(), vault)
+	if err != nil {
+		t.Fatalf("new continuity service: %v", err)
 	}
 	fixture.clock.Store(fixtureNow)
 	fixture.adminID = fixture.seedIdentity("operator", true)
@@ -184,6 +190,9 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 		if err := vault.Close(); err != nil {
 			t.Errorf("close vault: %v", err)
 		}
+		if err := fixture.identity.Close(); err != nil {
+			t.Errorf("close continuity service: %v", err)
+		}
 	})
 	return fixture
 }
@@ -206,6 +215,19 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, discord, label, boolInteger(admin), zero, ze
 	id, err := result.LastInsertId()
 	if err != nil {
 		fixture.t.Fatalf("identity id: %v", err)
+	}
+	if !admin {
+		tx, err := fixture.database.BeginTx(context.Background(), nil)
+		if err != nil {
+			fixture.t.Fatal(err)
+		}
+		defer tx.Rollback()
+		if _, err := fixture.identity.BindUserTx(context.Background(), tx, id); err != nil {
+			fixture.t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			fixture.t.Fatal(err)
+		}
 	}
 	return id
 }

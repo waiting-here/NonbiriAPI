@@ -51,14 +51,37 @@ func (s *Service) Run(ctx context.Context) {
 		case <-timer.C:
 		}
 		batch, cancel := context.WithTimeout(ctx, 2*time.Second)
-		ready, err := s.Advance(batch, s.now().Unix())
+		now := s.now().Unix()
+		ready, err := s.Advance(batch, now)
+		biddingReady := false
+		if err == nil && ready {
+			biddingReady, err = s.AdvanceBidding(batch, now)
+		}
 		cancel()
 		delay := time.Second
-		if err == nil && !ready {
+		if err == nil && (!ready || !biddingReady) {
 			delay = 25 * time.Millisecond
 		}
 		timer.Reset(delay)
 	}
+}
+
+func (s *Service) AdvanceBidding(ctx context.Context, now int64) (bool, error) {
+	if s == nil || s.database == nil || ctx == nil || now < 0 || now > 253402300799 {
+		return false, ErrInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, biddingBatchTime)
+	defer cancel()
+	tx, err := s.database.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	ready, err := advanceBiddingTx(ctx, tx, now)
+	if err != nil {
+		return false, err
+	}
+	return ready, tx.Commit()
 }
 
 func (s *Service) Read(ctx context.Context, user int64, board, window string, page pagination.Request) (Board, error) {
@@ -85,6 +108,11 @@ func (s *Service) Read(ctx context.Context, user int64, board, window string, pa
 		}
 		if !ready {
 			return Board{}, ErrCatchingUp
+		}
+		if board == biddingBoard {
+			if _, err := s.AdvanceBidding(ctx, now); err != nil {
+				return Board{}, err
+			}
 		}
 	}
 	tx, err = s.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -121,7 +149,7 @@ func validBoard(board, window string) bool {
 	switch board {
 	case "charity":
 		return window == "history"
-	case "game_charity", "game_net_profit", "fishing_net_profit", "blackjack_net_profit":
+	case "game_charity", "game_net_profit", "fishing_net_profit", "blackjack_net_profit", biddingBoard:
 		return window == "7d"
 	case "bidding", "blackjack":
 		return window == "7d" || window == "30d" || window == "history"
@@ -132,7 +160,7 @@ func validBoard(board, window string) bool {
 // DeleteTx participates in the account coordinator's transaction, before
 // retiring the ledger owner. Late settlements cannot recreate a deleted FK.
 func DeleteTx(ctx context.Context, tx *sql.Tx, user int64) error {
-	for _, table := range []string{"game_rank_net_rebuild_totals", "game_rank_expiry_work", "game_rank_events", "game_rank_totals"} {
+	for _, table := range []string{"game_bidding_net_rebuild_events", "game_bidding_net_rebuild_totals", "game_rank_net_rebuild_totals", "game_rank_expiry_work", "game_rank_events", "game_rank_totals"} {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE user_id=?`, user); err != nil {
 			return err
 		}

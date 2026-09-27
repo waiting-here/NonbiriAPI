@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/host"
@@ -36,17 +37,26 @@ const (
 	defaultLogLevel       = "info"
 	defaultProxies        = "127.0.0.0/8,::1/128"
 	maxMasterKeyFileBytes = 128
+
+	defaultStartupTimeoutSeconds  = 300
+	minStartupTimeoutSeconds      = 30
+	maxStartupTimeoutSeconds      = 1800
+	defaultShutdownTimeoutSeconds = 30
+	minShutdownTimeoutSeconds     = 5
+	maxShutdownTimeoutSeconds     = 120
 )
 
 // Config holds all resolved startup configuration. The encryption root is
 // kept in an opaque Vault and can be transferred exactly once with
 // TakeSecretVault; it is never exposed as a printable byte slice.
 type Config struct {
-	ListenAddr    string
-	DBPath        string
-	LogLevel      string
-	AdminUsername string
-	AdminPassword string
+	ListenAddr      string
+	DBPath          string
+	LogLevel        string
+	StartupTimeout  time.Duration
+	ShutdownTimeout time.Duration
+	AdminUsername   string
+	AdminPassword   string
 	// MasterSource is non-sensitive provenance for startup diagnostics. The
 	// corresponding key bytes remain inside masterVault.
 	MasterSource        string
@@ -85,10 +95,13 @@ type SMTPConfig struct {
 // Load reads environment variables and returns a fully validated Config, or a
 // descriptive error listing every problem found in the startup set.
 func Load() (*Config, error) {
+	startupTimeout, shutdownTimeout, timeoutErr := LoadTimeouts()
 	c := &Config{
 		ListenAddr:          getenv("NONBIRI_LISTEN_ADDR", defaultListenAddr),
 		DBPath:              getenv("NONBIRI_DB_PATH", defaultDBPath),
 		LogLevel:            getenv("NONBIRI_LOG_LEVEL", defaultLogLevel),
+		StartupTimeout:      startupTimeout,
+		ShutdownTimeout:     shutdownTimeout,
 		AdminUsername:       os.Getenv("NONBIRI_ADMIN_USERNAME"),
 		AdminPassword:       os.Getenv("NONBIRI_ADMIN_PASSWORD"),
 		DiscordClientID:     os.Getenv("NONBIRI_DISCORD_CLIENT_ID"),
@@ -97,6 +110,9 @@ func Load() (*Config, error) {
 	}
 
 	var errs []string
+	if timeoutErr != nil {
+		errs = append(errs, timeoutErr.Error())
+	}
 
 	// Master key: exactly one non-empty source is required. Parsing produces a
 	// short-lived byte slice that setMasterKey clears after constructing the
@@ -173,6 +189,49 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid startup configuration:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return c, nil
+}
+
+// LoadTimeouts resolves the startup and shutdown budget environment values.
+// It is also used by the process entrypoint before loading the rest of Config
+// so the startup deadline can include configuration-file I/O.
+func LoadTimeouts() (startup, shutdown time.Duration, err error) {
+	startup, startupErr := parseTimeoutSeconds(
+		"NONBIRI_STARTUP_TIMEOUT_SECONDS",
+		defaultStartupTimeoutSeconds,
+		minStartupTimeoutSeconds,
+		maxStartupTimeoutSeconds,
+	)
+	shutdown, shutdownErr := parseTimeoutSeconds(
+		"NONBIRI_SHUTDOWN_TIMEOUT_SECONDS",
+		defaultShutdownTimeoutSeconds,
+		minShutdownTimeoutSeconds,
+		maxShutdownTimeoutSeconds,
+	)
+
+	var errs []string
+	if startupErr != nil {
+		errs = append(errs, "NONBIRI_STARTUP_TIMEOUT_SECONDS: "+startupErr.Error())
+	}
+	if shutdownErr != nil {
+		errs = append(errs, "NONBIRI_SHUTDOWN_TIMEOUT_SECONDS: "+shutdownErr.Error())
+	}
+	if len(errs) > 0 {
+		return startup, shutdown, errors.New(strings.Join(errs, "; "))
+	}
+	return startup, shutdown, nil
+}
+
+func parseTimeoutSeconds(name string, defaultSeconds, minSeconds, maxSeconds int) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return time.Duration(defaultSeconds) * time.Second, nil
+	}
+
+	seconds, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || seconds < int64(minSeconds) || seconds > int64(maxSeconds) {
+		return 0, fmt.Errorf("must be an integer in [%d,%d] seconds", minSeconds, maxSeconds)
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
 
 // TakeSecretVault transfers ownership of the configured process vault. It

@@ -1,0 +1,134 @@
+{
+  "format": "nonbiri-fatfish-examples",
+  "version": 1,
+  "license": "AGPL-3.0",
+  "source": "Owner-provided original example set v0.6.0, adapted to integer engine v1",
+  "examples": [
+    {
+      "id": "01-first-rice",
+      "title": "转个弯，就开饭。",
+      "url": "/examples/fatfish/01-first-rice.fatfish.json",
+      "content_hash": "ebdee01746cfb16367f1bc93b9216ca6bf55717f94f6b5a200cbef37140bb4ff",
+      "source_example": "first-rice",
+      "adaptation": "All fish and a movable obstacle start on the board, with two optional tools on the outside workbench; a turn zone leads to the bowl.",
+      "coverage": [
+        "all_initial",
+        "preplaced_tool",
+        "outside_workbench",
+        "movable_tool",
+        "turn"
+      ],
+      "bytes": 3583,
+      "raw_sha256": "230b9329766f1eaffc246ac848a946db8a4bdbfd5a8c0237314e78c35cd1d5e8",
+      "source_sha256": "b5bc881dbb4a38cb26c5a6a9c5bb06126249f90305f9bdef6646201b6ab5762b"
+    },
+    {
+      "id": "02-buffer-pool",
+      "title": "断流池，绕着走。",
+      "url": "/examples/fatfish/02-buffer-pool.fatfish.json",
+      "content_hash": "3953777695b644661b4de2f1b69a8b090f8d5b9816c430a23941c6c75cfb1af5",
+      "source_example": "buffer-pool",
+      "adaptation": "Separate obstacles exercise each fish's turn stream beside a hazard pool.",
+      "coverage": [
+        "independent_random_turn",
+        "hazard"
+      ],
+      "bytes": 2788,
+      "raw_sha256": "15d9e751f432709e7b24d86d8833586ac5d87dc05b47420f5668d72ed54d26ff",
+      "source_sha256": "4926b85b4bb25dcd57219b20219c72ad4621c0e27b3808e13f3bcd709faa962d"
+    },
+    {
+      "id": "03-narrow-bridge",
+      "title": "带宽只够一座桥。",
+      "url": "/examples/fatfish/03-narrow-bridge.fatfish.json",
+      "content_hash": "8e6b2524085a107c63d907e8d237d7baa2a120fb7c7f48271aa04edb9bb27bb2",
+      "source_example": "narrow-bridge",
+      "adaptation": "Fish traverse the passage between pools; one escapes partial cover and one begins on a safe island.",
+      "coverage": [
+        "partial_cover_recovery",
+        "hazard_hole",
+        "multiple_bowls"
+      ],
+      "bytes": 3575,
+      "raw_sha256": "7516e08e0b24b75ae3356aa2ae5c2d39cd9a1fef0a382165e277a9eb8b379362",
+      "source_sha256": "0c85d89346910a6d8a29f85ec3c96ed0c88525cd0414ed5dd9dfdccec06e6622"
+    },
+    {
+      "id": "04-two-turns",
+      "title": "先左转，再右转。",
+      "url": "/examples/fatfish/04-two-turns.fatfish.json",
+      "content_hash": "faf015d188aadca400c2b15310aa0d7337376f05a5f24d38e37887e324f0dd4d",
+      "source_example": "two-turns",
+      "adaptation": "Two entry zones produce the two turns after clearing a movable barrier.",
+      "coverage": [
+        "turn",
+        "direction_entry",
+        "movable_tool"
+      ],
+      "bytes": 3131,
+      "raw_sha256": "0f6dc6e3b59c4cc354ef3a89bb47943c3312e474c860e0fa25f89997c7c22ba9",
+      "source_sha256": "cad77a2210f0abbe54802b4aa1d392dd16f1e0ad64e0471ae1ea5bca203c1934"
+    },
+    {
+      "id": "05-last-barrier",
+      "title": "最后一块挡板。",
+      "url": "/examples/fatfish/05-last-barrier.fatfish.json",
+      "content_hash": "1e2581dec0ec3c76249b889115bbfced3d98dd4f05abf8f7a7fa914ca768c979",
+      "source_example": "last-barrier",
+      "adaptation": "A westbound group needs the last barrier removed between two hazard areas.",
+      "coverage": [
+        "movable_tool",
+        "hazard"
+      ],
+      "bytes": 3085,
+      "raw_sha256": "ea0c8649067a34bb981431cdff9a0c21a612f826d7c25d6b0d47c8c917bfba89",
+      "source_sha256": "c18868575286108fb5fc7509ae7f8425fe61b62942cd48cbda5fd3a091844b05"
+    },
+    {
+      "id": "06-power-button",
+      "title": "踩一下，开饭门。",
+      "url": "/examples/fatfish/06-power-button.fatfish.json",
+      "content_hash": "ba7db4c84191d9f828a9ca6d447be802642774253906f15d9eff8552f4abfd9e",
+      "source_example": "power-button",
+      "adaptation": "A latched switch opens the initially closed gate before fish reach the bowl.",
+      "coverage": [
+        "switch",
+        "gate"
+      ],
+      "bytes": 2347,
+      "raw_sha256": "23f4cbae97889f21a80b74307c43b31d657bc32cf33c7e87322503cbfce4dacc",
+      "source_sha256": "f4971486e3d91cc0ad795ee251217294fff9f575326c7bcaa0fdd335477aa910"
+    },
+    {
+      "id": "07-one-way-stream",
+      "title": "跟着箭头，别逆行。",
+      "url": "/examples/fatfish/07-one-way-stream.fatfish.json",
+      "content_hash": "edb81031086c05a06522ab8f48c76a231ee8f9923f70ae3f32e796463dbd2ca0",
+      "source_example": "one-way-stream",
+      "adaptation": "An entry zone feeds a one-way stream toward the bowl.",
+      "coverage": [
+        "direction_entry",
+        "direction_oneway"
+      ],
+      "bytes": 2486,
+      "raw_sha256": "c640327a8aff29f4147f10823d759a3bcc9095d48407bc8034af9c90cefa8748",
+      "source_sha256": "7f6269d8309b5ed1d5aa02362464a22c53cd85ed0df5e37282377be7e8d097b6"
+    },
+    {
+      "id": "08-rice-buffet",
+      "title": "两碗白饭，都要有鱼。",
+      "url": "/examples/fatfish/08-rice-buffet.fatfish.json",
+      "content_hash": "876ffad2e97668ce87f1c49f1cd88a1c05d5888b8790c21c3de03f1eb5c84020",
+      "source_example": "rice-buffet",
+      "adaptation": "The first bowl fills at four fish; the others pass through to meet the second bowl quota.",
+      "coverage": [
+        "multiple_bowls",
+        "capacity",
+        "movable_tool"
+      ],
+      "bytes": 2523,
+      "raw_sha256": "56e5395537558d227dc72222c39f0b4551eab9589bcb966258f5bb228d4c7243",
+      "source_sha256": "d0b3bf37a505fb9907e5594565497fa1ba724e929551a44b755845cc0c4d0621"
+    }
+  ]
+}

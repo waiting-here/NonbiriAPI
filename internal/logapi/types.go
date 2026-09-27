@@ -146,32 +146,34 @@ func (UserCharityLogDetail) userLogDetail() {}
 type AdminLogRow struct {
 	CharityModel *string `json:"charity_model,omitempty"`
 	RejectionFields
-	ID                string          `json:"id"`
-	RouteKind         RouteKind       `json:"route_kind"`
-	CallerResultClass *ResultClass    `json:"caller_result_class"`
-	CallerStatus      *int            `json:"caller_status"`
-	CallerErrorCode   *string         `json:"caller_error_code"`
-	StartedAt         int64           `json:"started_at"`
-	CompletedAt       *int64          `json:"completed_at"`
-	Usage             LogUsage        `json:"usage"`
-	UserID            *string         `json:"user_id"`
-	AttemptCount      string          `json:"attempt_count"`
-	CallerIdentity    *CallerIdentity `json:"caller_identity"`
+	ID                 string          `json:"id"`
+	RouteKind          RouteKind       `json:"route_kind"`
+	CallerResultClass  *ResultClass    `json:"caller_result_class"`
+	CallerStatus       *int            `json:"caller_status"`
+	CallerErrorCode    *string         `json:"caller_error_code"`
+	StartedAt          int64           `json:"started_at"`
+	CompletedAt        *int64          `json:"completed_at"`
+	Usage              LogUsage        `json:"usage"`
+	UsageTotalMismatch bool            `json:"usage_total_mismatch"`
+	UserID             *string         `json:"user_id"`
+	AttemptCount       string          `json:"attempt_count"`
+	CallerIdentity     *CallerIdentity `json:"caller_identity"`
 }
 
 type AdminLogAttempt struct {
-	AttemptSeq      string     `json:"attempt_seq"`
-	ResultKind      ResultKind `json:"result_kind"`
-	EndpointKeyID   *string    `json:"endpoint_key_id"`
-	EndpointBaseURL string     `json:"endpoint_base_url"`
-	ConnectorType   string     `json:"connector_type"`
-	UpstreamModelID string     `json:"upstream_model_id"`
-	StatusCode      *int       `json:"status_code"`
-	UpstreamCode    *string    `json:"upstream_code"`
-	Diag            *string    `json:"diag"`
-	Usage           LogUsage   `json:"usage"`
-	StartedAt       int64      `json:"started_at"`
-	CompletedAt     int64      `json:"completed_at"`
+	AttemptSeq         string     `json:"attempt_seq"`
+	ResultKind         ResultKind `json:"result_kind"`
+	EndpointKeyID      *string    `json:"endpoint_key_id"`
+	EndpointBaseURL    string     `json:"endpoint_base_url"`
+	ConnectorType      string     `json:"connector_type"`
+	UpstreamModelID    string     `json:"upstream_model_id"`
+	StatusCode         *int       `json:"status_code"`
+	UpstreamCode       *string    `json:"upstream_code"`
+	Diag               *string    `json:"diag"`
+	Usage              LogUsage   `json:"usage"`
+	UsageTotalMismatch bool       `json:"usage_total_mismatch"`
+	StartedAt          int64      `json:"started_at"`
+	CompletedAt        int64      `json:"completed_at"`
 }
 
 type AdminLogDetail struct {
@@ -185,17 +187,18 @@ type AdminLogDetail struct {
 type StewardLogRow struct {
 	CharityModel *string `json:"charity_model,omitempty"`
 	RejectionFields
-	ID                string          `json:"id"`
-	RouteKind         RouteKind       `json:"route_kind"`
-	CallerResultClass *ResultClass    `json:"caller_result_class"`
-	CallerStatus      *int            `json:"caller_status"`
-	CallerErrorCode   *string         `json:"caller_error_code"`
-	StartedAt         int64           `json:"started_at"`
-	CompletedAt       *int64          `json:"completed_at"`
-	Usage             LogUsage        `json:"usage"`
-	UserID            *string         `json:"user_id"`
-	AttemptCount      string          `json:"attempt_count"`
-	CallerIdentity    *CallerIdentity `json:"caller_identity"`
+	ID                 string          `json:"id"`
+	RouteKind          RouteKind       `json:"route_kind"`
+	CallerResultClass  *ResultClass    `json:"caller_result_class"`
+	CallerStatus       *int            `json:"caller_status"`
+	CallerErrorCode    *string         `json:"caller_error_code"`
+	StartedAt          int64           `json:"started_at"`
+	CompletedAt        *int64          `json:"completed_at"`
+	Usage              LogUsage        `json:"usage"`
+	UsageTotalMismatch bool            `json:"usage_total_mismatch"`
+	UserID             *string         `json:"user_id"`
+	AttemptCount       string          `json:"attempt_count"`
+	CallerIdentity     *CallerIdentity `json:"caller_identity"`
 }
 
 type CallerIdentity struct {
@@ -204,18 +207,19 @@ type CallerIdentity struct {
 }
 
 type StewardLogAttempt struct {
-	AttemptSeq      string     `json:"attempt_seq"`
-	ResultKind      ResultKind `json:"result_kind"`
-	EndpointKeyID   *string    `json:"endpoint_key_id"`
-	EndpointBaseURL string     `json:"endpoint_base_url"`
-	ConnectorType   string     `json:"connector_type"`
-	UpstreamModelID string     `json:"upstream_model_id"`
-	StatusCode      *int       `json:"status_code"`
-	UpstreamCode    *string    `json:"upstream_code"`
-	Diag            *string    `json:"diag"`
-	Usage           LogUsage   `json:"usage"`
-	StartedAt       int64      `json:"started_at"`
-	CompletedAt     int64      `json:"completed_at"`
+	AttemptSeq         string     `json:"attempt_seq"`
+	ResultKind         ResultKind `json:"result_kind"`
+	EndpointKeyID      *string    `json:"endpoint_key_id"`
+	EndpointBaseURL    string     `json:"endpoint_base_url"`
+	ConnectorType      string     `json:"connector_type"`
+	UpstreamModelID    string     `json:"upstream_model_id"`
+	StatusCode         *int       `json:"status_code"`
+	UpstreamCode       *string    `json:"upstream_code"`
+	Diag               *string    `json:"diag"`
+	Usage              LogUsage   `json:"usage"`
+	UsageTotalMismatch bool       `json:"usage_total_mismatch"`
+	StartedAt          int64      `json:"started_at"`
+	CompletedAt        int64      `json:"completed_at"`
 }
 
 type StewardLogDetail struct {
@@ -225,19 +229,20 @@ type StewardLogDetail struct {
 }
 
 type ListFilter struct {
-	Phase           string
-	UserID          *int64
-	EndpointKeyID   *int64
-	EndpointBaseURL *string
-	UpstreamModel   *string
-	Model           *string
-	ErrorCode       *string
-	Status          *int
-	From            *int64
-	To              *int64
-	Cursor          string
-	Limit           int
-	Page            *pagination.Request
+	Phase              string
+	UserID             *int64
+	EndpointKeyID      *int64
+	EndpointBaseURL    *string
+	UpstreamModel      *string
+	Model              *string
+	ErrorCode          *string
+	Status             *int
+	UsageTotalMismatch *bool
+	From               *int64
+	To                 *int64
+	Cursor             string
+	Limit              int
+	Page               *pagination.Request
 }
 
 type AttemptFilter struct {

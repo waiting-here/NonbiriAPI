@@ -2,6 +2,7 @@ import { apiFetch } from '@shared/query/http';
 import { decoded, idempotentOptions, queryPath } from './api';
 import {
   amount,
+  array,
   boolean,
   decimal,
   decimalID,
@@ -98,6 +99,85 @@ export interface AdminUser {
   usage: UsageSummary;
   created_at: number;
   updated_at: number;
+}
+
+export type AccountState = 'all' | 'active' | 'deleted';
+export interface DeletedAccount {
+  record_id: string;
+  former_user_id: string | null;
+  discord_id: string | null;
+  snapshot_version: 1 | 2;
+  registered_at: number | null;
+  deleted_at: number | null;
+  effective_level: number | null;
+  ban: { state: 'known' | 'unknown'; active_at_deletion: boolean | null; reason: string | null; until: number | null };
+  charity_pause: { state: 'known' | 'unknown'; active_at_deletion: boolean | null; reason: string | null; until: number | null };
+  source: 'unknown' | 'self' | 'admin' | 'system';
+  actor_user_id: string | null;
+  blacklist_action: 'unknown' | 'none' | 'added' | 'appended';
+  blacklist_reason_codes: ('deletion_penalty_evasion' | 'deletion_debt_evasion')[];
+  general_balance: string | null;
+  game_balance: string | null;
+  donation_credit: string | null;
+  sketch_paper: string | null;
+  sketch_brush: string | null;
+  alert_id?: string;
+}
+export type ManagedAccount =
+  | { account_state: 'active'; user: AdminUser }
+  | { account_state: 'deleted'; deleted: DeletedAccount };
+
+function normalizeDeletionPenalty(value: unknown, label: string): DeletedAccount['ban'] {
+  const root = record(value, ['state', 'active_at_deletion', 'reason', 'until'], label);
+  return {
+    state: oneOf(root.state, ['known', 'unknown'] as const, `${label} state`),
+    active_at_deletion: root.active_at_deletion === null ? null : boolean(root.active_at_deletion, `${label} active`),
+    reason: nullableString(root.reason, `${label} reason`, { max: 1024, bytes: 4096, multiline: true }),
+    until: nullableUnixSecond(root.until, `${label} until`),
+  };
+}
+
+export function normalizeDeletedAccount(value: unknown): DeletedAccount {
+  const fields = ['record_id', 'former_user_id', 'discord_id', 'snapshot_version', 'registered_at', 'deleted_at', 'effective_level', 'ban', 'charity_pause', 'source', 'actor_user_id', 'blacklist_action', 'blacklist_reason_codes', 'general_balance', 'game_balance', 'donation_credit', 'sketch_paper', 'sketch_brush'];
+  const root = record(value, [...fields, 'alert_id'], 'deleted account', fields);
+  const nullableID = (input: unknown, label: string) => input === null ? null : decimalID(input, label);
+  const nullableAmount = (input: unknown, label: string) => input === null ? null : amount(input, label);
+  return {
+    record_id: decimalID(root.record_id, 'record id'),
+    former_user_id: nullableID(root.former_user_id, 'former user id'),
+    discord_id: nullableString(root.discord_id, 'former Discord id', { max: 128, bytes: 128 }),
+    snapshot_version: integer(root.snapshot_version, 'snapshot version', 1, 2) as 1 | 2,
+    registered_at: nullableUnixSecond(root.registered_at, 'registration time'),
+    deleted_at: nullableUnixSecond(root.deleted_at, 'deletion time'),
+    effective_level: root.effective_level === null ? null : integer(root.effective_level, 'former level', 1, 6),
+    ban: normalizeDeletionPenalty(root.ban, 'former ban'),
+    charity_pause: normalizeDeletionPenalty(root.charity_pause, 'former charity pause'),
+    source: oneOf(root.source, ['unknown', 'self', 'admin', 'system'] as const, 'deletion source'),
+    actor_user_id: nullableID(root.actor_user_id, 'deletion actor'),
+    blacklist_action: oneOf(root.blacklist_action, ['unknown', 'none', 'added', 'appended'] as const, 'blacklist action'),
+    blacklist_reason_codes: array(root.blacklist_reason_codes, 'blacklist reasons', 2).map((code) => oneOf(code, ['deletion_penalty_evasion', 'deletion_debt_evasion'] as const, 'blacklist reason')),
+    general_balance: nullableAmount(root.general_balance, 'former general balance'),
+    game_balance: nullableAmount(root.game_balance, 'former game balance'),
+    donation_credit: nullableAmount(root.donation_credit, 'former donation credit'),
+    sketch_paper: nullableAmount(root.sketch_paper, 'former sketch paper'),
+    sketch_brush: nullableAmount(root.sketch_brush, 'former sketch brush'),
+    ...(root.alert_id === undefined ? {} : { alert_id: decimalID(root.alert_id, 'deletion alert') }),
+  };
+}
+
+function normalizeManagedAccount(value: unknown): ManagedAccount {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && 'account_state' in value) {
+    const fields = value as Record<string, unknown>;
+    if (fields.account_state === 'deleted') {
+      const row = record(value, ['account_state', 'deleted'], 'deleted account row');
+      return { account_state: 'deleted', deleted: normalizeDeletedAccount(row.deleted) };
+    }
+    if (fields.account_state !== 'active') invalidResponse('account state');
+    const active = { ...fields };
+    delete active.account_state;
+    return { account_state: 'active', user: normalizeAdminUser(active) };
+  }
+  return { account_state: 'active', user: normalizeAdminUser(value) };
 }
 
 export function normalizeAdminUser(value: unknown): AdminUser {
@@ -209,7 +289,9 @@ export const managedUserKeys = {
     userID: string,
     page: string,
     size: PageSize,
-  ) => [...managementRoot(role), 'users', account, banned, query, level, userID, page, size] as const,
+    state: AccountState = 'active',
+    discordID = '',
+  ) => [...managementRoot(role), 'users', account, banned, query, level, userID, page, size, state, discordID] as const,
   detail: (role: ManagementRole, account: string, id: string) =>
     [...managementRoot(role), 'user', account, id] as const,
 };
@@ -235,6 +317,7 @@ export async function getManagedUsersPage(
   return decoded(
     queryPath(base(role), {
       is_banned: banned || undefined,
+      account_state: 'active',
       q: query || undefined,
       level: level || undefined,
       user_id: userID || undefined,
@@ -252,6 +335,68 @@ export async function getManagedUsersPage(
       ),
     { signal },
   );
+}
+
+export async function getManagedAccountsPage(
+  role: ManagementRole,
+  state: AccountState,
+  banned: '' | 'true' | 'false',
+  query: string,
+  level: string,
+  page: string,
+  pageSize: PageSize,
+  signal?: AbortSignal,
+  userID = '',
+  discordID = '',
+): Promise<NumberedPage<ManagedAccount>> {
+  validateWindow(page, pageSize);
+  validateText(query, 512, true);
+  if (!['all', 'active', 'deleted'].includes(state) || !['', 'true', 'false'].includes(banned) || !['', '1', '2', '3', '4', '5', '6'].includes(level) ||
+      (userID !== '' && !isPageNumber(userID, 9_223_372_036_854_775_807n)) ||
+      (discordID !== '' && !isPageNumber(discordID, 18_446_744_073_709_551_615n))) invalidRequest();
+  return decoded(
+    queryPath(base(role), { account_state: state, is_banned: banned || undefined, q: query || undefined,
+      level: level || undefined, user_id: userID || undefined, discord_id: discordID || undefined, page, page_size: pageSize }),
+    (value) => normalizeNumberedPage(value, 'managed account page', normalizeManagedAccount, page, pageSize,
+      (row) => row.account_state === 'active' ? `active:${row.user.id}` : `deleted:${row.deleted.record_id}`),
+    { signal },
+  );
+}
+
+export async function getDeletedAccountDetail(role: ManagementRole, recordID: string, signal?: AbortSignal): Promise<DeletedAccount> {
+  if (!isPageNumber(recordID, 9_223_372_036_854_775_807n)) invalidRequest();
+  return decoded(`${base(role)}/deleted/${encodeURIComponent(recordID)}`,
+    (value) => { const result = normalizeDeletedAccount(value); if (result.record_id !== recordID) invalidResponse('deleted account identity'); return result; }, { signal });
+}
+
+export interface DeletionDuelAbort {
+  id: string;
+  discord_id: string;
+  game_key: 'bidding' | 'likes';
+  match_id: string;
+  former_user_id: string;
+  reason: 'self_deletion_cancelled_match';
+  occurred_at: number;
+}
+
+export function getDeletionDuelAborts(discordID: string, page: string, signal?: AbortSignal): Promise<NumberedPage<DeletionDuelAbort>> {
+  validateWindow(page, 20);
+  if (!/^[1-9][0-9]{0,19}$/.test(discordID) || BigInt(discordID) > (1n << 64n) - 1n) invalidRequest();
+  return decoded(queryPath('/admin/api/users/deletion-duel-aborts', { discord_id: discordID, page, page_size: 20 }),
+    (value) => normalizeNumberedPage(value, 'deletion duel aborts', (candidate) => {
+      const row = record(candidate, ['id', 'discord_id', 'game_key', 'match_id', 'former_user_id', 'reason', 'occurred_at'], 'deletion duel abort');
+      const result: DeletionDuelAbort = {
+        id: decimalID(row.id, 'duel abort id'),
+        discord_id: string(row.discord_id, 'duel abort Discord id', { max: 20, ascii: true }),
+        game_key: oneOf(row.game_key, ['bidding', 'likes'] as const, 'duel abort game'),
+        match_id: string(row.match_id, 'duel abort match id', { min: 1, max: 128, bytes: 128 }),
+        former_user_id: decimalID(row.former_user_id, 'duel abort former user id'),
+        reason: oneOf(row.reason, ['self_deletion_cancelled_match'] as const, 'duel abort reason'),
+        occurred_at: unixSecond(row.occurred_at, 'duel abort time'),
+      };
+      if (result.discord_id !== discordID) invalidResponse('duel abort identity');
+      return result;
+    }, page, 20, (row) => row.id), { signal });
 }
 
 export async function getManagedUserDetail(

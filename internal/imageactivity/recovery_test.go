@@ -130,7 +130,7 @@ func TestNaturalEndDoesNotCancelAcceptedTask(t *testing.T) {
 		r, e := f.service.GetTask(f.ctx(f.user), f.user, task.ID)
 		return e == nil && r.Status == "succeeded"
 	})
-	if _, err := f.service.Submit(f.ctx(f.other), f.other, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", Prompt: "too late"}); err == nil {
+	if _, err := f.service.Submit(f.ctx(f.other), f.other, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", ExpectedPricingRevision: "1", Prompt: "too late"}); err == nil {
 		t.Fatal("natural end accepted new task")
 	}
 	f.checkLedger(t)

@@ -254,6 +254,10 @@ func (s *Service) releaseClaimTx(ctx context.Context, tx *sql.Tx, record claimRe
 			return ErrInvariant
 		}
 		if record.purpose == PurposeCharity {
+			if _, err := callbackTx.ExecContext(callbackCtx, `DELETE FROM charity_dispatch_receipts
+WHERE attempt_id=? AND state='reserved'`, record.claimID); err != nil {
+				return fmt.Errorf("claim: release physical dispatch reservation: %w", err)
+			}
 			if err := s.charity.ReleaseUndispatched(callbackCtx, callbackTx, CharityRelease{
 				RequestID:     record.requestID,
 				ClaimID:       record.claimID,
@@ -415,13 +419,15 @@ func (s *Service) completeAttemptTx(
 		_, err := callbackTx.ExecContext(callbackCtx, `INSERT INTO request_attempts(
 claim_id,request_log_id,attempt_seq,endpoint_id_snapshot,endpoint_key_id_snapshot,
 connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,upstream_code,diag,
-input_tokens,cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,started_at,completed_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+input_tokens,cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,
+usage_total_mismatch,started_at,completed_at)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			record.claimID, record.requestLogID, record.attemptSeq,
 			nullableSQLInt64(snapshot.endpointID), nullableSQLInt64(snapshot.endpointKeyID),
 			snapshot.connectorType, snapshot.baseURL, snapshot.upstreamModel, outcome.Kind,
 			status, code, diag, outcome.Usage.UncachedInputTokens, outcome.Usage.CacheWriteInputTokens,
 			outcome.Usage.CacheReadInputTokens, outcome.Usage.OutputTokens, usageUnknown,
+			boolInt(outcome.Usage.TotalMismatch),
 			record.dispatchedAt.Int64, at)
 		if err != nil {
 			return fmt.Errorf("claim: persist request attempt: %w", err)
@@ -677,17 +683,17 @@ func readAttemptTx(ctx context.Context, tx *sql.Tx, claimID string) (Attempt, er
 	var stateText, kindText, rewardText string
 	var code, diag sql.NullString
 	var upstreamStatus sql.NullInt64
-	var usageUnknown int
+	var usageUnknown, usageTotalMismatch int
 	var rewardActual sql.NullInt64
 	err := tx.QueryRowContext(ctx, `SELECT a.claim_id,c.logical_request_id,a.attempt_seq,c.state,a.result_kind,
 a.upstream_status,a.upstream_code,a.diag,a.input_tokens,a.cache_write_input_tokens,
-a.cache_read_input_tokens,a.output_tokens,a.usage_unknown,a.started_at,a.completed_at,
+a.cache_read_input_tokens,a.output_tokens,a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at,
 c.donor_reward_actual_milli,c.donor_reward_state
 FROM request_attempts a JOIN dispatch_claims c ON c.id=a.claim_id WHERE a.claim_id=?`, claimID).Scan(
 		&attempt.ClaimID, &attempt.RequestID, &attempt.AttemptSeq, &stateText, &kindText,
 		&upstreamStatus, &code, &diag, &attempt.Usage.UncachedInputTokens,
 		&attempt.Usage.CacheWriteInputTokens, &attempt.Usage.CacheReadInputTokens,
-		&attempt.Usage.OutputTokens, &usageUnknown, &attempt.StartedAt, &attempt.CompletedAt,
+		&attempt.Usage.OutputTokens, &usageUnknown, &usageTotalMismatch, &attempt.StartedAt, &attempt.CompletedAt,
 		&rewardActual, &rewardText)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -707,6 +713,10 @@ FROM request_attempts a JOIN dispatch_claims c ON c.id=a.claim_id WHERE a.claim_
 		attempt.Diagnostic = diag.String
 	}
 	attempt.Usage.Present = usageUnknown == 0
+	if usageTotalMismatch != 0 && usageTotalMismatch != 1 {
+		return Attempt{}, ErrInvariant
+	}
+	attempt.Usage.TotalMismatch = usageTotalMismatch == 1
 	if rewardActual.Valid {
 		attempt.RewardActualMilli = rewardActual.Int64
 	}
@@ -805,15 +815,18 @@ func updateRequestLogAttemptAggregateTx(
 	outcome AttemptOutcome,
 	diag string,
 ) error {
-	var attempts, unknown int
+	var attempts, unknown, mismatch int
 	var uncached, cacheWrite, cacheRead, output int64
 	if err := tx.QueryRowContext(ctx, `SELECT attempt_count,uncached_input_tokens,
-cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown
+cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,usage_total_mismatch
 FROM request_logs WHERE id=?`, requestLogID).Scan(
-		&attempts, &uncached, &cacheWrite, &cacheRead, &output, &unknown); err != nil {
+		&attempts, &uncached, &cacheWrite, &cacheRead, &output, &unknown, &mismatch); err != nil {
 		return fmt.Errorf("claim: read request attempt aggregate: %w", err)
 	}
 	if attempts >= MaxAttempts {
+		return ErrInvariant
+	}
+	if mismatch != 0 && mismatch != 1 {
 		return ErrInvariant
 	}
 	errorSource := "upstream"
@@ -822,13 +835,14 @@ FROM request_logs WHERE id=?`, requestLogID).Scan(
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE request_logs SET
 attempt_count=?,uncached_input_tokens=?,cache_write_input_tokens=?,
-cache_read_input_tokens=?,output_tokens=?,usage_unknown=?,error_source=?,error_diag=?
+cache_read_input_tokens=?,output_tokens=?,usage_unknown=?,usage_total_mismatch=?,error_source=?,error_diag=?
 WHERE id=?`, attempts+1,
 		saturatingAddNonnegative(uncached, outcome.Usage.UncachedInputTokens),
 		saturatingAddNonnegative(cacheWrite, outcome.Usage.CacheWriteInputTokens),
 		saturatingAddNonnegative(cacheRead, outcome.Usage.CacheReadInputTokens),
 		saturatingAddNonnegative(output, outcome.Usage.OutputTokens),
-		boolInt(unknown != 0 || !outcome.Usage.Present), errorSource, diag, requestLogID); err != nil {
+		boolInt(unknown != 0 || !outcome.Usage.Present),
+		boolInt(mismatch != 0 || outcome.Usage.TotalMismatch), errorSource, diag, requestLogID); err != nil {
 		return fmt.Errorf("claim: update request attempt aggregate: %w", err)
 	}
 	return nil

@@ -96,7 +96,9 @@ func newLogFixture(t *testing.T) *logFixture {
  route_kind TEXT NOT NULL, caller_result_class TEXT, caller_status INTEGER, caller_error_code TEXT,
  started_at INTEGER NOT NULL, completed_at INTEGER, uncached_input_tokens INTEGER NOT NULL,
  cache_write_input_tokens INTEGER NOT NULL, cache_read_input_tokens INTEGER NOT NULL,
- output_tokens INTEGER NOT NULL, usage_unknown INTEGER NOT NULL, attempt_count INTEGER NOT NULL,
+ output_tokens INTEGER NOT NULL, usage_unknown INTEGER NOT NULL,
+ usage_total_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(usage_total_mismatch IN (0,1)),
+ attempt_count INTEGER NOT NULL,
  raw_body TEXT, authorization TEXT, cookie TEXT, discord_id TEXT, private_note TEXT, ciphertext TEXT,
  rejection_stage TEXT,rejection_reason TEXT,request_method TEXT,request_path TEXT)`,
 		`CREATE TABLE request_attempts(
@@ -105,6 +107,7 @@ func newLogFixture(t *testing.T) *logFixture {
  connector_type TEXT NOT NULL, upstream_model_id TEXT NOT NULL, upstream_status INTEGER,
  upstream_code TEXT, diag TEXT, input_tokens INTEGER NOT NULL, cache_write_input_tokens INTEGER NOT NULL,
  cache_read_input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, usage_unknown INTEGER NOT NULL,
+ usage_total_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(usage_total_mismatch IN (0,1)),
  started_at INTEGER NOT NULL, completed_at INTEGER NOT NULL, raw_upstream TEXT, response_body TEXT,
  set_cookie TEXT)`,
 		`CREATE TABLE endpoints(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL,note TEXT NOT NULL)`,

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -35,6 +36,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
 	}
+	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil {
+		return result
+	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json")
 	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
@@ -50,6 +54,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 			defer scanner.Clear()
 			return scanner.Contains(value)
 		},
+	}
+	if policy.HasAdaptation {
+		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()

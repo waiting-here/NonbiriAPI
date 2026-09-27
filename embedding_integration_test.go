@@ -31,6 +31,7 @@ import (
 type embeddingHTTPFixture struct {
 	store                  *db.Store
 	app                    *application
+	forward                *publicForwardRuntime
 	server                 *httptest.Server
 	caller                 string
 	userID, donorID, keyID int64
@@ -115,7 +116,7 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = f.store.Close() })
-	f.app, err = buildApplication(auditConfig(), f.store, vault)
+	f.app, err = buildApplication(context.Background(), auditConfig(), f.store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,11 +151,12 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = runtime.Close() })
+	f.forward = runtime
 	handler, err := stationBoundary(auditConfig(), f.app.audits.Wrap(httpmw.API(runtime.handler)))
 	if err != nil {
 		t.Fatal(err)
@@ -245,6 +247,7 @@ func (f *embeddingHTTPFixture) seedModels(t *testing.T, vault *secret.Vault, bas
 		for _, mode := range []string{"per_request", "per_token"} {
 			model := f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,uncached_user_price,uncached_donor_reward,discount_percent,discount_enabled,flatten_tool_calls,revision,binding_revision,created_at,updated_at) VALUES('provider',?,?,1,?,3000,1250,4000000,2000000,80,1,1,1,1,?,?)`, mode, "[公益]provider/"+mode, mode, now, now)
 			f.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, model)
+			f.exec(t, `INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, model)
 			f.exec(t, `INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,?,'private-model',0,?,?)`, model, donationKey, key, now, now)
 		}
 	}

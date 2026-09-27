@@ -1,9 +1,9 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLocation, useNavigate } from 'react-router';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
 import { adminKeys } from '../data';
-import { AlertsPage } from './AlertsPage';
+import { AlertsPage, validAlertReturnTo } from './AlertsPage';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,6 +74,73 @@ function deferred<T>() {
 }
 
 describe('administrator alerts page', () => {
+  it('rejects off-site and ambiguous return destinations', () => {
+    expect(validAlertReturnTo('https://evil.invalid')).toBeNull();
+    expect(validAlertReturnTo('//evil.invalid')).toBeNull();
+    expect(validAlertReturnTo('/users\\evil')).toBeNull();
+    expect(validAlertReturnTo('/users?deleted=9&page=4&page_size=50')).toBe(
+      '/users?deleted=9&page=4&page_size=50',
+    );
+  });
+
+  it('opens an exact donation alert and links logs by endpoint key, then returns to the prior page', async () => {
+    const donationAlert = alert('7', false, {
+      kind: 'donation_failure_disabled',
+      ref: 'donation-key:71:generation:2:fold:3',
+    });
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/admin/api/session', body: session() },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+        body: page([donationAlert]),
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts/7',
+        body: {
+          alert: donationAlert,
+          context_version: 1,
+          occurred_facts: [
+            { key: 'failure_streak', value: '3' },
+            { key: 'failure_threshold', value: '3' },
+          ],
+          targets: [
+            { kind: 'donation', id: '2', available: true, status: 'approved' },
+            { kind: 'donation_key', id: '71', available: true, status: 'failure_disabled' },
+            { kind: 'endpoint_key', id: '83', available: true, status: 'enabled' },
+          ],
+          current_state: [],
+          related_logs: {
+            endpoint_key_id: '83',
+            from: 1799999100,
+            to: 1800000300,
+            available: true,
+          },
+          resolution_kind: '',
+        },
+      },
+    ]);
+    await renderWithProviders(<AlertsPage />, {
+      station: 'admin',
+      role: 'admin',
+      locale: 'en',
+      route:
+        '/alerts?resolved=false&page=1&page_size=20&alert_id=7&return_to=%2Fusers%3Fdeleted%3D9%26page%3D4%26page_size%3D50',
+    });
+    expect(await screen.findByRole('heading', { name: 'Alert details #7' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Return to previous page' })).toHaveAttribute(
+      'href',
+      '/users?deleted=9&page=4&page_size=50',
+    );
+    expect(
+      await screen.findByRole('link', {
+        name: 'From 15 minutes before to 5 minutes after this alert',
+      }),
+    ).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
+    expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
+  });
+
   it('confirms the administrator session before requesting private alerts', async () => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: {}, status: 401 },
@@ -487,6 +554,228 @@ describe('administrator alerts page', () => {
     await waitFor(() => expect(screen.queryByText('Alert A')).not.toBeInTheDocument());
     expect(screen.getByText('Alert B')).toBeVisible();
   });
+});
+
+it.each([
+  ['issue_projection_incomplete', 'issue', 'iss_' + 'A'.repeat(22), 'current'],
+  ['fishing_retry_exhausted', 'fishing_batch', 'fb_' + 'A'.repeat(22), 'reserved'],
+  ['rps_terminal_retrying', 'rps_session', 'rps_' + 'A'.repeat(22), 'terminal_processing'],
+])(
+  'opens only the exact %s target diagnostic after refresh',
+  async (alertKind, targetKind, id, state) => {
+    const row = alert('77', false, { kind: alertKind, ref: id });
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/admin/api/session', body: session() },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+        body: page([row]),
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts/77',
+        body: {
+          alert: row,
+          context_version: 1,
+          occurred_facts: [],
+          targets: [{ kind: targetKind, id, available: true, status: state }],
+          current_state: [],
+          related_logs: null,
+          resolution_kind: '',
+        },
+      },
+      {
+        method: 'GET',
+        path: `/admin/api/alerts/targets/${targetKind}/${id}`,
+        body: {
+          kind: targetKind,
+          id,
+          facts: [{ key: 'state', value: state }],
+          related_issue_ids: [],
+        },
+      },
+    ]);
+    const rendered = await renderWithProviders(
+      <>
+        <AlertsPage />
+        <LocationProbe />
+      </>,
+      {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route: `/alerts?resolved=false&alert_id=77&target_kind=${targetKind}&target_id=${id}`,
+      },
+    );
+    const heading = await screen.findByRole('heading', {
+      name: new RegExp(`Exact object diagnostic.*${id}`),
+    });
+    expect(heading).toBeVisible();
+    expect(await within(heading.closest('.card')!).findByText(state)).toBeVisible();
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
+      `/admin/api/alerts/targets/${targetKind}/${id}`,
+    );
+    await rendered.user.click(screen.getByRole('button', { name: 'Close diagnostic' }));
+    expect(screen.queryByRole('heading', { name: /Exact object diagnostic/ })).toBeNull();
+    expect(screen.getByTestId('location-search')).not.toHaveTextContent('target_id=');
+    const target = screen.getByText(new RegExp(`#${id}`)).closest('li');
+    expect(target).not.toBeNull();
+    await rendered.user.click(within(target!).getByRole('button', { name: 'Details' }));
+    expect(
+      await screen.findByRole('heading', { name: new RegExp(`Exact object diagnostic.*${id}`) }),
+    ).toBeVisible();
+  },
+);
+
+it('shows only real retained issue references for an incomplete projection alert and keeps the user link', async () => {
+  const issueID = 'iss_' + 'A'.repeat(22);
+  const row = alert('78', false, {
+    kind: 'issue_projection_incomplete',
+    ref: '',
+    subject_user_id: '42',
+  });
+  const fetchMock = installJsonFetchFixtures([
+    { method: 'GET', path: '/admin/api/session', body: session() },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+      body: page([row]),
+    },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts/78',
+      body: {
+        alert: row,
+        context_version: 1,
+        occurred_facts: [],
+        targets: [{ kind: 'user', id: '42', available: true, status: 'active' }],
+        current_state: [],
+        related_logs: null,
+        resolution_kind: '',
+      },
+    },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts/targets/issue_user/42',
+      body: {
+        kind: 'issue_user',
+        id: '42',
+        facts: [
+          { key: 'projection_phase', value: 'checkpointed' },
+          { key: 'retained_issue_count', value: '1' },
+        ],
+        related_issue_ids: [issueID],
+      },
+    },
+  ]);
+  const rendered = await renderWithProviders(<AlertsPage />, {
+    station: 'admin',
+    role: 'admin',
+    locale: 'en',
+    route: '/alerts?resolved=false&alert_id=78&target_kind=issue_user&target_id=42',
+  });
+  expect(await screen.findByRole('link', { name: 'Details' })).toHaveAttribute(
+    'href',
+    '/users?user=42',
+  );
+  expect(await screen.findByText(issueID)).toBeVisible();
+  expect(screen.getByText('Saved rebuild checkpoint')).toBeVisible();
+  expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
+    '/admin/api/alerts/targets/issue_user/42',
+  );
+  await rendered.user.click(screen.getByRole('button', { name: 'Close diagnostic' }));
+  expect(screen.queryByText(issueID)).toBeNull();
+  await rendered.user.click(screen.getByRole('button', { name: 'Issue projection' }));
+  expect(await screen.findByText(issueID)).toBeVisible();
+});
+
+it('does not reinterpret a normal user target as issue projection from crafted URL parameters', async () => {
+  const row = alert('79', false, { kind: 'fetch_failed', subject_user_id: '42' });
+  const fetchMock = installJsonFetchFixtures([
+    { method: 'GET', path: '/admin/api/session', body: session() },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+      body: page([row]),
+    },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts/79',
+      body: {
+        alert: row,
+        context_version: 1,
+        occurred_facts: [],
+        targets: [{ kind: 'user', id: '42', available: true, status: 'active' }],
+        current_state: [],
+        related_logs: null,
+        resolution_kind: '',
+      },
+    },
+  ]);
+  await renderWithProviders(<AlertsPage />, {
+    station: 'admin',
+    role: 'admin',
+    locale: 'en',
+    route: '/alerts?resolved=false&alert_id=79&target_kind=issue_user&target_id=42',
+  });
+  expect(await screen.findByRole('link', { name: 'Details' })).toHaveAttribute(
+    'href',
+    '/users?user=42',
+  );
+  expect(screen.queryByRole('button', { name: 'Issue projection' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: /Exact object diagnostic/ })).toBeNull();
+  expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(
+    '/admin/api/alerts/targets/issue_user/42',
+  );
+});
+
+it('does not open a stale user target from a crafted projection diagnostic URL', async () => {
+  const row = alert('80', false, {
+    kind: 'issue_projection_incomplete',
+    ref: '',
+    subject_user_id: '42',
+  });
+  const fetchMock = installJsonFetchFixtures([
+    { method: 'GET', path: '/admin/api/session', body: session() },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+      body: page([row]),
+    },
+    {
+      method: 'GET',
+      path: '/admin/api/alerts/80',
+      body: {
+        alert: row,
+        context_version: 1,
+        occurred_facts: [],
+        targets: [
+          {
+            kind: 'user',
+            id: '42',
+            available: false,
+            status: 'missing',
+            unavailable_reason: 'deleted',
+          },
+        ],
+        current_state: [],
+        related_logs: null,
+        resolution_kind: '',
+      },
+    },
+  ]);
+  await renderWithProviders(<AlertsPage />, {
+    station: 'admin',
+    role: 'admin',
+    locale: 'en',
+    route: '/alerts?resolved=false&alert_id=80&target_kind=issue_user&target_id=42',
+  });
+  expect(await screen.findByText(/User #42/)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Issue projection' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: /Exact object diagnostic/ })).toBeNull();
+  expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(
+    '/admin/api/alerts/targets/issue_user/42',
+  );
 });
 
 it('filters deletion alerts and resolves only selected unresolved rows', async () => {

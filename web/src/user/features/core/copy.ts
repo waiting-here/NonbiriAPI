@@ -132,6 +132,15 @@ const copy = {
   'home.checkin.today': ['Today', '今日状态'],
   'home.checkin.checkedIn': ['Checked in', '已签到'],
   'home.checkin.notCheckedIn': ['Not checked in yet', '未签到'],
+  'home.checkin.exclusiveNotice': [
+    'Choose one check-in each site day: general credits or game credits. Once you claim either one, the other is unavailable until the next site day.',
+    '每天只能选一种签到：通用积分或游戏积分。今天领过其中一种后，另一种要等到按本站时区计算的明天才能领。',
+  ],
+  'home.checkin.otherChosen': ['Other check-in claimed', '已领取另一种签到'],
+  'home.checkin.otherChosenHint': [
+    'You already chose the other credit check-in today. This one becomes available on the next site day.',
+    '今天已经领取另一种积分签到。按本站时区，明天才能领取此签到。',
+  ],
   'home.checkin.awardRange': ['Award range (credits)', '奖励范围（积分）'],
   'home.checkin.threshold': ['Check-in threshold (credits)', '签到门槛（积分）'],
   'home.checkin.thresholdNone': ['No limit', '无上限'],

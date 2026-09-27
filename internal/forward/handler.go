@@ -109,7 +109,7 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 	defer decoded.Clear()
 	defer clear(filtered)
 	requestattempt.Model(request.Context(), decoded.Model)
-	handler.service.execute(request.Context(), writer, userID, decoded, filtered, mediaType, request.Header.Get("Accept-Language"))
+	handler.service.execute(request.Context(), writer, userID, decoded, filtered, mediaType, request.Header.Get("Accept-Language"), request.Header)
 }
 
 func validateChatMedia(request *http.Request) (string, bool) {

@@ -167,7 +167,7 @@ func TestAcceptCharityUsesExplicitDecisionTimeAcrossClockSecond(t *testing.T) {
 
 		request, err := fixture.service.Accept(context.Background(), AcceptInput{
 			UserID: userID, Route: RouteCharityChat, ModelSnapshot: "[公益]provider/model", AttemptLimit: 2,
-			ReservedMilli: 200, CharityModelID: 1, CharityDecisionNow: &decisionNow,
+			ReservedMilli: 200, OutputTokenFloor: 333, CharityModelID: 1, CharityDecisionNow: &decisionNow,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -194,7 +194,7 @@ func TestAcceptCharityUsesExplicitDecisionTimeAcrossClockSecond(t *testing.T) {
 		fixture.charity.mu.Lock()
 		accepts := append([]CharityAcceptance(nil), fixture.charity.accepts...)
 		fixture.charity.mu.Unlock()
-		if len(accepts) != 1 || accepts[0].AcceptedAt != decisionNow {
+		if len(accepts) != 1 || accepts[0].AcceptedAt != decisionNow || accepts[0].OutputTokenFloor != 333 {
 			t.Fatalf("charity acceptance facts = %+v, want accepted_at %d", accepts, decisionNow)
 		}
 	})

@@ -32,6 +32,10 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/PictureBookSettingsPage')).PictureBookSettingsPage }),
       },
       {
+        path: pathFor('admin-fat-fish'),
+        lazy: async () => ({ Component: (await import('./pages/FatFishPage')).FatFishPage }),
+      },
+      {
         path: pathFor('admin-logs'),
         lazy: async () => ({ Component: (await import('./pages/LogsPage')).LogsPage }),
       },

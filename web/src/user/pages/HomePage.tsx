@@ -276,10 +276,22 @@ function CheckinCard({
     retry: false,
   });
 
+  const refreshBothStatusesAndBalances = async () => {
+    const ownStatus = status.refetch();
+    await Promise.all([
+      ownStatus,
+      queryClient.invalidateQueries({
+        queryKey: coreKeys.home(accountId, asset === 'game' ? 'checkin' : 'game-checkin'),
+      }),
+      queryClient.invalidateQueries({ queryKey: coreKeys.me(accountId) }),
+    ]);
+    return ownStatus;
+  };
+
   const refreshAuthority = async () => {
     setReconciling(true);
     try {
-      const authority = await status.refetch();
+      const authority = await refreshBothStatusesAndBalances();
       if (authority.isSuccess) {
         setOutcomeUnknown(false);
         mutation.reset();
@@ -305,10 +317,7 @@ function CheckinCard({
           },
         });
       }
-      await Promise.all([
-        status.refetch(),
-        queryClient.invalidateQueries({ queryKey: coreKeys.me(accountId) }),
-      ]);
+      await refreshBothStatusesAndBalances();
     } catch (error) {
       if (isOutcomeUnknown(error)) {
         setOutcomeUnknown(true);
@@ -326,12 +335,13 @@ function CheckinCard({
     committed !== null && status.error !== null
       ? true
       : (enabledAuthority?.checked_in_today ?? committed !== null);
+  const blockedByOtherCheckin = displayedAuthority?.blocked_by_other_checkin ?? false;
   const capReached =
     displayedAuthority !== null &&
     displayedAuthority.balance_cap !== '0' &&
     checkinMilli(displayedAuthority.balance) >= checkinMilli(displayedAuthority.balance_cap);
   return (
-    <section className="core-card">
+    <section className="core-card core-checkin-card">
       <div className="core-card__header">
         <h2>{t(asset === 'game' ? 'home.gameCheckinTitle' : 'home.checkinTitle')}</h2>
       </div>
@@ -364,7 +374,11 @@ function CheckinCard({
             <div className="core-metric">
               <span>{t('home.checkin.today')}</span>
               <strong>
-                {checkedIn ? t('home.checkin.checkedIn') : t('home.checkin.notCheckedIn')}
+                {checkedIn
+                  ? t('home.checkin.checkedIn')
+                  : blockedByOtherCheckin
+                    ? t('home.checkin.otherChosen')
+                    : t('home.checkin.notCheckedIn')}
               </strong>
             </div>
             <div className="core-metric">
@@ -391,6 +405,9 @@ function CheckinCard({
               </strong>
             </div>
           </div>
+          {blockedByOtherCheckin ? (
+            <p className="core-status-message">{t('home.checkin.otherChosenHint')}</p>
+          ) : null}
           {displayedAuthority.balance_cap !== '0' ? (
             <p className="core-muted">{t('home.checkin.thresholdHint')}</p>
           ) : null}
@@ -429,6 +446,7 @@ function CheckinCard({
             className="btn btn-primary"
             disabled={
               checkedIn ||
+              blockedByOtherCheckin ||
               mutation.isPending ||
               status.isFetching ||
               status.error !== null ||
@@ -463,20 +481,49 @@ function CapabilitySections({
     enabled: adapters.games.state === 'available',
     retry: false,
   });
+  const generalLoader = adapters.checkin.state === 'available' ? adapters.checkin.load : null;
+  const gameLoader = adapters.gameCheckin.state === 'available' ? adapters.gameCheckin.load : null;
+  const generalStatus = useQuery({
+    queryKey: coreKeys.home(accountId, 'checkin'),
+    queryFn: ({ signal }) => {
+      if (!generalLoader) throw new CapabilityUnavailableError();
+      return accountScopedHomeLoad(queryClient, accountId, generalLoader, signal);
+    },
+    enabled: adapters.checkin.state === 'available',
+    retry: false,
+  });
+  const gameStatus = useQuery({
+    queryKey: coreKeys.home(accountId, 'game-checkin'),
+    queryFn: ({ signal }) => {
+      if (!gameLoader) throw new CapabilityUnavailableError();
+      return accountScopedHomeLoad(queryClient, accountId, gameLoader, signal);
+    },
+    enabled: adapters.gameCheckin.state === 'available',
+    retry: false,
+  });
+  const mutuallyExclusive =
+    generalStatus.data?.mutually_exclusive || gameStatus.data?.mutually_exclusive;
   return (
     <>
-      <CheckinCard
-        key={`general:${accountId}`}
-        accountId={accountId}
-        asset="general"
-        capability={adapters.checkin}
-      />
-      <CheckinCard
-        key={`game:${accountId}`}
-        accountId={accountId}
-        asset="game"
-        capability={adapters.gameCheckin}
-      />
+      {mutuallyExclusive ? (
+        <p className="core-checkin-choice-note" role="note">
+          {t('home.checkin.exclusiveNotice')}
+        </p>
+      ) : null}
+      <div className="core-checkin-grid">
+        <CheckinCard
+          key={`general:${accountId}`}
+          accountId={accountId}
+          asset="general"
+          capability={adapters.checkin}
+        />
+        <CheckinCard
+          key={`game:${accountId}`}
+          accountId={accountId}
+          asset="game"
+          capability={adapters.gameCheckin}
+        />
+      </div>
 
       {adapters.games.state === 'unavailable' ? (
         <section className="core-card">

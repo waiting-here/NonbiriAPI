@@ -39,6 +39,7 @@ var (
 	ErrTerminal              = errors.New("claim: resource is terminal")
 	ErrCredentialUnavailable = errors.New("claim: credential is unavailable")
 	ErrDependencyUnavailable = errors.New("claim: required domain adapter is unavailable")
+	ErrRoutingBusy           = errors.New("claim: charity routing storage is busy")
 	ErrInvariant             = errors.New("claim: persisted invariant is invalid")
 )
 
@@ -135,12 +136,13 @@ type Candidate struct {
 // AcceptInput creates one economic logical request. Model discovery uses the
 // dedicated discovery rail because it has no economic reservation.
 type AcceptInput struct {
-	UserID         int64
-	Route          RouteKind
-	ModelSnapshot  string
-	AttemptLimit   int
-	ReservedMilli  int64
-	CharityModelID int64
+	UserID           int64
+	Route            RouteKind
+	ModelSnapshot    string
+	AttemptLimit     int
+	ReservedMilli    int64
+	OutputTokenFloor int64
+	CharityModelID   int64
 	// CharityDecisionNow is required only for charity and carries the single
 	// request decision time already used to freeze its candidate order.
 	CharityDecisionNow *int64
@@ -164,12 +166,22 @@ type Request struct {
 }
 
 type ClaimInput struct {
-	RequestID     string
-	ActorUserID   int64
-	AttemptSeq    int
-	Purpose       Purpose
-	Candidate     Candidate
-	DonationKeyID int64
+	RequestID        string
+	ActorUserID      int64
+	AttemptSeq       int
+	Purpose          Purpose
+	Candidate        Candidate
+	DonationKeyID    int64
+	OutputTokenFloor int64
+	// BalancedCandidates are already weighted into a random order by the
+	// routing snapshot. Claim chooses among them inside its write transaction.
+	BalancedCandidates []BalancedCandidate
+}
+
+type BalancedCandidate struct {
+	Candidate        Candidate
+	DonationKeyID    int64
+	OutputTokenFloor int64
 }
 
 // Handle is the only value returned by Claim. Its fields are private so a
@@ -181,13 +193,16 @@ type Handle struct {
 	attemptSeq         int
 	purpose            Purpose
 	candidate          Candidate
+	donationKeyID      int64
 	discoveryAuthorize func(context.Context, *sql.Tx) error
 }
 
-func (h Handle) ClaimID() string   { return h.claimID }
-func (h Handle) RequestID() string { return h.requestID }
-func (h Handle) AttemptSeq() int   { return h.attemptSeq }
-func (h Handle) Purpose() Purpose  { return h.purpose }
+func (h Handle) ClaimID() string      { return h.claimID }
+func (h Handle) RequestID() string    { return h.requestID }
+func (h Handle) AttemptSeq() int      { return h.attemptSeq }
+func (h Handle) Purpose() Purpose     { return h.purpose }
+func (h Handle) EndpointKeyID() int64 { return h.candidate.EndpointKeyID }
+func (h Handle) DonationKeyID() int64 { return h.donationKeyID }
 func (h Handle) Target() connectorcontract.Target {
 	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID)
 }
@@ -423,25 +438,27 @@ type Charity interface {
 }
 
 type CharityAcceptance struct {
-	RequestID      string
-	UserID         int64
-	CharityModelID int64
-	ModelSnapshot  string
-	ReservedMilli  int64
-	AttemptLimit   int
-	AcceptedAt     int64
+	RequestID        string
+	UserID           int64
+	CharityModelID   int64
+	ModelSnapshot    string
+	ReservedMilli    int64
+	OutputTokenFloor int64
+	AttemptLimit     int
+	AcceptedAt       int64
 }
 
 type CharityClaimInput struct {
-	RequestID       string
-	ClaimID         string
-	ActorUserID     int64
-	AttemptSeq      int
-	DonationKeyID   int64
-	EndpointID      int64
-	EndpointKeyID   int64
-	UpstreamModelID string
-	ClaimedAt       int64
+	RequestID        string
+	ClaimID          string
+	ActorUserID      int64
+	AttemptSeq       int
+	DonationKeyID    int64
+	EndpointID       int64
+	EndpointKeyID    int64
+	UpstreamModelID  string
+	ClaimedAt        int64
+	OutputTokenFloor int64
 }
 
 type CharityReservation struct {

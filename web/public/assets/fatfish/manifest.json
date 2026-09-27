@@ -1,0 +1,2002 @@
+{
+  "format": "nonbiri-fatfish-assets",
+  "version": 1,
+  "license": "AGPL-3.0",
+  "rights": "Supplied and original artwork under AGPL-3.0; music retains its separate CC-BY-4.0 license. See NOTICE.md.",
+  "tool_visuals": {
+    "barrier": "keycap-barrier",
+    "memory": "cache-puck",
+    "fan": "cooling-fan",
+    "light": "canteen-monitor",
+    "cup": "rice-sack"
+  },
+  "svg": [
+    {
+      "id": "rice-goal",
+      "name": "一大碗白饭",
+      "url": "/assets/fatfish/svg/rice-goal.svg",
+      "category": "props",
+      "role": "goal",
+      "viewBox": [
+        0,
+        0,
+        200,
+        180
+      ],
+      "anchor": [
+        100,
+        145
+      ],
+      "footprint": {
+        "type": "ellipse",
+        "cx": 100,
+        "cy": 134,
+        "rx": 57,
+        "ry": 19
+      },
+      "motion": "steam",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "735f17ef8cb7485416123632e03852087a0cfebf3e4f7bfe3c73684c8e96fdb4",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 5216,
+      "sha256": "735f17ef8cb7485416123632e03852087a0cfebf3e4f7bfe3c73684c8e96fdb4"
+    },
+    {
+      "id": "rice-goal-full",
+      "name": "开饭达标",
+      "url": "/assets/fatfish/svg/rice-goal-full.svg",
+      "category": "props",
+      "role": "goal-state",
+      "viewBox": [
+        0,
+        0,
+        200,
+        180
+      ],
+      "anchor": [
+        100,
+        145
+      ],
+      "footprint": null,
+      "motion": "steam + sparkle",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "6ebfb3c32c0bbbd8d7f9231bc24e4aa24336a1b2c0df958c819e44468a3add3c",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 5692,
+      "sha256": "6ebfb3c32c0bbbd8d7f9231bc24e4aa24336a1b2c0df958c819e44468a3add3c"
+    },
+    {
+      "id": "spawn-hatch",
+      "name": "小鱼上线舱",
+      "url": "/assets/fatfish/svg/spawn-hatch.svg",
+      "category": "props",
+      "role": "spawn",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        139
+      ],
+      "footprint": null,
+      "motion": "led",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "ce520c04fc906263873cb109ed2b21369632e23a683f38975597b61120822b64",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3761,
+      "sha256": "ce520c04fc906263873cb109ed2b21369632e23a683f38975597b61120822b64"
+    },
+    {
+      "id": "spawn-hatch-active",
+      "name": "正在上线",
+      "url": "/assets/fatfish/svg/spawn-hatch-active.svg",
+      "category": "props",
+      "role": "spawn-state",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        139
+      ],
+      "footprint": null,
+      "motion": "led + ripple",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "612c5ad57a9084e246e23385192c83d1168157cd0240b0685f6e80aaf0d0da6b",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3946,
+      "sha256": "612c5ad57a9084e246e23385192c83d1168157cd0240b0685f6e80aaf0d0da6b"
+    },
+    {
+      "id": "cache-puck",
+      "name": "缓存圆墩",
+      "url": "/assets/fatfish/svg/cache-puck.svg",
+      "category": "props",
+      "role": "movable-round",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        124
+      ],
+      "footprint": {
+        "type": "ellipse",
+        "cx": 80,
+        "cy": 100,
+        "rx": 51,
+        "ry": 30
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "93711e9b1a49c056ab2871aaab11546b6399030d0a5f6c10340429c9486ffffd",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3129,
+      "sha256": "93711e9b1a49c056ab2871aaab11546b6399030d0a5f6c10340429c9486ffffd"
+    },
+    {
+      "id": "keycap-barrier",
+      "name": "键帽挡板",
+      "url": "/assets/fatfish/svg/keycap-barrier.svg",
+      "category": "props",
+      "role": "movable-bar",
+      "viewBox": [
+        0,
+        0,
+        240,
+        140
+      ],
+      "anchor": [
+        120,
+        111
+      ],
+      "footprint": {
+        "type": "capsule",
+        "x": 20,
+        "y": 66,
+        "width": 200,
+        "height": 48
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "dafd640523d3a1aeded754bdbd1354b344066658255b7a29aa1d52b52fc93d92",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3391,
+      "sha256": "dafd640523d3a1aeded754bdbd1354b344066658255b7a29aa1d52b52fc93d92"
+    },
+    {
+      "id": "keycap-barrier-vertical",
+      "name": "竖向键帽挡板",
+      "url": "/assets/fatfish/svg/keycap-barrier-vertical.svg",
+      "category": "props",
+      "role": "movable-bar",
+      "viewBox": [
+        0,
+        0,
+        140,
+        240
+      ],
+      "anchor": [
+        65,
+        196
+      ],
+      "footprint": {
+        "type": "capsule",
+        "x": 30,
+        "y": 20,
+        "width": 50,
+        "height": 200
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1d34ef4a3686ef392e9b8b19e5051fb9f9d2904685e32253043cb88cf326d233",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3561,
+      "sha256": "1d34ef4a3686ef392e9b8b19e5051fb9f9d2904685e32253043cb88cf326d233"
+    },
+    {
+      "id": "router-wedge",
+      "name": "路由三角块",
+      "url": "/assets/fatfish/svg/router-wedge.svg",
+      "category": "props",
+      "role": "movable-wedge",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        81,
+        128
+      ],
+      "footprint": {
+        "type": "polygon",
+        "points": [
+          [
+            31,
+            110
+          ],
+          [
+            83,
+            40
+          ],
+          [
+            137,
+            110
+          ]
+        ]
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "4c7a9b70596fdfa0f78a1acd2b808b81121090e2855a5c1459dbb2bc553a8afa",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3105,
+      "sha256": "4c7a9b70596fdfa0f78a1acd2b808b81121090e2855a5c1459dbb2bc553a8afa"
+    },
+    {
+      "id": "server-wall",
+      "name": "固定机柜",
+      "url": "/assets/fatfish/svg/server-wall.svg",
+      "category": "props",
+      "role": "fixed-wall",
+      "viewBox": [
+        0,
+        0,
+        280,
+        140
+      ],
+      "anchor": [
+        140,
+        116
+      ],
+      "footprint": {
+        "type": "rect",
+        "x": 18,
+        "y": 57,
+        "width": 244,
+        "height": 59
+      },
+      "motion": "led",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "196a2be18a9108ad716e18189234fa373c9c54b3b2cda40b50022bb8a789cb4c",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4451,
+      "sha256": "196a2be18a9108ad716e18189234fa373c9c54b3b2cda40b50022bb8a789cb4c"
+    },
+    {
+      "id": "rice-arrow",
+      "name": "开饭箭头",
+      "url": "/assets/fatfish/svg/rice-arrow.svg",
+      "category": "props",
+      "role": "direction-tile",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        114
+      ],
+      "footprint": {
+        "type": "ellipse",
+        "cx": 80,
+        "cy": 87,
+        "rx": 50,
+        "ry": 25
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "102d7790ac14bcf57f77e86715da2a1b58f6c2b2f75f9fa49dd6a24d4410a2fb",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2950,
+      "sha256": "102d7790ac14bcf57f77e86715da2a1b58f6c2b2f75f9fa49dd6a24d4410a2fb"
+    },
+    {
+      "id": "switch-off",
+      "name": "开饭按钮 · 待触发",
+      "url": "/assets/fatfish/svg/switch-off.svg",
+      "category": "props",
+      "role": "pressure-switch",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        127
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [
+        "switch-off",
+        "switch-on"
+      ],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "3d3b49230cbd9f4b4fee1b81c77c0c9aa0ca0b5e90b0b519f76727b2c0c7a710",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3108,
+      "sha256": "3d3b49230cbd9f4b4fee1b81c77c0c9aa0ca0b5e90b0b519f76727b2c0c7a710"
+    },
+    {
+      "id": "switch-on",
+      "name": "开饭按钮 · 已按下",
+      "url": "/assets/fatfish/svg/switch-on.svg",
+      "category": "props",
+      "role": "pressure-switch",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        127
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [
+        "switch-off",
+        "switch-on"
+      ],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "18ae5cac787f3ad0c63097ef5ef38236ae0b5ea42ca3a44107b0f7d01f58a596",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3099,
+      "sha256": "18ae5cac787f3ad0c63097ef5ef38236ae0b5ea42ca3a44107b0f7d01f58a596"
+    },
+    {
+      "id": "gate-closed",
+      "name": "补给闸 · 关闭",
+      "url": "/assets/fatfish/svg/gate-closed.svg",
+      "category": "props",
+      "role": "gate",
+      "viewBox": [
+        0,
+        0,
+        260,
+        160
+      ],
+      "anchor": [
+        130,
+        140
+      ],
+      "footprint": {
+        "type": "rect",
+        "x": 43,
+        "y": 88,
+        "width": 174,
+        "height": 32
+      },
+      "motion": "led",
+      "states": [
+        "gate-closed",
+        "gate-open"
+      ],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "735a47184714e7a6ea91000b1779fe8b1d532c7d753c5ca0c633755d4ca33540",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3270,
+      "sha256": "735a47184714e7a6ea91000b1779fe8b1d532c7d753c5ca0c633755d4ca33540"
+    },
+    {
+      "id": "gate-open",
+      "name": "补给闸 · 开启",
+      "url": "/assets/fatfish/svg/gate-open.svg",
+      "category": "props",
+      "role": "gate",
+      "viewBox": [
+        0,
+        0,
+        260,
+        160
+      ],
+      "anchor": [
+        130,
+        140
+      ],
+      "footprint": null,
+      "motion": "led",
+      "states": [
+        "gate-closed",
+        "gate-open"
+      ],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "dd87082ee553a6133e7274eed16d3b3c60657a86a45a8ca4bd60a05684d1d3d1",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3262,
+      "sha256": "dd87082ee553a6133e7274eed16d3b3c60657a86a45a8ca4bd60a05684d1d3d1"
+    },
+    {
+      "id": "network-bridge",
+      "name": "网线桥",
+      "url": "/assets/fatfish/svg/network-bridge.svg",
+      "category": "props",
+      "role": "safe-bridge",
+      "viewBox": [
+        0,
+        0,
+        320,
+        160
+      ],
+      "anchor": [
+        160,
+        116
+      ],
+      "footprint": {
+        "type": "rect",
+        "x": 20,
+        "y": 49,
+        "width": 280,
+        "height": 56
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "319d048687a938acd5b3c7180bf194ad0d59cc1336f1f52dfe4fb674cfc67f3d",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4130,
+      "sha256": "319d048687a938acd5b3c7180bf194ad0d59cc1336f1f52dfe4fb674cfc67f3d"
+    },
+    {
+      "id": "offline-pool",
+      "name": "掉线池",
+      "url": "/assets/fatfish/svg/offline-pool.svg",
+      "category": "terrain",
+      "role": "hazard",
+      "viewBox": [
+        0,
+        0,
+        360,
+        200
+      ],
+      "anchor": [
+        180,
+        164
+      ],
+      "footprint": {
+        "type": "roundedRect",
+        "x": 24,
+        "y": 39,
+        "width": 312,
+        "height": 116,
+        "r": 25
+      },
+      "motion": "wave",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "7ebef8c8a8b1fb5216ea3ab8c32070ef05899740104b9c2a91b28e134aeb09f8",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4407,
+      "sha256": "7ebef8c8a8b1fb5216ea3ab8c32070ef05899740104b9c2a91b28e134aeb09f8"
+    },
+    {
+      "id": "overheat-vent",
+      "name": "过热散热口",
+      "url": "/assets/fatfish/svg/overheat-vent.svg",
+      "category": "terrain",
+      "role": "hazard",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        134
+      ],
+      "footprint": {
+        "type": "rect",
+        "x": 31,
+        "y": 55,
+        "width": 99,
+        "height": 73
+      },
+      "motion": "heat",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "fe8f90b60b14835e254f04998b609b263f546f39906a25ae7ccac805addae747",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4000,
+      "sha256": "fe8f90b60b14835e254f04998b609b263f546f39906a25ae7ccac805addae747"
+    },
+    {
+      "id": "context-vortex",
+      "name": "上下文漩涡",
+      "url": "/assets/fatfish/svg/context-vortex.svg",
+      "category": "terrain",
+      "role": "hazard-variant",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        131
+      ],
+      "footprint": {
+        "type": "ellipse",
+        "cx": 80,
+        "cy": 92,
+        "rx": 52,
+        "ry": 33
+      },
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "0ba38c3592bf3d6b8b0d5bd33fc54481de05e08228f4d464aa05e9946de7ef46",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2991,
+      "sha256": "0ba38c3592bf3d6b8b0d5bd33fc54481de05e08228f4d464aa05e9946de7ef46"
+    },
+    {
+      "id": "floor-tile",
+      "name": "可拼接地砖",
+      "url": "/assets/fatfish/svg/floor-tile.svg",
+      "category": "terrain",
+      "role": "tile",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "25c2deb3579509952989d39158716314567deec553f105f54769bc34f5984139",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2568,
+      "sha256": "25c2deb3579509952989d39158716314567deec553f105f54769bc34f5984139"
+    },
+    {
+      "id": "floor-edge",
+      "name": "安全边框",
+      "url": "/assets/fatfish/svg/floor-edge.svg",
+      "category": "terrain",
+      "role": "border",
+      "viewBox": [
+        0,
+        0,
+        320,
+        52
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "fb08af3660b1ba476105f873f6d19f033db277a12a6092081c42978eec279ab7",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2995,
+      "sha256": "fb08af3660b1ba476105f873f6d19f033db277a12a6092081c42978eec279ab7"
+    },
+    {
+      "id": "server-rack",
+      "name": "值班机柜",
+      "url": "/assets/fatfish/svg/server-rack.svg",
+      "category": "decor",
+      "role": "decoration",
+      "viewBox": [
+        0,
+        0,
+        160,
+        200
+      ],
+      "anchor": [
+        80,
+        177
+      ],
+      "footprint": null,
+      "motion": "led",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "f6558c8ab7cfc6ea06a8134f8004b88baa159ae6ca123d8b0b6b6f7f25b7c284",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4144,
+      "sha256": "f6558c8ab7cfc6ea06a8134f8004b88baa159ae6ca123d8b0b6b6f7f25b7c284"
+    },
+    {
+      "id": "whale-planter",
+      "name": "鲸尾绿植",
+      "url": "/assets/fatfish/svg/whale-planter.svg",
+      "category": "decor",
+      "role": "decoration",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        139
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "be0bcf74ee8a05088a47bea6beea8ff0ee14ad5ba2ed316cc2f65eddc7b00c3e",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3744,
+      "sha256": "be0bcf74ee8a05088a47bea6beea8ff0ee14ad5ba2ed316cc2f65eddc7b00c3e"
+    },
+    {
+      "id": "rice-sack",
+      "name": "白饭储备",
+      "url": "/assets/fatfish/svg/rice-sack.svg",
+      "category": "decor",
+      "role": "decoration",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        139
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "96e46bb729d116e0daee361170e18a159a2c491a5b5d53e011dbb7172c2adb11",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3250,
+      "sha256": "96e46bb729d116e0daee361170e18a159a2c491a5b5d53e011dbb7172c2adb11"
+    },
+    {
+      "id": "canteen-monitor",
+      "name": "今日供饭屏",
+      "url": "/assets/fatfish/svg/canteen-monitor.svg",
+      "category": "decor",
+      "role": "decoration",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        135
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "9fa68affb50f0f07a38272f16924d10833e0612a2d14b88557446186f9f2c79b",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3422,
+      "sha256": "9fa68affb50f0f07a38272f16924d10833e0612a2d14b88557446186f9f2c79b"
+    },
+    {
+      "id": "cooling-fan",
+      "name": "加班小风扇",
+      "url": "/assets/fatfish/svg/cooling-fan.svg",
+      "category": "decor",
+      "role": "decoration",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        142
+      ],
+      "footprint": null,
+      "motion": "spin",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "4d8f3352a97001604b1608f0c24a415e8f3572ab6d0db21697a1e096d341b792",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3557,
+      "sha256": "4d8f3352a97001604b1608f0c24a415e8f3572ab6d0db21697a1e096d341b792"
+    },
+    {
+      "id": "placement-valid",
+      "name": "可以放置",
+      "url": "/assets/fatfish/svg/placement-valid.svg",
+      "category": "effects",
+      "role": "placement-feedback",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        83
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "aa6d52e8ef223144471a78383833eb2650b1ded8289d5e4abec65965f7308600",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2722,
+      "sha256": "aa6d52e8ef223144471a78383833eb2650b1ded8289d5e4abec65965f7308600"
+    },
+    {
+      "id": "placement-invalid",
+      "name": "此处不能放置",
+      "url": "/assets/fatfish/svg/placement-invalid.svg",
+      "category": "effects",
+      "role": "placement-feedback",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        83
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "26958e9003641b1eb6e2e37a5dfa6cc4a3aaea3671b5c081919be29f4a786fdf",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2749,
+      "sha256": "26958e9003641b1eb6e2e37a5dfa6cc4a3aaea3671b5c081919be29f4a786fdf"
+    },
+    {
+      "id": "rice-sparkles",
+      "name": "米粒庆祝",
+      "url": "/assets/fatfish/svg/rice-sparkles.svg",
+      "category": "effects",
+      "role": "success-feedback",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        125
+      ],
+      "footprint": null,
+      "motion": "sparkle",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "9cf73ed2e7255e053f26f5acde4e49c0f58b3460d11eea573a6742d2c91fed97",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3447,
+      "sha256": "9cf73ed2e7255e053f26f5acde4e49c0f58b3460d11eea573a6742d2c91fed97"
+    },
+    {
+      "id": "spawn-ripple",
+      "name": "上线涟漪",
+      "url": "/assets/fatfish/svg/spawn-ripple.svg",
+      "category": "effects",
+      "role": "spawn-feedback",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        95
+      ],
+      "footprint": null,
+      "motion": "ripple",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "d827aa341c17ea55d476174f874978a39ba91b1549b98ae0b06bc8eb01d981a3",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2713,
+      "sha256": "d827aa341c17ea55d476174f874978a39ba91b1549b98ae0b06bc8eb01d981a3"
+    },
+    {
+      "id": "offline-bubble",
+      "name": "暂时掉线",
+      "url": "/assets/fatfish/svg/offline-bubble.svg",
+      "category": "effects",
+      "role": "loss-feedback",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        124
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1b07aa62df1cf7e5997735b318b7e7249760dcde9cc4c709abe2f0fcae9e7bd9",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2941,
+      "sha256": "1b07aa62df1cf7e5997735b318b7e7249760dcde9cc4c709abe2f0fcae9e7bd9"
+    },
+    {
+      "id": "soft-puff",
+      "name": "软弹碰撞云",
+      "url": "/assets/fatfish/svg/soft-puff.svg",
+      "category": "effects",
+      "role": "bump-feedback",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        122
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "71cbfb5c305c339d6e4c54f4ecef4b4598e717eba22919dcda4bc79f6e5c4d43",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2580,
+      "sha256": "71cbfb5c305c339d6e4c54f4ecef4b4598e717eba22919dcda4bc79f6e5c4d43"
+    },
+    {
+      "id": "busy-ring",
+      "name": "正在认真思考",
+      "url": "/assets/fatfish/svg/busy-ring.svg",
+      "category": "effects",
+      "role": "status-only",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        120
+      ],
+      "footprint": null,
+      "motion": "spin",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "e3243f37a55e41669757463b6e6f87f8986478766c458154110397f42e83bdb2",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2797,
+      "sha256": "e3243f37a55e41669757463b6e6f87f8986478766c458154110397f42e83bdb2"
+    },
+    {
+      "id": "selection-ring",
+      "name": "已选中",
+      "url": "/assets/fatfish/svg/selection-ring.svg",
+      "category": "effects",
+      "role": "selection",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        86
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "0adbed079947ba683664427314493909032b427be6f77ee5ef9eb96ebd02006f",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2551,
+      "sha256": "0adbed079947ba683664427314493909032b427be6f77ee5ef9eb96ebd02006f"
+    },
+    {
+      "id": "icon-play",
+      "name": "开始",
+      "url": "/assets/fatfish/svg/icon-play.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "853a010275866afd55dbcbfe4dcf27a0939194201a3d2933da1d311c5e68fd39",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2450,
+      "sha256": "853a010275866afd55dbcbfe4dcf27a0939194201a3d2933da1d311c5e68fd39"
+    },
+    {
+      "id": "icon-pause",
+      "name": "暂停",
+      "url": "/assets/fatfish/svg/icon-pause.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "08bcc8f2a2dfe6512b3f4a9394a043adc9dd81af245ea5598471cee1bcca455b",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2532,
+      "sha256": "08bcc8f2a2dfe6512b3f4a9394a043adc9dd81af245ea5598471cee1bcca455b"
+    },
+    {
+      "id": "icon-retry",
+      "name": "重试",
+      "url": "/assets/fatfish/svg/icon-retry.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "49cf069821853d53029a3ac52fb7ec167514a0f68e2cc25548447dc8be99f5da",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2475,
+      "sha256": "49cf069821853d53029a3ac52fb7ec167514a0f68e2cc25548447dc8be99f5da"
+    },
+    {
+      "id": "icon-home",
+      "name": "主页",
+      "url": "/assets/fatfish/svg/icon-home.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "ecf63de4d11d949285699ac363ec0e9dbfd84b0bc8b3ec72d4c71798c1c08274",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2477,
+      "sha256": "ecf63de4d11d949285699ac363ec0e9dbfd84b0bc8b3ec72d4c71798c1c08274"
+    },
+    {
+      "id": "icon-sound",
+      "name": "声音开启",
+      "url": "/assets/fatfish/svg/icon-sound.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "4c6d81ccdfb93c0fd3a40c816e68a7a77a845a03613324aaa289c92f338d1f40",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2595,
+      "sha256": "4c6d81ccdfb93c0fd3a40c816e68a7a77a845a03613324aaa289c92f338d1f40"
+    },
+    {
+      "id": "icon-muted",
+      "name": "声音关闭",
+      "url": "/assets/fatfish/svg/icon-muted.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1409e69a84554aba8991a169bc134544cac7071e2b747d347bc74cbc77d0797b",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2601,
+      "sha256": "1409e69a84554aba8991a169bc134544cac7071e2b747d347bc74cbc77d0797b"
+    },
+    {
+      "id": "icon-help",
+      "name": "帮助",
+      "url": "/assets/fatfish/svg/icon-help.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "b2c2248dc23da85b6a6c2da57f989849dac8e226d49f80759c39744ca043b060",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2644,
+      "sha256": "b2c2248dc23da85b6a6c2da57f989849dac8e226d49f80759c39744ca043b060"
+    },
+    {
+      "id": "icon-close",
+      "name": "关闭",
+      "url": "/assets/fatfish/svg/icon-close.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1d9a9c61d16472a08746cb10fd2077239850b20e844c5ed9e17e060122c3c1ac",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2464,
+      "sha256": "1d9a9c61d16472a08746cb10fd2077239850b20e844c5ed9e17e060122c3c1ac"
+    },
+    {
+      "id": "icon-check",
+      "name": "完成",
+      "url": "/assets/fatfish/svg/icon-check.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "4215756e65a8dcd01af3a8a7502b66a3450757c8066e34aea9dced7b0a33898c",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2456,
+      "sha256": "4215756e65a8dcd01af3a8a7502b66a3450757c8066e34aea9dced7b0a33898c"
+    },
+    {
+      "id": "icon-lock",
+      "name": "未解锁",
+      "url": "/assets/fatfish/svg/icon-lock.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "85d3e0e6d6cef0e41c93a256f209310346dd2a127ec0a00634a7de2d1de91d58",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2647,
+      "sha256": "85d3e0e6d6cef0e41c93a256f209310346dd2a127ec0a00634a7de2d1de91d58"
+    },
+    {
+      "id": "icon-rice",
+      "name": "已吃上饭",
+      "url": "/assets/fatfish/svg/icon-rice.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "aa8b6260505a37dd3337b22536d3f5c20dfe92627bab10c35735dc220592550c",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2617,
+      "sha256": "aa8b6260505a37dd3337b22536d3f5c20dfe92627bab10c35735dc220592550c"
+    },
+    {
+      "id": "icon-fish",
+      "name": "场内小鱼",
+      "url": "/assets/fatfish/svg/icon-fish.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "d58bc095851fc123095d5d6fbf0728385bf14490d3c85e37da9272c461630736",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2795,
+      "sha256": "d58bc095851fc123095d5d6fbf0728385bf14490d3c85e37da9272c461630736"
+    },
+    {
+      "id": "icon-timer",
+      "name": "剩余时间",
+      "url": "/assets/fatfish/svg/icon-timer.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "cafa9397961cf1433edb2efb28b7b70ec64a12d727e9872e05cf8aa1f2efd34f",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2571,
+      "sha256": "cafa9397961cf1433edb2efb28b7b70ec64a12d727e9872e05cf8aa1f2efd34f"
+    },
+    {
+      "id": "icon-drag",
+      "name": "可拖动",
+      "url": "/assets/fatfish/svg/icon-drag.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "3a4b20a07c086629d17aa9a37f5018477d6eb041b228697cce773f066ea622f0",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2849,
+      "sha256": "3a4b20a07c086629d17aa9a37f5018477d6eb041b228697cce773f066ea622f0"
+    },
+    {
+      "id": "icon-rotate",
+      "name": "旋转",
+      "url": "/assets/fatfish/svg/icon-rotate.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "0f0fd61ded63082a3f27005cdb63db9ade60dcacfb6658d2b9b533f887b3c9e7",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2483,
+      "sha256": "0f0fd61ded63082a3f27005cdb63db9ade60dcacfb6658d2b9b533f887b3c9e7"
+    },
+    {
+      "id": "icon-next",
+      "name": "继续",
+      "url": "/assets/fatfish/svg/icon-next.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1e04557f5a75699044333ab2d5bc500e10e31e96a0d84cfa73e647230292a7a1",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2457,
+      "sha256": "1e04557f5a75699044333ab2d5bc500e10e31e96a0d84cfa73e647230292a7a1"
+    },
+    {
+      "id": "icon-settings",
+      "name": "设置",
+      "url": "/assets/fatfish/svg/icon-settings.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "64a7ca7aa879fd23365f637e5a1424526c50cc3bb70682e51f0e12166af26660",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3477,
+      "sha256": "64a7ca7aa879fd23365f637e5a1424526c50cc3bb70682e51f0e12166af26660"
+    },
+    {
+      "id": "icon-pointer",
+      "name": "点击提示",
+      "url": "/assets/fatfish/svg/icon-pointer.svg",
+      "category": "icons",
+      "role": "ui-icon",
+      "viewBox": [
+        0,
+        0,
+        36,
+        36
+      ],
+      "anchor": [
+        18,
+        18
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "401d581782b5df242126b741c9e1e4b282bc966516075167f3831b744131e3e9",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2488,
+      "sha256": "401d581782b5df242126b741c9e1e4b282bc966516075167f3831b744131e3e9"
+    },
+    {
+      "id": "medal-bronze",
+      "name": "开饭达标",
+      "url": "/assets/fatfish/svg/medal-bronze.svg",
+      "category": "ui",
+      "role": "result-badge",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        137
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1db42103af1bbf51d4db72da6ee107d239dc7bcdfb9bc3413637b5b7e540e876",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3285,
+      "sha256": "1db42103af1bbf51d4db72da6ee107d239dc7bcdfb9bc3413637b5b7e540e876"
+    },
+    {
+      "id": "medal-silver",
+      "name": "供饭熟练",
+      "url": "/assets/fatfish/svg/medal-silver.svg",
+      "category": "ui",
+      "role": "result-badge",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        137
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "31bbc0e087a523ec031a5d8926018382c50d7512346cb3a6c27944c3146de84c",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3417,
+      "sha256": "31bbc0e087a523ec031a5d8926018382c50d7512346cb3a6c27944c3146de84c"
+    },
+    {
+      "id": "medal-all-fed",
+      "name": "一只都没饿着",
+      "url": "/assets/fatfish/svg/medal-all-fed.svg",
+      "category": "ui",
+      "role": "result-badge",
+      "viewBox": [
+        0,
+        0,
+        160,
+        160
+      ],
+      "anchor": [
+        80,
+        137
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "7caf9973de789c09b19d79d52a8d6e2002918d6239b9e7f46a4185eac8ae311e",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3565,
+      "sha256": "7caf9973de789c09b19d79d52a8d6e2002918d6239b9e7f46a4185eac8ae311e"
+    },
+    {
+      "id": "button-primary",
+      "name": "主按钮",
+      "url": "/assets/fatfish/svg/button-primary.svg",
+      "category": "ui",
+      "role": "button-skin",
+      "viewBox": [
+        0,
+        0,
+        260,
+        78
+      ],
+      "anchor": [
+        130,
+        39
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "7bbed135b84b0a13a7628286edb4611c10ce0740c20bb9992b97904da390f93f",
+      "transform": "Corrected visible vector, title and 260×78 viewport",
+      "license": "AGPL-3.0",
+      "bytes": 2708,
+      "sha256": "ea9f489c98928a8a535d8316cdad542e241b0438047288818b7e6fc5cde38357"
+    },
+    {
+      "id": "button-secondary",
+      "name": "次按钮",
+      "url": "/assets/fatfish/svg/button-secondary.svg",
+      "category": "ui",
+      "role": "button-skin",
+      "viewBox": [
+        0,
+        0,
+        260,
+        78
+      ],
+      "anchor": [
+        130,
+        39
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "fff7cd1e1f2f4d31cb40685e263c0082337fbb545e74ce2fecd9099834d8074d",
+      "transform": "Corrected visible vector, title and 260×78 viewport",
+      "license": "AGPL-3.0",
+      "bytes": 2726,
+      "sha256": "7005c5f861bfcd93a3d3c2293168b219cb4c9f41d681f9c2c75519b373e9ea62"
+    },
+    {
+      "id": "button-disabled",
+      "name": "禁用按钮",
+      "url": "/assets/fatfish/svg/button-disabled.svg",
+      "category": "ui",
+      "role": "button-skin",
+      "viewBox": [
+        0,
+        0,
+        260,
+        78
+      ],
+      "anchor": [
+        130,
+        39
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "43aee32ce1c86b85f9b693b83fa0cab06da74a4796143266678f83ba7c69eb29",
+      "transform": "Corrected visible vector, title and 260×78 viewport",
+      "license": "AGPL-3.0",
+      "bytes": 2717,
+      "sha256": "7f871af9df33bc55726eec000fae48753a180b773ce6085415b20136f74ffcc9"
+    },
+    {
+      "id": "panel-frame",
+      "name": "通用弹窗底板",
+      "url": "/assets/fatfish/svg/panel-frame.svg",
+      "category": "ui",
+      "role": "panel-skin",
+      "viewBox": [
+        0,
+        0,
+        480,
+        340
+      ],
+      "anchor": [
+        240,
+        170
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "5c9529b8e09928b922edcc42d6590b036ef795bb304d4079d8c61bfcdbdcca81",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3292,
+      "sha256": "5c9529b8e09928b922edcc42d6590b036ef795bb304d4079d8c61bfcdbdcca81"
+    },
+    {
+      "id": "result-success",
+      "name": "开饭成功装饰",
+      "url": "/assets/fatfish/svg/result-success.svg",
+      "category": "ui",
+      "role": "result-ornament",
+      "viewBox": [
+        0,
+        0,
+        320,
+        210
+      ],
+      "anchor": [
+        160,
+        190
+      ],
+      "footprint": null,
+      "motion": "steam + sparkle",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "6a758cf5d01a3f323d8d74fff045a25917b716ad53258ce56babe117e979728d",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 15781,
+      "sha256": "6a758cf5d01a3f323d8d74fff045a25917b716ad53258ce56babe117e979728d"
+    },
+    {
+      "id": "result-retry",
+      "name": "再试一次装饰",
+      "url": "/assets/fatfish/svg/result-retry.svg",
+      "category": "ui",
+      "role": "result-ornament",
+      "viewBox": [
+        0,
+        0,
+        320,
+        210
+      ],
+      "anchor": [
+        160,
+        190
+      ],
+      "footprint": null,
+      "motion": "steam",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "4c3e399f4aba72bfc047f208b051692c73376e1d360e269cff3ad36addbd52fd",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 11121,
+      "sha256": "4c3e399f4aba72bfc047f208b051692c73376e1d360e269cff3ad36addbd52fd"
+    },
+    {
+      "id": "title-emblem",
+      "name": "饭碗鲸鱼标记",
+      "url": "/assets/fatfish/svg/title-emblem.svg",
+      "category": "ui",
+      "role": "title-emblem",
+      "viewBox": [
+        0,
+        0,
+        240,
+        200
+      ],
+      "anchor": [
+        120,
+        177
+      ],
+      "footprint": null,
+      "motion": "steam + sparkle",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "319558e088fbffea7cd68bb73f6a4a83e92316fd5c4f7655a9326e1a3d737a1d",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 8289,
+      "sha256": "319558e088fbffea7cd68bb73f6a4a83e92316fd5c4f7655a9326e1a3d737a1d"
+    },
+    {
+      "id": "floor-day",
+      "name": "日间地面",
+      "url": "/assets/fatfish/svg/floor-day.svg",
+      "category": "scenes",
+      "role": "scene-floor",
+      "viewBox": [
+        0,
+        0,
+        960,
+        526
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "6725c5358473e401e58e39bb1f0dbe0e35ecab5cff308ff7cdfe918a08b8851a",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3611,
+      "sha256": "6725c5358473e401e58e39bb1f0dbe0e35ecab5cff308ff7cdfe918a08b8851a"
+    },
+    {
+      "id": "floor-night",
+      "name": "夜班地面",
+      "url": "/assets/fatfish/svg/floor-night.svg",
+      "category": "scenes",
+      "role": "scene-floor",
+      "viewBox": [
+        0,
+        0,
+        960,
+        526
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "9c0bafe35eb9cda05fbf65534d0ea56c4fc1c7bf61e7be87d6f5a88c5d7f7a80",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3629,
+      "sha256": "9c0bafe35eb9cda05fbf65534d0ea56c4fc1c7bf61e7be87d6f5a88c5d7f7a80"
+    },
+    {
+      "id": "floor-portrait",
+      "name": "竖屏地面",
+      "url": "/assets/fatfish/svg/floor-portrait.svg",
+      "category": "scenes",
+      "role": "scene-floor",
+      "viewBox": [
+        0,
+        0,
+        430,
+        553
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "6519b0f13a92b3bb16b76dc7e77d6b262584339ef59f16422feb61379dba5827",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 3656,
+      "sha256": "6519b0f13a92b3bb16b76dc7e77d6b262584339ef59f16422feb61379dba5827"
+    },
+    {
+      "id": "back-wall",
+      "name": "补给站后墙",
+      "url": "/assets/fatfish/svg/back-wall.svg",
+      "category": "scenes",
+      "role": "scene-backdrop",
+      "viewBox": [
+        0,
+        0,
+        960,
+        220
+      ],
+      "anchor": [
+        0,
+        220
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "c328dfc14a3c6d85c265611433b36653b7c2f07bc69bd085684459d6ff1d7c0b",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 19468,
+      "sha256": "c328dfc14a3c6d85c265611433b36653b7c2f07bc69bd085684459d6ff1d7c0b"
+    },
+    {
+      "id": "room-canopy",
+      "name": "补给站顶饰",
+      "url": "/assets/fatfish/svg/room-canopy.svg",
+      "category": "scenes",
+      "role": "scene-border",
+      "viewBox": [
+        0,
+        0,
+        960,
+        100
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "1143435b39cc11f8b24f0459473f435d5c215242b4f1ebac7b7a4bc1750ae10d",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 2878,
+      "sha256": "1143435b39cc11f8b24f0459473f435d5c215242b4f1ebac7b7a4bc1750ae10d"
+    },
+    {
+      "id": "composition-wide",
+      "name": "横屏构图示意",
+      "url": "/assets/fatfish/svg/composition-wide.svg",
+      "category": "compositions",
+      "role": "art-composition",
+      "viewBox": [
+        0,
+        0,
+        960,
+        720
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "0900ae1106f716376db9419443d9360eb848a7ab441399e5df073c1e06ac2fd2",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4196726,
+      "sha256": "0900ae1106f716376db9419443d9360eb848a7ab441399e5df073c1e06ac2fd2"
+    },
+    {
+      "id": "composition-portrait",
+      "name": "竖屏构图示意",
+      "url": "/assets/fatfish/svg/composition-portrait.svg",
+      "category": "compositions",
+      "role": "art-composition",
+      "viewBox": [
+        0,
+        0,
+        430,
+        660
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 64,
+      "source": "Owner-provided art-v0.2",
+      "source_sha256": "c8cf3923a59a693f6ab133a91992addbabe96a134228aaf6aac9bc3eee01abc7",
+      "transform": "Copied without content changes",
+      "license": "AGPL-3.0",
+      "bytes": 4165153,
+      "sha256": "c8cf3923a59a693f6ab133a91992addbabe96a134228aaf6aac9bc3eee01abc7"
+    }
+  ],
+  "character": {
+    "atlas_url": "/assets/fatfish/character/atlas.json",
+    "default_display_height": 48,
+    "frame_count": 24,
+    "files": [
+      {
+        "url": "/assets/fatfish/character/atlas.json",
+        "source": "Owner-provided character-v0.1",
+        "transform": "Renamed source image references",
+        "license": "AGPL-3.0",
+        "bytes": 6905,
+        "sha256": "a92c0cbb756196ee9dcd1fed0ad129e11f27f19bef684b7ecfaaa4c73fdbb7bd",
+        "source_sha256": "64f229d56b667d6d849e5b048423c2577755908dda539bd42db15accbb9d6dd2"
+      },
+      {
+        "url": "/assets/fatfish/character/walk.png",
+        "source": "Owner-provided character-v0.1",
+        "transform": "Copied without content changes",
+        "license": "AGPL-3.0",
+        "bytes": 1531566,
+        "sha256": "4a3e0e0f3f0c92e29d79d288df54f4b804eaf77098a429a05bbc64dac5622716",
+        "source_sha256": "4a3e0e0f3f0c92e29d79d288df54f4b804eaf77098a429a05bbc64dac5622716"
+      },
+      {
+        "url": "/assets/fatfish/character/expressions.png",
+        "source": "Owner-provided character-v0.1",
+        "transform": "Copied without content changes",
+        "license": "AGPL-3.0",
+        "bytes": 1553396,
+        "sha256": "cca8752d7b0f4a4defd2ca4eccd9adfc5985c632e580000b5aa7bd5f90539bd5",
+        "source_sha256": "cca8752d7b0f4a4defd2ca4eccd9adfc5985c632e580000b5aa7bd5f90539bd5"
+      }
+    ]
+  },
+  "cover": {
+    "url": "/assets/fatfish/cover.png",
+    "source": "Original illustration based on supplied mascot artwork",
+    "transform": "New rice-and-obstacle composition, supplied PNG unchanged",
+    "license": "AGPL-3.0",
+    "bytes": 2193862,
+    "sha256": "1c1d2d5f794edd788cbbe2ef0037bf1895bb0fca39b9d6e92e8b0626cbe2d0ef"
+  },
+  "music": {
+    "url": "/assets/fatfish/music/monkeys-spinning-monkeys.mp3",
+    "title": "Monkeys Spinning Monkeys",
+    "artist": "Kevin MacLeod",
+    "isrc": "USUAN1400011",
+    "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Monkeys%20Spinning%20Monkeys.mp3",
+    "transform": "Original MP3 unchanged; looped during playback",
+    "license": "CC-BY-4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "license_file": "/assets/fatfish/music/CC-BY-4.0.txt",
+    "attribution_url": "/assets/fatfish/NOTICE.md",
+    "bytes": 5005207,
+    "sha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14"
+  }
+}

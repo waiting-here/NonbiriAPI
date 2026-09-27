@@ -9,10 +9,12 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 )
 
 const (
-	SchemaVersion         = 10
+	SchemaVersion         = 11
 	CollectionLimit       = 10_000
 	MaxExportBytes        = 16 << 20
 	WorkerBatchLimit      = 100
@@ -49,6 +51,12 @@ type AdminFinalAuthorizer interface {
 	AuthorizeFreshAdmin(context.Context, *sql.Tx, int64) error
 }
 
+// System deletion is available only to an explicitly configured trusted
+// caller. It is never selected from a public request body.
+type SystemDeleteAuthorizer interface {
+	AuthorizeSystemDeletion(context.Context, *sql.Tx, int64) error
+}
+
 type CursorKeyDeriver interface {
 	DeriveGenerationTwoSubkey([]byte) ([]byte, error)
 }
@@ -77,6 +85,9 @@ type DeleteFinalizer interface {
 type DeleteRequest struct {
 	UserID      int64
 	DecisionNow int64
+	Source      DeleteSource
+	ActorUserID int64
+	Before      *adminalerts.DeletionBefore
 }
 
 // DeleteAdapter joins the coordinator-owned transaction. It must not commit,

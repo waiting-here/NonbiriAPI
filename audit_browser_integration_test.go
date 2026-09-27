@@ -96,6 +96,23 @@ func TestAuditBrowserFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	userID, _ := strconv.ParseInt(f.users[0].ID, 10, 64)
+	issueID, err := db.GenerateOpaqueID("iss_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`INSERT INTO user_issues(id,user_id,source,resource_kind,resource_ref,root_cause,generation,state,summary_code,safe_detail,first_seen_at,last_seen_at,count)
+VALUES(?,?,'model_discovery','endpoint_key','17','discovery_failed',1,'current','discovery_failed','synthetic retained issue',?,?,1)`, issueID, userID, now-30, now); err != nil {
+		t.Fatal(err)
+	}
+	alert, err := f.store.DB().Exec(`INSERT INTO admin_alerts(kind,message,subject_user_id,created_at,resolved)
+VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, userID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alertID, err := alert.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
 	minutes := make([]riskaudit.Minute, 5)
 	start := now/60*60 - 360
 	for i := range minutes {
@@ -113,7 +130,8 @@ func TestAuditBrowserFixture(t *testing.T) {
 	model := models[0].(map[string]any)
 	task := f.call("POST", "/api/limited-activities/picture-book/tasks", map[string]any{
 		"model_id": model["id"], "expected_model_revision": model["revision"],
-		"prompt": "fail synthetic audit sample", "n": 1,
+		"expected_pricing_revision": model["pricing_revision"],
+		"prompt":                    "fail synthetic audit sample", "n": 1,
 	}, f.users[0].Cookie, false)["task"].(map[string]any)["id"].(string)
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -170,6 +188,7 @@ func TestAuditBrowserFixture(t *testing.T) {
 		"control_token": controlToken, "users": f.users, "admin_cookie": f.adminCookie,
 		"request_ids": requestIDs, "discovery_id": discovery, "diagnostic_id": diagnosticID,
 		"image_task_id": task, "summaries": summaries,
+		"projection_alert_id": strconv.FormatInt(alertID, 10), "issue_id": issueID,
 		"source_ip": auditBrowserIP, "source_client": auditBrowserClient,
 		"json_body": auditBrowserJSON, "text_body": auditBrowserText,
 		"private_markers": []string{auditBrowserIP, auditBrowserClient, "audit-original-only", "audit-text-only"},

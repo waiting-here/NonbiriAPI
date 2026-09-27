@@ -1,0 +1,447 @@
+{
+  "format": "fat-fish-atlas-v1",
+  "version": "0.1.0",
+  "defaultDisplayHeight": 48,
+  "sources": {
+    "walk": {
+      "file": "walk.png",
+      "width": 1254,
+      "height": 1254
+    },
+    "expressions": {
+      "file": "expressions.png",
+      "width": 1774,
+      "height": 887
+    }
+  },
+  "animations": {
+    "walk-down": {
+      "frames": [
+        "walk-down-00",
+        "walk-down-01",
+        "walk-down-02",
+        "walk-down-03"
+      ],
+      "durationsMs": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true
+    },
+    "walk-left": {
+      "frames": [
+        "walk-left-00",
+        "walk-left-01",
+        "walk-left-02",
+        "walk-left-03"
+      ],
+      "durationsMs": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true
+    },
+    "walk-right": {
+      "frames": [
+        "walk-right-00",
+        "walk-right-01",
+        "walk-right-02",
+        "walk-right-03"
+      ],
+      "durationsMs": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true
+    },
+    "walk-up": {
+      "frames": [
+        "walk-up-00",
+        "walk-up-01",
+        "walk-up-02",
+        "walk-up-03"
+      ],
+      "durationsMs": [
+        125,
+        125,
+        125,
+        125
+      ],
+      "loop": true
+    },
+    "idle": {
+      "frames": [
+        "idle-00",
+        "idle-01",
+        "idle-02",
+        "idle-03"
+      ],
+      "durationsMs": [
+        1350,
+        220,
+        110,
+        520
+      ],
+      "loop": true
+    },
+    "eat": {
+      "frames": [
+        "eat-00",
+        "eat-01",
+        "eat-02",
+        "eat-03"
+      ],
+      "durationsMs": [
+        220,
+        200,
+        380,
+        340
+      ],
+      "loop": true
+    }
+  },
+  "frames": {
+    "walk-down-00": {
+      "source": "walk",
+      "rect": [
+        49,
+        55,
+        273,
+        281
+      ],
+      "pivot": [
+        112.77,
+        268
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-down-01": {
+      "source": "walk",
+      "rect": [
+        349,
+        56,
+        267,
+        281
+      ],
+      "pivot": [
+        115.48,
+        268
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-down-02": {
+      "source": "walk",
+      "rect": [
+        658,
+        57,
+        269,
+        282
+      ],
+      "pivot": [
+        114.14,
+        269
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-down-03": {
+      "source": "walk",
+      "rect": [
+        969,
+        55,
+        267,
+        284
+      ],
+      "pivot": [
+        114.69,
+        271
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-left-00": {
+      "source": "walk",
+      "rect": [
+        62,
+        353,
+        263,
+        272
+      ],
+      "pivot": [
+        84.19,
+        259
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-left-01": {
+      "source": "walk",
+      "rect": [
+        376,
+        352,
+        260,
+        273
+      ],
+      "pivot": [
+        84.78,
+        260
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-left-02": {
+      "source": "walk",
+      "rect": [
+        682,
+        353,
+        263,
+        271
+      ],
+      "pivot": [
+        84.77,
+        258
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-left-03": {
+      "source": "walk",
+      "rect": [
+        988,
+        352,
+        249,
+        274
+      ],
+      "pivot": [
+        85.03,
+        261
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-right-00": {
+      "source": "walk",
+      "rect": [
+        34,
+        642,
+        249,
+        272
+      ],
+      "pivot": [
+        169.75,
+        259
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-right-01": {
+      "source": "walk",
+      "rect": [
+        341,
+        643,
+        249,
+        272
+      ],
+      "pivot": [
+        167.96,
+        259
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-right-02": {
+      "source": "walk",
+      "rect": [
+        641,
+        643,
+        256,
+        270
+      ],
+      "pivot": [
+        175.63,
+        257
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-right-03": {
+      "source": "walk",
+      "rect": [
+        948,
+        642,
+        255,
+        274
+      ],
+      "pivot": [
+        171.15,
+        261
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-up-00": {
+      "source": "walk",
+      "rect": [
+        32,
+        931,
+        267,
+        284
+      ],
+      "pivot": [
+        138.02,
+        271
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-up-01": {
+      "source": "walk",
+      "rect": [
+        345,
+        932,
+        258,
+        282
+      ],
+      "pivot": [
+        134.2,
+        269
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-up-02": {
+      "source": "walk",
+      "rect": [
+        647,
+        932,
+        268,
+        282
+      ],
+      "pivot": [
+        139.5,
+        269
+      ],
+      "referenceHeight": 257.5
+    },
+    "walk-up-03": {
+      "source": "walk",
+      "rect": [
+        957,
+        933,
+        266,
+        283
+      ],
+      "pivot": [
+        138.67,
+        270
+      ],
+      "referenceHeight": 257.5
+    },
+    "idle-00": {
+      "source": "expressions",
+      "rect": [
+        66,
+        71,
+        380,
+        389
+      ],
+      "pivot": [
+        162.72,
+        376
+      ],
+      "referenceHeight": 364.5
+    },
+    "idle-01": {
+      "source": "expressions",
+      "rect": [
+        501,
+        69,
+        386,
+        391
+      ],
+      "pivot": [
+        171.26,
+        378
+      ],
+      "referenceHeight": 364.5
+    },
+    "idle-02": {
+      "source": "expressions",
+      "rect": [
+        940,
+        78,
+        390,
+        382
+      ],
+      "pivot": [
+        166.04,
+        369
+      ],
+      "referenceHeight": 364.5
+    },
+    "idle-03": {
+      "source": "expressions",
+      "rect": [
+        1393,
+        72,
+        381,
+        388
+      ],
+      "pivot": [
+        163.23,
+        375
+      ],
+      "referenceHeight": 364.5
+    },
+    "eat-00": {
+      "source": "expressions",
+      "rect": [
+        55,
+        478,
+        395,
+        389
+      ],
+      "pivot": [
+        172.25,
+        376
+      ],
+      "referenceHeight": 364.5
+    },
+    "eat-01": {
+      "source": "expressions",
+      "rect": [
+        501,
+        481,
+        391,
+        386
+      ],
+      "pivot": [
+        174.25,
+        373
+      ],
+      "referenceHeight": 364.5
+    },
+    "eat-02": {
+      "source": "expressions",
+      "rect": [
+        941,
+        480,
+        394,
+        387
+      ],
+      "pivot": [
+        169.99,
+        374
+      ],
+      "referenceHeight": 364.5
+    },
+    "eat-03": {
+      "source": "expressions",
+      "rect": [
+        1387,
+        481,
+        387,
+        387
+      ],
+      "pivot": [
+        168.65,
+        374
+      ],
+      "referenceHeight": 364.5
+    }
+  }
+}

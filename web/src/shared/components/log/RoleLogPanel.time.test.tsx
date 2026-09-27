@@ -36,6 +36,7 @@ function row(role: LogRole) {
     started_at: 1,
     completed_at: 2,
     usage,
+    ...(role === 'user' ? {} : { usage_total_mismatch: false }),
     ...(role === 'admin' ? { user_id: null, caller_identity: null } : {}),
     ...(role === 'user' ? { model: 'model', attempt_count: '1' } : { attempt_count: '1' }),
     ...(role === 'steward' ? { user_id: null, caller_identity: null } : {}),

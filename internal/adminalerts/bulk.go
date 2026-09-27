@@ -48,7 +48,7 @@ func (repository *Repository) ResolveMany(ctx context.Context, adminID int64, id
 		return BulkResolution{}, ErrNotFound
 	}
 	updateArgs := append([]any{now}, args...)
-	if _, err = tx.ExecContext(ctx, "UPDATE admin_alerts SET resolved=1,resolved_at=? WHERE resolved=0 AND id IN ("+placeholders+")", updateArgs...); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE admin_alerts SET resolved=1,resolved_at=?,resolution_kind='manual' WHERE resolved=0 AND id IN ("+placeholders+")", updateArgs...); err != nil {
 		return BulkResolution{}, err
 	}
 	if err = tx.Commit(); err != nil {

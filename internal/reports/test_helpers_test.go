@@ -18,6 +18,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -239,6 +240,24 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, discord, fmt.Sprintf("report-user-%d", s
 	userID, err := result.LastInsertId()
 	if err != nil {
 		t.Fatalf("seed report actor id: %v", err)
+	}
+	if !admin {
+		identities, err := continuity.New(environment.store.DB(), environment.vault)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer identities.Close()
+		tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := identities.BindUserTx(context.Background(), tx, userID); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	token := fmt.Sprintf("report-session-%d", sequence)
 	generation := fmt.Sprintf("report-generation-%d", sequence)

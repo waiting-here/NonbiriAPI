@@ -98,6 +98,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyLevelThreshold3Milli:         {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
 	KeyLevelThreshold4Milli:         {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
 	KeyCheckinMode:                  {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
+	KeyCheckinMutuallyExclusive:     {"economy", catalogText("每日签到二选一", "Choose one daily check-in"), catalogText("开启后，按站点时区每人每天只能领取通用或游戏积分签到中的一种；各自开关仍有效，已发奖励不追回。", "When enabled, each person can claim either general or game credits once per site day. Each check-in keeps its own availability setting; existing rewards are retained."), unitNone, nil},
 	KeyCheckinAwardMinMilli:         {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
 	KeyCheckinAwardMaxMilli:         {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
 	KeyCreditsCapMilli:              {"economy", catalogText("签到积分门槛", "Check-in credit threshold"), catalogText("可用积分达到该值后拒绝新的签到，不截断已准入奖励。", "Refuses new check-ins once spendable credits reach this value; admitted awards are not truncated."), unitMilli, nil},
@@ -320,6 +321,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("关闭新账号注册。", "Closes new-account registration.")
 	case KeyGatewayUserAttributionEnabled:
 		zero = catalogTextPtr("不发送 Gateway 费用归因标签。", "Does not send a Gateway cost attribution tag.")
+	case KeyCheckinMutuallyExclusive:
+		zero = catalogTextPtr("两种签到恢复各自独立的每日资格，已领过的同种签到仍不能重复。", "Restores independent daily eligibility for each check-in; an already claimed type cannot be claimed again.")
 	case KeySiteTimezoneOffsetMinutes:
 		zero = catalogTextPtr("显式设为 UTC+00:00，不同于未配置。", "Explicitly selects UTC+00:00, distinct from being unconfigured.")
 		nullValue = catalogText("原始 null 表示尚未配置；PATCH null 被拒绝。", "Raw null means not yet configured; PATCH null is rejected.")

@@ -161,9 +161,12 @@ func (repository *Repository) acceptRatesTx(
 		return err
 	}
 	if reporter != nil {
-		if err := add("account", []byte(strconv.FormatInt(reporter.UserID, 10)), 600, 1200, 10); err != nil {
+		digest, err := repository.accountRateTx(ctx, tx, reporter.UserID, now)
+		if err != nil {
 			return err
 		}
+		start := now - now%600
+		checks = append(checks, rateCheck{scope: "account", hash: digest, windowStart: start, expiresAt: start + 1200, limit: 10})
 	}
 	if err := add("fingerprint", fingerprint[:], 600, 1200, 3); err != nil {
 		return err

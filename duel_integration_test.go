@@ -76,6 +76,10 @@ func newDuelWireFixture(t *testing.T) *duelWireFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err := f.app.authRuntime.IdentityContinuity().BindUserTx(context.Background(), tx, f.users[seat]); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
 		for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
 			wallet, err := ledger.CreateUserAssetAccount(context.Background(), tx, f.users[seat], asset, f.now)
 			if err != nil {
@@ -246,7 +250,7 @@ func TestDuelPeriodicRecoveryPreservesAcceptedGames(t *testing.T) {
 	if _, err := f.app.games.RecoverModule(context.Background(), "likes", f.clock.Load(), 100, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if h := f.read(0, "likes"); h.Current == nil || h.Current.Round != 2 || h.Current.Phase != "plan" || h.Current.Deadline == nil || *h.Current.Deadline-f.clock.Load() != 20 {
+	if h := f.read(0, "likes"); h.Current == nil || h.Current.Round != 2 || h.Current.Phase != "plan" || h.Current.Deadline == nil || *h.Current.Deadline-f.clock.Load() != 30 {
 		t.Fatal("periodic recovery did not advance normally", h)
 	}
 	f.checkLedger()
@@ -353,7 +357,7 @@ func TestDuelProductionCancellationEntrypointsAreAtomic(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Cleanup(func() { _ = vault.Close() })
-				f.app, err = buildApplicationWithGameClock(auditConfig(), f.store, vault, func() time.Time { return time.Unix(f.clock.Load(), 0) })
+				f.app, err = buildApplicationWithGameClock(context.Background(), auditConfig(), f.store, vault, func() time.Time { return time.Unix(f.clock.Load(), 0) })
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -362,6 +366,17 @@ func TestDuelProductionCancellationEntrypointsAreAtomic(t *testing.T) {
 			}
 			f.assertCancelled("bidding", bid.ID, reason)
 			f.assertCancelled("likes", likes.ID, reason)
+			var aborts int
+			if err := f.store.DB().QueryRow(`SELECT count(*) FROM self_deletion_duel_aborts WHERE former_user_id=?`, f.users[0]).Scan(&aborts); err != nil {
+				t.Fatal(err)
+			}
+			wantAborts := 0
+			if kind == "deletion" {
+				wantAborts = 2
+			}
+			if aborts != wantAborts {
+				t.Fatalf("self-deletion events=%d want=%d", aborts, wantAborts)
+			}
 			for game, id := range map[string]string{"bidding": bid.ID, "likes": likes.ID} {
 				proof := readRandomProof(f, 1, game, id)
 				if proof.Commitment != openings[game] || len(proof.Seed) != 64 {
@@ -401,7 +416,7 @@ func TestDuelProductionMaintenanceAllowsSettlementAndManualPlanIsRequired(t *tes
 	}
 	f.clock.Store(*s.Deadline)
 	s = *f.read(0, "likes").Current
-	if s.Phase != "plan" || *s.Deadline != f.clock.Load()+20 {
+	if s.Phase != "plan" || *s.Deadline != f.clock.Load()+30 {
 		t.Fatal("maintenance shortened plan")
 	}
 	for seat := range 2 {
@@ -514,7 +529,7 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 						t.Fatalf("early terminal: %+v", h.LatestResult)
 					}
 					s = *h.Current
-					if g == "likes" && (s.Phase != "plan" || *s.Deadline != f.clock.Load()+20) {
+					if g == "likes" && (s.Phase != "plan" || *s.Deadline != f.clock.Load()+30) {
 						t.Fatal("next round shortened")
 					}
 					if g == "bidding" {
@@ -538,7 +553,7 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 				}
 				exported := f.call(seat, "POST", "/api/account/export", nil, true)
 				var doc lifecycle.ExportDocument
-				if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &doc) != nil || doc.SchemaVersion != 10 {
+				if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &doc) != nil || doc.SchemaVersion != 11 {
 					t.Fatalf("personal export: %d %s", exported.Code, exported.Body.String())
 				}
 				v := doc.Bidding

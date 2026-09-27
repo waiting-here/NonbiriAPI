@@ -96,6 +96,7 @@ type fakeUpstream struct {
 	posts, polls, models atomic.Int64
 	mu                   sync.Mutex
 	submitted            []map[string]any
+	catalogBody          []byte
 	started              chan struct{}
 	release              chan struct{}
 	png                  []byte
@@ -126,7 +127,13 @@ func newUpstream(t *testing.T) *fakeUpstream {
 				fmt.Fprint(w, `{"error":"synthetic malformed catalog"}`)
 				return
 			}
-			fmt.Fprint(w, `{"data":[{"id":"studio-test","meta":{"quality":["draft","high"]}}]}`)
+			f.mu.Lock()
+			body := append([]byte(nil), f.catalogBody...)
+			f.mu.Unlock()
+			if len(body) == 0 {
+				body = []byte(`{"data":[{"id":"studio-test","meta":{"quality":["draft","high"]}}]}`)
+			}
+			_, _ = w.Write(body)
 		case "/generate":
 			f.posts.Add(1)
 			var body map[string]any
@@ -336,7 +343,7 @@ func (f *fixture) configure(t *testing.T) {
 		t.Fatalf("catalog %v %v", catalog, err)
 	}
 	f.model = catalog.Data[0].ID
-	input := ModelInput{ExpectedRevision: "0", DisplayName: "Studio", Description: "Synthetic images", Enabled: true, Price: Price{"2", "1"}, Parameters: []ParameterRule{{Key: Prompt, Supported: true, Required: true, Type: "string", MaxLength: &length, LengthUnit: "utf8_bytes"}, {Key: N, Supported: true, Type: "integer", Minimum: &minimum, Maximum: &maximum}}, Combinations: []CombinationRule{}, Mapping: Mapping{Parameters: map[ParameterKey]string{}, Constants: []Constant{}}}
+	input := ModelInput{ExpectedRevision: "0", DisplayName: "Studio", Description: "Synthetic images", Enabled: true, CapabilityConfirmed: true, CatalogType: "image", Price: Price{"2", "1"}, Parameters: []ParameterRule{{Key: Prompt, Supported: true, Required: true, Type: "string", MaxLength: &length, LengthUnit: "utf8_bytes"}, {Key: N, Supported: true, Type: "integer", Minimum: &minimum, Maximum: &maximum}}, Combinations: []CombinationRule{}, Mapping: Mapping{Parameters: map[ParameterKey]string{}, Constants: []Constant{}}}
 	if _, err = f.service.PutModel(f.ctx(f.admin), f.admin, f.model, f.key(), input); err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +401,7 @@ func (f *fixture) wait(t *testing.T, done func() bool) {
 }
 func (f *fixture) submit(t *testing.T, user int64, n int) Task {
 	t.Helper()
-	result, err := f.service.Submit(f.ctx(user), user, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", Prompt: "Private synthetic prompt", N: &n})
+	result, err := f.service.Submit(f.ctx(user), user, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", ExpectedPricingRevision: "1", Prompt: "Private synthetic prompt", N: &n})
 	if err != nil {
 		t.Fatal(err)
 	}

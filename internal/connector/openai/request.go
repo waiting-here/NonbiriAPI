@@ -99,6 +99,24 @@ func (r *ChatRequest) RawField(name string) ([]byte, bool) {
 	return nil, false
 }
 
+// LogicalBody returns a fresh, bounded copy before target model, identity,
+// stream usage, and store policy are rewritten for a physical attempt.
+func (r *ChatRequest) LogicalBody() ([]byte, error) {
+	if r == nil {
+		return nil, ErrInvalidRequest
+	}
+	fields := make(map[string]json.RawMessage, len(r.fields))
+	for _, field := range r.fields {
+		fields[field.name] = field.value
+	}
+	body, err := json.Marshal(fields)
+	if err != nil || int64(len(body)) > r.bodyLimit {
+		clear(body)
+		return nil, ErrPayloadTooLarge
+	}
+	return body, nil
+}
+
 // SupportsOpenAICompatible preserves the existing OpenAI ingress boundary.
 // In particular, stream:null remains invalid for an OpenAI physical candidate
 // even though an Anthropic candidate can faithfully interpret null as false.
@@ -181,6 +199,19 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 	}
 	if !streamSeen {
 		request.Stream = false
+	}
+	if request.Stream {
+		for _, field := range fields {
+			if field.name == "stream_options" {
+				merged, ok := withUsageEnabled(field.value)
+				clear(merged)
+				if !ok {
+					request.Clear()
+					return nil, ErrInvalidRequest
+				}
+				break
+			}
+		}
 	}
 	request.requirements = projectCapabilities(fields, request.Stream)
 	return request, nil
@@ -427,12 +458,13 @@ func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier 
 			}
 		case "stream_options":
 			if r.Stream {
-				if merged, ok := withUsageEnabled(field.value); ok {
-					out.Write(merged)
-					clear(merged)
-				} else {
-					out.Write(field.value)
+				merged, ok := withUsageEnabled(field.value)
+				if !ok {
+					clear(out.Bytes())
+					return nil, ErrInvalidRequest
 				}
+				out.Write(merged)
+				clear(merged)
 			} else {
 				out.Write(field.value)
 			}
@@ -559,6 +591,9 @@ func decodeJSONObject(data []byte, maxFields int) ([]jsonField, error) {
 }
 
 func withUsageEnabled(raw json.RawMessage) ([]byte, bool) {
+	if isJSONNull(raw) {
+		return []byte(`{"include_usage":true}`), true
+	}
 	fields, err := decodeJSONObject(raw, 64)
 	if err != nil {
 		return nil, false

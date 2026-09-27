@@ -18,8 +18,10 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -31,6 +33,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
@@ -39,11 +42,13 @@ import (
 )
 
 type publicForwardRuntime struct {
-	service   *forward.Service
-	flow      *flowcontrol.Controller
-	abuse     *antiabuse.Service
-	lifecycle *lifecyclegate.Gate
-	handler   http.Handler
+	service     *forward.Service
+	flow        *flowcontrol.Controller
+	abuse       *antiabuse.Service
+	clientGuard *clientguard.Service
+	adaptations *requestadaptation.Store
+	lifecycle   *lifecyclegate.Gate
+	handler     http.Handler
 }
 
 func newStewardAutomationHandler(service *stewardautomation.Service, repository *resources.Repository, lifecycle *lifecyclegate.Gate, gate *maintenance.Gate) (http.Handler, error) {
@@ -70,6 +75,8 @@ func newStewardAutomationHandler(service *stewardautomation.Service, repository 
 func newPublicForwardRuntime(
 	store *db.Store,
 	vault *secret.Vault,
+	adaptations *requestadaptation.Store,
+	identities *continuity.Service,
 	claims *claim.Service,
 	charityService *charity.Service,
 	charityRoutes *charityrouting.Service,
@@ -83,11 +90,17 @@ func newPublicForwardRuntime(
 	audits *auditRuntime,
 	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
-	if store == nil || vault == nil || claims == nil || charityService == nil || charityRoutes == nil ||
+	if store == nil || vault == nil || adaptations == nil || identities == nil || claims == nil || charityService == nil || charityRoutes == nil ||
 		resourcesRepository == nil || registry == nil || outboundBackend == nil || debugHub == nil || maintenanceGate == nil || cancelUserDuelsTx == nil {
 		return nil, errors.New("public forward runtime dependencies are required")
 	}
-	lifecycle, err := lifecyclegate.New(lifecyclegate.Config{})
+	lifecycle, err := lifecyclegate.New(lifecyclegate.Config{IdentityResolver: func(ctx context.Context, userID int64) ([32]byte, error) {
+		key, err := identities.UserKey(ctx, userID)
+		if errors.Is(err, continuity.ErrNotFound) {
+			return [32]byte{}, lifecyclegate.ErrInvalid
+		}
+		return [32]byte(key), err
+	}})
 	if err != nil {
 		return nil, fmt.Errorf("create caller lifecycle gate: %w", err)
 	}
@@ -96,7 +109,7 @@ func newPublicForwardRuntime(
 	if audits != nil {
 		observer = audits.collector
 	}
-	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store),
+	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store), Continuity: identities,
 		Observer: observer,
 		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
 			return applyPublicRPMDenial(ctx, userID, reason, abuse)
@@ -116,13 +129,10 @@ func newPublicForwardRuntime(
 	if len(onBan) > 0 {
 		invalidate = onBan[0]
 	}
-	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: claims, OnBan: invalidate,
+	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: claims, OnBan: invalidate, Continuity: identities,
 		CancelUserDuelsTx: cancelUserDuelsTx,
 		BeginUserRetirement: func(ctx context.Context, userID int64) (antiabuse.Retirement, error) {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			return flow.BeginUserRetirement(userID)
+			return beginRestrictionRetirement(ctx, lifecycle, flow, userID)
 		},
 	})
 	if err != nil {
@@ -131,6 +141,16 @@ func newPublicForwardRuntime(
 	claimRail, err := forward.NewClaimServiceAdapter(claims)
 	if err != nil {
 		return fail(fmt.Errorf("create forward claim adapter: %w", err))
+	}
+	clientGuard, err := clientguard.New(clientguard.Config{
+		Database: store.DB(), Rejections: claims, OnBan: invalidate,
+		CancelUserGamesTx: cancelUserDuelsTx,
+		BeginUserRetirement: func(ctx context.Context, userID int64) (clientguard.Retirement, error) {
+			return beginRestrictionRetirement(ctx, lifecycle, flow, userID)
+		},
+	})
+	if err != nil {
+		return fail(fmt.Errorf("create client rule guard: %w", err))
 	}
 	routingStore, err := routing.New(store)
 	if err != nil {
@@ -162,8 +182,10 @@ func newPublicForwardRuntime(
 		connectors = append(connectors, instance)
 	}
 	forwardConfig := forward.Config{
-		Personal: personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
+		Adaptations: adaptations,
+		Personal:    personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
+		CharityGuard: clientGuard,
 	}
 	if audits != nil {
 		forwardConfig.ErrorScope = audits.observations.DiscoveryScope
@@ -196,7 +218,7 @@ func newPublicForwardRuntime(
 		closed.ServeHTTP(w, r)
 		return true
 	}))
-	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
+	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, adaptations: adaptations, lifecycle: lifecycle, handler: handler}, nil
 }
 
 type charityPolicyRouter struct {

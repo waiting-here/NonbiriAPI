@@ -27,6 +27,23 @@ type EmbeddingRequest struct {
 	Dimensions     int
 }
 
+// LogicalBody returns a fresh, bounded pre-dispatch object for adaptation.
+func (r *EmbeddingRequest) LogicalBody() ([]byte, error) {
+	if r == nil {
+		return nil, ErrInvalidRequest
+	}
+	fields := make(map[string]json.RawMessage, len(r.fields))
+	for _, field := range r.fields {
+		fields[field.name] = field.value
+	}
+	body, err := json.Marshal(fields)
+	if err != nil || int64(len(body)) > r.bodyLimit {
+		clear(body)
+		return nil, ErrPayloadTooLarge
+	}
+	return body, nil
+}
+
 // TopLevelFields returns an immutable field-name projection for fidelity checks.
 func (r *EmbeddingRequest) TopLevelFields() []string {
 	if r == nil {

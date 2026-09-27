@@ -91,7 +91,7 @@ func TestLikesAdapterKeepsSettlementUntilBeginAndHidesLoadout(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err = r.Inspect("quick", s)
-	if err != nil || info.Phase != "plan" || info.Round != 2 || info.Seconds != 20 {
+	if err != nil || info.Phase != "plan" || info.Round != 2 || info.Seconds != 30 {
 		t.Fatal(info, err)
 	}
 	if _, _, err := r.Begin("quick", s); err == nil {

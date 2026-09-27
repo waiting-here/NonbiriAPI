@@ -88,7 +88,7 @@ func TestChatCompilerFidelity(t *testing.T) {
 			t.Fatal(fragment)
 		}
 	}
-	for _, extra := range []string{`"store":false`, `"max_completion_tokens":128`, `"parallel_tool_calls":false`, `"providerOptions":{"gateway":{"user":"injected"}}`, `"user":"injected"`, `"unknown":null`, `"n":2`, `"logit_bias":{"1":1}`, `"logprobs":true`, `"response_format":{"type":"json_object"}`, `"stop":[null]`, `"stop":[""]`, `"seed":9007199254740992`, `"tools":[{"type":"web_search"}]`, `"tool_choice":"required"`} {
+	for _, extra := range []string{`"store":false`, `"max_completion_tokens":128`, `"parallel_tool_calls":false`, `"providerOptions":{"gateway":{"user":"injected"}}`, `"user":"injected"`, `"unknown":null`, `"thinking":{"type":"enabled","budget_tokens":4096}`, `"reasoning_effort":"low"`, `"reasoning":{"effort":"medium"}`, `"n":2`, `"logit_bias":{"1":1}`, `"logprobs":true`, `"response_format":{"type":"json_object"}`, `"stop":[null]`, `"stop":[""]`, `"seed":9007199254740992`, `"tools":[{"type":"web_search"}]`, `"tool_choice":"required"`} {
 		raw := strings.TrimSuffix(prompt, "}") + "," + extra + "}"
 		r, err := openai.DecodeChatRequest(strings.NewReader(raw), 4<<20)
 		if err == nil && SupportsRequest(r) {
@@ -146,9 +146,30 @@ func TestUsageRequiresUnambiguousBucketsAndNoDoubleCount(t *testing.T) {
 			t.Fatalf("%s %+v %v", raw, u, err)
 		}
 	}
-	for _, raw := range []string{`{"inputTokens":{"total":1,"noCache":2}}`, `{"inputTokens":{"noCache":-1}}`, `{"outputTokens":{"total":2,"text":2,"reasoning":1}}`, `{"inputTokens":{"noCache":9223372036854775807,"cacheRead":1,"cacheWrite":0},"outputTokens":{"total":1}}`} {
+	for _, raw := range []string{`{"inputTokens":{"total":1,"noCache":2}}`, `{"inputTokens":{"noCache":-1}}`, `{"inputTokens":{"noCache":9223372036854775807,"cacheRead":1,"cacheWrite":0},"outputTokens":{"total":1}}`, `{"inputTokens":{"total":9,"noCache":1,"noCache":4,"cacheRead":3,"cacheWrite":2},"outputTokens":{"total":5}}`, `{"inputTokens":{"total":9,"noCache":4,"cacheRead":3,"cacheWrite":2},"outputTokens":{"total":9,"total":5,"text":2,"reasoning":3}}`} {
 		if _, err := parseUsage([]byte(raw)); err == nil {
 			t.Fatal(raw)
+		}
+	}
+	for _, raw := range []string{
+		`{"inputTokens":{"total":9223372036854775807,"noCache":9223372036854775807,"cacheRead":1,"cacheWrite":0},"outputTokens":{"total":1}}`,
+		`{"inputTokens":{"total":0,"noCache":0,"cacheRead":0,"cacheWrite":0},"outputTokens":{"total":9223372036854775807,"text":9223372036854775807,"reasoning":1}}`,
+	} {
+		usage, err := parseUsage([]byte(raw))
+		if err == nil || usage.Present || !usage.TotalMismatch {
+			t.Fatalf("overflow must not trust reported total: %+v, %v", usage, err)
+		}
+	}
+	for _, tc := range []struct {
+		raw        string
+		wantOutput int64
+	}{
+		{`{"inputTokens":{"total":8,"noCache":4,"cacheRead":3,"cacheWrite":2},"outputTokens":{"total":5}}`, 5},
+		{`{"inputTokens":{"total":9,"noCache":4,"cacheRead":3,"cacheWrite":2},"outputTokens":{"total":2,"text":2,"reasoning":1}}`, 3},
+	} {
+		u, err := parseUsage([]byte(tc.raw))
+		if err != nil || !u.Present || !u.TotalMismatch || u.UncachedInputTokens != 4 || u.OutputTokens != tc.wantOutput {
+			t.Fatalf("valid native buckets with mismatched redundant total = %+v, %v", u, err)
 		}
 	}
 }
@@ -185,6 +206,28 @@ func TestAdapterHeadersTranslationAndCredentialGuard(t *testing.T) {
 	a.Attempt(context.Background(), w, target(), secret(), chat(t, `{"model":"x","messages":[{"role":"developer","content":"x"}]}`), nil, "")
 	if b.calls != 0 {
 		t.Fatal("incompatible request dispatched")
+	}
+}
+
+func TestNativeMockOutboundBillsValidatedComponents(t *testing.T) {
+	upstream := strings.Replace(chatOK, knownUsage,
+		`{"inputTokens":{"total":99,"noCache":4,"cacheRead":3,"cacheWrite":2},"outputTokens":{"total":99,"text":2,"reasoning":3}}`, 1)
+	backend := &fakeBackend{do: func(*http.Request) (*http.Response, error) {
+		return response(upstream, "application/json"), nil
+	}}
+	adapter, err := NewAdapter(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := httptest.NewRecorder()
+	result := adapter.Attempt(context.Background(), writer, target(), secret(), chat(t, prompt), nil, "")
+	if !result.Success || !result.Usage.Present || !result.Usage.TotalMismatch ||
+		result.Usage.UncachedInputTokens != 4 || result.Usage.CacheReadInputTokens != 3 ||
+		result.Usage.CacheWriteInputTokens != 2 || result.Usage.OutputTokens != 5 {
+		t.Fatalf("result=%+v body=%s", result, writer.Body.String())
+	}
+	if !strings.Contains(writer.Body.String(), `"total_tokens":14`) {
+		t.Fatalf("caller projection did not use validated buckets: %s", writer.Body.String())
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
@@ -77,6 +78,7 @@ type CharityRequestPolicy struct {
 // RouteCandidate is one credential-free physical candidate frozen before
 // request acceptance. Its routine formatting is always redacted.
 type RouteCandidate struct {
+	BindingID        int64
 	EndpointID       int64
 	EndpointKeyID    int64
 	DonationKeyID    int64
@@ -85,6 +87,7 @@ type RouteCandidate struct {
 	UpstreamModelID  string
 	Policy           connectorcontract.AttemptPolicy
 	Order            int
+	prepared         *preparedAttempt
 }
 
 func (RouteCandidate) String() string   { return "[redacted forward candidate]" }
@@ -100,7 +103,8 @@ type PersonalSnapshot struct {
 
 type CharitySnapshot struct {
 	CharityPreflight
-	Candidates []RouteCandidate
+	RouteStrategy string
+	Candidates    []RouteCandidate
 }
 
 type ListedModel struct {
@@ -125,6 +129,7 @@ type CharityRouter interface {
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
 	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
+	ReserveForOutput(context.Context, int64, int64, int64) (int64, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)
 }
 
@@ -135,6 +140,7 @@ type ClaimRail interface {
 	TakeForDispatch(context.Context, claim.Handle) (DispatchGrant, error)
 	MarkResponseStarted(context.Context, claim.Handle) error
 	ReleaseUndispatched(context.Context, claim.Handle) (claim.Attempt, error)
+	RevokeUndelivered(context.Context, claim.Handle) error
 	CompleteAttempt(context.Context, claim.Handle, claim.AttemptOutcome) (claim.Attempt, error)
 	CompleteRequest(context.Context, claim.CompleteRequestInput) (claim.Request, error)
 }
@@ -158,6 +164,10 @@ type DebugCapture interface {
 	DecideAfterAdmission(context.Context, debug.CaptureInput) (debug.CaptureDecision, error)
 }
 
+type CharityCallGuard interface {
+	CheckCharityCall(context.Context, int64, string, int64) (clientguard.Decision, error)
+}
+
 // Config is the production composition surface. Connector instances are
 // constructed by root wiring; forward validates them against Registry and
 // never reaches Backend, egress, or Vault directly.
@@ -168,11 +178,13 @@ type Config struct {
 	Charity        CharityRouter
 	Claims         ClaimRail
 	CharityCharges CharityChargeCalculator
+	CharityGuard   CharityCallGuard
 	Debug          DebugCapture
 	Registry       *connector.Registry
 	Connectors     []connector.Connector
 	Safety         *SafetyIdentifierFactory
 	Observer       *connector.SafeObserver
+	Adaptations    AdaptationReader
 	Now            func() time.Time
 	ForwardTimeout time.Duration
 	Settlement     time.Duration

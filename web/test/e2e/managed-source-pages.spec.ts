@@ -645,7 +645,18 @@ async function exerciseManagedSourceBrowser(
   await expect.poll(() => fixture.sourceKeyReads.length).toBeGreaterThan(0);
   expect(fixture.sourceKeyReads.at(-1)).toContain('scope=all');
   expect(fixture.sourceKeyReads.at(-1)).toContain('page=1');
-  await keysSection.getByRole('button', { name: setup.backToSources, exact: true }).click();
+  const backToSources = keysSection.getByRole('button', {
+    name: setup.backToSources,
+    exact: true,
+  });
+  if (setup.station === 'user') {
+    // A pointer at the lower edge must not make the button move in and out of hover.
+    await page.mouse.move(0, 0);
+    const edgeBox = await backToSources.boundingBox();
+    if (!edgeBox) throw new Error('Source return button has no visible bounds');
+    await page.mouse.move(edgeBox.x + edgeBox.width / 2, edgeBox.y + edgeBox.height - 0.5);
+  }
+  await backToSources.click();
   await expect(page).toHaveURL(/charity_section=sources/);
   const cancelledURL = new URL(page.url());
   expect(cancelledURL.searchParams.get('source_q')).toBe('source-needle');

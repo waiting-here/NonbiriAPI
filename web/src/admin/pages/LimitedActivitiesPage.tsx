@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -209,6 +210,10 @@ export function LimitedActivitiesPage({ children }: { readonly children?: ReactN
         )}
         icon="activities"
       />
+      {session.data?.admin ? <Card><h2>{t('饲养大肥鱼', 'Fat Fish')}</h2>
+        <p>{t('配置关卡草稿、不可变版本、试玩与正式期次。', 'Manage level drafts, immutable versions, playtests and formal periods.')}</p>
+        <Link className="btn btn-primary" to="/limited-activities/fat-fish">{t('打开关卡与期次编辑器', 'Open level and period editor')}</Link>
+      </Card> : null}
       {session.isPending ? (
         <LoadingState />
       ) : session.error ? (

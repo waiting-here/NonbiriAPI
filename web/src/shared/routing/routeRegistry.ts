@@ -130,6 +130,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'fat-fish',
+    path: '/activities/fat-fish',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'game-fishing',
     path: '/games/fishing',
     access: 'user',
@@ -271,6 +278,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     navGroup: 'content',
     icon: 'activities',
     labelKey: 'common.activities.limited',
+  }),
+  admin({
+    id: 'admin-fat-fish',
+    path: '/limited-activities/fat-fish',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
   }),
   admin({
     id: 'admin-risk-audit',

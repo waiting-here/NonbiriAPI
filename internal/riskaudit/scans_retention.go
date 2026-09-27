@@ -22,21 +22,40 @@ func cleanupScansTx(ctx context.Context, tx *sql.Tx, now int64, limit int) (Clea
 	if err != nil {
 		return result, err
 	}
-	deleted, err := tx.ExecContext(ctx, `DELETE FROM risk_client_scan_matches WHERE scan_id=? AND request_log_id IN (SELECT request_log_id FROM risk_client_scan_matches WHERE scan_id=? LIMIT ?)`, id, id, limit)
-	if err != nil {
-		return result, err
+	queries := []string{
+		`DELETE FROM risk_scan_result_sources WHERE (scan_id,row_no,request_log_id) IN (SELECT scan_id,row_no,request_log_id FROM risk_scan_result_sources WHERE scan_id=? LIMIT ?)`,
+		`DELETE FROM risk_scan_result_users WHERE (scan_id,row_no,user_id) IN (SELECT scan_id,row_no,user_id FROM risk_scan_result_users WHERE scan_id=? LIMIT ?)`,
+		`DELETE FROM risk_scan_results WHERE (scan_id,row_no) IN (SELECT r.scan_id,r.row_no FROM risk_scan_results r WHERE r.scan_id=? AND NOT EXISTS (SELECT 1 FROM risk_scan_result_sources s WHERE s.scan_id=r.scan_id AND s.row_no=r.row_no) AND NOT EXISTS (SELECT 1 FROM risk_scan_result_users u WHERE u.scan_id=r.scan_id AND u.row_no=r.row_no) LIMIT ?)`,
+		`DELETE FROM risk_client_scan_matches WHERE (scan_id,request_log_id) IN (SELECT scan_id,request_log_id FROM risk_client_scan_matches WHERE scan_id=? LIMIT ?)`,
 	}
-	n, err := deleted.RowsAffected()
-	if err != nil {
-		return result, err
-	}
-	result.Deleted, result.Processed = int(n), int(n)
-	if n < int64(limit) {
-		if _, err = tx.ExecContext(ctx, `DELETE FROM risk_client_scans WHERE id=?`, id); err != nil {
+	for _, query := range queries {
+		remaining := limit - result.Processed
+		if remaining <= 0 {
+			break
+		}
+		deleted, err := tx.ExecContext(ctx, query, id, remaining)
+		if err != nil {
 			return result, err
 		}
-		result.Deleted++
-		result.Processed++
+		n, err := deleted.RowsAffected()
+		if err != nil {
+			return result, err
+		}
+		result.Deleted += int(n)
+		result.Processed += int(n)
+	}
+	if result.Processed < limit {
+		var children bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_scan_results WHERE scan_id=? UNION SELECT 1 FROM risk_client_scan_matches WHERE scan_id=?)`, id, id).Scan(&children); err != nil {
+			return result, err
+		}
+		if !children {
+			if _, err = tx.ExecContext(ctx, `DELETE FROM risk_client_scans WHERE id=?`, id); err != nil {
+				return result, err
+			}
+			result.Deleted++
+			result.Processed++
+		}
 	}
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM risk_client_scans WHERE expires_at<=? OR reason='permission_changed')`, now).Scan(&result.More)
 	return result, err

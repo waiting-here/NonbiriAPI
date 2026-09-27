@@ -59,6 +59,7 @@ func TestImageActivityRootMaintenanceBanDeletionAndExport(t *testing.T) {
 		t.Helper()
 		receipt := f.call("POST", base+"/tasks", map[string]any{
 			"model_id": model["id"], "expected_model_revision": model["revision"], "prompt": prompt, "n": 1,
+			"expected_pricing_revision": model["pricing_revision"],
 		}, f.users[seat].Cookie, false)
 		return receipt["task"].(map[string]any)["id"].(string)
 	}
@@ -123,7 +124,7 @@ func TestImageActivityRootMaintenanceBanDeletionAndExport(t *testing.T) {
 	}
 	exported := lifecycleCall(0, "/api/account/export", nil)
 	var document lifecycle.ExportDocument
-	if exported.Code != http.StatusOK || json.Unmarshal(exported.Body.Bytes(), &document) != nil || document.SchemaVersion != 10 {
+	if exported.Code != http.StatusOK || json.Unmarshal(exported.Body.Bytes(), &document) != nil || document.SchemaVersion != 11 {
 		t.Fatalf("activity export: %d %s", exported.Code, exported.Body.String())
 	}
 	if len(document.ImageTasks) != 1 || document.ImageTasks[0].BillingState != "charged" || len(document.LimitedActivities.Exchanges) != 2 || document.LimitedActivities.Wallet.Paper != "98" || document.LimitedActivities.Wallet.Brush != "19" || document.Inactivity.Activity == nil {

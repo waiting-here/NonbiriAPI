@@ -19,7 +19,8 @@ var generationTwoWithoutProgressionSchema = gatewayBootstrapSchema(generationTwo
 var generationTwoWithoutGovernanceSchema = progressionBootstrapSchema(generationTwoWithoutProgressionSchema)
 var generationTwoWithoutAccountProtectionSchema = governanceBootstrapSchema(generationTwoWithoutGovernanceSchema)
 var generationTwoWithoutAuditScansSchema = accountProtectionBootstrapSchema(generationTwoWithoutAccountProtectionSchema)
-var generationTwoSchema = generationTwoWithoutAuditScansSchema + auditScanSchema
+var generationTwoWithoutInteractionsSchema = generationTwoWithoutAuditScansSchema + auditScanSchema
+var generationTwoSchema = interactionBootstrapSchema(generationTwoWithoutInteractionsSchema)
 
 // Steward reads use their own audit so account deletion can remove the actor
 // link without changing immutable administrator audit identities.

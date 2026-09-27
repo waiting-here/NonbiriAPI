@@ -98,6 +98,9 @@ func RecordTx(ctx context.Context, tx *sql.Tx, c Contribution) error {
 	if err := recordNetTotals(ctx, tx, c, raw); err != nil {
 		return err
 	}
+	if err := recordBiddingNet(ctx, tx, c, raw); err != nil {
+		return err
+	}
 	if profitBoard {
 		for _, window := range []string{"7d", "30d", "history"} {
 			if err := changeTotal(ctx, tx, c.UserID, c.Game, window, c.PositiveProfit, c.SettledAt, 1, raw); err != nil {
@@ -114,9 +117,15 @@ func changeTotal(ctx context.Context, tx *sql.Tx, user int64, board, window stri
 	}
 	var sign int
 	var mag []byte
-	err := tx.QueryRowContext(ctx, `SELECT amount_sign,amount_mag FROM game_rank_totals WHERE user_id=? AND board=? AND window=?`, user, board, window).Scan(&sign, &mag)
+	var previousAt int64
+	var previousPhase int
+	var previousSeq []byte
+	err := tx.QueryRowContext(ctx, `SELECT amount_sign,amount_mag,achieved_at,achieved_phase,achieved_seq FROM game_rank_totals WHERE user_id=? AND board=? AND window=?`, user, board, window).Scan(&sign, &mag, &previousAt, &previousPhase, &previousSeq)
 	current := new(big.Int)
 	if err == nil {
+		if board == biddingBoard && laterBiddingAchievement(previousAt, previousPhase, previousSeq, at, phase, seq) {
+			at, phase, seq = previousAt, previousPhase, previousSeq
+		}
 		value, err := db.NewSM128(sign, mag)
 		if err != nil {
 			return err

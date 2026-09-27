@@ -47,6 +47,7 @@ function parseState(
       continue;
     if (name === 'status' && !/^[1-5][0-9]{2}$/.test(trimmed)) continue;
     if (name === 'phase' && trimmed !== 'handler' && trimmed !== 'pre_handler') continue;
+    if (name === 'usage_total_mismatch' && trimmed !== 'true') continue;
     if (trimmed) filters[name] = trimmed;
   }
   const page = parsePositiveInt(params.get('page')) ?? 1;

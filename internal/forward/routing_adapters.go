@@ -42,6 +42,10 @@ func (adapter *ClaimServiceAdapter) ReleaseUndispatched(ctx context.Context, han
 	return adapter.service.ReleaseUndispatched(ctx, handle)
 }
 
+func (adapter *ClaimServiceAdapter) RevokeUndelivered(ctx context.Context, handle claim.Handle) error {
+	return adapter.service.RevokeUndelivered(ctx, handle)
+}
+
 func (adapter *ClaimServiceAdapter) CompleteAttempt(ctx context.Context, handle claim.Handle, outcome claim.AttemptOutcome) (claim.Attempt, error) {
 	return adapter.service.CompleteAttempt(ctx, handle, outcome)
 }
@@ -183,9 +187,10 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 	out := CharitySnapshot{CharityPreflight: CharityPreflight{
 		ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
-	}}
+	}, RouteStrategy: value.RouteStrategy}
 	for index, candidate := range value.Candidates() {
 		out.Candidates = append(out.Candidates, RouteCandidate{
+			BindingID:  candidate.BindingID,
 			EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
 			DonationKeyID: candidate.DonationKeyID, ConnectorType: candidate.ConnectorType,
 			CanonicalBaseURL: candidate.CanonicalBaseURL, UpstreamModelID: candidate.UpstreamModelID,
@@ -193,6 +198,13 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 		})
 	}
 	return out, nil
+}
+
+func (adapter *CharityRoutingAdapter) ReserveForOutput(ctx context.Context, modelID, currentReserve, outputFloor int64) (int64, error) {
+	if adapter == nil || adapter.service == nil {
+		return 0, ErrInternal
+	}
+	return adapter.service.ReserveForOutput(ctx, modelID, currentReserve, outputFloor)
 }
 
 func (adapter *CharityRoutingAdapter) ListAvailableModels(ctx context.Context, userID, now int64, limit int) ([]ListedModel, error) {

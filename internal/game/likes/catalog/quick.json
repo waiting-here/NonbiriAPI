@@ -1244,7 +1244,7 @@
     "SUB_TOTAL_UPGRADE": 800,
     "TARGET_LIKES": 60,
     "TOKEN_FLOOR": 1,
-    "TURN_SECONDS": 20
+    "TURN_SECONDS": 30
   },
   "passives": [
     {

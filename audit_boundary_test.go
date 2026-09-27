@@ -224,7 +224,7 @@ func TestGenerationTwoFreshAndCurrentApplicationBoot(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pass %d db.Open: %v", pass, err)
 		}
-		app, err := buildApplication(auditConfig(), store, vault)
+		app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 		if err != nil {
 			_ = store.Close()
 			t.Fatalf("pass %d buildApplication: %v", pass, err)
@@ -263,7 +263,7 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
-	app, err := buildApplication(auditConfig(), store, vault)
+	app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +486,8 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		// accessible model so this case reaches short-content enforcement.
 		if _, err := store.DB().Exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,created_at,updated_at)
 VALUES('provider','model','[公益]provider/model',1,'per_request',1,1);
-INSERT INTO charity_model_access(model_id,allowed_level_mask) SELECT id,63 FROM charity_models WHERE full_name='[公益]provider/model'`); err != nil {
+INSERT INTO charity_model_access(model_id,allowed_level_mask) SELECT id,63 FROM charity_models WHERE full_name='[公益]provider/model';
+INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) SELECT id,1,300 FROM charity_models WHERE full_name='[公益]provider/model'`); err != nil {
 			t.Fatal(err)
 		}
 		headers := map[string]string{"Authorization": "Bearer " + callerKey, "Content-Type": "application/json"}
@@ -618,7 +619,7 @@ func TestApplicationCloseIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
-	app, err := buildApplication(auditConfig(), store, vault)
+	app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}

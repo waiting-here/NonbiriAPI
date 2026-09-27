@@ -73,11 +73,16 @@ type Actor struct {
 	UserID int64
 }
 type Window struct {
-	From, To int64
-	Limit    int
-	After    int64
-	Kind     string
-	Model    string
+	From, To      int64
+	Limit         int
+	After         int64
+	Kind          string
+	Model         string
+	Page          int64
+	Watermark     int64
+	WatermarkSet  bool
+	ExpectedTotal int64
+	ExpectedSet   bool
 }
 
 func (w Window) validate(now int64) (Window, error) {
@@ -90,7 +95,7 @@ func (w Window) validate(now int64) (Window, error) {
 	if w.Limit == 0 {
 		w.Limit = 50
 	}
-	if w.From < 0 || w.To <= w.From || w.To > now || w.To-w.From > int64(Retention/time.Second) || w.Limit < 1 || w.Limit > MaxPage || w.After < 0 {
+	if w.From < 0 || w.To <= w.From || w.To > now || w.To-w.From > int64(Retention/time.Second) || w.Limit < 1 || w.Limit > MaxPage || w.After < 0 || w.Page < 0 || w.Page > 2147483647 || w.Watermark < 0 || w.ExpectedTotal < 0 {
 		return Window{}, ErrInvalid
 	}
 	if w.Kind != "" && w.Kind != "total" && w.Kind != "self" && w.Kind != "charity" && w.Kind != "unclassified" {
@@ -103,13 +108,19 @@ func (w Window) validate(now int64) (Window, error) {
 }
 
 type Page[T any] struct {
-	Items    []T    `json:"items"`
-	Next     int64  `json:"next,omitempty,string"`
-	HasMore  bool   `json:"has_more"`
-	From     int64  `json:"from"`
-	To       int64  `json:"to"`
-	Coverage string `json:"coverage"`
-	Scanned  int    `json:"scanned,omitempty"`
+	Items      []T    `json:"items"`
+	Next       int64  `json:"next,omitempty,string"`
+	HasMore    bool   `json:"has_more"`
+	From       int64  `json:"from"`
+	To         int64  `json:"to"`
+	Coverage   string `json:"coverage"`
+	Scanned    int    `json:"scanned,omitempty"`
+	Page       string `json:"page,omitempty"`
+	PageSize   int    `json:"page_size,omitempty"`
+	TotalItems string `json:"total_items,omitempty"`
+	TotalPages string `json:"total_pages,omitempty"`
+	Watermark  string `json:"watermark,omitempty"`
+	Changed    bool   `json:"changed,omitempty"`
 }
 
 func minuteAt(t time.Time) int64 { return t.UTC().Unix() / 60 * 60 }

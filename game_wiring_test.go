@@ -46,7 +46,7 @@ func newGameWireFixtureWithClock(t *testing.T, nowFunc func() time.Time) gameWir
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	app, err := buildApplicationWithGameClock(auditConfig(), store, vault, nowFunc)
+	app, err := buildApplicationWithRuntimeOptions(context.Background(), auditConfig(), store, vault, applicationRuntimeOptions{GameNow: nowFunc, ActivityNow: nowFunc})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +85,9 @@ func newGameWireFixtureWithClock(t *testing.T, nowFunc func() time.Time) gameWir
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
+	if _, err := app.authRuntime.IdentityContinuity().BindUserTx(ctx, tx, userID); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().Unix()
 	wallet, err := ledger.CreateUserAccount(ctx, tx, userID, now)
 	if err != nil {

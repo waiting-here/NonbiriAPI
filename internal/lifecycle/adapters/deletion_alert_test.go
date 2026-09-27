@@ -38,7 +38,7 @@ func TestDeletionAlertRetainsIdentityAndBothSignedBalances(t *testing.T) {
 				t.Fatal(err)
 			}
 			deletion := beginAdapterTx(t, f.store.DB())
-			if err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deletion, lifecycle.DeleteRequest{UserID: user.id, DecisionNow: adapterTestNow + 10}, mustAdapterID(t, "op_")); err != nil {
+			if err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deletion, capturedDeleteRequest(t, deletion, user.id, adapterTestNow+10, lifecycle.DeleteSystem), mustAdapterID(t, "op_")); err != nil {
 				t.Fatal(err)
 			}
 			if err := deletion.Commit(); err != nil {
@@ -72,7 +72,7 @@ func TestDeletionAlertFailureRollsBackIdentityAndWallet(t *testing.T) {
 		t.Fatal(err)
 	}
 	deletion := beginAdapterTx(t, f.store.DB())
-	if err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deletion, lifecycle.DeleteRequest{UserID: user.id, DecisionNow: adapterTestNow + 10}, mustAdapterID(t, "op_")); err == nil {
+	if err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deletion, capturedDeleteRequest(t, deletion, user.id, adapterTestNow+10, lifecycle.DeleteSystem), mustAdapterID(t, "op_")); err == nil {
 		t.Fatal("ignored failed alert")
 	}
 	if err := deletion.Rollback(); err != nil {
@@ -88,4 +88,20 @@ func TestDeletionAlertFailureRollsBackIdentityAndWallet(t *testing.T) {
 	if users != 1 || alerts != 0 {
 		t.Fatalf("partial deletion %d %d", users, alerts)
 	}
+}
+
+func capturedDeleteRequest(t *testing.T, tx *sql.Tx, userID, at int64, source lifecycle.DeleteSource) lifecycle.DeleteRequest {
+	t.Helper()
+	request := lifecycle.DeleteRequest{UserID: userID, DecisionNow: at, Source: source}
+	var actor *int64
+	if source == lifecycle.DeleteSelf || source == lifecycle.DeleteAdmin {
+		request.ActorUserID = userID
+		actor = &request.ActorUserID
+	}
+	before, err := adminalerts.CaptureAccountDeletionTx(context.Background(), tx, userID, at, string(source), actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Before = before
+	return request
 }

@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -76,6 +77,10 @@ func (coordinator *Coordinator) recordWorkerOutcome(
 			nextAt = maximumUnixSecond
 		}
 		next, err = worker.Advance(previous, previous.Cursor, previous.Generation, nextAt, decisionNow)
+		if err == nil {
+			// Only a completed lifecycle pass establishes the last success.
+			next.LastSuccessAt = &decisionNow
+		}
 	} else {
 		next, err = worker.Retry(previous, classifyLifecycleWorkerError(runErr), decisionNow)
 	}
@@ -96,16 +101,48 @@ func (coordinator *Coordinator) recordWorkerOutcome(
 	}
 	if runErr == nil {
 		if _, err := tx.ExecContext(ctx, `UPDATE admin_alerts
-SET resolved=1,resolved_at=COALESCE(resolved_at,?)
+SET resolved=1,resolved_at=COALESCE(resolved_at,?),resolution_kind='worker_recovered'
 WHERE kind='worker_checkpoint_failed' AND ref=? AND resolved=0`, decisionNow, workerKey); err != nil {
 			return fmt.Errorf("lifecycle: resolve worker alert: %w", err)
 		}
 	} else {
 		message := "Account lifecycle worker failed: " + string(next.LastError)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved)
-SELECT 'worker_checkpoint_failed',?,?,?,0
+		phase, domain := "recovery", "coordinator"
+		if workerKey == lifecycleRetentionWorkerKey {
+			phase = "retention"
+		}
+		var stage lifecycleStageError
+		if errors.As(runErr, &stage) {
+			phase, domain = stage.phase, stage.domain
+		}
+		type target struct {
+			Kind string `json:"kind"`
+			ID   string `json:"id"`
+		}
+		type fact struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		contextBody, err := json.Marshal(struct {
+			Targets []target `json:"targets"`
+			Facts   []fact   `json:"occurred_facts"`
+		}{
+			Targets: []target{{Kind: "worker_checkpoint", ID: workerKey}},
+			Facts: []fact{
+				{Key: "worker_module", Value: "account_lifecycle"},
+				{Key: "worker_stage", Value: phase},
+				{Key: "worker_domain", Value: domain},
+				{Key: "safe_error_code", Value: string(next.LastError)},
+				{Key: "retry_attempt", Value: fmt.Sprint(next.AttemptCount)},
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("lifecycle: encode worker alert: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved,context_version,context_json)
+SELECT 'worker_checkpoint_failed',?,?,?,0,1,?
 WHERE NOT EXISTS(SELECT 1 FROM admin_alerts
- WHERE kind='worker_checkpoint_failed' AND ref=? AND resolved=0)`, message, workerKey, decisionNow, workerKey); err != nil {
+ WHERE kind='worker_checkpoint_failed' AND ref=? AND resolved=0)`, message, workerKey, decisionNow, string(contextBody), workerKey); err != nil {
 			return fmt.Errorf("lifecycle: write worker alert: %w", err)
 		}
 	}

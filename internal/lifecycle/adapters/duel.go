@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -36,7 +37,34 @@ func (a *DuelAdapter) PrepareDelete(ctx context.Context, tx *sql.Tx, request lif
 	if a == nil {
 		return nil, lifecycle.ErrUnavailable
 	}
-	return deleteRegisteredGame(a.service, a.id, ctx, tx, request)
+	var active string
+	if request.Source == lifecycle.DeleteSelf {
+		if request.Before == nil || request.Before.UserID != request.UserID || request.DecisionNow > 253394524799 {
+			return nil, lifecycle.ErrInvalid
+		}
+		err := tx.QueryRowContext(ctx, `SELECT g.id FROM game_duel_user_slots p JOIN game_duel_sessions g ON g.id=p.session_id WHERE p.user_id=? AND p.game_key=? AND g.state='active'`, request.UserID, a.id).Scan(&active)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+	finalizer, err := deleteRegisteredGame(a.service, a.id, ctx, tx, request)
+	if err != nil || active == "" {
+		return finalizer, err
+	}
+	var cancelled bool
+	if err = tx.QueryRowContext(ctx, `SELECT state='terminal' AND outcome='system_cancelled' AND reason='account_unavailable' FROM game_duel_sessions WHERE id=?`, active).Scan(&cancelled); err == nil && !cancelled {
+		err = lifecycle.ErrInvariant
+	}
+	if err == nil {
+		_, err = tx.ExecContext(ctx, `INSERT INTO self_deletion_duel_aborts(discord_id,game_key,match_id,former_user_id,reason,occurred_at,expires_at) VALUES(?,?,?,?,'self_deletion_cancelled_match',?,?) ON CONFLICT(game_key,match_id,former_user_id) DO NOTHING`, request.Before.DiscordID, a.id, active, request.UserID, request.DecisionNow, request.DecisionNow+7776000)
+	}
+	if err != nil {
+		if finalizer != nil {
+			finalizer.Abort()
+		}
+		return nil, err
+	}
+	return finalizer, nil
 }
 func (a *DuelAdapter) Retain(ctx context.Context, now int64, limit int, deadline time.Time) (lifecycle.WorkResult, error) {
 	if a == nil {
@@ -59,6 +87,9 @@ func mapDuelRounds(values []duel.RoundView) []lifecycle.DuelRoundExport {
 }
 func mapDuelExport(v duel.Export) lifecycle.DuelExport {
 	out := lifecycle.DuelExport{CurrentRounds: mapDuelRounds(v.CurrentRounds), History: make([]lifecycle.DuelMatchExport, len(v.History))}
+	for _, item := range v.Loadouts {
+		out.Loadouts = append(out.Loadouts, lifecycle.DuelLoadoutExport{Slot: item.Slot, Revision: item.Revision, Mode: item.Mode, Loadout: append([]byte(nil), item.Loadout...), UpdatedAt: item.UpdatedAt})
+	}
 	if q := v.Queue; q != nil {
 		out.Queue = &lifecycle.DuelQueueExport{ID: q.ID, Revision: q.Revision, Mode: q.Mode, Deadline: q.Deadline, Ticket: q.Ticket, Payment: lifecycle.GamePaymentExport(q.Payment), TermsHash: q.TermsHash, RulesVersion: q.RulesVersion, Loadout: q.Loadout}
 	}

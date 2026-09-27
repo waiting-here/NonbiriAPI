@@ -146,7 +146,7 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 	}
 	switch role {
 	case "user":
-		if filter.UserID != nil || filter.EndpointKeyID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil {
+		if filter.UserID != nil || filter.EndpointKeyID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil || filter.UsageTotalMismatch != nil {
 			return ListFilter{}, ErrInvalid
 		}
 	case "admin", "steward":
@@ -308,6 +308,7 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	writePart(optionalString(filter.Model))
 	writePart(optionalString(filter.ErrorCode))
 	writePart(optionalInt(filter.Status))
+	writePart(optionalBool(filter.UsageTotalMismatch))
 	writePart(optionalInt64(filter.From))
 	writePart(optionalInt64(filter.To))
 	if filter.Phase != "" {
@@ -338,6 +339,16 @@ func optionalInt(value *int) string {
 	return "+" + strconv.Itoa(*value)
 }
 
+func optionalBool(value *bool) string {
+	if value == nil {
+		return "-"
+	}
+	if *value {
+		return "+true"
+	}
+	return "+false"
+}
+
 func optionalInt64(value *int64) string {
 	if value == nil {
 		return "-"
@@ -361,6 +372,7 @@ type commonLogRecord struct {
 	cacheRead                                                   int64
 	output                                                      int64
 	usageUnknown                                                int
+	usageTotalMismatch                                          int
 	attemptCount                                                int64
 	chargeMagnitude                                             []byte
 }
@@ -373,7 +385,7 @@ func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 		&record.rowID, &record.id, &record.routeKind, &record.callerResultClass,
 		&record.callerStatus, &record.callerErrorCode, &record.startedAt, &record.completedAt,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
-		&record.usageUnknown, &record.attemptCount, &record.chargeMagnitude,
+		&record.usageUnknown, &record.usageTotalMismatch, &record.attemptCount, &record.chargeMagnitude,
 		&record.rejectionStage, &record.rejectionReason, &record.requestMethod, &record.requestPath,
 	}
 	targets = append(targets, extra...)
@@ -390,7 +402,8 @@ func validateCommonRecord(record commonLogRecord) error {
 	if record.rowID <= 0 || !db.ValidateOpaqueID(record.id, "req_") || record.startedAt < 0 ||
 		record.startedAt > maxUnixSecond || record.attemptCount < 0 || record.attemptCount > 100 ||
 		record.uncached < 0 || record.cacheWrite < 0 || record.cacheRead < 0 || record.output < 0 ||
-		(record.usageUnknown != 0 && record.usageUnknown != 1) {
+		(record.usageUnknown != 0 && record.usageUnknown != 1) ||
+		(record.usageTotalMismatch != 0 && record.usageTotalMismatch != 1) {
 		return ErrInvariant
 	}
 	switch RouteKind(record.routeKind) {

@@ -5,7 +5,9 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
 	"sync"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -96,6 +98,10 @@ type Usage struct {
 	CacheReadInputTokens  int64
 	OutputTokens          int64
 	Present               bool
+	// TotalMismatch records a comparable upstream total that disagreed with
+	// independently validated buckets. It remains meaningful when Present is
+	// false because another usage defect made the buckets unbillable.
+	TotalMismatch bool
 }
 
 // AttemptResult contains only bounded metadata. Diagnostic is a locally
@@ -141,9 +147,12 @@ func (Target) LogValue() slog.Value {
 // Additional fields belong here only when their policy implementation needs
 // them; the initial projection carries the existing origin-scoped identifier.
 type AttemptPolicy struct {
-	SafetyIdentifier string
-	ForceStoreFalse  bool
-	FlattenToolCalls bool
+	SafetyIdentifier  string
+	ForceStoreFalse   bool
+	FlattenToolCalls  bool
+	AdditionalHeaders http.Header
+	NativeExtensions  map[string]json.RawMessage
+	HasAdaptation     bool
 }
 
 func (AttemptPolicy) String() string   { return "[redacted attempt policy]" }

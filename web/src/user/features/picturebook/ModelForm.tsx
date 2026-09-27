@@ -1,147 +1,21 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState } from '@shared/components/States';
 import { parameterLabel, usePictureBookText } from '@shared/picturebook/copy';
 import {
   initialValues,
-  multipliedPrice,
-  normalizeLines,
   prepareSubmission,
+  previewPrice,
   type ParameterValues,
 } from '@shared/picturebook/parameters';
-import { submitTask } from '@shared/picturebook/publicApi';
-import {
-  type ImageModel,
-  type ImageTask,
-  type ParameterRule,
-  type SubmitInput,
-} from '@shared/picturebook/publicTypes';
+import { ModelParameterFields } from '@shared/picturebook/ModelParameterFields';
+import { quoteTask, submitTask } from '@shared/picturebook/publicApi';
+import { type ImageModel, type ImageTask, type SubmitInput } from '@shared/picturebook/publicTypes';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import type { ActivityWallet } from '@shared/limitedactivities/api';
-import { useImageReconcile } from './queries';
+import { economySessionRequest } from '../economy/queries';
+import { useImageReconcile, pictureBookKeys } from './queries';
 
-function ParameterField({
-  rule,
-  value,
-  onChange,
-}: {
-  readonly rule: ParameterRule;
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-}) {
-  const t = usePictureBookText();
-  const id = useId();
-  const label = parameterLabel(rule.key, t);
-  if (rule.dimensions && !rule.enum) {
-    const [width = '', height = ''] = value.split('x');
-    const replaceDimension = (axis: 'width' | 'height', next: string) => {
-      const parts = axis === 'width' ? [next, height] : [width, next];
-      onChange(parts.every((part) => part === '') ? '' : parts.join('x'));
-    };
-    return (
-      <fieldset className="picturebook-field">
-        <legend>
-          {label}
-          {rule.required ? ' *' : ''}
-        </legend>
-        <div className="picturebook-dimensions">
-          {(['width', 'height'] as const).map((axis) => {
-            const range = rule.dimensions![axis];
-            return (
-              <div className="picturebook-field" key={axis}>
-                <label htmlFor={id + '-' + axis}>
-                  {axis === 'width' ? t('宽度', 'Width') : t('高度', 'Height')}
-                </label>
-                <input
-                  id={id + '-' + axis}
-                  aria-describedby={id + '-' + axis + '-range'}
-                  type="number"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  required={rule.required}
-                  value={axis === 'width' ? width : height}
-                  min={range.minimum}
-                  max={range.maximum}
-                  step={range.step}
-                  onChange={(event) => replaceDimension(axis, event.target.value)}
-                />
-                <small id={id + '-' + axis + '-range'}>
-                  {range.minimum} – {range.maximum} px · {t('步长', 'Step')} {range.step}
-                </small>
-              </div>
-            );
-          })}
-        </div>
-      </fieldset>
-    );
-  }
-  return (
-    <div className="picturebook-field">
-      <label htmlFor={id}>
-        <span>
-          {label}
-          {rule.required ? ' *' : ''}
-        </span>
-      </label>
-      {rule.enum ? (
-        <select
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          required={rule.required}
-        >
-          {!rule.required || value === '' ? (
-            <option value="">{t('使用默认值', 'Use default')}</option>
-          ) : null}
-          {rule.enum.map((option, index) => (
-            <option key={index} value={String(option)}>
-              {String(option)}
-            </option>
-          ))}
-        </select>
-      ) : rule.key === 'prompt' || rule.key === 'negative_prompt' ? (
-        <textarea
-          id={id}
-          value={value}
-          autoComplete="off"
-          spellCheck={false}
-          required={rule.required}
-          maxLength={rule.length_unit === 'utf16_units' ? rule.max_length : undefined}
-          onChange={(event) => onChange(normalizeLines(event.target.value))}
-        />
-      ) : (
-        <input
-          id={id}
-          value={value}
-          type={rule.type === 'string' ? 'text' : 'number'}
-          inputMode={
-            rule.type === 'integer' ? 'numeric' : rule.type === 'number' ? 'decimal' : undefined
-          }
-          step={rule.step ?? (rule.type === 'integer' ? 1 : 'any')}
-          min={rule.minimum}
-          max={rule.maximum}
-          required={rule.required}
-          autoComplete="off"
-          onChange={(event) => onChange(event.target.value)}
-        />
-      )}
-      {rule.minimum !== undefined || rule.maximum !== undefined ? (
-        <small>
-          {t('范围', 'Range')}: {rule.minimum ?? '—'} – {rule.maximum ?? '—'}
-        </small>
-      ) : null}
-      {rule.max_length !== undefined ? (
-        <small>
-          {t('长度上限', 'Length limit')}: {rule.max_length}{' '}
-          {rule.length_unit === 'utf8_bytes' || !rule.length_unit
-            ? t('UTF-8字节', 'UTF-8 bytes')
-            : rule.length_unit === 'unicode_scalars'
-              ? t('Unicode字符', 'Unicode characters')
-              : t('UTF-16单位', 'UTF-16 units')}
-        </small>
-      ) : null}
-    </div>
-  );
-}
 function Fields({
   model,
   locked,
@@ -150,6 +24,10 @@ function Fields({
   uncertain,
   pending,
   submit,
+  quote,
+  onRefresh,
+  initialDraft,
+  onDraftChange,
   error,
 }: {
   readonly model: ImageModel;
@@ -159,15 +37,28 @@ function Fields({
   readonly uncertain: boolean;
   readonly pending: boolean;
   readonly submit: (input?: SubmitInput) => void;
+  readonly quote: (input: SubmitInput) => ReturnType<typeof quoteTask>;
+  readonly onRefresh: () => void;
+  readonly initialDraft?: ParameterValues;
+  readonly onDraftChange: (values: ParameterValues) => void;
   readonly error: unknown;
 }) {
   const t = usePictureBookText();
-  const [values, setValues] = useState<ParameterValues>(() => initialValues(model)),
+  const [values, setValues] = useState<ParameterValues>(() => initialDraft ?? initialValues(model)),
     [attempted, setAttempted] = useState(false);
+  const [quoting, setQuoting] = useState(false),
+    [quoted, setQuoted] = useState<Awaited<ReturnType<typeof quoteTask>> | null>(null),
+    [quoteError, setQuoteError] = useState<unknown>(null);
+  const updateValues = (patch: ParameterValues) => {
+    const next = { ...values, ...patch };
+    setValues(next);
+    onDraftChange(next);
+    setQuoted(null);
+    setQuoteError(null);
+  };
   const prepared = prepareSubmission(model, values);
-  const countRule = model.parameters.find((r) => r.key === 'n' && r.supported);
-  const count = Number(values.n || countRule?.default || 1),
-    total = multipliedPrice(model.price.paper, model.price.brush, count);
+  const displayedPrice = previewPrice(model, values);
+  const total = displayedPrice?.total;
   const enough =
     wallet &&
     total &&
@@ -181,26 +72,60 @@ function Fields({
         event.preventDefault();
         setAttempted(true);
         if (uncertain) submit();
-        else if (!problem && enough && permitted && 'input' in prepared) submit(prepared.input);
+        else if (!problem && enough && permitted && 'input' in prepared && !quoting) {
+          setQuoting(true);
+          setQuoteError(null);
+          void quote(prepared.input)
+            .then((current) => {
+              if (
+                current.model_revision !== model.revision ||
+                current.pricing_revision !== model.pricing_revision ||
+                current.total.paper !== prepared.price.paper ||
+                current.total.brush !== prepared.price.brush ||
+                current.unit.paper !== prepared.unit.paper ||
+                current.unit.brush !== prepared.unit.brush
+              ) {
+                setQuoted(current);
+                onRefresh();
+                return;
+              }
+              submit(prepared.input);
+            })
+            .catch(setQuoteError)
+            .finally(() => setQuoting(false));
+        }
       }}
     >
       <fieldset disabled={locked}>
-        {model.parameters
-          .filter((rule) => rule.supported)
-          .map((rule) => (
-            <ParameterField
-              key={rule.key}
-              rule={rule}
-              value={values[rule.key] ?? ''}
-              onChange={(value) => setValues((old) => ({ ...old, [rule.key]: value }))}
-            />
-          ))}
+        <ModelParameterFields model={model} values={values} onChange={updateValues} />
       </fieldset>
       <dl className="picturebook-facts">
         <dt>{t('每张价格', 'Price per image')}</dt>
         <dd>
-          {model.price.paper} {t('草稿纸', 'paper')} + {model.price.brush} {t('画笔', 'brushes')}
+          {displayedPrice
+            ? displayedPrice.unit.paper +
+              ' ' +
+              t('草稿纸', 'paper') +
+              ' + ' +
+              displayedPrice.unit.brush +
+              ' ' +
+              t('画笔', 'brushes')
+            : t('此尺寸暂无可用价格', 'No price is available for this size')}
         </dd>
+        {displayedPrice ? (
+          <>
+            <dt>{t('计价依据', 'Price basis')}</dt>
+            <dd>
+              {displayedPrice.basis === 'size'
+                ? t('精确尺寸', 'Exact size')
+                : displayedPrice.basis === 'tier'
+                  ? t('尺寸档位', 'Size tier')
+                  : displayedPrice.basis === 'auto'
+                    ? t('自动尺寸', 'Automatic size')
+                    : t('默认价格', 'Default price')}
+            </dd>
+          </>
+        ) : null}
         <dt>{t('本次预扣', 'Reservation')}</dt>
         <dd>
           <output>
@@ -224,6 +149,13 @@ function Fields({
           )}
         </p>
       ) : null}
+      {quoted ? (
+        <p role="status">
+          {t('模型或价格已变化。当前整单价格：', 'The model or price changed. Current total: ')}
+          {quoted.total.paper} {t('草稿纸', 'paper')} + {quoted.total.brush} {t('画笔', 'brushes')}
+          {t('。请载入最新配置后再确认。', '. Load the latest configuration before confirming.')}
+        </p>
+      ) : null}
       {attempted && problem ? (
         <p role="alert">
           {problem === 'combination'
@@ -234,7 +166,10 @@ function Fields({
             : problem === 'prompt_size'
               ? t('提示词或请求超过长度限制。', 'The prompt or request exceeds the length limit.')
               : problem === 'price'
-                ? t('生成张数或总价超出限制。', 'The image count or total price exceeds its limit.')
+                ? t(
+                    '当前尺寸无可用价格，或总价超出限制。',
+                    'This size has no price, or the total exceeds its limit.',
+                  )
                 : t('请检查参数：', 'Check parameter: ') + parameterLabel(problem, t)}
         </p>
       ) : null}
@@ -246,15 +181,16 @@ function Fields({
           )}
         </p>
       ) : null}
+      {quoteError ? <ErrorState error={quoteError} /> : null}
       {error ? <ErrorState error={error} /> : null}
       <button
         className="btn btn-primary"
         type="submit"
-        disabled={pending || (!uncertain && (!permitted || !wallet || !enough))}
+        disabled={pending || quoting || (!uncertain && (!permitted || !wallet || !enough))}
       >
         {uncertain
           ? t('重试同一次提交', 'Retry the same submission')
-          : pending
+          : pending || quoting
             ? t('正在提交', 'Submitting')
             : t('确认预扣并加入队列', 'Reserve currency and join queue')}
       </button>
@@ -275,12 +211,17 @@ export function ModelForm({
   readonly onAccepted: (task: ImageTask) => void;
 }) {
   const t = usePictureBookText(),
-    reconcile = useImageReconcile(account);
+    reconcile = useImageReconcile(account),
+    client = useQueryClient();
   const [snapshot, setSnapshot] = useState<ImageModel | undefined>(models[0]),
-    [formGeneration, setFormGeneration] = useState(0);
+    [formGeneration, setFormGeneration] = useState(0),
+    [drafts, setDrafts] = useState<Record<string, ParameterValues>>({});
   const operation = useImageOperation('steward', submitTask, reconcile);
   const latest = models.find((model) => model.id === snapshot?.id);
-  const stale = !latest || latest.revision !== snapshot?.revision;
+  const stale =
+    !latest ||
+    latest.revision !== snapshot?.revision ||
+    latest.pricing_revision !== snapshot?.pricing_revision;
   return (
     <Card>
       <h2>{t('创作图片', 'Create images')}</h2>
@@ -346,11 +287,18 @@ export function ModelForm({
             uncertain={operation.uncertain}
             pending={operation.pending}
             error={operation.error}
+            initialDraft={drafts[snapshot.id]}
+            onDraftChange={(values) => setDrafts((old) => ({ ...old, [snapshot.id]: values }))}
+            quote={(input) => economySessionRequest(client, () => quoteTask(input), account)}
+            onRefresh={() =>
+              void client.invalidateQueries({ queryKey: pictureBookKeys.models(account) })
+            }
             submit={(input) => {
               const request = operation.input ?? input;
               if (request)
                 void operation.run(request, (task) => {
                   onAccepted(task);
+                  setDrafts((old) => ({ ...old, [snapshot.id]: initialValues(snapshot) }));
                   setFormGeneration((value) => value + 1);
                 });
             }}

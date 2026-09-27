@@ -83,11 +83,11 @@ func (provider anthropicDefaultMaxTokensProvider) RawAnthropicDefaultMaxTokens(c
 	return &value, nil
 }
 
-func loadRuntimeLimits(store *db.Store) (ratelimit.RPMConfig, egress.ConcurrencyLimits, error) {
+func loadRuntimeLimits(ctx context.Context, store *db.Store) (ratelimit.RPMConfig, egress.ConcurrencyLimits, error) {
 	if store == nil {
 		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, errors.New("runtime limit store is required")
 	}
-	values, err := store.GetAllSiteConfigValues()
+	values, err := store.GetAllSiteConfigValuesContext(ctx)
 	if err != nil {
 		return ratelimit.RPMConfig{}, egress.ConcurrencyLimits{}, err
 	}

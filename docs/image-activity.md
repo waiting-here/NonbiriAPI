@@ -56,15 +56,54 @@ a save. These request bodies are limited to 1 MiB. Model writes require
 Prices are whole quantities of draft paper and brushes per requested image:
 `price: {"paper":"2","brush":"1"}`. Both currencies are reserved together when
 the task is accepted. At least one currency must have a positive price.
-The total is the model price multiplied by the requested image count.
+The model can also have a `pricing` policy with `default`, `fallback`, `tiers`
+and exact `sizes` prices. An exact width and height price takes precedence,
+then a declared tier price, then the default if `fallback` is `default`.
+`fallback:"unavailable"` refuses an unmatched selection. The total is the
+selected unit price multiplied by the requested image count. A price does not
+make an unsupported size available.
 A complete, valid terminal response containing at least one valid image charges
 that entire total, including partial success. A malformed or truncated response
 does not establish successful generation.
 
-The submission includes the model revision the user reviewed. A stale revision
-is rejected before a charge. Accepted tasks keep their original price and
-execution configuration. Disabling a model cancels its queued tasks and refunds
-them; tasks already sent upstream finish under their original configuration.
+The no-charge `POST /api/limited-activities/picture-book/quote` resolves the
+selection and returns `model_revision`, `pricing_revision`,
+`effective_selection`, `unit`, `total`, `basis` and `price_key`. It creates no
+task and sends no generation request. Submission includes the model revision
+and `expected_pricing_revision` the user reviewed; if a price revision or capability changes before acceptance,
+the server returns `409 refresh_required` so the user can review a fresh quote.
+Accepted tasks keep both original revisions, selected price and execution
+configuration. Disabling a model cancels its queued tasks and refunds them;
+tasks already sent upstream finish under their original configuration.
+
+### Capability discovery and administrator review
+
+An administrator can save a bounded declarative `capability-profile` for
+discovery metadata. It maps known model fields, size capabilities and catalog
+classification without executing scripts or trusting arbitrary metadata as a
+public rule. Discovery keeps candidate snapshots for review; it does not
+silently replace an accepted model policy. The catalog can show image,
+unknown and other models, including missing previously configured models.
+An administrator reviews source changes and conflicts at
+`GET A/models/{id}/capabilities`, then explicitly applies a candidate with
+`POST A/models/{id}/capabilities/apply` using `snapshot_id`,
+`expected_revision` and `confirm:true`. Stale or conflicting changes require
+another review. Ordinary model saves preserve discovered source and record
+only actual manual differences. Private model reads show each effective
+parameter's accepted `source` (`discovered`, `profile`, `manual` or an explicit
+unknown/legacy state), `support`, `overridden` and `conflict`; user model
+responses never expose this provenance.
+
+`POST A/models/check` checks one draft and test selection against saved local
+configuration only, returning `valid`, bounded `issues`, resolved parameters,
+selection and quote. It does not call the upstream or spend currency. Batch
+save accepts at most 50 models at `POST A/models/batch`, validates the entire
+set before writing, and returns `{applied,receipts,issues}`. Any issue means
+`applied:false`, empty receipts and no model change; each issue identifies its
+`model_id`, `field_path`, `code` and safe message. An administrator draft with
+unsaved edits asks for Save, Discard or Continue Editing before switching
+models or leaving through site navigation. Reloading or closing the page uses
+the browser's unsaved-changes confirmation; drafts live only in page memory.
 
 ## Declarative adapter and public parameters
 
@@ -174,23 +213,34 @@ In the table, `U` means `/api/limited-activities/picture-book` and `A` means
 | User | `GET U/wallet` | General points, draft paper and brushes |
 | User | `POST U/exchange` | `{asset,quantity}`; receipt, wallet and supply |
 | User | `GET U/models` | Public model page |
+| User | `POST U/quote` | Resolve the selection and exact price without reserving or generating |
 | User | `GET U/queue` | Queue totals and the caller's positions |
 | User | `GET U/tasks` | Caller's recent task page |
-| User | `POST U/tasks` | `{model_id,expected_model_revision,prompt,...}`; `{task}` |
+| User | `POST U/tasks` | `{model_id,expected_model_revision,expected_pricing_revision,prompt,...}`; `{task}` |
 | User | `GET U/tasks/{id}` | Task state and billing result |
 | User | `POST U/tasks/{id}/cancel` | Empty object; `{task}` |
 | User | `GET U/tasks/{id}/images/{index}` | Original image bytes; zero-based index |
 | Administrator | `GET / PUT A` | Opening period, visibility, pause and exchange configuration |
 | Administrator | `GET / PUT A/upstream` | Private upstream configuration |
+| Administrator | `GET / PUT A/upstream/capability-profile` | Declarative discovery rules and revision |
 | Administrator | `GET A/upstream/controls` | Current and older physical upstream controls |
 | Administrator | `POST A/upstream/resume` | `{control_id,expected_revision,reason}`; `{control}` |
 | Administrator | `GET A/models` | Private discovered/configured model page |
+| Administrator | `GET A/models?type=all&page=1&page_size=20` | Numbered catalog, including unconfigured and missing models |
 | Administrator | `GET / PUT A/models/{id}` | Model rules, mapping and price |
+| Administrator | `POST A/models/check` | Local draft validation and no-charge preview |
+| Administrator | `POST A/models/batch` | Atomic validation and save of at most 50 models |
+| Administrator | `GET A/models/{id}/capabilities` | Review latest candidate and changes |
+| Administrator | `POST A/models/{id}/capabilities/apply` | Confirm an accepted capability revision |
 | Administrator | `POST A/models/refresh` | Empty object; `{operation}` |
 | Administrator | `GET A/models/refresh/{id}` | Discovery operation state |
 
-Image model, task and control lists use `page_size` (1–100, default 20) and
-optional `cursor`, returning `{data,next_cursor}`. Task status reads return a bare
+The administrator catalog uses `type=image|unknown|other|all`, optional
+`q,configured,enabled,catalog_revision`, and `page` 1–1000 with `page_size`
+20, 50 or 100; it returns `{data,total,revision,page,page_size}`. The default
+catalog type is `image`. Other image model, task and control lists use
+`page_size` (1–100, default 20) and optional `cursor`, returning
+`{data,next_cursor}`. Task status reads return a bare
 task; submit/cancel return a `task` wrapper. Currency amounts and revisions are
 decimal strings. Exchange `asset` is `sketch_paper` or `sketch_brush` and
 `quantity` is a positive whole-unit string.

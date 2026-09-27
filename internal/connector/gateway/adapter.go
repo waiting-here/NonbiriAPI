@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -42,6 +43,10 @@ func NewAdapter(outbound backend.Backend) (*Adapter, error) {
 
 // Attempt executes one upstream attempt. Routing alone owns retries and billing.
 func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, attribution string) (result contract.AttemptResult) {
+	return a.AttemptWithPolicy(ctx, w, target, credential, chat, embedding, attribution, contract.AttemptPolicy{})
+}
+
+func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, attribution string, policy contract.AttemptPolicy) (result contract.AttemptResult) {
 	result = contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "gateway attempt unavailable"}
 	defer credential.Clear()
 	sent := false
@@ -70,13 +75,24 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	if err != nil {
 		return result
 	}
-	defer clear(body)
+	defer func() { clear(body) }()
+	if len(policy.NativeExtensions) != 0 {
+		merged, mergeErr := requestadaptation.MergeNative(body, policy.NativeExtensions, maxJSONBytes)
+		if mergeErr != nil {
+			return result
+		}
+		clear(body)
+		body = merged
+	}
 	client, err := a.backend.Open(target.BaseURL())
 	if err != nil {
 		return upstreamFailure("upstream endpoint was refused", 0)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+path, bytes.NewReader(body))
 	if err != nil {
+		return result
+	}
+	if requestadaptation.ApplyAddedHeaders(request.Header, policy.AdditionalHeaders) != nil {
 		return result
 	}
 	plain, cipher, ok := credential.Take()
@@ -92,6 +108,9 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	defer errorGuard.Clear()
 	clear(label)
 	errorContext := upstreamerror.Context{BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
+	if policy.HasAdaptation {
+		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
+	}
 	setRequestHeaders(request, plain)
 	request.Header.Set("Content-Type", "application/json")
 	if embedding != nil {

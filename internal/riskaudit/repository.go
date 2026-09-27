@@ -27,7 +27,9 @@ type Repository struct {
 	now           func() time.Time
 	configChanged func(Config)
 	finalAuth     FinalAuthorizer
-	scanWorker    sync.Mutex
+	scanSlots     chan struct{}
+	scanSelection sync.Mutex
+	claimedScans  map[string]struct{}
 }
 
 func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, error) {
@@ -37,7 +39,10 @@ func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, er
 	if options.Now == nil {
 		options.Now = time.Now
 	}
-	return &Repository{db: database, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth}, nil
+	return &Repository{
+		db: database, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth,
+		scanSlots: make(chan struct{}, 2), claimedScans: make(map[string]struct{}),
+	}, nil
 }
 func (r *Repository) authorize(ctx context.Context, tx *sql.Tx, actor Actor, now int64) error {
 	if actor.UserID <= 0 {
@@ -276,7 +281,15 @@ func (r *Repository) Rules(ctx context.Context, actor Actor) ([]Rule, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	return rulesTx(ctx, tx)
+	rules, err := rulesTx(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	actions, err := readActions(ctx, tx)
+	if err != nil || attachActions(rules, actions) != nil {
+		return nil, ErrUnavailable
+	}
+	return rules, nil
 }
 func actorFields(actor Actor) (string, any) {
 	if actor.Admin {
@@ -285,7 +298,22 @@ func actorFields(actor Actor) (string, any) {
 	return "level6", actor.UserID
 }
 func (r *Repository) PutRule(ctx context.Context, actor Actor, rule Rule, create bool) (Rule, error) {
+	return r.PutRuleWithAction(ctx, actor, rule, create, ActionMutation{Present: rule.AutoBan != nil, AutoBan: rule.AutoBan})
+}
+
+// PutRuleWithAction applies the rule and optional privileged binding in one
+// final-authorized transaction. The rule revision is the sole CAS version.
+func (r *Repository) PutRuleWithAction(ctx context.Context, actor Actor, rule Rule, create bool, action ActionMutation) (Rule, error) {
 	if validateRule(rule) != nil {
+		return Rule{}, ErrInvalid
+	}
+	if action.Present && (!actor.Admin || action.AutoBan != nil && !action.AutoBan.valid()) {
+		if !actor.Admin {
+			return Rule{}, ErrForbidden
+		}
+		return Rule{}, ErrInvalid
+	}
+	if create && action.Present && action.AutoBan == nil {
 		return Rule{}, ErrInvalid
 	}
 	tx, err := r.begin(ctx, actor, true)
@@ -316,9 +344,29 @@ func (r *Repository) PutRule(ctx context.Context, actor Actor, rule Rule, create
 		}
 		rule.Revision = 1
 		_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_rules(`+ruleColumns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, rule.ID, rule.Name, rule.Status, rule.Enabled, rule.Revision, string(conditions), rule.EvidenceNote, rule.EvidenceURL, role, user, role, user, now, now)
+		if err == nil && action.Present {
+			var count int
+			if tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM client_rule_auto_bans`).Scan(&count) != nil {
+				return Rule{}, ErrUnavailable
+			}
+			if count >= MaxAutoBanRules {
+				return Rule{}, ErrConflict
+			}
+			_, err = tx.ExecContext(ctx, `INSERT INTO client_rule_auto_bans(rule_id,enabled,duration_seconds,revision,actor_user_id,updated_at) VALUES(?,?,?,?,?,?)`, rule.ID, action.AutoBan.Enabled, action.AutoBan.DurationSeconds, rule.Revision, actor.UserID, now)
+		}
 	} else {
 		if len(rule.ID) != 26 || rule.Revision < 1 || rule.Revision == 1<<63-1 {
 			return Rule{}, ErrInvalid
+		}
+		bound, boundRevision, e := actionForRule(ctx, tx, rule.ID)
+		if e != nil {
+			return Rule{}, e
+		}
+		if bound != nil && !actor.Admin {
+			return Rule{}, ErrForbidden
+		}
+		if bound != nil && boundRevision != rule.Revision {
+			return Rule{}, ErrConflict
 		}
 		var result sql.Result
 		result, err = tx.ExecContext(ctx, `UPDATE risk_client_rules SET name=?,status=?,enabled=?,revision=revision+1,conditions_json=?,evidence_note=?,evidence_url=?,updated_by_role=?,updated_by_user_id=?,updated_at=? WHERE id=? AND revision=?`, rule.Name, rule.Status, rule.Enabled, string(conditions), rule.EvidenceNote, rule.EvidenceURL, role, user, now, rule.ID, rule.Revision)
@@ -327,12 +375,34 @@ func (r *Repository) PutRule(ctx context.Context, actor Actor, rule Rule, create
 			if n != 1 {
 				return Rule{}, ErrConflict
 			}
+			if bound != nil && action.Present && action.AutoBan == nil {
+				_, err = tx.ExecContext(ctx, `DELETE FROM client_rule_auto_bans WHERE rule_id=? AND revision=?`, rule.ID, rule.Revision)
+			} else if bound != nil {
+				current := bound
+				if action.Present {
+					current = action.AutoBan
+				}
+				_, err = tx.ExecContext(ctx, `UPDATE client_rule_auto_bans SET enabled=?,duration_seconds=?,revision=?,actor_user_id=?,updated_at=? WHERE rule_id=? AND revision=?`, current.Enabled, current.DurationSeconds, rule.Revision+1, actor.UserID, now, rule.ID, rule.Revision)
+			} else if action.Present && action.AutoBan != nil {
+				var count int
+				if tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM client_rule_auto_bans`).Scan(&count) != nil {
+					return Rule{}, ErrUnavailable
+				}
+				if count >= MaxAutoBanRules {
+					return Rule{}, ErrConflict
+				}
+				_, err = tx.ExecContext(ctx, `INSERT INTO client_rule_auto_bans(rule_id,enabled,duration_seconds,revision,actor_user_id,updated_at) VALUES(?,?,?,?,?,?)`, rule.ID, action.AutoBan.Enabled, action.AutoBan.DurationSeconds, rule.Revision+1, actor.UserID, now)
+			}
 		}
 	}
 	if err != nil {
 		return Rule{}, ErrUnavailable
 	}
 	out, err := scanRule(tx.QueryRowContext(ctx, `SELECT `+ruleColumns+` FROM risk_client_rules WHERE id=?`, rule.ID))
+	if err != nil {
+		return Rule{}, err
+	}
+	out.AutoBan, _, err = actionForRule(ctx, tx, rule.ID)
 	if err != nil {
 		return Rule{}, err
 	}
@@ -350,6 +420,21 @@ func (r *Repository) DeleteRule(ctx context.Context, actor Actor, id string, rev
 		return err
 	}
 	defer tx.Rollback()
+	bound, boundRevision, err := actionForRule(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if bound != nil {
+		if !actor.Admin {
+			return ErrForbidden
+		}
+		if boundRevision != revision {
+			return ErrConflict
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM client_rule_auto_bans WHERE rule_id=? AND revision=?`, id, revision); err != nil {
+			return ErrUnavailable
+		}
+	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM risk_client_rules WHERE id=? AND revision=?`, id, revision)
 	if err != nil {
 		return ErrUnavailable

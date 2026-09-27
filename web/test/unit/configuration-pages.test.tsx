@@ -254,19 +254,63 @@ describe('screenshot-facing configuration pages', () => {
 });
 
 describe('authoritative site-config frontend', () => {
-  async function renderSettings() {
+  async function renderSettings(locale: 'en' | 'zh' = 'en') {
     const rendered = await renderWithProviders(
       <AdminSessionFixture>
         <SettingsPage />
       </AdminSessionFixture>,
       {
         station: 'admin',
-        locale: 'en',
+        locale,
         role: 'admin',
       },
     );
     return rendered;
   }
+
+  test('saves the daily check-in choice both ways and shows bilingual help', async () => {
+    const choice = catalogEntry('checkin_mutually_exclusive', {
+      group: 'economy',
+      type: 'boolean',
+      title: { zh: '每日签到二选一', en: 'Choose one daily check-in' },
+      description: {
+        zh: '开启后，每个站点日只能领取一种签到；已有奖励不追回。',
+        en: 'When enabled, claim only one check-in per site day; existing rewards remain.',
+      },
+      unit: null,
+      raw_default: false,
+      effective_fallback: false,
+      minimum: null,
+      maximum: null,
+      step: null,
+    });
+    const server = installSiteConfigServer(
+      { revision: '1', values: { checkin_mutually_exclusive: false } },
+      [choice],
+    );
+    const rendered = await renderSettings();
+    await rendered.user.click((await screen.findByText('Economy')).closest('button')!);
+    expect(screen.getByText(/claim only one check-in per site day/i)).toBeVisible();
+    const checkbox = screen.getByRole('checkbox', { name: /Choose one daily check-in/i });
+    expect(checkbox).not.toBeChecked();
+    await rendered.user.click(checkbox);
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(server.patches).toContainEqual({
+      path: '/admin/api/site-config/checkin_mutually_exclusive', value: true,
+    }));
+    expect(checkbox).toBeChecked();
+
+    await rendered.user.click(checkbox);
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(server.patches.at(-1)?.value).toBe(false));
+    expect(checkbox).not.toBeChecked();
+
+    rendered.unmount();
+    const zh = await renderSettings('zh');
+    await zh.user.click((await screen.findByText('经济')).closest('button')!);
+    expect(screen.getByText('每日签到二选一')).toBeVisible();
+    expect(screen.getByText(/每个站点日只能领取一种签到/)).toBeVisible();
+  });
 
   test('keeps edits across groups and searches, then sends one atomic configuration update', async () => {
     const siteName = catalogEntry('site_name', {
@@ -748,7 +792,7 @@ describe('admin per-user limit explanations', () => {
       },
       {
         method: 'GET',
-        path: '/admin/api/users?page=1&page_size=20',
+        path: '/admin/api/users?account_state=all&page=1&page_size=20',
         body: {
           data: [adminUser],
           next_cursor: null,

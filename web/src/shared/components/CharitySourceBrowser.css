@@ -18,6 +18,11 @@
   min-width: 0;
 }
 
+.charity-source-browser__keys-header > .btn:hover:not(:disabled) {
+  /* Keep the return control's pointer hit area fixed at its lower edge. */
+  transform: none;
+}
+
 .charity-source-browser__header h2,
 .charity-source-browser__keys-header h3,
 .charity-source-browser__key-heading h4 {

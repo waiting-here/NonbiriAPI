@@ -107,8 +107,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
     [
       '先看资源，再选招',
       'Read resources before choosing',
-      '双方共享上方电池，订阅瞬发与总量在同一个方框内，API 是独立余额。正式对局每轮只有 20 秒；未确认就会跳过，不足 5 秒时有视觉提醒，开启音效后也会响铃。教学讲解会等你。这轮先用 API 支付，保留订阅。',
-      'The battery above is shared. Subscription burst and total share a panel; API is a separate balance. Live turns last 20 seconds: an unconfirmed plan skips casting. Below five seconds the UI warns you, with sound when enabled. This tutorial waits for you. Pay with API this round to preserve subscription quota.',
+      '双方共享上方电池，订阅瞬发与总量在同一个方框内，API 是独立余额。正式对局每轮有 30 秒；未确认就会跳过，不足 5 秒时有视觉提醒，开启音效后也会响铃。教学讲解会等你。这轮先用 API 支付，保留订阅。',
+      'The battery above is shared. Subscription burst and total share a panel; API is a separate balance. Live turns last 30 seconds: an unconfirmed plan skips casting. Below five seconds the UI warns you, with sound when enabled. This tutorial waits for you. Pay with API this round to preserve subscription quota.',
     ],
     [
       '净化，追回得赞',
@@ -273,8 +273,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
             'You fell behind, cleansed, replenished resources and fought back, finally winning narrowly with speed and cache. This was a teaching script; live opponents make their own choices. You may copy the teaching loadout to the lobby and decide when to match.',
           )
         : t(
-            '看完变化后再继续。正式对局在结算演出结束后开始新的完整 20 秒。',
-            'Continue when you have reviewed the changes. Live games start a fresh full 20 seconds after the presentation ends.',
+            '看完变化后再继续。正式对局在结算演出结束后开始新的完整 30 秒。',
+            'Continue when you have reviewed the changes. Live games start a fresh full 30 seconds after the presentation ends.',
           ),
       round,
     );

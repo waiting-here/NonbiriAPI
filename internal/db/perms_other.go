@@ -4,6 +4,8 @@ package db
 
 import "errors"
 
+func inspectActiveDBFiles(path string) error { return secureDBFiles(path) }
+
 // The beta.1 database security contract is implemented only for the intended
 // Linux/amd64 target. An unsupported OS has no equivalent permission check;
 // fail closed before a writable SQLite handle can be returned.

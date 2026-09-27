@@ -46,13 +46,13 @@ func TestRegisterRoutesAndAccountLifecycleHTTP(t *testing.T) {
 		exportResponse, exportRequest, UserPrincipal{UserID: 7},
 	)
 	if exportResponse.Code != http.StatusOK ||
-		exportResponse.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v10.json"` ||
+		exportResponse.Header().Get("Content-Disposition") != `attachment; filename="nonbiriapi-account-export-v11.json"` ||
 		exportResponse.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("export response status=%d headers=%v body=%s",
 			exportResponse.Code, exportResponse.Header(), exportResponse.Body.String())
 	}
 	var exported map[string]any
-	if err := json.Unmarshal(exportResponse.Body.Bytes(), &exported); err != nil || exported["schema_version"] != float64(10) {
+	if err := json.Unmarshal(exportResponse.Body.Bytes(), &exported); err != nil || exported["schema_version"] != float64(11) {
 		t.Fatalf("export body=%v error=%v", exported, err)
 	}
 
@@ -68,6 +68,7 @@ func TestRegisterRoutesAndAccountLifecycleHTTP(t *testing.T) {
 
 func TestAccountDeleteHTTPRequiresExactClosedConfirmation(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, 100)
+	userID := seedLifecycleUser(t, fixture.store.DB(), "http-delete", false, 100)
 	coordinator := mustNewLifecycleCoordinator(t, fixture.config)
 	routes := newLifecycleRouteRecorder()
 	if err := RegisterRoutes(routes, routes, coordinator); err != nil {
@@ -82,7 +83,7 @@ func TestAccountDeleteHTTPRequiresExactClosedConfirmation(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, accountDeleteRoute, bytes.NewBufferString(body))
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
-		handler(response, request, UserPrincipal{UserID: 9})
+		handler(response, request, UserPrincipal{UserID: userID})
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("invalid delete %s status=%d body=%s", body, response.Code, response.Body.String())
 		}
@@ -94,7 +95,7 @@ func TestAccountDeleteHTTPRequiresExactClosedConfirmation(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, accountDeleteRoute, bytes.NewBufferString(`{"confirm":"DELETE"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	handler(response, request, UserPrincipal{UserID: 9})
+	handler(response, request, UserPrincipal{UserID: userID})
 	if response.Code != http.StatusNoContent || response.Body.Len() != 0 ||
 		response.Header().Get("Cache-Control") != "no-store" || fixture.auth.userCalls != 1 {
 		t.Fatalf("delete status=%d headers=%v body=%q fresh calls=%d",

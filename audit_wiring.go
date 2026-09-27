@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/economyaudit"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -37,7 +38,7 @@ type auditRuntime struct {
 	closeErr     error
 }
 
-func newAuditRuntime(store *db.Store, vault *secret.Vault, authorizer *roleFinalTxAuthorizer) (*auditRuntime, error) {
+func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, authorizer *roleFinalTxAuthorizer) (*auditRuntime, error) {
 	a := &auditRuntime{}
 	var err error
 	a.observations, err = observability.NewRepository(store.DB())
@@ -55,8 +56,6 @@ func newAuditRuntime(store *db.Store, vault *secret.Vault, authorizer *roleFinal
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	config, err := a.risk.CurrentConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -113,8 +112,8 @@ func (a *auditRuntime) Wrap(next http.Handler) http.Handler {
 	})
 }
 
-func (a *auditRuntime) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
+func (a *auditRuntime) Start(parent context.Context) {
+	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
 	a.workers.Add(3)
 	go func() { defer a.workers.Done(); a.collector.Run(ctx) }()
@@ -203,13 +202,28 @@ func (r diagnosticRetention) Retain(ctx context.Context, now int64, limit int, d
 	return lifecycle.WorkResult{Processed: result.Processed, More: result.More}, err
 }
 
-type riskRetention struct{ repository *riskaudit.Repository }
+type riskRetention struct {
+	repository  *riskaudit.Repository
+	clientGuard *clientguard.Service
+}
 
 func (r riskRetention) Retain(ctx context.Context, now int64, limit int, deadline time.Time) (lifecycle.WorkResult, error) {
 	bounded, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	result, err := r.repository.CleanupBatch(bounded, time.Unix(now, 0), limit)
-	return lifecycle.WorkResult{Processed: result.Processed, More: result.More}, err
+	work := lifecycle.WorkResult{Processed: result.Processed, More: result.More}
+	if err != nil || r.clientGuard == nil {
+		return work, err
+	}
+	remaining := limit - result.Processed
+	if remaining <= 0 {
+		work.More = true
+		return work, nil
+	}
+	count, err := r.clientGuard.CleanupReceiptsBatch(bounded, now, remaining)
+	work.Processed += count
+	work.More = work.More || count == remaining
+	return work, err
 }
 
 var _ lifecycle.RetentionAdapter = diagnosticRetention{}
