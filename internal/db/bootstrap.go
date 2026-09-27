@@ -1242,7 +1242,17 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if err := seedProgressionState(ctx, tx, time.Now().Unix()); err != nil {
 		return err
 	}
-	return seedGovernanceState(ctx, tx, time.Now().Unix())
+	if err := seedGovernanceState(ctx, tx, time.Now().Unix()); err != nil {
+		return err
+	}
+	var interactionPresent bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='fatfish_capacity')`).Scan(&interactionPresent); err != nil {
+		return err
+	}
+	if interactionPresent {
+		return seedInteractionStorage(ctx, tx)
+	}
+	return nil
 }
 
 func createFreshGenerationTwo(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
