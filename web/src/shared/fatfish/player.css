@@ -16,6 +16,27 @@
 .fatfish-player__banner div { display: grid; gap: .1rem; min-width: 0; }
 .fatfish-player__banner strong { font-size: 1.05rem; line-height: 1.2; }
 .fatfish-player__banner span { font-size: .82rem; }
+.fatfish-player__music {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .35rem .65rem;
+  width: min(100%, 480px); margin-inline: auto;
+  color: var(--nb-color-text-muted); font-size: .75rem; line-height: 1.35; text-align: center;
+}
+.fatfish-player__music button {
+  flex: none; min-height: 2.5rem; padding: .4rem .75rem;
+  border: 1px solid var(--nb-color-border-strong); border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface); color: var(--nb-color-text);
+  font: inherit; font-size: .85rem; font-weight: 650; cursor: pointer;
+}
+.fatfish-player__music button[aria-pressed='true'] {
+  border-color: var(--nb-color-accent); background: var(--nb-color-accent-soft);
+}
+.fatfish-player__music button:disabled { opacity: .65; cursor: not-allowed; }
+.fatfish-player__music button:focus-visible, .fatfish-player__music a:focus-visible {
+  outline: 3px solid var(--nb-color-focus); outline-offset: 2px;
+}
+.fatfish-player__music-credit { overflow-wrap: anywhere; }
+.fatfish-player__music-credit a { color: var(--nb-color-link); }
+.fatfish-player__music p { flex-basis: 100%; color: var(--nb-color-danger); }
 .fatfish-canvas {
   display: block; width: min(100%, 480px); height: auto; aspect-ratio: 6 / 7;
   margin-inline: auto; border: 3px solid #947659; border-radius: 1rem;
