@@ -45,6 +45,7 @@ type ExportAdapters struct {
 type DeleteAdapters struct {
 	Continuity           DeleteAdapter
 	AuthSessionCallerKey DeleteAdapter
+	RequestAdaptation    DeleteAdapter
 	Resources            DeleteAdapter
 	ClaimLog             DeleteAdapter
 	IssuesAnnouncements  DeleteAdapter
@@ -66,6 +67,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 	return []DeleteAdapter{
 		adapters.Continuity,
 		adapters.AuthSessionCallerKey,
+		adapters.RequestAdaptation,
 		adapters.Resources,
 		adapters.ClaimLog,
 		adapters.IssuesAnnouncements,
@@ -128,26 +130,27 @@ func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
 // RetentionAdapters fixes the six-hour cleanup order. Separate game fields
 // keep each reducer and retention cursor under its domain owner.
 type RetentionAdapters struct {
-	Continuity     RetentionAdapter
-	Sessions       RetentionAdapter
-	RequestLogs    RetentionAdapter
-	Audits         RetentionAdapter
-	Observability  RetentionAdapter
-	RiskAudit      RetentionAdapter
-	Issues         RetentionAdapter
-	Fishing        RetentionAdapter
-	LinkLink       RetentionAdapter
-	RPS            RetentionAdapter
-	Bidding        RetentionAdapter
-	Likes          RetentionAdapter
-	Blackjack      RetentionAdapter
-	Reports        RetentionAdapter
-	Donations      RetentionAdapter
-	Charity        RetentionAdapter
-	Idempotency    RetentionAdapter
-	Secrets        RetentionAdapter
-	Governance     RetentionAdapter
-	CharityRouting RetentionAdapter
+	RequestAdaptation RetentionAdapter
+	Continuity        RetentionAdapter
+	Sessions          RetentionAdapter
+	RequestLogs       RetentionAdapter
+	Audits            RetentionAdapter
+	Observability     RetentionAdapter
+	RiskAudit         RetentionAdapter
+	Issues            RetentionAdapter
+	Fishing           RetentionAdapter
+	LinkLink          RetentionAdapter
+	RPS               RetentionAdapter
+	Bidding           RetentionAdapter
+	Likes             RetentionAdapter
+	Blackjack         RetentionAdapter
+	Reports           RetentionAdapter
+	Donations         RetentionAdapter
+	Charity           RetentionAdapter
+	Idempotency       RetentionAdapter
+	Secrets           RetentionAdapter
+	Governance        RetentionAdapter
+	CharityRouting    RetentionAdapter
 }
 
 func (adapters RetentionAdapters) ordered() []RetentionAdapter {
@@ -172,6 +175,7 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.Secrets,
 		adapters.Governance,
 		adapters.CharityRouting,
+		adapters.RequestAdaptation,
 	}
 }
 

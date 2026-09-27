@@ -350,7 +350,7 @@ func newLifecycleCoordinator(
 	activityEngines *activityRuntime,
 ) (*lifecycle.Coordinator, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
-		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil ||
+		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil || forwardRuntime.adaptations == nil ||
 		gameRuntimes == nil || gameRuntimes.Service == nil || gameRuntimes.Limiter() == nil || claimService == nil ||
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
 		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
@@ -429,6 +429,7 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			RequestAdaptation:    forwardRuntime.adaptations,
 			Continuity:           authRuntime.IdentityContinuity(),
 			CharityRouting:       routingLifecycle,
 			Governance:           activityEngines,
@@ -457,16 +458,17 @@ func newLifecycleCoordinator(
 			Secrets:        secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
-			Continuity:     authRuntime.IdentityContinuity(),
-			CharityRouting: routingLifecycle,
-			Governance:     activityEngines,
-			Sessions:       lifecycleadapters.NewAuthSessionRetention(authRuntime),
-			RequestLogs:    lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:         lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
-			Observability:  diagnosticRetention{audits.observations},
-			RiskAudit:      riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
-			Issues:         lifecycleadapters.NewIssueRetention(issueService),
-			Fishing:        fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			RequestAdaptation: forwardRuntime.adaptations,
+			Continuity:        authRuntime.IdentityContinuity(),
+			CharityRouting:    routingLifecycle,
+			Governance:        activityEngines,
+			Sessions:          lifecycleadapters.NewAuthSessionRetention(authRuntime),
+			RequestLogs:       lifecycleadapters.NewRequestLogRetention(logRepository),
+			Audits:            lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Observability:     diagnosticRetention{audits.observations},
+			RiskAudit:         riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
+			Issues:            lifecycleadapters.NewIssueRetention(issueService),
+			Fishing:           fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,

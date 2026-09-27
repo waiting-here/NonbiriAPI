@@ -110,13 +110,14 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 		}
 		if input.Route.IsCharity() {
 			if err := s.charity.AcceptRequest(callbackCtx, callbackTx, CharityAcceptance{
-				RequestID:      requestID,
-				UserID:         input.UserID,
-				CharityModelID: input.CharityModelID,
-				ModelSnapshot:  input.ModelSnapshot,
-				ReservedMilli:  input.ReservedMilli,
-				AttemptLimit:   input.AttemptLimit,
-				AcceptedAt:     at,
+				RequestID:        requestID,
+				UserID:           input.UserID,
+				CharityModelID:   input.CharityModelID,
+				ModelSnapshot:    input.ModelSnapshot,
+				ReservedMilli:    input.ReservedMilli,
+				OutputTokenFloor: input.OutputTokenFloor,
+				AttemptLimit:     input.AttemptLimit,
+				AcceptedAt:       at,
 			}); err != nil {
 				return fmt.Errorf("claim: accept charity request: %w", err)
 			}
@@ -339,15 +340,16 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 		}
 		var err error
 		reservation, err = s.charity.Claim(ctx, tx, CharityClaimInput{
-			RequestID:       input.RequestID,
-			ClaimID:         claimID,
-			ActorUserID:     input.ActorUserID,
-			AttemptSeq:      input.AttemptSeq,
-			DonationKeyID:   input.DonationKeyID,
-			EndpointID:      target.endpointID,
-			EndpointKeyID:   input.Candidate.EndpointKeyID,
-			UpstreamModelID: input.Candidate.UpstreamModelID,
-			ClaimedAt:       at,
+			RequestID:        input.RequestID,
+			ClaimID:          claimID,
+			ActorUserID:      input.ActorUserID,
+			AttemptSeq:       input.AttemptSeq,
+			DonationKeyID:    input.DonationKeyID,
+			EndpointID:       target.endpointID,
+			EndpointKeyID:    input.Candidate.EndpointKeyID,
+			UpstreamModelID:  input.Candidate.UpstreamModelID,
+			ClaimedAt:        at,
+			OutputTokenFloor: input.OutputTokenFloor,
 		})
 		if err != nil {
 			return Handle{}, fmt.Errorf("claim: reserve charity attempt: %w", err)
@@ -620,13 +622,13 @@ AND (charity_suspended_until IS NULL OR charity_suspended_until<=?))`
 
 func validAcceptInput(input AcceptInput) bool {
 	if input.UserID <= 0 || input.AttemptLimit < 1 || input.AttemptLimit > MaxAttempts ||
-		input.ReservedMilli < 0 || input.ReservedMilli > MaxMoneyMilli ||
+		input.ReservedMilli < 0 || input.ReservedMilli > MaxMoneyMilli || input.OutputTokenFloor < 0 || input.OutputTokenFloor > 2147483647 ||
 		!validBoundedText(input.ModelSnapshot, MaxModelSnapshotBytes, true) {
 		return false
 	}
 	switch input.Route {
 	case RouteOpenAIChat, RouteOpenAIEmbeddings:
-		return input.CharityModelID == 0 && input.CharityDecisionNow == nil
+		return input.CharityModelID == 0 && input.CharityDecisionNow == nil && input.OutputTokenFloor == 0
 	case RouteCharityChat, RouteCharityEmbeddings:
 		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
 			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
@@ -637,17 +639,20 @@ func validAcceptInput(input AcceptInput) bool {
 
 func validClaimInput(input ClaimInput) bool {
 	if !db.ValidateOpaqueID(input.RequestID, "req_") || input.ActorUserID <= 0 ||
-		input.AttemptSeq < 1 || input.AttemptSeq > MaxAttempts {
+		input.AttemptSeq < 1 || input.AttemptSeq > MaxAttempts || input.OutputTokenFloor < 0 || input.OutputTokenFloor > 2147483647 {
 		return false
 	}
 	balanced := len(input.BalancedCandidates) > 0
+	if input.Purpose != PurposeCharity && input.OutputTokenFloor != 0 {
+		return false
+	}
 	if balanced {
 		if input.Purpose != PurposeCharity || len(input.BalancedCandidates) > MaxAttempts ||
 			input.DonationKeyID != 0 {
 			return false
 		}
 		for _, candidate := range input.BalancedCandidates {
-			if candidate.DonationKeyID <= 0 || !validCandidate(candidate.Candidate) {
+			if candidate.DonationKeyID <= 0 || !validCandidate(candidate.Candidate) || candidate.OutputTokenFloor < 0 || candidate.OutputTokenFloor > 2147483647 {
 				return false
 			}
 		}

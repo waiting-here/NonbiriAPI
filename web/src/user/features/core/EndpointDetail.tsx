@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
@@ -1837,6 +1838,14 @@ export function EndpointDetail({
           </button>
         )}
       </section>
+
+      <RequestAdaptationEditor
+        key={`${accountId}:${endpoint.data.id}`}
+        url={`/api/endpoints/${encodeURIComponent(endpoint.data.id)}/request-adaptation`}
+        scope="endpoint"
+        connectorType={endpoint.data.connector_type}
+        editable
+      />
 
       <section className="core-card" aria-busy={keys.isFetching}>
         <div className="core-card__header">

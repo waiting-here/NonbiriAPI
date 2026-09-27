@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -33,4 +34,22 @@ func Resolve(ctx context.Context, tx *sql.Tx, modelID int64) (int64, error) {
 		return 0, errors.New("charity reservation: invalid configured amount")
 	}
 	return value, nil
+}
+
+// WithOutputFloor raises the existing one-request reservation to cover a
+// forced maximum output. The regular configured reserve remains the floor.
+// It uses the same exact per-million-token pricing and finite money cap as
+// ordinary charity charging; no second reservation is created.
+func WithOutputFloor(configured, outputUnitPrice, outputTokens int64) (int64, error) {
+	if configured < 0 || configured > db.MaxMoneyMilli || outputUnitPrice < 0 || outputUnitPrice > db.MaxMoneyMilli || outputTokens < 0 || outputTokens > 2147483647 {
+		return 0, errors.New("charity reservation: invalid output budget")
+	}
+	price, err := credits.PriceTokenUsage(credits.TokenUsage{Output: outputTokens}, credits.TokenPrices{Output: outputUnitPrice})
+	if err != nil || price > db.MaxMoneyMilli {
+		return 0, errors.New("charity reservation: output budget exceeds limit")
+	}
+	if price > configured {
+		return price, nil
+	}
+	return configured, nil
 }

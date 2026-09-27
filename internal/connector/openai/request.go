@@ -99,6 +99,24 @@ func (r *ChatRequest) RawField(name string) ([]byte, bool) {
 	return nil, false
 }
 
+// LogicalBody returns a fresh, bounded copy before target model, identity,
+// stream usage, and store policy are rewritten for a physical attempt.
+func (r *ChatRequest) LogicalBody() ([]byte, error) {
+	if r == nil {
+		return nil, ErrInvalidRequest
+	}
+	fields := make(map[string]json.RawMessage, len(r.fields))
+	for _, field := range r.fields {
+		fields[field.name] = field.value
+	}
+	body, err := json.Marshal(fields)
+	if err != nil || int64(len(body)) > r.bodyLimit {
+		clear(body)
+		return nil, ErrPayloadTooLarge
+	}
+	return body, nil
+}
+
 // SupportsOpenAICompatible preserves the existing OpenAI ingress boundary.
 // In particular, stream:null remains invalid for an OpenAI physical candidate
 // even though an Anthropic candidate can faithfully interpret null as false.
