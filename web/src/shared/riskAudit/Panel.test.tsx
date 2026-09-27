@@ -1,8 +1,9 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { RiskAuditPanel } from './Panel';
 import { ApiError } from '@shared/query/http';
+import { useLocation, useNavigate } from 'react-router';
 
 const api = vi.hoisted(() => ({
   recentTasks: vi.fn(),
@@ -13,6 +14,7 @@ const api = vi.hoisted(() => ({
   saveConfig: vi.fn(),
   saveRule: vi.fn(),
   deleteRule: vi.fn(),
+  user: vi.fn(),
 }));
 vi.mock('./api', async (load) => ({
   ...(await load<typeof import('./api')>()),
@@ -37,6 +39,9 @@ const scanID = 'scn_AAAAAAAAAAAAAAAAAAAAAA';
 const scan = {
   id: scanID,
   kind: 'users',
+  call_kind: 'total',
+  signal: '',
+  model: '',
   state: 'completed',
   scanned_candidates: '1',
   candidates: '1',
@@ -45,11 +50,27 @@ const scan = {
   to: 2,
   filter_revision: 1,
   expires_at: 1800000000,
+  rule_count: 0,
   coverage: 'complete',
   changed: false,
   truncated_reason: '',
 };
 const selectedScanRoute = '/risk-audit?audit_users_scan=' + scanID;
+function HistoryProbe() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return (
+    <>
+      <button type="button" onClick={() => navigate(-1)}>
+        Browser back
+      </button>
+      <button type="button" onClick={() => navigate(1)}>
+        Browser forward
+      </button>
+      <output data-testid="audit-location">{location.search}</output>
+    </>
+  );
+}
 beforeEach(() => {
   vi.clearAllMocks();
   api.recentTasks.mockResolvedValue([scan]);
@@ -71,7 +92,54 @@ beforeEach(() => {
     revision: 1,
     updated_at: 0,
   });
-  api.numberedRules.mockResolvedValue({ items: [], page: '1', page_size: 20, total_items: '0', total_pages: '1', revision: 'r1', changed: false });
+  api.numberedRules.mockResolvedValue({
+    items: [],
+    page: '1',
+    page_size: 20,
+    total_items: '0',
+    total_pages: '1',
+    revision: 'r1',
+    changed: false,
+  });
+  api.user.mockImplementation(async (_id: string, filters: { model?: string }) => ({
+    user_id: summary.user_id,
+    summary,
+    minutes: [],
+    coverage: 'complete',
+    requests: {
+      items: [],
+      next: '',
+      has_more: false,
+      from: 1790000000,
+      to: 1790003600,
+      coverage: 'complete',
+      scanned: 0,
+    },
+    comparison: {
+      model: filters.model ?? '',
+      from: 1790000000,
+      to: 1790003600,
+      user: {
+        samples: 0,
+        dispatched: 0,
+        rejected: 0,
+        failed: 0,
+        unknown_duration: 0,
+        cancellations: [],
+      },
+      others: {
+        samples: 0,
+        dispatched: 0,
+        rejected: 0,
+        failed: 0,
+        unknown_duration: 0,
+        cancellations: [],
+      },
+      has_more: false,
+      coverage: 'complete',
+    },
+    source_distribution: [],
+  }));
 });
 describe('Risk audit access and evidence presentation', () => {
   it.each([
@@ -166,7 +234,9 @@ it('uses server-relative quick ranges even when the browser clock is ahead', asy
   await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
   await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
   await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
-  await waitFor(() => expect(api.createTask.mock.lastCall?.[0]).toMatchObject({ lookback_hours: 168 }));
+  await waitFor(() =>
+    expect(api.createTask.mock.lastCall?.[0]).toMatchObject({ lookback_hours: 168 }),
+  );
   expect(api.createTask.mock.lastCall?.[0].to).toBeUndefined();
 });
 it('builds a two-condition website and title rule without silently saving it', async () => {
@@ -251,4 +321,108 @@ it('blocks steward editing of a bound rule even when its ban is disabled', async
   ).toBeVisible();
   expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+});
+
+it('restores a saved aggregate scan’s frozen signal, call kind and time across history navigation', async () => {
+  const old = {
+    ...scan,
+    call_kind: 'charity',
+    signal: 'rpm',
+    model: '',
+    from: 1790000000,
+    to: 1790003600,
+    filter_revision: 7,
+  };
+  api.recentTasks.mockResolvedValue([old]);
+  api.taskResults.mockResolvedValue({
+    scan: old,
+    items: [summary],
+    page: '1',
+    page_size: 20,
+    total_items: '1',
+    total_pages: '1',
+    coverage: 'complete',
+  });
+  const view = await renderWithProviders(
+    <>
+      <RiskAuditPanel role="admin" scopeKey="operator" />
+      <HistoryProbe />
+    </>,
+    {
+      station: 'admin',
+      role: 'admin',
+      locale: 'en',
+      route: '/risk-audit?audit_kind=self&audit_signal=concurrency&audit_model=current-model',
+    },
+  );
+  await view.user.selectOptions(
+    await screen.findByRole('combobox', { name: 'Recent scans' }),
+    scanID,
+  );
+  expect(await screen.findByText(/Frozen conditions for this scan/)).toHaveTextContent('Charity');
+  expect(screen.getByText(/Frozen conditions for this scan/)).toHaveTextContent('High RPM');
+  expect(screen.getByText(/Frozen conditions for this scan/)).toHaveTextContent('Revision 7');
+  expect(screen.getByRole('combobox', { name: 'Call type' })).toHaveValue('charity');
+  expect(screen.getByRole('combobox', { name: 'Risk filter' })).toHaveValue('rpm');
+  const selected = new URLSearchParams(screen.getByTestId('audit-location').textContent ?? '');
+  expect(selected.get('audit_from')).toBe('1790000000');
+  expect(selected.get('audit_to')).toBe('1790003600');
+  expect(selected.get('audit_model')).toBeNull();
+  expect(selected.get('audit_users_scan')).toBe(scanID);
+  await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
+  expect(screen.getByRole('combobox', { name: 'Call type' })).toHaveValue('self');
+  expect(screen.getByRole('combobox', { name: 'Risk filter' })).toHaveValue('concurrency');
+  expect(
+    new URLSearchParams(screen.getByTestId('audit-location').textContent ?? '').get('audit_model'),
+  ).toBe('current-model');
+  await view.user.click(screen.getByRole('button', { name: 'Browser forward' }));
+  expect(screen.getByRole('combobox', { name: 'Call type' })).toHaveValue('charity');
+  expect(screen.getByRole('combobox', { name: 'Risk filter' })).toHaveValue('rpm');
+  expect(
+    new URLSearchParams(screen.getByTestId('audit-location').textContent ?? '').get('audit_model'),
+  ).toBeNull();
+  expect(await screen.findByText(/Frozen conditions for this scan/)).toHaveTextContent('High RPM');
+  await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
+  await waitFor(() =>
+    expect(api.createTask.mock.lastCall?.[0]).toMatchObject({
+      from: old.from,
+      to: old.to,
+      call_kind: 'charity',
+      signal: 'rpm',
+    }),
+  );
+  expect(api.createTask.mock.lastCall?.[0].model).toBeUndefined();
+});
+
+it('restores the user model draft with the query on Back and Forward', async () => {
+  const view = await renderWithProviders(
+    <>
+      <RiskAuditPanel role="admin" scopeKey="operator" />
+      <HistoryProbe />
+    </>,
+    {
+      station: 'admin',
+      role: 'admin',
+      locale: 'en',
+      route: `/risk-audit?audit_user=${summary.user_id}&audit_user_from=1790000000&audit_user_to=1790003600&audit_user_model=A`,
+    },
+  );
+  expect(await screen.findByRole('heading', { name: /Same-model comparison: A/ })).toBeVisible();
+  const model = screen.getByRole('textbox', { name: 'Model' });
+  expect(model).toHaveValue('A');
+  await view.user.clear(model);
+  await view.user.type(model, 'B');
+  await view.user.click(
+    within(model.closest('form')!).getByRole('button', { name: 'Apply filters' }),
+  );
+  expect(await screen.findByRole('heading', { name: /Same-model comparison: B/ })).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('B');
+  await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
+  expect(await screen.findByRole('heading', { name: /Same-model comparison: A/ })).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('A');
+  await view.user.click(screen.getByRole('button', { name: 'Browser forward' }));
+  expect(await screen.findByRole('heading', { name: /Same-model comparison: B/ })).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('B');
+  expect(api.user.mock.calls.map(([, filters]) => filters.model)).toContain('A');
+  expect(api.user.mock.calls.map(([, filters]) => filters.model)).toContain('B');
 });

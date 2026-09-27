@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	routeAlerts         = "/admin/api/alerts"
-	routeAlertDetail    = "/admin/api/alerts/{id}"
-	routeResolveAlert   = "/admin/api/alerts/{id}/resolve"
-	maxRawQueryBytes    = 8192
-	maxResolveBodyBytes = 4096
+	routeAlerts           = "/admin/api/alerts"
+	routeAlertDetail      = "/admin/api/alerts/{id}"
+	routeTargetDiagnostic = "/admin/api/alerts/targets/{kind}/{target_id}"
+	routeResolveAlert     = "/admin/api/alerts/{id}/resolve"
+	maxRawQueryBytes      = 8192
+	maxResolveBodyBytes   = 4096
 )
 
 type httpAPI struct {
@@ -39,6 +40,7 @@ func RegisterRoutes(registrar AdminRouteRegistrar, repository *Repository) error
 	}{
 		{method: http.MethodGet, pattern: routeAlerts, handler: api.list},
 		{method: http.MethodGet, pattern: routeAlertDetail, handler: api.detail},
+		{method: http.MethodGet, pattern: routeTargetDiagnostic, handler: api.targetDiagnostic},
 		{method: http.MethodPost, pattern: routeResolveAlert, handler: api.resolve},
 		{method: http.MethodPost, pattern: "/admin/api/alerts/resolve", handler: api.resolveMany},
 	}
