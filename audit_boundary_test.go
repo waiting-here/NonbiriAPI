@@ -486,7 +486,8 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		// accessible model so this case reaches short-content enforcement.
 		if _, err := store.DB().Exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,created_at,updated_at)
 VALUES('provider','model','[公益]provider/model',1,'per_request',1,1);
-INSERT INTO charity_model_access(model_id,allowed_level_mask) SELECT id,63 FROM charity_models WHERE full_name='[公益]provider/model'`); err != nil {
+INSERT INTO charity_model_access(model_id,allowed_level_mask) SELECT id,63 FROM charity_models WHERE full_name='[公益]provider/model';
+INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) SELECT id,1,300 FROM charity_models WHERE full_name='[公益]provider/model'`); err != nil {
 			t.Fatal(err)
 		}
 		headers := map[string]string{"Authorization": "Bearer " + callerKey, "Content-Type": "application/json"}

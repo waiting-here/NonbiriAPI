@@ -15,7 +15,7 @@ import userZh from '../../src/user/i18n/zh.json';
 import { ThemeContext, type Density, type FontSize, type Theme } from '@shared/theme/context';
 
 export type TestStation = 'admin' | 'user';
-export type TestRole = 'anonymous' | 'user' | 'level4' | 'level5' | 'admin';
+export type TestRole = 'anonymous' | 'user' | 'level4' | 'level5' | 'level6' | 'admin';
 export type TestLocale = 'zh' | 'en';
 
 interface RenderOptions {

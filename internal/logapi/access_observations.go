@@ -35,6 +35,8 @@ func (api *diagnosticAPI) accessObservations(w http.ResponseWriter, r *http.Requ
 	var value any
 	if summary {
 		value, err = observability.SummarizeAccessTx(ctx, tx, filter)
+	} else if filter.Page > 0 {
+		value, err = observability.ListAccessNumberedTx(ctx, tx, filter)
 	} else {
 		value, err = observability.ListAccessTx(ctx, tx, filter)
 	}
@@ -108,6 +110,21 @@ func parseAccessFilter(raw string, now int64) (observability.AccessFilter, error
 				return filter, ErrInvalid
 			}
 			filter.Limit = int(n)
+		case "page":
+			if n < 1 || n > 2147483647 || strconv.FormatInt(n, 10) != value[0] {
+				return filter, ErrInvalid
+			}
+			filter.Page = n
+		case "watermark":
+			if strconv.FormatInt(n, 10) != value[0] {
+				return filter, ErrInvalid
+			}
+			filter.Watermark, filter.WatermarkSet = n, true
+		case "expected_total":
+			if strconv.FormatInt(n, 10) != value[0] {
+				return filter, ErrInvalid
+			}
+			filter.ExpectedTotal, filter.ExpectedSet = n, true
 		default:
 			return filter, ErrInvalid
 		}
@@ -116,6 +133,13 @@ func parseAccessFilter(raw string, now int64) (observability.AccessFilter, error
 		return filter, ErrInvalid
 	}
 	if filter.KeyGeneration != nil && filter.UserID <= 0 {
+		return filter, ErrInvalid
+	}
+	if filter.Page > 0 && (filter.Cursor != "" || (filter.Limit != 20 && filter.Limit != 50 && filter.Limit != 100)) {
+		return filter, ErrInvalid
+	}
+	if filter.WatermarkSet && (filter.Page == 0 || !values.Has("from") || !values.Has("to")) ||
+		filter.ExpectedSet && !filter.WatermarkSet {
 		return filter, ErrInvalid
 	}
 	return filter, nil

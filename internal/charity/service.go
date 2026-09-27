@@ -6,6 +6,7 @@ package charity
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -941,8 +942,9 @@ func foldStreak(ctx context.Context, tx *sql.Tx, keyID int64, generation db.U128
 	var currentGenerationBlob, nextFoldBlob, streakBlob []byte
 	var thresholdText string
 	var failureDisabled int
-	if err := tx.QueryRowContext(ctx, `SELECT streak_generation,next_fold_seq,failure_streak,failure_disabled,failure_disable_threshold
-FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlob, &streakBlob, &failureDisabled, &thresholdText); err != nil {
+	var donationID, sourceKeyID int64
+	if err := tx.QueryRowContext(ctx, `SELECT streak_generation,next_fold_seq,failure_streak,failure_disabled,failure_disable_threshold,donation_id,source_endpoint_key_id
+FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlob, &streakBlob, &failureDisabled, &thresholdText, &donationID, &sourceKeyID); err != nil {
 		return fmt.Errorf("charity: read streak cursor: %w", err)
 	}
 	currentGeneration, err := decodeU128(currentGenerationBlob)
@@ -965,6 +967,8 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 		return err
 	}
 	disabledNow := false
+	var disablingStreak db.U128
+	var disablingFold db.U128
 	for {
 		var state string
 		var success sql.NullInt64
@@ -991,6 +995,8 @@ WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
 				if failureDisabled == 0 && threshold != (db.U128{}) && streak.Big().Cmp(threshold.Big()) >= 0 {
 					failureDisabled = 1
 					disabledNow = true
+					disablingStreak = streak
+					disablingFold = next
 				}
 			}
 		} else if state != "released" {
@@ -1013,9 +1019,39 @@ WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`,
 	}
 	if disabledNow {
 		ref := fmt.Sprintf("donation-key:%d:generation:%s:fold:%s", keyID, generation.Decimal(), next.Decimal())
-		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved)
-SELECT 'donation_failure_disabled','charity donation key disabled after consecutive protocol failures',?,?,0
-WHERE NOT EXISTS(SELECT 1 FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?)`, ref, at, ref); err != nil {
+		type target struct {
+			Kind string `json:"kind"`
+			ID   string `json:"id"`
+		}
+		type fact struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		contextBody, err := json.Marshal(struct {
+			Targets []target `json:"targets"`
+			Facts   []fact   `json:"occurred_facts"`
+		}{
+			Targets: []target{
+				{Kind: "donation", ID: fmt.Sprint(donationID)},
+				{Kind: "donation_key", ID: fmt.Sprint(keyID)},
+				{Kind: "endpoint_key", ID: fmt.Sprint(sourceKeyID)},
+			},
+			Facts: []fact{
+				{Key: "donation_id", Value: fmt.Sprint(donationID)},
+				{Key: "donation_key_id", Value: fmt.Sprint(keyID)},
+				{Key: "endpoint_key_id", Value: fmt.Sprint(sourceKeyID)},
+				{Key: "failure_streak", Value: disablingStreak.Decimal()},
+				{Key: "failure_threshold", Value: thresholdText},
+				{Key: "generation", Value: generation.Decimal()},
+				{Key: "fold", Value: disablingFold.Decimal()},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved,context_version,context_json)
+SELECT 'donation_failure_disabled','charity donation key disabled after consecutive protocol failures',?,?,0,1,?
+WHERE NOT EXISTS(SELECT 1 FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?)`, ref, at, string(contextBody), ref); err != nil {
 			return fmt.Errorf("charity: create failure alert: %w", err)
 		}
 	}

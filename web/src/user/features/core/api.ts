@@ -35,6 +35,7 @@ import {
   validateScalarInput,
 } from './normalizers';
 import { coreRawRequest, coreRequest, operationHeaders } from './request';
+import { validateAccountExportV11 } from './accountExportValidation';
 import {
   CONNECTOR_TYPES,
   type AccountAuthority,
@@ -285,6 +286,9 @@ const ACCOUNT_EXPORT_KEYS = [
   'limited_activities',
   'image_tasks',
   'inactivity',
+  'request_adaptations',
+  'continuity',
+  'fat_fish',
 ] as const;
 const ELEVATED_TOKEN = /^[A-Za-z0-9._-]{8,512}$/;
 
@@ -335,7 +339,7 @@ async function boundedAccountExport(response: Response): Promise<Uint8Array> {
   return bytes;
 }
 
-function validateAccountExport(bytes: Uint8Array): void {
+function validateAccountExport(bytes: Uint8Array, accountId: string): void {
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
@@ -347,12 +351,13 @@ function validateAccountExport(bytes: Uint8Array): void {
   const record = value as Record<string, unknown>;
   const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
   if (
-    record.schema_version !== 10 ||
+    record.schema_version !== 11 ||
     Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
     Object.keys(record).some((key) => !expected.has(key))
   ) {
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
   }
+  validateAccountExportV11(record, accountId);
 }
 
 export async function exportAccount(
@@ -371,17 +376,17 @@ export async function exportAccount(
   const disposition = response.headers.get('Content-Disposition') ?? '';
   if (
     !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v10.json"'
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v11.json"'
   ) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
   const bytes = await boundedAccountExport(response);
-  validateAccountExport(bytes);
+  validateAccountExport(bytes, accountId);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 10,
+    schemaVersion: 11,
   };
 }
 

@@ -40,6 +40,7 @@ type Checkpoint struct {
 	NextAttemptAt int64
 	LastError     ErrorClass
 	UpdatedAt     int64
+	LastSuccessAt *int64
 }
 
 // Load returns one checkpoint.
@@ -52,11 +53,12 @@ func Load(ctx context.Context, query interface {
 	var checkpoint Checkpoint
 	checkpoint.WorkerKey = workerKey
 	var errorClass string
+	var lastSuccess sql.NullInt64
 	err := query.QueryRowContext(ctx, `
-SELECT cursor_text,generation,attempt_count,next_attempt_at,last_error_class,updated_at
+SELECT cursor_text,generation,attempt_count,next_attempt_at,last_error_class,updated_at,last_success_at
 FROM worker_checkpoints WHERE worker_key=?`, workerKey).Scan(
 		&checkpoint.Cursor, &checkpoint.Generation, &checkpoint.AttemptCount,
-		&checkpoint.NextAttemptAt, &errorClass, &checkpoint.UpdatedAt)
+		&checkpoint.NextAttemptAt, &errorClass, &checkpoint.UpdatedAt, &lastSuccess)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Checkpoint{}, sql.ErrNoRows
 	}
@@ -64,6 +66,9 @@ FROM worker_checkpoints WHERE worker_key=?`, workerKey).Scan(
 		return Checkpoint{}, err
 	}
 	checkpoint.LastError = ErrorClass(errorClass)
+	if lastSuccess.Valid {
+		checkpoint.LastSuccessAt = &lastSuccess.Int64
+	}
 	if !validCheckpoint(checkpoint) {
 		return Checkpoint{}, ErrInvalidCheckpoint
 	}
@@ -96,12 +101,12 @@ func CompareAndSet(ctx context.Context, tx *sql.Tx, previous, next Checkpoint) (
 	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE worker_checkpoints
-SET cursor_text=?,generation=?,attempt_count=?,next_attempt_at=?,last_error_class=?,updated_at=?
+SET cursor_text=?,generation=?,attempt_count=?,next_attempt_at=?,last_error_class=?,updated_at=?,last_success_at=?
 WHERE worker_key=? AND cursor_text=? AND generation=? AND attempt_count=?
- AND next_attempt_at=? AND last_error_class=? AND updated_at=?`,
-		next.Cursor, next.Generation, next.AttemptCount, next.NextAttemptAt, string(next.LastError), next.UpdatedAt,
+ AND next_attempt_at=? AND last_error_class=? AND updated_at=? AND last_success_at IS ?`,
+		next.Cursor, next.Generation, next.AttemptCount, next.NextAttemptAt, string(next.LastError), next.UpdatedAt, next.LastSuccessAt,
 		previous.WorkerKey, previous.Cursor, previous.Generation, previous.AttemptCount,
-		previous.NextAttemptAt, string(previous.LastError), previous.UpdatedAt)
+		previous.NextAttemptAt, string(previous.LastError), previous.UpdatedAt, previous.LastSuccessAt)
 	if err != nil {
 		return false, err
 	}
@@ -118,6 +123,7 @@ func Advance(previous Checkpoint, cursor string, generation, nextAttemptAt, now 
 	next := Checkpoint{
 		WorkerKey: previous.WorkerKey, Cursor: cursor, Generation: generation,
 		AttemptCount: 0, NextAttemptAt: nextAttemptAt, LastError: ErrorNone, UpdatedAt: now,
+		LastSuccessAt: previous.LastSuccessAt,
 	}
 	if !validCheckpoint(previous) || !validCheckpoint(next) || generation < previous.Generation {
 		return Checkpoint{}, ErrInvalidCheckpoint
@@ -174,7 +180,7 @@ func Due(ctx context.Context, query interface {
 		return nil, ErrInvalidCheckpoint
 	}
 	rows, err := query.QueryContext(ctx, `
-SELECT worker_key,cursor_text,generation,attempt_count,next_attempt_at,last_error_class,updated_at
+SELECT worker_key,cursor_text,generation,attempt_count,next_attempt_at,last_error_class,updated_at,last_success_at
 FROM worker_checkpoints WHERE next_attempt_at<=?
 ORDER BY next_attempt_at,worker_key LIMIT ?`, now, limit)
 	if err != nil {
@@ -185,11 +191,15 @@ ORDER BY next_attempt_at,worker_key LIMIT ?`, now, limit)
 	for rows.Next() {
 		var checkpoint Checkpoint
 		var errorClass string
+		var lastSuccess sql.NullInt64
 		if err := rows.Scan(&checkpoint.WorkerKey, &checkpoint.Cursor, &checkpoint.Generation,
-			&checkpoint.AttemptCount, &checkpoint.NextAttemptAt, &errorClass, &checkpoint.UpdatedAt); err != nil {
+			&checkpoint.AttemptCount, &checkpoint.NextAttemptAt, &errorClass, &checkpoint.UpdatedAt, &lastSuccess); err != nil {
 			return nil, err
 		}
 		checkpoint.LastError = ErrorClass(errorClass)
+		if lastSuccess.Valid {
+			checkpoint.LastSuccessAt = &lastSuccess.Int64
+		}
 		if !validCheckpoint(checkpoint) {
 			return nil, ErrInvalidCheckpoint
 		}
@@ -201,6 +211,7 @@ ORDER BY next_attempt_at,worker_key LIMIT ?`, now, limit)
 func validCheckpoint(checkpoint Checkpoint) bool {
 	return checkpoint.WorkerKey != "" && checkpoint.Generation >= 0 && checkpoint.AttemptCount >= 0 && checkpoint.AttemptCount <= maxAttempts &&
 		checkpoint.NextAttemptAt >= 0 && checkpoint.NextAttemptAt <= maxUnix && checkpoint.UpdatedAt >= 0 && checkpoint.UpdatedAt <= maxUnix &&
+		(checkpoint.LastSuccessAt == nil || *checkpoint.LastSuccessAt >= 0 && *checkpoint.LastSuccessAt <= checkpoint.UpdatedAt) &&
 		validError(checkpoint.LastError) && (checkpoint.AttemptCount == 0) == (checkpoint.LastError == ErrorNone)
 }
 

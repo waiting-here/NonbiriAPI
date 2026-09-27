@@ -449,7 +449,12 @@ func (r *Repository) User(ctx context.Context, actor Actor, userID int64, window
 	if err != nil {
 		return UserDetail{}, err
 	}
-	requests, err := sourcesTx(ctx, tx, w, userID)
+	var requests Page[SourceRequest]
+	if w.Page > 0 {
+		requests, err = sourcesNumberedTx(ctx, tx, w, userID)
+	} else {
+		requests, err = sourcesTx(ctx, tx, w, userID)
+	}
 	if err != nil {
 		return UserDetail{}, err
 	}

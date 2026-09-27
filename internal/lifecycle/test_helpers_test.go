@@ -73,6 +73,8 @@ type testExportAdapter struct {
 	rankings         RankingExport
 	penalties        []PenaltyExport
 	governance       GovernanceExport
+	interaction      InteractionExport
+	fatFishFinalizer ExportFinalizer
 	donations        []DonationExport
 	charity          CharityExport
 	fishing          FishingExport
@@ -121,6 +123,18 @@ func (adapter *testExportAdapter) ExportLedger(_ context.Context, tx *sql.Tx, _ 
 
 func (adapter *testExportAdapter) ExportGovernance(_ context.Context, tx *sql.Tx, _ ExportRequest) (GovernanceExport, error) {
 	return adapter.governance, adapter.record("governance", tx)
+}
+
+func (adapter *testExportAdapter) ExportRequestAdaptations(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]RequestAdaptationExport, error) {
+	return adapter.interaction.RequestAdaptations, adapter.record("request_adaptation", tx)
+}
+
+func (adapter *testExportAdapter) ExportContinuity(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]ContinuityEligibilityExport, error) {
+	return adapter.interaction.Continuity, adapter.record("continuity", tx)
+}
+
+func (adapter *testExportAdapter) ExportFatFish(_ context.Context, tx *sql.Tx, _ ExportRequest) (FatFishExport, ExportFinalizer, error) {
+	return adapter.interaction.FatFish, adapter.fatFishFinalizer, adapter.record("fat_fish", tx)
 }
 
 func (adapter *testExportAdapter) ExportActivities(_ context.Context, tx *sql.Tx, _ ExportRequest) (ActivityExport, error) {
@@ -354,6 +368,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 		Store: store, UserAuth: auth, AdminAuth: auth, CursorKeys: testCursorKeys{},
 		Retirement: testRetirementBoundary{retirement: retirement}, Ledger: &testLedgerDelete{},
 		Export: ExportAdapters{
+			RequestAdaptation: exports, Continuity: exports, FatFish: exports,
 			Identity: exports, Resources: exports, Issues: exports, Ledger: exports, Activities: exports,
 			Donations: exports, Charity: exports, Fishing: exports, LinkLink: exports, RPS: exports,
 			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"},
@@ -362,6 +377,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Rankings:   exports, Penalties: exports, Governance: exports,
 		},
 		Delete: DeleteAdapters{
+			FatFish:              noopDelete("fat_fish"),
 			RequestAdaptation:    noopDelete("request_adaptation"),
 			Continuity:           noopDelete("continuity"),
 			CharityRouting:       noopDelete("charity_routing"),
@@ -373,6 +389,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopDelete("bidding"), Likes: noopDelete("likes"), Blackjack: noopDelete("blackjack"),
 		},
 		Recovery: RecoveryAdapters{
+			FatFish:        noopRecovery("fat_fish"),
 			CharityRouting: noopRecovery("charity_routing"),
 			Governance:     noopRecovery("governance"),
 			Idempotency:    noopRecovery("idempotency"), Discovery: noopRecovery("discovery"), Claims: noopRecovery("claims"),
@@ -381,6 +398,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
+			FatFish:           noopRetention("fat_fish"),
 			RequestAdaptation: noopRetention("request_adaptation"),
 			Continuity:        noopRetention("continuity"),
 			CharityRouting:    noopRetention("charity_routing"),

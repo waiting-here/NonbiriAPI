@@ -355,7 +355,7 @@ func newLifecycleCoordinator(
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
 		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
 		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
-		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil {
+		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil || activityEngines.fish == nil {
 		return nil, lifecycle.ErrInvalid
 	}
 
@@ -409,6 +409,7 @@ func newLifecycleCoordinator(
 	reportAdapter := lifecycleadapters.NewReportLifecycle(reportRepository)
 	announcementAdapter := lifecycleadapters.NewAnnouncementAuditLifecycle(announcementRepository)
 	secretAdapter := lifecycleadapters.NewOrphanSecretRecovery(claimService)
+	fatFishAdapter := activityEngines.fish.LifecycleAdapter()
 	idempotencyAdapter := lifecycleadapters.NewIdempotencyMaintenance(
 		idempotency.NewMaintenance(store.DB()),
 	)
@@ -420,8 +421,11 @@ func newLifecycleCoordinator(
 		},
 		Ledger: ledgerAdapter,
 		Export: lifecycle.ExportAdapters{
-			Governance: activityEngines,
-			Identity:   accountResources, Resources: accountResources, Issues: accountResources,
+			RequestAdaptation: forwardRuntime.adaptations,
+			Continuity:        authRuntime.IdentityContinuity(),
+			FatFish:           fatFishAdapter,
+			Governance:        activityEngines,
+			Identity:          accountResources, Resources: accountResources, Issues: accountResources,
 			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
@@ -429,6 +433,7 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			FatFish:              fatFishAdapter,
 			RequestAdaptation:    forwardRuntime.adaptations,
 			Continuity:           authRuntime.IdentityContinuity(),
 			CharityRouting:       routingLifecycle,
@@ -441,6 +446,7 @@ func newLifecycleCoordinator(
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
+			FatFish:        fatFishAdapter,
 			CharityRouting: routingLifecycle,
 			Governance:     activityEngines,
 			Idempotency:    idempotencyAdapter,
@@ -458,6 +464,7 @@ func newLifecycleCoordinator(
 			Secrets:        secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
+			FatFish:           fatFishAdapter,
 			RequestAdaptation: forwardRuntime.adaptations,
 			Continuity:        authRuntime.IdentityContinuity(),
 			CharityRouting:    routingLifecycle,

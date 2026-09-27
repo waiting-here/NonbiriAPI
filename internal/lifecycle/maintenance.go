@@ -7,6 +7,22 @@ import (
 	"time"
 )
 
+type lifecycleStageError struct {
+	phase  string
+	domain string
+	index  int
+	err    error
+}
+
+func (stage lifecycleStageError) Error() string {
+	if stage.index < 0 {
+		return fmt.Sprintf("lifecycle: %s: %v", stage.phase, stage.err)
+	}
+	return fmt.Sprintf("lifecycle: %s adapter %d: %v", stage.phase, stage.index, stage.err)
+}
+
+func (stage lifecycleStageError) Unwrap() error { return stage.err }
+
 // RecoverBeforeListener runs the full fixed recovery order synchronously.
 // Any failed domain keeps listener startup closed, but later domains are still
 // attempted so one failure does not hide another recoverable backlog.
@@ -133,11 +149,11 @@ func (coordinator *Coordinator) runRecovery(ctx context.Context, decisionNow int
 	}
 	var failures []error
 	if err := coordinator.expireAllDueHolds(ctx, decisionNow); err != nil {
-		failures = append(failures, fmt.Errorf("lifecycle: expire legal holds: %w", err))
+		failures = append(failures, lifecycleStageError{phase: "expire legal holds", domain: "legal_holds", index: -1, err: err})
 	}
-	for index, adapter := range coordinator.recovery.ordered() {
-		if err := drainRecoveryAdapter(ctx, adapter, decisionNow); err != nil {
-			failures = append(failures, fmt.Errorf("lifecycle: recovery adapter %d: %w", index, err))
+	for index, stage := range coordinator.recovery.ordered() {
+		if err := drainRecoveryAdapter(ctx, stage.adapter, decisionNow); err != nil {
+			failures = append(failures, lifecycleStageError{phase: "recovery", domain: stage.domain, index: index, err: err})
 		}
 	}
 	return errors.Join(failures...)
@@ -167,15 +183,15 @@ func drainRecoveryAdapter(ctx context.Context, adapter RecoveryAdapter, decision
 func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow int64) error {
 	var failures []error
 	adapters := coordinator.retention.ordered()
-	for index, adapter := range adapters {
-		if err := drainRetentionAdapter(ctx, adapter, decisionNow); err != nil {
-			failures = append(failures, fmt.Errorf("lifecycle: retention adapter %d: %w", index, err))
+	for index, stage := range adapters {
+		if err := drainRetentionAdapter(ctx, stage.adapter, decisionNow); err != nil {
+			failures = append(failures, lifecycleStageError{phase: "retention", domain: stage.domain, index: index, err: err})
 		}
 		if index == 1 {
 			for {
 				result, err := coordinator.retainEndedHolds(ctx, decisionNow, WorkerBatchLimit, time.Now().Add(WorkerBudget))
 				if err != nil {
-					failures = append(failures, fmt.Errorf("lifecycle: retain legal holds: %w", err))
+					failures = append(failures, lifecycleStageError{phase: "retain legal holds", domain: "legal_holds", index: -1, err: err})
 					break
 				}
 				if !result.More {

@@ -48,6 +48,44 @@ it('rejects oversized audit result pages', async () => {
   await expect(riskAPI('admin').clients({})).rejects.toMatchObject({ code: 'invalid_response' });
 });
 
+it('decodes a complete numbered user task result', async () => {
+  const scan = {
+    id: 'scn_BBBBBBBBBBBBBBBBBBBBBQ', state: 'completed', status: 'completed', reason: '',
+    from: 1799900000, to: 1800000000, kind: 'users', call_kind: 'total', model: '',
+    candidates: '41', scanned: '41', scanned_candidates: '41', matched: 41, rule_count: 0,
+    created_at: 1800000000, updated_at: 1800000001, expires_at: 1800086400,
+    filter_revision: 1, changed: false, coverage: 'complete',
+  };
+  fetcher.mockResolvedValue({
+    scan, page: '1', page_size: 20, total_items: '41', total_pages: '3', coverage: 'complete',
+    items: Array.from({ length: 20 }, (_, index) => ({
+      user_id: String(index + 1), rpm_committed: 1, rpm_denied: 0, concurrency_denied: 0,
+      peak: 1, occupancy_millis: 1000, complete_minutes: 1, incomplete_minutes: 0,
+      high_rpm_minutes: 0, high_concurrency_minutes: 0, rpm_risk: false,
+      concurrency_risk: false, risk_scope: 'total',
+    })),
+  });
+  await expect(riskAPI('admin').taskResults(scan.id, 'users', '1', 20)).resolves.toMatchObject({ total_items: '41', scan: { kind: 'users' } });
+});
+
+it('decodes numbered rule, source and access envelopes with their non-pagination fields', async () => {
+  fetcher.mockResolvedValueOnce({
+    items: [], page: '1', page_size: 20, total_items: '0', total_pages: '1',
+    revision: 'revision-a', changed: false,
+  });
+  await expect(riskAPI('admin').numberedRules('1', 20)).resolves.toMatchObject({ revision: 'revision-a', total_items: '0' });
+  fetcher.mockResolvedValueOnce({
+    items: [], next: '', has_more: false, from: 1, to: 2, coverage: 'source_page', scanned: 0,
+    page: '1', page_size: 20, total_items: '0', total_pages: '1', watermark: '0', changed: false,
+  });
+  await expect(riskAPI('admin').users({ page: 1, page_size: 20 })).resolves.toMatchObject({ watermark: '0', total_items: '0' });
+  fetcher.mockResolvedValueOnce({
+    data: [], page: '1', page_size: 20, total_items: '0', total_pages: '1',
+    watermark: '0', changed: false, from: 1, to: 2,
+  });
+  await expect(riskAPI('admin').numberedAccess({}, '1', 20)).resolves.toMatchObject({ watermark: '0', total_items: '0' });
+});
+
 const completedScan = {
   id: 'scn_AAAAAAAAAAAAAAAAAAAAAA',
   state: 'completed',

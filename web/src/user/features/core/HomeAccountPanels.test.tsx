@@ -794,7 +794,7 @@ describe('account deletion confirmation', () => {
     const adapter: AccountLifecycleAdapter = {
       capabilities: { exportAccount: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 10 }) as const),
+      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 11 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -844,7 +844,7 @@ describe('account deletion confirmation', () => {
     const adapter: AccountLifecycleAdapter = {
       capabilities: { exportAccount: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 10 }) as const),
+      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 11 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -890,7 +890,7 @@ describe('account deletion confirmation', () => {
     const adapter: AccountLifecycleAdapter = {
       capabilities: { exportAccount: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 10 }) as const),
+      exportAccount: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 11 }) as const),
       deleteAccount,
       readAccountAuthority,
     };

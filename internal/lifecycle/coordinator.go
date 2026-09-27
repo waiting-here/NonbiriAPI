@@ -21,23 +21,26 @@ type OpaqueIDSource func(string) (string, error)
 // ExportAdapters is the closed Generation 2 export registry. The coordinator
 // converges game state before reading financial projections in one transaction.
 type ExportAdapters struct {
-	Identity   IdentityExporter
-	Resources  ResourceExporter
-	Issues     IssueExporter
-	Ledger     LedgerExporter
-	Activities ActivityExporter
-	Donations  DonationExporter
-	Charity    CharityExporter
-	Fishing    FishingExporter
-	LinkLink   LinkLinkExporter
-	RPS        RPSExporter
-	Bidding    DuelExporter
-	Likes      DuelExporter
-	Blackjack  BlackjackExporter
-	Randomness RandomnessExporter
-	Rankings   RankingExporter
-	Penalties  PenaltyExporter
-	Governance GovernanceExporter
+	RequestAdaptation RequestAdaptationExporter
+	Continuity        ContinuityExporter
+	FatFish           FatFishExporter
+	Identity          IdentityExporter
+	Resources         ResourceExporter
+	Issues            IssueExporter
+	Ledger            LedgerExporter
+	Activities        ActivityExporter
+	Donations         DonationExporter
+	Charity           CharityExporter
+	Fishing           FishingExporter
+	LinkLink          LinkLinkExporter
+	RPS               RPSExporter
+	Bidding           DuelExporter
+	Likes             DuelExporter
+	Blackjack         BlackjackExporter
+	Randomness        RandomnessExporter
+	Rankings          RankingExporter
+	Penalties         PenaltyExporter
+	Governance        GovernanceExporter
 }
 
 // DeleteAdapters is the closed account-deletion registry. Each adapter owns
@@ -58,6 +61,7 @@ type DeleteAdapters struct {
 	Bidding              DeleteAdapter
 	Likes                DeleteAdapter
 	Blackjack            DeleteAdapter
+	FatFish              DeleteAdapter
 	DebugAccountStream   DeleteAdapter
 	Governance           DeleteAdapter
 	CharityRouting       DeleteAdapter
@@ -80,6 +84,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 		adapters.Bidding,
 		adapters.Likes,
 		adapters.Blackjack,
+		adapters.FatFish,
 		adapters.DebugAccountStream,
 		adapters.Governance,
 		adapters.CharityRouting,
@@ -101,29 +106,36 @@ type RecoveryAdapters struct {
 	Bidding        RecoveryAdapter
 	Likes          RecoveryAdapter
 	Blackjack      RecoveryAdapter
+	FatFish        RecoveryAdapter
 	Donations      RecoveryAdapter
 	Secrets        RecoveryAdapter
 	Governance     RecoveryAdapter
 	CharityRouting RecoveryAdapter
 }
 
-func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
-	return []RecoveryAdapter{
-		adapters.Idempotency,
-		adapters.Discovery,
-		adapters.Claims,
-		adapters.Thursday,
-		adapters.Reports,
-		adapters.Fishing,
-		adapters.LinkLink,
-		adapters.RPS,
-		adapters.Bidding,
-		adapters.Likes,
-		adapters.Blackjack,
-		adapters.Donations,
-		adapters.Secrets,
-		adapters.Governance,
-		adapters.CharityRouting,
+type namedRecoveryAdapter struct {
+	domain  string
+	adapter RecoveryAdapter
+}
+
+func (adapters RecoveryAdapters) ordered() []namedRecoveryAdapter {
+	return []namedRecoveryAdapter{
+		{"idempotency", adapters.Idempotency},
+		{"discovery", adapters.Discovery},
+		{"claims", adapters.Claims},
+		{"thursday", adapters.Thursday},
+		{"reports", adapters.Reports},
+		{"fishing", adapters.Fishing},
+		{"linklink", adapters.LinkLink},
+		{"rps", adapters.RPS},
+		{"bidding", adapters.Bidding},
+		{"likes", adapters.Likes},
+		{"blackjack", adapters.Blackjack},
+		{"donations", adapters.Donations},
+		{"fat_fish", adapters.FatFish},
+		{"secrets", adapters.Secrets},
+		{"governance", adapters.Governance},
+		{"charity_routing", adapters.CharityRouting},
 	}
 }
 
@@ -144,6 +156,7 @@ type RetentionAdapters struct {
 	Bidding           RetentionAdapter
 	Likes             RetentionAdapter
 	Blackjack         RetentionAdapter
+	FatFish           RetentionAdapter
 	Reports           RetentionAdapter
 	Donations         RetentionAdapter
 	Charity           RetentionAdapter
@@ -153,29 +166,35 @@ type RetentionAdapters struct {
 	CharityRouting    RetentionAdapter
 }
 
-func (adapters RetentionAdapters) ordered() []RetentionAdapter {
-	return []RetentionAdapter{
-		adapters.Continuity,
-		adapters.Sessions,
-		adapters.RequestLogs,
-		adapters.Audits,
-		adapters.Observability,
-		adapters.RiskAudit,
-		adapters.Issues,
-		adapters.Fishing,
-		adapters.LinkLink,
-		adapters.RPS,
-		adapters.Bidding,
-		adapters.Likes,
-		adapters.Blackjack,
-		adapters.Reports,
-		adapters.Donations,
-		adapters.Charity,
-		adapters.Idempotency,
-		adapters.Secrets,
-		adapters.Governance,
-		adapters.CharityRouting,
-		adapters.RequestAdaptation,
+type namedRetentionAdapter struct {
+	domain  string
+	adapter RetentionAdapter
+}
+
+func (adapters RetentionAdapters) ordered() []namedRetentionAdapter {
+	return []namedRetentionAdapter{
+		{"continuity", adapters.Continuity},
+		{"sessions", adapters.Sessions},
+		{"request_logs", adapters.RequestLogs},
+		{"audits", adapters.Audits},
+		{"observability", adapters.Observability},
+		{"risk_audit", adapters.RiskAudit},
+		{"issues", adapters.Issues},
+		{"fishing", adapters.Fishing},
+		{"linklink", adapters.LinkLink},
+		{"rps", adapters.RPS},
+		{"bidding", adapters.Bidding},
+		{"likes", adapters.Likes},
+		{"blackjack", adapters.Blackjack},
+		{"reports", adapters.Reports},
+		{"fat_fish", adapters.FatFish},
+		{"donations", adapters.Donations},
+		{"charity", adapters.Charity},
+		{"idempotency", adapters.Idempotency},
+		{"secrets", adapters.Secrets},
+		{"governance", adapters.Governance},
+		{"charity_routing", adapters.CharityRouting},
+		{"request_adaptation", adapters.RequestAdaptation},
 	}
 }
 
@@ -274,7 +293,8 @@ func completeExportAdapters(a ExportAdapters) bool {
 	return a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
 		a.Activities != nil && a.Donations != nil && a.Charity != nil && a.Fishing != nil &&
 		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil &&
-		a.Rankings != nil && a.Penalties != nil && a.Governance != nil
+		a.Rankings != nil && a.Penalties != nil && a.Governance != nil &&
+		a.RequestAdaptation != nil && a.Continuity != nil && a.FatFish != nil
 }
 
 func completeDeleteAdapters(a DeleteAdapters) bool {
@@ -288,7 +308,7 @@ func completeDeleteAdapters(a DeleteAdapters) bool {
 
 func completeRecoveryAdapters(a RecoveryAdapters) bool {
 	for _, adapter := range a.ordered() {
-		if adapter == nil {
+		if adapter.adapter == nil {
 			return false
 		}
 	}
@@ -297,7 +317,7 @@ func completeRecoveryAdapters(a RecoveryAdapters) bool {
 
 func completeRetentionAdapters(a RetentionAdapters) bool {
 	for _, adapter := range a.ordered() {
-		if adapter == nil {
+		if adapter.adapter == nil {
 			return false
 		}
 	}
@@ -382,6 +402,12 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if err != nil {
 		return nil, err
 	}
+	if document.FatFish, finalizer, err = coordinator.export.FatFish.ExportFatFish(ctx, tx, request); finalizer != nil {
+		finalizers = append(finalizers, finalizer)
+	}
+	if err != nil {
+		return nil, err
+	}
 	if document.Randomness, err = coordinator.export.Randomness.ExportRandomness(ctx, tx, request); err != nil {
 		return nil, err
 	}
@@ -419,6 +445,12 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if document.GovernanceExport, err = coordinator.export.Governance.ExportGovernance(ctx, tx, request); err != nil {
 		return nil, err
 	}
+	if document.RequestAdaptations, err = coordinator.export.RequestAdaptation.ExportRequestAdaptations(ctx, tx, request); err != nil {
+		return nil, err
+	}
+	if document.Continuity, err = coordinator.export.Continuity.ExportContinuity(ctx, tx, request); err != nil {
+		return nil, err
+	}
 	if len(document.LimitedActivities.Exchanges) > CollectionLimit || len(document.ImageTasks) > CollectionLimit || len(document.Inactivity.Runs) > CollectionLimit {
 		return nil, ErrTooLarge
 	}
@@ -444,6 +476,36 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 }
 
 func normalizeExportDocument(document *ExportDocument) {
+	if document.RequestAdaptations == nil {
+		document.RequestAdaptations = []RequestAdaptationExport{}
+	}
+	for i := range document.RequestAdaptations {
+		item := &document.RequestAdaptations[i]
+		if item.ForwardHeaders == nil {
+			item.ForwardHeaders = []string{}
+		}
+		if item.FixedHeaders == nil {
+			item.FixedHeaders = []AdaptationValueExport{}
+		}
+		if item.BodyDefaults == nil {
+			item.BodyDefaults = []AdaptationValueExport{}
+		}
+		if item.BodyForced == nil {
+			item.BodyForced = []AdaptationValueExport{}
+		}
+		if item.NativeExtensionPaths == nil {
+			item.NativeExtensionPaths = []string{}
+		}
+	}
+	if document.Continuity == nil {
+		document.Continuity = []ContinuityEligibilityExport{}
+	}
+	if document.FatFish.Summaries == nil {
+		document.FatFish.Summaries = []FatFishSummaryExport{}
+	}
+	if document.FatFish.Progress == nil {
+		document.FatFish.Progress = []FatFishProgressExport{}
+	}
 	if document.LimitedActivities.Exchanges == nil {
 		document.LimitedActivities.Exchanges = []ActivityExchangeExport{}
 	}
@@ -569,6 +631,9 @@ func normalizeExportDocument(document *ExportDocument) {
 }
 
 func validateExportCollectionBounds(document ExportDocument) error {
+	if len(document.FatFish.Summaries) > CollectionLimit || len(document.FatFish.Progress) > CollectionLimit-len(document.FatFish.Summaries) {
+		return ErrTooLarge
+	}
 	blackjackRows := len(document.Blackjack.History)
 	if document.Blackjack.Current != nil {
 		blackjackRows++
@@ -592,6 +657,7 @@ func validateExportCollectionBounds(document ExportDocument) error {
 		}
 	}
 	lengths := []int{
+		len(document.RequestAdaptations), len(document.Continuity),
 		len(document.GameOnboardingHolds), len(document.Loans), len(document.GameRankings.Totals), len(document.GameRankings.Events), len(document.Penalties),
 		len(document.Randomness),
 		len(document.Endpoints), len(document.CatalogPairs), len(document.Models), len(document.Issues),

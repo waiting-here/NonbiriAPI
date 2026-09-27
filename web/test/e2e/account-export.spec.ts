@@ -10,7 +10,7 @@ import {
 } from './support';
 
 for (const locale of ['en', 'zh'] as const) {
-  test(`account export downloads v10 after the one-shot confirmation in ${locale}`, async ({
+  test(`account export downloads v11 after the one-shot confirmation in ${locale}`, async ({
     page,
   }) => {
     const guard = collectConsoleViolations(page);
@@ -30,7 +30,7 @@ for (const locale of ['en', 'zh'] as const) {
       document.cookie = 'nb_elevated=synthetic_export_capability; Path=/; SameSite=Lax';
     }, locale);
     const exportedDocument = {
-      schema_version: 10,
+      schema_version: 11,
       generated_at: 1_700_000_000,
       user: { id: '1' },
       endpoints: [],
@@ -64,6 +64,9 @@ for (const locale of ['en', 'zh'] as const) {
       },
       image_tasks: [],
       inactivity: { activity: null, runs: [] },
+      request_adaptations: [],
+      continuity: [],
+      fat_fish: { summaries: [], progress: [] },
     };
     let requests = 0;
     await page.route(`${USER_ORIGIN}/api/account/export`, async (route) => {
@@ -73,7 +76,7 @@ for (const locale of ['en', 'zh'] as const) {
       await route.fulfill({
         headers: {
           'content-type': 'application/json',
-          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v10.json"',
+          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v11.json"',
           'cache-control': 'no-store',
         },
         body: JSON.stringify(exportedDocument),
@@ -88,7 +91,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '创建导出' : 'Create export', exact: true })
       .click();
     const download = await pending;
-    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v10.json');
+    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v11.json');
     expect(JSON.parse(await readFile((await download.path())!, 'utf8'))).toEqual(exportedDocument);
     expect(requests).toBe(1);
     expect(await page.evaluate(() => document.cookie)).not.toContain('nb_elevated');
