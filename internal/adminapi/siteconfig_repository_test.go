@@ -262,6 +262,8 @@ func TestSiteConfigPatchScalarBoundariesAndOptionalNull(t *testing.T) {
 	}{
 		{"boolean false", KeyRegistrationOpen, `false`, "0"},
 		{"boolean true", KeyRegistrationOpen, `true`, "1"},
+		{"check-in choice false", KeyCheckinMutuallyExclusive, `false`, "0"},
+		{"check-in choice true", KeyCheckinMutuallyExclusive, `true`, "1"},
 		{"integer minimum", KeyDefaultEndpointLimit, `0`, "0"},
 		{"integer maximum", KeyDefaultEndpointLimit, `10000`, "10000"},
 		{"amount minimum", KeyLevelThreshold2Milli, `"0"`, "0"},
@@ -299,6 +301,9 @@ func TestSiteConfigPatchScalarBoundariesAndOptionalNull(t *testing.T) {
 
 	invalid := []struct{ name, key, raw string }{
 		{"boolean type", KeyRegistrationOpen, `1`},
+		{"check-in choice number", KeyCheckinMutuallyExclusive, `1`},
+		{"check-in choice string", KeyCheckinMutuallyExclusive, `"true"`},
+		{"check-in choice null", KeyCheckinMutuallyExclusive, `null`},
 		{"integer below", KeyDefaultEndpointLimit, `-1`},
 		{"integer above", KeyDefaultEndpointLimit, `10001`},
 		{"integer fraction", KeyDefaultEndpointLimit, `1.0`},

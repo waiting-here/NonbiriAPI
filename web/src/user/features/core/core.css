@@ -41,6 +41,54 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
 }
 
+.core-checkin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--nb-space-4);
+}
+
+.core-checkin-choice-note {
+  margin: 0;
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border-inline-start: 0.25rem solid var(--nb-color-accent);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  font-weight: 600;
+}
+
+.core-checkin-card {
+  align-content: start;
+}
+
+.core-checkin-card .core-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+}
+
+.core-checkin-card > .btn {
+  inline-size: 100%;
+}
+
+@media (max-width: 32rem) {
+  .core-checkin-grid > .core-checkin-card {
+    padding: var(--nb-space-3);
+  }
+
+  .core-checkin-card .core-metric {
+    padding: var(--nb-space-2);
+  }
+
+  .core-checkin-card h2 {
+    font-size: var(--nb-font-size-md);
+  }
+}
+
+@media (max-width: 359px) {
+  .core-checkin-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .core-card {
   display: grid;
   gap: var(--nb-space-4);

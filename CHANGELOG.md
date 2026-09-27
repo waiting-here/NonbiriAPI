@@ -10,6 +10,8 @@ This entry describes the unreleased rc.4 source candidate. The latest published 
 
 ### Added
 
+- Administrators can optionally make general- and game-credit check-ins mutually exclusive per site day while retaining each type's availability settings. The user page displays both cards together with a clear daily-choice notice; transactional admission also enforces the choice for concurrent requests and returning identities.
+
 - Image-model setup now has capability discovery and reviewable profile changes, parameter forms across both stations, size-tier prices with exact width/height overrides and an optional per-model default, and a price preview that does not generate an image or charge credits. Legacy model prices and accepted task snapshots retain their existing meaning.
 - Fat Fish adds a deterministic local game, revisioned level and period editing, condition-aware node maps, eight hash-checked example levels, import/export, and version-bound no-charge administrator playtests. Formal challenges use explicit General-credit unlock and ticket confirmations, original-tab recovery, server replay verification, and period leaderboards.
 - Fat Fish includes an illustrated rice-and-obstacle cover and optional looping background music, "Monkeys Spinning Monkeys" by Kevin MacLeod under CC BY 4.0, with local delivery and an off-by-default music control.

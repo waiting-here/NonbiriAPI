@@ -49,13 +49,14 @@ func TestGenerationTwoConfigCatalogSeparatesRequiredAndOptionalRows(t *testing.T
 		"charity_token_reserve_milli",
 		"anthropic_default_max_tokens",
 		"model_request_body_limit_mib",
+		"checkin_mutually_exclusive",
 	} {
 		if requiredSet[key] || !knownSet[key] {
 			t.Fatalf("optional key %q required=%v known=%v", key, requiredSet[key], knownSet[key])
 		}
 	}
-	if len(known) != len(required)+4 {
-		t.Fatalf("known=%d required=%d, want exactly four optional fixed rows", len(known), len(required))
+	if len(known) != len(required)+5 {
+		t.Fatalf("known=%d required=%d, want exactly five optional fixed rows", len(known), len(required))
 	}
 	if knownSet["default_locale"] || requiredSet["default_locale"] {
 		t.Fatal("deleted default_locale remains in Generation 2 catalog")
@@ -556,7 +557,8 @@ func TestGenerationTwoConfigOptionalDeleteSurvivesCurrentValidation(t *testing.T
 	if _, err := database.Exec(`INSERT INTO site_config(key,value,updated_at) VALUES
 		('site_timezone_offset_minutes','0',0),
 		('charity_token_reserve_milli','1',0),
-		('anthropic_default_max_tokens','65536',0)`); err != nil {
+		('anthropic_default_max_tokens','65536',0),
+		('checkin_mutually_exclusive','1',0)`); err != nil {
 		t.Fatalf("insert optional rows: %v", err)
 	}
 	if err := database.Close(); err != nil {
@@ -567,8 +569,12 @@ func TestGenerationTwoConfigOptionalDeleteSurvivesCurrentValidation(t *testing.T
 	if err := validateGenerationTwoConfig(context.Background(), database); err != nil {
 		t.Fatalf("current validation with optional rows: %v", err)
 	}
+	var choice string
+	if err := database.QueryRow(`SELECT value FROM site_config WHERE key='checkin_mutually_exclusive'`).Scan(&choice); err != nil || choice != "1" {
+		t.Fatalf("check-in choice after reopen = %q, %v", choice, err)
+	}
 	if _, err := database.Exec(`DELETE FROM site_config WHERE key IN
-		('site_timezone_offset_minutes','charity_token_reserve_milli','anthropic_default_max_tokens')`); err != nil {
+		('site_timezone_offset_minutes','charity_token_reserve_milli','anthropic_default_max_tokens','checkin_mutually_exclusive')`); err != nil {
 		t.Fatalf("delete optional rows: %v", err)
 	}
 	if err := database.Close(); err != nil {

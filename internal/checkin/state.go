@@ -17,14 +17,15 @@ import (
 )
 
 const (
-	checkinModeKey     = "checkin_mode"
-	awardMinimumKey    = "checkin_award_min_milli"
-	awardMaximumKey    = "checkin_award_max_milli"
-	balanceCapKey      = "credits_cap_milli"
-	timezoneLockKey    = "site_timezone_offset_locked"
-	levelThreshold2Key = "level_threshold_2_milli"
-	levelThreshold3Key = "level_threshold_3_milli"
-	levelThreshold4Key = "level_threshold_4_milli"
+	checkinModeKey       = "checkin_mode"
+	mutuallyExclusiveKey = "checkin_mutually_exclusive"
+	awardMinimumKey      = "checkin_award_min_milli"
+	awardMaximumKey      = "checkin_award_max_milli"
+	balanceCapKey        = "credits_cap_milli"
+	timezoneLockKey      = "site_timezone_offset_locked"
+	levelThreshold2Key   = "level_threshold_2_milli"
+	levelThreshold3Key   = "level_threshold_3_milli"
+	levelThreshold4Key   = "level_threshold_4_milli"
 )
 
 type checkinSource struct {
@@ -50,6 +51,25 @@ type checkinConfig struct {
 type siteDay struct {
 	activityDay int64
 	siteDate    string
+}
+
+func readMutuallyExclusive(ctx context.Context, tx *sql.Tx) (bool, error) {
+	var raw string
+	err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, mutuallyExclusiveKey).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, classifyDatabase("read check-in choice configuration", err)
+	}
+	switch raw {
+	case "0":
+		return false, nil
+	case "1":
+		return true, nil
+	default:
+		return false, ErrInvariant
+	}
 }
 
 func readSiteDayAndConfig(ctx context.Context, tx *sql.Tx, now int64, source checkinSource) (siteDay, checkinConfig, error) {

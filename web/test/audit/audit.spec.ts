@@ -623,3 +623,107 @@ for (const level of [5, 1] as const) {
     },
   );
 }
+
+test('administrator check-in choice persists and both cards follow real daily eligibility', async ({
+  browser,
+}) => {
+  const admin = await session(browser, 'admin');
+  const user = await session(browser, 1, true);
+  try {
+    const settings = await (await api(admin, '/admin/api/site-config', true)).json();
+    expect(settings.values.checkin_mutually_exclusive).toBe(false);
+    const enabled = await api(admin, '/admin/api/site-config', true, 'PATCH', {
+      expected_revision: settings.revision,
+      values: {
+        checkin_mode: 'enabled',
+        game_checkin_mode: 'enabled',
+        checkin_award_min_milli: '1',
+        checkin_award_max_milli: '1',
+        game_checkin_award_min_milli: '2',
+        game_checkin_award_max_milli: '2',
+        credits_cap_milli: '0',
+        game_credits_cap_milli: '0',
+      },
+    });
+    expect(enabled.status()).toBe(200);
+    const settingsPage = await admin.newPage();
+    await settingsPage.goto(fixture().admin_url + '/settings');
+    await settingsPage.getByRole('button', { name: /^Economy/ }).click();
+    const choice = settingsPage.locator('#site-setting-checkin_mutually_exclusive');
+    await expect(choice).not.toBeChecked();
+    await choice.check();
+    await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
+    await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
+    await settingsPage.reload();
+    await settingsPage.getByRole('button', { name: /^Economy/ }).click();
+    await expect(choice).toBeChecked();
+    const forbidden = await api(
+      user,
+      '/admin/api/site-config/checkin_mutually_exclusive',
+      true,
+      'PATCH',
+      { value: false },
+    );
+    expect(forbidden.status()).toBe(401);
+
+    const beforeGeneral = await (await api(user, '/api/checkin')).json();
+    const beforeGame = await (await api(user, '/api/checkin/game')).json();
+    expect(beforeGeneral.mutually_exclusive).toBe(true);
+    expect(beforeGame.mutually_exclusive).toBe(true);
+    const page = await user.newPage();
+    const failures: string[] = [];
+    page.on('pageerror', (error) => failures.push(error.message));
+    await page.goto(fixture().user_url + '/');
+    await expect(page.locator('.core-checkin-choice-note')).toContainText('Choose one check-in');
+    const general = page.locator('.core-checkin-card').filter({
+      has: page.getByRole('heading', { name: 'General-credit check-in', exact: true }),
+    });
+    const game = page.locator('.core-checkin-card').filter({
+      has: page.getByRole('heading', { name: 'Game-credit check-in', exact: true }),
+    });
+    const generalButton = general.getByRole('button', { name: 'Check in', exact: true });
+    const gameButton = game.getByRole('button', { name: 'Check in', exact: true });
+    await expect(generalButton).toBeEnabled();
+    await expect(gameButton).toBeEnabled();
+    const generalBox = await general.boundingBox();
+    const gameBox = await game.boundingBox();
+    expect(generalBox).not.toBeNull();
+    expect(gameBox).not.toBeNull();
+    expect(Math.abs(generalBox!.y - gameBox!.y)).toBeLessThan(1);
+    expect(generalBox!.x + generalBox!.width).toBeLessThan(gameBox!.x);
+    await generalButton.click();
+    await expect(general).toContainText('Checked in');
+    await expect(game).toContainText('Other check-in claimed');
+    await expect(generalButton).toBeDisabled();
+    await expect(gameButton).toBeDisabled();
+    const claimedGeneral = await (await api(user, '/api/checkin')).json();
+    const blockedGame = await (await api(user, '/api/checkin/game')).json();
+    expect(claimedGeneral.checked_in_today).toBe(true);
+    expect(Number(claimedGeneral.balance) - Number(beforeGeneral.balance)).toBe(1);
+    expect(blockedGame).toMatchObject({ checked_in_today: false, blocked_by_other_checkin: true });
+    expect(blockedGame.balance).toBe(beforeGame.balance);
+    const blocked = await api(user, '/api/checkin/game', false, 'POST');
+    expect(blocked.status()).toBe(409);
+    expect((await blocked.json()).error.code).toBe('already_checked_in');
+    await page.reload();
+    await expect(gameButton).toBeDisabled();
+
+    await choice.uncheck();
+    await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
+    await expect(settingsPage.getByText('Settings saved.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.core-checkin-choice-note')).toHaveCount(0);
+    await expect(generalButton).toBeDisabled();
+    await expect(gameButton).toBeEnabled();
+    await gameButton.click();
+    await expect(game).toContainText('Checked in');
+    await expect(gameButton).toBeDisabled();
+    const claimedGame = await (await api(user, '/api/checkin/game')).json();
+    expect(claimedGame.checked_in_today).toBe(true);
+    expect(Number(claimedGame.balance) - Number(beforeGame.balance)).toBe(2);
+    expect(failures).toEqual([]);
+  } finally {
+    await admin.close();
+    await user.close();
+  }
+});
