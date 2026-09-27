@@ -15,10 +15,13 @@ import {
   decodeCombinations,
   decodeParameters,
   decodePrice,
+  decodePricingPolicy,
+  decodeSizeCapability,
   imagePage,
   revision,
 } from '@shared/picturebook/publicApi';
 import { parameterKeys, type ParameterKey } from '@shared/picturebook/publicTypes';
+import type { SubmitInput } from '@shared/picturebook/publicTypes';
 
 const base = '/admin/api/limited-activities/picture-book';
 const pointer = (v: unknown) => string(v, 'JSON pointer', { max: 512, bytes: 512 });
@@ -244,12 +247,64 @@ export function decodeAdminModel(value: unknown) {
       'enabled',
       'price',
       'parameters',
+      'parameter_capabilities',
+      'combinations',
+      'mapping',
+      'capability_revision',
+      'capability_readiness',
+      'pricing_revision',
+      'pricing',
+      'size_capability',
+      'catalog_type',
+      'missing',
+    ],
+    'private image model',
+    [
+      'id',
+      'upstream_model_id',
+      'metadata',
+      'configured',
+      'revision',
+      'display_name',
+      'description',
+      'enabled',
+      'price',
+      'parameters',
+      'parameter_capabilities',
       'combinations',
       'mapping',
     ],
-    'private image model',
   );
   jsonSize(v.metadata, 32768, 'model metadata');
+  const parameters = decodeParameters(v.parameters);
+  const parameterCapabilities = array(v.parameter_capabilities, 'parameter capabilities', 11).map(
+    (item) => {
+      const entry = record(
+        item,
+        ['key', 'source', 'support', 'overridden', 'conflict'],
+        'parameter capability',
+      );
+      const result = {
+        key: oneOf(entry.key, parameterKeys, 'parameter key'),
+        source: oneOf(
+          entry.source,
+          ['discovered', 'profile', 'manual', 'unknown', 'legacy'],
+          'parameter source',
+        ),
+        support: oneOf(entry.support, ['supported', 'unsupported', 'unknown'], 'parameter support'),
+        overridden: boolean(entry.overridden, 'manual override'),
+        conflict: boolean(entry.conflict, 'capability conflict'),
+      };
+      if (result.conflict && (!result.overridden || result.source !== 'manual'))
+        invalidResponse('capability conflict without a manual override');
+      return result;
+    },
+  );
+  if (
+    parameterCapabilities.length !== parameters.length ||
+    parameterCapabilities.some((entry, index) => entry.key !== parameters[index]?.key)
+  )
+    invalidResponse('parameter capability alignment');
   return {
     id: opaqueID(v.id, 'imdl_', 'image model'),
     upstream_model_id: string(v.upstream_model_id, 'upstream model', {
@@ -268,16 +323,52 @@ export function decodeAdminModel(value: unknown) {
     }),
     enabled: boolean(v.enabled, 'model availability'),
     price: decodePrice(v.price),
-    parameters: decodeParameters(v.parameters),
+    parameters,
+    parameter_capabilities: parameterCapabilities,
     combinations: decodeCombinations(v.combinations),
     mapping: decodeMapping(v.mapping),
+    ...(Object.hasOwn(v, 'capability_revision')
+      ? { capability_revision: revision(v.capability_revision) }
+      : {}),
+    ...(Object.hasOwn(v, 'capability_readiness')
+      ? {
+          capability_readiness: oneOf(
+            v.capability_readiness,
+            ['legacy', 'pending', 'ready'],
+            'capability readiness',
+          ),
+        }
+      : {}),
+    ...(Object.hasOwn(v, 'pricing_revision')
+      ? { pricing_revision: revision(v.pricing_revision) }
+      : {}),
+    ...(Object.hasOwn(v, 'pricing') ? { pricing: decodePricingPolicy(v.pricing) } : {}),
+    ...(Object.hasOwn(v, 'size_capability')
+      ? { size_capability: decodeSizeCapability(v.size_capability) }
+      : {}),
+    ...(Object.hasOwn(v, 'catalog_type')
+      ? { catalog_type: oneOf(v.catalog_type, ['image', 'unknown', 'other'], 'catalog type') }
+      : {}),
+    ...(Object.hasOwn(v, 'missing') ? { missing: boolean(v.missing, 'missing catalog item') } : {}),
   };
 }
 export type AdminModel = ReturnType<typeof decodeAdminModel>;
 export type ModelInput = Pick<
   AdminModel,
-  'display_name' | 'description' | 'enabled' | 'price' | 'parameters' | 'combinations' | 'mapping'
-> & { expected_revision: string };
+  | 'display_name'
+  | 'description'
+  | 'enabled'
+  | 'price'
+  | 'parameters'
+  | 'combinations'
+  | 'mapping'
+  | 'pricing'
+  | 'size_capability'
+> & {
+  expected_revision: string;
+  capability_confirmed?: boolean;
+  catalog_type?: 'image' | 'unknown' | 'other';
+};
 export function decodeRefresh(value: unknown) {
   const v = record(
     value,
@@ -314,11 +405,228 @@ export const getAdminModels = (cursor?: string, signal?: AbortSignal) =>
     (v) => imagePage(v, decodeAdminModel),
     { signal },
   );
+export type CatalogFilter = {
+  q: string;
+  type: 'image' | 'unknown' | 'other' | 'all';
+  configured: 'all' | 'true' | 'false';
+  enabled: 'all' | 'true' | 'false';
+  page: number;
+  page_size: 20 | 50 | 100;
+  catalog_revision?: string;
+};
+export const getCatalog = (filter: CatalogFilter, signal?: AbortSignal) =>
+  decoded(
+    queryPath(base + '/models', filter),
+    (value) => {
+      const v = record(value, ['data', 'total', 'revision', 'page', 'page_size'], 'image catalog', [
+        'data',
+        'total',
+        'revision',
+        'page',
+        'page_size',
+      ]);
+      return {
+        data: array(v.data, 'catalog models', 100).map(decodeAdminModel),
+        total: integer(v.total, 'catalog total', 0, 1000),
+        revision: v.revision === '0' ? '0' : opaqueID(v.revision, 'ics_', 'catalog revision'),
+        page: integer(v.page, 'catalog page', 1, 1000),
+        page_size: integer(v.page_size, 'catalog page size', 20, 100),
+      };
+    },
+    { signal },
+  );
+export function decodeProfileState(value: unknown) {
+  const v = record(value, ['revision', 'profile'], 'capability profile state', [
+    'revision',
+    'profile',
+  ]);
+  if (v.profile !== null) jsonSize(v.profile, 262144, 'capability profile');
+  return { revision: revision(v.revision, true), profile: v.profile };
+}
+export const getCapabilityProfile = (signal?: AbortSignal) =>
+  decoded(base + '/upstream/capability-profile', decodeProfileState, { signal });
+export const saveCapabilityProfile = (
+  input: { expected_revision: string; profile: unknown },
+  key: string,
+) =>
+  decoded(
+    base + '/upstream/capability-profile',
+    decodeProfileState,
+    idempotentOptions(key, { method: 'PUT', json: input }),
+  );
+export function decodeCapabilityReview(value: unknown) {
+  const v = record(value, ['snapshot_id', 'expires_at', 'source', 'changes'], 'capability review', [
+    'snapshot_id',
+    'expires_at',
+    'source',
+    'changes',
+  ]);
+  jsonSize(v.source, 262144, 'candidate capability');
+  return {
+    snapshot_id: opaqueID(v.snapshot_id, 'ics_', 'capability snapshot'),
+    expires_at: unixSecond(v.expires_at, 'snapshot expiry'),
+    source: v.source,
+    changes: array(v.changes, 'capability changes', 32).map((item) => {
+      const change = record(item, ['key', 'kind', 'conflict'], 'capability change', [
+        'key',
+        'kind',
+        'conflict',
+      ]);
+      return {
+        key: oneOf(change.key, parameterKeys, 'parameter key'),
+        kind: oneOf(
+          change.kind,
+          ['added', 'removed', 'changed', 'default_changed', 'range_narrowed'],
+          'change kind',
+        ),
+        conflict: boolean(change.conflict, 'manual conflict'),
+      };
+    }),
+  };
+}
+export const getCapabilityReview = (id: string, signal?: AbortSignal) =>
+  decoded(
+    base + '/models/' + opaqueID(id, 'imdl_', 'model id') + '/capabilities',
+    decodeCapabilityReview,
+    { signal },
+  );
+export const applyCapabilities = (
+  input: { id: string; snapshot_id: string; expected_revision: string; confirm: boolean },
+  key: string,
+) =>
+  decoded(
+    base + '/models/' + opaqueID(input.id, 'imdl_', 'model id') + '/capabilities/apply',
+    (value) => {
+      const v = record(
+        value,
+        ['id', 'revision', 'capability_revision', 'pricing_revision'],
+        'capability apply receipt',
+        ['id', 'revision', 'capability_revision', 'pricing_revision'],
+      );
+      return {
+        id: opaqueID(v.id, 'imdl_', 'model id'),
+        revision: revision(v.revision),
+        capability_revision: revision(v.capability_revision),
+        pricing_revision: revision(v.pricing_revision),
+      };
+    },
+    idempotentOptions(key, {
+      method: 'POST',
+      json: {
+        snapshot_id: input.snapshot_id,
+        expected_revision: input.expected_revision,
+        confirm: input.confirm,
+      },
+    }),
+  );
+export const checkModel = (input: {
+  model_id: string;
+  draft: ModelInput;
+  parameters: Partial<SubmitInput>;
+}) =>
+  decoded(
+    base + '/models/check',
+    (value) => {
+      const v = record(
+        value,
+        ['valid', 'issues', 'effective_parameters', 'effective_selection', 'quote'],
+        'local model check',
+        ['valid', 'issues'],
+      );
+      const issues = array(v.issues, 'check issues', 64).map((entry) => {
+        const item = record(
+          entry,
+          ['model_id', 'field_path', 'code', 'safe_message'],
+          'check issue',
+          ['model_id', 'field_path', 'code', 'safe_message'],
+        );
+        return {
+          model_id: opaqueID(item.model_id, 'imdl_', 'model id'),
+          field_path: string(item.field_path, 'field path', { max: 256, bytes: 256 }),
+          code: string(item.code, 'issue code', { max: 96, bytes: 96, ascii: true }),
+          safe_message: string(item.safe_message, 'check message', { max: 512, bytes: 512 }),
+        };
+      });
+      const quote =
+        v.quote === undefined
+          ? null
+          : record(v.quote, ['unit', 'total', 'basis', 'price_key'], 'draft quote', [
+              'unit',
+              'total',
+              'basis',
+              'price_key',
+            ]);
+      return {
+        valid: boolean(v.valid, 'check validity'),
+        issues,
+        effective_parameters: v.effective_parameters,
+        effective_selection: v.effective_selection,
+        quote: quote && {
+          unit: decodePrice(quote.unit),
+          total: decodePrice(quote.total),
+          basis: oneOf(quote.basis, ['size', 'tier', 'default', 'auto'], 'quote basis'),
+          price_key: string(quote.price_key, 'price key', { max: 128, bytes: 128 }),
+        },
+      };
+    },
+    { method: 'POST', json: input },
+  );
+export const saveModelsBatch = (
+  input: { models: { id: string; input: ModelInput }[] },
+  key: string,
+) =>
+  decoded(
+    base + '/models/batch',
+    (value) => {
+      const v = record(value, ['applied', 'receipts', 'issues'], 'batch model save', [
+        'applied',
+        'receipts',
+        'issues',
+      ]);
+      return {
+        applied: boolean(v.applied, 'batch applied'),
+        receipts: array(v.receipts, 'batch receipts', 50).map((entry) => {
+          const receipt = record(
+            entry,
+            ['id', 'revision', 'capability_revision', 'pricing_revision'],
+            'model receipt',
+            ['id', 'revision', 'capability_revision', 'pricing_revision'],
+          );
+          return {
+            id: opaqueID(receipt.id, 'imdl_', 'model id'),
+            revision: revision(receipt.revision),
+            capability_revision: revision(receipt.capability_revision),
+            pricing_revision: revision(receipt.pricing_revision),
+          };
+        }),
+        issues: array(v.issues, 'batch issues', 50).map((entry) => {
+          const issue = record(
+            entry,
+            ['model_id', 'field_path', 'code', 'safe_message'],
+            'batch issue',
+            ['model_id', 'field_path', 'code', 'safe_message'],
+          );
+          return {
+            model_id: issue.model_id === '' ? '' : opaqueID(issue.model_id, 'imdl_', 'model id'),
+            field_path: string(issue.field_path, 'field path', { max: 256, bytes: 256 }),
+            code: string(issue.code, 'issue code', { max: 96, bytes: 96, ascii: true }),
+            safe_message: string(issue.safe_message, 'safe message', { max: 512, bytes: 512 }),
+          };
+        }),
+      };
+    },
+    idempotentOptions(key, { method: 'POST', json: input }),
+  );
 export const saveModel = (value: { id: string; input: ModelInput }, key: string) =>
   decoded(
     base + '/models/' + opaqueID(value.id, 'imdl_', 'model id'),
     (v) => {
-      const receipt = record(v, ['id', 'revision'], 'model save receipt');
+      const receipt = record(
+        v,
+        ['id', 'revision', 'capability_revision', 'pricing_revision'],
+        'model save receipt',
+        ['id', 'revision'],
+      );
       return {
         id: opaqueID(receipt.id, 'imdl_', 'model id'),
         revision: revision(receipt.revision),

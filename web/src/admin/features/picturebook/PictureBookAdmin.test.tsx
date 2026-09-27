@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { assertNoSensitiveQueryCache, renderWithProviders } from '../../../../test/unit/support';
 import {
@@ -6,11 +6,17 @@ import {
   decodeControlRow,
   decodeRefresh,
   getRefresh,
+  getCatalog,
   refreshModels,
+  saveModelsBatch,
+  decodeAdminModel,
   type Upstream,
 } from './adminApi';
+import { modelFixture } from '@shared/picturebook/fixtures';
 import { UpstreamForm } from './UpstreamForm';
 import { RecoveryPanel } from './RecoveryPanel';
+import { ModelEditor } from './ModelEditor';
+import { CapabilityProfilePanel } from './CapabilityProfilePanel';
 
 const adapter = {
   discovery: { method: 'GET', path: '/v1/models', items_pointer: '/data', id_pointer: '/id' },
@@ -43,10 +49,238 @@ const upstream = (): Upstream => ({
   adapter: decodeAdapter(adapter),
   control: null,
 });
+const adminModelFixture = () => {
+  const publicModel = modelFixture();
+  return {
+    ...publicModel,
+    parameter_capabilities: publicModel.parameters.map((rule) => ({
+      key: rule.key,
+      source: 'profile',
+      support: rule.supported ? 'supported' : 'unsupported',
+      overridden: false,
+      conflict: false,
+    })),
+  };
+};
 function reply(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
 }
 describe('image configuration boundaries', () => {
+  it('decodes numbered full-catalog results and structured all-or-nothing batch issues', async () => {
+    const model = {
+      ...adminModelFixture(),
+      upstream_model_id: 'Synthetic image',
+      metadata: {},
+      configured: true,
+      enabled: true,
+      mapping: { model_pointer: '', parameters: {}, constants: [] },
+      capability_revision: '2',
+      capability_readiness: 'ready',
+      catalog_type: 'image',
+      missing: false,
+    };
+    const requests: { path: string; method: string | undefined; body: unknown }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: unknown, init?: RequestInit) => {
+        requests.push({
+          path: String(path),
+          method: init?.method,
+          body: init?.body && JSON.parse(String(init.body)),
+        });
+        if (init?.method === 'POST')
+          return reply({
+            applied: false,
+            receipts: [],
+            issues: [
+              {
+                model_id: model.id,
+                field_path: 'input.expected_revision',
+                code: 'revision_conflict',
+                safe_message: 'Reload this model before saving.',
+              },
+            ],
+          });
+        return reply({
+          data: [model],
+          total: 151,
+          revision: 'ics_AAAAAAAAAAAAAAAAAAAAAA',
+          page: 8,
+          page_size: 20,
+        });
+      }),
+    );
+    const catalog = await getCatalog({
+      q: 'synthetic',
+      type: 'all',
+      configured: 'all',
+      enabled: 'all',
+      page: 8,
+      page_size: 20,
+    });
+    expect(catalog.total).toBe(151);
+    expect(catalog.data[0].catalog_type).toBe('image');
+    expect(requests[0].path).toContain('page=8');
+    expect(requests[0].path).toContain('q=synthetic');
+    expect(() => decodeAdminModel({ ...model, upstream_secret: 'private' })).toThrow();
+    expect(() => decodeAdminModel({ ...model, parameter_capabilities: [] })).toThrow();
+    const result = await saveModelsBatch(
+      {
+        models: [
+          {
+            id: model.id,
+            input: {
+              expected_revision: '2',
+              display_name: model.display_name,
+              description: model.description,
+              enabled: true,
+              price: model.price,
+              pricing: model.pricing,
+              parameters: model.parameters,
+              combinations: model.combinations,
+              mapping: model.mapping,
+            },
+          },
+        ],
+      },
+      'AAAAAAAAAAAAAAAAAAAAAA',
+    );
+    expect(result.applied).toBe(false);
+    expect(result.issues[0].field_path).toBe('input.expected_revision');
+    expect(requests[1].method).toBe('POST');
+    expect(requests[1].body).toHaveProperty('models');
+  });
+  it('checks an unsaved model draft locally without a task or generation request', async () => {
+    const requests: { path: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: unknown, init?: RequestInit) => {
+        requests.push({ path: String(path), body: JSON.parse(String(init?.body)) });
+        return reply({
+          valid: true,
+          issues: [],
+          effective_parameters: { prompt: 'Synthetic sample', n: 1 },
+          effective_selection: { values: {}, selection: {} },
+          quote: {
+            unit: { paper: '2', brush: '1' },
+            total: { paper: '2', brush: '1' },
+            basis: 'default',
+            price_key: '',
+          },
+        });
+      }),
+    );
+    const value = decodeAdminModel({
+      ...adminModelFixture(),
+      parameter_capabilities: adminModelFixture().parameter_capabilities.map((entry, index) => ({
+        ...entry,
+        source: index === 0 ? 'profile' : index === 1 ? 'discovered' : 'manual',
+        overridden: index === 2,
+        conflict: index === 2,
+      })),
+      upstream_model_id: 'synthetic-image',
+      metadata: {},
+      configured: true,
+      enabled: true,
+      mapping: { model_pointer: '', parameters: {}, constants: [] },
+      capability_revision: '2',
+      capability_readiness: 'ready',
+      catalog_type: 'image',
+    });
+    const view = await renderWithProviders(
+      <ModelEditor value={value} onSaved={() => undefined} onLocked={() => undefined} />,
+      { station: 'admin', role: 'admin' },
+    );
+    const origins = within(screen.getByRole('region', { name: 'Accepted parameter sources' }));
+    expect(origins.getByText(/Connection profile/)).toBeInTheDocument();
+    expect(origins.getByText(/Discovered model metadata/)).toBeInTheDocument();
+    expect(origins.getAllByText(/Manual override/).length).toBeGreaterThan(0);
+    expect(origins.getByText(/Override conflicts with the accepted source/)).toBeInTheDocument();
+    expect(origins.getAllByText('View effective constraints')).toHaveLength(
+      value.parameters.length,
+    );
+    await view.user.type(screen.getByLabelText(/^Prompt/), 'Synthetic sample');
+    await view.user.clear(screen.getByLabelText('Image count'));
+    await view.user.type(screen.getByLabelText('Image count'), '2');
+    await view.user.click(screen.getByText('Advanced parameters'));
+    await view.user.selectOptions(screen.getByLabelText('Quality'), 'high');
+    expect(screen.getByText(/Local estimated total.*4 \/ 2/)).toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Check draft' }));
+    await screen.findByText(/Local check passed/);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].path).toContain('/models/check');
+    expect(requests[0].body).toHaveProperty('draft');
+    expect(requests[0].body).toHaveProperty('parameters.prompt', 'Synthetic sample');
+    expect(requests[0].body).toHaveProperty('parameters.n', 2);
+    expect(requests[0].body).toHaveProperty('parameters.quality', 'high');
+    expect(requests.every((request) => !/\/quote|\/tasks/.test(request.path))).toBe(true);
+  });
+  it('round-trips the closed capability profile through form controls and the saved JSON', async () => {
+    const starting = {
+      version: 1,
+      fields: [
+        {
+          rule: {
+            key: 'prompt',
+            type: 'string',
+            supported: true,
+            required: true,
+            length_unit: 'utf8_bytes',
+            min_length: 1,
+            max_length: 65536,
+          },
+        },
+      ],
+    };
+    const writes: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: unknown, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          const input = JSON.parse(String(init.body)) as { profile: unknown };
+          writes.push(input.profile);
+          return reply({ revision: '2', profile: input.profile });
+        }
+        if (String(path).endsWith('/upstream/capability-profile'))
+          return reply({ revision: '1', profile: starting });
+        throw new Error('unexpected request: ' + String(path));
+      }),
+    );
+    const view = await renderWithProviders(
+      <CapabilityProfilePanel account="fixture-admin" onDirty={() => undefined} />,
+      { station: 'admin', role: 'admin' },
+    );
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
+    await view.user.type(await screen.findByLabelText('catalog_type_pointer'), '/kind');
+    expect(screen.getByLabelText('Image classification value 1')).toHaveValue('image');
+    await view.user.click(screen.getByLabelText('Extract size capability'));
+    await view.user.selectOptions(screen.getByLabelText('Size converter mode'), 'width_height');
+    await view.user.type(screen.getByLabelText('combinations_pointer'), '/sizes');
+    await view.user.type(screen.getByLabelText('auto_pointer'), '/auto');
+    await view.user.click(screen.getByRole('button', { name: 'Add size combination' }));
+    await view.user.selectOptions(screen.getByLabelText('Add parameter'), 'size');
+    await view.user.click(screen.getByRole('button', { name: 'Add parameter' }));
+    await view.user.click(screen.getByLabelText('Parse width and height'));
+    const json = JSON.parse(
+      (screen.getByLabelText(/Complete declarative profile JSON/) as HTMLTextAreaElement).value,
+    );
+    expect(json).toMatchObject({
+      catalog_type_pointer: '/kind',
+      image_values: ['image'],
+      size: {
+        combinations_pointer: '/sizes',
+        auto_pointer: '/auto',
+        capability: { mode: 'width_height', combinations: [{ width: 1, height: 1 }] },
+      },
+    });
+    expect(
+      json.fields.find((field: { rule: { key: string } }) => field.rule.key === 'size').rule
+        .dimensions,
+    ).toMatchObject({ format: 'width_height', width: { minimum: 1, maximum: 1024, step: 1 } });
+    await view.user.click(screen.getByRole('button', { name: 'Save capability profile' }));
+    await waitFor(() => expect(writes).toEqual([json]));
+  });
   it('reads bare discovery status and the wrapped start receipt from their actual API helpers', async () => {
     const operation = {
       id: 'op_AAAAAAAAAAAAAAAAAAAAAA',

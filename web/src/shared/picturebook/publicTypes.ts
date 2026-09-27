@@ -1,3 +1,5 @@
+import type { PricingPolicy, SizeCapability } from './capabilities';
+
 export const parameterKeys = [
   'prompt',
   'negative_prompt',
@@ -54,10 +56,14 @@ export interface ImageModel {
   price: Price;
   parameters: ParameterRule[];
   combinations: CombinationRule[];
+  pricing_revision?: string;
+  pricing?: PricingPolicy;
+  size_capability?: SizeCapability;
 }
 export type SubmitInput = {
   model_id: string;
   expected_model_revision: string;
+  expected_pricing_revision?: string;
   prompt: string;
   negative_prompt?: string;
   n?: number;

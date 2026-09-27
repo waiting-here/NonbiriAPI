@@ -5,6 +5,8 @@ export const modelFixture = (): ImageModel => ({
   description: '<img src=x onerror=alert(1)>',
   revision: '2',
   price: { paper: '2', brush: '1' },
+  pricing_revision: '2',
+  pricing: { default: { paper: '2', brush: '1' }, fallback: 'default', tiers: [], sizes: [] },
   parameters: [
     {
       key: 'prompt',

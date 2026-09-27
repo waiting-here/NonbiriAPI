@@ -85,6 +85,21 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			return err
 		}
 	}
+	if err := users.RegisterUserRoute(http.MethodPost, userPrefix+"/quote", func(w http.ResponseWriter, r *http.Request, p UserPrincipal) {
+		var input SubmitInput
+		if err := decodeInput(r, &input, maxJSON, []string{"model_id", "prompt"}); err != nil {
+			writeError(w, err)
+			return
+		}
+		result, err := s.Quote(r.Context(), p.UserID, input)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, result)
+	}); err != nil {
+		return err
+	}
 	if err := users.RegisterUserRoute(http.MethodPost, userPrefix+"/tasks", func(w http.ResponseWriter, r *http.Request, p UserPrincipal) {
 		var input SubmitInput
 		if err := decodeInput(r, &input, maxJSON, []string{"model_id", "expected_model_revision", "prompt"}); err != nil {
@@ -138,6 +153,12 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			}
 			return s.GetUpstream(r.Context(), u)
 		}},
+		{"/upstream/capability-profile", func(r *http.Request, u int64) (any, error) {
+			if r.URL.RawQuery != "" {
+				return nil, ErrInvalid
+			}
+			return s.GetProfile(r.Context(), u)
+		}},
 		{"/upstream/controls", func(r *http.Request, u int64) (any, error) {
 			limit, cursor, err := listQuery(r)
 			if err != nil {
@@ -146,6 +167,13 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			return s.Controls(r.Context(), u, limit, cursor)
 		}},
 		{"/models", func(r *http.Request, u int64) (any, error) {
+			if catalogRequest(r) {
+				query, err := catalogQuery(r)
+				if err != nil {
+					return nil, err
+				}
+				return s.ListCatalog(r.Context(), u, query)
+			}
 			limit, cursor, err := listQuery(r)
 			if err != nil {
 				return nil, err
@@ -157,6 +185,12 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 				return nil, ErrInvalid
 			}
 			return s.GetAdminModel(r.Context(), u, r.PathValue("id"))
+		}},
+		{"/models/{id}/capabilities", func(r *http.Request, u int64) (any, error) {
+			if r.URL.RawQuery != "" {
+				return nil, ErrInvalid
+			}
+			return s.ReviewCapabilities(r.Context(), u, r.PathValue("id"))
 		}},
 		{"/models/refresh/{id}", func(r *http.Request, u int64) (any, error) {
 			if r.URL.RawQuery != "" {
@@ -189,6 +223,26 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 	}); err != nil {
 		return err
 	}
+	if err := admins.RegisterAdminRoute(http.MethodPut, adminPrefix+"/upstream/capability-profile", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
+		var input ProfileInput
+		if err := decodeInput(r, &input, maxJSON, []string{"expected_revision", "profile"}); err != nil {
+			writeError(w, err)
+			return
+		}
+		key, err := requestKey(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		result, err := s.PutProfile(r.Context(), p.UserID, key, input)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, result.Value)
+	}); err != nil {
+		return err
+	}
 	if err := admins.RegisterAdminRoute(http.MethodPut, adminPrefix+"/models/{id}", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
 		var input ModelInput
 		if err := decodeInput(r, &input, 1<<20, []string{"expected_revision", "display_name", "description", "enabled", "price", "parameters", "combinations", "mapping"}); err != nil {
@@ -201,6 +255,61 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			return
 		}
 		result, err := s.PutModel(r.Context(), p.UserID, r.PathValue("id"), key, input)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, result.Value)
+	}); err != nil {
+		return err
+	}
+	if err := admins.RegisterAdminRoute(http.MethodPost, adminPrefix+"/models/check", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
+		var input CheckInput
+		if err := decodeInput(r, &input, 1<<20, []string{"model_id", "draft", "parameters"}); err != nil {
+			writeError(w, err)
+			return
+		}
+		result, err := s.CheckModel(r.Context(), p.UserID, input)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, result)
+	}); err != nil {
+		return err
+	}
+	if err := admins.RegisterAdminRoute(http.MethodPost, adminPrefix+"/models/batch", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
+		var input BatchModelInput
+		if err := decodeInput(r, &input, 8<<20, []string{"models"}); err != nil {
+			writeError(w, err)
+			return
+		}
+		key, err := requestKey(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		result, err := s.PutModels(r.Context(), p.UserID, key, input)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, result.Value)
+	}); err != nil {
+		return err
+	}
+	if err := admins.RegisterAdminRoute(http.MethodPost, adminPrefix+"/models/{id}/capabilities/apply", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
+		var input CapabilityApplyInput
+		if err := decodeInput(r, &input, 8192, []string{"snapshot_id", "expected_revision", "confirm"}); err != nil {
+			writeError(w, err)
+			return
+		}
+		key, err := requestKey(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		result, err := s.ApplyCapabilities(r.Context(), p.UserID, key, r.PathValue("id"), input)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -295,6 +404,55 @@ func listQuery(r *http.Request) (int, string, error) {
 		}
 	}
 	return limit, cursor, nil
+}
+func catalogRequest(r *http.Request) bool {
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return true
+	}
+	for _, key := range []string{"q", "type", "configured", "enabled", "page", "catalog_revision"} {
+		if _, ok := values[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+func catalogQuery(r *http.Request) (CatalogQuery, error) {
+	var out CatalogQuery
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return out, ErrInvalid
+	}
+	for key, items := range values {
+		if len(items) != 1 {
+			return out, ErrInvalid
+		}
+		switch key {
+		case "q":
+			out.Q = items[0]
+		case "type":
+			out.Type = items[0]
+		case "configured":
+			out.Configured = items[0]
+		case "enabled":
+			out.Enabled = items[0]
+		case "page":
+			out.Page, err = strconv.Atoi(items[0])
+			if err != nil || strconv.Itoa(out.Page) != items[0] {
+				return out, ErrInvalid
+			}
+		case "page_size":
+			out.PageSize, err = strconv.Atoi(items[0])
+			if err != nil || strconv.Itoa(out.PageSize) != items[0] {
+				return out, ErrInvalid
+			}
+		case "catalog_revision":
+			out.CatalogRevision = items[0]
+		default:
+			return out, ErrInvalid
+		}
+	}
+	return out, out.normalize()
 }
 func strictValue(decoder *json.Decoder, depth int) error {
 	if depth > 32 {
@@ -400,6 +558,8 @@ func writeError(w http.ResponseWriter, err error) {
 		code, message = httperr.CodeNotFound, "The image task or model is unavailable."
 	case errors.Is(err, ErrConflict):
 		code, message = httperr.CodeConflict, "The model, settings, task state or request identity changed."
+	case errors.Is(err, ErrRefreshRequired):
+		code, message = httperr.CodeRefreshRequired, "Refresh the model and confirm its current price before submitting."
 	case errors.Is(err, ErrCapacity):
 		code, message = httperr.CodeResourceLimitExceeded, "The image queue or memory capacity is full."
 	case errors.Is(err, ledger.ErrInsufficientBalance):

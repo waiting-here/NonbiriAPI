@@ -188,7 +188,7 @@ func TestModelVersionConflictAndDisableUseOriginalPrice(t *testing.T) {
 	if _, err = f.service.PutModel(f.ctx(f.admin), f.admin, f.model, f.key(), input); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.service.Submit(f.ctx(f.other), f.other, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", Prompt: "stale"}); !errors.Is(err, ErrConflict) {
+	if _, err = f.service.Submit(f.ctx(f.other), f.other, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", ExpectedPricingRevision: "1", Prompt: "stale"}); !errors.Is(err, ErrRefreshRequired) {
 		t.Fatalf("stale price %v", err)
 	}
 	f.wait(t, func() bool {
@@ -199,7 +199,7 @@ func TestModelVersionConflictAndDisableUseOriginalPrice(t *testing.T) {
 	if err != nil || r.Charge != (Price{"2", "1"}) {
 		t.Fatalf("changed accepted price %+v %v", r, err)
 	}
-	accepted, err := f.service.Submit(f.ctx(f.other), f.other, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "2", Prompt: "current"})
+	accepted, err := f.service.Submit(f.ctx(f.other), f.other, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "2", ExpectedPricingRevision: "2", Prompt: "current"})
 	if err != nil {
 		t.Fatal(err)
 	}
