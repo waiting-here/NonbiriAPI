@@ -36,6 +36,28 @@ export interface ScanInput {
   kind?: string;
   model?: string;
 }
+export type TaskKind = 'client_hits' | 'users' | 'shared_ips';
+export interface TaskScan extends Omit<ClientScan, 'kind'> {
+  kind: TaskKind;
+  call_kind: string;
+  signal: string;
+  filter_revision: number;
+  changed: boolean;
+  coverage: string;
+  truncated_reason: string;
+  status: ClientScan['state'];
+  scanned_candidates: string;
+}
+export interface TaskInput extends Omit<ScanInput, 'kind'> {
+  kind: TaskKind;
+  call_kind?: string;
+  signal?: '' | 'rpm' | 'concurrency';
+}
+export interface TaskResults<T> extends PageMetadata {
+  scan: TaskScan;
+  items: T[];
+  coverage: string;
+}
 
 function clientScan(value: unknown): ClientScan {
   const o = obj(value);
@@ -90,6 +112,34 @@ function scanResults(value: unknown, id: string, page: string, size: PageSize): 
   validatePageResponse(metadata, page, size, items.length);
   if (scan.id !== id || BigInt(metadata.total_items) > 100000n) return invalid();
   return { ...metadata, scan, items };
+}
+function taskScan(value: unknown): TaskScan {
+  const o = obj(value);
+  const base = clientScan(value);
+  if (!['client_hits', 'users', 'shared_ips'].includes(base.kind) || o.status !== base.state) return invalid();
+  const scanned = text(o.scanned_candidates, 20);
+  if (scanned !== base.scanned) return invalid();
+  return {
+    ...base,
+    kind: base.kind as TaskKind,
+    call_kind: text(o.call_kind, 32),
+    signal: text(o.signal ?? '', 20),
+    filter_revision: num(o.filter_revision),
+    changed: bool(o.changed),
+    coverage: text(o.coverage, 64),
+    truncated_reason: text(o.truncated_reason ?? '', 64),
+    status: base.state,
+    scanned_candidates: scanned,
+  };
+}
+function taskResults<T>(value: unknown, scanID: string, requestedPage: string, size: PageSize, decode: (v: unknown) => T): TaskResults<T> {
+  const o = obj(value);
+  const metadata = pageMetadata(o);
+  const items = list(o.items, decode, 100);
+  const scan = taskScan(o.scan);
+  validatePageResponse(metadata, requestedPage, size, items.length);
+  if (scan.id !== scanID || BigInt(metadata.total_items) > 100000n) return invalid();
+  return { ...metadata, scan, items, coverage: text(o.coverage, 64) };
 }
 export const sourceFields = [
   'effective_ip',
@@ -230,6 +280,12 @@ export interface Page<T> {
   to: number;
   coverage: string;
   scanned: number;
+  page?: string;
+  page_size?: PageSize;
+  total_items?: string;
+  total_pages?: string;
+  watermark?: string;
+  changed?: boolean;
 }
 export interface Stats {
   samples: number;
@@ -325,6 +381,14 @@ function list<T>(v: unknown, decode: (v: unknown) => T, max = 100): T[] {
   if (!Array.isArray(v) || v.length > max) return invalid();
   return v.map(decode);
 }
+function pageMetadata(o: Record<string, unknown>): PageMetadata {
+  return normalizePageMetadata({
+    page: o.page,
+    page_size: o.page_size,
+    total_items: o.total_items,
+    total_pages: o.total_pages,
+  });
+}
 function source(v: unknown): Source {
   const o = obj(v),
     quality = o.quality == null ? {} : obj(o.quality);
@@ -417,6 +481,7 @@ function minute(v: unknown): Minute {
 }
 function page<T>(v: unknown, decode: (v: unknown) => T): Page<T> {
   const o = obj(v);
+  const metadata = o.page == null ? {} : pageMetadata(o);
   return {
     items: list(o.items, decode),
     next: text(o.next ?? '', 64),
@@ -425,6 +490,9 @@ function page<T>(v: unknown, decode: (v: unknown) => T): Page<T> {
     to: num(o.to),
     coverage: text(o.coverage, 80),
     scanned: num(o.scanned ?? 0),
+    ...metadata,
+    ...(o.watermark == null ? {} : { watermark: text(o.watermark, 20) }),
+    ...(o.changed == null ? {} : { changed: bool(o.changed) }),
   };
 }
 function stats(v: unknown): Stats {
@@ -607,6 +675,18 @@ export function riskAPI(role: RiskRole) {
     signal?: AbortSignal,
   ) => decode(await apiFetch<unknown>(queryPath(base + path, filters), { signal }));
   return {
+    createTask: async (input: TaskInput) =>
+      taskScan(await apiFetch<unknown>(base + '/scans', { method: 'POST', json: input })),
+    recentTasks: async (signal?: AbortSignal) =>
+      list(obj(await apiFetch<unknown>(base + '/scans', { signal })).items, taskScan, 200),
+    taskResults: async <T>(scanID: string, kind: TaskKind, page: string, size: PageSize, signal?: AbortSignal): Promise<TaskResults<T>> => {
+      const decode = (kind === 'users' ? summary : kind === 'shared_ips' ? sharedIP : request) as (v: unknown) => T;
+      const output = taskResults(await apiFetch<unknown>(queryPath(base + '/scans/' + encodeURIComponent(scanID) + '/results', { page, page_size: size }), { signal }), scanID, page, size, decode);
+      if (output.scan.kind !== kind) return invalid();
+      return output;
+    },
+    cancelTask: async (scanID: string) =>
+      taskScan(await apiFetch<unknown>(base + '/scans/' + encodeURIComponent(scanID) + '/cancel', { method: 'POST', json: {} })),
     createScan: async (input: ScanInput) =>
       clientScan(await apiFetch<unknown>(base + '/client-scans', { method: 'POST', json: input })),
     recentScans: async (signal?: AbortSignal) =>
@@ -655,6 +735,15 @@ export function riskAPI(role: RiskRole) {
         { after, limit: 100 },
         s,
       ),
+    numberedRules: (page: string, size: PageSize, revision?: string, s?: AbortSignal) =>
+      get('/client-rules', (v) => {
+        const o = obj(v);
+        const metadata = pageMetadata(o);
+        const items = list(o.items, rule);
+        const changed = bool(o.changed);
+        validatePageResponse(metadata, changed ? '1' : page, size, items.length);
+        return { ...metadata, items, revision: text(o.revision, 64), changed };
+      }, { page, page_size: size, revision }, s),
     saveRule: async (value: RuleInput, ruleID?: string) =>
       rule(
         await apiFetch<unknown>(
@@ -691,6 +780,14 @@ export function riskAPI(role: RiskRole) {
         f,
         s,
       ),
+    numberedAccess: (f: Filters, requestedPage: string, size: PageSize, s?: AbortSignal) =>
+      get('/access-events', (v) => {
+        const o = obj(v);
+        const metadata = pageMetadata(o);
+        const items = list(o.data, access);
+        validatePageResponse(metadata, requestedPage, size, items.length);
+        return { ...metadata, items, watermark: text(o.watermark, 20), changed: bool(o.changed), from: num(o.from), to: num(o.to) };
+      }, { ...f, page: requestedPage, page_size: size }, s),
     accessSummary: (f: Filters, s?: AbortSignal) => get('/access-summary', accessSummary, f, s),
   };
 }

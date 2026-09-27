@@ -17,6 +17,7 @@ import (
 
 const (
 	routeAlerts         = "/admin/api/alerts"
+	routeAlertDetail    = "/admin/api/alerts/{id}"
 	routeResolveAlert   = "/admin/api/alerts/{id}/resolve"
 	maxRawQueryBytes    = 8192
 	maxResolveBodyBytes = 4096
@@ -37,6 +38,7 @@ func RegisterRoutes(registrar AdminRouteRegistrar, repository *Repository) error
 		handler AuthorizedAdminHandler
 	}{
 		{method: http.MethodGet, pattern: routeAlerts, handler: api.list},
+		{method: http.MethodGet, pattern: routeAlertDetail, handler: api.detail},
 		{method: http.MethodPost, pattern: routeResolveAlert, handler: api.resolve},
 		{method: http.MethodPost, pattern: "/admin/api/alerts/resolve", handler: api.resolveMany},
 	}
@@ -46,6 +48,23 @@ func RegisterRoutes(registrar AdminRouteRegistrar, repository *Repository) error
 		}
 	}
 	return nil
+}
+
+func (api *httpAPI) detail(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
+	alertID, ok := parseAlertID(request)
+	if !ok {
+		writeError(writer, ErrInvalidRequest)
+		return
+	}
+	if !requireNoBody(writer, request) || !requireEmptyQuery(writer, request) {
+		return
+	}
+	value, err := api.repository.GetDetail(request.Context(), principal.UserID, alertID)
+	if err != nil {
+		writeError(writer, err)
+		return
+	}
+	httperr.WriteJSON(writer, http.StatusOK, value)
 }
 
 func (api *httpAPI) list(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {

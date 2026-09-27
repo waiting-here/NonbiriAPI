@@ -2,6 +2,8 @@ package lifecycle
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -228,6 +230,30 @@ func TestMaintenanceFailureBackoffDeduplicatesAndResolvesAlert(t *testing.T) {
 	}
 	assertLifecycleWorkerState(t, fixture, lifecycleRecoveryWorkerKey, 1, 130, "db_busy")
 	assertLifecycleWorkerAlerts(t, fixture, 1, 1, 0)
+	var lastSuccess sql.NullInt64
+	var alertContext string
+	if err := fixture.store.DB().QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key=?`, lifecycleRecoveryWorkerKey).Scan(&lastSuccess); err != nil || lastSuccess.Valid {
+		t.Fatalf("failed pass marked success: %+v %v", lastSuccess, err)
+	}
+	if err := fixture.store.DB().QueryRow(`SELECT context_json FROM admin_alerts WHERE kind='worker_checkpoint_failed' AND ref=?`, lifecycleRecoveryWorkerKey).Scan(&alertContext); err != nil {
+		t.Fatal(err)
+	}
+	var event struct {
+		Facts []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"occurred_facts"`
+	}
+	if err := json.Unmarshal([]byte(alertContext), &event); err != nil {
+		t.Fatal(err)
+	}
+	facts := make(map[string]string, len(event.Facts))
+	for _, fact := range event.Facts {
+		facts[fact.Key] = fact.Value
+	}
+	if facts["worker_module"] != "account_lifecycle" || facts["worker_stage"] != "recovery" || facts["worker_domain"] != "idempotency" || facts["safe_error_code"] != "db_busy" || strings.Contains(alertContext, "database is busy") {
+		t.Fatalf("worker alert lost stage or exposed raw error: %v", facts)
+	}
 
 	clock.Store(129)
 	if err := coordinator.RunDue(context.Background()); err != nil {
@@ -252,8 +278,23 @@ func TestMaintenanceFailureBackoffDeduplicatesAndResolvesAlert(t *testing.T) {
 	assertLifecycleWorkerState(t, fixture, lifecycleRecoveryWorkerKey, 0,
 		190+int64(WorkerSweepInterval/time.Second), "")
 	assertLifecycleWorkerAlerts(t, fixture, 1, 0, 1)
+	var resolution string
+	if err := fixture.store.DB().QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key=?`, lifecycleRecoveryWorkerKey).Scan(&lastSuccess); err != nil || !lastSuccess.Valid || lastSuccess.Int64 != 190 {
+		t.Fatalf("successful pass did not record success: %+v %v", lastSuccess, err)
+	}
+	if err := fixture.store.DB().QueryRow(`SELECT resolution_kind FROM admin_alerts WHERE kind='worker_checkpoint_failed' AND ref=?`, lifecycleRecoveryWorkerKey).Scan(&resolution); err != nil || resolution != "worker_recovered" {
+		t.Fatalf("worker resolution=%q err=%v", resolution, err)
+	}
 	if recoveryCalls.Load() != 3 {
 		t.Fatalf("recovery calls = %d, want 3", recoveryCalls.Load())
+	}
+	fail.Store(true)
+	clock.Store(190 + int64(WorkerSweepInterval/time.Second))
+	if err := coordinator.RunDue(context.Background()); err == nil {
+		t.Fatal("later failed pass unexpectedly succeeded")
+	}
+	if err := fixture.store.DB().QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key=?`, lifecycleRecoveryWorkerKey).Scan(&lastSuccess); err != nil || !lastSuccess.Valid || lastSuccess.Int64 != 190 {
+		t.Fatalf("later failure overwrote last success: %+v %v", lastSuccess, err)
 	}
 }
 

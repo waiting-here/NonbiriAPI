@@ -30,7 +30,7 @@ export function ClientScans({
   const rawPage = params.get('audit_page');
   const page = isPageNumber(rawPage) ? rawPage : '1';
   const rawSize = Number(params.get('audit_size'));
-  const size = isPageSize(rawSize) ? rawSize : 20;
+  const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
   const client = useQueryClient();
   const [token, setToken] = useState(() => crypto.randomUUID());
   const prefix = ['risk', role, scopeKey, 'scans'];
@@ -249,6 +249,7 @@ export function ClientScans({
           </Card>
           <PagePagination
             metadata={query.data}
+            pageSizes={[20, 50, 100]}
             requestedPage={page}
             busy={query.isPending}
             onPageChange={(next) =>

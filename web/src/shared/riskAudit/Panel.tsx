@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { ClientScans } from './ClientScans';
+import { TaskScans } from './TaskScans';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { isPageNumber, isPageSize } from '@shared/operations/pageNumbers';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import {
   accessPaths,
@@ -21,6 +24,7 @@ import {
   type RiskRole,
   type Rule,
   type RuleInput,
+  type SharedIP,
   type Source,
   type Stats,
   type Summary,
@@ -60,50 +64,6 @@ function initialWindow(params?: URLSearchParams): Filters {
   const model = params.get('audit_model');
   if (model && model.length <= 512) result.model = model;
   return result;
-}
-function usePager() {
-  const [cursors, setCursors] = useState(['']);
-  return {
-    after: cursors.at(-1) ?? '',
-    back: () => setCursors((v) => v.slice(0, -1)),
-    next: (value: string) => setCursors((v) => [...v, value]),
-    reset: () => setCursors(['']),
-    hasBack: cursors.length > 1,
-  };
-}
-function Pager({
-  c,
-  pager,
-  next,
-  more,
-  pending = false,
-}: {
-  c: RiskCopy;
-  pager: ReturnType<typeof usePager>;
-  next: string;
-  more: boolean;
-  pending?: boolean;
-}) {
-  return (
-    <div className="ops-actions">
-      <button
-        className="btn btn-secondary"
-        type="button"
-        disabled={!pager.hasBack || pending}
-        onClick={pager.back}
-      >
-        {c.back}
-      </button>
-      <button
-        className="btn btn-secondary"
-        type="button"
-        disabled={!more || !next || pending}
-        onClick={() => pager.next(next)}
-      >
-        {c.next}
-      </button>
-    </div>
-  );
 }
 function Coverage({ value, c }: { value: string; c: RiskCopy }) {
   return (
@@ -317,16 +277,37 @@ function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
   );
 }
 function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: () => void }) {
-  const { role, scopeKey, c, filters } = scope,
-    pager = usePager();
-  const [model, setModel] = useState(''),
-    [selectedModel, setSelectedModel] = useState('');
+  const { role, scopeKey, c } = scope;
+  const [params, setParams] = useSearchParams();
+  const rawPage = params.get('audit_user_page');
+  const page = isPageNumber(rawPage) ? rawPage : '1';
+  const rawSize = Number(params.get('audit_user_size'));
+  const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
+  const selectedModel = params.get('audit_user_model') ?? '';
+  const [model, setModel] = useState(selectedModel);
+  const from = Number(params.get('audit_user_from'));
+  const to = Number(params.get('audit_user_to'));
+  const watermark = params.get('audit_user_watermark') ?? undefined;
+  const expectedTotal = params.get('audit_user_total') ?? undefined;
   const query = useQuery({
-    queryKey: ['risk', role, scopeKey, 'user', userID, filters, selectedModel, pager.after],
+    queryKey: ['risk', role, scopeKey, 'user', userID, from, to, selectedModel, page, size, watermark, expectedTotal],
+    enabled: from > 0 && to > from,
     queryFn: ({ signal }) =>
-      riskAPI(role).user(userID, { ...filters, model: selectedModel, after: pager.after }, signal),
+      riskAPI(role).user(userID, { from, to, kind: scope.filters.kind, model: selectedModel, page, page_size: size, watermark, expected_total: expectedTotal }, signal),
     ...queryOptions,
   });
+  useEffect(() => {
+    const requests = query.data?.requests;
+    if (!requests?.watermark || watermark !== undefined) return;
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (!next.has('audit_user_watermark')) {
+        next.set('audit_user_watermark', requests.watermark!);
+        next.set('audit_user_total', requests.total_items ?? '0');
+      }
+      return next;
+    }, { replace: true });
+  }, [query.data, watermark, setParams]);
   return (
     <div className="ops-stack">
       <button className="btn btn-secondary" onClick={back}>
@@ -338,8 +319,15 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          setSelectedModel(model);
-          pager.reset();
+          setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            if (model) next.set('audit_user_model', model);
+            else next.delete('audit_user_model');
+            next.set('audit_user_page', '1');
+            next.delete('audit_user_watermark');
+            next.delete('audit_user_total');
+            return next;
+          });
         }}
       >
         <label>
@@ -357,13 +345,12 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
             <RequestView key={item.log_id} item={item} c={c} />
           ))}
           <Coverage value={query.data.requests.coverage} c={c} />
-          <Pager
-            c={c}
-            pager={pager}
-            next={query.data.requests.next}
-            more={query.data.requests.has_more}
-            pending={query.isFetching}
-          />
+          {query.data.requests.page && query.data.requests.page_size && query.data.requests.total_items && query.data.requests.total_pages &&
+            <PagePagination metadata={{ page: query.data.requests.page, page_size: query.data.requests.page_size, total_items: query.data.requests.total_items, total_pages: query.data.requests.total_pages }}
+              requestedPage={page} pageSizes={[20, 50, 100]} busy={query.isFetching}
+              onPageChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_user_page', next); return p; })}
+              onPageSizeChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_user_size', String(next)); p.set('audit_user_page', '1'); return p; })} />}
+          {query.data.requests.changed && <p role="status">{c.partial}: {c.sourcePage}</p>}
         </>
       ) : (
         <LoadingState />
@@ -372,128 +359,49 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
   );
 }
 function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
-  const { role, scopeKey, c, filters } = scope,
-    pager = usePager();
-  const [signalFilter, setSignalFilter] = useState('');
-  const query = useQuery({
-    queryKey: ['risk', role, scopeKey, 'users', filters, signalFilter, pager.after],
-    queryFn: ({ signal }) =>
-      riskAPI(role).users({ ...filters, signal: signalFilter, after: pager.after }, signal),
-    ...queryOptions,
-  });
+  const { c, filters } = scope;
+  const [params, setParams] = useSearchParams();
+  const rawSignal = params.get('audit_signal') ?? '';
+  const signalFilter = rawSignal === 'rpm' || rawSignal === 'concurrency' ? rawSignal : '';
   return (
-    <Card>
+    <div className="ops-stack">
+      <Card>
       <p>{c.configHelp}</p>
       <label>
         {c.signal}
         <select
           value={signalFilter}
-          onChange={(e) => {
-            setSignalFilter(e.target.value);
-            pager.reset();
-          }}
+          onChange={(e) => setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            if (e.target.value) next.set('audit_signal', e.target.value);
+            else next.delete('audit_signal');
+            next.delete('audit_users_scan');
+            next.set('audit_users_page', '1');
+            return next;
+          })}
         >
           <option value="">{c.all}</option>
           <option value="rpm">{c.rpm}</option>
           <option value="concurrency">{c.concurrency}</option>
         </select>
       </label>
-      {query.error ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : query.data ? (
-        <>
-          <Coverage value={query.data.coverage} c={c} />
-          <p>
-            {c.sampled}: {query.data.scanned}
-          </p>
-          {query.data.items.length === 0 ? (
-            <EmptyState title={c.empty} body={c.scanHelp} />
-          ) : (
-            <div className="ops-table-scroll">
-              <table className="ops-table">
-                <thead>
-                  <tr>
-                    {[
-                      c.user,
-                      c.rpmUsed,
-                      c.rpm,
-                      c.concurrency,
-                      c.peak,
-                      c.completed,
-                      c.incomplete,
-                      c.inspect,
-                    ].map((v) => (
-                      <th key={v}>{v}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {query.data.items.map((v) => (
-                    <tr key={v.user_id}>
-                      <td>{v.user_id}</td>
-                      <td>{v.rpm_committed}</td>
-                      <td>
-                        {v.high_rpm_minutes} · {v.rpm_risk ? c.yes : c.no}
-                      </td>
-                      <td>
-                        {v.high_concurrency_minutes} · {v.concurrency_risk ? c.yes : c.no}
-                      </td>
-                      <td>{v.peak}</td>
-                      <td>{v.complete_minutes}</td>
-                      <td>{v.incomplete_minutes}</td>
-                      <td>
-                        <button className="btn btn-secondary" onClick={() => inspect(v.user_id)}>
-                          {c.inspect}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <Pager
-            c={c}
-            pager={pager}
-            next={query.data.next}
-            more={query.data.has_more}
-            pending={query.isFetching}
-          />
-        </>
-      ) : (
-        <LoadingState />
-      )}
-    </Card>
+      </Card>
+      <TaskScans<Summary> role={scope.role} scopeKey={scope.scopeKey} filters={filters} kind="users" signal={signalFilter}
+        renderItem={(value) => <Card key={value.user_id}>
+          <div className="ops-actions"><strong>{c.user}: {value.user_id}</strong><button className="btn btn-secondary" onClick={() => inspect(value.user_id)}>{c.inspect}</button></div>
+          <SummaryView value={value} c={c} />
+        </Card>} />
+    </div>
   );
 }
 function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
   const stamp = useStamp();
-  const { role, scopeKey, c, filters } = scope,
-    pager = usePager();
-  const query = useQuery({
-    queryKey: ['risk', role, scopeKey, 'ips', filters, pager.after],
-    queryFn: ({ signal }) =>
-      riskAPI(role).ips(
-        { ...filters, from: scope.customRange ? filters.from : undefined, after: pager.after },
-        signal,
-      ),
-    ...queryOptions,
-  });
+  const { c, filters } = scope;
   return (
     <div className="ops-stack">
       <p>{c.ipHelp}</p>
-      {query.error ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : query.data ? (
-        <>
-          <Coverage value={query.data.coverage} c={c} />
-          <p>
-            {stamp(query.data.from)} — {stamp(query.data.to)}
-          </p>
-          {!query.data.items.length ? (
-            <EmptyState title={c.empty} body={c.ipHelp} />
-          ) : (
-            query.data.items.map((ip) => (
+      <TaskScans<SharedIP> role={scope.role} scopeKey={scope.scopeKey} filters={filters} kind="shared_ips"
+        renderItem={(ip) => (
               <Card key={ip.ip}>
                 <h2>{ip.ip}</h2>
                 <p>
@@ -514,19 +422,7 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
                 ))}
                 {ip.associations_truncated ? <p>{c.partialAssociations}</p> : null}
               </Card>
-            ))
-          )}
-          <Pager
-            c={c}
-            pager={pager}
-            next={query.data.next}
-            more={query.data.has_more}
-            pending={query.isFetching}
-          />
-        </>
-      ) : (
-        <LoadingState />
-      )}
+            )} />
     </div>
   );
 }
@@ -861,14 +757,29 @@ function RuleEditor({
 }
 function Rules({ role, scopeKey, c }: Scope) {
   const stamp = useStamp();
-  const pager = usePager(),
-    client = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const client = useQueryClient();
+  const rawPage = params.get('audit_rules_page');
+  const page = isPageNumber(rawPage) ? rawPage : '1';
+  const rawSize = Number(params.get('audit_rules_size'));
+  const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
+  const revision = params.get('audit_rules_revision') ?? undefined;
   const [editing, setEditing] = useState<Rule | 'new' | null>(null);
   const query = useQuery({
-    queryKey: ['risk', role, scopeKey, 'rules', pager.after],
-    queryFn: ({ signal }) => riskAPI(role).rules(pager.after, signal),
+    queryKey: ['risk', role, scopeKey, 'rules', page, size, revision],
+    queryFn: ({ signal }) => riskAPI(role).numberedRules(page, size, revision, signal),
     ...queryOptions,
   });
+  useEffect(() => {
+    const data = query.data;
+    if (!data || revision === data.revision && !data.changed) return;
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('audit_rules_revision', data.revision);
+      if (data.changed) next.set('audit_rules_page', '1');
+      return next;
+    }, { replace: true });
+  }, [query.data, revision, setParams]);
   const mutation = useMutation({
     mutationKey: ['risk', role, scopeKey, 'rules'],
     gcTime: 0,
@@ -878,6 +789,7 @@ function Rules({ role, scopeKey, c }: Scope) {
         : riskAPI(role).deleteRule(v.rule!.id, v.rule!.revision),
     onSuccess: async () => {
       setEditing(null);
+      setParams((previous) => { const next = new URLSearchParams(previous); next.delete('audit_rules_revision'); next.set('audit_rules_page', '1'); return next; });
       await client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
     },
   });
@@ -925,7 +837,7 @@ function Rules({ role, scopeKey, c }: Scope) {
           ) : query.data ? (
             <>
               <p>
-                {c.count}: {query.data.total}
+                {c.count}: {query.data.total_items}
               </p>
               {query.data.items.map((rule) => (
                 <Card key={rule.id}>
@@ -975,7 +887,10 @@ function Rules({ role, scopeKey, c }: Scope) {
                   </button>
                 </Card>
               ))}
-              <Pager c={c} pager={pager} next={query.data.next} more={query.data.has_more} />
+              {query.data.changed && <p role="status">{c.partial}: {c.ruleHelp}</p>}
+              <PagePagination metadata={query.data} requestedPage={page} pageSizes={[20, 50, 100]} busy={query.isFetching}
+                onPageChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_rules_page', next); return p; })}
+                onPageSizeChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_rules_size', String(next)); p.set('audit_rules_page', '1'); return p; })} />
             </>
           ) : (
             <LoadingState />
@@ -1085,26 +1000,52 @@ function Configuration({ role, scopeKey, c }: Scope) {
 }
 function Access({ role, scopeKey, c, filters }: Scope) {
   const stamp = useStamp();
-  const pager = usePager();
-  const [draft, setDraft] = useState({
-      user_id: '',
-      key_generation: '',
-      path_kind: '',
-      status_class: '',
-    }),
-    [selected, setSelected] = useState(draft);
-  const f = {
+  const [params, setParams] = useSearchParams();
+  const rawPage = params.get('audit_access_page');
+  const page = isPageNumber(rawPage) ? rawPage : '1';
+  const rawSize = Number(params.get('audit_access_size'));
+  const size = isPageSize(rawSize) && rawSize !== 10 ? rawSize : 20;
+  const selected = useMemo(() => ({
+    user_id: params.get('audit_access_user') ?? '',
+    key_generation: params.get('audit_access_key') ?? '',
+    path_kind: params.get('audit_access_path') ?? '',
+    status_class: params.get('audit_access_status') ?? '',
+  }), [params]);
+  const selectedKey = JSON.stringify(selected);
+  const [draftState, setDraftState] = useState({ key: selectedKey, value: selected });
+  const draft = draftState.key === selectedKey ? draftState.value : selected;
+  const setDraft = (update: (value: typeof selected) => typeof selected) =>
+    setDraftState((previous) => ({
+      key: selectedKey,
+      value: update(previous.key === selectedKey ? previous.value : selected),
+    }));
+  const fixedFrom = params.get('audit_access_from');
+  const fixedTo = params.get('audit_access_to');
+  const f = fixedFrom && fixedTo ? { from: fixedFrom, to: fixedTo, ...selected } : {
     from: filters.from,
     to: filters.to,
     lookback_hours: filters.lookback_hours,
     ...selected,
   };
+  const watermark = params.get('audit_access_watermark');
+  const expectedTotal = params.get('audit_access_total');
   const events = useQuery({
-    queryKey: ['risk', role, scopeKey, 'access', f, pager.after],
+    queryKey: ['risk', role, scopeKey, 'access', f, page, size, watermark, expectedTotal],
     queryFn: ({ signal }) =>
-      riskAPI(role).access({ ...f, cursor: pager.after, page_size: 100 }, signal),
+      riskAPI(role).numberedAccess({ ...f, watermark: watermark ?? undefined, expected_total: expectedTotal ?? undefined }, page, size, signal),
     ...queryOptions,
   });
+  useEffect(() => {
+    if (!events.data || fixedFrom && fixedTo && watermark !== null) return;
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (!next.has('audit_access_from')) next.set('audit_access_from', String(events.data!.from));
+      if (!next.has('audit_access_to')) next.set('audit_access_to', String(events.data!.to));
+      if (!next.has('audit_access_watermark')) next.set('audit_access_watermark', events.data!.watermark);
+      if (!next.has('audit_access_total')) next.set('audit_access_total', events.data!.total_items);
+      return next;
+    }, { replace: true });
+  }, [events.data, fixedFrom, fixedTo, watermark, setParams]);
   const summary = useQuery({
     queryKey: ['risk', role, scopeKey, 'access-summary', f],
     queryFn: ({ signal }) => riskAPI(role).accessSummary(f, signal),
@@ -1116,8 +1057,17 @@ function Access({ role, scopeKey, c, filters }: Scope) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          setSelected(draft);
-          pager.reset();
+          setParams((previous) => {
+            const next = new URLSearchParams(previous);
+            for (const [key, value] of Object.entries(draft)) {
+              const queryKey = { user_id: 'audit_access_user', key_generation: 'audit_access_key', path_kind: 'audit_access_path', status_class: 'audit_access_status' }[key as keyof typeof draft];
+              if (value) next.set(queryKey, value);
+              else next.delete(queryKey);
+            }
+            for (const key of ['from', 'to', 'watermark', 'total']) next.delete('audit_access_' + key);
+            next.set('audit_access_page', '1');
+            return next;
+          });
         }}
       >
         <div className="ops-field-grid">
@@ -1226,13 +1176,10 @@ function Access({ role, scopeKey, c, filters }: Scope) {
               <SourceView source={e.source} c={c} />
             </Card>
           ))}
-          <Pager
-            c={c}
-            pager={pager}
-            next={events.data.next}
-            more={Boolean(events.data.next)}
-            pending={events.isFetching}
-          />
+          {events.data.changed && <p role="status">{c.partial}: {c.sourcePage}</p>}
+          <PagePagination metadata={events.data} requestedPage={page} pageSizes={[20, 50, 100]} busy={events.isFetching}
+            onPageChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_access_page', next); return p; })}
+            onPageSizeChange={(next) => setParams((previous) => { const p = new URLSearchParams(previous); p.set('audit_access_size', String(next)); p.set('audit_access_page', '1'); return p; })} />
         </>
       ) : (
         <LoadingState />
@@ -1281,19 +1228,32 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   )
     ? (rawTab as Tab)
     : 'users';
-  const setTab = (next: Tab) =>
-    setParams((previous) => {
-      const p = new URLSearchParams(previous);
-      p.set('audit_tab', next);
-      return p;
-    });
-  const [selectedUser, setSelectedUser] = useState('');
+  const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '') ? params.get('audit_user')! : '';
+  const setSelectedUser = useCallback((id: string) => setParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (id) {
+      next.set('audit_user', id);
+      const filter = initialWindow(previous);
+      const to = Number(filter.to ?? Math.floor(Date.now() / 1000));
+      const from = Number(filter.from ?? to - Number(filter.lookback_hours ?? 24) * 3600);
+      next.set('audit_user_from', String(from));
+      next.set('audit_user_to', String(to));
+    } else next.delete('audit_user');
+    next.delete('audit_user_watermark');
+    next.delete('audit_user_total');
+    next.set('audit_user_page', '1');
+    return next;
+  }), [setParams]);
   const client = useQueryClient();
   const [range, setRange] = useState(() =>
     params.has('audit_from') ? 'custom' : (params.get('audit_lookback_hours') ?? 'default'),
   );
   const [rangeError, setRangeError] = useState(false);
   const filters = useMemo(() => initialWindow(params), [params]);
+  useEffect(() => {
+    if (!selectedUser || params.has('audit_user_to')) return;
+    setSelectedUser(selectedUser);
+  }, [params, selectedUser, setSelectedUser]);
   const setFilters = (value: Filters) =>
     setParams((previous) => {
       const p = new URLSearchParams(previous);
@@ -1304,6 +1264,19 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
       }
       p.delete('audit_scan');
       p.delete('audit_page');
+      for (const name of ['users', 'ips']) {
+        p.delete(`audit_${name}_scan`);
+        p.delete(`audit_${name}_page`);
+      }
+      p.delete('audit_user_watermark');
+      p.delete('audit_user_total');
+      p.delete('audit_user_from');
+      p.delete('audit_user_to');
+      p.delete('audit_access_watermark');
+      p.delete('audit_access_total');
+      p.delete('audit_access_from');
+      p.delete('audit_access_to');
+      p.delete('audit_user');
       return p;
     });
   const [draft, setDraft] = useState(() => ({
@@ -1354,8 +1327,17 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
               key={v}
               aria-pressed={tab === v && !selectedUser}
               onClick={() => {
-                setTab(v);
-                setSelectedUser('');
+                setParams((previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.set('audit_tab', v);
+                  next.delete('audit_user');
+                  next.delete('audit_user_from');
+                  next.delete('audit_user_to');
+                  next.delete('audit_user_watermark');
+                  next.delete('audit_user_total');
+                  next.set('audit_user_page', '1');
+                  return next;
+                });
               }}
             >
               {c[v]}

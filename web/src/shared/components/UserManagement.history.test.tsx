@@ -1,6 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
+import { normalizeDeletedAccount } from '@shared/operations/managedUsers';
+import { DeletedAccountCard } from './DeletedAccountCard';
 import { UserManagement } from './UserManagement';
 
 const deleted = {
@@ -40,4 +42,22 @@ it('shows a former account to a steward without management actions or administra
   expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   await waitFor(() => expect(paths).toContain('/api/steward/users/deleted/42'));
   expect(paths).not.toContain('/admin/api/users/deletion-duel-aborts');
+});
+
+it('links the exact deletion alert with the administrator list state but hides it from a steward', async () => {
+  const account = normalizeDeletedAccount({ ...deleted, discord_id: null, alert_id: '77' });
+  const admin = await renderWithProviders(<DeletedAccountCard account={account} role="admin" onClose={() => undefined} />, {
+    station: 'admin', role: 'admin', locale: 'en',
+    route: '/users?account_state=deleted&page=3&page_size=50&deleted=42',
+  });
+  const target = screen.getByRole('link', { name: /alert.*#77/i });
+  const destination = new URL(target.getAttribute('href')!, window.location.origin);
+  expect(destination.pathname).toBe('/alerts');
+  expect(destination.searchParams.get('alert_id')).toBe('77');
+  expect(destination.searchParams.get('return_to')).toBe('/users?account_state=deleted&page=3&page_size=50&deleted=42');
+  admin.unmount();
+  await renderWithProviders(<DeletedAccountCard account={account} role="steward" onClose={() => undefined} />, {
+    station: 'user', role: 'level6', locale: 'en', route: '/steward?tab=users&deleted=42',
+  });
+  expect(screen.queryByRole('link', { name: /alert.*#77/i })).toBeNull();
 });

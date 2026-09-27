@@ -72,15 +72,18 @@ func TestClientScanFrozenWindowRulesResumeAndResultPages(t *testing.T) {
 	if _, err = f.repository.CreateScan(ctx, actor, changed); !errors.Is(err, ErrConflict) {
 		t.Fatalf("token changed intent: %v", err)
 	}
-	if _, err = f.repository.CreateScan(ctx, actor, scanInput("create_scan_example_2")); !errors.Is(err, ErrConflict) {
-		t.Fatal("second unfinished scan admitted", err)
-	}
 	if _, err = f.repository.ProcessScanBatch(ctx); err != nil {
 		t.Fatal(err)
 	}
 	partial, err := f.repository.ScanResults(ctx, actor, scan.ID, 1, 20)
 	if err != nil || partial.Scan.Scanned != 100 || partial.TotalItems != "50" || len(partial.Items) != 20 || partial.TotalPages != "3" {
 		t.Fatalf("partial %+v %v", partial, err)
+	}
+	if _, err = f.repository.CreateScan(ctx, actor, scanInput("create_scan_example_2")); err != nil {
+		t.Fatal("second unfinished scan rejected", err)
+	}
+	if _, err = f.repository.CreateScan(ctx, actor, scanInput("create_scan_example_3")); !errors.Is(err, ErrConflict) {
+		t.Fatal("third unfinished scan admitted", err)
 	}
 	// A later log, a changed rule and a newly enabled rule cannot alter this task.
 	f.source(subject, "self", "192.0.2.1", "direct_peer", "Example/2", "model", "success", 0)
@@ -235,7 +238,7 @@ func TestClientScanCancelledContextQueueBoundsAndConcurrentCreation(t *testing.T
 	if err != nil || scan.Scanned != 0 {
 		t.Fatal("checkpoint moved", scan, err)
 	}
-	for i := 1; i < MaxQueuedScans; i++ {
+	for i := 1; i < MaxRunningScans; i++ {
 		_, err = f.repository.CreateScan(ctx, Actor{UserID: f.user(6)}, scanInput(fmt.Sprintf("queue_example_%08d", i)))
 		if err != nil {
 			t.Fatal(err)
@@ -243,6 +246,120 @@ func TestClientScanCancelledContextQueueBoundsAndConcurrentCreation(t *testing.T
 	}
 	if _, err = f.repository.CreateScan(ctx, Actor{UserID: f.user(6)}, scanInput("queue_example_overflow")); !errors.Is(err, ErrConflict) {
 		t.Fatal("queue unbounded", err)
+	}
+}
+
+func TestTwoScanWorkersClaimDifferentTasksAndDoNotCountWriteContentionAsFailure(t *testing.T) {
+	f := newAuditFixture(t)
+	ctx := context.Background()
+	actor := Actor{Admin: true, UserID: f.admin}
+	user := f.user(1)
+	for range 501 {
+		f.source(user, "self", "192.0.2.40", "direct_peer", "Example/1", "model", "success", 0)
+	}
+	first, err := f.repository.CreateScan(ctx, actor, ScanInput{RequestToken: "parallel_scan_first", LookbackHours: 24, ScanKind: "users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := f.repository.CreateScan(ctx, actor, ScanInput{RequestToken: "parallel_scan_second", LookbackHours: 24, ScanKind: "shared_ips"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstClaim, releaseFirst, err := f.repository.claimScan(ctx)
+	if err != nil || firstClaim != first.ID && firstClaim != second.ID {
+		t.Fatalf("first claim=%q err=%v", firstClaim, err)
+	}
+	secondClaim, releaseSecond, err := f.repository.claimScan(ctx)
+	if err != nil || secondClaim == firstClaim || secondClaim != first.ID && secondClaim != second.ID {
+		t.Fatalf("second claim=%q err=%v", secondClaim, err)
+	}
+	if third, _, err := f.repository.claimScan(ctx); err != nil || third != "" {
+		t.Fatalf("same task claimed twice: %q %v", third, err)
+	}
+	releaseSecond()
+	releaseFirst()
+	var group sync.WaitGroup
+	var failures [2]error
+	for index := range failures {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			_, failures[index] = f.repository.ProcessScanBatch(ctx)
+		}()
+	}
+	group.Wait()
+	for index, err := range failures {
+		if err != nil {
+			t.Fatalf("worker %d: %v", index, err)
+		}
+	}
+	finishAggregateScan(t, f.repository)
+	for _, id := range []string{first.ID, second.ID} {
+		var state string
+		var failures int
+		if err := f.store.DB().QueryRow(`SELECT state,failures FROM risk_client_scans WHERE id=?`, id).Scan(&state, &failures); err != nil || state != "completed" || failures != 0 {
+			t.Fatalf("task %s state=%s failures=%d err=%v", id, state, failures, err)
+		}
+	}
+}
+
+func TestScanWorkersSelectLeastRecentlyAdvancedTask(t *testing.T) {
+	f := newAuditFixture(t)
+	ctx := context.Background()
+	actor := Actor{Admin: true, UserID: f.admin}
+	user := f.user(1)
+	f.source(user, "self", "192.0.2.41", "direct_peer", "Example/1", "model", "success", 0)
+	first, err := f.repository.CreateScan(ctx, actor, ScanInput{RequestToken: "fair_scan_first_01", LookbackHours: 24, ScanKind: "users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := f.repository.CreateScan(ctx, actor, ScanInput{RequestToken: "fair_scan_second_01", LookbackHours: 24, ScanKind: "users"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`UPDATE risk_client_scans SET state='running',updated_at=? WHERE id=?`, f.now+2, first.ID)
+	f.exec(`UPDATE risk_client_scans SET state='running',updated_at=? WHERE id=?`, f.now+1, second.ID)
+	claimed, release, err := f.repository.claimScan(ctx)
+	if err != nil || claimed != second.ID {
+		t.Fatalf("least recently advanced task = %q, want %q: %v", claimed, second.ID, err)
+	}
+	release()
+}
+
+func TestClientScanCandidateLimitCountsFilteredSource(t *testing.T) {
+	f := newAuditFixture(t)
+	ctx := context.Background()
+	actor := Actor{Admin: true, UserID: f.admin}
+	scanRuleFixture(t, f)
+	f.source(f.user(1), "self", "192.0.2.42", "direct_peer", "Example/1", "model", "success", 0)
+	input := scanInput("filtered_candidate_limit")
+	input.Kind = "charity" // The final candidate is scanned but never matches this filter.
+	scan, err := f.repository.CreateScan(ctx, actor, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`UPDATE risk_client_scans SET scanned=? WHERE id=?`, MaxScanCandidates-1, scan.ID)
+	if progressed, err := f.repository.ProcessScanBatch(ctx); err != nil || !progressed {
+		t.Fatal(progressed, err)
+	}
+	got, err := f.repository.GetScan(ctx, actor, scan.ID)
+	if err != nil || got.State != "limited" || got.Reason != "candidate_limit" || got.Scanned != MaxScanCandidates || got.Matched != 0 {
+		t.Fatalf("candidate bound escaped filtered source: %+v %v", got, err)
+	}
+}
+
+func TestAggregateScanRejectsModelFilterWithoutModelAggregation(t *testing.T) {
+	f := newAuditFixture(t)
+	for _, kind := range []string{"users", "shared_ips"} {
+		_, err := f.repository.CreateScan(context.Background(), Actor{Admin: true, UserID: f.admin}, ScanInput{
+			RequestToken:  "model_filter_rejected_" + kind,
+			LookbackHours: 24,
+			ScanKind:      kind,
+			Model:         "a-model",
+		})
+		if !errors.Is(err, ErrInvalid) {
+			t.Fatalf("%s accepted ignored model filter: %v", kind, err)
+		}
 	}
 }
 

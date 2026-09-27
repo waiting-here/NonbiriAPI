@@ -27,7 +27,9 @@ type Repository struct {
 	now           func() time.Time
 	configChanged func(Config)
 	finalAuth     FinalAuthorizer
-	scanWorker    sync.Mutex
+	scanSlots     chan struct{}
+	scanSelection sync.Mutex
+	claimedScans  map[string]struct{}
 }
 
 func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, error) {
@@ -37,7 +39,10 @@ func NewRepository(database *sql.DB, options RepositoryOptions) (*Repository, er
 	if options.Now == nil {
 		options.Now = time.Now
 	}
-	return &Repository{db: database, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth}, nil
+	return &Repository{
+		db: database, now: options.Now, configChanged: options.ConfigChanged, finalAuth: options.FinalAuth,
+		scanSlots: make(chan struct{}, 2), claimedScans: make(map[string]struct{}),
+	}, nil
 }
 func (r *Repository) authorize(ctx context.Context, tx *sql.Tx, actor Actor, now int64) error {
 	if actor.UserID <= 0 {

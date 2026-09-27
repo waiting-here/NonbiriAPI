@@ -5,9 +5,11 @@ import { RiskAuditPanel } from './Panel';
 import { ApiError } from '@shared/query/http';
 
 const api = vi.hoisted(() => ({
-  users: vi.fn(),
+  recentTasks: vi.fn(),
+  taskResults: vi.fn(),
+  createTask: vi.fn(),
   config: vi.fn(),
-  rules: vi.fn(),
+  numberedRules: vi.fn(),
   saveConfig: vi.fn(),
   saveRule: vi.fn(),
   deleteRule: vi.fn(),
@@ -31,17 +33,36 @@ const summary = {
   concurrency_risk: false,
   risk_scope: 'total',
 };
+const scanID = 'scn_AAAAAAAAAAAAAAAAAAAAAA';
+const scan = {
+  id: scanID,
+  kind: 'users',
+  state: 'completed',
+  scanned_candidates: '1',
+  candidates: '1',
+  matched: '1',
+  from: 1,
+  to: 2,
+  filter_revision: 1,
+  expires_at: 1800000000,
+  coverage: 'complete',
+  changed: false,
+  truncated_reason: '',
+};
+const selectedScanRoute = '/risk-audit?audit_users_scan=' + scanID;
 beforeEach(() => {
   vi.clearAllMocks();
-  api.users.mockResolvedValue({
+  api.recentTasks.mockResolvedValue([scan]);
+  api.taskResults.mockResolvedValue({
+    scan,
     items: [summary],
-    next: '',
-    has_more: false,
-    coverage: 'observed_minutes',
-    scanned: 1,
-    from: 1,
-    to: 2,
+    page: '1',
+    page_size: 20,
+    total_items: '1',
+    total_pages: '1',
+    coverage: 'complete',
   });
+  api.createTask.mockResolvedValue(scan);
   api.config.mockResolvedValue({
     threshold_percent: 80,
     consecutive_minutes: 5,
@@ -50,7 +71,7 @@ beforeEach(() => {
     revision: 1,
     updated_at: 0,
   });
-  api.rules.mockResolvedValue({ items: [], total: 0, next: '', has_more: false });
+  api.numberedRules.mockResolvedValue({ items: [], page: '1', page_size: 20, total_items: '0', total_pages: '1', revision: 'r1', changed: false });
 });
 describe('Risk audit access and evidence presentation', () => {
   it.each([
@@ -79,12 +100,13 @@ describe('Risk audit access and evidence presentation', () => {
     const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
       station: 'admin',
       role: 'admin',
+      route: selectedScanRoute,
     });
-    await screen.findByText('9007199254740993');
-    api.users.mockRejectedValueOnce(new ApiError('forbidden', 'Session revoked.', 403));
-    await view.user.selectOptions(screen.getByLabelText('Risk filter'), 'rpm');
+    await screen.findByText(/User ID: 9007199254740993/);
+    api.taskResults.mockRejectedValueOnce(new ApiError('forbidden', 'Session revoked.', 403));
+    await view.user.click(screen.getAllByRole('button', { name: 'Refresh' })[1]);
     await waitFor(() => {
-      expect(screen.queryByText('9007199254740993')).not.toBeInTheDocument();
+      expect(screen.queryByText(/User ID: 9007199254740993/)).not.toBeInTheDocument();
       expect(
         view.queryClient
           .getQueryCache()
@@ -97,10 +119,11 @@ describe('Risk audit access and evidence presentation', () => {
     await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
       station: 'admin',
       role: 'admin',
+      route: selectedScanRoute,
     });
-    expect(await screen.findByText('9007199254740993')).toBeVisible();
+    expect(await screen.findByText(/User ID: 9007199254740993/)).toBeVisible();
     expect(screen.getByText(/not proof of identity or misuse/)).toBeVisible();
-    expect(screen.getByText('Incomplete minutes')).toBeVisible();
+    expect(screen.getByText(/Incomplete minutes/)).toBeVisible();
   });
   it('exposes thresholds as read-only for a steward', async () => {
     const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
@@ -115,7 +138,7 @@ describe('Risk audit access and evidence presentation', () => {
     await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="" enabled={false} />, {
       station: 'user',
     });
-    await waitFor(() => expect(api.users).not.toHaveBeenCalled());
+    await waitFor(() => expect(api.recentTasks).not.toHaveBeenCalled());
   });
   it('allows bounded rule editing with all conditions visible', async () => {
     const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
@@ -137,14 +160,14 @@ it('uses server-relative quick ranges even when the browser clock is ahead', asy
   const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
     station: 'admin',
     role: 'admin',
+    route: selectedScanRoute,
   });
-  await screen.findByText('9007199254740993');
-  expect(api.users.mock.calls[0][0]).not.toHaveProperty('to');
-  expect(api.users.mock.calls[0][0]).not.toHaveProperty('from');
+  await screen.findByText(/User ID: 9007199254740993/);
   await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
   await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
-  await waitFor(() => expect(api.users.mock.lastCall?.[0]).toMatchObject({ lookback_hours: 168 }));
-  expect(api.users.mock.lastCall?.[0]).not.toHaveProperty('to');
+  await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
+  await waitFor(() => expect(api.createTask.mock.lastCall?.[0]).toMatchObject({ lookback_hours: 168 }));
+  expect(api.createTask.mock.lastCall?.[0].to).toBeUndefined();
 });
 it('builds a two-condition website and title rule without silently saving it', async () => {
   const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
@@ -190,7 +213,7 @@ it('converts a bounded administrator ban duration exactly and keeps it off ordin
 });
 
 it('blocks steward editing of a bound rule even when its ban is disabled', async () => {
-  api.rules.mockResolvedValue({
+  api.numberedRules.mockResolvedValue({
     items: [
       {
         id: 'rsk_AAAAAAAAAAAAAAAAAAAAAA',
@@ -212,9 +235,12 @@ it('blocks steward editing of a bound rule even when its ban is disabled', async
         auto_ban: { enabled: false, duration_seconds: null },
       },
     ],
-    total: 1,
-    next: '',
-    has_more: false,
+    page: '1',
+    page_size: 20,
+    total_items: '1',
+    total_pages: '1',
+    revision: 'r2',
+    changed: false,
   });
   const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
     station: 'user',
