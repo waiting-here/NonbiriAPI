@@ -21,9 +21,11 @@ import (
 )
 
 const (
-	routeUsers                 = "/admin/api/users"
-	routeUser                  = "/admin/api/users/{id}"
-	routeDeletedUser           = "/admin/api/users/deleted/{recordID}"
+	routeUsers = "/admin/api/users"
+	routeUser  = "/admin/api/users/{id}"
+	// A shared wildcard keeps /users/deleted/{recordID} compatible with
+	// /users/{id}/loans and /users/{id}/penalties in the standard router.
+	routeDeletedUser           = "/admin/api/users/{id}/{recordID}"
 	routeDeletionDuelAborts    = "/admin/api/users/deletion-duel-aborts"
 	routeBan                   = "/admin/api/users/{id}/ban"
 	routeUnban                 = "/admin/api/users/{id}/unban"
@@ -176,6 +178,10 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 }
 
 func (api *httpAPI) getDeletedUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
+	if request.PathValue("id") != "deleted" {
+		writeError(writer, ErrNotFound)
+		return
+	}
 	if !requireReadRequest(writer, request) {
 		return
 	}
