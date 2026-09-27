@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 type nativeUsage struct {
@@ -30,7 +31,7 @@ func parseUsage(raw []byte) (contract.Usage, error) {
 		return out, nil
 	}
 	var value nativeUsage
-	if json.Unmarshal(raw, &value) != nil {
+	if strictjson.ValidateObjectWithFieldLimit(raw, 16384) != nil || json.Unmarshal(raw, &value) != nil {
 		return out, errResponse
 	}
 	for _, n := range []*int64{value.Input.Total, value.Input.NoCache, value.Input.CacheRead, value.Input.CacheWrite, value.Output.Total, value.Output.Text, value.Output.Reasoning} {
