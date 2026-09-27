@@ -91,6 +91,7 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 	if s == nil || ctx == nil || tx == nil || !db.ValidateOpaqueID(input.RequestID, "req_") ||
 		input.UserID <= 0 || input.CharityModelID <= 0 || input.AttemptLimit < 1 ||
 		input.AttemptLimit > claim.MaxAttempts || !validMoney(input.ReservedMilli) ||
+		input.OutputTokenFloor < 0 || input.OutputTokenFloor > 2147483647 ||
 		!validTime(input.AcceptedAt) || len([]byte(input.ModelSnapshot)) > claim.MaxModelSnapshotBytes {
 		return claim.ErrInvalidInput
 	}
@@ -108,6 +109,12 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 		if err != nil {
 			return claim.ErrInvariant
 		}
+	} else if input.OutputTokenFloor > 0 {
+		expectedReserve, err = charityreserve.WithOutputFloor(pricing.tokenReserve, pricing.outputUser, input.OutputTokenFloor)
+		if err != nil {
+			return claim.ErrInvariant
+		}
+		pricing.tokenReserve = expectedReserve
 	}
 	if input.ReservedMilli != expectedReserve {
 		return claim.ErrConflict
@@ -200,7 +207,7 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 		!db.ValidateOpaqueID(input.ClaimID, "clm_") || input.ActorUserID <= 0 ||
 		input.AttemptSeq < 1 || input.AttemptSeq > claim.MaxAttempts || input.DonationKeyID <= 0 ||
 		input.EndpointID <= 0 || input.EndpointKeyID <= 0 || !validUpstreamModelID(input.UpstreamModelID) ||
-		!validTime(input.ClaimedAt) {
+		!validTime(input.ClaimedAt) || input.OutputTokenFloor < 0 || input.OutputTokenFloor > 2147483647 {
 		return claim.CharityReservation{}, claim.ErrInvalidInput
 	}
 	var gate string
@@ -244,6 +251,9 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 	priceReserve := row.pricing.tokenReserve
 	tokenBudget, err := donationquota.ReadTokenBudget(ctx, tx, row.donationKeyID)
 	if err != nil {
+		return claim.CharityReservation{}, err
+	}
+	if err := raiseOutputTokenBudget(&tokenBudget, input.OutputTokenFloor); err != nil {
 		return claim.CharityReservation{}, err
 	}
 	row.tokenReserve = tokenBudget.Reservation.Total
@@ -332,6 +342,33 @@ VALUES(?,?,?,?,?,?,?,'reserved',?,?,?)`, input.ClaimID, row.donationKeyID, db.En
 		ReservedCalls: 1, ReservedTokens: row.tokenReserve,
 		ReservedInputTokens: tokenBudget.Reservation.Input, ReservedOutputTokens: tokenBudget.Reservation.Output,
 	}, nil
+}
+
+func raiseOutputTokenBudget(budget *donationquota.TokenBudget, floor int64) error {
+	if budget == nil || floor < 0 || floor > 2147483647 {
+		return claim.ErrInvalidInput
+	}
+	if floor == 0 {
+		return nil
+	}
+	if budget.Reservation.Output == nil {
+		if floor > budget.Reservation.Total {
+			budget.Reservation.Total = floor
+		}
+		return nil
+	}
+	input := *budget.Reservation.Input
+	output := *budget.Reservation.Output
+	if floor > output {
+		output = floor
+	}
+	if input > math.MaxInt64-output {
+		return donationquota.ErrLimited
+	}
+	budget.Reservation.Input = &input
+	budget.Reservation.Output = &output
+	budget.Reservation.Total = input + output
+	return nil
 }
 
 func readClaimKey(ctx context.Context, tx *sql.Tx, input claim.CharityClaimInput) (keyReservation, error) {

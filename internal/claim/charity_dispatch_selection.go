@@ -97,6 +97,7 @@ WHERE k.id=?`, option.Candidate.EndpointKeyID).Scan(&secretRefID, &baseURL)
 		selected.BalancedCandidates = nil
 		selected.Candidate = choice.candidate.Candidate
 		selected.DonationKeyID = choice.candidate.DonationKeyID
+		selected.OutputTokenFloor = choice.candidate.OutputTokenFloor
 		handle, claimErr := s.claimTx(ctx, tx, claimID, at, selected)
 		if claimErr == nil {
 			if _, err := tx.ExecContext(ctx, `RELEASE balanced_candidate`); err != nil {

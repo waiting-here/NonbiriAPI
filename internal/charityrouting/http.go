@@ -36,6 +36,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminModel, api.getAdminModel},
 		{http.MethodPatch, routeAdminModel, api.patchAdminModel},
 		{http.MethodDelete, routeAdminModel, api.deleteAdminModel},
+		{http.MethodGet, routeAdminModelAdaptation, api.getAdminModelAdaptation},
+		{http.MethodPut, routeAdminModelAdaptation, api.putAdminModelAdaptation},
 		{http.MethodGet, routeAdminCandidates, api.adminCandidates},
 		{http.MethodGet, routeAdminBindingDonations, api.adminBindingDonations},
 		{http.MethodGet, routeAdminBindingKeys, api.adminBindingKeys},
@@ -43,6 +45,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodPost, routeAdminBindingBatch, api.addAdminBindings},
 		{http.MethodPut, routeAdminBindingOrder, api.orderAdminBindings},
 		{http.MethodDelete, routeAdminBinding, api.deleteAdminBinding},
+		{http.MethodGet, routeAdminBindingAdaptation, api.getAdminBindingAdaptation},
+		{http.MethodPut, routeAdminBindingAdaptation, api.putAdminBindingAdaptation},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
@@ -68,6 +72,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardModel, api.getStewardModel},
 		{http.MethodPatch, routeStewardModel, api.patchStewardModel},
 		{http.MethodDelete, routeStewardModel, api.deleteStewardModel},
+		{http.MethodGet, routeStewardModelAdaptation, api.getStewardModelAdaptation},
 		{http.MethodGet, routeStewardCandidates, api.stewardCandidates},
 		{http.MethodGet, routeStewardBindingDonations, api.stewardBindingDonations},
 		{http.MethodGet, routeStewardBindingKeys, api.stewardBindingKeys},
@@ -75,6 +80,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPost, routeStewardBindingBatch, api.addStewardBindings},
 		{http.MethodPut, routeStewardBindingOrder, api.orderStewardBindings},
 		{http.MethodDelete, routeStewardBinding, api.deleteStewardBinding},
+		{http.MethodGet, routeStewardBindingAdaptation, api.getStewardBindingAdaptation},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterUserRoute(route.method, route.pattern, route.handler); err != nil {

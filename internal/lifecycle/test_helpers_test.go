@@ -362,6 +362,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Rankings:   exports, Penalties: exports, Governance: exports,
 		},
 		Delete: DeleteAdapters{
+			RequestAdaptation:    noopDelete("request_adaptation"),
 			Continuity:           noopDelete("continuity"),
 			CharityRouting:       noopDelete("charity_routing"),
 			Governance:           noopDelete("governance"),
@@ -380,10 +381,11 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
-			Continuity:     noopRetention("continuity"),
-			CharityRouting: noopRetention("charity_routing"),
-			Governance:     noopRetention("governance"),
-			Sessions:       noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
+			RequestAdaptation: noopRetention("request_adaptation"),
+			Continuity:        noopRetention("continuity"),
+			CharityRouting:    noopRetention("charity_routing"),
+			Governance:        noopRetention("governance"),
+			Sessions:          noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
 			Observability: noopRetention("observability"), RiskAudit: noopRetention("risk_audit"),
 			Issues: noopRetention("issues"), Fishing: noopRetention("fishing"), LinkLink: noopRetention("linklink"),
 			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Donations: noopRetention("donations"),

@@ -69,6 +69,7 @@ type fakeCharityRouter struct {
 	preTimes      []int64
 	snapTimes     []int64
 	snapTypes     [][]connectorcontract.Type
+	outputFloors  []int64
 }
 
 func (router *fakeCharityRouter) RequestPolicy(_ context.Context, _ int64, model string, _ int64) (CharityRequestPolicy, error) {
@@ -92,6 +93,11 @@ func (router *fakeCharityRouter) Snapshot(_ context.Context, userID int64, _ int
 	router.snapTimes = append(router.snapTimes, now)
 	router.snapTypes = append(router.snapTypes, append([]connectorcontract.Type(nil), connectorTypes...))
 	return router.snapshot, router.snapErr
+}
+
+func (router *fakeCharityRouter) ReserveForOutput(_ context.Context, _ int64, currentReserve, outputFloor int64) (int64, error) {
+	router.outputFloors = append(router.outputFloors, outputFloor)
+	return currentReserve, nil
 }
 
 func (router *fakeCharityRouter) PreflightEmbedding(ctx context.Context, userID int64, model string, _ *openai.EmbeddingRequest, now int64) (CharityPreflight, error) {

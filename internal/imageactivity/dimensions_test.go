@@ -142,7 +142,7 @@ func TestDimensionMetadataAndServerAdmissionUseStoredRules(t *testing.T) {
 			t.Fatalf("public schema leaked %q", private)
 		}
 	}
-	request := SubmitInput{ModelID: f.model, ExpectedModelRevision: "2", Prompt: "bounded", Size: json.RawMessage(`"8x11"`)}
+	request := SubmitInput{ModelID: f.model, ExpectedModelRevision: "2", ExpectedPricingRevision: "2", Prompt: "bounded", Size: json.RawMessage(`"8x11"`)}
 	if _, err := f.service.Submit(f.ctx(f.user), f.user, f.key(), request); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("invalid dimension reached admission: %v", err)
 	}

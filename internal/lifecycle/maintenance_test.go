@@ -44,10 +44,11 @@ func retentionAdaptersWithRecorder(record func(string)) RetentionAdapters {
 		}}
 	}
 	return RetentionAdapters{
-		Continuity:     makeAdapter("continuity"),
-		CharityRouting: makeAdapter("charity_routing"),
-		Governance:     makeAdapter("governance"),
-		Sessions:       makeAdapter("sessions"), RequestLogs: makeAdapter("request_logs"), Audits: makeAdapter("audits"),
+		RequestAdaptation: makeAdapter("request_adaptation"),
+		Continuity:        makeAdapter("continuity"),
+		CharityRouting:    makeAdapter("charity_routing"),
+		Governance:        makeAdapter("governance"),
+		Sessions:          makeAdapter("sessions"), RequestLogs: makeAdapter("request_logs"), Audits: makeAdapter("audits"),
 		Observability: makeAdapter("observability"), RiskAudit: makeAdapter("risk_audit"),
 		Issues: makeAdapter("issues"), Fishing: makeAdapter("fishing"), LinkLink: makeAdapter("linklink"),
 		RPS: makeAdapter("rps"), Reports: makeAdapter("reports"), Donations: makeAdapter("donations"),
@@ -72,7 +73,7 @@ func TestMaintenanceRunsFrozenRecoveryThenRetentionOrder(t *testing.T) {
 		"recovery:governance", "recovery:charity_routing",
 		"retention:continuity", "retention:sessions", "retention:request_logs", "retention:audits", "retention:observability", "retention:risk_audit", "retention:issues", "retention:fishing",
 		"retention:linklink", "retention:rps", "retention:bidding", "retention:likes", "retention:blackjack", "retention:reports", "retention:donations", "retention:charity",
-		"retention:idempotency", "retention:secrets", "retention:governance", "retention:charity_routing",
+		"retention:idempotency", "retention:secrets", "retention:governance", "retention:charity_routing", "retention:request_adaptation",
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("maintenance order = %v, want %v", calls, want)

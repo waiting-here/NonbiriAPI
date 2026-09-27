@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 )
 
 const (
@@ -34,6 +35,7 @@ const (
 
 type Config struct {
 	Store               *db.Store
+	Adaptations         *requestadaptation.Store
 	Connectors          *connector.Registry
 	BaseURLs            BaseURLValidator
 	Secrets             SecretWriter
@@ -54,6 +56,7 @@ type Config struct {
 
 type Repository struct {
 	db                  *sql.DB
+	adaptations         *requestadaptation.Store
 	connectors          *connector.Registry
 	baseURLs            BaseURLValidator
 	secrets             SecretWriter
@@ -96,7 +99,8 @@ func New(config Config) (*Repository, error) {
 	}
 	return &Repository{
 		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs,
-		secrets: config.Secrets, keyDeletion: config.KeyDeletion, keyCreation: config.KeyCreation,
+		adaptations: config.Adaptations,
+		secrets:     config.Secrets, keyDeletion: config.KeyDeletion, keyCreation: config.KeyCreation,
 		projection: config.Projection, discoveryRail: config.DiscoveryRail,
 		discoveryWorker:  config.DiscoveryWorker,
 		managedDiscovery: config.ManagedDiscovery,

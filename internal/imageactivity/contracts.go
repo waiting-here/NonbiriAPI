@@ -29,13 +29,14 @@ const (
 )
 
 var (
-	ErrInvalid     = errors.New("image activity: invalid request")
-	ErrConflict    = errors.New("image activity: revision or state conflict")
-	ErrUnavailable = errors.New("image activity: unavailable")
-	ErrCapacity    = errors.New("image activity: capacity exhausted")
-	ErrNotFound    = errors.New("image activity: not found")
-	ErrInvariant   = errors.New("image activity: invariant violation")
-	ErrExportLimit = errors.New("image activity: export limit exceeded")
+	ErrInvalid         = errors.New("image activity: invalid request")
+	ErrConflict        = errors.New("image activity: revision or state conflict")
+	ErrRefreshRequired = errors.New("image activity: refresh model and confirm current price")
+	ErrUnavailable     = errors.New("image activity: unavailable")
+	ErrCapacity        = errors.New("image activity: capacity exhausted")
+	ErrNotFound        = errors.New("image activity: not found")
+	ErrInvariant       = errors.New("image activity: invariant violation")
+	ErrExportLimit     = errors.New("image activity: export limit exceeded")
 )
 
 type Vault interface {
@@ -117,27 +118,31 @@ type CombinationRule struct {
 	Allowed [][]json.RawMessage `json:"allowed"`
 }
 type Model struct {
-	ID           string            `json:"id"`
-	DisplayName  string            `json:"display_name"`
-	Description  string            `json:"description"`
-	Revision     string            `json:"revision"`
-	Price        Price             `json:"price"`
-	Parameters   []ParameterRule   `json:"parameters"`
-	Combinations []CombinationRule `json:"combinations"`
+	ID              string            `json:"id"`
+	DisplayName     string            `json:"display_name"`
+	Description     string            `json:"description"`
+	Revision        string            `json:"revision"`
+	Price           Price             `json:"price"`
+	Parameters      []ParameterRule   `json:"parameters"`
+	Combinations    []CombinationRule `json:"combinations"`
+	PricingRevision string            `json:"pricing_revision"`
+	Pricing         PricingPolicy     `json:"pricing"`
+	SizeCapability  *SizeCapability   `json:"size_capability,omitempty"`
 }
 type SubmitInput struct {
-	ModelID               string          `json:"model_id"`
-	ExpectedModelRevision string          `json:"expected_model_revision"`
-	Prompt                string          `json:"prompt"`
-	NegativePrompt        json.RawMessage `json:"negative_prompt,omitempty"`
-	N                     *int            `json:"n,omitempty"`
-	Size                  json.RawMessage `json:"size,omitempty"`
-	AspectRatio           json.RawMessage `json:"aspect_ratio,omitempty"`
-	Resolution            json.RawMessage `json:"resolution,omitempty"`
-	Seed                  json.RawMessage `json:"seed,omitempty"`
-	Steps                 json.RawMessage `json:"steps,omitempty"`
-	Guidance              json.RawMessage `json:"guidance,omitempty"`
-	Quality               json.RawMessage `json:"quality,omitempty"`
+	ModelID                 string          `json:"model_id"`
+	ExpectedModelRevision   string          `json:"expected_model_revision"`
+	ExpectedPricingRevision string          `json:"expected_pricing_revision"`
+	Prompt                  string          `json:"prompt"`
+	NegativePrompt          json.RawMessage `json:"negative_prompt,omitempty"`
+	N                       *int            `json:"n,omitempty"`
+	Size                    json.RawMessage `json:"size,omitempty"`
+	AspectRatio             json.RawMessage `json:"aspect_ratio,omitempty"`
+	Resolution              json.RawMessage `json:"resolution,omitempty"`
+	Seed                    json.RawMessage `json:"seed,omitempty"`
+	Steps                   json.RawMessage `json:"steps,omitempty"`
+	Guidance                json.RawMessage `json:"guidance,omitempty"`
+	Quality                 json.RawMessage `json:"quality,omitempty"`
 }
 type ImageInfo struct {
 	Index int    `json:"index"`

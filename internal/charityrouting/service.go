@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -33,29 +34,34 @@ const (
 )
 
 const (
-	routeCapability              = "/api/charity/models"
-	routeAdminModels             = "/admin/api/charity-models"
-	routeAdminModel              = "/admin/api/charity-models/{id}"
-	routeAdminCandidates         = "/admin/api/charity-models/{id}/binding-candidates"
-	routeAdminBindingDonations   = "/admin/api/charity-models/{id}/binding-donations"
-	routeAdminBindingKeys        = "/admin/api/charity-models/{id}/binding-donations/{donationId}/keys"
-	routeAdminBindings           = "/admin/api/charity-models/{id}/bindings"
-	routeAdminBindingBatch       = "/admin/api/charity-models/{id}/bindings/batch"
-	routeAdminBindingOrder       = "/admin/api/charity-models/{id}/bindings/order"
-	routeAdminBinding            = "/admin/api/charity-models/{id}/bindings/{bindingId}"
-	routeStewardModels           = "/api/steward/charity-models"
-	routeStewardModel            = "/api/steward/charity-models/{id}"
-	routeStewardCandidates       = "/api/steward/charity-models/{id}/binding-candidates"
-	routeStewardBindingDonations = "/api/steward/charity-models/{id}/binding-donations"
-	routeStewardBindingKeys      = "/api/steward/charity-models/{id}/binding-donations/{donationId}/keys"
-	routeStewardBindings         = "/api/steward/charity-models/{id}/bindings"
-	routeStewardBindingBatch     = "/api/steward/charity-models/{id}/bindings/batch"
-	routeStewardBindingOrder     = "/api/steward/charity-models/{id}/bindings/order"
-	routeStewardBinding          = "/api/steward/charity-models/{id}/bindings/{bindingId}"
+	routeCapability               = "/api/charity/models"
+	routeAdminModels              = "/admin/api/charity-models"
+	routeAdminModel               = "/admin/api/charity-models/{id}"
+	routeAdminCandidates          = "/admin/api/charity-models/{id}/binding-candidates"
+	routeAdminBindingDonations    = "/admin/api/charity-models/{id}/binding-donations"
+	routeAdminBindingKeys         = "/admin/api/charity-models/{id}/binding-donations/{donationId}/keys"
+	routeAdminBindings            = "/admin/api/charity-models/{id}/bindings"
+	routeAdminBindingBatch        = "/admin/api/charity-models/{id}/bindings/batch"
+	routeAdminBindingOrder        = "/admin/api/charity-models/{id}/bindings/order"
+	routeAdminBinding             = "/admin/api/charity-models/{id}/bindings/{bindingId}"
+	routeStewardModels            = "/api/steward/charity-models"
+	routeStewardModel             = "/api/steward/charity-models/{id}"
+	routeStewardCandidates        = "/api/steward/charity-models/{id}/binding-candidates"
+	routeStewardBindingDonations  = "/api/steward/charity-models/{id}/binding-donations"
+	routeStewardBindingKeys       = "/api/steward/charity-models/{id}/binding-donations/{donationId}/keys"
+	routeStewardBindings          = "/api/steward/charity-models/{id}/bindings"
+	routeStewardBindingBatch      = "/api/steward/charity-models/{id}/bindings/batch"
+	routeStewardBindingOrder      = "/api/steward/charity-models/{id}/bindings/order"
+	routeStewardBinding           = "/api/steward/charity-models/{id}/bindings/{bindingId}"
+	routeAdminModelAdaptation     = "/admin/api/charity-models/{id}/request-adaptation"
+	routeAdminBindingAdaptation   = "/admin/api/charity-models/{id}/bindings/{bindingId}/request-adaptation"
+	routeStewardModelAdaptation   = "/api/steward/charity-models/{id}/request-adaptation"
+	routeStewardBindingAdaptation = "/api/steward/charity-models/{id}/bindings/{bindingId}/request-adaptation"
 )
 
 type Config struct {
 	Store         *db.Store
+	Adaptations   *requestadaptation.Store
 	RoleAuth      RoleFinalTxAuthorizer
 	DonationState DonationStateOwner
 	CursorKeys    resources.CursorKeyDeriver
@@ -65,6 +71,7 @@ type Config struct {
 
 type Service struct {
 	db            *sql.DB
+	adaptations   *requestadaptation.Store
 	roleAuth      RoleFinalTxAuthorizer
 	donationState DonationStateOwner
 	cursorKeys    resources.CursorKeyDeriver
@@ -82,7 +89,7 @@ func New(config Config) (*Service, error) {
 	if nilDependency(config.Entropy) {
 		config.Entropy = cryptorand.Reader
 	}
-	return &Service{db: config.Store.DB(), roleAuth: config.RoleAuth, donationState: config.DonationState,
+	return &Service{db: config.Store.DB(), adaptations: config.Adaptations, roleAuth: config.RoleAuth, donationState: config.DonationState,
 		cursorKeys: config.CursorKeys, entropy: config.Entropy, now: config.Now}, nil
 }
 
@@ -324,6 +331,20 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	}
 	if !validModelName(updated.provider) || !validModelName(updated.model) {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+	}
+	if input.ExcludedRequestFields != nil && s.adaptations != nil {
+		modelAdaptation, err := s.adaptations.LoadTx(ctx, tx, requestadaptation.Ref{Scope: requestadaptation.ScopeCharityModel, ID: modelID})
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, routingAdaptationError(err)
+		}
+		defer modelAdaptation.Clear()
+		excluded, err := decodeExcludedFields(updated.excludedFields)
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+		if err := s.validateModelAdaptationsTx(ctx, tx, modelID, excluded, modelAdaptation.Document); err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
 	}
 	fullName := "[公益]" + updated.provider + "/" + updated.model
 	result, err := tx.ExecContext(ctx, `UPDATE charity_models SET
