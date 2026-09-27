@@ -11,11 +11,13 @@ import (
 // Only the complete published source is eligible for this additive extension.
 const preInteractionManifestHash = "66319db6ffcd94d214725a7f21b3b10b8efb9bdc055d17acc14579cde6c86009"
 
-var interactionChangedTables = []string{"charity_model_routing", "game_rank_totals", "game_rank_net_rebuild_totals", "credit_operations"}
+var interactionChangedTables = []string{"charity_model_routing", "game_rank_totals", "game_rank_net_rebuild_totals", "credit_operations", "discord_blacklist"}
 
 func interactionTableSQL(table, previous string) (string, error) {
 	var changes [][2]string
 	switch table {
+	case "discord_blacklist":
+		changes = append(changes, [2]string{"length(reason) BETWEEN 1 AND 1024", "length(reason) BETWEEN 1 AND 2000"})
 	case "charity_model_routing":
 		changes = append(changes, [2]string{"'ordered','random','expiry_weighted'", "'ordered','random','expiry_weighted','cache_balanced'"})
 	case "game_rank_totals":

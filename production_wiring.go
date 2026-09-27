@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -70,6 +71,7 @@ func newStewardAutomationHandler(service *stewardautomation.Service, repository 
 func newPublicForwardRuntime(
 	store *db.Store,
 	vault *secret.Vault,
+	identities *continuity.Service,
 	claims *claim.Service,
 	charityService *charity.Service,
 	charityRoutes *charityrouting.Service,
@@ -83,11 +85,17 @@ func newPublicForwardRuntime(
 	audits *auditRuntime,
 	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
-	if store == nil || vault == nil || claims == nil || charityService == nil || charityRoutes == nil ||
+	if store == nil || vault == nil || identities == nil || claims == nil || charityService == nil || charityRoutes == nil ||
 		resourcesRepository == nil || registry == nil || outboundBackend == nil || debugHub == nil || maintenanceGate == nil || cancelUserDuelsTx == nil {
 		return nil, errors.New("public forward runtime dependencies are required")
 	}
-	lifecycle, err := lifecyclegate.New(lifecyclegate.Config{})
+	lifecycle, err := lifecyclegate.New(lifecyclegate.Config{IdentityResolver: func(ctx context.Context, userID int64) ([32]byte, error) {
+		key, err := identities.UserKey(ctx, userID)
+		if errors.Is(err, continuity.ErrNotFound) {
+			return [32]byte{}, lifecyclegate.ErrInvalid
+		}
+		return [32]byte(key), err
+	}})
 	if err != nil {
 		return nil, fmt.Errorf("create caller lifecycle gate: %w", err)
 	}

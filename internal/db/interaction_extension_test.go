@@ -124,6 +124,14 @@ func TestInteractionPublishedSourcePreservesRows(t *testing.T) {
 	if err := foreignKeyCheck(ctx, database); err != nil {
 		t.Fatal(err)
 	}
+	// A first note has the same Unicode-scalar budget as later notes.
+	if _, err := database.Exec(`INSERT INTO discord_blacklist VALUES('200000000000000001',?,3)`, strings.Repeat("界", 2000)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`INSERT INTO discord_blacklist VALUES('200000000000000002',?,3)`, strings.Repeat("界", 2001)); err == nil {
+		t.Fatal("accepted an oversized first note")
+	}
+	hostileMustExec(t, database, `DELETE FROM discord_blacklist WHERE discord_id='200000000000000001'`)
 	var visible, rows int
 	if err := database.QueryRow(`SELECT visible FROM limited_activity_configs WHERE activity_key='fat-fish'`).Scan(&visible); err != nil || visible != 0 {
 		t.Fatal(visible, err)

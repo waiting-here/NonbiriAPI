@@ -382,6 +382,7 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			Continuity:           authRuntime.IdentityContinuity(),
 			CharityRouting:       routingLifecycle,
 			Governance:           activityEngines,
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,
@@ -409,6 +410,7 @@ func newLifecycleCoordinator(
 			Secrets:        secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
+			Continuity:     authRuntime.IdentityContinuity(),
 			CharityRouting: routingLifecycle,
 			Governance:     activityEngines,
 			Sessions:       lifecycleadapters.NewAuthSessionRetention(authRuntime),
