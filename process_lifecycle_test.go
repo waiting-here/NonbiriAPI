@@ -214,11 +214,14 @@ func TestProcessCloseTimeoutRetainsStoreAndVaultOwnership(t *testing.T) {
 		t.Fatalf("vault remained open after final process close: %v", err)
 	}
 	reopenedVault := processTestVault(t)
-	reopened, err := db.OpenContext(wait, path, reopenedVault)
+	// Reopening performs startup validation and has its own startup budget.
+	// The completed shutdown's deadline must not constrain that new operation.
+	reopened, err := db.Open(path, reopenedVault)
 	if err != nil {
 		t.Fatalf("database did not reopen after final process close: %v", err)
 	}
-	if err := reopened.CloseContext(wait); err != nil {
+	t.Cleanup(func() { _ = reopened.Close() })
+	if err := reopened.Close(); err != nil {
 		t.Fatalf("close reopened database: %v", err)
 	}
 }
@@ -324,6 +327,7 @@ func TestInitializeProcessBindFailureKeepsResourcesOwnedForCleanup(t *testing.T)
 	t.Cleanup(func() { _ = occupied.Close() })
 	path := filepath.Join(t.TempDir(), "bind-failure.sqlite")
 	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	for name, value := range map[string]string{
 		"NONBIRI_LISTEN_ADDR":              occupied.Addr().String(),
 		"NONBIRI_DB_PATH":                  path,
@@ -370,11 +374,12 @@ func TestInitializeProcessBindFailureKeepsResourcesOwnedForCleanup(t *testing.T)
 		t.Fatalf("bind failure left vault open: %v", err)
 	}
 	reopenedVault := processTestVault(t)
-	reopened, err := db.OpenContext(wait, path, reopenedVault)
+	reopened, err := db.Open(path, reopenedVault)
 	if err != nil {
-		t.Fatalf("bind failure left database owned: %v", err)
+		t.Fatalf("database did not reopen after failed-bind cleanup: %v", err)
 	}
-	if err := reopened.CloseContext(wait); err != nil {
+	t.Cleanup(func() { _ = reopened.Close() })
+	if err := reopened.Close(); err != nil {
 		t.Fatalf("close reopened bind-failure database: %v", err)
 	}
 }
