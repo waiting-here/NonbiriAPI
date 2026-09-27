@@ -58,3 +58,27 @@ func TestUserNumberedHTTPRejectsWatermarkWithoutFrozenWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestUserNumberedHTTPBoundsPageSizeBeforeConversion(t *testing.T) {
+	f := newAuditFixture(t)
+	userID := f.user(1)
+	for _, test := range []struct {
+		size string
+		code int
+	}{
+		{"20", 200}, {"50", 200}, {"100", 200},
+		{"0", 400}, {"-1", 400}, {"10", 400}, {"30", 400}, {"101", 400},
+		{"020", 400}, {"%2B20", 400}, {"4294967316", 400},
+		{"9223372036854775807", 400}, {"9223372036854775808", 400},
+	} {
+		t.Run(test.size, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/risk/users/"+strconv.FormatInt(userID, 10)+"?page=1&page_size="+test.size, nil)
+			req.SetPathValue("id", strconv.FormatInt(userID, 10))
+			response := httptest.NewRecorder()
+			serve(f.repository, "user", Actor{Admin: true, UserID: f.admin}, response, req)
+			if response.Code != test.code {
+				t.Fatalf("page size %q: %d %s", test.size, response.Code, response.Body.String())
+			}
+		})
+	}
+}
