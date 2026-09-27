@@ -59,6 +59,13 @@ for (const scenario of [
             as_of: 2000000000,
             statistics_start: 1900000000,
             window,
+            ...(path === '/api/games/bidding/net-profit'
+              ? {
+                  rebuild_status: 'completed',
+                  missing_events: '0',
+                  history_coverage_start: 1900000000,
+                }
+              : {}),
             rows: Array.from({ length: 20 }, (_, i) => ({
               rank: String(i + 1),
               amount: '9007199254740993.123',
@@ -114,9 +121,15 @@ for (const scenario of [
       await page.goto(`${USER_ORIGIN}${path}`);
       const cards = page.locator('.progression-ranking');
       await expect(cards).toHaveCount(path === '/games' ? 2 : 1);
-      if (path === '/games/blackjack') {
+      if (path === '/games/blackjack' || path === '/games/bidding') {
         await expect(cards.first().getByRole('heading')).toHaveText(
-          zh ? '赌神榜' : 'Card master leaderboard',
+          path === '/games/blackjack'
+            ? zh
+              ? '赌神榜'
+              : 'Card master leaderboard'
+            : zh
+              ? '竞标高手榜'
+              : 'Bidding masters',
         );
         await expect(cards.first().locator('select')).toHaveCount(0);
         const tabs = page.getByRole('tablist', {
@@ -126,8 +139,15 @@ for (const scenario of [
         await tabs.getByRole('tab').first().press('End');
         await expect(tabs.getByRole('tab').last()).toBeFocused();
         await expect(cards.first().getByRole('heading')).toHaveText(
-          zh ? '利润榜' : 'Profit leaderboard',
+          path === '/games/blackjack'
+            ? zh
+              ? '利润榜'
+              : 'Profit leaderboard'
+            : zh
+              ? '竞标利润榜'
+              : 'Bidding profits',
         );
+        await tabs.getByRole('tab').first().click();
       }
       const card = cards.first();
       await expect(card.locator('tbody tr')).toHaveCount(21);
@@ -135,10 +155,24 @@ for (const scenario of [
       await expect(card.getByText('9,007,199,254,740,993.123', { exact: true })).toHaveCount(20);
       expect(await card.locator('img').count()).toBe(0);
       if (path !== '/games') {
+        await page
+          .getByRole('tablist', {
+            name: zh ? '选择排行榜' : 'Choose a leaderboard',
+          })
+          .getByRole('tab')
+          .last()
+          .click();
         await card.locator('select').selectOption('30d');
         await expect.poll(() => windows.at(-1)).toBe('30d');
         await card.locator('select').selectOption('history');
         await expect(card.locator('time')).toBeVisible();
+        await page
+          .getByRole('tablist', {
+            name: zh ? '选择排行榜' : 'Choose a leaderboard',
+          })
+          .getByRole('tab')
+          .first()
+          .click();
       }
       if (path !== '/games/bidding') {
         if (path === '/games/blackjack')

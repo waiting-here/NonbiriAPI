@@ -66,13 +66,14 @@ function row(role: Role, index: number, charity = false) {
         : usage,
   };
   if (role === 'admin')
-    return { ...common, user_id: '7', caller_identity: null, attempt_count: '23' };
+    return { ...common, user_id: '7', caller_identity: null, attempt_count: '23', usage_total_mismatch: false };
   if (role === 'steward')
     return {
       ...common,
       user_id: '7',
       caller_identity: { discord_nickname: 'Shared caller', discord_id: '111111111111111111' },
       attempt_count: '23',
+      usage_total_mismatch: false,
     };
   return {
     ...common,
@@ -93,6 +94,7 @@ function attempt(role: Role, index: number) {
     upstream_code: null,
     diag: null,
     usage,
+    ...(role === 'user' ? {} : { usage_total_mismatch: false }),
     started_at: 1_800_000_000,
     completed_at: 1_800_000_001,
     ...(role === 'user' ? { endpoint_note: 'Personal endpoint', key_note: 'Personal key' } : {}),

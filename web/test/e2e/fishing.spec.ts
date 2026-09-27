@@ -85,6 +85,14 @@ async function installFishingRoutes(
   page: import('@playwright/test').Page,
   fixture: FishingFixture,
 ) {
+  // Keep the public avatar path exercised while satisfying the suite's
+  // no-external-network boundary with one exact, synthetic image response.
+  await page.route(AVATAR_URL, (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1" fill="#789"/></svg>',
+    }),
+  );
   await page.route('**/api/games**', async (route) => {
     const request = route.request();
     const requestURL = new URL(request.url());
@@ -445,7 +453,13 @@ test('Fishing recovery is identical across a second page and leaderboard identit
   await expect(page.getByText('Anonymous angler').first()).toBeVisible();
   await expect(page.getByText('Public angler')).toBeVisible();
   await expect(page.getByText('No avatar angler')).toBeVisible();
-  await expect(page.locator('.fishing-board img')).toHaveCount(0);
+  const avatar = page.locator('.fishing-board img');
+  await expect(avatar).toHaveCount(1);
+  await expect(avatar).toHaveAttribute('src', AVATAR_URL);
+  await expect(avatar).toHaveAttribute('alt', '');
+  await expect
+    .poll(() => avatar.evaluate((node) => (node as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
 
   const secondContext = await browser.newContext({ serviceWorkers: 'block' });
   try {
