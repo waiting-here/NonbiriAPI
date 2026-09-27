@@ -93,6 +93,7 @@ CREATE TABLE game_bidding_net_rebuild_totals (
  amount_sign INTEGER NOT NULL CHECK(amount_sign IN (-1,0,1)),
  amount_mag BLOB NOT NULL CHECK(length(amount_mag)=32 AND (amount_sign=0)=(amount_mag=zeroblob(32))),
  achieved_at INTEGER NOT NULL CHECK(achieved_at BETWEEN 0 AND 253402300799),
+ achieved_phase INTEGER NOT NULL CHECK(achieved_phase IN (0,1)),
  achieved_seq BLOB NOT NULL CHECK(length(achieved_seq)=16)
 ) STRICT;
 `
