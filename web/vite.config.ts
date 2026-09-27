@@ -62,6 +62,7 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
   const station = stationFor(mode);
   return {
     root: station.root,
+    publicDir: fileURLToPath(new URL('./public/', import.meta.url)),
     plugins: [react(), ...(command === 'build' ? [catalogPairPlugin()] : [])],
     resolve: {
       alias: {
