@@ -15,6 +15,8 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 | `NONBIRI_LISTEN_ADDR` | no | HTTP listener; blank/unset defaults to `127.0.0.1:8080` |
 | `NONBIRI_DB_PATH` | no | SQLite path; blank/unset defaults to `nonbiriapi.db` |
 | `NONBIRI_LOG_LEVEL` | no | `debug`, `info`, `warn`, or `error` |
+| `NONBIRI_STARTUP_TIMEOUT_SECONDS` | no | Whole integer seconds; default `300`, inclusive range `30`–`1800`. One total startup budget from process start through configuration, validation, database recovery, application initialization, and listener bind. |
+| `NONBIRI_SHUTDOWN_TIMEOUT_SECONDS` | no | Whole integer seconds; default `30`, inclusive range `5`–`120`. One total graceful-shutdown budget; expiration results in a nonzero process exit. |
 | `NONBIRI_ADMIN_USERNAME` | yes | single administrator username |
 | `NONBIRI_ADMIN_PASSWORD` | yes | single administrator password; changing it and restarting revokes old admin sessions |
 | `NONBIRI_MASTER_KEY_FILE` or `NONBIRI_MASTER_KEY` | exactly one | 32-byte encryption root; the file form is preferred for production |
@@ -25,6 +27,8 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 | `NONBIRI_ADMIN_HOST` | no | separate admin host; blank/unset derives `admin.<user-host>` (explicit value required for IPv6 user hosts) |
 | `NONBIRI_TRUSTED_PROXY_CIDRS` | no | peers allowed to supply forwarding metadata; defaults to loopback ranges; `none` disables trust |
 | `NONBIRI_SMTP_*` | no | parsed/reserved only; the current prereleases do not send alert email |
+
+The timeout variables accept integer seconds only; decimals and out-of-range values are rejected. Blank or unset values use the defaults. Budgets cover the whole process phase rather than restarting for each step. Opening the database alone does not mean the application is ready; readiness follows full initialization and listener binding. See the [API contract](api-contract.md) for `/readyz`.
 
 If registration is enabled, an OAuth scope override must retain both identity and guild-member access; `identify` alone cannot satisfy the guild/role registration gate.
 

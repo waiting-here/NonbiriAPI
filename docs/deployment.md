@@ -96,6 +96,10 @@ sudo journalctl -u nonbiriapi.service -n 100 --no-pager
 
 The service should start only after the environment file, master key, release binary, and database directory are readable/writable by the service account.
 
+`NONBIRI_STARTUP_TIMEOUT_SECONDS` defaults to `300` and accepts whole integer seconds from `30` through `1800`; it is one total budget for configuration, validation, database recovery, application initialization, and listener binding. `NONBIRI_SHUTDOWN_TIMEOUT_SECONDS` defaults to `30` and accepts whole integer seconds from `5` through `120`; it is one total graceful-shutdown budget, and expiration causes a nonzero process exit. See [configuration.md](configuration.md#startup-environment) for the full environment reference. Opening the database alone does not mean the application is ready.
+
+The anonymous `GET /readyz` returns HTTP 200 with `{"status":"ready"}` only when fully initialized and the listener is bound and serving. During shutdown or after a critical worker fails, it returns HTTP 503 with `{"status":"not_ready"}`. Before initialization and listener binding, requests may be unreachable. The existing `/healthz` response remains unchanged.
+
 ## Reverse proxy requirements
 
 Configure the public user host and the separate admin host in DNS and TLS. The proxy should:

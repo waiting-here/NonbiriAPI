@@ -90,6 +90,18 @@ brand-new database and its sidecars with owner-only permissions. `umask 077`
 remains useful defense in depth for a manual launch, but runtime path, owner,
 mode, file-shape, and sidecar checks are authoritative.
 
+### Startup and shutdown budgets
+
+| Variable | Required | Value |
+| --- | --- | --- |
+| `NONBIRI_STARTUP_TIMEOUT_SECONDS` | no | `300` whole seconds by default; inclusive range `30`–`1800`. One total budget covers configuration, validation, database recovery, application initialization, and listener bind. |
+| `NONBIRI_SHUTDOWN_TIMEOUT_SECONDS` | no | `30` whole seconds by default; inclusive range `5`–`120`. One total graceful-shutdown budget; expiration makes the process exit nonzero. |
+
+Only integer seconds are accepted; decimals and values outside the stated ranges
+are rejected. Blank or unset values use the defaults. The database opening is
+one step, not the readiness signal; the application is ready after complete
+initialization and explicit listener binding.
+
 ### Administrator credential
 
 | Variable | Required | Value |
@@ -180,6 +192,8 @@ The loader collects the validation problems below and reports them together. Res
 - The admin host equals the user host, or is not a valid hostname.
 - `NONBIRI_TRUSTED_PROXY_CIDRS` malformed (use `none` to disable cleanly).
 - Any `NONBIRI_SMTP_*` field malformed when `NONBIRI_SMTP_HOST` is set.
+- The startup or shutdown budget is not a whole integer number of seconds within
+  its inclusive range.
 
 The error message names each offending variable; it never prints secret
 material.
@@ -211,22 +225,29 @@ sudo journalctl -u nonbiriapi.service -n 100 --no-pager
 
 Then through the reverse proxy, confirm:
 
-1. `GET https://<user-host>/healthz` returns a healthy response.
-2. The user station loads and clearly shows the maintenance state. OAuth start,
+1. `GET https://<user-host>/healthz` returns its existing healthy liveness
+   response; this behavior is unchanged.
+2. `GET https://<user-host>/readyz` returns HTTP 200 with
+   `{"status":"ready"}` only when fully initialized and the listener is bound
+   and serving. During shutdown or after a critical worker fails, it returns
+   HTTP 503 with `{"status":"not_ready"}`. Before initialization and listener
+   binding, the request may be unreachable. Opening the database alone is not
+   readiness.
+3. The user station loads and clearly shows the maintenance state. OAuth start,
    callback and all other user APIs remain intentionally unavailable while
    maintenance is on.
-3. The admin station (`https://<admin-host>`) shows the admin login, and the
+4. The admin station (`https://<admin-host>`) shows the admin login, and the
    configured username/password signs in.
-4. After signing in to the admin station, set the Discord guild and role used by
+5. After signing in to the admin station, set the Discord guild and role used by
    the registration gate (see [configuration.md](configuration.md)), review and
    apply the instance-specific legal text and donation guidance, configure any
    mainstream channel templates, verify all necessary limits and upstream
    settings, and prepare and restore-test a complete snapshot before inviting
    the first user.
-5. Only after those checks pass, turn maintenance off. Keep registration,
+6. Only after those checks pass, turn maintenance off. Keep registration,
    activities, charity, donation intake, and games closed unless a controlled
    acceptance test or onboarding window is intended.
-6. For a disposable new-user OAuth test, deliberately open registration, confirm
+7. For a disposable new-user OAuth test, deliberately open registration, confirm
    that Discord sign-in reaches the callback and creates the expected account,
    then complete an end-to-end call. Close registration again if onboarding is
    not yet intended. Enable activities, charity, donation intake, and games only
