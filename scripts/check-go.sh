@@ -14,10 +14,10 @@
 # reinstalls would overwrite any change), so the exclusion is done here at the
 # gate-command layer rather than by marking a nested module inside it.
 #
-# Exit codes of the go toolchain are preserved: with pipefail, the `go list`
-# pipeline must itself succeed, and each go subcommand runs under set -e so the
-# script exits with go's real exit code on the first failure -- no truncating
-# pipes or short-circuit masking of a non-zero status.
+# Exit codes of the go toolchain are preserved: package enumeration finishes
+# before filtering, and each go subcommand runs under set -e so the script exits
+# with go's real exit code on the first failure -- no truncating pipes or
+# short-circuit masking of a non-zero status.
 
 set -euo pipefail
 
@@ -33,11 +33,22 @@ export CGO_ENABLED=0
 cd "$(dirname "$0")/.."
 
 # Enumerate this module's packages, dropping anything under a /node_modules/
-# segment. grep -v returns 0 whenever it still emits at least one line (the
-# project packages always remain), and under pipefail a `go list` failure
-# propagates as a non-zero pipeline status before any build runs.
-pkgs="$("$GO" list ./... | grep -v '/node_modules/')"
+# segment. Keep the calls separate so an empty filter result cannot replace
+# the exit code of a failed `go list`. Project packages must remain afterward.
+pkgs="$("$GO" list ./...)"
+pkgs="$(printf '%s\n' "$pkgs" | grep -v '/node_modules/')"
 
+printf 'Go build started at %s\n' "$(date -u +%FT%TZ)"
+check_go_started=$SECONDS
 "$GO" build $pkgs
+printf 'Go build completed in %s seconds\n' "$((SECONDS - check_go_started))"
+
+printf 'Go vet started at %s\n' "$(date -u +%FT%TZ)"
+check_go_started=$SECONDS
 "$GO" vet $pkgs
+printf 'Go vet completed in %s seconds\n' "$((SECONDS - check_go_started))"
+
+printf 'Go tests started at %s\n' "$(date -u +%FT%TZ)"
+check_go_started=$SECONDS
 "$GO" test -timeout="$GO_TEST_TIMEOUT" $pkgs
+printf 'Go tests completed in %s seconds\n' "$((SECONDS - check_go_started))"

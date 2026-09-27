@@ -65,8 +65,8 @@ jobs:
           test "$GO_BUILD_RESULT" = success
           test "$RACE_RESULT" = success
 
-  web:
-    name: Web checks
+  web_unit:
+    name: Web unit, types, lint, and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -80,11 +80,6 @@ jobs:
           node-version: 22.22.3
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Set up Go for browser integration
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: 1.26.6
-          cache: true
       - name: Pin npm
         run: |
           npm install --global npm@12.0.1
@@ -101,26 +96,81 @@ jobs:
         run: npm run build
       - name: Verify generated notices
         run: git diff --exit-code -- THIRD_PARTY_NOTICES.md
+
+  web_browser:
+    name: Web browser (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [smoke, integration]
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Set up Go for browser integration
+        if: matrix.suite == 'integration'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.6
+          cache: true
+      - name: Pin npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(npm --version)" = "12.0.1"
+      - name: Install dependencies
+        run: npm ci
+      - name: Build both stations
+        run: npm run build
+      - name: Verify generated notices
+        run: git diff --exit-code -- THIRD_PARTY_NOTICES.md
       - name: Install Chromium
         run: npm exec -- playwright install --with-deps chromium
       - name: Deterministic game engine in Chromium
+        if: matrix.suite == 'smoke'
         run: node test/fatfish-engine/check.mjs chromium
       - name: Browser smoke
+        if: matrix.suite == 'smoke'
         env:
           PLAYWRIGHT_HTML_OPEN: never
         run: npm run test:e2e
       - name: Image activity browser integration
+        if: matrix.suite == 'integration'
         env:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
         run: npx playwright test -c playwright.picturebook.config.ts
       - name: Audit browser integration
+        if: matrix.suite == 'integration'
         env:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
         run: npx playwright test -c playwright.audit.config.ts
       - name: Fish game browser integration
+        if: matrix.suite == 'integration'
         env:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
         run: npx playwright test -c playwright.fatfish.config.ts
+
+  web:
+    name: Web checks
+    if: ${{ always() }}
+    needs: [web_unit, web_browser]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Web checks
+        env:
+          WEB_UNIT_RESULT: ${{ needs.web_unit.result }}
+          WEB_BROWSER_RESULT: ${{ needs.web_browser.result }}
+        run: |
+          test "$WEB_UNIT_RESULT" = success
+          test "$WEB_BROWSER_RESULT" = success
