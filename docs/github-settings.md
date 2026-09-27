@@ -24,6 +24,13 @@ For a multi-part version, maintainers may use a version integration branch (for 
 
 Complete CI runs on pull requests and can also be started manually. After merging, verify that the resulting `master` tree matches the passing PR tree before reusing its evidence for release. A changed tree requires checks for the affected inputs. CodeQL keeps its independent triggers; removing redundant post-merge CI does not remove required PR checks or authorize direct updates.
 
+`Go checks` requires both the build/vet/test/upgrade job and every race shard.
+`Web checks` requires the unit/type/lint/build job and both browser suites. These
+aggregate jobs run even when a dependency fails or is cancelled, and succeed
+only when every dependency succeeded. Keep the protected check names stable
+when changing parallelism; a skipped or failed suite must not produce a green
+aggregate check.
+
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 
 ## Recommended repository options

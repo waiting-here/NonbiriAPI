@@ -30,10 +30,23 @@ scripts/race-check.sh
 Frontend:
 
 ```sh
+npm --prefix web test
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
 ```
+
+CI runs frontend unit/type/lint/build checks, browser smoke tests and browser
+integrations in independent jobs. The `Web checks` gate requires every job to
+succeed. Browser integrations retain isolated application/database fixtures;
+splitting the workflow does not change test retries, workers or assertions.
+
+The complete race gate derives its package and test catalog from the checked-out
+source. `scripts/race-timings.json` only balances work across the sixteen CI
+shards; stale or missing timings must never omit a test. Keep fresh-database,
+upgrade, rollback and lock tests on their actual initialization paths. Tests
+that only exercise constraints may copy a validated schema image into a private
+database, provided mutations and cleanup cannot affect another test.
 
 For a release-like binary, build the frontend first and then run:
 
