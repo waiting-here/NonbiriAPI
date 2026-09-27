@@ -140,7 +140,8 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+		UsageTotalMismatch: record.usageTotalMismatch == 1,
+		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 	}
 	attempts, err := repository.listAdminAttemptsTx(ctx, tx, record.rowID, requestID, filter)
 	if err != nil {
@@ -212,7 +213,8 @@ func (repository *Repository) GetSteward(
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+		UsageTotalMismatch: record.usageTotalMismatch == 1,
+		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 	}
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {
@@ -227,28 +229,29 @@ func (repository *Repository) GetSteward(
 }
 
 type attemptRecord struct {
-	sequence      int64
-	resultKind    string
-	endpointKeyID sql.NullInt64
-	baseURL       string
-	connectorType string
-	upstreamModel string
-	statusCode    sql.NullInt64
-	upstreamCode  sql.NullString
-	diag          sql.NullString
-	uncached      int64
-	cacheWrite    int64
-	cacheRead     int64
-	output        int64
-	usageUnknown  int
-	startedAt     int64
-	completedAt   int64
+	sequence           int64
+	resultKind         string
+	endpointKeyID      sql.NullInt64
+	baseURL            string
+	connectorType      string
+	upstreamModel      string
+	statusCode         sql.NullInt64
+	upstreamCode       sql.NullString
+	diag               sql.NullString
+	uncached           int64
+	cacheWrite         int64
+	cacheRead          int64
+	output             int64
+	usageUnknown       int
+	usageTotalMismatch int
+	startedAt          int64
+	completedAt        int64
 }
 
 const attemptColumns = `a.attempt_seq,a.result_kind,a.endpoint_key_id_snapshot,a.canonical_base_url,
 a.connector_type,a.upstream_model_id,a.upstream_status,a.upstream_code,a.diag,
 a.input_tokens,a.cache_write_input_tokens,a.cache_read_input_tokens,a.output_tokens,
-a.usage_unknown,a.started_at,a.completed_at`
+a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at`
 
 func scanAttempt(scanner rowScanner, extra ...any) (attemptRecord, error) {
 	var record attemptRecord
@@ -256,7 +259,7 @@ func scanAttempt(scanner rowScanner, extra ...any) (attemptRecord, error) {
 		&record.sequence, &record.resultKind, &record.endpointKeyID, &record.baseURL,
 		&record.connectorType, &record.upstreamModel, &record.statusCode, &record.upstreamCode, &record.diag,
 		&record.uncached, &record.cacheWrite, &record.cacheRead, &record.output,
-		&record.usageUnknown, &record.startedAt, &record.completedAt,
+		&record.usageUnknown, &record.usageTotalMismatch, &record.startedAt, &record.completedAt,
 	}
 	targets = append(targets, extra...)
 	if err := scanner.Scan(targets...); err != nil {
@@ -267,7 +270,8 @@ func scanAttempt(scanner rowScanner, extra ...any) (attemptRecord, error) {
 		!validBaseURL(record.baseURL) || !validConnector(record.connectorType) ||
 		!utf8.ValidString(record.upstreamModel) || len([]rune(record.upstreamModel)) > 512 ||
 		record.uncached < 0 || record.cacheWrite < 0 || record.cacheRead < 0 || record.output < 0 ||
-		(record.usageUnknown != 0 && record.usageUnknown != 1) || record.startedAt < 0 ||
+		(record.usageUnknown != 0 && record.usageUnknown != 1) ||
+		(record.usageTotalMismatch != 0 && record.usageTotalMismatch != 1) || record.startedAt < 0 ||
 		record.completedAt < record.startedAt || record.completedAt > maxUnixSecond {
 		return attemptRecord{}, ErrInvariant
 	}
@@ -423,7 +427,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
 			StatusCode: intPointer(record.statusCode), UpstreamCode: textPointer(record.upstreamCode),
-			Diag: textPointer(record.diag), Usage: usage, StartedAt: record.startedAt, CompletedAt: record.completedAt,
+			Diag: textPointer(record.diag), Usage: usage, UsageTotalMismatch: record.usageTotalMismatch == 1,
+			StartedAt: record.startedAt, CompletedAt: record.completedAt,
 		})
 		last = record.sequence
 	}
@@ -502,7 +507,8 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
 			StatusCode: intPointer(record.statusCode), UpstreamCode: textPointer(record.upstreamCode),
-			Diag: textPointer(record.diag), Usage: usage, StartedAt: record.startedAt, CompletedAt: record.completedAt,
+			Diag: textPointer(record.diag), Usage: usage, UsageTotalMismatch: record.usageTotalMismatch == 1,
+			StartedAt: record.startedAt, CompletedAt: record.completedAt,
 		})
 		last = record.sequence
 	}

@@ -22,7 +22,7 @@ var (
 	// token invariants (wrong shape, non-integer or negative token values,
 	// cache sub-items exceeding the prompt total, or checked-sum overflow).
 	// It degrades the whole usage to unknown instead of failing the response:
-	// no token value is ever fabricated from contradictory upstream data.
+	// no token value is ever fabricated from invalid individual buckets.
 	errUsageMalformed = errors.New("openai connector: malformed usage")
 )
 
@@ -87,7 +87,7 @@ func validateChunk(data []byte) ([]byte, Usage, bool, error) {
 	}
 	usage, err := parseUsage(root["usage"])
 	// The malformed flag lets the stream loop poison the whole request's
-	// usage (contradictory upstream data must never yield token values)
+	// usage (invalid individual buckets must never yield billable values)
 	// while the otherwise valid chunk still forwards to the client.
 	malformed := errors.Is(err, errUsageMalformed)
 	if err != nil && !malformed {
@@ -218,14 +218,16 @@ func parseUsage(raw json.RawMessage) (Usage, error) {
 		!decodeNonNegativeInt(values["total_tokens"], &total) {
 		return Usage{}, errUsageMalformed
 	}
-	if summed, ok := addChecked(prompt, completion); !ok || summed != total {
-		return Usage{}, errUsageMalformed
+	summed, sumOK := addChecked(prompt, completion)
+	mismatch := !sumOK || summed != total
+	if !sumOK {
+		return Usage{TotalMismatch: true}, errUsageMalformed
 	}
 	var cacheRead, cacheWrite int64
 	if detailsRaw := values["prompt_tokens_details"]; len(bytes.TrimSpace(detailsRaw)) != 0 && !isJSONNull(detailsRaw) {
 		details, err := decodeJSONObject(detailsRaw, 64)
 		if err != nil {
-			return Usage{}, errUsageMalformed
+			return Usage{TotalMismatch: mismatch}, errUsageMalformed
 		}
 		detailValues := fieldsByName(details)
 		readOK, writeOK := true, true
@@ -237,12 +239,12 @@ func parseUsage(raw json.RawMessage) (Usage, error) {
 		}
 		clearFields(details)
 		if !readOK || !writeOK {
-			return Usage{}, errUsageMalformed
+			return Usage{TotalMismatch: mismatch}, errUsageMalformed
 		}
 	}
 	cacheSummed, ok := addChecked(cacheRead, cacheWrite)
 	if !ok || cacheSummed > prompt {
-		return Usage{}, errUsageMalformed
+		return Usage{TotalMismatch: mismatch}, errUsageMalformed
 	}
 	return Usage{
 		UncachedInputTokens:   prompt - cacheSummed,
@@ -250,6 +252,7 @@ func parseUsage(raw json.RawMessage) (Usage, error) {
 		CacheReadInputTokens:  cacheRead,
 		OutputTokens:          completion,
 		Present:               true,
+		TotalMismatch:         mismatch,
 	}, nil
 }
 
