@@ -424,7 +424,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
-		if event.Event != "message" {
+		if event.Event != "message" && !(event.Event == "done" && event.Data == "[DONE]") {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream event type was invalid")
 		}
 		if event.Data == "[DONE]" {
@@ -533,7 +533,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
 			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
-		if event.Event != "message" {
+		if event.Event != "message" && !(event.Event == "done" && event.Data == "[DONE]") {
 			return failure("upstream stream event type was invalid")
 		}
 		if event.Data == "[DONE]" {
