@@ -1,7 +1,7 @@
 const english = {
   title: 'Abuse audit',
   description:
-    'Review request patterns and supporting evidence. Audit findings do not automatically penalize accounts.',
+    'Review request patterns and supporting evidence. Administrator-bound rules can ban new charity calls automatically.',
   caveat:
     'Client names and headers are self-reported and may be changed or relayed. A rule match is a lead, not proof of identity or misuse.',
   comparisonHelp:
@@ -91,6 +91,20 @@ const english = {
   prefix: 'Starts with',
   ruleHelp:
     'All conditions in a rule must match. Rules are alternatives. Missing or truncated values cannot match. Up to 8 conditions per rule and 1,000 rules.',
+  autoBan: 'Automatic ban for new charity calls',
+  noAutoBan: 'No automatic ban binding',
+  autoBanDisabled: 'Bound, but automatic ban disabled',
+  autoBanEnabled: 'Automatic ban enabled',
+  autoBanHours: 'Hours',
+  autoBanDays: 'Days',
+  autoBanSeconds: 'Seconds',
+  autoBanPermanent: 'Permanent',
+  autoBanDuration: 'Ban duration',
+  autoBanInvalid: 'Enter a whole duration from 1 second to 3,650 days.',
+  autoBanProtected:
+    'Only an administrator can edit or remove this bound rule, even while its ban is disabled.',
+  autoBanHelp:
+    'Only new matching charity model calls are refused before dispatch. Unbinding restores ordinary rule editing.',
   threshold: 'Threshold (%)',
   consecutive: 'Consecutive complete minutes',
   hours: 'Shared IP window (hours)',
@@ -153,7 +167,7 @@ const english = {
 };
 const chinese: typeof english = {
   title: '防滥用审计',
-  description: '查看请求行为与命中依据，供人工初筛；审计命中不会自动处罚账号。',
+  description: '查看请求行为与命中依据；管理员绑定自动封禁后，新公益调用命中规则会被拒绝。',
   caveat:
     '客户端名称与请求头是自报信息，可能被修改或中继覆盖。命中规则只提供线索，不证明身份或盗用行为。',
   comparisonHelp:
@@ -242,6 +256,18 @@ const chinese: typeof english = {
   prefix: '前缀',
   ruleHelp:
     '同一规则的全部条件共同匹配，规则之间为 OR。缺失或截断字段不匹配；每条最多 8 个条件，全站最多 1,000 条规则。',
+  autoBan: '新公益调用自动封禁',
+  noAutoBan: '不绑定自动封禁',
+  autoBanDisabled: '已绑定，但自动封禁关闭',
+  autoBanEnabled: '自动封禁开启',
+  autoBanHours: '小时',
+  autoBanDays: '天',
+  autoBanSeconds: '秒',
+  autoBanPermanent: '永久',
+  autoBanDuration: '封禁时长',
+  autoBanInvalid: '请输入 1 秒至 3650 天之间的整数时长。',
+  autoBanProtected: '绑定后即使关闭自动封禁，也只有管理员能编辑或删除该规则。',
+  autoBanHelp: '只拒绝新命中的公益模型调用，且在派发前执行；解除绑定后恢复普通规则编辑权限。',
   threshold: '额度占比阈值（%）',
   consecutive: '连续完整分钟数',
   hours: '共享 IP 窗口（小时）',

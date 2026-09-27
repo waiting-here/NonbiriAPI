@@ -114,3 +114,31 @@ it('sends only mutable rule fields and retains the revision', async () => {
   expect(options.json.revision).toBe(7);
   expect(options.json).not.toHaveProperty('created_by_role');
 });
+
+it('sends an explicit unbind only when requested', async () => {
+  fetcher.mockResolvedValue({});
+  const input = {
+    name: 'Example',
+    status: 'suspected' as const,
+    revision: 7,
+    enabled: true,
+    conditions: [
+      {
+        field: 'user_agent' as const,
+        operator: 'prefix' as const,
+        value: 'Example/',
+        case_sensitive: false,
+      },
+    ],
+    evidence_note: '',
+    evidence_url: '',
+  };
+  await riskAPI('admin')
+    .saveRule(input, 'rsk_example')
+    .catch(() => undefined);
+  expect(fetcher.mock.calls[0][1].json).not.toHaveProperty('auto_ban');
+  await riskAPI('admin')
+    .saveRule({ ...input, auto_ban: null }, 'rsk_example')
+    .catch(() => undefined);
+  expect(fetcher.mock.calls[1][1].json).toHaveProperty('auto_ban', null);
+});

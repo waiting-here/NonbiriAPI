@@ -129,6 +129,10 @@ export interface Condition {
   value: string;
   case_sensitive: boolean;
 }
+export interface AutoBan {
+  enabled: boolean;
+  duration_seconds: number | null;
+}
 export interface RuleInput {
   name: string;
   status: 'suspected' | 'confirmed';
@@ -137,8 +141,10 @@ export interface RuleInput {
   conditions: Condition[];
   evidence_note: string;
   evidence_url: string;
+  auto_ban?: AutoBan | null;
 }
 export interface Rule extends RuleInput {
+  auto_ban: AutoBan | null;
   id: string;
   created_at: number;
   updated_at: number;
@@ -480,6 +486,14 @@ function config(v: unknown): Config {
 }
 function rule(v: unknown): Rule {
   const o = obj(v);
+  let autoBan: AutoBan | null = null;
+  if (o.auto_ban != null) {
+    const action = obj(o.auto_ban);
+    const duration = action.duration_seconds === null ? null : num(action.duration_seconds);
+    if (duration !== null && (!Number.isInteger(duration) || duration < 1 || duration > 315360000))
+      return invalid();
+    autoBan = { enabled: bool(action.enabled), duration_seconds: duration };
+  }
   return {
     id: text(o.id, 64),
     name: text(o.name, 120),
@@ -509,6 +523,7 @@ function rule(v: unknown): Rule {
     ),
     evidence_note: text(o.evidence_note),
     evidence_url: text(o.evidence_url, 2048),
+    auto_ban: autoBan,
     created_at: num(o.created_at),
     updated_at: num(o.updated_at),
     created_by_role: text(o.created_by_role, 20),
@@ -654,6 +669,7 @@ export function riskAPI(role: RiskRole) {
               conditions: value.conditions,
               evidence_note: value.evidence_note,
               evidence_url: value.evidence_url,
+              ...(value.auto_ban !== undefined ? { auto_ban: value.auto_ban } : {}),
             },
           },
         ),
