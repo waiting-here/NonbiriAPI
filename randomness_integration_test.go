@@ -300,7 +300,7 @@ func TestRandomnessBlackjackRestartDisclosesOriginalCancelledSeed(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	f.app, err = buildApplicationWithGameClock(auditConfig(), f.store, vault, func() time.Time { return time.Unix(f.clock.Load(), 0) })
+	f.app, err = buildApplicationWithGameClock(context.Background(), auditConfig(), f.store, vault, func() time.Time { return time.Unix(f.clock.Load(), 0) })
 	if err != nil {
 		t.Fatal(err)
 	}

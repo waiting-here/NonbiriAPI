@@ -62,7 +62,7 @@ func secureDBFiles(path string) error {
 	return nil
 }
 
-func secureOneDBFile(path, role string) error {
+func secureOneDBFile(path, role string) (result error) {
 	if _, err := os.Lstat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -76,7 +76,11 @@ func secureOneDBFile(path, role string) error {
 	if err != nil {
 		return fmt.Errorf("open %s for permission check: %w", role, err)
 	}
-	defer func() { _ = fd.Close() }()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			result = appendStartupError(result, startupError(StartupCleanupFailure))
+		}
+	}()
 
 	if err := syscall.Fchmod(int(fd.Fd()), 0o600); err != nil {
 		return fmt.Errorf("set %s to owner-only permissions: %w", role, err)
@@ -94,6 +98,27 @@ func secureOneDBFile(path, role string) error {
 	}
 	if stat.Uid != uint32(syscall.Geteuid()) {
 		return fmt.Errorf("%s must be owned by the current user", role)
+	}
+	return nil
+}
+
+// inspectActiveDBFiles never opens a descriptor. POSIX locks are process
+// scoped, and closing an auxiliary descriptor would invalidate SQLite locks.
+func inspectActiveDBFiles(path string) error {
+	for _, candidate := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := os.Lstat(candidate)
+		if errors.Is(err, os.ErrNotExist) && candidate != path {
+			continue
+		}
+		if err != nil {
+			return startupError(StartupUnsafePath)
+		}
+		if err := validateDBRegularPath(candidate, info); err != nil {
+			return startupError(StartupUnsafePath)
+		}
+		if err := validateSourceFile(nil, info); err != nil {
+			return startupError(StartupUnsafePath)
+		}
 	}
 	return nil
 }

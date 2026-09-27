@@ -12,9 +12,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/signal"
+
 	"sync"
-	"syscall"
+
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
@@ -23,7 +23,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/adminusers"
 	"github.com/waiting-here/NonbiriAPI/internal/announcements"
-	"github.com/waiting-here/NonbiriAPI/internal/applog"
+
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -58,101 +58,6 @@ import (
 
 func main() {
 	os.Exit(run())
-}
-
-// run owns every startup resource. The listener is created only after db.Open
-// has completed the Generation 2 snapshot, manifest, seed, credential and
-// pre-listener recovery checks.
-func run() int {
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "startup configuration error:")
-		fmt.Fprintln(os.Stderr, err)
-		return 2
-	}
-
-	logger := applog.New(os.Stdout, applog.ParseLevel(cfg.LogLevel))
-	slog.SetDefault(logger)
-
-	secretVault := cfg.TakeSecretVault()
-	if secretVault == nil {
-		slog.Error("secret vault initialization failed")
-		return 1
-	}
-	defer func() { _ = secretVault.Close() }()
-
-	slog.Info("startup",
-		"listen_addr", cfg.ListenAddr,
-		"db_path", cfg.DBPath,
-		"log_level", cfg.LogLevel,
-		"user_host", cfg.UserHost,
-		"admin_host", cfg.AdminHost,
-		"master_source", cfg.MasterSource,
-		"encryption_root_bytes", secret.MasterKeyBytes,
-		"trusted_proxies", len(cfg.TrustedProxyCIDRs),
-		"smtp_enabled", cfg.SMTP.Enabled,
-	)
-
-	store, err := db.Open(cfg.DBPath, secretVault)
-	if err != nil {
-		slog.Error("database open failed", "err", err)
-		return 1
-	}
-	defer func() { _ = store.Close() }()
-	slog.Info("database ready", "path", cfg.DBPath)
-
-	app, err := buildApplication(cfg, store, secretVault)
-	if err != nil {
-		slog.Error("application wiring failed", "err", err)
-		return 1
-	}
-	defer func() { _ = app.Close() }()
-
-	srv := &http.Server{
-		Addr:        cfg.ListenAddr,
-		Handler:     app.handler,
-		ReadTimeout: 15 * time.Second,
-		// Streaming owners install their own bounded write deadlines when their
-		// routes are registered. A zero server WriteTimeout remains intentional.
-		IdleTimeout: 60 * time.Second,
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	serveErr := make(chan error, 1)
-	go func() {
-		slog.Info("http server listening", "addr", cfg.ListenAddr)
-		serveErr <- srv.ListenAndServe()
-	}()
-
-	exitCode := 0
-	serverRunning := true
-	select {
-	case <-ctx.Done():
-	case err := <-serveErr:
-		serverRunning = false
-		if !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("http server stopped with error", "err", err)
-		} else {
-			slog.Error("http server stopped before shutdown completed")
-		}
-		exitCode = 1
-	case err := <-app.failures:
-		slog.Error("application background worker failed", "err", err)
-		exitCode = 1
-	}
-	slog.Info("shutdown initiated")
-	app.BeginShutdown()
-	if serverRunning {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			slog.Error("http shutdown error", "err", err)
-			return 1
-		}
-	}
-	slog.Info("shutdown complete")
-	return exitCode
 }
 
 func healthz(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +107,7 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
+	mux.HandleFunc("/readyz", (*readinessState)(nil).serveHTTP)
 	if store != nil {
 		mux.Handle("/admin/api/branding", httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { servePublicBranding(store, w, r) })))
 	}
@@ -279,7 +185,7 @@ func stationBoundary(cfg *config.Config, next http.Handler) (http.Handler, error
 
 // newHTTPHandler remains the boundary-only constructor used by tests and
 // embedded-shell callers. Without a validated store it deliberately exposes
-// no API other than healthz.
+// only liveness and unavailable readiness probes.
 func newHTTPHandler(cfg *config.Config) (http.Handler, error) {
 	if cfg == nil {
 		return nil, errors.New("configuration is required")
@@ -328,104 +234,16 @@ type application struct {
 	maintenance     *maintenance.Service
 	egress          *egress.Stack
 
-	shutdownOnce sync.Once
-	closeOnce    sync.Once
-	closeErr     error
-}
-
-// BeginShutdown closes process-local streaming and caller admission before
-// http.Server.Shutdown starts waiting for active connections. Durable workers
-// remain owned by Close and leave unfinished work at their checkpoints.
-func (a *application) BeginShutdown() {
-	if a == nil {
-		return
-	}
-	a.shutdownOnce.Do(func() {
-		if a.accountEvents != nil {
-			_ = a.accountEvents.Close()
-		}
-		if a.forward != nil {
-			a.forward.BeginShutdown()
-		}
-		if a.debug != nil {
-			_ = a.debug.Close()
-		}
-	})
-}
-
-func (a *application) Close() error {
-	if a == nil {
-		return nil
-	}
-	a.closeOnce.Do(func() {
-		a.BeginShutdown()
-		var closeErrors []error
-		if a.rankingCancel != nil {
-			a.rankingCancel()
-		}
-		if a.rankingDone != nil {
-			<-a.rankingDone
-		}
-		if a.lifecycleCancel != nil {
-			a.lifecycleCancel()
-		}
-		if a.lifecycleDone != nil {
-			<-a.lifecycleDone
-		}
-		if a.lifecycle != nil {
-			if err := a.lifecycle.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.activityRuntime != nil {
-			if err := a.activityRuntime.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.reports != nil {
-			if err := a.reports.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.games != nil {
-			if err := a.games.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.forward != nil {
-			if err := a.forward.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.audits != nil {
-			if err := a.audits.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.activityEvents != nil {
-			if err := a.activityEvents.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.authRuntime != nil {
-			if err := a.authRuntime.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.discoveryWorker != nil {
-			a.discoveryWorker.Close()
-		}
-		if a.bridge != nil {
-			if err := a.bridge.Close(); err != nil {
-				closeErrors = append(closeErrors, err)
-			}
-		}
-		if a.egress != nil {
-			a.egress.CloseIdleConnections()
-		}
-		a.closeErr = errors.Join(closeErrors...)
-	})
-	return a.closeErr
+	readiness        *readinessState
+	workerCancel     context.CancelFunc
+	workerCancelOnce sync.Once
+	shutdownDone     chan struct{}
+	closeDone        chan struct{}
+	closeMu          sync.Mutex
+	closePhase       string
+	shutdownOnce     sync.Once
+	closeOnce        sync.Once
+	closeErr         error
 }
 
 const (
@@ -819,12 +637,12 @@ func (activityPublishReporter) ReportActivitiesPublishError(err error) {
 	}
 }
 
-func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
-	return buildApplicationWithRuntimeOptions(cfg, store, vault, applicationRuntimeOptions{})
+func buildApplication(ctx context.Context, cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
+	return buildApplicationWithRuntimeOptions(ctx, cfg, store, vault, applicationRuntimeOptions{})
 }
 
-func buildApplicationWithGameClock(cfg *config.Config, store *db.Store, vault *secret.Vault, gameNow func() time.Time) (*application, error) {
-	return buildApplicationWithRuntimeOptions(cfg, store, vault, applicationRuntimeOptions{GameNow: gameNow})
+func buildApplicationWithGameClock(ctx context.Context, cfg *config.Config, store *db.Store, vault *secret.Vault, gameNow func() time.Time) (*application, error) {
+	return buildApplicationWithRuntimeOptions(ctx, cfg, store, vault, applicationRuntimeOptions{GameNow: gameNow})
 }
 
 // Runtime options are supplied only by the process composition root. Request
@@ -835,10 +653,25 @@ type applicationRuntimeOptions struct {
 	ActivityNow func() time.Time
 }
 
-func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vault *secret.Vault, options applicationRuntimeOptions) (*application, error) {
-	if cfg == nil || store == nil || vault == nil {
+func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *config.Config, store *db.Store, vault *secret.Vault, options applicationRuntimeOptions) (built *application, result error) {
+	if startupContext == nil || cfg == nil || store == nil || vault == nil {
 		return nil, errors.New("application dependencies are required")
 	}
+	if _, bounded := startupContext.Deadline(); !bounded {
+		var cancel context.CancelFunc
+		startupContext, cancel = context.WithTimeout(startupContext, db.DefaultStartupTimeout)
+		defer cancel()
+	}
+	if err := startupContext.Err(); err != nil {
+		return nil, err
+	}
+	db.RecordStartupStage(startupContext, db.StageDomainRecovery)
+	workerContext, workerCancel := context.WithCancel(context.Background())
+	defer func() {
+		if built == nil {
+			workerCancel()
+		}
+	}()
 	gameNow := options.GameNow
 	if gameNow == nil {
 		gameNow = time.Now
@@ -885,65 +718,41 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 	var forwardRuntime *publicForwardRuntime
 	var gameRuntimes *gameRuntimeBundle
 	var audits *auditRuntime
-	cleanup := func() {
-		if activityEngines != nil {
-			_ = activityEngines.Close()
+	defer func() {
+		if built != nil {
+			return
 		}
-		if accountConnections != nil {
-			_ = accountConnections.Close()
+		partial := &application{
+			activityRuntime: activityEngines, accountEvents: accountConnections,
+			debug: debugHub, reports: reportRepository, lifecycle: lifecycleCoordinator,
+			games: gameRuntimes, forward: forwardRuntime, audits: audits,
+			activityEvents: activityEvents, authRuntime: authRuntime, elevation: elevationManager,
+			discoveryWorker: discoveryWorker, bridge: bridgeRuntime, egress: outbound,
+			workerCancel: workerCancel,
 		}
-		if debugHub != nil {
-			_ = debugHub.Close()
+		if err := partial.CloseContext(startupContext); err != nil {
+			var pending *applicationCleanupError
+			if errors.As(err, &pending) {
+				pending.primary = result
+				result = pending
+			} else {
+				result = db.WithStartupCleanupError(result, err)
+			}
 		}
-		if reportRepository != nil {
-			_ = reportRepository.Close()
-		}
-		if lifecycleCoordinator != nil {
-			_ = lifecycleCoordinator.Close()
-		}
-		if gameRuntimes != nil {
-			_ = gameRuntimes.Close()
-		}
-		if forwardRuntime != nil {
-			_ = forwardRuntime.Close()
-		}
-		if audits != nil {
-			_ = audits.Close()
-		}
-		if activityEvents != nil {
-			_ = activityEvents.Close()
-		}
-		if authRuntime != nil {
-			_ = authRuntime.Close()
-		} else {
-			_ = elevationManager.Close()
-		}
-		if discoveryWorker != nil {
-			discoveryWorker.Close()
-		}
-		if bridgeRuntime != nil {
-			_ = bridgeRuntime.Close()
-		}
-		outbound.CloseIdleConnections()
-	}
+	}()
 
-	startupContext := context.Background()
 	if err := outbound.AddSelfOrigins(startupContext, cfg); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register egress self origins: %w", err)
 	}
-	rpmLimits, concurrencyLimits, err := loadRuntimeLimits(store)
+	rpmLimits, concurrencyLimits, err := loadRuntimeLimits(startupContext, store)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("load runtime limits: %w", err)
 	}
 	if err := outbound.SetConcurrencyLimits(concurrencyLimits); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("apply egress concurrency limits: %w", err)
 	}
 	localBackend, err := backend.NewLocal(outbound)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create local backend: %w", err)
 	}
 	discordProvider, err := auth.NewHTTPDiscordProvider(auth.HTTPDiscordProviderConfig{
@@ -952,7 +761,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Scopes:       cfg.DiscordOAuthScopes,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create Discord authentication provider: %w", err)
 	}
 	authRuntime, err = auth.NewRuntime(auth.RuntimeConfig{
@@ -968,13 +776,11 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Elevation:            elevationManager,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create authentication runtime: %w", err)
 	}
 	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
-	audits, err = newAuditRuntime(store, vault, roleAuthorizer)
+	audits, err = newAuditRuntime(startupContext, store, vault, roleAuthorizer)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
@@ -982,19 +788,16 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Committed: audits.configurationChanged,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create administrator site configuration repository: %w", err)
 	}
 	adminConfigRuntime, err := adminapi.NewSiteConfigRuntime(adminConfigRepository)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create administrator site configuration runtime: %w", err)
 	}
 	adminAlertRepository, err := adminalerts.NewRepository(adminalerts.Config{
 		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create administrator alert repository: %w", err)
 	}
 	donationService, err := donation.New(donation.Config{
@@ -1004,7 +807,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		CursorKeys: vault,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create donation service: %w", err)
 	}
 	charityService, err := charity.New(charity.Config{
@@ -1012,7 +814,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		KeyDeletion: donationService,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create charity service: %w", err)
 	}
 	claimService, err := claim.New(claim.Dependencies{
@@ -1024,14 +825,12 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Acceptance:   maintenanceService,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create claim service: %w", err)
 	}
-	usageContext, cancelUsageInitialization := context.WithTimeout(context.Background(), 30*time.Second)
+	usageContext, cancelUsageInitialization := context.WithTimeout(startupContext, 30*time.Second)
 	err = claimService.InitializeUsageTotals(usageContext)
 	cancelUsageInitialization()
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("initialize request usage totals: %w", err)
 	}
 	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
@@ -1042,7 +841,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Backend:    localBackend,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create resource bridge: %w", err)
 	}
 	discoveryWorker, err = resources.NewDiscoveryWorkerPool(
@@ -1051,7 +849,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		discoveryWorkerTimeout,
 	)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create discovery worker: %w", err)
 	}
 	connectorRegistry := connector.NewDefaultRegistry()
@@ -1059,24 +856,20 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create announcement repository: %w", err)
 	}
 	announcementService, err := announcements.NewService(announcementRepository)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create announcement service: %w", err)
 	}
 	issueRepository, err := issues.NewRepository(issues.Config{
 		Store: store, CursorKeys: vault, ResourceValidation: emptyResourceValidationAuthority{},
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create issue repository: %w", err)
 	}
 	issueService, err := issues.NewService(issueRepository)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create issue service: %w", err)
 	}
 	reportRepository, err = reports.New(reports.Config{
@@ -1090,7 +883,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		},
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create report repository: %w", err)
 	}
 	resourceRepository, err = resources.New(resources.Config{
@@ -1109,7 +901,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		AdminFinalAuth:   roleAuthorizer,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create resource repository: %w", err)
 	}
 	charityRoutingService, err := charityrouting.New(charityrouting.Config{
@@ -1119,7 +910,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		CursorKeys:    vault,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create charity routing service: %w", err)
 	}
 	activityRepository, err := activities.NewRepository(activities.RepositoryConfig{
@@ -1130,23 +920,19 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		CursorKeys:     vault,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create activities repository: %w", err)
 	}
 	accountSources, err := newAccountEventSources(activityRepository)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create account event sources: %w", err)
 	}
 	activityEvents, err = accountstream.New(accountSources, accountSources)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create account event hub: %w", err)
 	}
 	accountConnections = newAccountEventConnections()
 	activityPublisher, err := activities.NewAccountstreamPublisher(activityRepository, activityEvents)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create activities publisher: %w", err)
 	}
 	activityService, err := activities.NewService(activities.ServiceConfig{
@@ -1155,30 +941,24 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		Reporter:   activityPublishReporter{},
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create activities service: %w", err)
 	}
 	if err := recoverAnnouncementsBeforeListener(startupContext, announcementService); err != nil {
-		cleanup()
 		return nil, err
 	}
 	if err := recoverIssuesBeforeListener(startupContext, issueService); err != nil {
-		cleanup()
 		return nil, err
 	}
 	debugHub, err = debug.NewHub(debugIdentityAuthority{runtime: authRuntime})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create Debug hub: %w", err)
 	}
 	debugMutations, err := debug.NewMutationRepository(store.DB())
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create Debug mutation repository: %w", err)
 	}
 	logRepository, err := logapi.NewRepository(store.DB(), vault)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create log repository: %w", err)
 	}
 	gameRuntimes, err = newGameRuntimeBundle(
@@ -1187,43 +967,36 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		gameNow,
 	)
 	if err != nil {
-		cleanup()
 		return nil, err
 	}
 	checkinService, err := checkin.NewService(checkin.ServiceConfig{
 		Store: store, FinalAuth: authRuntime, Maintenance: maintenanceService,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create check-in service: %w", err)
 	}
 	homeGameService := gameRuntimes.Service
 	rankingService, err := ranking.New(store.DB(), authRuntime, gameNow)
 	if err != nil {
-		cleanup()
 		return nil, err
 	}
 	if err := ranking.RegisterRoutes(authRuntime, rankingService); err != nil {
-		cleanup()
 		return nil, err
 	}
 	if err := gameRuntimes.RegisterRoutes(gamehost.Registrars{
 		User: authRuntime, Admin: authRuntime, Continuation: authRuntime, Maintenance: registry,
 	}); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register game routes: %w", err)
 	}
 	userInvalidations := &userSessionInvalidationFanout{
 		debug: debugHub, connections: accountConnections,
 	}
 	if err := authRuntime.AttachUserSessionInvalidationObserver(userInvalidations); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
 	}
 	activityEngines, err = newActivityRuntime(store, vault, authRuntime, roleAuthorizer,
 		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, options.ActivityNow)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create limited activity runtimes: %w", err)
 	}
 	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
@@ -1231,7 +1004,6 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		CancelUserDuelsTx: activityEngines.CancelUserTx,
 	})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create administrator user service: %w", err)
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
@@ -1239,17 +1011,14 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		connectorRegistry, localBackend, debugHub, gate, rpmLimits, activityEngines.CancelUserTx, audits, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
-		cleanup()
 		return nil, err
 	}
 	if err := authRuntime.AttachUserLifecycleGate(forwardRuntime.lifecycle); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
 	}
 	audits.flow = forwardRuntime.flow
 	userInvalidations.limitsChanged = forwardRuntime.flow.NotifyUserLimitsChanged
 	if err := audits.attachAccess(resourceRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("attach auxiliary access observations: %w", err)
 	}
 	lifecycleCoordinator, err = newLifecycleCoordinator(
@@ -1260,125 +1029,96 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		activityEvents, debugHub, gameNow, audits, activityEngines,
 	)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
 	}
 	if err := adminapi.RegisterSiteConfigRoutes(siteConfigRouteRegistrar{runtime: authRuntime}, adminConfigRuntime); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register administrator site configuration routes: %w", err)
 	}
 	if err := adminusers.RegisterRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register administrator user routes: %w", err)
 	}
 	if err := adminusers.RegisterStewardRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register steward user routes: %w", err)
 	}
 	if err := adminalerts.RegisterRoutes(adminAlertRouteRegistrar{runtime: authRuntime}, adminAlertRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register administrator alert routes: %w", err)
 	}
 	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register resource routes: %w", err)
 	}
 	if err := resources.RegisterAdminRoutes(resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register resource administrator routes: %w", err)
 	}
 	if err := resources.RegisterManagedDiscoveryRoutes(authRuntime, resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register managed model discovery routes: %w", err)
 	}
 	if err := donation.RegisterOwnerRoutes(authRuntime, donationService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register donation owner routes: %w", err)
 	}
 	if err := donation.RegisterAdminRoutes(authRuntime, donationService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register donation administrator routes: %w", err)
 	}
 	if err := donation.RegisterStewardRoutes(authRuntime, donationService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register donation steward routes: %w", err)
 	}
 	if err := charityrouting.RegisterOwnerRoutes(authRuntime, charityRoutingService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register charity capability routes: %w", err)
 	}
 	if err := charityrouting.RegisterAdminRoutes(authRuntime, charityRoutingService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register charity administrator routes: %w", err)
 	}
 	if err := charityrouting.RegisterStewardRoutes(authRuntime, charityRoutingService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register charity steward routes: %w", err)
 	}
 	if err := checkin.RegisterRoutes(authRuntime, checkinService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register check-in routes: %w", err)
 	}
 	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
 	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register activities routes: %w", err)
 	}
 	announcementRoutes := announcementRouteRegistrar{runtime: authRuntime}
 	if err := announcements.RegisterRoutes(announcementRoutes, announcementRoutes, announcementService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register announcement routes: %w", err)
 	}
 	if err := announcements.RegisterStewardRoutes(announcementRoutes, announcementService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register steward announcement routes: %w", err)
 	}
 	if err := issues.RegisterRoutes(issueRouteRegistrar{runtime: authRuntime}, issueService); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register issue routes: %w", err)
 	}
 	if err := reportRepository.RegisterRoutes(authRuntime); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register report routes: %w", err)
 	}
 	maintenanceRoutes := maintenanceRouteRegistrar{runtime: authRuntime}
 	if err := maintenance.RegisterRoutes(maintenanceRoutes, maintenanceRoutes, maintenance.HTTPOptions{
 		Database: store.DB(), Service: maintenanceService,
 	}); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register maintenance routes: %w", err)
 	}
 	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: authRuntime}, debugHub, debugMutations); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register Debug routes: %w", err)
 	}
 	if err := logapi.RegisterUserRoutes(authRuntime, logRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register user log routes: %w", err)
 	}
 	if err := creditapi.RegisterUserRoutes(authRuntime, store.DB()); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register credit history route: %w", err)
 	}
 	if err := logapi.RegisterStewardRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register steward log routes: %w", err)
 	}
 	if err := logapi.RegisterAdminRoutes(authRuntime, logRepository); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register administrator log routes: %w", err)
 	}
 	if err := audits.registerRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register audit routes: %w", err)
 	}
 	if err := activityEngines.RegisterRoutes(authRuntime); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register limited activity routes: %w", err)
 	}
 	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
 	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
 	}
 	if err := timeapi.RegisterRoutes(
@@ -1386,67 +1126,65 @@ func buildApplicationWithRuntimeOptions(cfg *config.Config, store *db.Store, vau
 		resourceAdminRouteRegistrar{runtime: authRuntime},
 		&timeContextResolver{store: store, authority: roleAuthorizer},
 	); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register time API routes: %w", err)
 	}
 	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.AccountContinuation(), activityEvents, accountConnections); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("register account event route: %w", err)
 	}
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
 	}
 	if err := gameRuntimes.ValidatePersistedState(startupContext); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("validate game persisted state: %w", err)
 	}
 	if err := charityService.ValidateRecurringState(startupContext); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("validate recurring charity limits: %w", err)
 	}
 	if err := recoverRankingsAndLifecycleBeforeListener(startupContext, rankingService, lifecycleCoordinator, gameNow().Unix()); err != nil {
-		cleanup()
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}
 
 	automationService, err := stewardautomation.New(stewardautomation.Config{Database: store.DB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService})
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("create steward automation service: %w", err)
 	}
 	automationHandler, err := newStewardAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
 	if err != nil {
-		cleanup()
 		return nil, err
 	}
 	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, automationHandler)
 	if err != nil {
-		cleanup()
 		return nil, err
 	}
 	handler, err := stationBoundary(cfg, audits.Wrap(mux))
 	if err != nil {
-		cleanup()
 		return nil, err
 	}
-	gameWorkerContext := context.Background()
-	if err := gameRuntimes.StartWorker(gameWorkerContext); err != nil {
-		cleanup()
+	if err := startupContext.Err(); err != nil {
+		return nil, err
+	}
+	db.RecordStartupStage(startupContext, db.StageRoutesReady)
+	if err := startupContext.Err(); err != nil {
+		return nil, err
+	}
+	readiness := &readinessState{}
+	mux.HandleFunc("/readyz", readiness.serveHTTP)
+	if err := gameRuntimes.StartWorker(workerContext); err != nil {
 		return nil, fmt.Errorf("start game workers: %w", err)
 	}
-	lifecycleCancel, lifecycleDone, err := startLifecycleWorker(context.Background(), lifecycleCoordinator)
+	lifecycleCancel, lifecycleDone, err := startLifecycleWorker(workerContext, lifecycleCoordinator)
 	if err != nil {
-		cleanup()
 		return nil, fmt.Errorf("start account lifecycle worker: %w", err)
 	}
 	failures := make(chan error, 1)
-	rankingContext, rankingCancel := context.WithCancel(context.Background())
+	rankingContext, rankingCancel := context.WithCancel(workerContext)
 	rankingDone := make(chan struct{})
 	go func() { defer close(rankingDone); rankingService.Run(rankingContext) }()
-	audits.Start()
-	activityEngines.Start(failures)
+	audits.Start(workerContext)
+	activityEngines.Start(workerContext, failures, func() { readiness.failed.Store(true) })
 	return &application{
+		readiness:       readiness,
+		workerCancel:    workerCancel,
 		audits:          audits,
 		activityRuntime: activityEngines,
 		handler:         handler,

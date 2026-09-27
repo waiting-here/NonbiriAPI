@@ -224,7 +224,7 @@ func testReleasedGameplayUpgrade(t *testing.T, variable string, rulesVersion int
 		t.Fatal(err)
 	}
 	clock := func() time.Time { return time.Unix(fixtureAt, 0) }
-	app, err := buildApplicationWithGameClock(auditConfig(), store, vault, clock)
+	app, err := buildApplicationWithGameClock(context.Background(), auditConfig(), store, vault, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func testReleasedGameplayUpgrade(t *testing.T, variable string, rulesVersion int
 		t.Fatal(err)
 	}
 	defer again.Close()
-	appAgain, err := buildApplicationWithGameClock(auditConfig(), again, vault, clock)
+	appAgain, err := buildApplicationWithGameClock(context.Background(), auditConfig(), again, vault, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +343,7 @@ func testReleasedBillingUpgrade(t *testing.T, variable string) {
 		upgradeScalar(t, store.DB(), `SELECT count(*) FROM donation_usage_reservations WHERE input_tokens_reserved IS NOT NULL OR output_tokens_reserved IS NOT NULL OR input_tokens_actual IS NOT NULL OR output_tokens_actual IS NOT NULL`, 0)
 	}
 
-	app, err := buildApplication(auditConfig(), store, vault)
+	app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}

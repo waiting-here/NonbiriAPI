@@ -573,115 +573,87 @@ func TestGenerationTwoFreshFailureIsAtomicAndCleansOnlyOwnedFile(t *testing.T) {
 func TestGenerationTwoFreshConcurrentSingleOEXCLWinnerDoesNotDeleteWinner(t *testing.T) {
 	preserveBootstrapHooks(t)
 	path := bootstrapTestPath(t, "concurrent.db")
+	vault := bootstrapTestVault(t)
 	const contenderCount = 9
-	entered := make(chan struct{}, contenderCount)
+	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseContenders := func() { releaseOnce.Do(func() { close(release) }) }
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
 	beforeFreshExclusiveCreateHook = func() {
 		entered <- struct{}{}
 		<-release
 	}
-
 	type result struct {
 		store *Store
 		err   error
-		vault *secret.Vault
 	}
 	results := make(chan result, contenderCount)
 	var wg sync.WaitGroup
+	t.Cleanup(func() {
+		unblock()
+		wg.Wait()
+		close(results)
+		for outcome := range results {
+			if outcome.store != nil {
+				_ = outcome.store.Close()
+			}
+		}
+	})
 	for i := 0; i < contenderCount; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			vault := bootstrapTestVaultNoCleanup()
 			store, err := Open(path, vault)
-			results <- result{store: store, err: err, vault: vault}
+			results <- result{store, err}
 		}()
 	}
-
-	timer := time.NewTimer(bootstrapHookWait)
-	arrivals := 0
-	var early *result
-	for arrivals < contenderCount && early == nil {
+	select {
+	case <-entered:
+	case <-time.After(bootstrapHookWait):
+		t.Fatal("no preflight owner reached exclusive creation")
+	}
+	for i := 0; i < contenderCount-1; i++ {
 		select {
-		case <-entered:
-			arrivals++
 		case outcome := <-results:
-			early = &outcome
-		case <-timer.C:
-			releaseContenders()
-			wg.Wait()
-			close(results)
-			for outcome := range results {
-				if outcome.store != nil {
-					_ = outcome.store.Close()
-				}
-				_ = outcome.vault.Close()
+			if outcome.store != nil {
+				_ = outcome.store.Close()
+				t.Fatal("a second preflight owner was admitted")
 			}
-			t.Fatalf("only %d/%d fresh contenders reached the pre-O_EXCL seam within %s", arrivals, contenderCount, bootstrapHookWait)
-		}
-	}
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	releaseContenders()
-	wg.Wait()
-	close(results)
-
-	outcomes := make([]result, 0, contenderCount)
-	if early != nil {
-		outcomes = append(outcomes, *early)
-	}
-	for outcome := range results {
-		outcomes = append(outcomes, outcome)
-	}
-	for _, outcome := range outcomes {
-		if outcome.store != nil {
-			if err := outcome.store.Close(); err != nil {
-				t.Errorf("close fresh contender store: %v", err)
+			if !errors.Is(outcome.err, ErrDatabaseInUse) {
+				t.Fatalf("contender rejection=%v", outcome.err)
 			}
+		case <-time.After(bootstrapHookWait):
+			t.Fatal("duplicate ownership did not fail promptly")
 		}
-		if err := outcome.vault.Close(); err != nil {
-			t.Errorf("close fresh contender vault: %v", err)
+	}
+	unblock()
+	var winner *Store
+	select {
+	case outcome := <-results:
+		if outcome.err != nil {
+			t.Fatal(outcome.err)
 		}
+		winner = outcome.store
+	case <-time.After(bootstrapHookWait):
+		t.Fatal("exclusive owner did not finish initialization")
 	}
-	if early != nil {
-		t.Fatalf("fresh contender returned before all callers reached the pre-O_EXCL seam: %v", early.err)
+	if winner == nil {
+		t.Fatal("no successful owner")
 	}
-	if len(outcomes) != contenderCount {
-		t.Fatalf("fresh contender outcomes=%d, want %d", len(outcomes), contenderCount)
+	if epoch := queryBootstrapAnnouncementEpoch(t, winner); epoch == "" {
+		t.Fatal("winner database has no announcement epoch")
 	}
-	winners := 0
-	for _, outcome := range outcomes {
-		if outcome.err == nil && outcome.store != nil {
-			winners++
-			continue
-		}
-		if outcome.store != nil {
-			t.Fatalf("failed fresh contender returned a store: %v", outcome.err)
-		}
-		assertBootstrapStartupKind(t, outcome.err, StartupInitialization)
+	if _, err := Open(path, vault); !errors.Is(err, ErrDatabaseInUse) {
+		t.Fatalf("live owner was not protected: %v", err)
 	}
-	if winners != 1 {
-		t.Fatalf("fresh O_EXCL winners=%d, want 1", winners)
+	if err := winner.Close(); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("winner source disappeared while losers failed: %v", err)
-	}
-
-	reopened := bootstrapTestVault(t)
-	store, err := Open(path, reopened)
+	store, err := Open(path, vault)
 	if err != nil {
 		t.Fatalf("winner database was damaged by loser cleanup: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	if epoch := queryBootstrapAnnouncementEpoch(t, store); epoch == "" {
-		t.Fatal("winner database has no announcement epoch")
-	}
 }
 
 func TestGenerationTwoRejectZeroByteDatabaseWithoutSourceWrite(t *testing.T) {

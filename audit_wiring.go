@@ -37,7 +37,7 @@ type auditRuntime struct {
 	closeErr     error
 }
 
-func newAuditRuntime(store *db.Store, vault *secret.Vault, authorizer *roleFinalTxAuthorizer) (*auditRuntime, error) {
+func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, authorizer *roleFinalTxAuthorizer) (*auditRuntime, error) {
 	a := &auditRuntime{}
 	var err error
 	a.observations, err = observability.NewRepository(store.DB())
@@ -55,8 +55,6 @@ func newAuditRuntime(store *db.Store, vault *secret.Vault, authorizer *roleFinal
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	config, err := a.risk.CurrentConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -113,8 +111,8 @@ func (a *auditRuntime) Wrap(next http.Handler) http.Handler {
 	})
 }
 
-func (a *auditRuntime) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
+func (a *auditRuntime) Start(parent context.Context) {
+	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
 	a.workers.Add(3)
 	go func() { defer a.workers.Done(); a.collector.Run(ctx) }()

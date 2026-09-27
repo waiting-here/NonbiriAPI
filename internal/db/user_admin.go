@@ -84,10 +84,14 @@ func (s *Store) SetSiteConfigValue(key, value string) error {
 // snapshot. Corrupt or unknown rows fail closed instead of being silently
 // omitted. The permanent timezone-freeze marker is internal metadata.
 func (s *Store) GetAllSiteConfigValues() (map[string]string, error) {
-	if s == nil || s.db == nil {
+	return s.GetAllSiteConfigValuesContext(context.Background())
+}
+
+func (s *Store) GetAllSiteConfigValuesContext(ctx context.Context) (map[string]string, error) {
+	if s == nil || s.db == nil || ctx == nil {
 		return nil, ErrInvalidSiteConfig
 	}
-	values, err := validateCurrentGenerationTwoSiteConfig(context.Background(), s.db)
+	values, err := validateCurrentGenerationTwoSiteConfig(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("list site configuration: %w", err)
 	}

@@ -34,3 +34,5 @@ func secureDBFiles(path string) error {
 	}
 	return nil
 }
+
+func inspectActiveDBFiles(path string) error { return secureDBFiles(path) }

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -20,10 +21,13 @@ import (
 // caller owns the codec lifecycle; typed repositories use it internally so
 // plaintext never has to become a database argument or a Store field.
 type Store struct {
-	db        *sql.DB
-	secrets   secret.GenerationTwoContextCodec
-	closeOnce sync.Once
-	closeErr  error
+	db         *sql.DB
+	secrets    secret.GenerationTwoContextCodec
+	closeOnce  sync.Once
+	closeErr   error
+	closeDone  chan struct{}
+	owner      *databaseOwner
+	afterClose func() error
 }
 
 // Open classifies path as either completely fresh or current Generation 2.
@@ -31,13 +35,46 @@ type Store struct {
 // SQLite is allowed to open the source path. Only the exact supported prior
 // Generation 2 schema receives the additive routing table; no repair is attempted.
 func Open(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultStartupTimeout)
+	defer cancel()
+	return OpenContext(ctx, path, secrets)
+}
+
+// OpenContext applies one deadline to preflight, validation and recovery.
+// Ownership is retained until all SQLite connections have actually closed.
+func OpenContext(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec) (store *Store, result error) {
+	if ctx == nil {
+		return nil, errors.New("open database: context is required")
+	}
+	if _, bounded := ctx.Deadline(); !bounded {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultStartupTimeout)
+		defer cancel()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if nilSecretCodec(secrets) {
 		return nil, fmt.Errorf("open database: secret codec is required")
 	}
+	RecordStartupStage(ctx, StagePathPreflight)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	owner, err := acquireDatabaseOwner(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if store == nil {
+			owner.releasePreflight()
+		}
+	}()
+	ctx = context.WithValue(ctx, databaseOwnerKey{}, owner)
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}
-	return openGenerationTwo(path, secrets)
+	return openGenerationTwo(ctx, path, secrets)
 }
 
 // prepareDBDirectory validates every existing parent component before it
@@ -140,18 +177,50 @@ func (s *Store) DB() *sql.DB { return s.db }
 // Close closes the database handle. The injected secret codec remains owned
 // by the caller.
 func (s *Store) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultShutdownTimeout)
+	defer cancel()
+	return s.CloseContext(ctx)
+}
+
+// CloseContext starts exactly one close operation. A timeout does not release
+// the process ownership guard: subsequent callers can wait for the same close.
+func (s *Store) CloseContext(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	if ctx == nil {
+		return errors.New("close database: context is required")
+	}
 	s.closeOnce.Do(func() {
-		s.closeErr = s.db.Close()
-		// database/sql may return before a cancelled transaction releases its
-		// connection. SQLite must finish rollback and close its files before
-		// a subsequent startup can capture a stable database snapshot.
-		if s.db.Stats().OpenConnections != 0 {
-			ticker := time.NewTicker(time.Millisecond)
-			defer ticker.Stop()
-			for s.db.Stats().OpenConnections != 0 {
-				<-ticker.C
+		s.closeDone = make(chan struct{})
+		go func() {
+			defer close(s.closeDone)
+			s.closeErr = s.db.Close()
+			// database/sql may return before a cancelled transaction releases its
+			// connection. SQLite must finish rollback and close its files before
+			// a subsequent startup can capture a stable database snapshot.
+			if s.db.Stats().OpenConnections != 0 {
+				ticker := time.NewTicker(time.Millisecond)
+				defer ticker.Stop()
+				for s.db.Stats().OpenConnections != 0 {
+					<-ticker.C
+				}
 			}
-		}
+			if s.afterClose != nil {
+				s.closeErr = appendStartupError(s.closeErr, s.afterClose())
+			}
+			s.owner.release()
+		}()
 	})
-	return s.closeErr
+	select {
+	case <-s.closeDone:
+		return s.closeErr
+	default:
+	}
+	select {
+	case <-s.closeDone:
+		return s.closeErr
+	case <-ctx.Done():
+		return &CloseDeadlineError{Cause: ctx.Err(), OpenConnections: s.db.Stats().OpenConnections}
+	}
 }
