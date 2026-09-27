@@ -8,16 +8,18 @@
       "id": "01-first-rice",
       "title": "转个弯，就开饭。",
       "url": "/examples/fatfish/01-first-rice.fatfish.json",
-      "content_hash": "3c85f30130cd044a7ef488475ccb04871f305d15efecf37563aaebfd8ea3d471",
+      "content_hash": "ebdee01746cfb16367f1bc93b9216ca6bf55717f94f6b5a200cbef37140bb4ff",
       "source_example": "first-rice",
-      "adaptation": "All fish start on the board; a movable obstacle and turn zone lead to the bowl.",
+      "adaptation": "All fish and a movable obstacle start on the board, with two optional tools on the outside workbench; a turn zone leads to the bowl.",
       "coverage": [
         "all_initial",
+        "preplaced_tool",
+        "outside_workbench",
         "movable_tool",
         "turn"
       ],
-      "bytes": 2356,
-      "raw_sha256": "e546752ece52a89611e6efdc5a67fcfb95cd45259672ce14621a8146f31bd153",
+      "bytes": 3583,
+      "raw_sha256": "230b9329766f1eaffc246ac848a946db8a4bdbfd5a8c0237314e78c35cd1d5e8",
       "source_sha256": "b5bc881dbb4a38cb26c5a6a9c5bb06126249f90305f9bdef6646201b6ab5762b"
     },
     {
