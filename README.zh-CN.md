@@ -4,6 +4,8 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 
 > **当前版本：** [1.0.0-rc.3](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.3)，面向 Linux/amd64 的源码预发行版。请从标签源码构建；不提供官方预编译二进制。向用户开放前，请阅读部署、隐私和安全文档。
 >
+> **未发布候选：** v1.0.0-rc.4 开发候选新增绘本模型能力与尺寸定价、审计和账号保护、饲养大肥鱼编辑器及本地玩法、游戏榜单与实时展示、公益调度和请求适配，以及 schema 11 类型化账号导出。完整范围见[更新日志](CHANGELOG.md)。该候选尚未发布或部署。
+>
 > **兼容性：** 支持从 rc.2 修复提交 `db959c64674afc531046a63066de0464725d439c` 和管理功能修复提交 `84018acbd594765c563cc0ee4083d206e0bd6a77` 升级，保留现有数据、配置和实例法律正文。继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。未知中间结构不在保证内；Alpha/Generation 1 仍须全新切换。详见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)

@@ -1,8 +1,8 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **current unreleased rc.4 Generation 2 source** — this checklist describes
-> the source export, deletion, retention, and privacy boundary. Final Fat Fish root
-> integration and browser acceptance are pending; none of this is a claim that rc.4 is deployed.
+> Status: **unreleased rc.4 source candidate** — this checklist describes the candidate's
+> export, deletion, retention, and privacy boundary. It does not announce publication or
+> deployment; instance status is specific to each operator.
 >
 > Canonical DDL: `internal/db/schema.go` plus registered extension schemas; manifest: `internal/db/schema_manifest.go`;
 > target fingerprint: the build’s canonical `GenerationTwoSchemaHash` and complete manifest.
@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Account export schema 11 retains the prior schema-10 safe projections and adds only the three typed top-level families below. Its filename is `nonbiriapi-account-export-v11.json`; SQLite `user_version` remains 2. Release wiring and validation must still be completed before deployment.
+Account export schema 11 retains the prior schema-10 safe projections and adds only the three typed top-level families below. Its filename is `nonbiriapi-account-export-v11.json`; SQLite `user_version` remains 2. This describes the unreleased candidate contract and does not assert completed release validation or production deployment.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
@@ -181,6 +181,8 @@ maintenance on and registration/game/activity off, and does not merge a source
 snapshot. Re-activating an old copy is an operator event that must disclose its data
 cutoff and repeat any needed revocation/configuration; it is not an online deletion
 guarantee.
+
+The supported rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Upgrade validation compares every original table projection and the fresh schema, decrypts retained credentials, and checks repeated startup. Operators must use a consistent source backup from their own instance before deploying.
 
 ## Change discipline
 
