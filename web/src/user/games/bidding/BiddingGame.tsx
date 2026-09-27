@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { GameWallets } from '../common/GameWallets';
 import { Leaderboard } from '../ranking/Leaderboard';
+import { LeaderboardTabs } from '../ranking/LeaderboardTabs';
 import { OnboardingCard } from '../common/OnboardingCard';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GamePayment } from '../common/GamePayment';
@@ -323,7 +324,20 @@ export function BiddingGame({
         </>
       )}
       {rules && <BiddingRules onClose={closeRules} />}
-      <Leaderboard board="bidding" />
+      <LeaderboardTabs
+        items={[
+          {
+            id: 'net-profit',
+            label: t('竞标高手榜', 'Bidding masters'),
+            content: <Leaderboard board="bidding_net_profit" />,
+          },
+          {
+            id: 'profit',
+            label: t('竞标利润榜', 'Bidding profits'),
+            content: <Leaderboard board="bidding" />,
+          },
+        ]}
+      />
       {history && (
         <DuelHistory
           codec={biddingCodec}

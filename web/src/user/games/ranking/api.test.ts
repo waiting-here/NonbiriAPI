@@ -17,14 +17,53 @@ const board = () => ({
 
 describe('exact rankings', () => {
   it('restricts all net-profit boards to the existing seven-day window', () => {
-    for (const key of ['game_net_profit', 'fishing_net_profit', 'blackjack_net_profit'] as const) {
-      expect(normalizeRanking(board(), key, '7d').rows[0].amount).toBe('9007199254740993.123');
+    for (const key of [
+      'game_net_profit',
+      'fishing_net_profit',
+      'blackjack_net_profit',
+      'bidding_net_profit',
+    ] as const) {
+      const wire =
+        key === 'bidding_net_profit'
+          ? {
+              ...board(),
+              rebuild_status: 'completed',
+              history_coverage_start: 1900000000,
+              missing_events: '0',
+            }
+          : board();
+      expect(normalizeRanking(wire, key, '7d').rows[0].amount).toBe('9007199254740993.123');
       for (const window of ['30d', 'history'] as const)
-        expect(() => normalizeRanking({ ...board(), window }, key, window)).toThrow();
+        expect(() => normalizeRanking({ ...wire, window }, key, window)).toThrow();
     }
     for (const key of ['bidding', 'blackjack'] as const)
       for (const window of ['30d', 'history'] as const)
         expect(normalizeRanking({ ...board(), window }, key, window).window).toBe(window);
+  });
+  it('keeps an unfinished Bidding rebuild hidden and reports exact coverage', () => {
+    const rebuilding = { ...board(), rows: [], rebuild_status: 'scanning', missing_events: '2' };
+    const value = normalizeRanking(rebuilding, 'bidding_net_profit', '7d');
+    expect(value.rows).toHaveLength(0);
+    expect(value.rebuildStatus).toBe('scanning');
+    expect(value.missingEvents).toBe('2');
+    expect(() =>
+      normalizeRanking({ ...rebuilding, rows: [row()] }, 'bidding_net_profit', '7d'),
+    ).toThrow();
+    expect(() =>
+      normalizeRanking({ ...rebuilding, missing_events: 2 }, 'bidding_net_profit', '7d'),
+    ).toThrow();
+    const completed = normalizeRanking(
+      {
+        ...board(),
+        rebuild_status: 'completed',
+        history_coverage_start: 1900000000,
+        missing_events: '1',
+      },
+      'bidding_net_profit',
+      '7d',
+    );
+    expect(completed.historyCoverageStart).toBe(1900000000);
+    expect(completed.missingEvents).toBe('1');
   });
   it('preserves wide decimals and rejects anonymous identity leaks', () => {
     expect(normalizeRanking(board(), 'bidding', '7d').rows[0].amount).toBe('9007199254740993.123');

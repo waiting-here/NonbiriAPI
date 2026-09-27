@@ -224,7 +224,7 @@ export function blackjackFact(v: unknown) {
   };
 }
 export type BlackjackFact = ReturnType<typeof blackjackFact>;
-export function blackjackTable(v: unknown) {
+export function blackjackTable(v: unknown, live = false) {
   const required = [
     'id',
     'revision',
@@ -235,7 +235,45 @@ export function blackjackTable(v: unknown) {
     'terminal_at',
     'fact',
   ];
-  const r = record(v, [...required, 'reason'], 'table', required);
+  const r = record(
+    v,
+    [...required, 'reason', ...(live ? ['realtime_identities'] : [])],
+    'table',
+    required,
+  );
+  const fact = blackjackFact(r.fact);
+  const identities =
+    live && r.realtime_identities !== undefined
+      ? array(r.realtime_identities, 'live identities', 9).map((value) => {
+          const identity = record(value, ['seat', 'display_name', 'avatar_url'], 'live identity');
+          const seat = seatNo(identity.seat);
+          if (!fact.seats.some((s) => s.seat === seat)) invalidResponse('live identity seat');
+          const avatar = nullableString(identity.avatar_url, 'live avatar', { max: 2048 });
+          if (avatar !== null) {
+            let parsed: URL;
+            try {
+              parsed = new URL(avatar);
+            } catch {
+              invalidResponse('live avatar');
+            }
+            if (
+              parsed!.protocol !== 'https:' ||
+              parsed!.username ||
+              parsed!.password ||
+              parsed!.port ||
+              !['cdn.discordapp.com', 'media.discordapp.net'].includes(parsed!.hostname)
+            )
+              invalidResponse('live avatar');
+          }
+          return {
+            seat,
+            display_name: string(identity.display_name, 'live name', { min: 1, max: 128 }),
+            avatar_url: avatar,
+          };
+        })
+      : [];
+  if (new Set(identities.map((value) => value.seat)).size !== identities.length)
+    invalidResponse('duplicate live seat');
   return {
     id: opaqueID(r.id, 'bjt_', 'table id'),
     revision: decimal(r.revision, 'table revision', { positive: true }),
@@ -249,7 +287,8 @@ export function blackjackTable(v: unknown) {
       ['', 'completed', 'server_restart', 'closed', 'maintenance'] as const,
       'reason',
     ),
-    fact: blackjackFact(r.fact),
+    fact,
+    ...(live ? { realtime_identities: identities } : {}),
   };
 }
 export type BlackjackTable = ReturnType<typeof blackjackTable>;
@@ -328,7 +367,7 @@ export function blackjackState(v: unknown) {
     queue_count: wide(r.queue_count),
     you: r.you === null ? null : own(r.you),
     your_seat: nullableInteger(r.your_seat, 'your seat', 0, 8),
-    table: r.table === null ? null : blackjackTable(r.table),
+    table: r.table === null ? null : blackjackTable(r.table, true),
   };
 }
 export type BlackjackState = ReturnType<typeof blackjackState>;

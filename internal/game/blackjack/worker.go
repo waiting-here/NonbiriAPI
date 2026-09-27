@@ -240,6 +240,11 @@ func (s *Service) stopUserTx(ctx context.Context, tx *sql.Tx, user, now int64, d
 		}
 	}
 	if deleting {
+		// A seated identity disappearing must refresh every authorized viewer,
+		// including spectators. The finalizer publishes only after commit.
+		if err == nil && e.Session.Valid {
+			facts.Global = true
+		}
 		if err := s.finance.ReleaseOnboarding(ctx, tx, user); err != nil {
 			return nil, err
 		}
