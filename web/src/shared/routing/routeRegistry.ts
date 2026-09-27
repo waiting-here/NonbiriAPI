@@ -130,6 +130,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'fat-fish',
+    path: '/activities/fat-fish',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'game-fishing',
     path: '/games/fishing',
     access: 'user',

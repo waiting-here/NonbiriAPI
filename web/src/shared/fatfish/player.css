@@ -1,0 +1,7 @@
+.fatfish-player { display: grid; gap: 1rem; max-width: 46rem; }
+.fatfish-canvas { display: block; width: min(100%, 480px); height: auto; aspect-ratio: 6 / 7; border: 2px solid #5d8991; border-radius: .75rem; background: #d7eff1; }
+.fatfish-player__status { min-height: 1.5rem; }
+.fatfish-player__controls { display: flex; flex-wrap: wrap; gap: .5rem; }
+.fatfish-player__controls button { min-height: 2.75rem; padding: .45rem .7rem; border: 1px solid #577e87; border-radius: .5rem; background: #eef8f7; color: #1c3943; cursor: pointer; }
+.fatfish-player__controls button.is-selected { outline: 3px solid #2f8295; }
+.fatfish-player__controls button:disabled { opacity: .55; cursor: not-allowed; }

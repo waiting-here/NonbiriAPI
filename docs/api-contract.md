@@ -1,9 +1,9 @@
-# NonbiriAPI HTTP API Contract (`v1.0.0-rc.3`)
+# NonbiriAPI HTTP API Contract (`v1.0.0-rc.4` candidate)
 
-- Status: **source prerelease contract**. Deployment status is specific to each instance.
+- Status: **unreleased rc.4 source candidate contract**. The latest published source prerelease remains rc.3; deployment status is specific to each instance.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. Image generation is available only through the session-authenticated limited activity, not ordinary `/v1/images/generations` or personal/charity model routes.
-- Release boundary: sections explicitly marked **unreleased rc.4** describe the current development contract and are not available on the deployed rc.3 instance. Final root integration and browser acceptance remain pending.
+- Release boundary: rc.4 additions describe the candidate contract and are not available on a deployed rc.3 instance. This document does not announce publication or deployment.
 
 ## 1. Shared wire rules
 
@@ -82,11 +82,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Supported sources include the complete rc.2 maintenance database at `db959c64674afc531046a63066de0464725d439c` and the administration maintenance database at `84018acbd594765c563cc0ee4083d206e0bd6a77`. Extensions and role migration are atomic; unknown or partial structures are rejected before source writes. Existing identities, balances, settled charges, saved games, configuration and legal overrides remain intact. Old manual level 5 becomes level 6; former model level-5 admission moves to level 6 and new level-5 admission initially copies level 4. Historical audit roles and idempotent receipts keep their original meaning and wire values; current GETs show current authority and masks. New input/output counters never invent a split of old total Tokens. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. The last published rc.3 prerelease supported the complete rc.2 maintenance database at `db959c64674afc531046a63066de0464725d439c` and the administration maintenance database at `84018acbd594765c563cc0ee4083d206e0bd6a77`. For the unreleased rc.4 candidate, the supported upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Extensions and role migration are atomic; unknown or partial structures are rejected before source writes. Existing identities, balances, settled charges, saved games, configuration and legal overrides remain intact. Old manual level 5 becomes level 6; former model level-5 admission moves to level 6 and new level-5 admission initially copies level 4. Historical audit roles and idempotent receipts keep their original meaning and wire values; current GETs show current authority and masks. New input/output counters never invent a split of old total Tokens. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes).
 
-Account export `schema_version=10` is independent of SQLite `user_version`.
-
-**Unreleased rc.4:** account export advances to `schema_version=11` and `nonbiriapi-account-export-v11.json`; SQLite remains Generation 2. See §9 for the three added safe projections.
+Account export `schema_version=11` is independent of SQLite `user_version`. Its filename is `nonbiriapi-account-export-v11.json`; SQLite remains Generation 2. See §9 for the three added safe projections.
 
 ### 1.5 Display time context
 
@@ -564,6 +562,8 @@ Fat Fish is a session-authenticated limited activity under `/api/limited-activit
 | `GET /history?page=1&limit=20`; `GET /periods/{p}/leaderboard?page=1&page_size=20&node_id=ffn_…` | Own 30-day terminal history uses `limit` of 20, 50 or 100 and `{items,page,page_size,has_more}`. Whole-period or optional node leaderboard uses `page_size` of 20, 50 or 100 and `{period_id,node_id?,final,page,page_size,total,rows}`. |
 
 Collection `page` is 1–1,000,000; period, level and version collections have a fixed page size of 20. A period has at most 128 nodes; a node binds an immutable content version and current revision. `amounts` contains canonical nonnegative General-credit strings `unlock_cost,ticket_price,first_clear_reward,star_rewards[3]`; game credits, paper and brushes cannot pay these charges. A period's `state` (`draft|open|closed`), `visible`, `paused` and `past_public` are separate controls. A closed period with `past_public=false` does not expose its public detail or board, while a caller can still read their authorized retained history. Rankings expose only current public identity or an anonymous projection, never another player's private result.
+
+Visible period node summaries may include `condition_hint`, a user-safe explanation of the visible unlock conditions and whether they are met. Hidden prerequisites are represented only by a generic hidden-prerequisite hint; their identities and exact conditions are not exposed.
 
 Prepare lasts 60 seconds without a charge. Start fixes `start_at_ms` at acceptance plus 3,000 ms, and `submit_until_ms` at the game's end plus 30 minutes; late delivery does not restart the clock. The original tab holds a 32-byte capability in session storage and resumes from its bounded local input record. A copied or new tab has no continuation authority. The first timely submit fixes one input digest; another digest returns 409. The input is at most 4 MiB within a 4 MiB + 1 KiB request envelope and is kept only in bounded verification memory. At most two verifications run with six waiting; full capacity returns 429 with `Retry-After: 1` before acceptance. Verification has a five-second deadline. After a crash, the same digest can be resubmitted by the original tab within ten minutes of its recorded receipt; this is not a new-play grace period. A confirmed platform verification fault refunds the original ticket; an invalid or late client submission does not. Validated settlement alone updates best scores and once-only rewards.
 
