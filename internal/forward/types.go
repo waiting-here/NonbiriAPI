@@ -100,7 +100,8 @@ type PersonalSnapshot struct {
 
 type CharitySnapshot struct {
 	CharityPreflight
-	Candidates []RouteCandidate
+	RouteStrategy string
+	Candidates    []RouteCandidate
 }
 
 type ListedModel struct {
@@ -135,6 +136,7 @@ type ClaimRail interface {
 	TakeForDispatch(context.Context, claim.Handle) (DispatchGrant, error)
 	MarkResponseStarted(context.Context, claim.Handle) error
 	ReleaseUndispatched(context.Context, claim.Handle) (claim.Attempt, error)
+	RevokeUndelivered(context.Context, claim.Handle) error
 	CompleteAttempt(context.Context, claim.Handle, claim.AttemptOutcome) (claim.Attempt, error)
 	CompleteRequest(context.Context, claim.CompleteRequestInput) (claim.Request, error)
 }

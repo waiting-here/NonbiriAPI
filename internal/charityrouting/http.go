@@ -324,6 +324,7 @@ type modelCreateWire struct {
 	AllowedLevels         requiredField[[]int]        `json:"allowed_levels"`
 	PublicDescription     requiredField[string]       `json:"public_description"`
 	RouteStrategy         requiredField[string]       `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]          `json:"affinity_ttl_seconds"`
 	Provider              requiredField[string]       `json:"provider"`
 	Model                 requiredField[string]       `json:"model"`
 	Enabled               requiredField[bool]         `json:"enabled"`
@@ -366,6 +367,13 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		}
 		input.RouteStrategy = wire.RouteStrategy.Value
 		canonical["route_strategy"] = wire.RouteStrategy.Value
+	}
+	if wire.AffinityTTLSeconds.Set {
+		if !validAffinityTTL(wire.AffinityTTLSeconds.Value) {
+			return ModelCreate{}, nil, ErrInvalidRequest
+		}
+		input.AffinityTTLSeconds = &wire.AffinityTTLSeconds.Value
+		canonical["affinity_ttl_seconds"] = wire.AffinityTTLSeconds.Value
 	}
 	if wire.AllowedLevels.Set {
 		mask, err := charityaccess.Mask(wire.AllowedLevels.Value)
@@ -470,6 +478,7 @@ type modelPatchWire struct {
 	AllowedLevels         requiredField[[]int]             `json:"allowed_levels"`
 	PublicDescription     requiredField[string]            `json:"public_description"`
 	RouteStrategy         requiredField[string]            `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]               `json:"affinity_ttl_seconds"`
 	ExpectedRevision      requiredField[string]            `json:"expected_revision"`
 	Provider              requiredField[string]            `json:"provider"`
 	Model                 requiredField[string]            `json:"model"`
@@ -523,6 +532,13 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 		}
 		input.RouteStrategy = &wire.RouteStrategy.Value
 		canonical["route_strategy"] = wire.RouteStrategy.Value
+	}
+	if wire.AffinityTTLSeconds.Set {
+		if !validAffinityTTL(wire.AffinityTTLSeconds.Value) {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		input.AffinityTTLSeconds = &wire.AffinityTTLSeconds.Value
+		canonical["affinity_ttl_seconds"] = wire.AffinityTTLSeconds.Value
 	}
 	if wire.Provider.Set {
 		input.Provider = &wire.Provider.Value

@@ -78,9 +78,10 @@ type logicalAdmission struct {
 
 type executionPlan struct {
 	logicalAdmission
-	candidates []RouteCandidate
-	purpose    claim.Purpose
-	route      claim.RouteKind
+	candidates      []RouteCandidate
+	charityStrategy string
+	purpose         claim.Purpose
+	route           claim.RouteKind
 }
 
 type attemptRun struct {
@@ -467,6 +468,7 @@ func (service *Service) snapshot(
 			return executionPlan{}, ErrInternal
 		}
 		plan.candidates = append([]RouteCandidate(nil), value.Candidates...)
+		plan.charityStrategy = value.RouteStrategy
 		plan.purpose = claim.PurposeCharity
 	} else {
 		value, err := service.personal.Snapshot(ctx, userID, identifier)
@@ -548,23 +550,48 @@ func (service *Service) runAttempts(
 ) attemptRun {
 	var run attemptRun
 	keyLimited := false
-	for index, candidate := range plan.candidates {
+	remaining := append([]RouteCandidate(nil), plan.candidates...)
+	balancedPlan := plan.charity && plan.charityStrategy == charityrouting.RouteCacheBalanced
+	safetyByBaseURL := make(map[string]string)
+	if balancedPlan {
+		for _, candidate := range plan.candidates {
+			if _, present := safetyByBaseURL[candidate.CanonicalBaseURL]; present {
+				continue
+			}
+			origin, err := canonicalOrigin(candidate.CanonicalBaseURL)
+			if err != nil {
+				return attemptRun{err: err}
+			}
+			safety, err := service.safety.Generate(userID, origin)
+			if err != nil {
+				return attemptRun{err: err}
+			}
+			safetyByBaseURL[candidate.CanonicalBaseURL] = safety
+		}
+	}
+	for index := range plan.candidates {
 		if executionContext.Err() != nil {
 			break
 		}
-		origin, err := canonicalOrigin(candidate.CanonicalBaseURL)
-		if err != nil {
-			run.err = err
+		balanced := balancedPlan
+		if balanced && len(remaining) == 0 {
 			break
 		}
-		safety, err := service.safety.Generate(userID, origin)
-		origin = ""
-		if err != nil {
-			run.err = err
-			break
+		candidate := plan.candidates[index]
+		safety := safetyByBaseURL[candidate.CanonicalBaseURL]
+		if !balanced {
+			origin, err := canonicalOrigin(candidate.CanonicalBaseURL)
+			if err != nil {
+				run.err = err
+				break
+			}
+			safety, err = service.safety.Generate(userID, origin)
+			if err != nil {
+				run.err = err
+				break
+			}
 		}
-
-		handle, err := service.claims.Claim(executionContext, claim.ClaimInput{
+		claimInput := claim.ClaimInput{
 			RequestID: accepted.ID, ActorUserID: userID, AttemptSeq: index + 1, Purpose: plan.purpose,
 			Candidate: claim.Candidate{
 				EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
@@ -572,7 +599,20 @@ func (service *Service) runAttempts(
 				UpstreamModelID: candidate.UpstreamModelID, Policy: candidate.Policy,
 			},
 			DonationKeyID: candidate.DonationKeyID,
-		})
+		}
+		if balanced {
+			claimInput.Candidate = claim.Candidate{}
+			claimInput.DonationKeyID = 0
+			for _, choice := range remaining {
+				claimInput.BalancedCandidates = append(claimInput.BalancedCandidates, claim.BalancedCandidate{
+					Candidate: claim.Candidate{EndpointID: choice.EndpointID, EndpointKeyID: choice.EndpointKeyID,
+						ConnectorType: choice.ConnectorType, CanonicalBaseURL: choice.CanonicalBaseURL,
+						UpstreamModelID: choice.UpstreamModelID, Policy: choice.Policy},
+					DonationKeyID: choice.DonationKeyID,
+				})
+			}
+		}
+		handle, err := service.claims.Claim(executionContext, claimInput)
 		if err != nil {
 			if plan.charity && (errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable)) {
 				value := failureForError(err, true)
@@ -581,12 +621,18 @@ func (service *Service) runAttempts(
 			}
 			if errors.Is(err, claim.ErrKeyRateLimited) || errors.Is(err, donationquota.ErrLimited) {
 				keyLimited = true
+				if balanced {
+					break
+				}
 				continue
 			}
 			if errors.Is(err, claim.ErrNotFound) {
+				if balanced {
+					break
+				}
 				continue
 			}
-			if errors.Is(err, donationquota.ErrCapacity) {
+			if errors.Is(err, donationquota.ErrCapacity) || errors.Is(err, claim.ErrRoutingBusy) {
 				if !run.dispatched {
 					value := failureForError(err, plan.charity)
 					run.failure = &value
@@ -595,6 +641,23 @@ func (service *Service) runAttempts(
 			}
 			run.err = err
 			break
+		}
+		if balanced {
+			selected := -1
+			for position, choice := range remaining {
+				if choice.EndpointKeyID == handle.EndpointKeyID() && choice.DonationKeyID == handle.DonationKeyID() &&
+					choice.UpstreamModelID == handle.Target().UpstreamModel() {
+					selected = position
+					candidate = choice
+					break
+				}
+			}
+			if selected < 0 {
+				run.handleDispatchFailure(parent, service, handle, claim.ErrInvariant)
+				break
+			}
+			remaining = append(remaining[:selected], remaining[selected+1:]...)
+			safety = safetyByBaseURL[candidate.CanonicalBaseURL]
 		}
 
 		dispatch, err := service.claims.TakeForDispatch(executionContext, handle)
@@ -615,7 +678,7 @@ func (service *Service) runAttempts(
 		attemptRequest := request.CloneForAttempt()
 		if attemptRequest == nil {
 			dispatch.Clear()
-			run.completeSynthetic(parent, service, handle, "request snapshot unavailable")
+			run.completeUndeliveredSynthetic(parent, service, handle, plan.charity, "request snapshot unavailable")
 			break
 		}
 		policy := dispatch.Policy()
@@ -627,13 +690,13 @@ func (service *Service) runAttempts(
 			if err := suppressor.MarkDispatched(); err != nil {
 				attemptRequest.Clear()
 				dispatch.Clear()
-				run.completeSynthetic(parent, service, handle, "debug capture canceled")
+				run.completeUndeliveredSynthetic(parent, service, handle, plan.charity, "debug capture canceled")
 				break
 			}
 			if trace == nil || trace.MarkDispatched() != nil {
 				attemptRequest.Clear()
 				dispatch.Clear()
-				run.completeSynthetic(parent, service, handle, "debug capture canceled")
+				run.completeUndeliveredSynthetic(parent, service, handle, plan.charity, "debug capture canceled")
 				break
 			}
 		}
@@ -644,7 +707,7 @@ func (service *Service) runAttempts(
 			if credential != nil {
 				credential.Clear()
 			}
-			run.completeSynthetic(parent, service, handle, "credential unavailable")
+			run.completeUndeliveredSynthetic(parent, service, handle, plan.charity, "credential unavailable")
 			break
 		}
 		sink := writer
@@ -663,7 +726,7 @@ func (service *Service) runAttempts(
 		if protocolConnector == nil {
 			credential.Clear()
 			attemptRequest.Clear()
-			run.completeSynthetic(parent, service, handle, "connector unavailable")
+			run.completeUndeliveredSynthetic(parent, service, handle, plan.charity, "connector unavailable")
 			break
 		}
 		attemptContext := executionContext
@@ -775,6 +838,20 @@ func (run *attemptRun) completeSynthetic(parent context.Context, service *Servic
 	defer cancel()
 	_, run.err = service.claims.CompleteAttempt(settleContext, handle, attemptOutcome(result))
 	run.terminalBlocked = run.err != nil
+}
+
+func (run *attemptRun) completeUndeliveredSynthetic(parent context.Context, service *Service, handle claim.Handle, charity bool, diagnosticText string) {
+	var revokeErr error
+	if charity {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+		revokeErr = service.claims.RevokeUndelivered(ctx, handle)
+		cancel()
+	}
+	run.completeSynthetic(parent, service, handle, diagnosticText)
+	if revokeErr != nil {
+		run.err = errors.Join(run.err, revokeErr)
+		run.terminalBlocked = true
+	}
 }
 
 func (service *Service) classifyCaller(parent, executionContext context.Context, plan executionPlan, run attemptRun) (claim.CallerResult, *wireFailure) {
@@ -1151,7 +1228,7 @@ func failureForError(err error, charity bool) wireFailure {
 		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
 	case errors.Is(err, ledger.ErrInsufficientBalance):
 		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
-	case errors.Is(err, ledger.ErrCapacityExhausted), errors.Is(err, ledger.ErrRetryable), errors.Is(err, donationquota.ErrCapacity):
+	case errors.Is(err, ledger.ErrCapacityExhausted), errors.Is(err, ledger.ErrRetryable), errors.Is(err, donationquota.ErrCapacity), errors.Is(err, claim.ErrRoutingBusy):
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, charityrouting.ErrContentTooShort):
 		message := "charity content is too short"

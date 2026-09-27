@@ -178,7 +178,12 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 	if err != nil {
 		return Handle{}, err
 	}
-	handle, err := s.claimTx(ctx, tx, claimID, at, input)
+	var handle Handle
+	if len(input.BalancedCandidates) > 0 {
+		handle, err = s.claimBalancedTx(ctx, tx, claimID, at, input)
+	} else {
+		handle, err = s.claimTx(ctx, tx, claimID, at, input)
+	}
 	if err != nil {
 		return Handle{}, s.quotaCapacityFailure(ctx, tx, at, err)
 	}
@@ -373,6 +378,9 @@ VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?,?,?)`,
 		if err := donationquota.Reserve(ctx, tx, claimID, at); err != nil {
 			return Handle{}, fmt.Errorf("claim: reserve recurring limits: %w", err)
 		}
+		if err := reserveCharityDispatchTx(ctx, tx, claimID, input, target.secretRefID, target.secretBaseURL, at); err != nil {
+			return Handle{}, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE logical_requests SET state='running'
 WHERE id=? AND state='accepted'`, input.RequestID); err != nil {
@@ -390,11 +398,12 @@ WHERE logical_request_id=?`, input.Candidate.EndpointKeyID, input.Candidate.Upst
 	candidate := input.Candidate
 	candidate.Policy.ForceStoreFalse = target.forceStoreFalse == 1
 	return Handle{
-		claimID:    claimID,
-		requestID:  input.RequestID,
-		attemptSeq: input.AttemptSeq,
-		purpose:    input.Purpose,
-		candidate:  candidate,
+		claimID:       claimID,
+		requestID:     input.RequestID,
+		attemptSeq:    input.AttemptSeq,
+		purpose:       input.Purpose,
+		candidate:     candidate,
+		donationKeyID: input.DonationKeyID,
 	}, nil
 }
 
@@ -494,6 +503,11 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(encrypted)
 			return nil, s.quotaCapacityFailure(ctx, tx, at, err)
 		}
+		if err := markCharityDispatchTx(ctx, tx, handle.claimID, at); err != nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, err
+		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE dispatch_claims
 SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, handle.claimID)
@@ -518,19 +532,19 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 	if err := ctx.Err(); err != nil {
 		clear(contextID)
 		clear(encrypted)
-		return nil, fmt.Errorf("%w: %w", ErrCredentialUnavailable, err)
+		return nil, errors.Join(fmt.Errorf("%w: %w", ErrCredentialUnavailable, err), revokeAfterCredentialFailure(s, handle))
 	}
 	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
 	clear(contextID)
 	if err != nil {
 		clear(encrypted)
-		return nil, ErrCredentialUnavailable
+		return nil, errors.Join(ErrCredentialUnavailable, revokeAfterCredentialFailure(s, handle))
 	}
 	plaintext, err := s.secrets.OpenForGenerationTwoContext(string(encrypted), credentialContext)
 	if err != nil {
 		clear(encrypted)
 		clear(plaintext)
-		return nil, ErrCredentialUnavailable
+		return nil, errors.Join(ErrCredentialUnavailable, revokeAfterCredentialFailure(s, handle))
 	}
 	credential := connectorcontract.NewShortLivedSecret(plaintext, encrypted)
 	return &Dispatch{
@@ -623,14 +637,28 @@ func validAcceptInput(input AcceptInput) bool {
 
 func validClaimInput(input ClaimInput) bool {
 	if !db.ValidateOpaqueID(input.RequestID, "req_") || input.ActorUserID <= 0 ||
-		input.AttemptSeq < 1 || input.AttemptSeq > MaxAttempts || !validCandidate(input.Candidate) {
+		input.AttemptSeq < 1 || input.AttemptSeq > MaxAttempts {
+		return false
+	}
+	balanced := len(input.BalancedCandidates) > 0
+	if balanced {
+		if input.Purpose != PurposeCharity || len(input.BalancedCandidates) > MaxAttempts ||
+			input.DonationKeyID != 0 {
+			return false
+		}
+		for _, candidate := range input.BalancedCandidates {
+			if candidate.DonationKeyID <= 0 || !validCandidate(candidate.Candidate) {
+				return false
+			}
+		}
+	} else if !validCandidate(input.Candidate) {
 		return false
 	}
 	switch input.Purpose {
 	case PurposeSelf, PurposeDebugLive:
-		return input.DonationKeyID == 0
+		return !balanced && input.DonationKeyID == 0
 	case PurposeCharity:
-		return input.DonationKeyID > 0
+		return balanced || input.DonationKeyID > 0
 	default:
 		return false
 	}

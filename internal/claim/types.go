@@ -39,6 +39,7 @@ var (
 	ErrTerminal              = errors.New("claim: resource is terminal")
 	ErrCredentialUnavailable = errors.New("claim: credential is unavailable")
 	ErrDependencyUnavailable = errors.New("claim: required domain adapter is unavailable")
+	ErrRoutingBusy           = errors.New("claim: charity routing storage is busy")
 	ErrInvariant             = errors.New("claim: persisted invariant is invalid")
 )
 
@@ -170,6 +171,14 @@ type ClaimInput struct {
 	Purpose       Purpose
 	Candidate     Candidate
 	DonationKeyID int64
+	// BalancedCandidates are already weighted into a random order by the
+	// routing snapshot. Claim chooses among them inside its write transaction.
+	BalancedCandidates []BalancedCandidate
+}
+
+type BalancedCandidate struct {
+	Candidate     Candidate
+	DonationKeyID int64
 }
 
 // Handle is the only value returned by Claim. Its fields are private so a
@@ -181,13 +190,16 @@ type Handle struct {
 	attemptSeq         int
 	purpose            Purpose
 	candidate          Candidate
+	donationKeyID      int64
 	discoveryAuthorize func(context.Context, *sql.Tx) error
 }
 
-func (h Handle) ClaimID() string   { return h.claimID }
-func (h Handle) RequestID() string { return h.requestID }
-func (h Handle) AttemptSeq() int   { return h.attemptSeq }
-func (h Handle) Purpose() Purpose  { return h.purpose }
+func (h Handle) ClaimID() string      { return h.claimID }
+func (h Handle) RequestID() string    { return h.requestID }
+func (h Handle) AttemptSeq() int      { return h.attemptSeq }
+func (h Handle) Purpose() Purpose     { return h.purpose }
+func (h Handle) EndpointKeyID() int64 { return h.candidate.EndpointKeyID }
+func (h Handle) DonationKeyID() int64 { return h.donationKeyID }
 func (h Handle) Target() connectorcontract.Target {
 	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID)
 }
