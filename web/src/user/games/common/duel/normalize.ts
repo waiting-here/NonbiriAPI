@@ -80,12 +80,8 @@ export function configValue(value: unknown, game: DuelGame, modes: readonly stri
   ]);
   safeInteger(r.queue_seconds, 120, 120, 'queue duration');
   safeInteger(r.queue_capacity, 4096, 4096, 'queue capacity');
-  safeInteger(
-    r[timers[0]],
-    game === 'bidding' ? 10 : 20,
-    game === 'bidding' ? 10 : 20,
-    'phase duration',
-  );
+  if (game === 'bidding') safeInteger(r.joker_seconds, 10, 10, 'phase duration');
+  else enumNumber(r.plan_seconds, [20, 30], 'phase duration');
   if (game === 'bidding') safeInteger(r.bid_seconds, 20, 20, 'phase duration');
   else if (r.settlement_seconds !== 0 && r.settlement_seconds !== 5)
     invalidResponse('presentation duration');
