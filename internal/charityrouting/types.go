@@ -375,6 +375,7 @@ type CandidateQuery struct {
 // formatting is always redacted because its safe routing facts are still not a
 // caller projection.
 type RuntimeCandidate struct {
+	BindingID        int64
 	DonationKeyID    int64
 	EndpointID       int64
 	EndpointKeyID    int64

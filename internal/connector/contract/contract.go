@@ -5,7 +5,9 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
 	"sync"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -141,9 +143,12 @@ func (Target) LogValue() slog.Value {
 // Additional fields belong here only when their policy implementation needs
 // them; the initial projection carries the existing origin-scoped identifier.
 type AttemptPolicy struct {
-	SafetyIdentifier string
-	ForceStoreFalse  bool
-	FlattenToolCalls bool
+	SafetyIdentifier  string
+	ForceStoreFalse   bool
+	FlattenToolCalls  bool
+	AdditionalHeaders http.Header
+	NativeExtensions  map[string]json.RawMessage
+	HasAdaptation     bool
 }
 
 func (AttemptPolicy) String() string   { return "[redacted attempt policy]" }

@@ -199,6 +199,18 @@ describe('endpoint detail numbered resource panels', () => {
       const url = new URL(raw, window.location.origin);
       const path = `${url.pathname}${url.search}`;
       requests.push(path);
+      if (path === '/api/endpoints/11/request-adaptation') {
+        return Promise.resolve(
+          jsonResponse({
+            revision: '0',
+            forward_headers: { mode: 'replace', values: [] },
+            fixed_headers: { mode: 'replace', values: {} },
+            body_defaults: { mode: 'replace', values: {} },
+            body_forced: { mode: 'replace', values: {} },
+            native_extension_paths: { mode: 'replace', values: [] },
+          }),
+        );
+      }
       if (path === '/api/endpoints/11/keys?page=1&page_size=20') {
         return Promise.resolve(
           jsonResponse({
@@ -240,7 +252,14 @@ describe('endpoint detail numbered resource panels', () => {
 
     expect(await screen.findByText('key note')).toBeVisible();
     expect(await screen.findByText('second key note')).toBeVisible();
-    expect(requests).toEqual(['/api/endpoints/11/keys?page=1&page_size=20']);
+    expect(requests).toContain('/api/endpoints/11/keys?page=1&page_size=20');
+    expect(
+      requests.every(
+        (path) =>
+          path === '/api/endpoints/11/keys?page=1&page_size=20' ||
+          path === '/api/endpoints/11/request-adaptation',
+      ),
+    ).toBe(true);
 
     const summaries = screen.getAllByText('Manual catalog', { selector: 'summary' });
     expect(summaries).toHaveLength(2);

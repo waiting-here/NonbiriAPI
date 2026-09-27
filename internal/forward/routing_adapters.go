@@ -190,6 +190,7 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 	}, RouteStrategy: value.RouteStrategy}
 	for index, candidate := range value.Candidates() {
 		out.Candidates = append(out.Candidates, RouteCandidate{
+			BindingID:  candidate.BindingID,
 			EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
 			DonationKeyID: candidate.DonationKeyID, ConnectorType: candidate.ConnectorType,
 			CanonicalBaseURL: candidate.CanonicalBaseURL, UpstreamModelID: candidate.UpstreamModelID,
@@ -197,6 +198,13 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 		})
 	}
 	return out, nil
+}
+
+func (adapter *CharityRoutingAdapter) ReserveForOutput(ctx context.Context, modelID, currentReserve, outputFloor int64) (int64, error) {
+	if adapter == nil || adapter.service == nil {
+		return 0, ErrInternal
+	}
+	return adapter.service.ReserveForOutput(ctx, modelID, currentReserve, outputFloor)
 }
 
 func (adapter *CharityRoutingAdapter) ListAvailableModels(ctx context.Context, userID, now int64, limit int) ([]ListedModel, error) {

@@ -17,6 +17,8 @@ import { FailureResetControl } from './FailureResetControl';
 import { FailurePolicyControl } from './FailurePolicyControl';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { RequestAdaptationEditor } from './RequestAdaptationEditor';
+import { useRequestAdaptationCopy } from './requestAdaptationCopy';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { MarkdownText } from './MarkdownText';
@@ -1680,7 +1682,11 @@ function modelDraft(model?: CharityModel): ModelDraft {
     flatten: model?.flatten_tool_calls ?? false,
   };
 }
-function modelBody(draft: ModelDraft, includeTokenReserveCredits: boolean, includeAffinityTTL: boolean) {
+function modelBody(
+  draft: ModelDraft,
+  includeTokenReserveCredits: boolean,
+  includeAffinityTTL: boolean,
+) {
   const start = timeDraftValue(draft.discountStart);
   const end = timeDraftValue(draft.discountEnd);
   if (start === undefined || end === undefined) throw new Error('Time is not ready');
@@ -1724,7 +1730,11 @@ type ModelValidation =
   | 'discountDates';
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
-  if (!Number.isInteger(draft.affinityTTLSeconds) || draft.affinityTTLSeconds < 1 || draft.affinityTTLSeconds > 86_400)
+  if (
+    !Number.isInteger(draft.affinityTTLSeconds) ||
+    draft.affinityTTLSeconds < 1 ||
+    draft.affinityTTLSeconds > 86_400
+  )
     return 'affinityTTLSeconds';
   if (excludedFields(draft.excluded) === null) return 'excludedFields';
   const provider = draft.provider.trim();
@@ -1936,7 +1946,9 @@ function ModelForm({
                 max={86_400}
                 step={1}
                 value={draft.affinityTTLSeconds}
-                onChange={(event) => setDraft({ ...draft, affinityTTLSeconds: Number(event.target.value) })}
+                onChange={(event) =>
+                  setDraft({ ...draft, affinityTTLSeconds: Number(event.target.value) })
+                }
               />
               <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
             </label>
@@ -2211,7 +2223,9 @@ function ModelForm({
               ? t('common.operations.charity.validation.modelLevels')
               : validationError === 'publicDescription'
                 ? t('common.operations.charity.validation.publicDescription')
-                : t(`common.operations.charity.validation.${validationError}`)}
+                : validationError === 'affinityTTLSeconds'
+                  ? t('common.operations.charity.validation.affinityTTLSeconds')
+                  : t(`common.operations.charity.validation.${validationError}`)}
         </p>
       ) : null}
       <div className="ops-actions">
@@ -2296,14 +2310,18 @@ function BindingsPanel({
   refresh,
   model,
   onCapabilityLoss,
+  showAdaptation,
 }: {
   role: CharityRole;
   accountId: string;
   refresh: () => Promise<unknown>;
   model: CharityModel;
   onCapabilityLoss?: () => void;
+  showAdaptation: boolean;
 }) {
   const { t } = useTranslation();
+  const adaptationCopy = useRequestAdaptationCopy();
+  const [adaptationBinding, setAdaptationBinding] = useState('');
   const [, setParams] = useSearchState();
   const pager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -2464,6 +2482,16 @@ function BindingsPanel({
                           id: entry.donation_key_id,
                         })}
                       </button>
+                      {showAdaptation ? (
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setAdaptationBinding(entry.id)}
+                        >
+                          {adaptationCopy('title')}
+                        </button>
+                      ) : null}
                       <button
                         className="btn btn-secondary"
                         type="button"
@@ -2505,6 +2533,20 @@ function BindingsPanel({
           onPageChange={pager.setPage}
           onPageSizeChange={pager.setPageSize}
           busy={busy}
+        />
+      ) : null}
+      {showAdaptation &&
+      adaptationBinding &&
+      bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
+        <RequestAdaptationEditor
+          key={`${accountId}:${model.id}:${adaptationBinding}`}
+          url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
+          scope="binding"
+          connectorType={
+            bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
+              .connector_type
+          }
+          editable={role === 'admin'}
         />
       ) : null}
       {orderChanged ? (
@@ -2866,6 +2908,14 @@ function ModelsPanel({
                   onCapabilityLoss={onCapabilityLoss}
                 />
               ) : null}
+              {!trainee ? (
+                <RequestAdaptationEditor
+                  key={`${accountId}:${role}:${selected.id}`}
+                  url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(selected.id)}/request-adaptation`}
+                  scope="charity-model"
+                  editable={role === 'admin'}
+                />
+              ) : null}
               <BindingsPanel
                 key={`bindings:${selected.id}`}
                 role={role}
@@ -2873,6 +2923,7 @@ function ModelsPanel({
                 model={selected}
                 refresh={refresh}
                 onCapabilityLoss={onCapabilityLoss}
+                showAdaptation={!trainee}
               />
               {trainee ? (
                 <CharityModelScope modelID={selected.id}>

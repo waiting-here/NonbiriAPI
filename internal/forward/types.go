@@ -77,6 +77,7 @@ type CharityRequestPolicy struct {
 // RouteCandidate is one credential-free physical candidate frozen before
 // request acceptance. Its routine formatting is always redacted.
 type RouteCandidate struct {
+	BindingID        int64
 	EndpointID       int64
 	EndpointKeyID    int64
 	DonationKeyID    int64
@@ -85,6 +86,7 @@ type RouteCandidate struct {
 	UpstreamModelID  string
 	Policy           connectorcontract.AttemptPolicy
 	Order            int
+	prepared         *preparedAttempt
 }
 
 func (RouteCandidate) String() string   { return "[redacted forward candidate]" }
@@ -126,6 +128,7 @@ type CharityRouter interface {
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
 	PreflightEmbedding(context.Context, int64, string, *openai.EmbeddingRequest, int64) (CharityPreflight, error)
 	Snapshot(context.Context, int64, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
+	ReserveForOutput(context.Context, int64, int64, int64) (int64, error)
 	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)
 }
 
@@ -175,6 +178,7 @@ type Config struct {
 	Connectors     []connector.Connector
 	Safety         *SafetyIdentifierFactory
 	Observer       *connector.SafeObserver
+	Adaptations    AdaptationReader
 	Now            func() time.Time
 	ForwardTimeout time.Duration
 	Settlement     time.Duration

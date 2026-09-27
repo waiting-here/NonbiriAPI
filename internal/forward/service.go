@@ -28,6 +28,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
@@ -59,6 +60,7 @@ type Service struct {
 	connectors     map[connectorcontract.Type]connector.Connector
 	safety         *SafetyIdentifierFactory
 	observer       *connector.SafeObserver
+	adaptations    AdaptationReader
 	now            func() time.Time
 	timeout        time.Duration
 	settlement     time.Duration
@@ -80,6 +82,7 @@ type executionPlan struct {
 	logicalAdmission
 	candidates      []RouteCandidate
 	charityStrategy string
+	outputFloor     int64
 	purpose         claim.Purpose
 	route           claim.RouteKind
 }
@@ -144,7 +147,8 @@ func NewService(config Config) (*Service, error) {
 		personal: config.Personal, charity: config.Charity, claims: config.Claims,
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
 		connectors: instances, safety: config.Safety, observer: config.Observer,
-		now: config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
+		adaptations: config.Adaptations,
+		now:         config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
 		backoff: config.Backoff.normalized(),
 	}, nil
 }
@@ -238,15 +242,15 @@ func (service *Service) Chat(
 	mediaType string,
 	language string,
 ) {
-	service.execute(ctx, writer, userID, chatRequest(request), body, mediaType, language)
+	service.execute(ctx, writer, userID, chatRequest(request), body, mediaType, language, nil)
 }
 
 // Embeddings shares the same admission, dispatch, recovery and accounting rail.
 func (service *Service) Embeddings(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.EmbeddingRequest, body []byte, mediaType, language string) {
-	service.execute(ctx, writer, userID, embeddingRequest(request), body, mediaType, language)
+	service.execute(ctx, writer, userID, embeddingRequest(request), body, mediaType, language, nil)
 }
 
-func (service *Service) execute(ctx context.Context, writer http.ResponseWriter, userID int64, request *validatedRequest, body []byte, mediaType, language string) {
+func (service *Service) execute(ctx context.Context, writer http.ResponseWriter, userID int64, request *validatedRequest, body []byte, mediaType, language string, inbound http.Header) {
 	if service == nil || ctx == nil || writer == nil || userID <= 0 || !request.valid() {
 		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
 		return
@@ -309,15 +313,17 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		}
 	}
 
-	plan, err := service.snapshot(executionContext, userID, request.Model, attemptRequest, admission, decision)
+	plan, err := service.snapshot(executionContext, userID, request.Model, attemptRequest, admission, decision, inbound)
 	if err != nil {
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
 	}
+	defer plan.clearPrepared()
 	acceptInput := claim.AcceptInput{
 		UserID: userID, Route: plan.route, ModelSnapshot: plan.fullName,
 		AttemptLimit: len(plan.candidates), ReservedMilli: plan.reservedMilli,
-		CharityModelID: charityModelID(plan),
+		CharityModelID:   charityModelID(plan),
+		OutputTokenFloor: plan.outputFloor,
 	}
 	if plan.charity {
 		decisionNow := plan.decisionNow
@@ -453,6 +459,7 @@ func (service *Service) snapshot(
 	request *validatedRequest,
 	admission logicalAdmission,
 	decision debug.CaptureDecision,
+	inbound http.Header,
 ) (executionPlan, error) {
 	plan := executionPlan{logicalAdmission: admission, route: requestkind.ForOperation(request.operation, admission.charity)}
 	if admission.charity {
@@ -488,23 +495,38 @@ func (service *Service) snapshot(
 		return executionPlan{}, ErrInternal
 	}
 
+	if err := service.freezeAdaptations(ctx, request, &plan, inbound); err != nil {
+		plan.clearPrepared()
+		return executionPlan{}, err
+	}
 	capable := make([]RouteCandidate, 0, len(plan.candidates))
 	capabilityByType := make(map[connectorcontract.Type]bool, len(service.connectors))
 	for _, candidate := range plan.candidates {
 		if !service.validCandidate(candidate, admission.charity) {
+			plan.clearPrepared()
 			return executionPlan{}, ErrInternal
 		}
 		if request.chat != nil && admission.flatten && candidate.ConnectorType != connectorcontract.TypeOpenAICompatible {
+			plan.clearPrepared()
 			return executionPlan{}, ErrInternal
 		}
+		candidateRequest := request
+		if candidate.prepared != nil {
+			candidateRequest = candidate.prepared.request
+		}
 		supported, evaluated := capabilityByType[candidate.ConnectorType]
+		if candidate.prepared != nil {
+			evaluated = false
+		}
 		if !evaluated {
-			supported = request.supports(service.registry, candidate.ConnectorType)
+			supported = candidateRequest.supports(service.registry, candidate.ConnectorType)
 			capabilityByType[candidate.ConnectorType] = supported
 		}
 		if supported {
 			candidate.Policy.FlattenToolCalls = request.chat != nil && admission.flatten
 			capable = append(capable, candidate)
+		} else if candidate.prepared != nil {
+			candidate.prepared.clear()
 		}
 	}
 	clear(plan.candidates)
@@ -512,11 +534,32 @@ func (service *Service) snapshot(
 		return executionPlan{}, openai.ErrInvalidRequest
 	}
 	ordered, err := orderCandidates(plan.strategy, capable)
+	if err != nil {
+		for _, candidate := range capable {
+			if candidate.prepared != nil {
+				candidate.prepared.clear()
+			}
+		}
+	}
 	clear(capable)
 	if err != nil {
 		return executionPlan{}, err
 	}
 	plan.candidates = ordered
+	if plan.charity {
+		for _, candidate := range ordered {
+			if candidate.prepared != nil && candidate.prepared.outputFloor > plan.outputFloor {
+				plan.outputFloor = candidate.prepared.outputFloor
+			}
+		}
+		if plan.outputFloor > 0 {
+			plan.reservedMilli, err = service.charity.ReserveForOutput(ctx, plan.modelID, plan.reservedMilli, plan.outputFloor)
+			if err != nil {
+				plan.clearPrepared()
+				return executionPlan{}, err
+			}
+		}
+	}
 	return plan, nil
 }
 
@@ -529,7 +572,12 @@ func (service *Service) supportedCharityConnectorTypes(request *validatedRequest
 		if instance == nil || request.chat != nil && flatten && connectorType != connectorcontract.TypeOpenAICompatible {
 			continue
 		}
-		if request.supports(service.registry, connectorType) {
+		if service.adaptations != nil {
+			descriptor, ok := service.registry.Descriptor(connectorType)
+			if ok && (request.embedding == nil || descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)) {
+				connectorTypes = append(connectorTypes, connectorType)
+			}
+		} else if request.supports(service.registry, connectorType) {
 			connectorTypes = append(connectorTypes, connectorType)
 		}
 	}
@@ -600,6 +648,9 @@ func (service *Service) runAttempts(
 			},
 			DonationKeyID: candidate.DonationKeyID,
 		}
+		if plan.charity {
+			claimInput.OutputTokenFloor = outputFloor(candidate)
+		}
 		if balanced {
 			claimInput.Candidate = claim.Candidate{}
 			claimInput.DonationKeyID = 0
@@ -608,7 +659,8 @@ func (service *Service) runAttempts(
 					Candidate: claim.Candidate{EndpointID: choice.EndpointID, EndpointKeyID: choice.EndpointKeyID,
 						ConnectorType: choice.ConnectorType, CanonicalBaseURL: choice.CanonicalBaseURL,
 						UpstreamModelID: choice.UpstreamModelID, Policy: choice.Policy},
-					DonationKeyID: choice.DonationKeyID,
+					DonationKeyID:    choice.DonationKeyID,
+					OutputTokenFloor: outputFloor(choice),
 				})
 			}
 		}
@@ -675,7 +727,12 @@ func (service *Service) runAttempts(
 			break
 		}
 		run.dispatched = true
+		prepared := candidate.prepared
 		attemptRequest := request.CloneForAttempt()
+		if prepared != nil {
+			attemptRequest.Clear()
+			attemptRequest = prepared.request.CloneForAttempt()
+		}
 		if attemptRequest == nil {
 			dispatch.Clear()
 			run.completeUndeliveredSynthetic(parent, service, handle, plan.charity, "request snapshot unavailable")
@@ -683,6 +740,11 @@ func (service *Service) runAttempts(
 		}
 		policy := dispatch.Policy()
 		policy.SafetyIdentifier = safety
+		if prepared != nil {
+			policy.AdditionalHeaders = prepared.headers.Clone()
+			policy.NativeExtensions = prepared.native
+			policy.HasAdaptation = prepared.active
+		}
 		if request.embedding != nil {
 			policy.ForceStoreFalse, policy.FlattenToolCalls = false, false
 		}
@@ -1203,6 +1265,12 @@ func failureForError(err error, charity bool) wireFailure {
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, maintenance.ErrMaintenanceOn):
 		return platformFailure(httperr.CodeMaintenance, "maintenance mode is active")
+	case errors.Is(err, requestadaptation.ErrInvalid):
+		return platformFailure(httperr.CodeInvalidRequest, "request adaptation contains an unsupported field or value")
+	case errors.Is(err, requestadaptation.ErrConflict):
+		return platformFailure(httperr.CodeConflict, "request adaptation conflicts with the current model configuration")
+	case errors.Is(err, requestadaptation.ErrUnavailable):
+		return platformFailure(httperr.CodeServiceUnavailable, "request adaptation is temporarily unavailable")
 	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
 		return platformFailure(httperr.CodeNotFound, "model not found")
 	case errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, claim.ErrForbidden):

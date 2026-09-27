@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	routeEndpoints         = "/api/endpoints"
-	routeEndpoint          = "/api/endpoints/{id}"
-	routeEndpointKeys      = "/api/endpoints/{id}/keys"
-	routeEndpointKey       = "/api/endpoints/{id}/keys/{keyId}"
-	maxEndpointSecretBytes = 64 * 1024
+	routeEndpoints          = "/api/endpoints"
+	routeEndpoint           = "/api/endpoints/{id}"
+	routeEndpointAdaptation = "/api/endpoints/{id}/request-adaptation"
+	routeEndpointKeys       = "/api/endpoints/{id}/keys"
+	routeEndpointKey        = "/api/endpoints/{id}/keys/{keyId}"
+	maxEndpointSecretBytes  = 64 * 1024
 )
 
 func validateEndpointSecretPlaintext(value []byte) bool {

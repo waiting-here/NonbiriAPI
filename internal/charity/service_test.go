@@ -190,6 +190,10 @@ VALUES('provider',?,?,1,?,?,?,?,?,80,1,?,?,1,1,?,?)`, model, "[公益]provider/"
 		t.Fatalf("seed charity model: %v", err)
 	}
 	modelID, _ := result.LastInsertId()
+	if _, err := environment.store.DB().Exec(`INSERT INTO charity_routing_settings(
+model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, modelID); err != nil {
+		t.Fatalf("seed charity routing settings: %v", err)
+	}
 	if _, err := environment.store.DB().Exec(`INSERT INTO charity_model_access(
 model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, modelID); err != nil {
 		t.Fatalf("seed charity model access: %v", err)
@@ -204,6 +208,10 @@ VALUES(?,?,?,'upstream-model',0,?,?)`, modelID, environment.donationKey, environ
 }
 
 func (environment *charityTestEnv) accept(t *testing.T, modelID, reserved int64, attemptLimit int, routes ...claim.RouteKind) string {
+	return environment.acceptWithOutputFloor(t, modelID, reserved, attemptLimit, 0, routes...)
+}
+
+func (environment *charityTestEnv) acceptWithOutputFloor(t *testing.T, modelID, reserved int64, attemptLimit int, outputFloor int64, routes ...claim.RouteKind) string {
 	t.Helper()
 	route := claim.RouteCharityChat
 	if len(routes) > 0 {
@@ -221,7 +229,7 @@ VALUES(?,?,?,'[公益]provider/model','accepted',?,'reserved',?,'user',?,?)`,
 	}
 	if err := environment.service.AcceptRequest(context.Background(), tx, claim.CharityAcceptance{
 		RequestID: requestID, UserID: environment.callerID, CharityModelID: modelID,
-		ModelSnapshot: "[公益]provider/model", ReservedMilli: reserved, AttemptLimit: attemptLimit,
+		ModelSnapshot: "[公益]provider/model", ReservedMilli: reserved, OutputTokenFloor: outputFloor, AttemptLimit: attemptLimit,
 		AcceptedAt: charityTestNow,
 	}); err != nil {
 		t.Fatalf("AcceptRequest: %v", err)
@@ -235,15 +243,19 @@ type charityTestClaim struct {
 	reservation claim.CharityReservation
 }
 
-func (environment *charityTestEnv) claim(t *testing.T, requestID string, attemptSeq int, dispatched bool) charityTestClaim {
+func (environment *charityTestEnv) claim(t *testing.T, requestID string, attemptSeq int, dispatched bool, outputFloors ...int64) charityTestClaim {
 	t.Helper()
+	var outputFloor int64
+	if len(outputFloors) > 0 {
+		outputFloor = outputFloors[0]
+	}
 	claimID := mustOpaqueID(t, "clm_")
 	tx := beginTestTx(t, environment.store.DB())
 	reservation, err := environment.service.Claim(context.Background(), tx, claim.CharityClaimInput{
 		RequestID: requestID, ClaimID: claimID, ActorUserID: environment.callerID, AttemptSeq: attemptSeq,
 		DonationKeyID: environment.donationKey, EndpointID: environment.endpointID,
 		EndpointKeyID: environment.endpointKey, UpstreamModelID: "upstream-model",
-		ClaimedAt: charityTestNow + int64(attemptSeq),
+		ClaimedAt: charityTestNow + int64(attemptSeq), OutputTokenFloor: outputFloor,
 	})
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -417,6 +429,29 @@ func TestPerTokenActualMayExceedReserveAndUnknownIsConservative(t *testing.T) {
 	charge, err = environment.service.CalculateRequestCharge(context.Background(), unknownRequest, claim.AccountingCommit)
 	if err != nil || charge != 4 {
 		t.Fatalf("unknown conservative discounted charge = %d, %v; want 4", charge, err)
+	}
+}
+
+func TestForcedOutputBudgetUsesExistingReservationAndClaim(t *testing.T) {
+	environment := newCharityTestEnv(t)
+	if _, err := environment.store.DB().Exec(`UPDATE charity_models SET output_user_price=2000000 WHERE id=?`, environment.tokenModel); err != nil {
+		t.Fatal(err)
+	}
+	requestID := environment.acceptWithOutputFloor(t, environment.tokenModel, 200, 1, 100)
+	var tokenReserve, userReserved int64
+	if err := environment.store.DB().QueryRow(`SELECT token_reserve_milli,user_reserved_milli FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(&tokenReserve, &userReserved); err != nil {
+		t.Fatal(err)
+	}
+	if tokenReserve != 200 || userReserved != 200 {
+		t.Fatalf("accepted reservation = %d/%d, want 200/200", tokenReserve, userReserved)
+	}
+	claimed := environment.claim(t, requestID, 1, false, 100)
+	if claimed.reservation.ReservedPriceMilli != 200 || claimed.reservation.ReservedTokens != 100 {
+		t.Fatalf("claim reservation = %+v", claimed.reservation)
+	}
+	var rows int
+	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM donation_usage_reservations WHERE claim_id=? AND price_reserved_milli=200 AND tokens_reserved=100`, claimed.id).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("single existing reservation row = %d, %v", rows, err)
 	}
 }
 
