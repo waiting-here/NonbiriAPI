@@ -5,10 +5,14 @@ package dbfixture
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -31,7 +35,77 @@ func (cache *imageCache) load() ([]byte, error) {
 	return cache.image, cache.err
 }
 
-var generationTwoTemplate = imageCache{build: buildGenerationTwoTemplate}
+const (
+	RaceTemplatePathEnv = "NONBIRI_RACE_TEMPLATE_PATH"
+	RaceTemplateSHAEnv  = "NONBIRI_RACE_TEMPLATE_SHA256"
+	RaceTemplateIDEnv   = "NONBIRI_RACE_TEMPLATE_ID"
+)
+
+var generationTwoTemplate = imageCache{build: loadOrBuildGenerationTwoTemplate}
+
+// BuildGenerationTwoTemplate builds a fresh image for the race-instrumented
+// per-runner fixture helper. It never reads an inherited shared template.
+func BuildGenerationTwoTemplate() ([]byte, error) {
+	return buildGenerationTwoTemplate()
+}
+
+func loadOrBuildGenerationTwoTemplate() ([]byte, error) {
+	path, hasPath := os.LookupEnv(RaceTemplatePathEnv)
+	wantSHA, hasSHA := os.LookupEnv(RaceTemplateSHAEnv)
+	identity, hasID := os.LookupEnv(RaceTemplateIDEnv)
+	if !hasPath && !hasSHA && !hasID {
+		return buildGenerationTwoTemplate()
+	}
+	if !hasPath || !hasSHA || !hasID {
+		return nil, errors.New("race template environment is incomplete")
+	}
+	return loadRaceTemplate(path, wantSHA, identity)
+}
+
+func loadRaceTemplate(path, wantSHA, identity string) ([]byte, error) {
+	if !validDigest(wantSHA) || !validDigest(identity) {
+		return nil, errors.New("race template digest or identity is invalid")
+	}
+	if !filepath.IsAbs(path) || filepath.Base(path) != identity+".sqlite" {
+		return nil, errors.New("race template path does not match its run identity")
+	}
+	dir := filepath.Dir(path)
+	parent, err := os.Lstat(dir)
+	if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 ||
+		(runtime.GOOS != "windows" && parent.Mode().Perm() != 0o700) {
+		return nil, fmt.Errorf("race template parent is not private: %v", err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 ||
+		(runtime.GOOS != "windows" && info.Mode().Perm() != 0o400) {
+		return nil, fmt.Errorf("race template is not a private regular file: %v", err)
+	}
+	for _, suffix := range []string{"-journal", "-wal", "-shm"} {
+		if _, err := os.Lstat(path + suffix); !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("race template sidecar %s: %v", suffix, err)
+		}
+	}
+	image, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read race template: %w", err)
+	}
+	if len(image) < 100 {
+		return nil, errors.New("race template is too short")
+	}
+	gotSHA := sha256.Sum256(image)
+	if hex.EncodeToString(gotSHA[:]) != wantSHA {
+		return nil, errors.New("race template SHA-256 mismatch")
+	}
+	return image, nil
+}
+
+func validDigest(value string) bool {
+	if len(value) != sha256.Size*2 || strings.ToLower(value) != value {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
 
 // Materialize writes a private, isolated copy of the process-local Generation
 // 2 template to path. The target must not already exist. Callers still open the
@@ -131,8 +205,20 @@ func buildGenerationTwoTemplate() (image []byte, resultErr error) {
 	if secretCount != 0 {
 		return fail(fmt.Errorf("Generation 2 template contains %d credential rows", secretCount))
 	}
+	var userCount int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount); err != nil {
+		return fail(fmt.Errorf("inspect Generation 2 template users: %w", err))
+	}
+	if userCount != 0 {
+		return fail(fmt.Errorf("Generation 2 template contains %d user rows", userCount))
+	}
 	if err := errors.Join(store.Close(), vault.Close()); err != nil {
 		return nil, fmt.Errorf("close Generation 2 template: %w", err)
+	}
+	for _, suffix := range []string{"-journal", "-wal", "-shm"} {
+		if _, err := os.Lstat(path + suffix); !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("Generation 2 template sidecar %s: %v", suffix, err)
+		}
 	}
 
 	info, err := os.Lstat(path)

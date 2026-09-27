@@ -2,10 +2,15 @@ package dbfixture
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -177,5 +182,176 @@ func TestMaterializeConcurrentCopiesAreDistinct(t *testing.T) {
 			info os.FileInfo
 			path string
 		}{info: info, path: path})
+	}
+}
+
+func sharedTemplateForTest(t *testing.T) (string, string, string) {
+	t.Helper()
+	image, err := generationTwoTemplate.load()
+	if err != nil {
+		t.Fatalf("build template: %v", err)
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("secure template parent: %v", err)
+	}
+	identity := strings.Repeat("a", sha256.Size*2)
+	path := filepath.Join(dir, identity+".sqlite")
+	if err := os.WriteFile(path, image, 0o600); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatalf("make template read-only: %v", err)
+	}
+	digest := sha256.Sum256(image)
+	return path, hex.EncodeToString(digest[:]), identity
+}
+
+func TestRaceTemplateLoaderRejectsCorruptionAndDifferentRuns(t *testing.T) {
+	path, digest, identity := sharedTemplateForTest(t)
+	image, err := loadRaceTemplate(path, digest, identity)
+	if err != nil || len(image) < 100 {
+		t.Fatalf("load intact template: bytes=%d err=%v", len(image), err)
+	}
+	if _, err := loadRaceTemplate(path, strings.Repeat("b", sha256.Size*2), identity); err == nil {
+		t.Fatal("accepted wrong SHA-256")
+	}
+	if _, err := loadRaceTemplate(path, digest, strings.Repeat("b", sha256.Size*2)); err == nil {
+		t.Fatal("accepted another run identity")
+	}
+	if err := os.WriteFile(path+"-wal", []byte("unexpected sidecar"), 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	if _, err := loadRaceTemplate(path, digest, identity); err == nil {
+		t.Fatal("accepted template with sidecar")
+	}
+	if err := os.Remove(path + "-wal"); err != nil {
+		t.Fatalf("remove sidecar: %v", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatalf("unprotect template for corruption test: %v", err)
+	}
+	image[0] ^= 0xff
+	if err := os.WriteFile(path, image, 0o600); err != nil {
+		t.Fatalf("corrupt template: %v", err)
+	}
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatalf("reprotect corrupt template: %v", err)
+	}
+	if _, err := loadRaceTemplate(path, digest, identity); err == nil {
+		t.Fatal("accepted corrupt template")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove corrupt template: %v", err)
+	}
+	if _, err := loadRaceTemplate(path, digest, identity); err == nil {
+		t.Fatal("silently rebuilt missing template")
+	}
+}
+
+func TestRaceTemplateLoaderRequiresPrivateBoundary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX mode checks are verified on Linux")
+	}
+	path, digest, identity := sharedTemplateForTest(t)
+	if err := os.Chmod(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("make parent public: %v", err)
+	}
+	if _, err := loadRaceTemplate(path, digest, identity); err == nil {
+		t.Fatal("accepted public template parent")
+	}
+}
+
+func TestRaceTemplateEnvironmentFailureDoesNotFallback(t *testing.T) {
+	path, digest, identity := sharedTemplateForTest(t)
+	t.Setenv(RaceTemplatePathEnv, path)
+	t.Setenv(RaceTemplateSHAEnv, digest)
+	t.Setenv(RaceTemplateIDEnv, identity)
+	if _, err := loadOrBuildGenerationTwoTemplate(); err != nil {
+		t.Fatalf("load valid environment template: %v", err)
+	}
+	t.Setenv(RaceTemplateSHAEnv, strings.Repeat("b", sha256.Size*2))
+	if _, err := loadOrBuildGenerationTwoTemplate(); err == nil {
+		t.Fatal("bad environment checksum silently fell back to bootstrap")
+	}
+	t.Setenv(RaceTemplateSHAEnv, "")
+	if _, err := loadOrBuildGenerationTwoTemplate(); err == nil {
+		t.Fatal("partial environment silently fell back to bootstrap")
+	}
+}
+
+func TestRaceTemplateChildProcess(t *testing.T) {
+	if os.Getenv("NONBIRI_RACE_TEMPLATE_TEST_CHILD") != "1" {
+		return
+	}
+	path := os.Getenv("NONBIRI_RACE_TEMPLATE_TEST_COPY")
+	if path == "" {
+		t.Fatal("missing child copy path")
+	}
+	if err := materialize(path); err != nil {
+		t.Fatalf("child materialize: %v", err)
+	}
+	store, err := db.Open(path, fixtureVault(t, 0x33))
+	if err != nil {
+		t.Fatalf("child current-store validation: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("child close: %v", err)
+	}
+}
+
+func TestRaceTemplateCopiesAcrossProcessesRemainIndependent(t *testing.T) {
+	path, digest, identity := sharedTemplateForTest(t)
+	copyDir := t.TempDir()
+	if err := os.Chmod(copyDir, 0o700); err != nil {
+		t.Fatalf("secure copy parent: %v", err)
+	}
+	paths := []string{filepath.Join(copyDir, "one.sqlite"), filepath.Join(copyDir, "two.sqlite")}
+	commands := make([]*exec.Cmd, len(paths))
+	outputs := make([]*bytes.Buffer, len(paths))
+	for index, copyPath := range paths {
+		command := exec.Command(os.Args[0], "-test.run=^TestRaceTemplateChildProcess$")
+		outputs[index] = &bytes.Buffer{}
+		command.Stdout = outputs[index]
+		command.Stderr = outputs[index]
+		command.Env = append(os.Environ(),
+			RaceTemplatePathEnv+"="+path,
+			RaceTemplateSHAEnv+"="+digest,
+			RaceTemplateIDEnv+"="+identity,
+			"NONBIRI_RACE_TEMPLATE_TEST_CHILD=1",
+			"NONBIRI_RACE_TEMPLATE_TEST_COPY="+copyPath)
+		if err := command.Start(); err != nil {
+			for _, started := range commands[:index] {
+				_ = started.Process.Kill()
+				_ = started.Wait()
+			}
+			t.Fatalf("start child %d: %v", index, err)
+		}
+		commands[index] = command
+	}
+	var waitErr error
+	for index, command := range commands {
+		if err := command.Wait(); err != nil {
+			if waitErr == nil {
+				waitErr = fmt.Errorf("child %d: %w: %s", index, err, outputs[index].String())
+				for _, remaining := range commands[index+1:] {
+					_ = remaining.Process.Kill()
+				}
+			}
+		}
+	}
+	if waitErr != nil {
+		t.Fatal(waitErr)
+	}
+	first, err := os.Stat(paths[0])
+	if err != nil {
+		t.Fatalf("stat first copy: %v", err)
+	}
+	second, err := os.Stat(paths[1])
+	if err != nil {
+		t.Fatalf("stat second copy: %v", err)
+	}
+	if os.SameFile(first, second) {
+		t.Fatal("cross-process copies share file identity")
 	}
 }
