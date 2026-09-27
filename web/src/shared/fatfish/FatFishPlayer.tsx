@@ -7,6 +7,7 @@ import { fishFootprint } from './engine/trig_helpers';
 import { formatScoreUnits, type FatFishChallenge } from './api';
 import { loadFatFishArt, toolIcon, type FatFishArt } from './art';
 import type { FatFishSessionController } from './session';
+import { useFatFishMusic } from './useFatFishMusic';
 import './player.css';
 
 const unit = 64;
@@ -321,6 +322,8 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
     };
   }, [controller]);
   const level = snapshot.challenge?.level;
+  const { enabled: musicEnabled, unavailable: musicUnavailable, toggle: toggleMusic,
+    host: musicHost } = useFatFishMusic(controller, Boolean(level) && snapshot.phase !== 'read_only');
   const normalizedLevel = useMemo(() => level ? normalizeLevel(level) : null, [level]);
   const submit = async () => {
     setBusy(true); setActionError(null);
@@ -446,6 +449,18 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
       <img src="/assets/fatfish/svg/rice-goal.svg" alt="" aria-hidden="true" />
       <div><strong>{t('大肥鱼，开饭啦！', 'Fat Fish, dinner is ready!')}</strong>
         <span>{t('带小鱼去吃饭', 'Guide the fish to rice')}</span></div>
+    </div>
+    <div className="fatfish-player__music">
+      <button type="button" data-fatfish-music-toggle="" aria-pressed={musicEnabled}
+        disabled={!level || snapshot.phase === 'read_only'}
+        onClick={toggleMusic}>{musicEnabled ? t('关闭背景音乐', 'Mute music') : t('开启背景音乐', 'Play music')}</button>
+      <span className="fatfish-player__music-credit">
+        Monkeys Spinning Monkeys · Kevin MacLeod (<a href="https://incompetech.com/">incompetech.com</a>) · <a
+          href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>
+      </span>
+      <span ref={musicHost} hidden aria-hidden="true" />
+      {musicUnavailable ? <p role="alert">{t('音乐无法播放，请重试开启；游戏会继续运行。',
+        'Music could not play. Try turning it on again; the game will continue.')}</p> : null}
     </div>
     <div className="fatfish-player__status" role="status" data-fish-tick={snapshot.state?.tick} data-fish-fed={rescued}>
       {snapshot.phase === 'read_only' ? <span className="fatfish-player__notice">{t('本局正在另一标签页游玩；此页只能查看。', 'This challenge is active in another tab. This page is read-only.')}</span> : null}

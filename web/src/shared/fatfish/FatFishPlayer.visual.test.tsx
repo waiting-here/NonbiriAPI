@@ -52,6 +52,41 @@ function bounds(element: Element, x: number, y: number, width: number, height: n
 afterEach(() => vi.restoreAllMocks());
 
 describe('Fat Fish illustrated player controls', () => {
+  it('shows the same credited music control in user play and admin playtest', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const active = controller();
+    const user = await renderWithProviders(<FatFishPlayer controller={active.value} />,
+      { station: 'user', role: 'user' });
+    expect(screen.getByRole('button', { name: 'Play music' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/Monkeys Spinning Monkeys/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'CC BY 4.0' })).toHaveAttribute('href',
+      'https://creativecommons.org/licenses/by/4.0/');
+    user.unmount();
+
+    await renderWithProviders(<FatFishPlayer controller={active.value} mode="playtest" />,
+      { station: 'admin', role: 'admin' });
+    expect(screen.getByRole('button', { name: 'Play music' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('exposes the active loop for browser playback inspection and removes it on exit', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    const active = controller();
+    const view = await renderWithProviders(<FatFishPlayer controller={active.value} />,
+      { station: 'user', role: 'user' });
+    expect(document.querySelector('[data-fatfish-music]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Play music' }));
+    const audio = document.querySelector<HTMLAudioElement>('[data-fatfish-music]');
+    expect(audio).toBeInstanceOf(HTMLAudioElement);
+    expect(audio?.getAttribute('src')).toBe('/assets/fatfish/music/monkeys-spinning-monkeys.mp3');
+    expect(audio?.loop).toBe(true);
+    expect(play).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(document.querySelector('[data-fatfish-music]')).toBeNull();
+  });
+
   it('keeps a preplaced tool on the board and shows unplaced pieces on an external bench', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const active = controller();
