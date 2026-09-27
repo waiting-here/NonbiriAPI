@@ -2,6 +2,7 @@ import { useRef, useState, type PointerEvent } from 'react';
 import { containsPolygon, polygonsInteriorOverlap, translatePolygon } from '@shared/fatfish/engine/geometry';
 import { fishFootprint } from '@shared/fatfish/engine/trig_helpers';
 import { type Level, type Point, type Polygon } from '@shared/fatfish/engine/types';
+import { FatFishCanvas } from '@shared/fatfish/FatFishPlayer';
 import { type ObjectKind, type Selection, GRID, hitTest, moveSelection, px, snap, unit } from './draft';
 
 const colors: Record<ObjectKind, string> = {
@@ -63,29 +64,32 @@ export function LevelCanvas({ level, selected, grid, onSelect, onCommit, onPlace
     drag.current = null;
   };
   return (
+    <div className="fatfish-level-stage">
+    <FatFishCanvas level={shown} decorative />
     <svg ref={svg} role="img" aria-label="Fat Fish level map" className="fatfish-level-map"
       viewBox="0 0 480 560" onPointerDown={down} onPointerMove={move}
       onPointerUp={end} onPointerCancel={() => { drag.current = null; setPreview(null); }}>
-      <defs><pattern id="fatfish-grid" width={GRID / 64} height={GRID / 64} patternUnits="userSpaceOnUse"><path d={`M ${GRID / 64} 0 L 0 0 0 ${GRID / 64}`} fill="none" stroke="#d7e2e7" strokeWidth="0.5" /></pattern></defs>
-      <rect width="480" height="560" fill="#f6fafb" />
+      <defs><pattern id="fatfish-grid" width={GRID / 64} height={GRID / 64} patternUnits="userSpaceOnUse"><path d={`M ${GRID / 64} 0 L 0 0 0 ${GRID / 64}`} fill="none" stroke="#476b7938" strokeWidth="0.4" /></pattern></defs>
       {grid ? <rect width="480" height="560" fill="url(#fatfish-grid)" /> : null}
       {shapeKinds.flatMap((kind) => shown[kind].map((item) => {
         const polygon = kind === 'tools'
           ? (() => { const tool = shown.tools.find((candidate) => candidate.id === item.id)!; return translatePolygon(tool.polygon, tool.x, tool.y); })()
           : item.polygon;
         return <path key={`${kind}-${item.id}`} d={polygonPath(polygon)} fillRule="evenodd"
-          fill={colors[kind]} fillOpacity={kind === 'tools' && !shown.tools.some((tool) => tool.id === item.id && tool.placed) ? 0.15 : selected?.kind === kind && selected.id === item.id ? 0.66 : 0.38}
-          stroke={colors[kind]} strokeWidth={selected?.kind === kind && selected.id === item.id ? 3 : 1.4} />;
+          fill={colors[kind]} fillOpacity={kind === 'tools' && !shown.tools.some((tool) => tool.id === item.id && tool.placed) ? 0.12 : selected?.kind === kind && selected.id === item.id ? 0.3 : 0.08}
+          stroke={colors[kind]} strokeWidth={selected?.kind === kind && selected.id === item.id ? 3 : 1.5} />;
       }))}
       {shown.fish.map((fish) => {
         const collision = fishCollision(shown, fish);
         return <g key={fish.id} transform={`translate(${px(fish.x)} ${px(fish.y)})`}>
-          <path d={fishPath} fill={collision ? '#d2223b' : colors.fish}
-            stroke={selected?.kind === 'fish' && selected.id === fish.id ? '#122d44' : '#fff'} strokeWidth="2" />
+          <path d={fishPath} fill={collision ? '#d2223b88' : '#227bb216'}
+            stroke={selected?.kind === 'fish' && selected.id === fish.id ? '#122d44' : collision ? '#d2223b' : '#24577788'}
+            strokeWidth={selected?.kind === 'fish' && selected.id === fish.id ? 2.5 : 1} />
           <path d="M 0 0 L 14 0" transform={`rotate(${fish.heading * 360 / 4096})`}
             stroke="white" strokeWidth="2" />
         </g>;
       })}
     </svg>
+    </div>
   );
 }
