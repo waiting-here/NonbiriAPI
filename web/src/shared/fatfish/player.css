@@ -1,7 +1,42 @@
-.fatfish-player { display: grid; gap: 1rem; max-width: 46rem; }
-.fatfish-canvas { display: block; width: min(100%, 480px); height: auto; aspect-ratio: 6 / 7; border: 2px solid #5d8991; border-radius: .75rem; background: #d7eff1; }
-.fatfish-player__status { min-height: 1.5rem; }
+.fatfish-player { display: grid; gap: .75rem; max-width: 46rem; min-width: 0; }
+.fatfish-canvas {
+  display: block; width: min(100%, 480px); height: auto; aspect-ratio: 6 / 7;
+  border: 2px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-md); background: #d7eff1;
+}
+.fatfish-canvas:focus-visible { outline: 2px solid var(--nb-color-focus); outline-offset: 3px; box-shadow: var(--nb-focus-ring); }
+.fatfish-player__status {
+  min-height: 2.75rem; padding: .65rem .8rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface-muted); color: var(--nb-color-text);
+  line-height: 1.4; overflow-wrap: anywhere;
+}
 .fatfish-player__controls { display: flex; flex-wrap: wrap; gap: .5rem; }
-.fatfish-player__controls button { min-height: 2.75rem; padding: .45rem .7rem; border: 1px solid #577e87; border-radius: .5rem; background: #eef8f7; color: #1c3943; cursor: pointer; }
-.fatfish-player__controls button.is-selected { outline: 3px solid #2f8295; }
-.fatfish-player__controls button:disabled { opacity: .55; cursor: not-allowed; }
+.fatfish-player .fatfish-player__controls button {
+  min-height: 2.75rem; padding: .55rem .8rem;
+  border: 1px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface); color: var(--nb-color-text);
+  font: inherit; font-weight: 600; line-height: 1.25;
+  cursor: pointer; transition: background-color var(--nb-transition), border-color var(--nb-transition);
+}
+.fatfish-player .fatfish-player__controls button:hover:not(:disabled) {
+  background: var(--nb-color-surface-emphasis); border-color: var(--nb-color-accent);
+}
+.fatfish-player .fatfish-player__controls button.is-selected {
+  border-color: var(--nb-color-accent);
+  background: var(--nb-color-accent-soft); color: var(--nb-color-text);
+  box-shadow: inset 0 0 0 1px var(--nb-color-accent);
+}
+.fatfish-player .fatfish-player__controls button:focus-visible {
+  outline: 2px solid var(--nb-color-focus); outline-offset: 2px; box-shadow: var(--nb-focus-ring);
+}
+.fatfish-player .fatfish-player__controls button:disabled {
+  border-color: var(--nb-color-border); background: var(--nb-color-surface-muted);
+  color: var(--nb-color-text-muted); cursor: not-allowed;
+}
+.fatfish-player p { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .fatfish-player .fatfish-player__controls button { flex: 1 1 auto; }
+}
