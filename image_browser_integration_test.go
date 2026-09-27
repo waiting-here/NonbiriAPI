@@ -311,7 +311,8 @@ func (f *imageBrowserFixture) initialize() {
 	f.call("PUT", prefix+"/models/"+model["id"].(string), map[string]any{
 		"expected_revision": model["revision"], "display_name": "Browser canvas",
 		"description": "<img src=x onerror=alert(1)> is displayed as text.",
-		"enabled":     true, "price": map[string]string{"paper": "2", "brush": "1"},
+		"enabled":     true, "capability_confirmed": true, "catalog_type": "image",
+		"price": map[string]string{"paper": "2", "brush": "1"},
 		"parameters": []any{
 			map[string]any{"key": "prompt", "supported": true, "required": true, "type": "string",
 				"min_length": 1, "max_length": 65536, "length_unit": "utf8_bytes"},

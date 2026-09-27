@@ -86,7 +86,7 @@ export function SizeSelector({
                   onChange={(event) => {
                     const next =
                       axis === 'width' ? [event.target.value, height] : [width, event.target.value];
-                    onChange({ size: next.join('x') });
+                    onChange({ aspect_ratio: '', resolution: '', size: next.join('x') });
                   }}
                 />
                 <small>
