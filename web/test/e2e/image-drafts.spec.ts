@@ -140,6 +140,7 @@ test('administrator preview and draft guard save both drafts without generation'
       json: {
         key: 'picture-book',
         name: 'Picture book',
+        cover_key: 'picture-book',
         visible: false,
         starts_at: null,
         ends_at: null,

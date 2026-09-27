@@ -46,7 +46,7 @@ for (const [lang, width, theme] of [
       page.getByRole('heading', { name: lang === 'zh' ? '二十一点' : 'Blackjack', exact: true }),
     ).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    const grid = page.locator('.bj-seats--seating > .bj-seat');
+    const grid = page.locator('.bj-seats--nine > .bj-seat');
     await expect(grid).toHaveCount(9);
     const positions = await grid.evaluateAll((nodes) =>
       nodes.map((node) => {
@@ -54,8 +54,9 @@ for (const [lang, width, theme] of [
         return { x: Math.round(box.x), y: Math.round(box.y) };
       }),
     );
-    expect(new Set(positions.map((p) => p.x)).size).toBe(3);
-    expect(new Set(positions.map((p) => p.y)).size).toBe(3);
+    const columns = width <= 700 ? 2 : 3;
+    expect(new Set(positions.map((p) => p.x)).size).toBe(columns);
+    expect(new Set(positions.map((p) => p.y)).size).toBe(Math.ceil(9 / columns));
     const quick = page.locator('.bj-quick-stakes');
     await expect(quick.getByRole('button')).toHaveCount(8);
     for (const index of [7, 0, 4, 2]) await quick.getByRole('button').nth(index).click();
