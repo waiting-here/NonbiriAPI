@@ -186,7 +186,13 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			}
 			return s.GetAdminModel(r.Context(), u, r.PathValue("id"))
 		}},
-		{"/models/{id}/capabilities", func(r *http.Request, u int64) (any, error) {
+		// A wildcard action keeps the existing /models/refresh/{id} route
+		// strictly more specific. Two crossing literal/wildcard patterns
+		// otherwise conflict in the real HTTP multiplexer.
+		{"/models/{id}/{action}", func(r *http.Request, u int64) (any, error) {
+			if r.PathValue("action") != "capabilities" {
+				return nil, ErrNotFound
+			}
 			if r.URL.RawQuery != "" {
 				return nil, ErrInvalid
 			}
