@@ -45,7 +45,9 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
   const [saved, setSaved] = useState(() => JSON.stringify({ title: initial?.title ?? '', description: initial?.description ?? '', visible: initial?.visible ?? false,
     paused: initial?.paused ?? false, pastPublic: initial?.past_public ?? false, starts: initial?.starts_at ?? null, ends: initial?.ends_at ?? null }));
   const starts = timeDraftValue(start), ends = timeDraftValue(end);
-  const current = JSON.stringify({ title, description, visible, paused, pastPublic, starts, ends });
+  const current = JSON.stringify({ title, description, visible, paused, pastPublic,
+    starts: start.text === start.originalText && !start.invalidInput ? start.originalEpoch : starts ?? start.text,
+    ends: end.text === end.originalText && !end.invalidInput ? end.originalEpoch : ends ?? end.text });
   const dirty = saved !== current;
   const textValid = utf8Bytes(title) <= 128 && utf8Bytes(description) <= 8192;
   useDraftGuard(dirty || nodeDirty);
@@ -53,7 +55,8 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
   const save = useRetainedOperation((request: { id: string | null; input: PeriodInput }, key) => savePeriod(request.id, request.input, key),
     () => client.invalidateQueries({ queryKey: ['fatfish', 'periods'] }), ['admin', 'fatfish']);
   const transition = useRetainedOperation((request: { id: string; action: 'publish' | 'close' | 'reopen'; revision: string }, key) => changePeriodState(request.id, request.action, request.revision, key),
-    () => client.invalidateQueries({ queryKey: ['fatfish', 'period', initial?.id] }), ['admin', 'fatfish']);
+    () => Promise.all([client.invalidateQueries({ queryKey: ['fatfish', 'period', initial?.id] }),
+      client.invalidateQueries({ queryKey: ['fatfish', 'periods'] })]), ['admin', 'fatfish']);
   const uncertain = save.isError && responseOutcomeUnknown(save.error);
   const editingLocked = save.isPending || uncertain;
   const period = initial ? { ...initial, revision: revision ?? initial.revision, state } : null;
