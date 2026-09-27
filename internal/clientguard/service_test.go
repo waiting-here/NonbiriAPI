@@ -171,7 +171,7 @@ func TestFreshCharityMatchIsAtomicZeroCostAndIdempotent(t *testing.T) {
 		t.Fatal("upstream or fee effect on first hit")
 	}
 	var reason string
-	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || !strings.Contains(reason, `"source":"client_rule"`) {
+	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || reason != "识别到违规第三方客户端特征：permanent、short" {
 		t.Fatalf("reason %q %v", reason, err)
 	}
 	replay, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
@@ -235,7 +235,7 @@ func TestPriorManualBanAndFailedGameHookPreserveState(t *testing.T) {
 	if err != nil || decision.Until == nil || *decision.Until != testNow+3600 {
 		t.Fatalf("manual maximum %+v %v", decision, err)
 	}
-	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || !strings.Contains(reason, "Manual review") || !strings.Contains(reason, "client_rule") {
+	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || reason != "识别到违规第三方客户端特征：finite\n既有封禁原因：Manual review" {
 		t.Fatalf("lost evidence %q %v", reason, err)
 	}
 }
@@ -312,7 +312,7 @@ func TestAccountRemovedBeforePenaltyTransactionCannotBeRebanned(t *testing.T) {
 func TestHundredRuleEvidenceFitsManagementReasonBudget(t *testing.T) {
 	f := newGuardFixture(t)
 	for i := 0; i < 100; i++ {
-		f.rule("match", "Client/", true, nil)
+		f.rule(fmt.Sprintf("%03d-%s", i, strings.Repeat("名称", 58)), "Client/", true, nil)
 	}
 	ctx := f.context("charity", "Client/1")
 	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
@@ -323,10 +323,41 @@ func TestHundredRuleEvidenceFitsManagementReasonBudget(t *testing.T) {
 	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil {
 		t.Fatal(err)
 	}
-	if len(reason) > 4096 || utf8.RuneCountInString(reason) > 1024 || !strings.Contains(reason, `"rules_truncated":true`) {
+	if len(reason) > 4096 || utf8.RuneCountInString(reason) > 1024 || !strings.HasPrefix(reason, "识别到违规第三方客户端特征：000-") || !strings.Contains(reason, "（另有") {
 		t.Fatalf("reason exceeds management budget: %d bytes, %d runes", len(reason), utf8.RuneCountInString(reason))
 	}
 	if f.scalar(`SELECT json_array_length(rules_json) FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx)) != 100 {
 		t.Fatal("full rule evidence missing from receipt")
+	}
+}
+
+func TestAutomaticBanReasonUsesFinalRuleNameAndKeepsReceipt(t *testing.T) {
+	f := newGuardFixture(t)
+	id := f.rule("Previous name", "Tavo/", true, nil)
+	f.beforeGate = func() {
+		f.exec(`UPDATE risk_client_rules SET name='Tavo',revision=revision+1 WHERE id=?`, id)
+		f.exec(`UPDATE client_rule_auto_bans SET revision=revision+1 WHERE rule_id=?`, id)
+	}
+	ctx := f.context("charity", "Tavo/secret-not-a-reason")
+	decision, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+	if err != nil || !decision.Banned {
+		t.Fatalf("client penalty %+v %v", decision, err)
+	}
+	var reason, refs string
+	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || reason != "识别到违规第三方客户端特征：Tavo" {
+		t.Fatalf("readable current reason %q %v", reason, err)
+	}
+	if err := f.store.DB().QueryRow(`SELECT rules_json FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx)).Scan(&refs); err != nil || refs != fmt.Sprintf(`[{"id":%q,"revision":2}]`, id) {
+		t.Fatalf("complete revision receipt %q %v", refs, err)
+	}
+	f.beforeGate = nil
+	f.exec(`UPDATE risk_client_rules SET name='Renamed later',revision=revision+1 WHERE id=?`, id)
+	f.exec(`UPDATE client_rule_auto_bans SET revision=revision+1 WHERE rule_id=?`, id)
+	replay, err := f.service.CheckCharityCall(ctx, f.user, "[公益]provider/model", testNow)
+	if err != nil || !replay.Replayed || f.gameCalls != 1 {
+		t.Fatalf("duplicate penalty %+v %v", replay, err)
+	}
+	if err := f.store.DB().QueryRow(`SELECT banned_reason FROM users WHERE id=?`, f.user).Scan(&reason); err != nil || reason != "识别到违规第三方客户端特征：Tavo" {
+		t.Fatalf("replay rewrote historical reason %q %v", reason, err)
 	}
 }
