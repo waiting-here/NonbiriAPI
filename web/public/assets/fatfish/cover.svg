@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="title description">
+  <title id="title">Blue fish and rice bowl</title>
+  <desc id="description">Blue fish cross a hardware-themed play field toward a steaming bowl of rice.</desc>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e3f2f5"/><stop offset="1" stop-color="#fffdf5"/></linearGradient>
+    <linearGradient id="floor" x2="0" y2="1"><stop stop-color="#b9dfe6"/><stop offset="1" stop-color="#74bdd0"/></linearGradient>
+    <linearGradient id="bowl" x2="0" y2="1"><stop stop-color="#fffef8"/><stop offset="1" stop-color="#b8d8e5"/></linearGradient>
+    <linearGradient id="blue" x2="0" y2="1"><stop stop-color="#69c8df"/><stop offset="1" stop-color="#2b78bd"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#b8d7e0" stroke-width="1.5"/></pattern>
+    <g id="fish">
+      <path d="M6 24C5 8 30 3 43 13C47 5 54 5 59 9L55 18L65 15C65 24 58 30 46 28C39 42 11 40 6 24Z" fill="url(#blue)" stroke="#284963" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="19" cy="21" r="2.7" fill="#fffdf5"/>
+      <path d="M25 6Q19 -3 16 1M25 6Q31 -4 34 1" fill="none" stroke="#284963" stroke-width="2" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <rect width="1200" height="675" fill="url(#sky)"/>
+  <path d="M0 176H1200V675H0Z" fill="url(#floor)"/>
+  <path d="M0 176H1200V675H0Z" fill="url(#grid)" opacity=".55"/>
+  <path d="M0 176H1200M0 596H1200" stroke="#284963" stroke-width="8"/>
+  <rect x="70" y="238" width="304" height="302" rx="38" fill="#e9f5f5" stroke="#284963" stroke-width="8"/>
+  <rect x="94" y="262" width="256" height="96" rx="20" fill="#163e62" stroke="#284963" stroke-width="7"/>
+  <path d="M126 301H310M126 325H260" stroke="#69c8df" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="321" cy="327" r="13" fill="#72c9ac"/>
+  <path d="M98 408H346M98 458H346" stroke="#7795a5" stroke-width="15" stroke-linecap="round"/>
+  <path d="M392 462C505 462 510 338 622 338S727 462 844 462" fill="none" stroke="#fffdf5" stroke-width="34" stroke-linecap="round" opacity=".85"/>
+  <path d="M392 462C505 462 510 338 622 338S727 462 844 462" fill="none" stroke="#2b78bd" stroke-width="5" stroke-dasharray="10 16" stroke-linecap="round"/>
+  <g transform="translate(412 421) scale(2.4)"><use href="#fish"/></g>
+  <g transform="translate(536 322) scale(1.9)"><use href="#fish"/></g>
+  <g transform="translate(683 373) scale(1.65)"><use href="#fish"/></g>
+  <ellipse cx="1028" cy="532" rx="149" ry="27" fill="#42627a" opacity=".18"/>
+  <path d="M864 404Q895 559 1028 553Q1161 559 1192 404Z" fill="url(#bowl)" stroke="#284963" stroke-width="9"/>
+  <ellipse cx="1028" cy="407" rx="164" ry="42" fill="#81aec4" stroke="#284963" stroke-width="9"/>
+  <path d="M888 405Q901 345 950 355Q975 306 1026 342Q1078 301 1117 353Q1162 348 1173 405Q1030 460 888 405Z" fill="#fffbed" stroke="#b7ccd1" stroke-width="5"/>
+  <path d="M915 416Q1030 462 1144 416" fill="none" stroke="#2b78bd" stroke-width="9" stroke-linecap="round"/>
+  <path d="M954 325Q940 294 961 265M1022 310Q1008 271 1030 244M1093 326Q1079 290 1101 267" fill="none" stroke="#7795a5" stroke-width="9" stroke-linecap="round" opacity=".65"/>
+  <g fill="#efbc66" stroke="#284963" stroke-width="3"><path d="M813 234v34m-17-17h34"/><path d="M756 195v23m-12-11h24"/></g>
+</svg>

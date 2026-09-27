@@ -76,6 +76,10 @@ func newDuelWireFixture(t *testing.T) *duelWireFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err := f.app.authRuntime.IdentityContinuity().BindUserTx(context.Background(), tx, f.users[seat]); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
 		for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
 			wallet, err := ledger.CreateUserAssetAccount(context.Background(), tx, f.users[seat], asset, f.now)
 			if err != nil {
@@ -549,7 +553,7 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 				}
 				exported := f.call(seat, "POST", "/api/account/export", nil, true)
 				var doc lifecycle.ExportDocument
-				if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &doc) != nil || doc.SchemaVersion != 10 {
+				if exported.Code != 200 || json.Unmarshal(exported.Body.Bytes(), &doc) != nil || doc.SchemaVersion != 11 {
 					t.Fatalf("personal export: %d %s", exported.Code, exported.Body.String())
 				}
 				v := doc.Bidding

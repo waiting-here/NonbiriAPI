@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1607,8 +1608,17 @@ func TestVisibleNodeHidesUnrevealedPrerequisiteIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, item := range periodDetail.Nodes {
-		if len(item.Condition) != 0 || item.ConditionHint != nil || len(item.Level) != 0 {
+		if len(item.Condition) != 0 || len(item.Level) != 0 {
 			t.Fatalf("period preview included detailed node payload: %+v", item)
+		}
+		if item.ID == hidden.ID && item.ConditionHint != nil {
+			t.Fatal("hidden node exposed its prerequisite configuration")
+		}
+		if item.ID == visible.ID && !reflect.DeepEqual(item.ConditionHint, detail.ConditionHint) {
+			t.Fatalf("period prerequisite projection differs from node detail: %+v", item.ConditionHint)
+		}
+		if item.ID == entry && (item.ConditionHint == nil || item.ConditionHint.Kind != "none") {
+			t.Fatal("visible entry node omitted its safe prerequisite projection")
 		}
 	}
 }

@@ -2,4 +2,5 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-exec bash "$root/scripts/check-duel-upgrade.sh"
+bash "$root/scripts/check-duel-upgrade.sh"
+exec bash "$root/scripts/check-interaction-upgrade.sh"

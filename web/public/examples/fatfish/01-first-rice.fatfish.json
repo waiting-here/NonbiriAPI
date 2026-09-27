@@ -1,0 +1,153 @@
+{
+  "format": "nonbiri-fatfish-level",
+  "format_version": 1,
+  "engine_version": 1,
+  "scoring_version": 1,
+  "duration_seconds": 90,
+  "speed_pixels_per_second": 80,
+  "thresholds": [
+    5,
+    7,
+    8
+  ],
+  "fish": [
+    {
+      "id": 1,
+      "x": 5120,
+      "y": 24320,
+      "heading": 0
+    },
+    {
+      "id": 2,
+      "x": 6720,
+      "y": 24320,
+      "heading": 0
+    },
+    {
+      "id": 3,
+      "x": 5120,
+      "y": 25600,
+      "heading": 0
+    },
+    {
+      "id": 4,
+      "x": 6720,
+      "y": 25600,
+      "heading": 0
+    },
+    {
+      "id": 5,
+      "x": 5120,
+      "y": 26880,
+      "heading": 0
+    },
+    {
+      "id": 6,
+      "x": 6720,
+      "y": 26880,
+      "heading": 0
+    },
+    {
+      "id": 7,
+      "x": 5120,
+      "y": 28160,
+      "heading": 0
+    },
+    {
+      "id": 8,
+      "x": 6720,
+      "y": 28160,
+      "heading": 0
+    }
+  ],
+  "tools": [
+    {
+      "id": 100,
+      "resource_key": "memory",
+      "polygon": {
+        "outer": [
+          {
+            "x": -320,
+            "y": -3520
+          },
+          {
+            "x": 320,
+            "y": -3520
+          },
+          {
+            "x": 320,
+            "y": 3520
+          },
+          {
+            "x": -320,
+            "y": 3520
+          }
+        ],
+        "holes": []
+      },
+      "placed": true,
+      "x": 10880,
+      "y": 26880
+    }
+  ],
+  "solids": [],
+  "hazards": [],
+  "bowls": [
+    {
+      "id": 400,
+      "polygon": {
+        "outer": [
+          {
+            "x": 15104,
+            "y": 9280
+          },
+          {
+            "x": 19200,
+            "y": 9280
+          },
+          {
+            "x": 19200,
+            "y": 12480
+          },
+          {
+            "x": 15104,
+            "y": 12480
+          }
+        ],
+        "holes": []
+      },
+      "required": 0,
+      "capacity": 8
+    }
+  ],
+  "switches": [],
+  "gates": [],
+  "directions": [
+    {
+      "id": 700,
+      "polygon": {
+        "outer": [
+          {
+            "x": 15680,
+            "y": 23360
+          },
+          {
+            "x": 18560,
+            "y": 23360
+          },
+          {
+            "x": 18560,
+            "y": 30080
+          },
+          {
+            "x": 15680,
+            "y": 30080
+          }
+        ],
+        "holes": []
+      },
+      "mode": "entry",
+      "heading": 3072
+    }
+  ]
+}

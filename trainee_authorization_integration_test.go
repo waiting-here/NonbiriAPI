@@ -108,6 +108,7 @@ VALUES('synthetic','managed','[公益]synthetic/managed',1,'per_request',1,?,?)`
 VALUES('synthetic','outside-scope','[公益]synthetic/outside-scope',1,'per_request',0,?,?)`, f.now, f.now)
 	for _, id := range []int64{model, other} {
 		exec(`INSERT INTO charity_model_access(model_id,allowed_level_mask) VALUES(?,63)`, id)
+		exec(`INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, id)
 	}
 	exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
 VALUES(?,?,?,'synthetic/maintained',0,?,?)`, other, customKey.key, customKey.physical, f.now, f.now)

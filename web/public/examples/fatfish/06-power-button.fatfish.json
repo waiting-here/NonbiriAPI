@@ -1,0 +1,153 @@
+{
+  "format": "nonbiri-fatfish-level",
+  "format_version": 1,
+  "engine_version": 1,
+  "scoring_version": 1,
+  "duration_seconds": 120,
+  "speed_pixels_per_second": 76,
+  "thresholds": [
+    6,
+    7,
+    8
+  ],
+  "fish": [
+    {
+      "id": 1,
+      "x": 5120,
+      "y": 24320,
+      "heading": 0
+    },
+    {
+      "id": 2,
+      "x": 6720,
+      "y": 24320,
+      "heading": 0
+    },
+    {
+      "id": 3,
+      "x": 5120,
+      "y": 25600,
+      "heading": 0
+    },
+    {
+      "id": 4,
+      "x": 6720,
+      "y": 25600,
+      "heading": 0
+    },
+    {
+      "id": 5,
+      "x": 5120,
+      "y": 26880,
+      "heading": 0
+    },
+    {
+      "id": 6,
+      "x": 6720,
+      "y": 26880,
+      "heading": 0
+    },
+    {
+      "id": 7,
+      "x": 5120,
+      "y": 28160,
+      "heading": 0
+    },
+    {
+      "id": 8,
+      "x": 6720,
+      "y": 28160,
+      "heading": 0
+    }
+  ],
+  "tools": [],
+  "solids": [],
+  "hazards": [],
+  "bowls": [
+    {
+      "id": 400,
+      "polygon": {
+        "outer": [
+          {
+            "x": 24000,
+            "y": 23360
+          },
+          {
+            "x": 27520,
+            "y": 23360
+          },
+          {
+            "x": 27520,
+            "y": 30400
+          },
+          {
+            "x": 24000,
+            "y": 30400
+          }
+        ],
+        "holes": []
+      },
+      "required": 0,
+      "capacity": 8
+    }
+  ],
+  "switches": [
+    {
+      "id": 500,
+      "polygon": {
+        "outer": [
+          {
+            "x": 9600,
+            "y": 23360
+          },
+          {
+            "x": 12160,
+            "y": 23360
+          },
+          {
+            "x": 12160,
+            "y": 29760
+          },
+          {
+            "x": 9600,
+            "y": 29760
+          }
+        ],
+        "holes": []
+      },
+      "mode": "latch"
+    }
+  ],
+  "gates": [
+    {
+      "id": 600,
+      "polygon": {
+        "outer": [
+          {
+            "x": 16960,
+            "y": 23360
+          },
+          {
+            "x": 17600,
+            "y": 23360
+          },
+          {
+            "x": 17600,
+            "y": 29760
+          },
+          {
+            "x": 16960,
+            "y": 29760
+          }
+        ],
+        "holes": []
+      },
+      "initially_open": false,
+      "mode": "any",
+      "switch_ids": [
+        500
+      ]
+    }
+  ],
+  "directions": []
+}

@@ -106,6 +106,10 @@ i18n.json
 !web/src/shared/assets/game-fishing/
 !web/src/shared/assets/game-fishing/catches/
 !web/src/shared/assets/game-fishing/catches/*.webp
+!web/public/assets/fatfish/cover.svg
+!web/public/assets/fatfish/svg/*.svg
+!web/public/assets/fatfish/character/walk.png
+!web/public/assets/fatfish/character/expressions.png
 
 # ===== Go =====
 
