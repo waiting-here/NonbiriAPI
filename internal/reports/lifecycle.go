@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -77,14 +76,8 @@ func (repository *Repository) DetachUserForDeletion(
 WHERE owner_user_id=?`, decisionNow, userID); err != nil {
 		return fmt.Errorf("reports: detach target identity: %w", err)
 	}
-	rateHash, err := repository.keys.rateDigest("account", []byte(strconv.FormatInt(userID, 10)))
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM report_rate_buckets WHERE scope='account' AND scope_hash=?`, rateHash[:]); err != nil {
-		return fmt.Errorf("reports: clear account rate scope: %w", err)
-	}
-	return nil
+	_, err = repository.accountRateTx(ctx, tx, userID, decisionNow)
+	return err
 }
 
 func readUserPendingCapturesTx(ctx context.Context, tx *sql.Tx, userID int64) ([]pendingCapture, error) {

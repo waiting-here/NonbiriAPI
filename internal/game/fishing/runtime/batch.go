@@ -111,7 +111,7 @@ func (service *Service) startFishing(ctx context.Context, input StartInput, rule
 	if !service.available() {
 		return nil, nil, ErrServiceUnavailable
 	}
-	reservation, _, err := service.limiter.Reserve(input.UserID)
+	reservation, _, err := service.limiter.ReserveTx(ctx, tx, input.UserID)
 	if err != nil {
 		return nil, nil, mapLimiter(err)
 	}

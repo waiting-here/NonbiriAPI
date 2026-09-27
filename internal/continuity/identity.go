@@ -36,6 +36,7 @@ type Service struct {
 	mu       sync.RWMutex
 	secret   [sha256.Size]byte
 	closed   bool
+	windows  []WindowPreserver
 }
 
 func New(database *sql.DB, deriver SubkeyDeriver) (*Service, error) {

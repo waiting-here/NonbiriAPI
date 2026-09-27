@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
@@ -233,7 +234,7 @@ func (boundary *productionRetirementBoundary) BeginUserRetirement(
 		gateRetirement.Abort()
 		return nil, translateRetirementError(err)
 	}
-	gameCommit, gameAbort, err := boundary.games.BeginUserDeletion(userID)
+	gameCommit, gameAbort, err := boundary.games.BeginUserDeletionContext(ctx, userID)
 	if err != nil {
 		flowRetirement.Abort()
 		gateRetirement.Abort()
@@ -262,6 +263,46 @@ type productionRetirement struct {
 	gameCommit func() bool
 	gameAbort  func() bool
 	done       atomic.Bool
+}
+
+type restrictionRetirement struct {
+	gate *lifecyclegate.UserRetirement
+	flow *flowcontrol.UserRetirement
+	done atomic.Bool
+}
+
+func beginRestrictionRetirement(ctx context.Context, gate *lifecyclegate.Gate, flow *flowcontrol.Controller, userID int64) (*restrictionRetirement, error) {
+	if ctx == nil || gate == nil || flow == nil {
+		return nil, lifecycle.ErrInvalid
+	}
+	identityAndUser, err := gate.BeginUserRetirementExcludingContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	admission, err := flow.BeginUserRetirement(userID)
+	if err != nil {
+		identityAndUser.Abort()
+		return nil, err
+	}
+	return &restrictionRetirement{gate: identityAndUser, flow: admission}, nil
+}
+
+func (r *restrictionRetirement) Commit() bool {
+	if r == nil || !r.done.CompareAndSwap(false, true) {
+		return false
+	}
+	r.flow.Commit()
+	r.gate.Commit()
+	return true
+}
+
+func (r *restrictionRetirement) Abort() bool {
+	if r == nil || !r.done.CompareAndSwap(false, true) {
+		return false
+	}
+	r.flow.Abort()
+	r.gate.Abort()
+	return true
 }
 
 func (retirement *productionRetirement) Commit() bool {
@@ -318,6 +359,12 @@ func newLifecycleCoordinator(
 		return nil, lifecycle.ErrInvalid
 	}
 
+	if err := gameRuntimes.Limiter().AttachContinuity(continuity.StartWindows{Service: authRuntime.IdentityContinuity()}); err != nil {
+		return nil, err
+	}
+	if err := authRuntime.IdentityContinuity().AttachWindowPreservers(forwardRuntime.flow, gameRuntimes.Limiter(), forwardRuntime.abuse); err != nil {
+		return nil, err
+	}
 	accountResources, err := lifecycleadapters.NewAccountResources(
 		authRuntime, resourceRepository, issueService.Sources(), logRepository,
 	)

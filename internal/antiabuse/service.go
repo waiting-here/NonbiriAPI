@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
@@ -27,6 +28,7 @@ type RejectionRecorder interface {
 }
 type ServiceConfig struct {
 	Database            *sql.DB
+	Continuity          *continuity.Service
 	Rejections          RejectionRecorder
 	BeginUserRetirement func(context.Context, int64) (Retirement, error)
 	OnBan               func(int64)
@@ -197,6 +199,21 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 		return nil, nil
 	}
 	old, exists := windows[key]
+	imported, err := s.mergeContinuityWindow(ctx, tx, key, &old, now, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if imported > MaxWindowUsers*MaxEventsPerUser-eventCount {
+		return nil, charityrouting.ErrResourceLimit
+	}
+	eventCount += imported
+	exists = exists || len(old.events) != 0
+	if imported > 0 {
+		if _, present := windows[key]; !present && len(windows) >= MaxWindowUsers {
+			return nil, charityrouting.ErrResourceLimit
+		}
+		windows[key] = old
+	}
 	// Per-user capacity reaches every supported threshold; the separate global
 	// event ceiling keeps many busy accounts from multiplying that allocation.
 	if !exists && len(windows) >= MaxWindowUsers || len(old.events) >= MaxViolationThreshold || eventCount >= MaxWindowUsers*MaxEventsPerUser {
@@ -217,7 +234,10 @@ func (s *Service) record(parent context.Context, userID int64, charity bool, mod
 	}
 	window := old
 	window.events = append(append([]int64(nil), window.events...), now)
-	event := windowEvent{At: now, RequestID: requestID}
+	if windowDuration(key, cfg) > 253402300799-now {
+		return nil, charityrouting.ErrInvariant
+	}
+	event := windowEvent{At: now, Expires: now + windowDuration(key, cfg), RequestID: requestID}
 	if charity {
 		event.Chars = new(actual)
 	}

@@ -104,7 +104,7 @@ func newPublicForwardRuntime(
 	if audits != nil {
 		observer = audits.collector
 	}
-	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store),
+	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store), Continuity: identities,
 		Observer: observer,
 		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) error {
 			return applyPublicRPMDenial(ctx, userID, reason, abuse)
@@ -124,13 +124,10 @@ func newPublicForwardRuntime(
 	if len(onBan) > 0 {
 		invalidate = onBan[0]
 	}
-	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: claims, OnBan: invalidate,
+	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: claims, OnBan: invalidate, Continuity: identities,
 		CancelUserDuelsTx: cancelUserDuelsTx,
 		BeginUserRetirement: func(ctx context.Context, userID int64) (antiabuse.Retirement, error) {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			return flow.BeginUserRetirement(userID)
+			return beginRestrictionRetirement(ctx, lifecycle, flow, userID)
 		},
 	})
 	if err != nil {
