@@ -9,9 +9,10 @@ import (
 )
 
 type Rules struct {
-	engines   map[string]*engine.Engine
-	legacy    bool
-	supported map[string]*Rules
+	engines    map[string]*engine.Engine
+	legacy     bool
+	historical bool
+	supported  map[string]*Rules
 }
 
 var _ duel.Rules = (*Rules)(nil)
@@ -25,6 +26,11 @@ func NewRules() (*Rules, error) {
 		}
 		r.engines[mode] = e
 		r.supported[e.ContentHash()] = r
+		previous, err := engine.NewHistorical(mode)
+		if err != nil {
+			return nil, err
+		}
+		r.supported[previous.ContentHash()] = &Rules{engines: map[string]*engine.Engine{mode: previous}, historical: true}
 		old, err := engine.NewLegacy(mode)
 		if err != nil {
 			return nil, err
@@ -38,15 +44,17 @@ func (*Rules) ID() string { return "likes" }
 func (r *Rules) CompatibleCatalogs() ([]duel.Catalog, error) {
 	result := []duel.Catalog{}
 	for _, mode := range []string{"quick", "standard"} {
-		old, err := catalog.PublicLegacy(mode)
-		if err != nil {
-			return nil, err
+		for _, public := range []func(string) (catalog.Snapshot, error){catalog.PublicHistorical, catalog.PublicLegacy} {
+			old, err := public(mode)
+			if err != nil {
+				return nil, err
+			}
+			body, err := duel.Encode(old)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, duel.Catalog{Hash: old.ContentHash, DesignVersion: old.DesignVersion, SchemaVersion: old.SchemaVersion, JSON: body})
 		}
-		body, err := duel.Encode(old)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, duel.Catalog{Hash: old.ContentHash, DesignVersion: old.DesignVersion, SchemaVersion: old.SchemaVersion, JSON: body})
 	}
 	return result, nil
 }
@@ -70,6 +78,8 @@ func (r *Rules) Catalog(mode string) (duel.Catalog, error) {
 	public := catalog.Public
 	if r.legacy {
 		public = catalog.PublicLegacy
+	} else if r.historical {
+		public = catalog.PublicHistorical
 	}
 	c, err := public(mode)
 	if err != nil {
@@ -120,7 +130,7 @@ func (r *Rules) Inspect(mode string, raw json.RawMessage) (duel.RuleInfo, error)
 	if err != nil {
 		return duel.RuleInfo{}, err
 	}
-	i := duel.RuleInfo{Round: int(s.Round), Phase: "plan", Seconds: 20, Required: [2]bool{!s.Blocked[0], !s.Blocked[1]}, Scores: [2]int64{s.Players[0].Likes, s.Players[1].Likes}}
+	i := duel.RuleInfo{Round: int(s.Round), Phase: "plan", Seconds: r.engines[mode].TurnSeconds(), Required: [2]bool{!s.Blocked[0], !s.Blocked[1]}, Scores: [2]int64{s.Players[0].Likes, s.Players[1].Likes}}
 	if s.Result != nil {
 		i.Phase = "terminal"
 		i.Seconds = 0

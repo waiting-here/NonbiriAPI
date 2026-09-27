@@ -53,6 +53,9 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 	}); err != nil {
 		return err
 	}
+	if err := s.registerLoadoutRoutes(user); err != nil {
+		return err
+	}
 	for _, route := range s.descriptor.Routes {
 		if route.Station != "user" || !route.Continuation || route.Pattern == base+"/randomness/{id}" {
 			continue

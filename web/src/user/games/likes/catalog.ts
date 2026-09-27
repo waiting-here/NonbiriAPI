@@ -255,9 +255,13 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     'config',
   ]);
   safeInteger(outer.rules_version, 1, 1, 'rules');
-  enumValue(outer.design_version, ['0.17.0', '0.18.0'], 'design');
+  enumValue(outer.design_version, ['0.17.0', '0.18.0', '0.18.1'], 'design');
   const schema = safeInteger(outer.schema_version, 15, 16, 'schema');
-  if (outer.design_version !== (schema === 16 ? '0.18.0' : '0.17.0'))
+  if (
+    schema === 15
+      ? outer.design_version !== '0.17.0'
+      : !['0.18.0', '0.18.1'].includes(outer.design_version as string)
+  )
     invalidResponse('catalog identity');
   const r = exactRecord(outer.config, [
     'schemaVersion',
@@ -325,7 +329,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     !parameters.MAX_ROUNDS ||
     !parameters.TARGET_LIKES ||
     !parameters.ENERGY_CAP ||
-    parameters.TURN_SECONDS !== 20 ||
+    parameters.TURN_SECONDS !== (outer.design_version === '0.18.1' ? 30 : 20) ||
     parameters.PREP_MAX !== 2 ||
     parameters.INSERT_CAP !== 1
   )
@@ -515,7 +519,7 @@ export function likesCatalog(value: unknown): LikesCatalog {
     ['compatible_modes'],
   );
   safeInteger(r.rules_version, 1, 1, 'catalog rules');
-  enumValue(r.design_version, ['0.17.0', '0.18.0'], 'catalog design');
+  enumValue(r.design_version, ['0.17.0', '0.18.0', '0.18.1'], 'catalog design');
   safeInteger(r.schema_version, 15, 16, 'catalog schema');
   const modes = exactRecord(r.modes, ['quick', 'standard']);
   return {
@@ -525,7 +529,7 @@ export function likesCatalog(value: unknown): LikesCatalog {
         ? []
         : unique(
             r.compatible_modes,
-            2,
+            4,
             (value) => {
               const snapshot = exactRecord(value, [
                 'rules_version',

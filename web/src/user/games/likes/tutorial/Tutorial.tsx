@@ -37,7 +37,7 @@ function stateFor(
     phaseSeq: String(round),
     phase: 'plan',
     round,
-    deadline: 1020,
+    deadline: 1030,
     serverNow: 1000,
     you: 0,
     locked: [false, false],
