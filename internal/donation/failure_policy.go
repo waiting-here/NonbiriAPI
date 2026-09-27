@@ -3,6 +3,7 @@ package donation
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -92,7 +93,40 @@ VALUES(?,?,?,?,'failure_policy_update',?,?)`, donationID, expected+1, actorID, r
 	}
 	if disabled && !before.FailureDisabled {
 		ref := fmt.Sprintf("donation-key:%d:policy:%d", keyID, expected+1)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved) VALUES('donation_failure_disabled','charity donation key disabled after consecutive protocol failures',?,?,0)`, ref, now); err != nil {
+		var sourceKeyID int64
+		if err := tx.QueryRowContext(ctx, `SELECT source_endpoint_key_id FROM donation_keys WHERE id=? AND donation_id=?`, keyID, donationID).Scan(&sourceKeyID); err != nil {
+			return FailurePolicy{}, err
+		}
+		type target struct {
+			Kind string `json:"kind"`
+			ID   string `json:"id"`
+		}
+		type fact struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		contextBody, err := json.Marshal(struct {
+			Targets []target `json:"targets"`
+			Facts   []fact   `json:"occurred_facts"`
+		}{
+			Targets: []target{
+				{Kind: "donation", ID: strconv.FormatInt(donationID, 10)},
+				{Kind: "donation_key", ID: strconv.FormatInt(keyID, 10)},
+				{Kind: "endpoint_key", ID: strconv.FormatInt(sourceKeyID, 10)},
+			},
+			Facts: []fact{
+				{Key: "donation_id", Value: strconv.FormatInt(donationID, 10)},
+				{Key: "donation_key_id", Value: strconv.FormatInt(keyID, 10)},
+				{Key: "endpoint_key_id", Value: strconv.FormatInt(sourceKeyID, 10)},
+				{Key: "failure_streak", Value: before.FailureStreak},
+				{Key: "failure_threshold", Value: threshold},
+				{Key: "policy_revision", Value: strconv.FormatInt(expected+1, 10)},
+			},
+		})
+		if err != nil {
+			return FailurePolicy{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved,context_version,context_json) VALUES('donation_failure_disabled','charity donation key disabled after consecutive protocol failures',?,?,0,1,?)`, ref, now, string(contextBody)); err != nil {
 			return FailurePolicy{}, err
 		}
 	}

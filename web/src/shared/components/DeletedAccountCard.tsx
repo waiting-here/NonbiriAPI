@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState } from './States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -12,6 +12,7 @@ export function DeletedAccountCard({ account, role, onClose }: { account: Delete
   const label = i18n.language.startsWith('zh') ? accountCopy.zh : accountCopy.en;
   const history = i18n.language.startsWith('zh') ? accountHistoryCopy.zh : accountHistoryCopy.en;
   const formatDateTime = useDateTimeFormatter();
+  const location = useLocation();
   const [abortPage, setAbortPage] = useState(1);
   const canReadAborts = role === 'admin' && Boolean(account.discord_id && /^[1-9][0-9]{0,19}$/.test(account.discord_id));
   const aborts = useQuery({
@@ -28,6 +29,11 @@ export function DeletedAccountCard({ account, role, onClose }: { account: Delete
   const sameIdentityPath = role === 'admin'
     ? `/users?account_state=all&discord_id=${encodeURIComponent(account.discord_id ?? '')}`
     : `/steward?tab=users&account_state=all&discord_id=${encodeURIComponent(account.discord_id ?? '')}`;
+  const returnPath = `${location.pathname}${location.search}`;
+  const alertParams = new URLSearchParams({ alert_id: account.alert_id ?? '' });
+  if (returnPath.startsWith('/users') && returnPath.length <= 2048) {
+    alertParams.set('return_to', returnPath);
+  }
   return (
     <div className="ops-stack">
       <Card>
@@ -54,7 +60,7 @@ export function DeletedAccountCard({ account, role, onClose }: { account: Delete
         </dl>
         <p>{history.coverage}</p>
         {account.discord_id ? <Link to={sameIdentityPath}>{label.sameIdentity}</Link> : null}
-        {role === 'admin' && account.alert_id ? <p>{label.alert}: #{account.alert_id}</p> : null}
+        {role === 'admin' && account.alert_id ? <p><Link to={`/alerts?${alertParams.toString()}`}>{label.alert}: #{account.alert_id}</Link></p> : null}
       </Card>
       {canReadAborts ? (
         <Card>

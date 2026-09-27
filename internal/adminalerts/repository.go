@@ -377,9 +377,9 @@ func (repository *Repository) SetResolved(ctx context.Context, adminID, alertID 
 	committed := false
 	defer finishTransaction(tx, &committed)
 	if resolved {
-		_, err = tx.ExecContext(ctx, `UPDATE admin_alerts SET resolved=1,resolved_at=? WHERE id=? AND resolved=0`, now, alertID)
+		_, err = tx.ExecContext(ctx, `UPDATE admin_alerts SET resolved=1,resolved_at=?,resolution_kind='manual' WHERE id=? AND resolved=0`, now, alertID)
 	} else {
-		_, err = tx.ExecContext(ctx, `UPDATE admin_alerts SET resolved=0,resolved_at=NULL WHERE id=? AND resolved=1`, alertID)
+		_, err = tx.ExecContext(ctx, `UPDATE admin_alerts SET resolved=0,resolved_at=NULL,resolution_kind='' WHERE id=? AND resolved=1`, alertID)
 	}
 	if err != nil {
 		return AdminAlert{}, fmt.Errorf("administrator alerts: set resolved state: %w", err)

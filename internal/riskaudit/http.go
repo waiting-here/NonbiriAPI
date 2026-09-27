@@ -2,6 +2,8 @@ package riskaudit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
@@ -23,6 +25,10 @@ type AdminRouteRegistrar interface {
 type route struct{ method, path, action string }
 
 var routes = []route{
+	{http.MethodPost, "/scans", "scan_create_v2"}, {http.MethodGet, "/scans", "scan_recent_v2"},
+	{http.MethodGet, "/scans/{id}", "scan_get_v2"},
+	{http.MethodGet, "/scans/{id}/results", "scan_results_v2"},
+	{http.MethodPost, "/scans/{id}/cancel", "scan_cancel_v2"},
 	{http.MethodPost, "/client-scans", "scan_create"}, {http.MethodGet, "/client-scans", "scan_recent"},
 	{http.MethodGet, "/client-scans/{id}", "scan_get"},
 	{http.MethodGet, "/client-scans/{id}/results", "scan_results"},
@@ -225,7 +231,7 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		auditError(w, ErrInvalid)
 		return
 	}
-	allowed := map[string]bool{"from": true, "to": true, "lookback_hours": true, "limit": true, "after": true, "kind": true, "signal": true, "revision": true, "model": true}
+	allowed := map[string]bool{"from": true, "to": true, "lookback_hours": true, "limit": true, "after": true, "kind": true, "signal": true, "revision": true, "model": true, "page": true, "page_size": true, "watermark": true, "expected_total": true}
 	for key, values := range q {
 		if !allowed[key] || len(values) != 1 {
 			auditError(w, ErrInvalid)
@@ -253,6 +259,43 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		var rules []Rule
 		rules, err = repository.Rules(ctx, actor)
 		if err != nil {
+			break
+		}
+		if q.Has("page") {
+			page, e := intQuery(q, "page", 1)
+			if e != nil || page < 1 || page > 2147483647 || q.Has("after") {
+				err = ErrInvalid
+				break
+			}
+			size, e := intQuery(q, "page_size", 20)
+			if e != nil || size != 20 && size != 50 && size != 100 {
+				err = ErrInvalid
+				break
+			}
+			raw, e := json.Marshal(rules)
+			if e != nil {
+				err = ErrUnavailable
+				break
+			}
+			hash := sha256.Sum256(raw)
+			revision := hex.EncodeToString(hash[:])
+			changed := q.Has("revision") && q.Get("revision") != revision
+			if changed {
+				page = 1
+			}
+			pages := max(int64(1), (int64(len(rules))+size-1)/size)
+			page = min(page, pages)
+			start := (page - 1) * size
+			end := min(int64(len(rules)), start+size)
+			output = struct {
+				Items      []Rule `json:"items"`
+				Page       string `json:"page"`
+				PageSize   int64  `json:"page_size"`
+				TotalItems string `json:"total_items"`
+				TotalPages string `json:"total_pages"`
+				Revision   string `json:"revision"`
+				Changed    bool   `json:"changed"`
+			}{rules[start:end], strconv.FormatInt(page, 10), size, strconv.Itoa(len(rules)), strconv.FormatInt(pages, 10), revision, changed}
 			break
 		}
 		limit, e := intQuery(q, "limit", 100)
@@ -352,8 +395,34 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 			err = ErrInvalid
 			break
 		}
+		if q.Has("watermark") && (!q.Has("page") || !q.Has("from") || !q.Has("to")) ||
+			q.Has("expected_total") && !q.Has("watermark") {
+			err = ErrInvalid
+			break
+		}
 		var window Window
 		window, err = parseWindow(q, repository.now().Unix(), true)
+		if err == nil {
+			if q.Has("page") {
+				window.Page, err = intQuery(q, "page", 1)
+				if err == nil && window.Page < 1 {
+					err = ErrInvalid
+				}
+				var size int64
+				if err == nil {
+					size, err = intQuery(q, "page_size", 20)
+					window.Limit = int(size)
+				}
+				if err == nil && q.Has("watermark") {
+					window.Watermark, err = intQuery(q, "watermark", 0)
+					window.WatermarkSet = true
+				}
+				if err == nil && q.Has("expected_total") {
+					window.ExpectedTotal, err = intQuery(q, "expected_total", 0)
+					window.ExpectedSet = true
+				}
+			}
+		}
 		if err == nil {
 			output, err = repository.User(ctx, actor, user, window)
 		}

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLocation, useNavigate } from 'react-router';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
 import { adminKeys } from '../data';
-import { AlertsPage } from './AlertsPage';
+import { AlertsPage, validAlertReturnTo } from './AlertsPage';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,6 +74,42 @@ function deferred<T>() {
 }
 
 describe('administrator alerts page', () => {
+  it('rejects off-site and ambiguous return destinations', () => {
+    expect(validAlertReturnTo('https://evil.invalid')).toBeNull();
+    expect(validAlertReturnTo('//evil.invalid')).toBeNull();
+    expect(validAlertReturnTo('/users\\evil')).toBeNull();
+    expect(validAlertReturnTo('/users?deleted=9&page=4&page_size=50')).toBe('/users?deleted=9&page=4&page_size=50');
+  });
+
+  it('opens an exact donation alert and links logs by endpoint key, then returns to the prior page', async () => {
+    const donationAlert = alert('7', false, {
+      kind: 'donation_failure_disabled', ref: 'donation-key:71:generation:2:fold:3',
+    });
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/admin/api/session', body: session() },
+      { method: 'GET', path: '/admin/api/alerts?resolved=false&page=1&page_size=20', body: page([donationAlert]) },
+      { method: 'GET', path: '/admin/api/alerts/7', body: {
+        alert: donationAlert, context_version: 1,
+        occurred_facts: [{ key: 'failure_streak', value: '3' }, { key: 'failure_threshold', value: '3' }],
+        targets: [
+          { kind: 'donation', id: '2', available: true, status: 'approved' },
+          { kind: 'donation_key', id: '71', available: true, status: 'failure_disabled' },
+          { kind: 'endpoint_key', id: '83', available: true, status: 'enabled' },
+        ],
+        current_state: [], related_logs: { endpoint_key_id: '83', from: 1799999100, to: 1800000300, available: true },
+        resolution_kind: '',
+      } },
+    ]);
+    await renderWithProviders(<AlertsPage />, {
+      station: 'admin', role: 'admin', locale: 'en',
+      route: '/alerts?resolved=false&page=1&page_size=20&alert_id=7&return_to=%2Fusers%3Fdeleted%3D9%26page%3D4%26page_size%3D50',
+    });
+    expect(await screen.findByRole('heading', { name: 'Alert details #7' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Return to previous page' })).toHaveAttribute('href', '/users?deleted=9&page=4&page_size=50');
+    expect(await screen.findByRole('link', { name: 'From 15 minutes before to 5 minutes after this alert' })).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
+    expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
+  });
+
   it('confirms the administrator session before requesting private alerts', async () => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: {}, status: 401 },

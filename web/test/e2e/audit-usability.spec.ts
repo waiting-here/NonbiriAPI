@@ -61,8 +61,16 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
         return;
       }
       await route.fulfill({
-        json: { items: saved ? [saved] : [], total: saved ? 1 : 0, has_more: false, next: '' },
+        json: {
+          items: saved ? [saved] : [], page: '1', page_size: 20,
+          total_items: saved ? '1' : '0', total_pages: '1',
+          revision: saved ? 'rule-revision-2' : 'rule-revision-1', changed: false,
+        },
       });
+      return;
+    }
+    if (path === 'scans') {
+      await route.fulfill({ json: { items: [] } });
       return;
     }
     if (path === 'access-summary') {
@@ -80,7 +88,10 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
       return;
     }
     if (path === 'access-events') {
-      await route.fulfill({ json: { data: [], next_cursor: null } });
+      await route.fulfill({ json: {
+        data: [], page: '1', page_size: 20, total_items: '0', total_pages: '1',
+        watermark: '0', changed: false, from: 1800000000 - 86400, to: 1800000000,
+      } });
       return;
     }
     expect(url.searchParams.has('to')).toBe(false);
@@ -98,7 +109,7 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
     });
   });
   await page.goto(ADMIN_ORIGIN + '/abuse-audit');
-  await expect(page.getByText('No entries on this page', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Scan user summaries', exact: true })).toBeVisible();
   await page.getByLabel(/^Time range/).selectOption('168');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   await page.getByRole('button', { name: 'Access events', exact: true }).click();

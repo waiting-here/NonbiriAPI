@@ -107,23 +107,28 @@ type RecoveryAdapters struct {
 	CharityRouting RecoveryAdapter
 }
 
-func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
-	return []RecoveryAdapter{
-		adapters.Idempotency,
-		adapters.Discovery,
-		adapters.Claims,
-		adapters.Thursday,
-		adapters.Reports,
-		adapters.Fishing,
-		adapters.LinkLink,
-		adapters.RPS,
-		adapters.Bidding,
-		adapters.Likes,
-		adapters.Blackjack,
-		adapters.Donations,
-		adapters.Secrets,
-		adapters.Governance,
-		adapters.CharityRouting,
+type namedRecoveryAdapter struct {
+	domain  string
+	adapter RecoveryAdapter
+}
+
+func (adapters RecoveryAdapters) ordered() []namedRecoveryAdapter {
+	return []namedRecoveryAdapter{
+		{"idempotency", adapters.Idempotency},
+		{"discovery", adapters.Discovery},
+		{"claims", adapters.Claims},
+		{"thursday", adapters.Thursday},
+		{"reports", adapters.Reports},
+		{"fishing", adapters.Fishing},
+		{"linklink", adapters.LinkLink},
+		{"rps", adapters.RPS},
+		{"bidding", adapters.Bidding},
+		{"likes", adapters.Likes},
+		{"blackjack", adapters.Blackjack},
+		{"donations", adapters.Donations},
+		{"secrets", adapters.Secrets},
+		{"governance", adapters.Governance},
+		{"charity_routing", adapters.CharityRouting},
 	}
 }
 
@@ -153,29 +158,34 @@ type RetentionAdapters struct {
 	CharityRouting    RetentionAdapter
 }
 
-func (adapters RetentionAdapters) ordered() []RetentionAdapter {
-	return []RetentionAdapter{
-		adapters.Continuity,
-		adapters.Sessions,
-		adapters.RequestLogs,
-		adapters.Audits,
-		adapters.Observability,
-		adapters.RiskAudit,
-		adapters.Issues,
-		adapters.Fishing,
-		adapters.LinkLink,
-		adapters.RPS,
-		adapters.Bidding,
-		adapters.Likes,
-		adapters.Blackjack,
-		adapters.Reports,
-		adapters.Donations,
-		adapters.Charity,
-		adapters.Idempotency,
-		adapters.Secrets,
-		adapters.Governance,
-		adapters.CharityRouting,
-		adapters.RequestAdaptation,
+type namedRetentionAdapter struct {
+	domain  string
+	adapter RetentionAdapter
+}
+
+func (adapters RetentionAdapters) ordered() []namedRetentionAdapter {
+	return []namedRetentionAdapter{
+		{"continuity", adapters.Continuity},
+		{"sessions", adapters.Sessions},
+		{"request_logs", adapters.RequestLogs},
+		{"audits", adapters.Audits},
+		{"observability", adapters.Observability},
+		{"risk_audit", adapters.RiskAudit},
+		{"issues", adapters.Issues},
+		{"fishing", adapters.Fishing},
+		{"linklink", adapters.LinkLink},
+		{"rps", adapters.RPS},
+		{"bidding", adapters.Bidding},
+		{"likes", adapters.Likes},
+		{"blackjack", adapters.Blackjack},
+		{"reports", adapters.Reports},
+		{"donations", adapters.Donations},
+		{"charity", adapters.Charity},
+		{"idempotency", adapters.Idempotency},
+		{"secrets", adapters.Secrets},
+		{"governance", adapters.Governance},
+		{"charity_routing", adapters.CharityRouting},
+		{"request_adaptation", adapters.RequestAdaptation},
 	}
 }
 
@@ -288,7 +298,7 @@ func completeDeleteAdapters(a DeleteAdapters) bool {
 
 func completeRecoveryAdapters(a RecoveryAdapters) bool {
 	for _, adapter := range a.ordered() {
-		if adapter == nil {
+		if adapter.adapter == nil {
 			return false
 		}
 	}
@@ -297,7 +307,7 @@ func completeRecoveryAdapters(a RecoveryAdapters) bool {
 
 func completeRetentionAdapters(a RetentionAdapters) bool {
 	for _, adapter := range a.ordered() {
-		if adapter == nil {
+		if adapter.adapter == nil {
 			return false
 		}
 	}

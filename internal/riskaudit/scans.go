@@ -9,17 +9,22 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	sqlite "modernc.org/sqlite"
 )
 
 const (
-	ScanLifetime     = 24 * time.Hour
-	ScanBatchSize    = 100
-	MaxScanResults   = 100000
-	MaxRetainedScans = 32
-	MaxQueuedScans   = 8
+	ScanLifetime        = 24 * time.Hour
+	ScanBatchSize       = 500
+	clientScanBatchSize = 100
+	MaxScanResults      = 100000
+	MaxScanCandidates   = 1000000
+	MaxRetainedScans    = 200
+	MaxRunningScans     = 20
+	MaxActorScans       = 2
 )
 
 var scanTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
@@ -33,34 +38,60 @@ type ScanInput struct {
 	LookbackHours int64  `json:"lookback_hours,omitempty"`
 	Kind          string `json:"kind,omitempty"`
 	Model         string `json:"model,omitempty"`
+	ScanKind      string `json:"scan_kind,omitempty"`
+	Signal        string `json:"signal,omitempty"`
 }
 
 type ClientScan struct {
-	ID         string `json:"id"`
-	State      string `json:"state"`
-	Reason     string `json:"reason"`
-	From       int64  `json:"from"`
-	To         int64  `json:"to"`
-	Kind       string `json:"kind"`
-	Model      string `json:"model"`
-	Candidates int64  `json:"candidates,string"`
-	Scanned    int64  `json:"scanned,string"`
-	Matched    int    `json:"matched"`
-	CreatedAt  int64  `json:"created_at"`
-	UpdatedAt  int64  `json:"updated_at"`
-	ExpiresAt  int64  `json:"expires_at"`
-	RuleCount  int    `json:"rule_count"`
-	owner      int64
-	admin      bool
-	upper      int64
-	afterAt    int64
-	afterID    int64
-	rules      []Rule
+	ID              string `json:"id"`
+	State           string `json:"state"`
+	Reason          string `json:"reason"`
+	From            int64  `json:"from"`
+	To              int64  `json:"to"`
+	Kind            string `json:"kind"`
+	Model           string `json:"model"`
+	Candidates      int64  `json:"candidates,string"`
+	Scanned         int64  `json:"scanned,string"`
+	Matched         int    `json:"matched"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
+	ExpiresAt       int64  `json:"expires_at"`
+	RuleCount       int    `json:"rule_count"`
+	ScanKind        string `json:"scan_kind"`
+	Signal          string `json:"signal,omitempty"`
+	FilterRevision  int64  `json:"filter_revision"`
+	Changed         bool   `json:"changed"`
+	Coverage        string `json:"coverage"`
+	TruncatedReason string `json:"truncated_reason,omitempty"`
+	owner           int64
+	admin           bool
+	upper           int64
+	afterAt         int64
+	afterID         int64
+	rules           []Rule
+	checkpoint      string
+	config          Config
 }
 
-const scanCommonColumns = `id,user_id,admin,state,reason,from_at,to_at,call_kind,model,upper_log_id,after_at,after_log_id,candidates,scanned,matched,created_at,updated_at,expires_at`
+type scanCheckpoint struct {
+	Signal      string    `json:"signal,omitempty"`
+	Config      Config    `json:"config"`
+	PendingUser int64     `json:"pending_user,omitempty"`
+	AfterUser   int64     `json:"after_user,omitempty"`
+	PendingIP   string    `json:"pending_ip,omitempty"`
+	AfterIP     string    `json:"after_ip,omitempty"`
+	SourceAt    int64     `json:"source_at,omitempty"`
+	SourceID    int64     `json:"source_id,omitempty"`
+	IPSummary   *SharedIP `json:"ip_summary,omitempty"`
+}
+
+const scanCommonColumns = `id,user_id,admin,state,reason,from_at,to_at,call_kind,model,upper_log_id,after_at,after_log_id,candidates,scanned,matched,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json,coverage_json,changed`
 const scanColumns = scanCommonColumns + `,rules_json`
 const scanMetaColumns = scanCommonColumns + `,json_array_length(rules_json)`
+
+// Completed, cancelled, and failed scans never resume. Retain only the
+// non-identity configuration in their checkpoint during the 24-hour result TTL.
+const scanCheckpointWithoutIdentitySQL = `json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')`
 
 func readScan(row scanner) (ClientScan, error) {
 	return readScanRow(row, true)
@@ -72,12 +103,30 @@ func readScanRow(row scanner, hydrate bool) (ClientScan, error) {
 	if !hydrate {
 		ruleValue = &out.RuleCount
 	}
-	err := row.Scan(&out.ID, &out.owner, &out.admin, &out.State, &out.Reason, &out.From, &out.To, &out.Kind, &out.Model, &out.upper, &out.afterAt, &out.afterID, &out.Candidates, &out.Scanned, &out.Matched, &out.CreatedAt, &out.UpdatedAt, &out.ExpiresAt, ruleValue)
+	var coverage string
+	err := row.Scan(&out.ID, &out.owner, &out.admin, &out.State, &out.Reason, &out.From, &out.To, &out.Kind, &out.Model, &out.upper, &out.afterAt, &out.afterID, &out.Candidates, &out.Scanned, &out.Matched, &out.CreatedAt, &out.UpdatedAt, &out.ExpiresAt, &out.ScanKind, &out.FilterRevision, &out.checkpoint, &coverage, &out.Changed, ruleValue)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
 	}
 	if err != nil {
 		return out, err
+	}
+	out.Coverage = "complete"
+	if out.State == "queued" || out.State == "running" {
+		out.Coverage = "partial"
+	}
+	if out.State == "limited" || out.State == "failed" || out.State == "cancelled" {
+		out.Coverage, out.TruncatedReason = "partial", out.Reason
+	}
+	if out.Changed {
+		out.Coverage = "changed"
+	}
+	if len(coverage) > 4096 || len(out.checkpoint) > 16384 {
+		return out, ErrUnavailable
+	}
+	var frozen scanCheckpoint
+	if json.Unmarshal([]byte(out.checkpoint), &frozen) == nil {
+		out.Signal, out.config = frozen.Signal, frozen.Config
 	}
 	if !hydrate {
 		return out, nil
@@ -96,6 +145,15 @@ func readScanRow(row scanner, hydrate bool) (ClientScan, error) {
 
 func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInput) (ClientScan, error) {
 	if !scanTokenPattern.MatchString(input.RequestToken) || input.LookbackHours < 0 || input.LookbackHours > 720 || (input.LookbackHours > 0 && (input.From != 0 || input.To != 0)) {
+		return ClientScan{}, ErrInvalid
+	}
+	if input.ScanKind == "" {
+		input.ScanKind = "client_hits"
+	}
+	if input.ScanKind != "client_hits" && input.ScanKind != "users" && input.ScanKind != "shared_ips" ||
+		(input.Signal != "" && input.Signal != "rpm" && input.Signal != "concurrency") ||
+		(input.ScanKind != "users" && input.Signal != "") ||
+		(input.ScanKind != "client_hits" && input.Model != "") {
 		return ClientScan{}, ErrInvalid
 	}
 	if input.Kind == "" {
@@ -120,24 +178,33 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		return ClientScan{}, err
 	}
 	now := r.now().Unix()
-	w := Window{From: input.From, To: input.To, Kind: input.Kind, Model: input.Model, Limit: ScanBatchSize}
+	config, err := readConfig(ctx, tx)
+	if err != nil {
+		return ClientScan{}, err
+	}
+	w := Window{From: input.From, To: input.To, Kind: input.Kind, Model: input.Model, Limit: MaxPage}
 	if input.LookbackHours > 0 {
 		w.From, w.To = max(0, now-input.LookbackHours*3600), now
+	} else if input.ScanKind == "shared_ips" && input.From == 0 && input.To == 0 {
+		w.From, w.To = max(0, now-int64(config.SharedIPHours)*3600), now
 	}
 	w, err = w.validate(now)
 	if err != nil {
 		return ClientScan{}, err
 	}
-	var retained, queued, unfinished int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(sum(state='queued'),0),COALESCE(sum(user_id=? AND state IN ('queued','running')),0) FROM risk_client_scans`, actor.UserID).Scan(&retained, &queued, &unfinished); err != nil {
+	var retained, running, unfinished int
+	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(sum(state IN ('queued','running')),0),COALESCE(sum(user_id=? AND state IN ('queued','running')),0) FROM risk_client_scans WHERE expires_at>?`, actor.UserID, now).Scan(&retained, &running, &unfinished); err != nil {
 		return ClientScan{}, err
 	}
-	if retained >= MaxRetainedScans || queued >= MaxQueuedScans || unfinished > 0 {
+	if retained >= MaxRetainedScans || running >= MaxRunningScans || unfinished >= MaxActorScans {
 		return ClientScan{}, ErrConflict
 	}
-	rules, err := rulesTx(ctx, tx)
-	if err != nil {
-		return ClientScan{}, err
+	var rules []Rule
+	if input.ScanKind == "client_hits" {
+		rules, err = rulesTx(ctx, tx)
+		if err != nil {
+			return ClientScan{}, err
+		}
 	}
 	frozen := make([]Rule, 0, len(rules))
 	for _, rule := range rules {
@@ -157,7 +224,19 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		return ClientScan{}, err
 	}
 	where, args := scanPredicate(w.From, w.To, upper)
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s WHERE `+where, args...).Scan(&total); err != nil {
+	switch input.ScanKind {
+	case "client_hits":
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s WHERE `+where, args...).Scan(&total)
+	case "users":
+		err = tx.QueryRowContext(ctx, `SELECT
+ (SELECT count(*) FROM request_source_facts WHERE occurred_at>=? AND occurred_at<? AND request_log_id<=? AND user_id IS NOT NULL AND kind IN ('self','charity','unclassified'))
+ +(SELECT count(*) FROM (SELECT DISTINCT user_id FROM risk_audit_minutes WHERE minute>=? AND minute<?) m WHERE NOT EXISTS (
+ SELECT 1 FROM request_source_facts s WHERE s.user_id=m.user_id AND s.occurred_at>=? AND s.occurred_at<? AND s.request_log_id<=? AND s.kind IN ('self','charity','unclassified')))
+`, w.From, w.To, upper, w.From, w.To, w.From, w.To, upper).Scan(&total)
+	case "shared_ips":
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts WHERE occurred_at>=? AND occurred_at<? AND request_log_id<=? AND user_id IS NOT NULL AND kind IN ('self','charity','unclassified') AND (?='total' OR kind=?) AND ip_quality IN ('direct_peer','trusted_forwarded')`, w.From, w.To, upper, w.Kind, w.Kind).Scan(&total)
+	}
+	if err != nil {
 		return ClientScan{}, err
 	}
 	id, err := db.GenerateOpaqueID("scn_")
@@ -165,10 +244,14 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		return ClientScan{}, err
 	}
 	state := "queued"
-	if total == 0 || len(frozen) == 0 {
+	if total == 0 || input.ScanKind == "client_hits" && len(frozen) == 0 {
 		state = "completed"
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, actor.UserID, actor.Admin, input.RequestToken, string(encoded), string(raw), state, w.From, w.To, w.Kind, w.Model, upper, w.From, total, now, now, now+int64(ScanLifetime/time.Second))
+	checkpoint, err := json.Marshal(scanCheckpoint{Signal: input.Signal, Config: config})
+	if err != nil {
+		return ClientScan{}, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, actor.UserID, actor.Admin, input.RequestToken, string(encoded), string(raw), state, w.From, w.To, w.Kind, w.Model, upper, w.From, total, now, now, now+int64(ScanLifetime/time.Second), input.ScanKind, config.Revision, string(checkpoint))
 	if err != nil {
 		return ClientScan{}, err
 	}
@@ -206,12 +289,20 @@ func (r *Repository) GetScan(ctx context.Context, actor Actor, id string) (Clien
 }
 
 func (r *Repository) RecentScans(ctx context.Context, actor Actor) ([]ClientScan, error) {
+	return r.recentScans(ctx, actor, 10)
+}
+
+func (r *Repository) RecentTasks(ctx context.Context, actor Actor) ([]ClientScan, error) {
+	return r.recentScans(ctx, actor, MaxRetainedScans)
+}
+
+func (r *Repository) recentScans(ctx context.Context, actor Actor, limit int) ([]ClientScan, error) {
 	tx, err := r.begin(ctx, actor, false)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT `+scanMetaColumns+` FROM risk_client_scans WHERE user_id=? AND admin=? AND expires_at>? AND reason<>'permission_changed' ORDER BY created_at DESC,id DESC LIMIT 10`, actor.UserID, actor.Admin, r.now().Unix())
+	rows, err := tx.QueryContext(ctx, `SELECT `+scanMetaColumns+` FROM risk_client_scans WHERE user_id=? AND admin=? AND expires_at>? AND reason<>'permission_changed' ORDER BY created_at DESC,id DESC LIMIT ?`, actor.UserID, actor.Admin, r.now().Unix(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +330,7 @@ func (r *Repository) CancelScan(ctx context.Context, actor Actor, id string) (Cl
 	}
 	if out.State == "queued" || out.State == "running" {
 		out.State, out.UpdatedAt = "cancelled", r.now().Unix()
-		if _, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',updated_at=? WHERE id=?`, out.UpdatedAt, id); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=? WHERE id=?`, out.UpdatedAt, id); err != nil {
 			return out, err
 		}
 	}
@@ -270,13 +361,16 @@ func (r *Repository) ScanResults(ctx context.Context, actor Actor, id string, pa
 		return out, err
 	}
 	var total int64
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM risk_client_scan_matches WHERE scan_id=?`, id).Scan(&total); err != nil {
+	if out.Scan.ScanKind != "client_hits" {
+		return out, ErrInvalid
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM risk_scan_results WHERE scan_id=? AND published=1`, id).Scan(&total); err != nil {
 		return out, err
 	}
 	pages := max(1, (total+int64(size)-1)/int64(size))
 	page = min(page, pages)
 	out.Page, out.PageSize, out.TotalItems, out.TotalPages = strconv.FormatInt(page, 10), size, strconv.FormatInt(total, 10), strconv.FormatInt(pages, 10)
-	rows, err := tx.QueryContext(ctx, `SELECT request_log_id FROM risk_client_scan_matches WHERE scan_id=? ORDER BY ordinal LIMIT ? OFFSET ?`, id, size, (page-1)*int64(size))
+	rows, err := tx.QueryContext(ctx, `SELECT request_log_id FROM risk_scan_results WHERE scan_id=? AND published=1 ORDER BY row_no LIMIT ? OFFSET ?`, id, size, (page-1)*int64(size))
 	if err != nil {
 		return out, err
 	}
@@ -351,51 +445,102 @@ func sourcesByID(ctx context.Context, tx *sql.Tx, ids []int64) (map[int64]Source
 	return out, rows.Err()
 }
 
+func scanBusy(err error) bool {
+	var sqliteError *sqlite.Error
+	if !errors.As(err, &sqliteError) {
+		return false
+	}
+	code := sqliteError.Code() & 0xff
+	return code == 5 || code == 6 // SQLITE_BUSY or SQLITE_LOCKED.
+}
+
+// A task is claimed only in RAM for one batch. The durable checkpoint remains
+// the restart authority, and concurrent workers cannot select the same task.
+func (r *Repository) claimScan(ctx context.Context) (string, func(), error) {
+	r.scanSelection.Lock()
+	defer r.scanSelection.Unlock()
+	rows, err := r.db.QueryContext(ctx, `SELECT id FROM risk_client_scans WHERE state IN ('queued','running') AND expires_at>? ORDER BY updated_at,created_at,id LIMIT ?`, r.now().Unix(), MaxRunningScans)
+	if err != nil {
+		return "", nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return "", nil, err
+		}
+		if _, active := r.claimedScans[id]; active {
+			continue
+		}
+		r.claimedScans[id] = struct{}{}
+		return id, func() {
+			r.scanSelection.Lock()
+			delete(r.claimedScans, id)
+			r.scanSelection.Unlock()
+		}, nil
+	}
+	return "", nil, rows.Err()
+}
+
 // ProcessScanBatch commits at most one batch. A cancelled transaction leaves
 // its previous checkpoint intact, including when the service is shutting down.
 func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, result error) {
 	parent := ctx
-	if !r.scanWorker.TryLock() {
+	select {
+	case r.scanSlots <- struct{}{}:
+		defer func() { <-r.scanSlots }()
+	default:
 		return false, nil
 	}
-	defer r.scanWorker.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	scanID, release, err := r.claimScan(ctx)
+	if err != nil || scanID == "" {
+		return false, err
+	}
+	defer release()
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	scanID := ""
 	defer func() {
+		// Two independent task workers may race for SQLite's single writer.
+		// A BUSY/LOCKED snapshot is a scheduling retry, not a failed task.
+		if result != nil && parent.Err() == nil && scanBusy(result) {
+			progress, result = false, nil
+			return
+		}
 		if result == nil || parent.Err() != nil || scanID == "" {
 			return
 		}
 		_ = tx.Rollback()
 		bounded, cancel := context.WithTimeout(parent, 2*time.Second)
 		defer cancel()
-		_, _ = r.db.ExecContext(bounded, `UPDATE risk_client_scans SET failures=failures+1,state=CASE WHEN failures>=2 THEN 'failed' ELSE state END,reason=CASE WHEN failures>=2 THEN 'scan_failed' ELSE reason END WHERE id=? AND state IN ('queued','running')`, scanID)
+		_, _ = r.db.ExecContext(bounded, `UPDATE risk_client_scans SET failures=failures+1,state=CASE WHEN failures>=2 THEN 'failed' ELSE state END,reason=CASE WHEN failures>=2 THEN 'scan_failed' ELSE reason END,checkpoint_json=CASE WHEN failures>=2 THEN `+scanCheckpointWithoutIdentitySQL+` ELSE checkpoint_json END WHERE id=? AND state IN ('queued','running')`, scanID)
 	}()
 	now := r.now().Unix()
-	scan, err := readScan(tx.QueryRowContext(ctx, `SELECT `+scanColumns+` FROM risk_client_scans WHERE state IN ('queued','running') AND expires_at>? ORDER BY state DESC,created_at,id LIMIT 1`, now))
+	scan, err := readScan(tx.QueryRowContext(ctx, `SELECT `+scanColumns+` FROM risk_client_scans WHERE id=? AND state IN ('queued','running') AND expires_at>?`, scanID, now))
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	scanID = scan.ID
 	var allowed bool
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND ((?=1 AND is_admin=1) OR (?=0 AND is_admin=0 AND COALESCE(level,auto_level)=6)) AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?)))`, scan.owner, scan.admin, scan.admin, now).Scan(&allowed)
 	if err != nil {
 		return false, err
 	}
 	if !allowed {
-		_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',updated_at=? WHERE id=?`, now, scan.ID)
+		_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',checkpoint_json=`+scanCheckpointWithoutIdentitySQL+`,updated_at=? WHERE id=?`, now, scan.ID)
 		if err != nil {
 			return false, err
 		}
 		return true, tx.Commit()
+	}
+	if scan.ScanKind != "client_hits" {
+		return r.processAggregateScanBatch(ctx, tx, scan, now)
 	}
 	items, err := readScanCandidates(ctx, tx, scan)
 	if err != nil {
@@ -408,12 +553,9 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		}
 		scan.Scanned++
 		scan.afterAt, scan.afterID = item.at, item.id
-		if (scan.Kind != "total" && item.kind != scan.Kind) || (scan.Model != "" && item.model != scan.Model) {
-			continue
-		}
-		if len(matchRules(item.source, scan.rules, false)) > 0 {
+		if (scan.Kind == "total" || item.kind == scan.Kind) && (scan.Model == "" || item.model == scan.Model) && len(matchRules(item.source, scan.rules, false)) > 0 {
 			scan.Matched++
-			if _, err = tx.ExecContext(ctx, `INSERT INTO risk_client_scan_matches(scan_id,request_log_id,ordinal) VALUES(?,?,?)`, scan.ID, item.id, scan.Matched); err != nil {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO risk_scan_results(scan_id,row_no,user_id,request_log_id,result_json,published) VALUES(?,?,?,?,'{}',1)`, scan.ID, scan.Matched, item.userID, item.id); err != nil {
 				return false, err
 			}
 			if scan.Matched == MaxScanResults {
@@ -421,8 +563,12 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 				break
 			}
 		}
+		if scan.Scanned >= MaxScanCandidates {
+			scan.State, scan.Reason = "limited", "candidate_limit"
+			break
+		}
 	}
-	if scan.State == "running" && len(items) < ScanBatchSize {
+	if scan.State == "running" && len(items) < clientScanBatchSize {
 		scan.State = "completed"
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state=?,reason=?,after_at=?,after_log_id=?,scanned=?,matched=?,updated_at=?,failures=0 WHERE id=?`, scan.State, scan.Reason, scan.afterAt, scan.afterID, scan.Scanned, scan.Matched, now, scan.ID)
@@ -433,12 +579,12 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 }
 
 type scanCandidate struct {
-	id, at      int64
-	source      Source
-	kind, model string
+	id, at, userID int64
+	source         Source
+	kind, model    string
 }
 
-const scanCandidateSelect = `SELECT s.request_log_id,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,s.kind,l.model FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified')`
+const scanCandidateSelect = `SELECT s.request_log_id,s.occurred_at,s.user_id,s.source_json,s.effective_ip,s.ip_quality,s.kind,l.model FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified')`
 const scanSameSecond = scanCandidateSelect + ` AND s.occurred_at=? AND s.request_log_id>? AND s.request_log_id<=? ORDER BY s.request_log_id LIMIT ?`
 const scanLaterSeconds = scanCandidateSelect + ` AND s.occurred_at>? AND s.occurred_at<? AND s.request_log_id<=? ORDER BY s.occurred_at,s.request_log_id LIMIT ?`
 
@@ -446,13 +592,13 @@ const scanLaterSeconds = scanCandidateSelect + ` AND s.occurred_at>? AND s.occur
 // columns for the former; a row-value comparison can rescan a long same-second
 // prefix even when its EXPLAIN plan reports a time-index range.
 func readScanCandidates(ctx context.Context, tx *sql.Tx, scan ClientScan) ([]scanCandidate, error) {
-	items := make([]scanCandidate, 0, ScanBatchSize)
+	items := make([]scanCandidate, 0, clientScanBatchSize)
 	for step := range 2 {
 		query := scanSameSecond
-		args := []any{scan.afterAt, scan.afterID, scan.upper, ScanBatchSize - len(items)}
+		args := []any{scan.afterAt, scan.afterID, scan.upper, clientScanBatchSize - len(items)}
 		if step == 1 {
 			query = scanLaterSeconds
-			args = []any{scan.afterAt, scan.To, scan.upper, ScanBatchSize - len(items)}
+			args = []any{scan.afterAt, scan.To, scan.upper, clientScanBatchSize - len(items)}
 		}
 		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
@@ -461,7 +607,7 @@ func readScanCandidates(ctx context.Context, tx *sql.Tx, scan ClientScan) ([]sca
 		for rows.Next() {
 			var item scanCandidate
 			var raw, ip, quality string
-			if err = rows.Scan(&item.id, &item.at, &raw, &ip, &quality, &item.kind, &item.model); err != nil {
+			if err = rows.Scan(&item.id, &item.at, &item.userID, &raw, &ip, &quality, &item.kind, &item.model); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -477,16 +623,28 @@ func readScanCandidates(ctx context.Context, tx *sql.Tx, scan ClientScan) ([]sca
 		if err != nil {
 			return nil, err
 		}
-		if len(items) == ScanBatchSize {
+		if len(items) == clientScanBatchSize {
 			break
 		}
 	}
 	return items, nil
 }
 
-// RunScans owns a single resumable worker. Temporary failures are bounded;
-// session credentials are never persisted in a background task.
+// RunScans runs two bounded task workers. SQLite may serialize their commits,
+// while RAM claims keep a task's batches exclusive within this single instance.
 func (r *Repository) RunScans(ctx context.Context) {
+	var workers sync.WaitGroup
+	workers.Add(2)
+	for index := range 2 {
+		go func(cleanup bool) {
+			defer workers.Done()
+			r.runScanWorker(ctx, cleanup)
+		}(index == 0)
+	}
+	workers.Wait()
+}
+
+func (r *Repository) runScanWorker(ctx context.Context, cleanup bool) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
@@ -495,9 +653,11 @@ func (r *Repository) RunScans(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
-		_, cleanupErr := r.CleanupScans(ctx)
-		if cleanupErr != nil && ctx.Err() == nil {
-			slog.Warn("client audit scan retention failed", "error_class", "storage_or_deadline")
+		if cleanup {
+			_, cleanupErr := r.CleanupScans(ctx)
+			if cleanupErr != nil && ctx.Err() == nil {
+				slog.Warn("client audit scan retention failed", "error_class", "storage_or_deadline")
+			}
 		}
 		progress, err := r.ProcessScanBatch(ctx)
 		delay := time.Second

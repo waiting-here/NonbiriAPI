@@ -51,6 +51,20 @@ describe('PagePagination', () => {
     expect(onPageSizeChange).toHaveBeenCalledWith(100);
   });
 
+  it('limits audit page sizes to 20, 50, and 100 without changing the shared defaults', async () => {
+    const onPageSizeChange = vi.fn();
+    const view = await renderWithProviders(
+      <PagePagination metadata={metadata()} pageSizes={[20, 50, 100]} onPageChange={vi.fn()} onPageSizeChange={onPageSizeChange} />,
+      { station: 'admin', role: 'admin' },
+    );
+    const select = screen.getByRole('combobox', { name: 'Items per page' });
+    expect([...select.querySelectorAll('option')].map((option) => option.value)).toEqual(['20', '50', '100']);
+    fireEvent.change(select, { target: { value: '10' } });
+    expect(onPageSizeChange).not.toHaveBeenCalled();
+    await view.user.selectOptions(select, '50');
+    expect(onPageSizeChange).toHaveBeenCalledWith(50);
+  });
+
   it('navigates, clamps an oversized jump, and keeps an invalid jump local', async () => {
     const onPageChange = vi.fn();
     const view = await renderWithProviders(
