@@ -280,6 +280,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'common.activities.limited',
   }),
   admin({
+    id: 'admin-fat-fish',
+    path: '/limited-activities/fat-fish',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
+  }),
+  admin({
     id: 'admin-risk-audit',
     path: '/abuse-audit',
     access: 'admin',
