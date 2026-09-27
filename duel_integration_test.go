@@ -250,7 +250,7 @@ func TestDuelPeriodicRecoveryPreservesAcceptedGames(t *testing.T) {
 	if _, err := f.app.games.RecoverModule(context.Background(), "likes", f.clock.Load(), 100, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if h := f.read(0, "likes"); h.Current == nil || h.Current.Round != 2 || h.Current.Phase != "plan" || h.Current.Deadline == nil || *h.Current.Deadline-f.clock.Load() != 20 {
+	if h := f.read(0, "likes"); h.Current == nil || h.Current.Round != 2 || h.Current.Phase != "plan" || h.Current.Deadline == nil || *h.Current.Deadline-f.clock.Load() != 30 {
 		t.Fatal("periodic recovery did not advance normally", h)
 	}
 	f.checkLedger()
@@ -416,7 +416,7 @@ func TestDuelProductionMaintenanceAllowsSettlementAndManualPlanIsRequired(t *tes
 	}
 	f.clock.Store(*s.Deadline)
 	s = *f.read(0, "likes").Current
-	if s.Phase != "plan" || *s.Deadline != f.clock.Load()+20 {
+	if s.Phase != "plan" || *s.Deadline != f.clock.Load()+30 {
 		t.Fatal("maintenance shortened plan")
 	}
 	for seat := range 2 {
@@ -529,7 +529,7 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 						t.Fatalf("early terminal: %+v", h.LatestResult)
 					}
 					s = *h.Current
-					if g == "likes" && (s.Phase != "plan" || *s.Deadline != f.clock.Load()+20) {
+					if g == "likes" && (s.Phase != "plan" || *s.Deadline != f.clock.Load()+30) {
 						t.Fatal("next round shortened")
 					}
 					if g == "bidding" {

@@ -254,8 +254,8 @@
           "thursday": 100
         },
         "available": true,
-        "terms_hash": "d52e005ce2c76a4bf8a383b1ec2b718bddc5310bfe8d778c37fda31bfe880dab",
-        "content_hash": "177cb83e30206c8343cd91984963228970980fe6b36a4fb6844253f7d76ececc"
+        "terms_hash": "0aac26c3a74007c929cc3898622aadf2078a2f8ce25db0c8c591ce8566d119cf",
+        "content_hash": "ce86861b57caff1058cd5e56f572287d47c3ec5aaa57f784a2c5e8ceea61c460"
       },
       "standard": {
         "enabled": false,
@@ -266,14 +266,14 @@
           "thursday": 100
         },
         "available": true,
-        "terms_hash": "ddee0b07338084558fe9844dd4eb9650dc8e8d7d0dc3077a6585d4f65523dcce",
-        "content_hash": "27fe126841daa7328c487036241469a8854866c9bf9602743eda2f925a84cced"
+        "terms_hash": "2ee6518a884739a54b03ec7c21324bc0b920f275504d833f4e34589bccf36f60",
+        "content_hash": "5daccc5ccbcb621f5c0f69c25f6f703d47e7fc0ee1012f873f830fe8377d1eed"
       }
     },
     "available": true,
     "queue_seconds": 120,
     "queue_capacity": 4096,
-    "plan_seconds": 20,
+    "plan_seconds": 30,
     "settlement_seconds": 0
   }
 }
