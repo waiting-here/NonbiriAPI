@@ -273,7 +273,7 @@ function Content({ account }: { account: string }) {
         <code>{item.id}</code>
         <strong>{item.result?.passed ? t('通过', 'Passed') : t('未通过', 'Not passed')}</strong>
         <span>{item.result?.stars ?? 0}★ · {formatScoreUnits(item.result?.score_units ?? '0')}</span>
-        <span>{item.result?.ticket_charge ?? item.ticket_price} / {item.result?.ticket_refund ?? '0'} / {item.result?.rewards ?? '0'}</span>
+        <span>{t('门票', 'Ticket')}: {item.result?.ticket_charge ?? item.ticket_price} · {t('退款', 'Refund')}: {item.result?.ticket_refund ?? '0'} · {t('奖励', 'Rewards')}: {item.result?.rewards ?? '0'}</span>
       </li>)}</ol>
       <div className="fatfish-pager"><button type="button" disabled={historyPage <= 1} onClick={() => setHistoryPage(historyPage - 1)}>{t('上一页', 'Previous')}</button>
         <span>{historyPage}</span><button type="button" disabled={!history.data?.has_more} onClick={() => setHistoryPage(historyPage + 1)}>{t('下一页', 'Next')}</button></div>
