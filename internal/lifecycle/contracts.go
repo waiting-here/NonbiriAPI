@@ -77,6 +77,8 @@ type DeleteFinalizer interface {
 type DeleteRequest struct {
 	UserID      int64
 	DecisionNow int64
+	Source      DeleteSource
+	ActorUserID int64
 }
 
 // DeleteAdapter joins the coordinator-owned transaction. It must not commit,

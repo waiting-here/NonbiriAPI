@@ -642,7 +642,7 @@ func (coordinator *Coordinator) DeleteAccount(ctx context.Context, userID, decis
 	if err := coordinator.userAuth.AuthorizeFreshUser(ctx, tx, userID); err != nil {
 		return err
 	}
-	request := DeleteRequest{UserID: userID, DecisionNow: decisionNow}
+	request := DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteSelf, ActorUserID: userID}
 	finalizers := make([]DeleteFinalizer, 0, len(coordinator.delete.ordered()))
 	abortFinalizers := func() {
 		for index := len(finalizers) - 1; index >= 0; index-- {
