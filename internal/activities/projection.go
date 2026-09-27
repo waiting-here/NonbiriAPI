@@ -103,7 +103,7 @@ func projectWelfareTx(ctx context.Context, tx *sql.Tx, userID, now int64, config
 		if err != nil {
 			return err
 		}
-		view.ClaimedToday, err = readWelfareClaimTx(ctx, tx, userID, view.SiteDay)
+		view.ClaimedToday, err = readWelfareClaimTx(ctx, tx, userID, view.SiteDay, now)
 		if err != nil {
 			return err
 		}
