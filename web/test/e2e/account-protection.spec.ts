@@ -1,5 +1,5 @@
 import { expect, test } from './test';
-import { ADMIN_ORIGIN } from './ports';
+import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 
 async function setup(page: import('@playwright/test').Page) {
@@ -150,5 +150,74 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
   await page.getByRole('button', { name: 'Remove from blacklist' }).click();
   await expect(page.getByRole('link', { name: '42', exact: true })).toHaveCount(0);
   expect(listed).toBe(false);
+  errors.assertNone();
+});
+
+test('administrator can inspect an old deleted account without mutation controls', async ({ page }) => {
+  const errors = collectConsoleViolations(page);
+  await setup(page);
+  const discordID = '123456789012345678';
+  const deleted = {
+    record_id: '7', former_user_id: '42', discord_id: discordID, snapshot_version: 1,
+    registered_at: null, deleted_at: 1_800_000_000, effective_level: null,
+    ban: { state: 'unknown', active_at_deletion: null, reason: null, until: null },
+    charity_pause: { state: 'unknown', active_at_deletion: null, reason: null, until: null },
+    source: 'unknown', actor_user_id: null, blacklist_action: 'unknown', blacklist_reason_codes: [],
+    general_balance: '-2', game_balance: null, donation_credit: null,
+    sketch_paper: null, sketch_brush: null, alert_id: '7',
+  };
+  const pageBody = (data: unknown[]) => ({ data, next_cursor: null, pagination: {
+    page: '1', page_size: 20, total_items: String(data.length), total_pages: '1',
+  } });
+  await page.route('**/admin/api/users**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/admin/api/users') {
+      expect(url.searchParams.get('account_state')).toBe('all');
+      await route.fulfill({ json: pageBody([{ account_state: 'deleted', deleted }]) });
+    } else if (url.pathname === '/admin/api/users/deleted/7') {
+      await route.fulfill({ json: deleted });
+    } else if (url.pathname === '/admin/api/users/deletion-duel-aborts') {
+      expect(url.searchParams.get('discord_id')).toBe(discordID);
+      await route.fulfill({ json: pageBody([]) });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.goto(`${ADMIN_ORIGIN}/users`);
+  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Deleted account #7' })).toBeVisible();
+  expect(await page.getByText('Unknown', { exact: true }).count()).toBeGreaterThan(0);
+  await expect(page.getByText('No retained match cancellations')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'All accounts for this Discord ID' })).toHaveAttribute('href', /discord_id=123456789012345678/);
+  await expect(page.getByRole('button', { name: /ban|unban|delete|restore/i })).toHaveCount(0);
+  errors.assertNone();
+});
+
+test('level six can read administrator-origin blacklist events without a removal control', async ({ page }) => {
+  const errors = collectConsoleViolations(page);
+  await mockRoleSession(page, 'user', 'level6');
+  await mockPublicConfig(page, 'user');
+  const discordID = '123456789012345678';
+  await page.route('**/api/steward/blacklist**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/events')) {
+      await route.fulfill({ json: {
+        data: [{ id: '1', actor_kind: 'admin', actor_user_id: '9', reason_codes: [], safe_note: 'Original administrative note', created_at: 1_800_000_000 }],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+      } });
+    } else {
+      await route.fulfill({ json: {
+        data: [{ discord_id: discordID, reason: 'Original administrative note', created_at: 1_800_000_000, user_id: null, first_actor_kind: 'admin', first_actor_user_id: '9' }],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+      } });
+    }
+  });
+  await page.goto(`${USER_ORIGIN}/steward?tab=blacklist`);
+  await expect(page.getByRole('cell', { name: 'admin #9' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove from blacklist' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Events' }).click();
+  await expect(page.getByText(/Additional note: Original administrative note/)).toBeVisible();
   errors.assertNone();
 });

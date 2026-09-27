@@ -269,6 +269,11 @@ func applyAtSequence(ctx context.Context, tx *sql.Tx, plan Plan, sequence int64)
 	if err != nil {
 		return Result{}, err
 	}
+	if plan.spec.kind == KindFatFishUnlock || plan.spec.kind == KindFatFishTicket {
+		if len(roles) != 2 || accounts[roles[0].id].UserID != plan.spec.meta.ActorUserID {
+			return Result{}, ErrInvalidPlan
+		}
+	}
 	if plan.spec.kind == KindActivityLoan {
 		if len(roles) != 4 || accounts[roles[0].id].UserID <= 0 || accounts[roles[0].id].UserID != accounts[roles[2].id].UserID {
 			return Result{}, ErrInvalidPlan

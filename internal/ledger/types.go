@@ -62,6 +62,10 @@ const (
 	KindImageRefund          Kind = "image_refund"
 	KindImageDeleteFinalize  Kind = "image_delete_finalize"
 	KindInactivityDecay      Kind = "inactivity_decay"
+	KindFatFishUnlock        Kind = "fatfish_unlock"
+	KindFatFishTicket        Kind = "fatfish_ticket"
+	KindFatFishReward        Kind = "fatfish_reward"
+	KindFatFishRefund        Kind = "fatfish_refund"
 )
 
 type sourceType string

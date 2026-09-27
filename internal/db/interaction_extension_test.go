@@ -42,6 +42,113 @@ func interactionSourceFixture(t *testing.T) *sql.DB {
 	return database
 }
 
+func TestWorkerSuccessTimestampUpgradePreservesUnknownHistory(t *testing.T) {
+	database := interactionSourceFixture(t)
+	hostileMustExec(t, database, `INSERT INTO worker_checkpoints(worker_key,generation,attempt_count,next_attempt_at,updated_at) VALUES('lifecycle_recovery_v1',1,0,0,100)`)
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	var recorded sql.NullInt64
+	if err := database.QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key='lifecycle_recovery_v1'`).Scan(&recorded); err != nil || recorded.Valid {
+		t.Fatal("upgrade invented a successful checkpoint", recorded, err)
+	}
+	for _, value := range []any{1.5, int64(-1), int64(101), "not-a-timestamp"} {
+		if _, err := database.Exec(`UPDATE worker_checkpoints SET last_success_at=? WHERE worker_key='lifecycle_recovery_v1'`, value); err == nil {
+			t.Fatalf("invalid last-success timestamp accepted: %v", value)
+		}
+	}
+	hostileMustExec(t, database, `UPDATE worker_checkpoints SET last_success_at=100 WHERE worker_key='lifecycle_recovery_v1'`)
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key='lifecycle_recovery_v1'`).Scan(&recorded); err != nil || !recorded.Valid || recorded.Int64 != 100 {
+		t.Fatal("reentry changed the successful checkpoint", recorded, err)
+	}
+}
+
+func TestInteractionScanReasonsAndAccessPageIndex(t *testing.T) {
+	database := interactionSourceFixture(t)
+	queryPlan := func() string {
+		t.Helper()
+		rows, err := database.Query(`EXPLAIN QUERY PLAN SELECT id FROM audit_access_events WHERE occurred_at>=? AND occurred_at<? ORDER BY occurred_at DESC,id DESC LIMIT 20`, 0, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var details []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			details = append(details, detail)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(details, ";")
+	}
+	if before := queryPlan(); !strings.Contains(before, "USE TEMP B-TREE") {
+		t.Fatalf("source unexpectedly has a time page index: %s", before)
+	}
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	if after := queryPlan(); !strings.Contains(after, "idx_audit_access_time_page") || strings.Contains(after, "USE TEMP B-TREE") {
+		t.Fatalf("unindexed access page: %s", after)
+	}
+	user := hostileInsertUser(t, database, "scan reasons", 1, 1)
+	scan := hostileOID("scn_")
+	hostileMustExec(t, database, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at) VALUES(?,?,1,'abcdefghijklmnop','{}','[]','completed',0,100,'total','',0,0,0,0,0,86400)`, scan, user)
+	for _, reason := range []string{"result_limit", "permission_changed", "scan_failed", "candidate_limit", "minute_limit", "source_changed"} {
+		hostileMustExec(t, database, `UPDATE risk_client_scans SET reason=? WHERE id=?`, reason, scan)
+	}
+	if _, err := database.Exec(`UPDATE risk_client_scans SET reason='unrecognized' WHERE id=?`, scan); err == nil {
+		t.Fatal("unknown scan reason accepted")
+	}
+}
+
+func TestInteractionUpgradePreservesExistingScanResults(t *testing.T) {
+	database := interactionSourceFixture(t)
+	user := hostileInsertUser(t, database, "retained scan", 1, 1)
+	scan := hostileOID("scn_")
+	var logs []int64
+	for index := 0; index < 2; index++ {
+		request, err := GenerateOpaqueID("req_")
+		if err != nil {
+			t.Fatal(err)
+		}
+		hostileInsertTerminalRequest(t, database, request, user, "openai_chat_completions", "success", 200, nil)
+		log := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO request_logs(logical_request_id,user_id,route_kind,model,upstream_model_id,endpoint_base_url,caller_result_class,caller_status,status_code,attempt_count,started_at,completed_at) VALUES(?,?,'openai_chat_completions','model','upstream','https://upstream.example/v1','success',200,200,0,0,1)`, request, user))
+		hostileMustExec(t, database, `INSERT INTO request_source_facts VALUES(?,?,'self','192.0.2.1','direct_peer','{}',1)`, log, user)
+		logs = append(logs, log)
+	}
+	hostileMustExec(t, database, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,scanned,matched,created_at,updated_at,expires_at) VALUES(?,?,1,'abcdefghijklmnop','{}','[]','completed',0,100,'total','',?,0,3,3,3,0,0,86400)`, scan, user, logs[1])
+	for index, log := range logs {
+		hostileMustExec(t, database, `INSERT INTO risk_client_scan_matches VALUES(?,?,?)`, scan, log, 1+index*2)
+	}
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	for index, log := range logs {
+		var id, ordinal, source int64
+		var published int
+		var value string
+		if err := database.QueryRow(`SELECT r.request_log_id,r.row_no,r.result_json,s.request_log_id,r.published FROM risk_scan_results r JOIN risk_scan_result_sources s USING(scan_id,row_no) WHERE r.scan_id=? AND r.row_no=?`, scan, 1+index*2).Scan(&id, &ordinal, &value, &source, &published); err != nil || id != log || source != log || ordinal != int64(1+index*2) || value != "{}" || published != 1 {
+			t.Fatal("upgrade lost the stable result or source", id, ordinal, value, source, err)
+		}
+	}
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	hostileMustExec(t, database, `UPDATE request_source_facts SET user_id=NULL WHERE request_log_id=?`, logs[0])
+	var count, changed int
+	if err := database.QueryRow(`SELECT (SELECT count(*) FROM risk_scan_results WHERE scan_id=?),changed FROM risk_client_scans WHERE id=?`, scan, scan).Scan(&count, &changed); err != nil || count != 1 || changed != 1 {
+		t.Fatal("retained result missed privacy invalidation", count, changed, err)
+	}
+}
+
 // Preserve every original column and row, including opaque credentials and
 // arbitrary instance text, while permitting only the new hidden activity row.
 func interactionOriginalRows(t *testing.T, database *sql.DB, source generationManifest) map[string][]string {

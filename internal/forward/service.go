@@ -55,6 +55,7 @@ type Service struct {
 	charity        CharityRouter
 	claims         ClaimRail
 	charityCharges CharityChargeCalculator
+	charityGuard   CharityCallGuard
 	debug          DebugCapture
 	registry       *connector.Registry
 	connectors     map[connectorcontract.Type]connector.Connector
@@ -146,7 +147,8 @@ func NewService(config Config) (*Service, error) {
 		errorScope: config.ErrorScope, classify: config.Classify,
 		personal: config.Personal, charity: config.Charity, claims: config.Claims,
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
-		connectors: instances, safety: config.Safety, observer: config.Observer,
+		charityGuard: config.CharityGuard,
+		connectors:   instances, safety: config.Safety, observer: config.Observer,
 		adaptations: config.Adaptations,
 		now:         config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
 		backoff: config.Backoff.normalized(),
@@ -328,6 +330,18 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	if plan.charity {
 		decisionNow := plan.decisionNow
 		acceptInput.CharityDecisionNow = &decisionNow
+		if service.charityGuard != nil {
+			guarded, guardErr := service.charityGuard.CheckCharityCall(parent, userID, plan.fullName, decisionNow)
+			if guardErr != nil || guarded.Banned {
+				if guardErr != nil {
+					guardErr = claim.ErrDependencyUnavailable
+				} else {
+					guardErr = &accountBannedError{until: guarded.Until}
+				}
+				service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, guardErr, true, language)
+				return
+			}
+		}
 	}
 	accepted, err := service.claims.Accept(executionContext, acceptInput)
 	if err != nil {
@@ -1255,7 +1269,12 @@ func nilInterfaceValue(value any) bool {
 	}
 }
 
+type accountBannedError struct{ until *int64 }
+
+func (*accountBannedError) Error() string { return "account is banned" }
+
 func failureForError(err error, charity bool) wireFailure {
+	var banned *accountBannedError
 	switch {
 	case err == nil:
 		return platformFailure(httperr.CodeInternal, "internal error")
@@ -1271,6 +1290,12 @@ func failureForError(err error, charity bool) wireFailure {
 		return platformFailure(httperr.CodeConflict, "request adaptation conflicts with the current model configuration")
 	case errors.Is(err, requestadaptation.ErrUnavailable):
 		return platformFailure(httperr.CodeServiceUnavailable, "request adaptation is temporarily unavailable")
+	case errors.As(err, &banned):
+		message := "account is banned"
+		if banned.until != nil {
+			message += " until " + time.Unix(*banned.until, 0).UTC().Format(time.RFC3339)
+		}
+		return platformFailure(httperr.CodeForbidden, message)
 	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
 		return platformFailure(httperr.CodeNotFound, "model not found")
 	case errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, claim.ErrForbidden):
