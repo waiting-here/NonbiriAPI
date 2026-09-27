@@ -66,6 +66,18 @@ function requestFrom(detail: NumberedRoleLogDetail): RoleLogRow {
   return detail.request;
 }
 
+function UsageMismatchBadge({ visible }: { visible: boolean }) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  const label = t('common.operations.logs.usageTotalMismatch');
+  const explanation = t('common.operations.logs.usageTotalMismatchExplanation');
+  return (
+    <span className="status-badge" title={explanation} aria-label={`${label}. ${explanation}`}>
+      {label}
+    </span>
+  );
+}
+
 function isFinalAuthorityError(error: unknown): boolean {
   return isApiError(error) && (error.code === 'unauthorized' || error.code === 'forbidden');
 }
@@ -160,6 +172,9 @@ function AttemptTable({
                       : 'common.operations.logs.upstreamResponse',
                   )}
                 </span>
+                {attempt.role !== 'user' ? (
+                  <UsageMismatchBadge visible={attempt.usage_total_mismatch} />
+                ) : null}
               </div>
               {attempt.result_kind === 'synthetic' ? (
                 <p className="log-attempt-notice">
@@ -316,6 +331,7 @@ function ScopedRoleLogPanel({
             'error_code',
             'status',
             'phase',
+            'usage_total_mismatch',
           ] as const),
     [role],
   );
@@ -441,6 +457,15 @@ function ScopedRoleLogPanel({
         maxLength: 39,
       });
     if (role !== 'user') {
+      values.push({
+        name: 'usage_total_mismatch',
+        label: t('common.operations.logs.usageTotalMismatchFilter'),
+        ariaLabel: t('common.operations.logs.usageTotalMismatchFilter'),
+        options: [
+          { value: '', label: t('common.operations.logs.usageTotalMismatchAll') },
+          { value: 'true', label: t('common.operations.logs.usageTotalMismatchOnly') },
+        ],
+      });
       values.push({
         name: 'endpoint_key_id',
         label: t('common.operations.logs.endpointKeyId'),
@@ -577,7 +602,16 @@ function ScopedRoleLogPanel({
       header: t('logs.error'),
       render: (row) => <span className="mono">{row.caller_error_code ?? '—'}</span>,
     },
-    { key: 'usage', header: t('logs.tokens'), render: (row) => <TokenBuckets row={row.usage} /> },
+    {
+      key: 'usage',
+      header: t('logs.tokens'),
+      render: (row) => (
+        <div className="ops-stack">
+          <TokenBuckets row={row.usage} />
+          {row.role !== 'user' ? <UsageMismatchBadge visible={row.usage_total_mismatch} /> : null}
+        </div>
+      ),
+    },
     {
       key: 'charge',
       header: t('common.operations.logs.charge'),
@@ -658,7 +692,17 @@ function ScopedRoleLogPanel({
             label: t('common.operations.logs.callerError'),
             value: <span className="mono">{detailRequest.caller_error_code ?? '—'}</span>,
           },
-          { label: t('logs.tokens'), value: <TokenBuckets row={detailRequest.usage} /> },
+          {
+            label: t('logs.tokens'),
+            value: (
+              <div className="ops-stack">
+                <TokenBuckets row={detailRequest.usage} />
+                {detailRequest.role !== 'user' ? (
+                  <UsageMismatchBadge visible={detailRequest.usage_total_mismatch} />
+                ) : null}
+              </div>
+            ),
+          },
           ...(role !== 'user'
             ? [
                 {
