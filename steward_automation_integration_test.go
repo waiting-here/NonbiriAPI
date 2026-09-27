@@ -149,6 +149,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	}
 	f.modelID = strconv.FormatInt(f.exec(t, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,revision,binding_revision,created_at,updated_at) VALUES('fixture','automation','[公益]fixture/automation',1,'per_request',1,1,?,?)`, time.Now().Unix(), time.Now().Unix()), 10)
 	f.exec(t, `INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,63,'')`, f.modelID)
+	f.exec(t, `INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(?,1,300)`, f.modelID)
 	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{upstream.URL}, RequestTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
@@ -569,7 +570,7 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 	if err := json.Unmarshal(exported.Body.Bytes(), &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.SchemaVersion != 10 || len(document.Endpoints) != 1 || len(document.Endpoints[0].Keys) != 2 ||
+	if document.SchemaVersion != 11 || len(document.Endpoints) != 1 || len(document.Endpoints[0].Keys) != 2 ||
 		len(document.Donations) != 1 || document.Donations[0].ID != created.DonationID || document.Donations[0].Status != "approved" ||
 		len(document.Donations[0].Keys) != 2 || len(document.Donations[0].Keys[0].RecurringLimits) != 1 || len(document.CatalogPairs) != 2 {
 		t.Fatal("automation resources are missing from the existing export")

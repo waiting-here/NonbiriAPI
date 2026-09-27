@@ -228,7 +228,7 @@ describe('shared account management', () => {
     await view.user.selectOptions(level, '4');
     await waitFor(() =>
       expect(
-        calls.some((call) => call.path === '/api/steward/users?level=4&page=1&page_size=20'),
+        calls.some((call) => call.path === '/api/steward/users?account_state=all&level=4&page=1&page_size=20'),
       ).toBe(true),
     );
     expect(screen.getByTestId('location')).toHaveTextContent('level=4');

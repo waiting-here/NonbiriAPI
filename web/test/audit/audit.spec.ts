@@ -23,6 +23,8 @@ interface Fixture {
   discovery_id: string;
   diagnostic_id: string;
   image_task_id: string;
+  projection_alert_id: string;
+  issue_id: string;
   source_ip: string;
   source_client: string;
   json_body: string;
@@ -200,18 +202,29 @@ async function riskEvidence(page: Page, sustained = true) {
   const group = page.getByRole('group', { name: 'Abuse audit', exact: true });
   await group.getByRole('button', { name: 'Users', exact: true }).click();
   await page.getByLabel('Risk filter').selectOption('rpm');
+  await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   if (!sustained) {
-    await expect(page.getByText('No entries on this page', { exact: true })).toBeVisible();
+    await expect(page.getByText('Page 1 of 1 · Total: 0', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'No results yet', exact: true })).toBeVisible();
     await page.getByLabel('Risk filter').selectOption('');
+    await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+    await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   }
-  const row = page
-    .getByRole('row')
-    .filter({ has: page.getByRole('cell', { name: f.users[0].id, exact: true }) });
-  await expect(row).toContainText(sustained ? '5 · Yes' : '0 · No');
-  if (!sustained) await expect(row.getByRole('cell').nth(6)).toHaveText('5');
-  await row.getByRole('button', { name: 'Inspect', exact: true }).click();
+  const card = page.locator('.card').filter({
+    has: page.getByText('User ID: ' + f.users[0].id, { exact: true }),
+  });
+  await expect(
+    card.getByText(sustained ? '5 · Yes' : '0 · No', { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    card.locator('dt').filter({ hasText: 'Complete minutes / Incomplete minutes' }).locator('+ dd'),
+  ).toHaveText(sustained ? '5 / 0' : '0 / 5');
+  await card.getByRole('button', { name: 'Inspect', exact: true }).click();
   await expect(page.getByText('Minute observations', { exact: true })).toBeVisible();
   await group.getByRole('button', { name: 'Shared IPs', exact: true }).click();
+  await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
   await expect(page.getByText('Users: 4', { exact: false })).toBeVisible();
   await group.getByRole('button', { name: 'Client matches', exact: true }).click();
@@ -234,6 +247,41 @@ function amount(value: string) {
   return whole.toLocaleString('en-US');
 }
 test.describe.configure({ mode: 'serial' });
+
+test('an alert opens the exact retained issue context across refresh and mobile layout', async ({
+  browser,
+}) => {
+  const f = fixture();
+  const context = await session(browser, 'admin');
+  try {
+    const page = await context.newPage();
+    await page.goto(f.admin_url + '/alerts?alert_id=' + f.projection_alert_id);
+    await page.getByRole('button', { name: 'Issue projection', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Retained related issue IDs', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(f.issue_id, { exact: true })).toBeVisible();
+    const saved = page.url();
+    expect(new URL(saved).searchParams.get('target_kind')).toBe('issue_user');
+    expect(new URL(saved).searchParams.get('target_id')).toBe(f.users[0].id);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(page.getByText(f.issue_id, { exact: true })).toBeVisible();
+    expect(page.url()).toBe(saved);
+    await expect(page.locator('a[href="/users?user=' + f.users[0].id + '"]')).toBeVisible();
+    const response = await api(
+      context,
+      '/admin/api/alerts/targets/issue_user/' + f.users[0].id,
+      true,
+    );
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.related_issue_ids).toContain(f.issue_id);
+    expect(JSON.stringify(body)).not.toContain('synthetic retained issue');
+  } finally {
+    await context.close();
+  }
+});
 
 test('administrator reviews raw diagnostics, human audit evidence and all four asset ledgers', async ({
   browser,

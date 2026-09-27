@@ -426,7 +426,7 @@ func (authorizer *siteConfigBarrierAuthorizer) AuthorizeAdmin(ctx context.Contex
 	}
 }
 
-func openSharedSiteConfigStores(t *testing.T) (*db.Store, *db.Store) {
+func openConcurrentSiteConfigStore(t *testing.T) *db.Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "shared-site-config.db")
 	masterKey := bytes.Repeat([]byte{0x67}, secret.MasterKeyBytes)
@@ -441,25 +441,22 @@ func openSharedSiteConfigStores(t *testing.T) (*db.Store, *db.Store) {
 		_ = vault.Close()
 		t.Fatalf("open first shared store: %v", err)
 	}
-	second, err := db.Open(path, vault)
-	if err != nil {
-		_ = first.Close()
-		_ = vault.Close()
-		t.Fatalf("open second shared store: %v", err)
-	}
+	// One store owns the database lifetime. Two retained pool connections let
+	// this test force overlapping snapshots without bypassing file ownership.
+	first.DB().SetMaxOpenConns(2)
+	first.DB().SetMaxIdleConns(2)
 	t.Cleanup(func() {
-		_ = second.Close()
 		_ = first.Close()
 		_ = vault.Close()
 	})
-	return first, second
+	return first
 }
 
 func TestSiteConfigConcurrentRevisionHasOneWinner(t *testing.T) {
-	firstStore, secondStore := openSharedSiteConfigStores(t)
+	firstStore := openConcurrentSiteConfigStore(t)
 	authorizer := &siteConfigBarrierAuthorizer{release: make(chan struct{})}
 	first := newSiteConfigTestRepository(t, firstStore, authorizer)
-	second := newSiteConfigTestRepository(t, secondStore, authorizer)
+	second := newSiteConfigTestRepository(t, firstStore, authorizer)
 	initialRevision := siteConfigRevision(t, firstStore)
 
 	type outcome struct {
