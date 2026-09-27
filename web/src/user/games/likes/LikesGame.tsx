@@ -24,6 +24,7 @@ import { LikesArt } from './LikesArt';
 import { Arena, CompactScores } from './Arena';
 import { Glossary } from './Glossary';
 import { LoadoutEditor } from './Loadout';
+import { CustomPresets } from './CustomPresets';
 import { initialSelection, selectionProblem } from './selection';
 import { LikesRoundLog } from './Log';
 import { useReducedMotion, useServerClock } from './motion';
@@ -81,8 +82,8 @@ function Rules({
       <h3>{t('逐步结算演出', 'Step-by-step resolution')}</h3>
       <p>
         {t(
-          '方案揭示 → 购物充电 → 费用与过载 → 净化与Buff → 得赞 → 追加效果 → 轮末变化。每一步按内容留出阅读时间，连续技能逐个展示，总时长不限。双方同步展示，全部结束后开始新的完整20秒。资源补充与结果均以服务端记录为准。',
-          'Plans → shopping and charge → payment and overload → cleansing and buffs → likes → follow-ups → round end. Each step has its own reading time. Consecutive casts play one by one, with no overall time cap. Both sides display together; the next full twenty seconds starts when every step finishes. Changes and results follow server records.',
+          '方案揭示 → 购物充电 → 费用与过载 → 净化与Buff → 得赞 → 追加效果 → 轮末变化。每一步按内容留出阅读时间，连续技能逐个展示，总时长不限。双方同步展示，全部结束后开始新的完整30秒。资源补充与结果均以服务端记录为准。',
+          'Plans → shopping and charge → payment and overload → cleansing and buffs → likes → follow-ups → round end. Each step has its own reading time. Consecutive casts play one by one, with no overall time cap. Both sides display together; the next full thirty seconds starts when every step finishes. Changes and results follow server records.',
         )}
       </p>
       <h3>{t('共享电能与过载', 'Shared energy and overload')}</h3>
@@ -154,23 +155,28 @@ function Outcomes({ result }: { readonly result: DuelResult<LikesView, Presentat
 }
 function Lobby({
   catalog,
+  catalogs,
   context,
   blocked,
+  selection,
+  onSelectionChange,
+  onPresetLoad,
   onQueue,
   onInspect,
   onEdit,
-  initialLoadout,
 }: {
   readonly catalog: ModeCatalog;
+  readonly catalogs: Readonly<Record<'quick' | 'standard', ModeCatalog>>;
   readonly context: DuelLobbyContext;
   readonly blocked: boolean;
+  readonly selection: Selection;
+  readonly onSelectionChange: (selection: Selection) => void;
+  readonly onPresetLoad: (mode: 'quick' | 'standard', selection: Selection) => void;
   readonly onQueue: (selection: Selection) => void;
   readonly onInspect: (id: string) => void;
   readonly onEdit: () => void;
-  readonly initialLoadout?: Selection;
 }) {
   const t = useDuelText();
-  const [selection, setSelection] = useState(() => initialLoadout ?? initialSelection(catalog));
   const mode = context.config.modes[catalog.mode],
     enough =
       creditsToMilli(spendableGameCredits(context.wallets).total) >=
@@ -182,11 +188,18 @@ function Lobby({
         catalog={catalog}
         value={selection}
         onChange={(next) => {
-          setSelection(next);
+          onSelectionChange(next);
           onEdit();
         }}
         disabled={blocked}
         onInspect={onInspect}
+      />
+      <CustomPresets
+        catalogs={catalogs}
+        mode={catalog.mode}
+        selection={selection}
+        blocked={blocked}
+        onLoad={onPresetLoad}
       />
       {mode && <DuelTerms mode={mode} />}
       <div className="likes-enqueue">
@@ -237,8 +250,7 @@ export function LikesGame(context: DuelLobbyContext) {
   const [tutorial, setTutorial] = useState(false);
   const [tutorialSeen, setTutorialSeen] = useState(() => !!tutorialStatus());
   const [tutorialScene, setTutorialScene] = useState<MusicScene>('lobby');
-  const [teachingLoadout, setTeachingLoadout] = useState<Selection | undefined>();
-  const [loadoutRevision, setLoadoutRevision] = useState(0);
+  const [drafts, setDrafts] = useState<Partial<Record<'quick' | 'standard', Selection>>>({});
   const [lobbyForResult, setLobbyForResult] = useState<string | null>(null);
   const [rules, setRules] = useState(false),
     [guide, setGuide] = useState<string | null>(null),
@@ -323,8 +335,7 @@ export function LikesGame(context: DuelLobbyContext) {
     setTutorial(false);
     if (selection && !current && !queue && !duel.blocked) {
       setMode('quick');
-      setTeachingLoadout(selection);
-      setLoadoutRevision((n) => n + 1);
+      setDrafts((previous) => ({ ...previous, quick: selection }));
       setLobbyForResult(result?.id ?? null);
     }
   };
@@ -589,11 +600,19 @@ export function LikesGame(context: DuelLobbyContext) {
                 ))}
               </div>
               <Lobby
-                key={`${mode}:${loadoutRevision}`}
-                initialLoadout={mode === 'quick' ? teachingLoadout : undefined}
                 catalog={c}
+                catalogs={catalogQuery.data!.modes}
                 context={context}
                 blocked={duel.blocked}
+                selection={drafts[mode] ?? initialSelection(c)}
+                onSelectionChange={(selection) =>
+                  setDrafts((previous) => ({ ...previous, [mode]: selection }))
+                }
+                onPresetLoad={(savedMode, selection) => {
+                  setDrafts((previous) => ({ ...previous, [savedMode]: selection }));
+                  setMode(savedMode);
+                  editLobby();
+                }}
                 onInspect={setGuide}
                 onEdit={editLobby}
                 onQueue={(selection) => {

@@ -15,6 +15,8 @@ func Descriptor() game.ModuleDescriptor {
 			{Station: "admin", Method: "GET", Pattern: "/admin/api/games/likes/history/{id}/rounds"},
 			{Station: "admin", Method: "POST", Pattern: "/admin/api/games/likes/history/export"},
 			{Station: "user", Method: "GET", Pattern: "/api/games/likes/catalog", Continuation: true},
+			{Station: "user", Method: "GET", Pattern: "/api/games/likes/loadouts"},
+			{Station: "user", Method: "PUT", Pattern: "/api/games/likes/loadouts/{slot}"},
 			{Station: "user", Method: "GET", Pattern: "/api/games/likes/state", Continuation: true},
 			{Station: "user", Method: "POST", Pattern: "/api/games/likes/queue"},
 			{Station: "user", Method: "DELETE", Pattern: "/api/games/likes/queue/{id}", Continuation: true},

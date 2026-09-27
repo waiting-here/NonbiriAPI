@@ -49,3 +49,19 @@ func TestSupportedLegacyIdentitiesAndExplicitCategories(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviousCatalogIdentityAndPlanningTime(t *testing.T) {
+	for mode, expected := range map[string]string{
+		"quick":    "177cb83e30206c8343cd91984963228970980fe6b36a4fb6844253f7d76ececc",
+		"standard": "27fe126841daa7328c487036241469a8854866c9bf9602743eda2f925a84cced",
+	} {
+		old, hash, err := LoadHistorical(mode)
+		if err != nil || hash != expected || old.SchemaVersion != 16 || old.Parameters["TURN_SECONDS"] != 20 {
+			t.Fatal("previous catalog identity changed", mode, hash, err)
+		}
+		current, currentHash, err := Load(mode)
+		if err != nil || currentHash == hash || current.Parameters["TURN_SECONDS"] != 30 {
+			t.Fatal("current catalog does not have distinct 30-second identity", mode, currentHash, err)
+		}
+	}
+}

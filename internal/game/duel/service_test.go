@@ -317,6 +317,9 @@ func TestRealBiddingSamePhaseLocksAndDeadlineWins(t *testing.T) {
 func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 	f := newFixture(t, "likes")
 	state := f.matched()
+	if state.Deadline == nil || *state.Deadline != 130 {
+		t.Fatal("initial likes plan did not receive 30 seconds", state.Deadline)
+	}
 	body := `{"kind":"plan","plan":{"purchases":[],"main":{"skillId":"PUB01"},"extra":[]}}`
 	f.action(0, state, body)
 	f.action(1, state, body)
@@ -331,7 +334,7 @@ func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 	}
 	f.clock.Store(end)
 	next := *f.read(0).Current
-	if next.Phase != "plan" || next.Round != 2 || *next.Deadline != end+20 {
+	if next.Phase != "plan" || next.Round != 2 || *next.Deadline != end+30 {
 		t.Fatal(next)
 	}
 	f.action(0, next, body)

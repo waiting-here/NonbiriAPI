@@ -287,6 +287,38 @@
   color: var(--l-muted);
   font-size: 0.8rem;
 }
+.likes-custom-presets {
+  margin: 1.5rem 0;
+}
+.likes-custom-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.65rem;
+}
+.likes-custom-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  justify-content: space-between;
+  padding: 0.8rem;
+  border: 1px solid var(--l-line);
+  border-radius: 0.5rem;
+  background: var(--l-raised);
+}
+.likes-custom-preset > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.likes-custom-preset span {
+  color: var(--l-muted);
+  overflow-wrap: anywhere;
+}
+.likes-custom-preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
 .likes-enqueue,
 .likes-plan-confirm {
   display: flex;
