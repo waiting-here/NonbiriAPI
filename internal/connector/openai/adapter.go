@@ -407,6 +407,8 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	seenChunk := false
 	usage := Usage{}
 	usageState := cumulativeUsage{}
+	var leadingUsageFrame []byte
+	defer func() { clear(leadingUsageFrame) }()
 
 	for {
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
@@ -456,6 +458,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
 		}
+		hasChoices := chunkHasChoices(compact)
 		frame := make([]byte, 0, len(compact)+8)
 		frame = append(frame, "data: "...)
 		frame = append(frame, compact...)
@@ -467,6 +470,24 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream was rejected")
 		}
 		usage = usageState.observe(chunkUsage, chunkUsageMalformed)
+		if !seenChunk && !hasChoices {
+			// Retain only a bounded cumulative snapshot until a validated
+			// choice establishes output. A metadata-only stream cannot start
+			// the response, but metadata before real output remains compatible.
+			clear(leadingUsageFrame)
+			leadingUsageFrame = frame
+			continue
+		}
+		if len(leadingUsageFrame) != 0 {
+			wrote, writeErr := a.writeStreamFrame(writer, controller, leadingUsageFrame)
+			clear(leadingUsageFrame)
+			leadingUsageFrame = nil
+			committed = committed || wrote
+			if writeErr != nil {
+				clear(frame)
+				return sinkFailureWithCommit(committed, usage)
+			}
+		}
 		wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
 		clear(frame)
 		committed = committed || wrote
@@ -668,11 +689,6 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			return failure("upstream stream chunk was invalid")
 		}
 		usage = usageState.observe(chunkUsage, chunkMalformed)
-		seenChunk = true
-		if err := connectorcontract.MarkResponseStarted(writer); err != nil {
-			clear(frame)
-			return sinkFailureWithCommit(committed, usage)
-		}
 		if len(choices) == 0 {
 			// Hold the latest usage until finish -> usage -> DONE. Empty
 			// keepalive chunks must not erase a previously received snapshot.
@@ -683,6 +699,11 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 				clear(frame)
 			}
 			continue
+		}
+		seenChunk = true
+		if err := connectorcontract.MarkResponseStarted(writer); err != nil {
+			clear(frame)
+			return sinkFailureWithCommit(committed, usage)
 		}
 		if !toolsSeen && !hasToolsSeen {
 			if _, writeErr := writeFrame(frame, []byte(event.Data)); writeErr != nil {
