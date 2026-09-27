@@ -17,6 +17,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -45,6 +46,7 @@ func processTestVault(t *testing.T) *secret.Vault {
 
 func processTestStore(t *testing.T, path string, vault *secret.Vault) *db.Store {
 	t.Helper()
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	store, err := db.OpenContext(ctx, path, vault)
@@ -321,6 +323,7 @@ func TestInitializeProcessBindFailureKeepsResourcesOwnedForCleanup(t *testing.T)
 	}
 	t.Cleanup(func() { _ = occupied.Close() })
 	path := filepath.Join(t.TempDir(), "bind-failure.sqlite")
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	for name, value := range map[string]string{
 		"NONBIRI_LISTEN_ADDR":              occupied.Addr().String(),
 		"NONBIRI_DB_PATH":                  path,
