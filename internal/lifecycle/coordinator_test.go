@@ -36,6 +36,8 @@ func TestNewRequiresEveryClosedAdapterFamily(t *testing.T) {
 		{"routing retention", func(config *Config) { config.Retention.CharityRouting = nil }},
 		{"continuity delete", func(config *Config) { config.Delete.Continuity = nil }},
 		{"continuity retention", func(config *Config) { config.Retention.Continuity = nil }},
+		{"adaptation delete", func(config *Config) { config.Delete.RequestAdaptation = nil }},
+		{"adaptation retention", func(config *Config) { config.Retention.RequestAdaptation = nil }},
 		{"delete", func(config *Config) { config.Delete.Reports = nil }},
 		{"recovery", func(config *Config) { config.Recovery.Claims = nil }},
 		{"retention", func(config *Config) { config.Retention.RequestLogs = nil }},
@@ -237,6 +239,7 @@ func configuredDeleteAdapters(calls *[]string, finalizers []*testFinalizer, fail
 		return adapter
 	}
 	return DeleteAdapters{
+		RequestAdaptation:    makeAdapter(17, "request_adaptation"),
 		Continuity:           makeAdapter(16, "continuity"),
 		CharityRouting:       makeAdapter(15, "charity_routing"),
 		Governance:           makeAdapter(14, "governance"),
@@ -251,7 +254,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-success", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 17)
+	finalizers := make([]*testFinalizer, 18)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -271,7 +274,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	if err := coordinator.DeleteAccount(context.Background(), userID, 100); err != nil {
 		t.Fatalf("DeleteAccount: %v", err)
 	}
-	wantOrder := []string{"continuity", "auth", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "debug", "governance", "charity_routing", "ledger"}
+	wantOrder := []string{"continuity", "auth", "request_adaptation", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "debug", "governance", "charity_routing", "ledger"}
 	if !reflect.DeepEqual(calls, wantOrder) {
 		t.Fatalf("delete order = %v, want %v", calls, wantOrder)
 	}
@@ -296,7 +299,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-rollback", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 17)
+	finalizers := make([]*testFinalizer, 18)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -320,7 +323,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 		t.Fatalf("retirement commits=%d aborts=%d", retirement.commits, retirement.aborts)
 	}
 	for index, finalizer := range finalizers {
-		if index < 6 || index == 16 {
+		if index < 6 || index == 16 || index == 17 {
 			if finalizer.aborts != 1 || finalizer.commits != 0 {
 				t.Fatalf("prepared finalizer %d commits=%d aborts=%d", index, finalizer.commits, finalizer.aborts)
 			}

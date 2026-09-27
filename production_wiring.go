@@ -33,6 +33,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
@@ -45,6 +46,7 @@ type publicForwardRuntime struct {
 	flow        *flowcontrol.Controller
 	abuse       *antiabuse.Service
 	clientGuard *clientguard.Service
+	adaptations *requestadaptation.Store
 	lifecycle   *lifecyclegate.Gate
 	handler     http.Handler
 }
@@ -73,6 +75,7 @@ func newStewardAutomationHandler(service *stewardautomation.Service, repository 
 func newPublicForwardRuntime(
 	store *db.Store,
 	vault *secret.Vault,
+	adaptations *requestadaptation.Store,
 	identities *continuity.Service,
 	claims *claim.Service,
 	charityService *charity.Service,
@@ -87,7 +90,7 @@ func newPublicForwardRuntime(
 	audits *auditRuntime,
 	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
-	if store == nil || vault == nil || identities == nil || claims == nil || charityService == nil || charityRoutes == nil ||
+	if store == nil || vault == nil || adaptations == nil || identities == nil || claims == nil || charityService == nil || charityRoutes == nil ||
 		resourcesRepository == nil || registry == nil || outboundBackend == nil || debugHub == nil || maintenanceGate == nil || cancelUserDuelsTx == nil {
 		return nil, errors.New("public forward runtime dependencies are required")
 	}
@@ -179,7 +182,8 @@ func newPublicForwardRuntime(
 		connectors = append(connectors, instance)
 	}
 	forwardConfig := forward.Config{
-		Personal: personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
+		Adaptations: adaptations,
+		Personal:    personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
 		CharityGuard: clientGuard,
 	}
@@ -214,7 +218,7 @@ func newPublicForwardRuntime(
 		closed.ServeHTTP(w, r)
 		return true
 	}))
-	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, lifecycle: lifecycle, handler: handler}, nil
+	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, clientGuard: clientGuard, adaptations: adaptations, lifecycle: lifecycle, handler: handler}, nil
 }
 
 type charityPolicyRouter struct {
