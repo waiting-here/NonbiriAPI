@@ -59,6 +59,8 @@ Bidding Duel offers 13 simultaneous hidden-card rounds. Turn-based Battle Miniga
 
 The six games have dedicated covers; Fishing includes illustrated catches with an SVG fallback. Bidding Duel, Turn-based Battle Minigame (Test) and Blackjack include short sound effects. Turn-based Battle Minigame (Test) also has synchronized scene music. Sound and music start off and remember each game's choice in the browser. Account → Local preferences offers lightweight or lossless music, applied on the next music activation or game entry. Media sources and formats are documented in the [audio notice](web/src/shared/assets/game-audio/NOTICE.md).
 
+The Fat Fish limited activity has an illustrated cover and optional background music: "Monkeys Spinning Monkeys" by Kevin MacLeod, under CC BY 4.0. It is delivered locally as the original MP3, with a separate music switch that starts off; the lightweight/lossless choice does not change this track. See its [media credits](web/public/assets/fatfish/NOTICE.md).
+
 Blackjack shares one nine-seat table with a persistent waiting queue and a 5/20/5-second cadence aligned to each :00 and :30. Six-deck rules include splitting and doubling; each hand pays all net returns in general credits after frozen fees. The game starts disabled. See [Blackjack rules](docs/blackjack.md).
 
 All six games provide private per-game seeds, opening commitments and terminal verification. See [randomness and phased disclosure](docs/game-randomness.md) for the protocol, independent verifier and its limits.

@@ -65,10 +65,13 @@ export function LimitedActivitiesSection() {
                   />
                 ) : (
                   <img
-                    src="/assets/fatfish/cover.svg"
-                    alt={t('鱼缸中的大肥鱼与电脑器材', 'A big fish among aquarium and computer equipment')}
-                    width="960"
-                    height="540"
+                    src="/assets/fatfish/cover.png"
+                    alt={t(
+                      '大肥鱼搬动障碍，开心地奔向大碗米饭',
+                      'Fat Fish move obstacles and happily head toward bowls of rice',
+                    )}
+                    width="1536"
+                    height="1024"
                     loading="lazy"
                   />
                 )}
@@ -83,8 +86,8 @@ export function LimitedActivitiesSection() {
                         'Open the picture book and collect sketch paper and brushes.',
                       )
                     : t(
-                        '在独立的鱼缸中探索、培养并挑战。',
-                        'Explore, grow and take on challenges in a dedicated tank.',
+                        '搬动障碍，帮饥肠辘辘的大肥鱼找到米饭。',
+                        'Move obstacles and guide hungry Fat Fish to their rice.',
                       )}
                 </p>
                 <p className="limited-entry__status">{statusLabel(activity.status, t)}</p>

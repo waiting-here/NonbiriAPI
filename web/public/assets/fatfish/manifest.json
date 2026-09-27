@@ -2,7 +2,7 @@
   "format": "nonbiri-fatfish-assets",
   "version": 1,
   "license": "AGPL-3.0",
-  "rights": "Owner-provided artwork authorized for this project; the cover is an original composition of the supplied visual language.",
+  "rights": "Supplied and original artwork under AGPL-3.0; music retains its separate CC-BY-4.0 license. See NOTICE.md.",
   "tool_visuals": {
     "barrier": "keycap-barrier",
     "memory": "cache-puck",
@@ -1978,11 +1978,25 @@
     ]
   },
   "cover": {
-    "url": "/assets/fatfish/cover.svg",
-    "source": "Original composition using owner-provided fish and hardware vector language",
-    "transform": "New static SVG composition",
+    "url": "/assets/fatfish/cover.png",
+    "source": "Original illustration based on supplied mascot artwork",
+    "transform": "New rice-and-obstacle composition, supplied PNG unchanged",
     "license": "AGPL-3.0",
-    "bytes": 3450,
-    "sha256": "0b1b437b77a9c3d27db6807d497be5ddd4a2201aba8cd4ccbd25952da0255e72"
+    "bytes": 2193862,
+    "sha256": "1c1d2d5f794edd788cbbe2ef0037bf1895bb0fca39b9d6e92e8b0626cbe2d0ef"
+  },
+  "music": {
+    "url": "/assets/fatfish/music/monkeys-spinning-monkeys.mp3",
+    "title": "Monkeys Spinning Monkeys",
+    "artist": "Kevin MacLeod",
+    "isrc": "USUAN1400011",
+    "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Monkeys%20Spinning%20Monkeys.mp3",
+    "transform": "Original MP3 unchanged; looped during playback",
+    "license": "CC-BY-4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "license_file": "/assets/fatfish/music/CC-BY-4.0.txt",
+    "attribution_url": "/assets/fatfish/NOTICE.md",
+    "bytes": 5005207,
+    "sha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14"
   }
 }
