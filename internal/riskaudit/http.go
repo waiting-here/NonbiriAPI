@@ -411,7 +411,13 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 				var size int64
 				if err == nil {
 					size, err = intQuery(q, "page_size", 20)
-					window.Limit = int(size)
+					if err == nil {
+						if size < 1 || size > MaxPage {
+							err = ErrInvalid
+						} else {
+							window.Limit = int(size)
+						}
+					}
 				}
 				if err == nil && q.Has("watermark") {
 					window.Watermark, err = intQuery(q, "watermark", 0)

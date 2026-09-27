@@ -348,11 +348,10 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		case "error_code":
 			filter.ErrorCode = &value
 		case "status":
-			parsed, ok := parseCanonicalInt64(value, 100, 599)
-			if !ok {
+			status, err := strconv.Atoi(value)
+			if err != nil || status < 100 || status > 599 || strconv.Itoa(status) != value {
 				return ListFilter{}, ErrInvalid
 			}
-			status := int(parsed)
 			filter.Status = &status
 		case "usage_total_mismatch":
 			if value != "true" && value != "false" {
