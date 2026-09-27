@@ -268,9 +268,26 @@ export function normalizePage<T>(
 
 export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
   const root = asRecord(value, 'check-in status');
+  const mutuallyExclusive =
+    root.mutually_exclusive === undefined
+      ? false
+      : exactBoolean(root.mutually_exclusive, 'check-in mutual exclusion');
+  const blockedByOtherCheckin =
+    root.blocked_by_other_checkin === undefined
+      ? false
+      : exactBoolean(root.blocked_by_other_checkin, 'other check-in block');
   if (root.enabled === false) {
-    exactRecord(value, ['enabled'], [], 'check-in status');
-    return { enabled: false };
+    exactRecord(
+      value,
+      ['enabled'],
+      ['mutually_exclusive', 'blocked_by_other_checkin'],
+      'check-in status',
+    );
+    return {
+      enabled: false,
+      mutually_exclusive: mutuallyExclusive,
+      blocked_by_other_checkin: blockedByOtherCheckin,
+    };
   }
   const record = exactRecord(
     value,
@@ -283,7 +300,7 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
       'award_max',
       'balance_cap',
     ],
-    [],
+    ['mutually_exclusive', 'blocked_by_other_checkin'],
     'check-in status',
   );
   if (!exactBoolean(record.enabled, 'check-in enabled state')) invalid('check-in status');
@@ -292,6 +309,8 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
   if (creditMilli(awardMin) > creditMilli(awardMax)) invalid('check-in award range');
   return {
     enabled: true,
+    mutually_exclusive: mutuallyExclusive,
+    blocked_by_other_checkin: blockedByOtherCheckin,
     asset_type: oneOf(record.asset_type, ['general', 'game'] as const, 'check-in asset'),
     checked_in_today: exactBoolean(record.checked_in_today, 'check-in day state'),
     balance: creditAmount(record.balance, 'check-in balance', true),
