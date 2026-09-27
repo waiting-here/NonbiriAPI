@@ -1,0 +1,25 @@
+.fatfish-page { display: grid; gap: 1.4rem; }
+.fatfish-page .btn { min-height: 2.75rem; }
+.fatfish-periods { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .65rem; }
+.fatfish-periods button, .fatfish-node-list button, .fatfish-pager button { min-height: 2.75rem; border: 1px solid #7f9da4; border-radius: .55rem; background: var(--surface, #fff); color: inherit; cursor: pointer; }
+.fatfish-periods button { display: grid; gap: .2rem; padding: .7rem; text-align: start; }
+.fatfish-periods .is-selected, .fatfish-map .is-selected { outline: 3px solid #40839b; }
+.fatfish-map-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.fatfish-map-controls button { min-height: 2.75rem; padding: .35rem .8rem; border: 1px solid #7f9da4; border-radius: .5rem; background: #fff; color: inherit; }
+.fatfish-map-viewport { max-width: 40rem; width: 100%; overflow: auto; border: 1px solid #8baeb1; border-radius: .85rem; }
+.fatfish-map { position: relative; background: linear-gradient(135deg, #d4eff1, #e9f5e8); }
+.fatfish-map__edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.fatfish-map__edges line { stroke: #4d8393; stroke-width: .5; vector-effect: non-scaling-stroke; }
+.fatfish-map button { position: absolute; min-width: 2.75rem; min-height: 2.75rem; transform: translate(-50%, -50%); border: 2px solid #547c8a; border-radius: 50%; background: #fff9e7; color: #233f48; cursor: pointer; }
+.fatfish-node-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .6rem; padding-left: 1.5rem; }
+.fatfish-node-list li { display: grid; gap: .3rem; }
+.fatfish-facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; }
+.fatfish-facts dt { font-weight: 600; }
+.fatfish-pager { display: flex; gap: .7rem; align-items: center; margin-top: .6rem; }
+.fatfish-pager button { padding: .35rem .8rem; }
+.fatfish-pager button:disabled { opacity: .5; cursor: not-allowed; }
+.fatfish-board, .fatfish-history { padding-left: 1.5rem; }
+.fatfish-board li, .fatfish-history li { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding: .45rem 0; border-bottom: 1px solid #cadcdd; }
+.fatfish-board strong { margin-left: auto; }
+.fatfish-condition--met { color: #317252; }
+@media (max-width: 640px) { .fatfish-map-controls, .fatfish-map-viewport { display: none; } }
