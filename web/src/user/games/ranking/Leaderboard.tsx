@@ -7,6 +7,7 @@ import { useUserSession, userKeys } from '../../data';
 import { patchCharityProfile } from '../../features/core/api';
 import { useDuelText } from '../common/duel/copy';
 import { formatCredits } from '../common/strict';
+import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { isNetProfitBoard, loadRanking, type RankBoard, type RankWindow } from './api';
 import './ranking.css';
 
@@ -98,12 +99,16 @@ function RankingPanel({
     game_charity: [t('游戏慈善榜', 'Game Charity'), t('匿名慈善家', 'Anonymous philanthropist')],
     bidding: [t('竞标利润榜', 'Bidding profits'), t('匿名竞标者', 'Anonymous bidder')],
     blackjack: [t('利润榜', 'Profit leaderboard'), t('匿名牌手', 'Anonymous card player')],
-    game_net_profit: [t('游戏暴富榜', 'Game fortune leaderboard'), t('匿名玩家', 'Anonymous player')],
+    game_net_profit: [
+      t('游戏暴富榜', 'Game fortune leaderboard'),
+      t('匿名土豪', 'Anonymous tycoon'),
+    ],
     fishing_net_profit: [t('锦鲤榜', 'Lucky catch leaderboard'), t('匿名钓友', 'Anonymous angler')],
     blackjack_net_profit: [
       t('赌神榜', 'Card master leaderboard'),
       t('匿名牌手', 'Anonymous card player'),
     ],
+    bidding_net_profit: [t('竞标高手榜', 'Bidding masters'), t('匿名竞标者', 'Anonymous bidder')],
   };
   const help =
     board === 'charity'
@@ -113,8 +118,8 @@ function RankingPanel({
         )
       : isNetProfitBoard(board)
         ? t(
-            `最近7×24小时，${board === 'game_net_profit' ? '六游戏' : board === 'fishing_net_profit' ? '池塘垂钓' : '二十一点'}实际返还减实际投入，输赢相抵并计入抽水与入场费。两种积分等值计算，排除奖励、网贷和调账等非对局收支。仅正净盈利入榜。`,
-            `Over the last 7×24 hours: returns minus spending ${board === 'game_net_profit' ? 'across all six games' : board === 'fishing_net_profit' ? 'in pond fishing' : 'in blackjack'}, including fees and entry costs. Losses offset wins and both credit types count equally. Rewards, loans and other non-game transactions are excluded. Positive net profits only.`,
+            `最近7×24小时，${board === 'game_net_profit' ? '六游戏' : board === 'fishing_net_profit' ? '池塘垂钓' : board === 'bidding_net_profit' ? '竞标对决' : '二十一点'}实际返还减实际投入，输赢相抵并计入抽水与入场费。两种积分等值计算，排除奖励、网贷和调账等非对局收支。仅正净盈利入榜。`,
+            `Over the last 7×24 hours: returns minus spending ${board === 'game_net_profit' ? 'across all six games' : board === 'fishing_net_profit' ? 'in pond fishing' : board === 'bidding_net_profit' ? 'in Bidding Duel' : 'in blackjack'}, including fees and entry costs. Losses offset wins and both credit types count equally. Rewards, loans and other non-game transactions are excluded. Positive net profits only.`,
           )
         : board === 'game_charity'
           ? t(
@@ -161,6 +166,23 @@ function RankingPanel({
       </div>
       {enabled && query.isPending && <LoadingState />}
       {query.error && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
+      {data && board === 'bidding_net_profit' && data.rebuildStatus !== 'completed' && (
+        <p role="status" className="table-note">
+          {t(
+            '正在重建竞标高手榜，历史数据尚未完整，请稍后刷新。',
+            'Rebuilding the Bidding masters board. Historical results are not complete yet; refresh shortly.',
+          )}
+        </p>
+      )}
+      {data && board === 'bidding_net_profit' && data.rebuildStatus === 'completed' && (
+        <p className="table-note">
+          {t('可核验历史起点', 'Verifiable history starts')}:{' '}
+          {data.historyCoverageStart === null
+            ? t('未知', 'Unknown')
+            : new Date(data.historyCoverageStart * 1000).toLocaleString()}{' '}
+          · {t('已知缺失事件', 'Known missing events')}: {data.missingEvents}
+        </p>
+      )}
       {data && window === 'history' && board !== 'charity' && (
         <p className="table-note">
           {t('统计起点：', 'Statistics started: ')}
@@ -169,9 +191,13 @@ function RankingPanel({
           </time>
         </p>
       )}
-      {data && rows.length === 0 && (
-        <p>{t('暂无符合条件的排名。', 'No qualifying rankings yet.')}</p>
-      )}
+      {data &&
+        rows.length === 0 &&
+        data.rebuildStatus !== 'scanning' &&
+        data.rebuildStatus !== 'publishing' &&
+        data.rebuildStatus !== 'pending' && (
+          <p>{t('暂无符合条件的排名。', 'No qualifying rankings yet.')}</p>
+        )}
       {rows.length > 0 && (
         <div className="rank-table-scroll">
           <table className="data-table">
@@ -191,24 +217,12 @@ function RankingPanel({
                 >
                   <td>{row.rank}</td>
                   <td>
-                    <span className="rank-identity">
-                      {row.identity.kind === 'public' && row.identity.avatarURL && (
-                        <img
-                          src={row.identity.avatarURL}
-                          alt=""
-                          width="28"
-                          height="28"
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                        />
-                      )}
-                      <span>
-                        {row.identity.kind === 'public'
-                          ? row.identity.displayName
-                          : names[board][1]}
-                        {row.isMe ? ` · ${t('我', 'Me')}` : ''}
-                      </span>
-                    </span>
+                    <PublicGameIdentity
+                      identity={row.identity}
+                      anonymousLabel={names[board][1]}
+                      isMe={row.isMe}
+                      meLabel={t('我', 'Me')}
+                    />
                   </td>
                   <td>{formatCredits(row.amount)}</td>
                 </tr>

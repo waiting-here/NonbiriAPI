@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -74,7 +73,11 @@ func TestDetachUserForDeletionPreservesCaseAndPurgesIdentityUnderLegalHold(t *te
 FROM report_cases WHERE id=?`, caseID).Scan(&deadline, &materialVersion, &targetVersion); err != nil {
 		t.Fatal(err)
 	}
-	rateHash, err := environment.repository.keys.rateDigest("account", []byte(strconv.FormatInt(owner.UserID, 10)))
+	var keyRaw []byte
+	if err := environment.store.DB().QueryRow(`SELECT identity_key FROM user_continuity_identities WHERE user_id=?`, owner.UserID).Scan(&keyRaw); err != nil {
+		t.Fatal(err)
+	}
+	rateHash, err := environment.repository.keys.identityRateDigest([32]byte(keyRaw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +125,7 @@ WHERE case_id=? AND state='deleted_by_account' AND endpoint_key_id IS NULL
 		t.Fatalf("deidentified account targets=%d", got)
 	}
 	if got := environment.rowCount(t, `SELECT COUNT(*) FROM report_rate_buckets
-WHERE scope='account' AND scope_hash=?`, rateHash[:]); got != 0 {
+WHERE scope='account' AND scope_hash=?`, rateHash[:]); got != 1 {
 		t.Fatalf("account rate rows after deletion=%d", got)
 	}
 	badgeAfter, err := environment.repository.Badge(context.Background(), admin)

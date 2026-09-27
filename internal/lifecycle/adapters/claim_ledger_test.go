@@ -55,9 +55,7 @@ func TestLedgerAdapterZeroesPositiveZeroAndNegativeWalletsBeforeDeletingIdentity
 			deletionID := mustAdapterID(t, "op_")
 			deleteTx := beginAdapterTx(t, fixture.store.DB())
 			adapter := NewLedgerAdapter()
-			if err := adapter.ZeroAndDeleteAccount(context.Background(), deleteTx, lifecycle.DeleteRequest{
-				UserID: user.id, DecisionNow: adapterTestNow + 10,
-			}, deletionID); err != nil {
+			if err := adapter.ZeroAndDeleteAccount(context.Background(), deleteTx, capturedDeleteRequest(t, deleteTx, user.id, adapterTestNow+10, lifecycle.DeleteSystem), deletionID); err != nil {
 				t.Fatalf("zero and delete %s wallet: %v", test.name, err)
 			}
 			if err := deleteTx.Commit(); err != nil {
@@ -123,9 +121,7 @@ func TestLedgerAdapterRollsBackAndFailsClosedAtMaximumCapacity(t *testing.T) {
 		}
 		deletionID := mustAdapterID(t, "op_")
 		deleteTx := beginAdapterTx(t, fixture.store.DB())
-		if err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deleteTx, lifecycle.DeleteRequest{
-			UserID: user.id, DecisionNow: adapterTestNow + 10,
-		}, deletionID); err != nil {
+		if err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deleteTx, capturedDeleteRequest(t, deleteTx, user.id, adapterTestNow+10, lifecycle.DeleteSystem), deletionID); err != nil {
 			t.Fatal(err)
 		}
 		if err := deleteTx.Rollback(); err != nil {
@@ -159,9 +155,7 @@ func TestLedgerAdapterRollsBackAndFailsClosedAtMaximumCapacity(t *testing.T) {
 			t.Fatal(err)
 		}
 		deletionID := mustAdapterID(t, "op_")
-		err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deleteTx, lifecycle.DeleteRequest{
-			UserID: user.id, DecisionNow: adapterTestNow + 10,
-		}, deletionID)
+		err := NewLedgerAdapter().ZeroAndDeleteAccount(context.Background(), deleteTx, capturedDeleteRequest(t, deleteTx, user.id, adapterTestNow+10, lifecycle.DeleteSystem), deletionID)
 		if !errors.Is(err, ledger.ErrCapacityExhausted) {
 			t.Fatalf("MAX deletion error = %v, want capacity exhausted", err)
 		}
@@ -307,7 +301,7 @@ func TestClaimAndLedgerAdaptersKeepLateCompletionExternalAfterIdentityDeletion(t
 
 	clock.Store(adapterTestNow + 10)
 	deleteTx := beginAdapterTx(t, fixture.store.DB())
-	deleteRequest := lifecycle.DeleteRequest{UserID: user.id, DecisionNow: clock.Load()}
+	deleteRequest := capturedDeleteRequest(t, deleteTx, user.id, clock.Load(), lifecycle.DeleteSystem)
 	if finalizer, err := claimAdapter.PrepareDelete(context.Background(), deleteTx, deleteRequest); err != nil || finalizer != nil {
 		t.Fatalf("prepare claim handoff = (%v,%v)", finalizer, err)
 	}

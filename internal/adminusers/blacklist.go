@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
+	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -17,15 +20,16 @@ import (
 )
 
 type BlacklistEntry struct {
-	DiscordID string  `json:"discord_id"`
-	Reason    string  `json:"reason"`
-	CreatedAt int64   `json:"created_at"`
-	UserID    *string `json:"user_id"`
+	DiscordID        string  `json:"discord_id"`
+	Reason           string  `json:"reason"`
+	CreatedAt        int64   `json:"created_at"`
+	UserID           *string `json:"user_id"`
+	FirstActorKind   string  `json:"first_actor_kind"`
+	FirstActorUserID *string `json:"first_actor_user_id"`
 }
 
 func validDiscordID(value string) bool {
-	id, err := strconv.ParseUint(value, 10, 64)
-	return err == nil && id > 0 && strconv.FormatUint(id, 10) == value
+	return blacklist.ValidDiscordID(value)
 }
 
 func (s *Service) ListBlacklist(ctx context.Context, adminID int64, q string, page pagination.Request) (Page[BlacklistEntry], error) {
@@ -84,21 +88,57 @@ func (s *Service) ListBlacklist(ctx context.Context, adminID int64, q string, pa
 // The list update and any existing account revocation share one transaction.
 // Removal only permits registration again; it never implicitly unbans an account.
 func (s *Service) SetBlacklist(ctx context.Context, adminID int64, control ControlMutation, discordID, reason string, add bool) (MutationResult[struct{}], error) {
+	return s.setBlacklist(ctx, adminID, roleAdmin, control, discordID, reason, add)
+}
+
+func (s *Service) setBlacklist(ctx context.Context, adminID int64, role managementRole, control ControlMutation, discordID, reason string, add bool) (MutationResult[struct{}], error) {
 	empty := MutationResult[struct{}]{}
-	if !validDiscordID(discordID) || add && !validReason(reason) {
+	if !validDiscordID(discordID) {
 		return empty, ErrInvalidRequest
+	}
+	if role == roleSteward && !add {
+		return empty, ErrForbidden
+	}
+	if add {
+		var err error
+		reason, err = blacklist.NormalizeNote(reason)
+		if err != nil {
+			return empty, ErrInvalidRequest
+		}
 	}
 	now := s.now().Unix()
 	if !validNow(now) {
 		return empty, ErrUnavailable
 	}
-	tx, err := s.beginAuthorized(ctx, adminID)
+	if ctx == nil {
+		return empty, ErrUnauthorized
+	}
+	preflight, err := s.beginManagement(ctx, adminID, role, true)
+	if err != nil {
+		return empty, err
+	}
+	if add {
+		_, err = blacklistTargetTx(ctx, preflight, role, discordID)
+	}
+	if err != nil {
+		preflight.Rollback()
+		return empty, err
+	}
+	if err := preflight.Commit(); err != nil {
+		return empty, classifyDatabaseError("commit blacklist authorization", err)
+	}
+	release, err := s.lockIdentity(ctx, discordID)
+	if err != nil {
+		return empty, err
+	}
+	defer release()
+	tx, err := s.beginManagement(ctx, adminID, role, false)
 	if err != nil {
 		return empty, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	decision, err := beginControlMutation(ctx, tx, adminID, roleAdmin, control, now)
+	decision, err := beginControlMutation(ctx, tx, adminID, role, control, now)
 	if err != nil {
 		return empty, err
 	}
@@ -111,13 +151,9 @@ func (s *Service) SetBlacklist(ctx context.Context, adminID int64, control Contr
 	}
 	var targetID int64
 	if add {
-		var admin int
-		err = tx.QueryRowContext(ctx, `SELECT id,is_admin FROM users WHERE discord_id=?`, discordID).Scan(&targetID, &admin)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		targetID, err = blacklistTargetTx(ctx, tx, role, discordID)
+		if err != nil {
 			return empty, err
-		}
-		if admin != 0 {
-			return empty, ErrForbidden
 		}
 		if targetID != 0 {
 			row, err := readUserRow(ctx, tx, targetID)
@@ -142,7 +178,11 @@ func (s *Service) SetBlacklist(ctx context.Context, adminID int64, control Contr
 				}
 				defer func() { finalize(done) }()
 			}
-			result, err := tx.ExecContext(ctx, `UPDATE users SET is_banned=1,banned_reason=?,banned_until=NULL,auto_banned=0,ban_kind='',revision=?,updated_at=? WHERE id=? AND is_admin=0 AND revision=?`, reason, db.EncodeU128(next), now, targetID, row.revision)
+			banReason := reason
+			if utf8.RuneCountInString(banReason) > 1024 {
+				banReason = string([]rune(banReason)[:1024])
+			}
+			result, err := tx.ExecContext(ctx, `UPDATE users SET is_banned=1,banned_reason=?,banned_until=NULL,auto_banned=0,ban_kind='',revision=?,updated_at=? WHERE id=? AND is_admin=0 AND revision=?`, banReason, db.EncodeU128(next), now, targetID, row.revision)
 			if err != nil {
 				return empty, err
 			}
@@ -166,7 +206,14 @@ func (s *Service) SetBlacklist(ctx context.Context, adminID int64, control Contr
 				return empty, err
 			}
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO discord_blacklist(discord_id,reason,created_at) VALUES(?,?,?) ON CONFLICT(discord_id) DO UPDATE SET reason=excluded.reason`, discordID, reason, now)
+		kind := blacklist.Admin
+		if role == roleSteward {
+			kind = blacklist.Steward6
+		}
+		_, err = blacklist.AppendTx(ctx, tx, blacklist.Event{
+			DiscordID: discordID, OperationKey: fmt.Sprintf("manual:%s:%d:%s", role.actorKind(), adminID, control.IdempotencyKey),
+			ActorKind: kind, ActorUserID: &adminID, Note: reason, At: now,
+		})
 	} else {
 		_, err = tx.ExecContext(ctx, `DELETE FROM discord_blacklist WHERE discord_id=?`, discordID)
 	}
@@ -184,4 +231,20 @@ func (s *Service) SetBlacklist(ctx context.Context, adminID int64, control Contr
 		s.invalidator.InvalidateUserAuthority(targetID)
 	}
 	return MutationResult[struct{}]{Status: http.StatusNoContent, Body: []byte{}}, nil
+}
+
+func blacklistTargetTx(ctx context.Context, tx *sql.Tx, role managementRole, discordID string) (int64, error) {
+	var targetID int64
+	var admin, level int
+	err := tx.QueryRowContext(ctx, `SELECT id,is_admin,COALESCE(level,auto_level) FROM users WHERE discord_id=?`, discordID).Scan(&targetID, &admin, &level)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if admin != 0 || role == roleSteward && level >= 6 {
+		return 0, ErrForbidden
+	}
+	return targetID, nil
 }

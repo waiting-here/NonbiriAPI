@@ -546,6 +546,20 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 }
 
 func (r *Runtime) registerUser(ctx context.Context, identity DiscordIdentity, member GuildMember, expectedGuild, expectedRole string) (int64, string, int64, error) {
+	key, err := r.continuity.KeyForDiscord(identity.ID)
+	if err != nil {
+		return 0, "", 0, ErrProviderUnavailable
+	}
+	r.mu.Lock()
+	gate := r.userLifecycle
+	r.mu.Unlock()
+	if gate != nil {
+		change, err := gate.BeginIdentityChange(ctx, [32]byte(key))
+		if err != nil {
+			return 0, "", 0, errIdentityConflict
+		}
+		defer change.Abort()
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, "", 0, err
@@ -598,6 +612,9 @@ func (r *Runtime) registerUser(ctx context.Context, identity DiscordIdentity, me
 		return 0, "", 0, err
 	}
 	if err := authz.InitializeRegistration(ctx, tx, userID, now, authz.LedgerWalletRegistrationHook{}); err != nil {
+		return 0, "", 0, err
+	}
+	if _, err := r.continuity.BindUserTx(ctx, tx, userID); err != nil {
 		return 0, "", 0, err
 	}
 	generation, err := randomOpaque(32)

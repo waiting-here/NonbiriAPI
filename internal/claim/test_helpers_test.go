@@ -397,6 +397,17 @@ func (c *testCharity) AcceptRequest(ctx context.Context, tx *sql.Tx, input Chari
 VALUES('accept',?)`, input.RequestID); err != nil {
 		return err
 	}
+	zero := make([]byte, 16)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_reservations(
+logical_request_id,user_id,charity_model_id,model_snapshot,state,pricing_mode,discount_percent,
+request_user_price_milli,request_donor_reward_milli,uncached_user_price_milli,cache_write_user_price_milli,
+cache_read_user_price_milli,output_user_price_milli,uncached_donor_reward_milli,cache_write_donor_reward_milli,
+cache_read_donor_reward_milli,output_donor_reward_milli,token_reserve_milli,user_reserved_milli,
+original_charge_milli,user_charge_milli,donor_reward_total_mag,created_at,updated_at)
+VALUES(?,?,?,?,'reserved','per_request',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,?,?,?)`,
+		input.RequestID, input.UserID, input.CharityModelID, input.ModelSnapshot, zero, input.AcceptedAt, input.AcceptedAt); err != nil {
+		return err
+	}
 	c.mu.Lock()
 	c.accepts = append(c.accepts, input)
 	c.mu.Unlock()
@@ -574,6 +585,12 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	store, err := db.Open(path, codec)
 	if err != nil {
 		t.Fatalf("open Generation 2 fixture: %v", err)
+	}
+	if _, err := store.DB().Exec(`INSERT INTO charity_models(id,provider,model,full_name,enabled,pricing_mode,created_at,updated_at)
+VALUES(1,'provider','model','[公益]provider/model',1,'per_request',1000,1000);
+INSERT INTO charity_model_routing(model_id,strategy) VALUES(1,'expiry_weighted');
+INSERT INTO charity_routing_settings(model_id,revision,affinity_ttl_seconds) VALUES(1,1,300)`); err != nil {
+		t.Fatalf("seed charity routing fixture: %v", err)
 	}
 	if _, err := store.DB().Exec(`CREATE TEMP TABLE claim_test_ledger_rows(
 kind TEXT NOT NULL,source_id TEXT NOT NULL,PRIMARY KEY(kind,source_id)) WITHOUT ROWID`); err != nil {

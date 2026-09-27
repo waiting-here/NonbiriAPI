@@ -1,6 +1,7 @@
 package db
 
 const accountContinuitySchema = `
+ALTER TABLE abuse_window_events ADD COLUMN expires_at INTEGER CHECK(expires_at>occurred_at AND expires_at<=253402300799);
 CREATE TABLE client_rule_auto_bans (
  rule_id TEXT PRIMARY KEY REFERENCES risk_client_rules(id) ON DELETE RESTRICT,
  enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),

@@ -317,6 +317,7 @@ function deferred<T>() {
 
 const charityModel = (start: number, end: number): CharityModel => ({
   route_strategy: 'expiry_weighted',
+  affinity_ttl_seconds: 300,
   id: '1',
   provider: 'provider',
   model: 'model',
@@ -712,6 +713,10 @@ describe('CharityManagement corrective controls', () => {
       expect(editor.getByLabelText('Start (optional)')).toHaveValue(siteDateTime(start)),
     );
     expect(editor.getByLabelText('End (optional)')).toHaveValue(siteDateTime(end));
+    await view.user.selectOptions(editor.getByRole('combobox', { name: /Routing strategy/ }), 'cache_balanced');
+    fireEvent.change(editor.getByRole('spinbutton', { name: /Association duration/ }), {
+      target: { value: '86400' },
+    });
 
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
 
@@ -719,7 +724,8 @@ describe('CharityManagement corrective controls', () => {
     expect(patchBodies[0]).toEqual({
       is_mainstream: false,
       excluded_request_fields: [],
-      route_strategy: 'expiry_weighted',
+      route_strategy: 'cache_balanced',
+      affinity_ttl_seconds: 86400,
       expected_revision: '1',
       provider: 'provider',
       model: 'model',
@@ -854,6 +860,9 @@ describe('CharityManagement corrective controls', () => {
       const card = heading.closest('.card');
       if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
       const editor = within(card);
+      if (fixture.frame === 'steward') {
+        expect(editor.queryByLabelText('关联有效时长（秒）')).not.toBeInTheDocument();
+      }
       const reserve = editor.getByLabelText(fixture.reserveLabel);
       expect(reserve).toHaveValue('1.234');
       expect(editor.getByText(fixture.reserveHelp)).toBeVisible();
@@ -869,6 +878,9 @@ describe('CharityManagement corrective controls', () => {
       await view.user.click(editor.getByRole('button', { name: /Save model|保存模型/ }));
       await waitFor(() => expect(patchBodies).toHaveLength(1));
       expect(patchBodies[0]).not.toHaveProperty('token_reserve_credits');
+      if (fixture.frame === 'steward') {
+        expect(patchBodies[0]).not.toHaveProperty('affinity_ttl_seconds');
+      }
       expect(current.pricing).toMatchObject({ mode: 'per_request' });
 
       await view.user.selectOptions(

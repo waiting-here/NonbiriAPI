@@ -65,6 +65,53 @@ afterEach(() => {
 });
 
 describe('blackjack public state and simultaneous controls', () => {
+  it.each([
+    ['seating', 0, 9, 'nine'],
+    ['seating', null, 9, 'nine'],
+    ['decision', 0, 8, 'eight'],
+    ['decision', null, 9, 'nine'],
+    ['result', 0, 8, 'eight'],
+    ['result', null, 9, 'nine'],
+  ] as const)(
+    'projects %s phase for viewer %s with %s seats',
+    async (phase, viewer, count, grid) => {
+      const home = {
+        ...blackjackWire(phase, viewer),
+        table: {
+          ...blackjackWire(phase, viewer).table,
+          realtime_identities: [
+            {
+              seat: 0,
+              display_name: 'Player zero',
+              avatar_url: 'https://cdn.discordapp.com/avatars/1/a.png',
+            },
+            { seat: 1, display_name: 'Player one', avatar_url: null },
+          ],
+        },
+      };
+      install(home);
+      const view = await renderWithProviders(<BlackjackGame />, {
+        station: 'user',
+        route: '/games/blackjack',
+        role: 'user',
+      });
+      const table = await screen.findByRole('region', { name: 'Blackjack table' });
+      expect(table).toHaveClass(`bj-board--phase-${phase}`);
+      expect(table).toHaveClass(
+        `bj-board--viewer-${viewer === null ? 'spectator' : 'participant'}`,
+      );
+      expect(within(table).getAllByRole('region', { name: /^Seat / })).toHaveLength(count);
+      expect(table.querySelector('.bj-seats')).toHaveClass(`bj-seats--${grid}`);
+      expect(within(table).getByText('Player one')).toBeVisible();
+      const avatar = table.querySelector<HTMLImageElement>(
+        'img[src="https://cdn.discordapp.com/avatars/1/a.png"]',
+      );
+      expect(avatar).not.toBeNull();
+      expect(avatar?.getAttribute('referrerpolicy')).toBe('no-referrer');
+      view.unmount();
+    },
+  );
+
   it('renders all nine seats, hides the hole, and submits the exact own hand revision', async () => {
     const server = install();
     const view = await renderWithProviders(<BlackjackGame />, {

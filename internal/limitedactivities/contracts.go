@@ -15,6 +15,7 @@ import (
 )
 
 const PictureBook = "picture-book"
+const FatFish = "fat-fish"
 const maxUnix = int64(253402300799)
 
 var (
@@ -87,6 +88,7 @@ type ExchangeSupply struct {
 type Detail struct {
 	Key          string          `json:"key"`
 	Name         string          `json:"name"`
+	CoverKey     string          `json:"cover_key"`
 	Visible      bool            `json:"visible"`
 	StartsAt     *int64          `json:"starts_at"`
 	EndsAt       *int64          `json:"ends_at"`

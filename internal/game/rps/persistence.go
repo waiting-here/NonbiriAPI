@@ -827,7 +827,7 @@ func safeDisplayName(value string) string {
 
 func safeAvatar(value string) *string {
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+	if err != nil || len(value) > 2048 || parsed.Scheme != "https" || parsed.User != nil || parsed.Port() != "" || (parsed.Hostname() != "cdn.discordapp.com" && parsed.Hostname() != "media.discordapp.net") {
 		return nil
 	}
 	copy := value

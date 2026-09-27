@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router';
 import { UserManagement } from '@shared/components/UserManagement';
+import { BlacklistManagement } from '../../admin/pages/BlacklistPage';
 import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
 import { AnnouncementEditor } from '@shared/components/AnnouncementEditor';
 import { listReturnPath } from '@shared/operations/listReturn';
@@ -23,7 +24,7 @@ export function StewardPage() {
 }
 
 function StewardPageContent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const authority = useUserAuthority();
   const refetchAuthority = authority.refetch;
@@ -36,13 +37,14 @@ function StewardPageContent() {
     : requestedTab === 'charity' ||
         requestedTab === 'maintenance' ||
         requestedTab === 'users' ||
+        requestedTab === 'blacklist' ||
         requestedTab === 'risk' ||
         requestedTab === 'announcements'
       ? requestedTab
       : 'logs';
   const announcement = searchParams.get('announcement') ?? '';
   const setSection = useCallback(
-    (value: 'logs' | 'charity' | 'maintenance' | 'users' | 'announcements' | 'risk') => {
+    (value: 'logs' | 'charity' | 'maintenance' | 'users' | 'blacklist' | 'announcements' | 'risk') => {
       setSearchParams({ tab: value }, { replace: true });
     },
     [setSearchParams],
@@ -122,7 +124,7 @@ function StewardPageContent() {
             >
               {t('user.steward.charityTab')}
             </button>
-            {(['users', 'announcements'] as const).map((tab) => (
+            {(['users', 'blacklist', 'announcements'] as const).map((tab) => (
               <button
                 key={tab}
                 className={section === tab ? 'btn btn-primary' : 'btn btn-secondary'}
@@ -131,7 +133,7 @@ function StewardPageContent() {
                 aria-selected={section === tab}
                 onClick={() => setSection(tab)}
               >
-                {tab === 'users' ? t('user.steward.usersTab') : t('user.steward.announcementsTab')}
+                {tab === 'users' ? t('user.steward.usersTab') : tab === 'blacklist' ? (i18n.language.startsWith('zh') ? '黑名单' : 'Blacklist') : t('user.steward.announcementsTab')}
               </button>
             ))}
             <button
@@ -182,6 +184,17 @@ function StewardPageContent() {
             account={authority.data.id}
             scopeReady={allowed}
             sessionError={authority.error}
+            onAuthorityLoss={authorityLoss}
+          />
+        ) : null}
+        {section === 'blacklist' ? (
+          <BlacklistManagement
+            key={`blacklist:${authority.data.id}`}
+            role="steward"
+            accountID={`steward:${authority.data.id}`}
+            sessionError={authority.error}
+            sessionFetching={authority.isFetching}
+            refreshSession={() => void authority.refetch()}
             onAuthorityLoss={authorityLoss}
           />
         ) : null}

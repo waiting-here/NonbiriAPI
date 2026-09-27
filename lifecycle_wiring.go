@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
@@ -233,7 +234,7 @@ func (boundary *productionRetirementBoundary) BeginUserRetirement(
 		gateRetirement.Abort()
 		return nil, translateRetirementError(err)
 	}
-	gameCommit, gameAbort, err := boundary.games.BeginUserDeletion(userID)
+	gameCommit, gameAbort, err := boundary.games.BeginUserDeletionContext(ctx, userID)
 	if err != nil {
 		flowRetirement.Abort()
 		gateRetirement.Abort()
@@ -262,6 +263,46 @@ type productionRetirement struct {
 	gameCommit func() bool
 	gameAbort  func() bool
 	done       atomic.Bool
+}
+
+type restrictionRetirement struct {
+	gate *lifecyclegate.UserRetirement
+	flow *flowcontrol.UserRetirement
+	done atomic.Bool
+}
+
+func beginRestrictionRetirement(ctx context.Context, gate *lifecyclegate.Gate, flow *flowcontrol.Controller, userID int64) (*restrictionRetirement, error) {
+	if ctx == nil || gate == nil || flow == nil {
+		return nil, lifecycle.ErrInvalid
+	}
+	identityAndUser, err := gate.BeginUserRetirementExcludingContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	admission, err := flow.BeginUserRetirement(userID)
+	if err != nil {
+		identityAndUser.Abort()
+		return nil, err
+	}
+	return &restrictionRetirement{gate: identityAndUser, flow: admission}, nil
+}
+
+func (r *restrictionRetirement) Commit() bool {
+	if r == nil || !r.done.CompareAndSwap(false, true) {
+		return false
+	}
+	r.flow.Commit()
+	r.gate.Commit()
+	return true
+}
+
+func (r *restrictionRetirement) Abort() bool {
+	if r == nil || !r.done.CompareAndSwap(false, true) {
+		return false
+	}
+	r.flow.Abort()
+	r.gate.Abort()
+	return true
 }
 
 func (retirement *productionRetirement) Commit() bool {
@@ -318,6 +359,12 @@ func newLifecycleCoordinator(
 		return nil, lifecycle.ErrInvalid
 	}
 
+	if err := gameRuntimes.Limiter().AttachContinuity(continuity.StartWindows{Service: authRuntime.IdentityContinuity()}); err != nil {
+		return nil, err
+	}
+	if err := authRuntime.IdentityContinuity().AttachWindowPreservers(forwardRuntime.flow, gameRuntimes.Limiter(), forwardRuntime.abuse); err != nil {
+		return nil, err
+	}
 	accountResources, err := lifecycleadapters.NewAccountResources(
 		authRuntime, resourceRepository, issueService.Sources(), logRepository,
 	)
@@ -346,6 +393,10 @@ func newLifecycleCoordinator(
 	}
 
 	ledgerAdapter := lifecycleadapters.NewLedgerAdapter()
+	routingLifecycle, err := claim.NewCharityRoutingLifecycle(store.DB())
+	if err != nil {
+		return nil, err
+	}
 	activityAdapter := lifecycleadapters.NewActivity(activityRepository)
 	donationAdapter := lifecycleadapters.NewDonation(donationService)
 	charityAdapter := lifecycleadapters.NewCharity(charityService)
@@ -378,6 +429,8 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			Continuity:           authRuntime.IdentityContinuity(),
+			CharityRouting:       routingLifecycle,
 			Governance:           activityEngines,
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,
 			IssuesAnnouncements: lifecycleadapters.NewIssueAnnouncementDelete(issueService.Sources()),
@@ -387,30 +440,33 @@ func newLifecycleCoordinator(
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
-			Governance:  activityEngines,
-			Idempotency: idempotencyAdapter,
-			Discovery:   lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
-			Claims:      lifecycleadapters.NewClaimRecovery(claimService),
-			Thursday:    lifecycleadapters.NewThursdayRecovery(activityService),
-			Reports:     reportAdapter,
-			Fishing:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
-			LinkLink:    lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
-			RPS:         lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
-			Bidding:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
-			Likes:       lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
-			Blackjack:   lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
-			Donations:   lifecycleadapters.NewDonationRecovery(donationService),
-			Secrets:     secretAdapter,
+			CharityRouting: routingLifecycle,
+			Governance:     activityEngines,
+			Idempotency:    idempotencyAdapter,
+			Discovery:      lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
+			Claims:         lifecycleadapters.NewClaimRecovery(claimService),
+			Thursday:       lifecycleadapters.NewThursdayRecovery(activityService),
+			Reports:        reportAdapter,
+			Fishing:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
+			LinkLink:       lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
+			RPS:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
+			Bidding:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
+			Likes:          lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
+			Blackjack:      lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
+			Donations:      lifecycleadapters.NewDonationRecovery(donationService),
+			Secrets:        secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
-			Governance:    activityEngines,
-			Sessions:      lifecycleadapters.NewAuthSessionRetention(authRuntime),
-			RequestLogs:   lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:        lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
-			Observability: diagnosticRetention{audits.observations},
-			RiskAudit:     riskRetention{audits.risk},
-			Issues:        lifecycleadapters.NewIssueRetention(issueService),
-			Fishing:       fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Continuity:     authRuntime.IdentityContinuity(),
+			CharityRouting: routingLifecycle,
+			Governance:     activityEngines,
+			Sessions:       lifecycleadapters.NewAuthSessionRetention(authRuntime),
+			RequestLogs:    lifecycleadapters.NewRequestLogRetention(logRepository),
+			Audits:         lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Observability:  diagnosticRetention{audits.observations},
+			RiskAudit:      riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
+			Issues:         lifecycleadapters.NewIssueRetention(issueService),
+			Fishing:        fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,

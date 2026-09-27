@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/clientguard"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
@@ -100,7 +101,8 @@ type PersonalSnapshot struct {
 
 type CharitySnapshot struct {
 	CharityPreflight
-	Candidates []RouteCandidate
+	RouteStrategy string
+	Candidates    []RouteCandidate
 }
 
 type ListedModel struct {
@@ -135,6 +137,7 @@ type ClaimRail interface {
 	TakeForDispatch(context.Context, claim.Handle) (DispatchGrant, error)
 	MarkResponseStarted(context.Context, claim.Handle) error
 	ReleaseUndispatched(context.Context, claim.Handle) (claim.Attempt, error)
+	RevokeUndelivered(context.Context, claim.Handle) error
 	CompleteAttempt(context.Context, claim.Handle, claim.AttemptOutcome) (claim.Attempt, error)
 	CompleteRequest(context.Context, claim.CompleteRequestInput) (claim.Request, error)
 }
@@ -158,6 +161,10 @@ type DebugCapture interface {
 	DecideAfterAdmission(context.Context, debug.CaptureInput) (debug.CaptureDecision, error)
 }
 
+type CharityCallGuard interface {
+	CheckCharityCall(context.Context, int64, string, int64) (clientguard.Decision, error)
+}
+
 // Config is the production composition surface. Connector instances are
 // constructed by root wiring; forward validates them against Registry and
 // never reaches Backend, egress, or Vault directly.
@@ -168,6 +175,7 @@ type Config struct {
 	Charity        CharityRouter
 	Claims         ClaimRail
 	CharityCharges CharityChargeCalculator
+	CharityGuard   CharityCallGuard
 	Debug          DebugCapture
 	Registry       *connector.Registry
 	Connectors     []connector.Connector

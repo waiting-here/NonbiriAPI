@@ -392,7 +392,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			}
 		}
 		sawSupportedCandidate = true
-		weight, eligible, err := runtimeCandidateWeight(decisionNow, expiresAt)
+		denominator, eligible, err := runtimeCandidateDenominator(decisionNow, expiresAt)
 		if err != nil {
 			return RuntimeSnapshot{}, err
 		}
@@ -445,7 +445,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 			continue
 		}
 		candidate.Policy.FlattenToolCalls = snapshot.FlattenToolCalls
-		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, weight: weight})
+		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, denominator: denominator})
 		if len(weighted) > MaxRuntimeCandidates {
 			return RuntimeSnapshot{}, ErrResourceLimit
 		}
@@ -474,6 +474,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow
 		if strategyErr != nil {
 			return RuntimeSnapshot{}, strategyErr
 		}
+		snapshot.RouteStrategy = strategy
 		snapshot.candidates, err = orderRuntimeCandidates(s.entropy, weighted, strategy)
 		if err != nil {
 			return RuntimeSnapshot{}, err

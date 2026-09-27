@@ -58,6 +58,7 @@ var historyCategories = map[string][]Kind{
 	"penalty":      {KindAntiAbusePenalty},
 	"picture_book": {KindActivityExchange, KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize},
 	"inactivity":   {KindInactivityDecay},
+	"fat_fish":     {KindFatFishUnlock, KindFatFishTicket, KindFatFishReward, KindFatFishRefund},
 }
 
 func ValidateHistoryFilter(filter HistoryFilter) error {

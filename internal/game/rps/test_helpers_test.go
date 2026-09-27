@@ -3,8 +3,10 @@ package rps
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"math/big"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -218,6 +221,7 @@ type rpsFixture struct {
 	database     *sql.DB
 	vault        *secret.Vault
 	service      *Service
+	identity     *continuity.Service
 	limiter      *game.StartLimiter
 	authorizer   *rpsTestAuthorizer
 	continuation *rpsTestContinuation
@@ -242,6 +246,12 @@ func newRPSFixture(t *testing.T) *rpsFixture {
 	}
 	fixture := &rpsFixture{t: t, store: store, database: store.DB(), vault: vault,
 		continuation: &rpsTestContinuation{}, account: &rpsTestAccountEvents{}, activity: &rpsTestActivityEvents{}}
+	fixture.identity, err = continuity.New(store.DB(), vault)
+	if err != nil {
+		_ = store.Close()
+		_ = vault.Close()
+		t.Fatal(err)
+	}
 	fixture.clock.Store(rpsTestNow)
 	fixture.authorizer = &rpsTestAuthorizer{clock: &fixture.clock}
 	limiter, err := game.NewStartLimiter(game.StartLimiterConfig{Now: func() time.Time {
@@ -263,6 +273,7 @@ func newRPSFixture(t *testing.T) *rpsFixture {
 	t.Cleanup(func() {
 		_ = fixture.service.Close()
 		_ = fixture.limiter.Close()
+		_ = fixture.identity.Close()
 		_ = fixture.store.Close()
 		_ = fixture.vault.Close()
 	})
@@ -285,7 +296,8 @@ func (fixture *rpsFixture) newService(epoch int64) *Service {
 func (fixture *rpsFixture) seedIdentity(label string, admin bool) int64 {
 	fixture.t.Helper()
 	zero := db.EncodeU128(db.U128{})
-	var discord any = "rps-" + label
+	digest := sha256.Sum256([]byte(label))
+	var discord any = "rps-" + hex.EncodeToString(digest[:])
 	if admin {
 		discord = nil
 	}
@@ -301,6 +313,19 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, discord, label, boolIntRPS(admin), zero, zer
 	id, err := result.LastInsertId()
 	if err != nil {
 		fixture.t.Fatal(err)
+	}
+	if !admin {
+		tx, err := fixture.database.BeginTx(context.Background(), nil)
+		if err != nil {
+			fixture.t.Fatal(err)
+		}
+		defer tx.Rollback()
+		if _, err := fixture.identity.BindUserTx(context.Background(), tx, id); err != nil {
+			fixture.t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			fixture.t.Fatal(err)
+		}
 	}
 	return id
 }

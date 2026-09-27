@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
@@ -105,7 +106,8 @@ func DBUserLimitResolver(store *db.Store) UserLimitResolver {
 // ratelimit defaults; a partially filled value is normalized by the
 // ratelimit package (window and bounded stores filled in, limits validated).
 type Config struct {
-	RPM ratelimit.RPMConfig
+	RPM        ratelimit.RPMConfig
+	Continuity *continuity.Service
 	// UserLimits resolves current account state and explicit limits. Nil is a
 	// narrow test/standalone mode using the RPM default and concurrency 5.
 	UserLimits UserLimitResolver
@@ -129,6 +131,8 @@ type Controller struct {
 	userConcurrency *userConcurrencyLimiter
 	userAdmissions  *userAdmissionGate
 	userLimits      UserLimitResolver
+	continuity      *continuity.Service
+	now             func() time.Time
 	onDenied        func(context.Context, int64, ratelimit.RPMReason) error
 	observer        Observer
 }
@@ -170,11 +174,16 @@ func newWithClock(config Config, clock ratelimit.Clock) (*Controller, error) {
 	if clock != nil {
 		concurrency.now = clock.Now
 	}
+	now := time.Now
+	if clock != nil {
+		now = clock.Now
+	}
 	return &Controller{
 		limiter: limiter, userConcurrency: concurrency,
 		userAdmissions: &userAdmissionGate{},
 		userLimits:     config.UserLimits, onDenied: config.OnDenied,
-		observer: config.Observer,
+		observer:   config.Observer,
+		continuity: config.Continuity, now: now,
 	}, nil
 }
 
@@ -232,6 +241,10 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 		}
 	}
 	requestID := requestattempt.CurrentID(ctx)
+	rpmKey, err := c.loadRPMWindow(ctx, userID)
+	if err != nil {
+		return nil, 0, err
+	}
 	permit, err := c.userConcurrency.tryAcquireObserved(userID, limits.ConcurrencyLimit, requestID)
 	if err != nil {
 		if errors.Is(err, errConcurrencyClosed) {
@@ -250,12 +263,12 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 	var reservation *ratelimit.RPMReservation
 	var decision ratelimit.RPMDecision
 	if limits.RPMLimitSet {
-		reservation, decision, err = c.limiter.ReserveObserved(ctx, userKey(userID), limits.RPMLimit, c.rpmObserver(userID, requestID))
+		reservation, decision, err = c.limiter.ReserveObserved(ctx, rpmKey, limits.RPMLimit, c.rpmObserver(userID, requestID))
 	} else {
 		// NULL uses the current site default inside the RPM limiter's own lock.
 		// Do not take a separate Limits snapshot: SetLimits and Reserve must not
 		// have a TOCTOU gap.
-		reservation, decision, err = c.limiter.ReserveObserved(ctx, userKey(userID), 0, c.rpmObserver(userID, requestID))
+		reservation, decision, err = c.limiter.ReserveObserved(ctx, rpmKey, 0, c.rpmObserver(userID, requestID))
 	}
 	if err != nil {
 		permit.Release()

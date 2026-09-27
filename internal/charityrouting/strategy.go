@@ -11,10 +11,11 @@ const (
 	RouteOrdered        = "ordered"
 	RouteRandom         = "random"
 	RouteExpiryWeighted = "expiry_weighted"
+	RouteCacheBalanced  = "cache_balanced"
 )
 
 func validRouteStrategy(strategy string) bool {
-	return strategy == RouteOrdered || strategy == RouteRandom || strategy == RouteExpiryWeighted
+	return strategy == RouteOrdered || strategy == RouteRandom || strategy == RouteExpiryWeighted || strategy == RouteCacheBalanced
 }
 
 func defaultRouteStrategy(strategy string) string {
@@ -60,10 +61,10 @@ func orderRuntimeCandidates(source io.Reader, candidates []weightedRuntimeCandid
 	case RouteRandom:
 		uniform := append([]weightedRuntimeCandidate(nil), candidates...)
 		for index := range uniform {
-			uniform[index].weight = 1
+			uniform[index].denominator = 1
 		}
 		return orderWeightedRuntimeCandidates(source, uniform)
-	case RouteExpiryWeighted:
+	case RouteExpiryWeighted, RouteCacheBalanced:
 		return orderWeightedRuntimeCandidates(source, candidates)
 	default:
 		return nil, ErrInvariant

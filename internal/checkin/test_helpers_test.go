@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -125,6 +126,7 @@ type checkinFixture struct {
 	order       *callRecorder
 	clock       atomic.Int64
 	adminID     int64
+	continuity  *continuity.Service
 }
 
 func newCheckinFixture(t *testing.T) *checkinFixture {
@@ -141,6 +143,11 @@ func newCheckinFixture(t *testing.T) *checkinFixture {
 		t.Fatalf("open check-in database: %v", err)
 	}
 	fixture := &checkinFixture{t: t, store: store, database: store.DB(), order: &callRecorder{}}
+	fixture.continuity, err = continuity.New(store.DB(), vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fixture.continuity.Close() })
 	fixture.clock.Store(checkinTestNow)
 	fixture.authorizer = &checkinTestAuthorizer{recorder: fixture.order}
 	fixture.maintenance = &checkinTestMaintenance{recorder: fixture.order}
@@ -187,6 +194,19 @@ func (fixture *checkinFixture) seedIdentity(label string, admin bool) int64 {
 	id, err := result.LastInsertId()
 	if err != nil {
 		fixture.t.Fatalf("read identity id: %v", err)
+	}
+	if !admin {
+		tx, err := fixture.database.BeginTx(context.Background(), nil)
+		if err != nil {
+			fixture.t.Fatal(err)
+		}
+		defer tx.Rollback()
+		if _, err := fixture.continuity.BindUserTx(context.Background(), tx, id); err != nil {
+			fixture.t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			fixture.t.Fatal(err)
+		}
 	}
 	return id
 }

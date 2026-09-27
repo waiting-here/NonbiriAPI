@@ -136,7 +136,9 @@ func TestBlacklistRollbackFinalAuthorityAndFutureIdentity(t *testing.T) {
 	if err := RegisterStewardRoutes(f.registrar, f.service); err != nil {
 		t.Fatal(err)
 	}
-	if f.registrar.handler("POST", roleSteward.route(routeBlacklist)) != nil {
-		t.Fatal("blacklist exposed to stewards")
+	if f.registrar.handler("POST", roleSteward.route(routeBlacklist)) == nil ||
+		f.registrar.handler("GET", roleSteward.route(routeBlacklist)) == nil ||
+		f.registrar.handler("POST", roleSteward.route(routeBlacklistRemove)) != nil {
+		t.Fatal("steward blacklist route matrix is wrong")
 	}
 }

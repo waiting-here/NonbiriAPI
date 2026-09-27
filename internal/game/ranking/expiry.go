@@ -18,6 +18,8 @@ type expiryGroup struct {
 	delta         *big.Int
 	netDelta      [3]*big.Int
 	netSeq        [2][]byte
+	biddingDelta  *big.Int
+	biddingSeq    []byte
 	seq           []byte
 }
 
@@ -82,13 +84,17 @@ func nextGroup(ctx context.Context, tx *sql.Tx, now int64) (expiryGroup, error) 
 	var raw []byte
 	var netSigns [3]int
 	var netRaw [3][]byte
+	var biddingSign int
+	var biddingRaw []byte
 	for i := range g.netDelta {
 		g.netDelta[i] = new(big.Int)
 	}
 	for i := range g.netSeq {
 		g.netSeq[i] = make([]byte, 16)
 	}
-	err := tx.QueryRowContext(ctx, `SELECT user_id,board,window,expires_at,delta_sign,delta_mag,last_seq,net_game_delta_sign,net_game_delta_mag,net_fishing_delta_sign,net_fishing_delta_mag,net_blackjack_delta_sign,net_blackjack_delta_mag,net_fishing_last_seq,net_blackjack_last_seq FROM game_rank_expiry_work WHERE id=1`).Scan(&g.user, &g.board, &g.window, &g.at, &sign, &raw, &g.seq, &netSigns[0], &netRaw[0], &netSigns[1], &netRaw[1], &netSigns[2], &netRaw[2], &g.netSeq[0], &g.netSeq[1])
+	g.biddingDelta = new(big.Int)
+	g.biddingSeq = make([]byte, 16)
+	err := tx.QueryRowContext(ctx, `SELECT user_id,board,window,expires_at,delta_sign,delta_mag,last_seq,net_game_delta_sign,net_game_delta_mag,net_fishing_delta_sign,net_fishing_delta_mag,net_blackjack_delta_sign,net_blackjack_delta_mag,net_fishing_last_seq,net_blackjack_last_seq,net_bidding_delta_sign,net_bidding_delta_mag,net_bidding_last_seq FROM game_rank_expiry_work WHERE id=1`).Scan(&g.user, &g.board, &g.window, &g.at, &sign, &raw, &g.seq, &netSigns[0], &netRaw[0], &netSigns[1], &netRaw[1], &netSigns[2], &netRaw[2], &g.netSeq[0], &g.netSeq[1], &biddingSign, &biddingRaw, &g.biddingSeq)
 	if err == nil {
 		g.delta = new(big.Int).SetBytes(raw)
 		if sign < 0 {
@@ -99,6 +105,10 @@ func nextGroup(ctx context.Context, tx *sql.Tx, now int64) (expiryGroup, error) 
 			if netSigns[i] < 0 {
 				g.netDelta[i].Neg(g.netDelta[i])
 			}
+		}
+		g.biddingDelta.SetBytes(biddingRaw)
+		if biddingSign < 0 {
+			g.biddingDelta.Neg(g.biddingDelta)
 		}
 		if g.at > now {
 			return expiryGroup{}, ErrCatchingUp
@@ -171,6 +181,16 @@ func advanceGroup(ctx context.Context, tx *sql.Tx, g expiryGroup, limit int) (in
 					g.netSeq[index-1] = v.seq
 				}
 			}
+			if v.game == "bidding" {
+				applied, err := captureBiddingExpiry(ctx, tx, v.seq)
+				if err != nil {
+					return 0, err
+				}
+				if applied && amount.Sign() != 0 {
+					g.biddingDelta.Add(g.biddingDelta, amount)
+					g.biddingSeq = v.seq
+				}
+			}
 		}
 		g.seq = v.seq
 		set := column + `=NULL`
@@ -203,6 +223,9 @@ func advanceGroup(ctx context.Context, tx *sql.Tx, g expiryGroup, limit int) (in
 					return 0, err
 				}
 			}
+			if err := applyBiddingExpiry(ctx, tx, g.user, g.biddingDelta, g.at, g.biddingSeq); err != nil {
+				return 0, err
+			}
 		}
 		_, err = tx.ExecContext(ctx, `DELETE FROM game_rank_expiry_work WHERE id=1`)
 	} else {
@@ -217,7 +240,11 @@ func advanceGroup(ctx context.Context, tx *sql.Tx, g expiryGroup, limit int) (in
 			}
 			netRaw[i] = new(big.Int).Abs(value).FillBytes(make([]byte, 32))
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO game_rank_expiry_work(id,user_id,board,window,expires_at,delta_sign,delta_mag,last_seq,net_game_delta_sign,net_game_delta_mag,net_fishing_delta_sign,net_fishing_delta_mag,net_blackjack_delta_sign,net_blackjack_delta_mag,net_fishing_last_seq,net_blackjack_last_seq) VALUES(1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET delta_sign=excluded.delta_sign,delta_mag=excluded.delta_mag,last_seq=excluded.last_seq,net_game_delta_sign=excluded.net_game_delta_sign,net_game_delta_mag=excluded.net_game_delta_mag,net_fishing_delta_sign=excluded.net_fishing_delta_sign,net_fishing_delta_mag=excluded.net_fishing_delta_mag,net_blackjack_delta_sign=excluded.net_blackjack_delta_sign,net_blackjack_delta_mag=excluded.net_blackjack_delta_mag,net_fishing_last_seq=excluded.net_fishing_last_seq,net_blackjack_last_seq=excluded.net_blackjack_last_seq`, g.user, g.board, g.window, g.at, g.delta.Sign(), mag, g.seq, g.netDelta[0].Sign(), netRaw[0], g.netDelta[1].Sign(), netRaw[1], g.netDelta[2].Sign(), netRaw[2], g.netSeq[0], g.netSeq[1])
+		if g.biddingDelta.BitLen() > 256 {
+			return 0, ErrInvalid
+		}
+		biddingMagnitude := new(big.Int).Abs(g.biddingDelta).FillBytes(make([]byte, 32))
+		_, err = tx.ExecContext(ctx, `INSERT INTO game_rank_expiry_work(id,user_id,board,window,expires_at,delta_sign,delta_mag,last_seq,net_game_delta_sign,net_game_delta_mag,net_fishing_delta_sign,net_fishing_delta_mag,net_blackjack_delta_sign,net_blackjack_delta_mag,net_fishing_last_seq,net_blackjack_last_seq,net_bidding_delta_sign,net_bidding_delta_mag,net_bidding_last_seq) VALUES(1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET delta_sign=excluded.delta_sign,delta_mag=excluded.delta_mag,last_seq=excluded.last_seq,net_game_delta_sign=excluded.net_game_delta_sign,net_game_delta_mag=excluded.net_game_delta_mag,net_fishing_delta_sign=excluded.net_fishing_delta_sign,net_fishing_delta_mag=excluded.net_fishing_delta_mag,net_blackjack_delta_sign=excluded.net_blackjack_delta_sign,net_blackjack_delta_mag=excluded.net_blackjack_delta_mag,net_fishing_last_seq=excluded.net_fishing_last_seq,net_blackjack_last_seq=excluded.net_blackjack_last_seq,net_bidding_delta_sign=excluded.net_bidding_delta_sign,net_bidding_delta_mag=excluded.net_bidding_delta_mag,net_bidding_last_seq=excluded.net_bidding_last_seq`, g.user, g.board, g.window, g.at, g.delta.Sign(), mag, g.seq, g.netDelta[0].Sign(), netRaw[0], g.netDelta[1].Sign(), netRaw[1], g.netDelta[2].Sign(), netRaw[2], g.netSeq[0], g.netSeq[1], g.biddingDelta.Sign(), biddingMagnitude, g.biddingSeq)
 	}
 	return len(items), err
 }

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -42,6 +43,7 @@ type ExportAdapters struct {
 // DeleteAdapters is the closed account-deletion registry. Each adapter owns
 // its domain SQL; the coordinator only fixes the cross-domain order.
 type DeleteAdapters struct {
+	Continuity           DeleteAdapter
 	AuthSessionCallerKey DeleteAdapter
 	Resources            DeleteAdapter
 	ClaimLog             DeleteAdapter
@@ -57,10 +59,12 @@ type DeleteAdapters struct {
 	Blackjack            DeleteAdapter
 	DebugAccountStream   DeleteAdapter
 	Governance           DeleteAdapter
+	CharityRouting       DeleteAdapter
 }
 
 func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 	return []DeleteAdapter{
+		adapters.Continuity,
 		adapters.AuthSessionCallerKey,
 		adapters.Resources,
 		adapters.ClaimLog,
@@ -76,6 +80,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 		adapters.Blackjack,
 		adapters.DebugAccountStream,
 		adapters.Governance,
+		adapters.CharityRouting,
 	}
 }
 
@@ -83,20 +88,21 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 // runtime registry. Legal-hold expiry is owned by the coordinator and runs
 // before this list.
 type RecoveryAdapters struct {
-	Idempotency RecoveryAdapter
-	Discovery   RecoveryAdapter
-	Claims      RecoveryAdapter
-	Thursday    RecoveryAdapter
-	Reports     RecoveryAdapter
-	Fishing     RecoveryAdapter
-	LinkLink    RecoveryAdapter
-	RPS         RecoveryAdapter
-	Bidding     RecoveryAdapter
-	Likes       RecoveryAdapter
-	Blackjack   RecoveryAdapter
-	Donations   RecoveryAdapter
-	Secrets     RecoveryAdapter
-	Governance  RecoveryAdapter
+	Idempotency    RecoveryAdapter
+	Discovery      RecoveryAdapter
+	Claims         RecoveryAdapter
+	Thursday       RecoveryAdapter
+	Reports        RecoveryAdapter
+	Fishing        RecoveryAdapter
+	LinkLink       RecoveryAdapter
+	RPS            RecoveryAdapter
+	Bidding        RecoveryAdapter
+	Likes          RecoveryAdapter
+	Blackjack      RecoveryAdapter
+	Donations      RecoveryAdapter
+	Secrets        RecoveryAdapter
+	Governance     RecoveryAdapter
+	CharityRouting RecoveryAdapter
 }
 
 func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
@@ -115,34 +121,38 @@ func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
 		adapters.Donations,
 		adapters.Secrets,
 		adapters.Governance,
+		adapters.CharityRouting,
 	}
 }
 
 // RetentionAdapters fixes the six-hour cleanup order. Separate game fields
 // keep each reducer and retention cursor under its domain owner.
 type RetentionAdapters struct {
-	Sessions      RetentionAdapter
-	RequestLogs   RetentionAdapter
-	Audits        RetentionAdapter
-	Observability RetentionAdapter
-	RiskAudit     RetentionAdapter
-	Issues        RetentionAdapter
-	Fishing       RetentionAdapter
-	LinkLink      RetentionAdapter
-	RPS           RetentionAdapter
-	Bidding       RetentionAdapter
-	Likes         RetentionAdapter
-	Blackjack     RetentionAdapter
-	Reports       RetentionAdapter
-	Donations     RetentionAdapter
-	Charity       RetentionAdapter
-	Idempotency   RetentionAdapter
-	Secrets       RetentionAdapter
-	Governance    RetentionAdapter
+	Continuity     RetentionAdapter
+	Sessions       RetentionAdapter
+	RequestLogs    RetentionAdapter
+	Audits         RetentionAdapter
+	Observability  RetentionAdapter
+	RiskAudit      RetentionAdapter
+	Issues         RetentionAdapter
+	Fishing        RetentionAdapter
+	LinkLink       RetentionAdapter
+	RPS            RetentionAdapter
+	Bidding        RetentionAdapter
+	Likes          RetentionAdapter
+	Blackjack      RetentionAdapter
+	Reports        RetentionAdapter
+	Donations      RetentionAdapter
+	Charity        RetentionAdapter
+	Idempotency    RetentionAdapter
+	Secrets        RetentionAdapter
+	Governance     RetentionAdapter
+	CharityRouting RetentionAdapter
 }
 
 func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 	return []RetentionAdapter{
+		adapters.Continuity,
 		adapters.Sessions,
 		adapters.RequestLogs,
 		adapters.Audits,
@@ -161,6 +171,7 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.Idempotency,
 		adapters.Secrets,
 		adapters.Governance,
+		adapters.CharityRouting,
 	}
 }
 
@@ -193,6 +204,7 @@ type Config struct {
 	Store       *db.Store
 	UserAuth    UserFinalAuthorizer
 	AdminAuth   AdminFinalAuthorizer
+	SystemAuth  SystemDeleteAuthorizer
 	CursorKeys  CursorKeyDeriver
 	Retirement  RetirementBoundary
 	Ledger      LedgerDeleteAdapter
@@ -209,6 +221,7 @@ type Coordinator struct {
 	database    *sql.DB
 	userAuth    UserFinalAuthorizer
 	adminAuth   AdminFinalAuthorizer
+	systemAuth  SystemDeleteAuthorizer
 	retirement  RetirementBoundary
 	ledger      LedgerDeleteAdapter
 	export      ExportAdapters
@@ -246,7 +259,7 @@ func New(config Config) (*Coordinator, error) {
 		config.NewID = db.GenerateOpaqueID
 	}
 	return &Coordinator{
-		database: config.Store.DB(), userAuth: config.UserAuth, adminAuth: config.AdminAuth,
+		database: config.Store.DB(), userAuth: config.UserAuth, adminAuth: config.AdminAuth, systemAuth: config.SystemAuth,
 		retirement: config.Retirement, ledger: config.Ledger, export: config.Export,
 		delete: config.Delete, recovery: config.Recovery, retention: config.Retention,
 		heldObjects: config.HeldObjects, cursorKeys: config.CursorKeys, now: config.Now, newID: config.NewID,
@@ -617,7 +630,23 @@ func validateExportCollectionBounds(document ExportDocument) error {
 // DeleteAccount executes every domain handoff and the final ledger/user delete
 // in one transaction. Process-local retirement is committed only afterward.
 func (coordinator *Coordinator) DeleteAccount(ctx context.Context, userID, decisionNow int64) error {
-	if coordinator == nil || ctx == nil || !validDecision(userID, decisionNow) {
+	return coordinator.deleteAccount(ctx, DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteSelf, ActorUserID: userID})
+}
+
+func (coordinator *Coordinator) DeleteAccountByAdmin(ctx context.Context, adminID, userID, decisionNow int64) error {
+	if adminID <= 0 {
+		return ErrInvalid
+	}
+	return coordinator.deleteAccount(ctx, DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteAdmin, ActorUserID: adminID})
+}
+
+func (coordinator *Coordinator) DeleteAccountBySystem(ctx context.Context, userID, decisionNow int64) error {
+	return coordinator.deleteAccount(ctx, DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteSystem})
+}
+
+func (coordinator *Coordinator) deleteAccount(ctx context.Context, request DeleteRequest) error {
+	userID, decisionNow := request.UserID, request.DecisionNow
+	if coordinator == nil || ctx == nil || !validDecision(userID, decisionNow) || !request.Source.Valid() {
 		return ErrInvalid
 	}
 	if coordinator.closed.Load() {
@@ -639,10 +668,28 @@ func (coordinator *Coordinator) DeleteAccount(ctx context.Context, userID, decis
 		return fmt.Errorf("lifecycle: begin account deletion: %w", err)
 	}
 	defer tx.Rollback()
-	if err := coordinator.userAuth.AuthorizeFreshUser(ctx, tx, userID); err != nil {
+	switch request.Source {
+	case DeleteSelf:
+		err = coordinator.userAuth.AuthorizeFreshUser(ctx, tx, userID)
+	case DeleteAdmin:
+		err = coordinator.adminAuth.AuthorizeFreshAdmin(ctx, tx, request.ActorUserID)
+	case DeleteSystem:
+		if coordinator.systemAuth == nil {
+			return ErrForbidden
+		}
+		err = coordinator.systemAuth.AuthorizeSystemDeletion(ctx, tx, userID)
+	}
+	if err != nil {
 		return err
 	}
-	request := DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteSelf, ActorUserID: userID}
+	var actor *int64
+	if request.ActorUserID > 0 {
+		actor = &request.ActorUserID
+	}
+	request.Before, err = adminalerts.CaptureAccountDeletionTx(ctx, tx, userID, decisionNow, string(request.Source), actor)
+	if err != nil {
+		return err
+	}
 	finalizers := make([]DeleteFinalizer, 0, len(coordinator.delete.ordered()))
 	abortFinalizers := func() {
 		for index := len(finalizers) - 1; index >= 0; index-- {
