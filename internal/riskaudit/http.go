@@ -31,6 +31,7 @@ var routes = []route{
 	{http.MethodGet, "/shared-ips", "ips"}, {http.MethodGet, "/client-rules", "rules"},
 	{http.MethodPost, "/client-rules", "create_rule"}, {http.MethodPatch, "/client-rules/{id}", "update_rule"},
 	{http.MethodDelete, "/client-rules/{id}", "delete_rule"},
+	{http.MethodGet, "/client-rule-ban-receipts/{id}", "rule_ban_receipt"},
 	{http.MethodGet, "/config", "config"}, {http.MethodPut, "/config", "update_config"},
 }
 
@@ -58,6 +59,9 @@ func RegisterStewardRoutes(registrar resources.UserRouteRegistrar, repository *R
 		return ErrInvalid
 	}
 	for _, route := range routes {
+		if route.action == "rule_ban_receipt" {
+			continue
+		}
 		action := route.action
 		if err := registrar.RegisterUserRoute(route.method, "/api/steward/abuse-audit"+route.path, func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			actor, ok := auth.ActorFromContext(r.Context())
@@ -162,13 +166,48 @@ func decodeBody(w http.ResponseWriter, r *http.Request, value any) error {
 }
 
 type ruleInput struct {
-	Name         string      `json:"name"`
-	Status       string      `json:"status"`
-	Enabled      bool        `json:"enabled"`
-	Revision     int64       `json:"revision"`
-	Conditions   []Condition `json:"conditions"`
-	EvidenceNote string      `json:"evidence_note"`
-	EvidenceURL  string      `json:"evidence_url"`
+	Name         string          `json:"name"`
+	Status       string          `json:"status"`
+	Enabled      bool            `json:"enabled"`
+	Revision     int64           `json:"revision"`
+	Conditions   []Condition     `json:"conditions"`
+	EvidenceNote string          `json:"evidence_note"`
+	EvidenceURL  string          `json:"evidence_url"`
+	AutoBan      json.RawMessage `json:"auto_ban"`
+}
+
+func parseAction(raw json.RawMessage) (ActionMutation, error) {
+	if raw == nil {
+		return ActionMutation{}, nil
+	}
+	mutation := ActionMutation{Present: true}
+	if string(raw) == "null" {
+		return mutation, nil
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || len(fields) != 2 || fields["enabled"] == nil || fields["duration_seconds"] == nil {
+		return ActionMutation{}, ErrInvalid
+	}
+	var enabled bool
+	if value := strings.TrimSpace(string(fields["enabled"])); value != "true" && value != "false" {
+		return ActionMutation{}, ErrInvalid
+	}
+	if json.Unmarshal(fields["enabled"], &enabled) != nil {
+		return ActionMutation{}, ErrInvalid
+	}
+	action := &AutoBan{Enabled: enabled}
+	if string(fields["duration_seconds"]) != "null" {
+		var duration int64
+		if json.Unmarshal(fields["duration_seconds"], &duration) != nil {
+			return ActionMutation{}, ErrInvalid
+		}
+		action.DurationSeconds = &duration
+	}
+	if !action.valid() {
+		return ActionMutation{}, ErrInvalid
+	}
+	mutation.AutoBan = action
+	return mutation, nil
 }
 
 func serve(repository *Repository, action string, actor Actor, w http.ResponseWriter, r *http.Request) {
@@ -253,7 +292,12 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 			break
 		}
 		rule := Rule{ID: r.PathValue("id"), Name: value.Name, Status: value.Status, Enabled: value.Enabled, Revision: value.Revision, Conditions: value.Conditions, EvidenceNote: value.EvidenceNote, EvidenceURL: value.EvidenceURL}
-		output, err = repository.PutRule(ctx, actor, rule, action == "create_rule")
+		var binding ActionMutation
+		binding, err = parseAction(value.AutoBan)
+		if err != nil {
+			break
+		}
+		output, err = repository.PutRuleWithAction(ctx, actor, rule, action == "create_rule", binding)
 		if action == "create_rule" {
 			status = http.StatusCreated
 		}
@@ -267,6 +311,12 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 		output = struct {
 			Deleted bool `json:"deleted"`
 		}{true}
+	case "rule_ban_receipt":
+		if !actor.Admin {
+			err = ErrForbidden
+			break
+		}
+		output, err = repository.RuleBanReceipt(ctx, actor, r.PathValue("id"))
 	case "users":
 		var window Window
 		window, err = parseWindow(q, repository.now().Unix(), true)
