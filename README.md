@@ -6,6 +6,8 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 
 > **Current release:** [1.0.0-rc.3](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.3), a source prerelease for Linux/amd64. Build from the tagged source; no official precompiled binaries are provided. Review the deployment, privacy and security documentation before exposing an instance to users.
 >
+> **Unreleased candidate:** The v1.0.0-rc.4 source candidate adds image-model capability and size-pricing controls, expanded audit and account-protection workflows, a Fat Fish editor and local game, updated game boards and live presentation, charity dispatch and request-adaptation controls, and typed schema-11 account exports. See the [changelog](CHANGELOG.md) for the full scope. It has not been published or deployed.
+>
 > **Compatibility:** supported upgrade sources include rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c` and administration maintenance commit `84018acbd594765c563cc0ee4083d206e0bd6a77`, preserving existing data, configuration and instance legal text. Generation 2 (`application_id=0x4E425249`, `user_version=2`) and Linux/amd64 remain the target. Unknown intermediate schemas are outside this guarantee; Alpha/Generation 1 requires a fresh cutover. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes).
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)

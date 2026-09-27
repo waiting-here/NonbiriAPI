@@ -4,6 +4,30 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [1.0.0-rc.4] - Unreleased
+
+This entry describes the unreleased rc.4 source candidate. The latest published source prerelease remains 1.0.0-rc.3; this entry does not announce publication or deployment.
+
+### Added
+
+- Image-model setup now has capability discovery and reviewable profile changes, parameter forms across both stations, size-tier prices with exact width/height overrides and an optional per-model default, and a price preview that does not generate an image or charge credits. Legacy model prices and accepted task snapshots retain their existing meaning.
+- Fat Fish adds a deterministic local game, revisioned level and period editing, condition-aware node maps, eight hash-checked example levels, import/export, and version-bound no-charge administrator playtests. Formal challenges use explicit General-credit unlock and ticket confirmations, original-tab recovery, server replay verification, and period leaderboards.
+- Risk and audit screens can page through all six result lists. Alert details cover twelve alert kinds with safe current-target resolution, related-log links, and explicit resolution or worker status.
+- Game presentation now includes full-row activity covers, anonymous large-donor display, avatars on leaderboard rows, a seven-day Bidding net-profit board, and live Blackjack identities for seated players and spectators while keeping those identities out of history and account exports.
+- Account protection adds configured automatic bans for eligible new charity requests, same-Discord continuity for eligible once-only rewards and active enforcement windows, and long-lived minimal deleted-account snapshots for administrator and level-6 review. Manual policy, role, and game progress are not restored to a re-registered account. Self-deletion during an active restriction, charity suspension, or negative general/game balance creates a lasting blacklist entry; only administrators can remove it, and role boundaries prevent peer-level management.
+- Charity dispatch gains expiring key affinity and continuous expiry-weighted selection. Scoped request adaptations can add or replace outbound headers and JSON-body fields at authorized endpoint, model, and binding levels.
+- SQLite lock and shared-memory handles now follow one coordinated lifecycle. Startup and shutdown apply bounded lock and recovery budgets, readiness reflects critical worker failure, and diagnostics preserve the primary initialization or worker-failure stage.
+
+### Changed
+
+- SQLite remains Generation 2. The account export advances to schema 11 with typed safe `request_adaptations`, `continuity`, and `fat_fish` projections; full play inputs, prompts, credentials, unrevealed seeds, and other players' private results remain excluded. Oversized exports fail as a whole instead of truncating.
+- The supported rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Upgrades preserve existing account and game data, credentials, configuration, and instance legal text. Instance legal-text publication remains a separate operator action.
+
+### Fixed
+
+- Contradictory or overflowing upstream token totals now make usage unknown without discarding otherwise valid response content. Gateway usage with duplicate token fields is rejected.
+- OpenAI streaming requests normalize null stream options to request usage and reject invalid option shapes before dispatch. Usage-only streams cannot become successful completions, and named completion events accept the standard `[DONE]` marker.
+
 ## [1.0.0-rc.3] - 2026-09-25
 
 Source prerelease for Linux/amd64, without official precompiled attachments. Supported data-preserving upgrade sources include rc.2 maintenance commit `db959c64674afc531046a63066de0464725d439c` and the complete administration maintenance schema at `84018acbd594765c563cc0ee4083d206e0bd6a77`, preserving business data, configuration and instance legal text. Unknown intermediate schemas remain unsupported; a downgrade requires a complete matching stopped snapshot.
