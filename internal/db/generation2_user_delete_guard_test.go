@@ -4,7 +4,7 @@ import "testing"
 
 func TestGenerationTwoUserDeleteRequiresEconomicHandoff(t *testing.T) {
 	t.Run("terminal request does not block", func(t *testing.T) {
-		database := openGenerationTwoDDLForTest(t)
+		database := openGenerationTwoConstraintFixture(t)
 		defer database.Close()
 		userID := hostileInsertUser(t, database, "delete-terminal-request", 0, 0)
 		hostileInsertTerminalRequest(t, database, hostileOIDVariant("req_", 'T', 'Q'), userID,
@@ -13,7 +13,7 @@ func TestGenerationTwoUserDeleteRequiresEconomicHandoff(t *testing.T) {
 	})
 
 	t.Run("reserved request blocks until released", func(t *testing.T) {
-		database := openGenerationTwoDDLForTest(t)
+		database := openGenerationTwoConstraintFixture(t)
 		defer database.Close()
 		userID := hostileInsertUser(t, database, "delete-reserved-request", 0, 0)
 		requestID := hostileOIDVariant("req_", 'R', 'Q')
@@ -29,7 +29,7 @@ INSERT INTO logical_requests(
 	})
 
 	t.Run("claimed request blocks until released", func(t *testing.T) {
-		database := openGenerationTwoDDLForTest(t)
+		database := openGenerationTwoConstraintFixture(t)
 		defer database.Close()
 		userID := hostileInsertUser(t, database, "delete-claimed-request", 0, 0)
 		endpointID := hostileInsertEndpoint(t, database, userID, "https://claimed.example/v1")
@@ -48,7 +48,7 @@ INSERT INTO dispatch_claims(
 	})
 
 	t.Run("dispatched request permits explicit external handoff", func(t *testing.T) {
-		database := openGenerationTwoDDLForTest(t)
+		database := openGenerationTwoConstraintFixture(t)
 		defer database.Close()
 		userID := hostileInsertUser(t, database, "delete-dispatched-request", 0, 0)
 		endpointID := hostileInsertEndpoint(t, database, userID, "https://dispatched.example/v1")
@@ -70,7 +70,7 @@ UPDATE logical_requests SET user_id=NULL,settlement_destination='external' WHERE
 
 func TestGenerationTwoUserDeleteRequiresGameReservationHandoff(t *testing.T) {
 	t.Run("fishing reserved", func(t *testing.T) {
-		database := openGenerationTwoDDLForTest(t)
+		database := openGenerationTwoConstraintFixture(t)
 		defer database.Close()
 		userID := hostileInsertUser(t, database, "delete-fishing", 0, 0)
 		batchID := hostileOIDVariant("fb_", 'F', 'Q')
@@ -81,7 +81,7 @@ func TestGenerationTwoUserDeleteRequiresGameReservationHandoff(t *testing.T) {
 	})
 
 	t.Run("rps queue", func(t *testing.T) {
-		database := openGenerationTwoDDLForTest(t)
+		database := openGenerationTwoConstraintFixture(t)
 		defer database.Close()
 		queueID, _ := hostileInsertRPSQueue(t, database, 'Q', "quick", hostileBlob16(1), hostileBlob16(1))
 		var userID int64
@@ -95,7 +95,7 @@ func TestGenerationTwoUserDeleteRequiresGameReservationHandoff(t *testing.T) {
 
 	for _, state := range []string{"started", "terminal_processing"} {
 		t.Run("rps "+state, func(t *testing.T) {
-			database := openGenerationTwoDDLForTest(t)
+			database := openGenerationTwoConstraintFixture(t)
 			defer database.Close()
 			userID := hostileInsertUser(t, database, "delete-rps-"+state, 0, 0)
 			sessionID := hostileOIDVariant("rps_", state[0], 'Q')

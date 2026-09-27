@@ -123,7 +123,7 @@ func TestGovernancePublishedSourceUpgrade(t *testing.T) {
 }
 
 func TestGovernanceActivityIntegerGuardsUseAll128Bits(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	defer database.Close()
 	wide := new(big.Int).Lsh(big.NewInt(1), 120)
 	wide.Quo(wide, big.NewInt(1000)).Mul(wide, big.NewInt(1000))
