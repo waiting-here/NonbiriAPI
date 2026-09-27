@@ -1,5 +1,7 @@
 package db
 
+// Guards protect ownership and deletion integrity. Session validity and timed
+// bans use the final authorizer in the same write transaction as each save.
 const likesLoadoutSchema = `
 CREATE TABLE game_likes_loadouts (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -16,13 +18,13 @@ CREATE TABLE game_likes_loadouts (
  PRIMARY KEY(user_id,slot)
 );
 CREATE TRIGGER game_likes_loadouts_insert_guard BEFORE INSERT ON game_likes_loadouts
-WHEN NEW.revision<>1 OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND is_admin=0 AND is_banned=0)
+WHEN NEW.revision<>1 OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND is_admin=0)
  OR EXISTS(SELECT 1 FROM user_deletion_markers WHERE user_id=NEW.user_id)
 BEGIN SELECT RAISE(ABORT,'invalid custom preset owner or revision'); END;
 CREATE TRIGGER game_likes_loadouts_update_guard BEFORE UPDATE ON game_likes_loadouts
 WHEN NEW.user_id<>OLD.user_id OR NEW.slot<>OLD.slot OR OLD.revision=9223372036854775807
  OR NEW.revision<>OLD.revision+1 OR NEW.updated_at<OLD.updated_at
- OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND is_admin=0 AND is_banned=0)
+ OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND is_admin=0)
  OR EXISTS(SELECT 1 FROM user_deletion_markers WHERE user_id=NEW.user_id)
 BEGIN SELECT RAISE(ABORT,'invalid custom preset update'); END;
 `
