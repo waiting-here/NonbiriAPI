@@ -71,6 +71,7 @@ func TestStatusMapping(t *testing.T) {
 		CodeCheckinCapReached:       http.StatusForbidden,
 		CodeNotFound:                http.StatusNotFound,
 		CodeConflict:                http.StatusConflict,
+		CodeRefreshRequired:         http.StatusConflict,
 		CodeAlreadyCheckedIn:        http.StatusConflict,
 		CodeDebugLiveCancelled:      http.StatusConflict,
 		CodeMethodNotAllowed:        http.StatusMethodNotAllowed,

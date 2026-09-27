@@ -17,6 +17,15 @@ import (
 type modelSnapshot struct {
 	id, controlID, upstreamID string
 	revision                  int64
+	capabilityRevision        int64
+	pricingRevision           int64
+	readiness                 string
+	size                      *SizeCapability
+	pricing                   PricingPolicy
+	manual                    []ManualCapability
+	manualPolicy              effectivePolicy
+	parameterCapabilities     []AdminParameterCapability
+	catalogType               string
 	input                     ModelInput
 	metadata                  json.RawMessage
 	payment                   ledger.SketchPayment
@@ -68,13 +77,26 @@ func modelTx(ctx context.Context, tx *sql.Tx, id string, revision int64) (modelS
 		out.input.Combinations = []CombinationRule{}
 	}
 	out.input.Mapping = normalizeMapping(out.input.Mapping)
+	if err = loadModelPolicyTx(ctx, tx, &out); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 func adminModelView(m modelSnapshot) AdminModel {
-	return AdminModel{ID: m.id, UpstreamModelID: m.upstreamID, Metadata: m.metadata, Configured: m.revision > 0, Revision: strconv.FormatInt(m.revision, 10), DisplayName: m.input.DisplayName, Description: m.input.Description, Enabled: m.input.Enabled, Price: m.input.Price, Parameters: m.input.Parameters, Combinations: m.input.Combinations, Mapping: m.input.Mapping}
+	out := AdminModel{ID: m.id, UpstreamModelID: m.upstreamID, Metadata: m.metadata, Configured: m.revision > 0, Revision: strconv.FormatInt(m.revision, 10), DisplayName: m.input.DisplayName, Description: m.input.Description, Enabled: m.input.Enabled, Price: m.input.Price, Parameters: m.input.Parameters, ParameterCapabilities: []AdminParameterCapability{}, Combinations: m.input.Combinations, Mapping: m.input.Mapping}
+	if m.revision > 0 {
+		out.ParameterCapabilities = m.parameterCapabilities
+		out.CapabilityRevision = strconv.FormatInt(m.capabilityRevision, 10)
+		out.CapabilityReadiness = m.readiness
+		out.PricingRevision = strconv.FormatInt(m.pricingRevision, 10)
+		out.Pricing = &m.pricing
+		out.SizeCapability = m.size
+		out.CatalogType = m.catalogType
+	}
+	return out
 }
 func publicModelView(m modelSnapshot) Model {
-	return Model{ID: m.id, DisplayName: m.input.DisplayName, Description: m.input.Description, Revision: strconv.FormatInt(m.revision, 10), Price: m.input.Price, Parameters: m.input.Parameters, Combinations: m.input.Combinations}
+	return Model{ID: m.id, DisplayName: m.input.DisplayName, Description: m.input.Description, Revision: strconv.FormatInt(m.revision, 10), Price: m.input.Price, Parameters: m.input.Parameters, Combinations: m.input.Combinations, PricingRevision: strconv.FormatInt(m.pricingRevision, 10), Pricing: m.pricing, SizeCapability: m.size}
 }
 func (s *Service) ListModels(ctx context.Context, user int64, admin bool, limit int, cursor string) (Page[AdminModel], error) {
 	out := Page[AdminModel]{Data: []AdminModel{}}
@@ -116,7 +138,7 @@ func (s *Service) ListModels(ctx context.Context, user int64, admin bool, limit 
 	}
 	query := `SELECT m.id FROM image_activity_models m LEFT JOIN image_model_revisions r ON r.model_id=m.id AND r.revision=m.current_revision WHERE m.control_id=? AND m.id>?`
 	if !admin {
-		query += " AND r.enabled=1"
+		query += " AND r.enabled=1 AND EXISTS (SELECT 1 FROM image_model_revision_policies p JOIN image_model_capability_revisions c ON c.model_id=p.model_id AND c.revision=p.capability_revision WHERE p.model_id=m.id AND p.model_revision=m.current_revision AND c.readiness IN ('legacy','ready'))"
 	}
 	query += " ORDER BY m.id LIMIT ?"
 	rows, err := tx.QueryContext(ctx, query, upstream.controlID, after, limit+1)
@@ -162,7 +184,10 @@ func (s *Service) UserModels(ctx context.Context, user int64, limit int, cursor 
 		return out, err
 	}
 	for _, m := range internal.Data {
-		out.Data = append(out.Data, Model{m.ID, m.DisplayName, m.Description, m.Revision, m.Price, m.Parameters, m.Combinations})
+		if m.Pricing == nil {
+			return out, ErrInvariant
+		}
+		out.Data = append(out.Data, Model{ID: m.ID, DisplayName: m.DisplayName, Description: m.Description, Revision: m.Revision, Price: m.Price, Parameters: m.Parameters, Combinations: m.Combinations, PricingRevision: m.PricingRevision, Pricing: *m.Pricing, SizeCapability: m.SizeCapability})
 	}
 	return out, nil
 }
@@ -252,6 +277,9 @@ func (s *Service) PutModel(ctx context.Context, admin int64, id, key string, inp
 	if err != nil {
 		return out, err
 	}
+	if err = storeModelPolicyTx(ctx, tx, id, next, old, input, now); err != nil {
+		return out, err
+	}
 	if err = requireOne(tx.ExecContext(ctx, "UPDATE image_activity_models SET current_revision=? WHERE id=?", next, id)); err != nil {
 		return out, err
 	}
@@ -262,7 +290,7 @@ func (s *Service) PutModel(ctx context.Context, admin int64, id, key string, inp
 			return out, err
 		}
 	}
-	out.Value = ModelReceipt{ID: id, Revision: strconv.FormatInt(next, 10)}
+	out.Value = ModelReceipt{ID: id, Revision: strconv.FormatInt(next, 10), CapabilityRevision: strconv.FormatInt(next, 10), PricingRevision: strconv.FormatInt(next, 10)}
 	if err = finishReplay(ctx, tx, d, out.Value); err != nil {
 		return out, err
 	}

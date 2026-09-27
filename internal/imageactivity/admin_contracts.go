@@ -6,8 +6,10 @@ type UpstreamReceipt struct {
 	Revision string `json:"revision"`
 }
 type ModelReceipt struct {
-	ID       string `json:"id"`
-	Revision string `json:"revision"`
+	ID                 string `json:"id"`
+	Revision           string `json:"revision"`
+	CapabilityRevision string `json:"capability_revision"`
+	PricingRevision    string `json:"pricing_revision"`
 }
 type ResumeResult struct {
 	Control Control `json:"control"`
@@ -107,28 +109,50 @@ type Adapter struct {
 	Response  ResponseAdapter  `json:"response"`
 }
 type AdminModel struct {
-	ID              string            `json:"id"`
-	UpstreamModelID string            `json:"upstream_model_id"`
-	Metadata        json.RawMessage   `json:"metadata"`
-	Configured      bool              `json:"configured"`
-	Revision        string            `json:"revision"`
-	DisplayName     string            `json:"display_name"`
-	Description     string            `json:"description"`
-	Enabled         bool              `json:"enabled"`
-	Price           Price             `json:"price"`
-	Parameters      []ParameterRule   `json:"parameters"`
-	Combinations    []CombinationRule `json:"combinations"`
-	Mapping         Mapping           `json:"mapping"`
+	ID                    string                     `json:"id"`
+	UpstreamModelID       string                     `json:"upstream_model_id"`
+	Metadata              json.RawMessage            `json:"metadata"`
+	Configured            bool                       `json:"configured"`
+	Revision              string                     `json:"revision"`
+	DisplayName           string                     `json:"display_name"`
+	Description           string                     `json:"description"`
+	Enabled               bool                       `json:"enabled"`
+	Price                 Price                      `json:"price"`
+	Parameters            []ParameterRule            `json:"parameters"`
+	ParameterCapabilities []AdminParameterCapability `json:"parameter_capabilities"`
+	Combinations          []CombinationRule          `json:"combinations"`
+	Mapping               Mapping                    `json:"mapping"`
+	CapabilityRevision    string                     `json:"capability_revision,omitempty"`
+	CapabilityReadiness   string                     `json:"capability_readiness,omitempty"`
+	PricingRevision       string                     `json:"pricing_revision,omitempty"`
+	Pricing               *PricingPolicy             `json:"pricing,omitempty"`
+	SizeCapability        *SizeCapability            `json:"size_capability,omitempty"`
+	CatalogType           string                     `json:"catalog_type,omitempty"`
+	Missing               bool                       `json:"missing,omitempty"`
+}
+
+// AdminParameterCapability describes the accepted rule's persisted origin.
+// Unknown and legacy are explicit when no trustworthy source lineage exists.
+type AdminParameterCapability struct {
+	Key        ParameterKey      `json:"key"`
+	Source     string            `json:"source"`
+	Support    CapabilitySupport `json:"support"`
+	Overridden bool              `json:"overridden"`
+	Conflict   bool              `json:"conflict"`
 }
 type ModelInput struct {
-	ExpectedRevision string            `json:"expected_revision"`
-	DisplayName      string            `json:"display_name"`
-	Description      string            `json:"description"`
-	Enabled          bool              `json:"enabled"`
-	Price            Price             `json:"price"`
-	Parameters       []ParameterRule   `json:"parameters"`
-	Combinations     []CombinationRule `json:"combinations"`
-	Mapping          Mapping           `json:"mapping"`
+	ExpectedRevision    string            `json:"expected_revision"`
+	DisplayName         string            `json:"display_name"`
+	Description         string            `json:"description"`
+	Enabled             bool              `json:"enabled"`
+	Price               Price             `json:"price"`
+	Parameters          []ParameterRule   `json:"parameters"`
+	Combinations        []CombinationRule `json:"combinations"`
+	Mapping             Mapping           `json:"mapping"`
+	Pricing             *PricingPolicy    `json:"pricing,omitempty"`
+	SizeCapability      *SizeCapability   `json:"size_capability,omitempty"`
+	CapabilityConfirmed bool              `json:"capability_confirmed,omitempty"`
+	CatalogType         string            `json:"catalog_type,omitempty"`
 }
 type Refresh struct {
 	HTTPStatus  *int64  `json:"http_status,omitempty"`

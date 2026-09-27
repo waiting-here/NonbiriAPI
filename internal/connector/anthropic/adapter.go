@@ -16,6 +16,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -160,17 +161,17 @@ func (*Adapter) ConnectorType() connectorcontract.Type {
 }
 
 func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, safetyIdentifier string) connectorcontract.AttemptResult {
-	return a.attempt(ctx, writer, target, request, safetyIdentifier)
+	return a.attempt(ctx, writer, target, request, connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier})
 }
 
 // AttemptWithPolicy is additive for the connector registry. Anthropic never
 // receives OpenAI-only store or flatten semantics; only the safety identifier
 // is forwarded to its existing translator.
 func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
-	return a.attempt(ctx, writer, target, request, policy.SafetyIdentifier)
+	return a.attempt(ctx, writer, target, request, policy)
 }
 
-func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, safetyIdentifier string) connectorcontract.AttemptResult {
+func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
 	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
 	if a == nil || backend.IsNil(a.backend) || ctx == nil || writer == nil || request == nil {
@@ -186,7 +187,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		}
 	}
 	attemptStarted := a.now().UTC()
-	body, err := compileRequestWithDefaultResolver(request, target.upstreamModel, safetyIdentifier, func() (int64, error) {
+	body, err := compileRequestWithDefaultResolver(request, target.upstreamModel, policy.SafetyIdentifier, func() (int64, error) {
 		return resolveDefaultMaxTokens(ctx, a.maxTokens)
 	})
 	if err != nil {
@@ -197,13 +198,24 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		result.Diagnostic = "request translation failed"
 		return result
 	}
-	defer clear(body)
+	defer func() { clear(body) }()
+	if len(policy.NativeExtensions) != 0 {
+		merged, mergeErr := requestadaptation.MergeNative(body, policy.NativeExtensions, MaxTranslatedRequestBytes)
+		if mergeErr != nil {
+			return result
+		}
+		clear(body)
+		body = merged
+	}
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
 		return upstreamFailure("upstream endpoint was refused", 0)
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, MessagesURL(client.BaseURL()), bytes.NewReader(body))
 	if err != nil {
+		return result
+	}
+	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil {
 		return result
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
@@ -216,7 +228,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if len(target.credential.apiKey) == 0 {
 		return result
 	}
-	safetyMaterial := []byte(safetyIdentifier)
+	safetyMaterial := []byte(policy.SafetyIdentifier)
 	wireGuard := newSensitiveGuard(target.credential.apiKey, target.credential.ciphertext, safetyMaterial)
 	clear(safetyMaterial)
 	semanticGuard := wireGuard.clone()
@@ -229,6 +241,9 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 			defer scanner.Clear()
 			return scanner.Contains(value)
 		},
+	}
+	if policy.HasAdaptation {
+		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	httpRequest.Header.Set("X-Api-Key", string(target.credential.apiKey))
 	target.credential.clear()

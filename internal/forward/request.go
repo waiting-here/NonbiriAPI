@@ -19,6 +19,7 @@ type validatedRequest struct {
 	Stream            bool
 	policyModelID     int64
 	policyDecisionNow int64
+	excluded          []string
 }
 
 func (*validatedRequest) String() string       { return "[redacted forward request]" }
@@ -86,6 +87,7 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 		result = embeddingRequest(r.embedding.CloneForAttempt())
 	}
 	result.policyModelID, result.policyDecisionNow = r.policyModelID, r.policyDecisionNow
+	result.excluded = append([]string(nil), r.excluded...)
 	return result
 }
 
@@ -93,10 +95,16 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 	if !r.valid() {
 		return openai.ErrInvalidRequest
 	}
+	var err error
 	if r.chat != nil {
-		return r.chat.ExcludeFields(fields)
+		err = r.chat.ExcludeFields(fields)
+	} else {
+		err = r.embedding.ExcludeFields(fields)
 	}
-	return r.embedding.ExcludeFields(fields)
+	if err == nil {
+		r.excluded = append([]string(nil), fields...)
+	}
+	return err
 }
 
 func (r *validatedRequest) supports(registry *connector.Registry, kind contract.Type) bool {

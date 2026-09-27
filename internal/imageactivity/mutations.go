@@ -24,6 +24,7 @@ type submission struct {
 	payload  []byte
 	n        int
 	price    ledger.SketchPayment
+	quote    PriceQuote
 }
 
 func normalizeSubmitText(input SubmitInput) SubmitInput {
@@ -72,21 +73,30 @@ func (s *Service) prepareSubmission(ctx context.Context, user int64, key string,
 		return prepared, nil, err
 	}
 	expected, e := decimalRevision(input.ExpectedModelRevision, false)
-	if e != nil {
-		return prepared, nil, e
+	pricingExpected, priceErr := decimalRevision(input.ExpectedPricingRevision, false)
+	if e != nil || priceErr != nil || prepared.model.revision != expected || prepared.model.pricingRevision != pricingExpected {
+		return prepared, nil, ErrRefreshRequired
 	}
-	if prepared.model.revision != expected || prepared.model.controlID != prepared.upstream.controlID {
+	if prepared.model.controlID != prepared.upstream.controlID {
 		return prepared, nil, ErrConflict
 	}
-	if !prepared.model.input.Enabled {
+	if !prepared.model.input.Enabled || prepared.model.readiness == "pending" {
 		return prepared, nil, ErrUnavailable
 	}
-	params, n, err := normalizeSubmit(input, prepared.model.input.Parameters, prepared.model.input.Combinations)
+	linked, rules, err := linkedSubmission(input, prepared.model)
+	if err != nil {
+		return prepared, nil, err
+	}
+	params, n, err := normalizeSubmit(linked, rules, prepared.model.input.Combinations)
 	if err != nil {
 		return prepared, nil, err
 	}
 	prepared.n = n
-	prepared.price, err = parsePayment(prepared.model.input.Price, n)
+	_, prepared.quote, err = selectedPrice(prepared.model, params, n)
+	if err != nil {
+		return prepared, nil, err
+	}
+	prepared.price, err = parsePayment(prepared.quote.Unit, n)
 	if err != nil {
 		return prepared, nil, err
 	}
@@ -173,8 +183,8 @@ func (s *Service) Submit(ctx context.Context, user int64, key string, input Subm
 	if err != nil {
 		return out, err
 	}
-	if model.revision != prepared.model.revision || !model.input.Enabled {
-		return out, ErrConflict
+	if model.revision != prepared.model.revision || model.pricingRevision != prepared.model.pricingRevision || !model.input.Enabled || model.readiness == "pending" {
+		return out, ErrRefreshRequired
 	}
 	var all, mine, rows int
 	if err = tx.QueryRowContext(ctx, `SELECT count(*),COALESCE(sum(user_id=?),0) FROM image_activity_tasks WHERE finance_state='reserved'`, user).Scan(&all, &mine); err != nil {
@@ -207,6 +217,17 @@ func (s *Service) Submit(ctx context.Context, user int64, key string, input Subm
 		_, err := tx.ExecContext(ctx, `INSERT INTO image_activity_tasks(id,user_id,model_id,model_revision,upstream_revision,control_id,n,paper_charge_mag,brush_charge_mag,state,finance_state,slot_state,ledger_rows_remaining,created_at,updated_at,queue_deadline,execution_timeout_seconds) VALUES(?,?,?,?,?,?,?,?,?,'queued','reserved','none',?,?,?,?,?)`, id, user, model.id, model.revision, current.revision, current.controlID, prepared.n, encodeAmount(prepared.price.Paper), encodeAmount(prepared.price.Brush), db.EncodeU128(one), now, now, now+int64(current.queueSeconds), current.executionSeconds)
 		return err
 	})
+	if err != nil {
+		return out, err
+	}
+	unitPayment, err := parsePayment(prepared.quote.Unit, 1)
+	if err != nil {
+		return out, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO image_task_price_receipts
+	 (task_id,user_id,model_revision,pricing_revision,n,unit_paper_mag,unit_brush_mag,total_paper_mag,total_brush_mag,basis,price_key,created_at)
+	 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, user, model.revision, model.pricingRevision, prepared.n,
+		encodeAmount(unitPayment.Paper), encodeAmount(unitPayment.Brush), encodeAmount(prepared.price.Paper), encodeAmount(prepared.price.Brush), prepared.quote.Basis, prepared.quote.PriceKey, now)
 	if err != nil {
 		return out, err
 	}

@@ -32,10 +32,14 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 
 	claimAndDispatch := func(index int) Handle {
 		t.Helper()
+		var outputFloor int64
+		if index == 0 {
+			outputFloor = 333
+		}
 		handle, err := fixture.service.Claim(context.Background(), ClaimInput{
 			RequestID: request.ID, ActorUserID: consumerID, AttemptSeq: index + 1,
 			Purpose: PurposeCharity, Candidate: keys[index].candidate,
-			DonationKeyID: donationKeyIDs[index],
+			DonationKeyID: donationKeyIDs[index], OutputTokenFloor: outputFloor,
 		})
 		if err != nil {
 			t.Fatalf("claim charity attempt %d: %v", index+1, err)
@@ -43,9 +47,9 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 		fixture.charity.mu.Lock()
 		seamInput := fixture.charity.claims[len(fixture.charity.claims)-1]
 		fixture.charity.mu.Unlock()
-		if seamInput.UpstreamModelID != keys[index].candidate.UpstreamModelID {
-			t.Fatalf("charity seam upstream model = %q, want %q",
-				seamInput.UpstreamModelID, keys[index].candidate.UpstreamModelID)
+		if seamInput.UpstreamModelID != keys[index].candidate.UpstreamModelID || seamInput.OutputTokenFloor != outputFloor {
+			t.Fatalf("charity seam model/floor = %q/%d, want %q/%d",
+				seamInput.UpstreamModelID, seamInput.OutputTokenFloor, keys[index].candidate.UpstreamModelID, outputFloor)
 		}
 		dispatch, err := fixture.service.TakeForDispatch(context.Background(), handle)
 		if err != nil {

@@ -49,6 +49,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -204,6 +205,7 @@ type application struct {
 	donations       *donation.Service
 	charity         *charity.Service
 	charityRouting  *charityrouting.Service
+	adaptations     *requestadaptation.Store
 	checkin         *checkin.Service
 	homeGames       *gamehost.Service
 	announcements   *announcements.Service
@@ -896,7 +898,12 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create report repository: %w", err)
 	}
+	adaptations, err := requestadaptation.New(requestadaptation.Config{DB: store.DB(), Codec: vault, KeyDeriver: vault})
+	if err != nil {
+		return nil, fmt.Errorf("create request adaptation store: %w", err)
+	}
 	resourceRepository, err = resources.New(resources.Config{
+		Adaptations:      adaptations,
 		Store:            store,
 		Connectors:       connectorRegistry,
 		BaseURLs:         outbound,
@@ -915,6 +922,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create resource repository: %w", err)
 	}
 	charityRoutingService, err := charityrouting.New(charityrouting.Config{
+		Adaptations:   adaptations,
 		Store:         store,
 		RoleAuth:      roleAuthorizer,
 		DonationState: donationService,
@@ -1018,7 +1026,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create administrator user service: %w", err)
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
-		store, vault, authRuntime.IdentityContinuity(), claimService, charityService, charityRoutingService, resourceRepository,
+		store, vault, adaptations, authRuntime.IdentityContinuity(), claimService, charityService, charityRoutingService, resourceRepository,
 		connectorRegistry, localBackend, debugHub, gate, rpmLimits, activityEngines.CancelUserTx, audits, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
@@ -1223,6 +1231,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		donations:       donationService,
 		charity:         charityService,
 		charityRouting:  charityRoutingService,
+		adaptations:     adaptations,
 		checkin:         checkinService,
 		homeGames:       homeGameService,
 		announcements:   announcementService,

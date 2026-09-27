@@ -31,6 +31,7 @@ const (
 	CodeForbidden               = "forbidden"
 	CodeNotFound                = "not_found"
 	CodeConflict                = "conflict"
+	CodeRefreshRequired         = "refresh_required"
 	CodeMethodNotAllowed        = "method_not_allowed"
 	CodeRateLimited             = "rate_limited"
 	CodePayloadTooLarge         = "payload_too_large"
@@ -115,7 +116,7 @@ func (e Error) WithUpstreamCode(code string) Error {
 func IsStableCode(code string) bool {
 	switch code {
 	case CodeInternal, CodeInvalidRequest, CodeUnauthorized, CodeForbidden,
-		CodeNotFound, CodeConflict, CodeMethodNotAllowed, CodeRateLimited,
+		CodeNotFound, CodeConflict, CodeRefreshRequired, CodeMethodNotAllowed, CodeRateLimited,
 		CodePayloadTooLarge, CodeElevationRequired, CodeUnboundModel,
 		CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
 		CodeResourceLimitExceeded, CodeResourceLocked, CodeInsufficientCredits,
@@ -142,7 +143,7 @@ func statusOf(code string) int {
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound
-	case CodeConflict, CodeAlreadyCheckedIn:
+	case CodeConflict, CodeRefreshRequired, CodeAlreadyCheckedIn:
 		return http.StatusConflict
 	case CodeMethodNotAllowed:
 		return http.StatusMethodNotAllowed

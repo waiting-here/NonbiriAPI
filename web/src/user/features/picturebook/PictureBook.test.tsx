@@ -16,13 +16,27 @@ const session = { user: { id: '1', username: 'fixture-user', effective_level: 1 
 function reply(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
 }
+function quoted(body: string) {
+  const request = JSON.parse(body) as { n?: number; expected_model_revision: string };
+  const n = request.n ?? 1;
+  return reply({
+    model_revision: request.expected_model_revision,
+    pricing_revision: '2',
+    effective_selection: { values: {}, selection: {} },
+    unit: { paper: '2', brush: '1' },
+    total: { paper: String(2 * n), brush: String(n) },
+    basis: 'default',
+    price_key: '',
+  });
+}
 
 describe('picture book page state', () => {
   it('quotes per-image combined prices, escapes model copy, and retries one uncertain submission without caching its prompt', async () => {
     const calls: { body: string; key: string | null }[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_input: unknown, init?: RequestInit) => {
+      vi.fn(async (path: unknown, init?: RequestInit) => {
+        if (String(path).endsWith('/quote')) return quoted(String(init?.body));
         calls.push({
           body: String(init?.body),
           key: new Headers(init?.headers).get('Idempotency-Key'),
@@ -87,7 +101,20 @@ describe('picture book page state', () => {
     view.rerender(
       <ModelForm
         account="1"
-        models={[{ ...model, revision: '3', price: { paper: '5', brush: '2' } }]}
+        models={[
+          {
+            ...model,
+            revision: '3',
+            pricing_revision: '3',
+            price: { paper: '5', brush: '2' },
+            pricing: {
+              default: { paper: '5', brush: '2' },
+              fallback: 'default',
+              tiers: [],
+              sizes: [],
+            },
+          },
+        ]}
         available
         wallet={wallet}
         onAccepted={() => undefined}
@@ -117,7 +144,8 @@ describe('picture book page state', () => {
     const writes: string[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_path: unknown, init?: RequestInit) => {
+      vi.fn(async (path: unknown, init?: RequestInit) => {
+        if (String(path).endsWith('/quote')) return quoted(String(init?.body));
         writes.push(String(init?.body));
         return reply({ task: taskFixture() });
       }),
@@ -144,11 +172,12 @@ describe('picture book page state', () => {
     let finish!: (reply: Response) => void;
     vi.stubGlobal(
       'fetch',
-      vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            finish = resolve;
-          }),
+      vi.fn((path: unknown, init?: RequestInit) =>
+        String(path).endsWith('/quote')
+          ? Promise.resolve(quoted(String(init?.body)))
+          : new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
       ),
     );
     const accepted = vi.fn();
@@ -165,6 +194,7 @@ describe('picture book page state', () => {
     view.queryClient.setQueryData(['user', 'session'], session);
     await view.user.type(screen.getByLabelText(/Prompt \*/), 'synthetic-delayed-prompt');
     await view.user.click(screen.getByRole('button', { name: 'Reserve currency and join queue' }));
+    await waitFor(() => expect(finish).toBeDefined());
     act(() => {
       clearStationSession(view.queryClient, 'steward');
       noteManagementSessionSuccess(

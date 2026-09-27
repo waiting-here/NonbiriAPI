@@ -17,6 +17,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -235,6 +236,9 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	if err != nil {
 		return result
 	}
+	if requestadaptation.ApplyAddedHeaders(httpRequest.Header, policy.AdditionalHeaders) != nil {
+		return result
+	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	if request.Stream {
 		httpRequest.Header.Set("Accept", "text/event-stream")
@@ -258,6 +262,11 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 			defer scanner.Clear()
 			return scanner.Contains(value)
 		},
+	}
+	if policy.HasAdaptation {
+		// Configured values may be echoed by an upstream error. Suppress the
+		// optional raw diagnostic instead of trying to infer every nesting.
+		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	var sourceGuard *responseGuard
 	if request.Stream && policy.FlattenToolCalls {

@@ -23,7 +23,7 @@ func (testActiveRecorder) RecordLimitedActivityTx(ctx context.Context, tx *sql.T
 func TestSyncPartialSuccessAtomicReplayAndPrivacy(t *testing.T) {
 	f := newFixture(t)
 	f.configure(t)
-	input := SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", Prompt: "not persisted", N: ptr(4)}
+	input := SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", ExpectedPricingRevision: "1", Prompt: "not persisted", N: ptr(4)}
 	key := f.key()
 	first, err := f.service.Submit(f.ctx(f.user), f.user, key, input)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestCancellationRaceAndAtomicSourceFailure(t *testing.T) {
 	f.configure(t)
 	f.service.config.Activity = testActiveRecorder{}
 	f.source.fail.Store(true)
-	if _, err := f.service.Submit(f.ctx(f.user), f.user, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", Prompt: "rollback"}); err == nil {
+	if _, err := f.service.Submit(f.ctx(f.user), f.user, f.key(), SubmitInput{ModelID: f.model, ExpectedModelRevision: "1", ExpectedPricingRevision: "1", Prompt: "rollback"}); err == nil {
 		t.Fatal("source failure accepted")
 	}
 	f.source.fail.Store(false)
