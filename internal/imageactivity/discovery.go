@@ -2,10 +2,12 @@ package imageactivity
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -295,7 +297,8 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 	}
 	defer tx.Rollback()
 	var control, state string
-	if err = tx.QueryRowContext(ctx, "SELECT control_id,state FROM image_model_refreshes WHERE operation_id=?", id).Scan(&control, &state); err != nil {
+	var upstreamRevision int64
+	if err = tx.QueryRowContext(ctx, "SELECT control_id,state,upstream_revision FROM image_model_refreshes WHERE operation_id=?", id).Scan(&control, &state, &upstreamRevision); err != nil {
 		return err
 	}
 	if state != "queued" && state != "running" {
@@ -304,15 +307,76 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 	result := "failed"
 	if code == "" {
 		result = "succeeded"
-		if _, err = tx.ExecContext(ctx, "DELETE FROM image_activity_models WHERE control_id=? AND current_revision IS NULL", control); err != nil {
+		profile, e := profileTx(ctx, tx, control)
+		if e != nil {
+			return e
+		}
+		profileRevision, e := decimalRevision(profile.Revision, true)
+		if e != nil {
+			return e
+		}
+		// The approved image contract bounds unapplied candidate snapshots to
+		// the latest two for this connection and 24 hours. Model revisions and
+		// accepted task receipts are never touched by this cleanup.
+		if _, err = tx.ExecContext(ctx, "DELETE FROM image_capability_snapshots WHERE control_id=? AND expires_at<=?", control, now); err != nil {
 			return err
 		}
-		for _, model := range models {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM image_capability_snapshots WHERE id IN
+		 (SELECT id FROM image_capability_snapshots WHERE control_id=? ORDER BY rowid DESC LIMIT -1 OFFSET 1)`, control); err != nil {
+			return err
+		}
+		snapshotID, e := newID("ics_")
+		if e != nil {
+			return e
+		}
+		ordered := append([]discoveredModel(nil), models...)
+		sort.Slice(ordered, func(i, j int) bool { return ordered[i].id < ordered[j].id })
+		type candidate struct {
+			model  discoveredModel
+			source []byte
+			hash   [32]byte
+		}
+		candidates := make([]candidate, 0, len(ordered))
+		aggregateInput := make([]byte, 0, len(ordered)*32)
+		for _, model := range ordered {
+			source := []byte("{}")
+			if profile.Profile != nil {
+				compiled, compileErr := CompileCapability(*profile.Profile, model.metadata, nil)
+				if compileErr != nil {
+					return compileErr
+				}
+				source, e = json.Marshal(compiled)
+				if e != nil || len(source) > 262144 {
+					return ErrInvalid
+				}
+			}
+			hash := sha256.Sum256(append(append([]byte(nil), source...), model.metadata...))
+			aggregateInput = append(aggregateInput, hash[:]...)
+			candidates = append(candidates, candidate{model, source, hash})
+		}
+		aggregate := sha256.Sum256(aggregateInput)
+		_, err = tx.ExecContext(ctx, `INSERT INTO image_capability_snapshots
+		 (id,control_id,upstream_revision,profile_revision,candidate_hash,created_at,expires_at)
+		 VALUES(?,?,?,?,?,?,?)`, snapshotID, control, upstreamRevision, profileRevision, aggregate[:], now, now+86400)
+		if err != nil {
+			return err
+		}
+		for _, item := range candidates {
+			model := item.model
 			localID, e := newID("imdl_")
 			if e != nil {
 				return e
 			}
 			_, err = tx.ExecContext(ctx, `INSERT INTO image_activity_models(id,control_id,upstream_model_id,metadata_json,current_revision,discovered_at) VALUES(?,?,?,?,NULL,?) ON CONFLICT(control_id,upstream_model_id) DO UPDATE SET metadata_json=excluded.metadata_json,discovered_at=excluded.discovered_at`, localID, control, model.id, string(model.metadata), now)
+			if err != nil {
+				return err
+			}
+			var storedID string
+			if err = tx.QueryRowContext(ctx, `SELECT id FROM image_activity_models WHERE control_id=? AND upstream_model_id=?`, control, model.id).Scan(&storedID); err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, `INSERT INTO image_capability_candidates(snapshot_id,model_id,source_json,metadata_json,candidate_hash)
+			 VALUES(?,?,?,?,?)`, snapshotID, storedID, string(item.source), string(model.metadata), item.hash[:])
 			if err != nil {
 				return err
 			}
