@@ -74,6 +74,7 @@ const (
 	// two award bounds are a cross-validated pair: PATCHing either validates
 	// min <= max against the other key's current value in ONE transaction.
 	KeyCheckinMode                  = "checkin_mode"
+	KeyCheckinMutuallyExclusive     = "checkin_mutually_exclusive"
 	KeyCheckinAwardMinMilli         = "checkin_award_min_milli"
 	KeyCheckinAwardMaxMilli         = "checkin_award_max_milli"
 	KeyCreditsCapMilli              = "credits_cap_milli"
@@ -289,6 +290,7 @@ var knownSiteConfig = func() map[string]keySpec {
 			allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
 			defStr:  db.CheckinModeDisabled},
 		KeyCheckinAwardMinMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+		KeyCheckinMutuallyExclusive:         {kind: kindBool, def: 0},
 		KeyCheckinAwardMaxMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
 		KeyCreditsCapMilli:                  {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
 		KeyGameCheckinMode:                  {kind: kindEnum, allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled}, defStr: db.CheckinModeDisabled},

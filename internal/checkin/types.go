@@ -18,6 +18,7 @@ var (
 	ErrNotFound         = errors.New("checkin: not found")
 	ErrFeatureDisabled  = errors.New("checkin: feature disabled")
 	ErrAlreadyCheckedIn = errors.New("checkin: already checked in")
+	ErrOtherCheckedIn   = errors.New("checkin: other daily check-in already claimed")
 	ErrBalanceCap       = errors.New("checkin: balance cap reached")
 	ErrMaintenance      = errors.New("checkin: maintenance")
 	ErrResourceLimit    = errors.New("checkin: resource limit")
@@ -28,13 +29,15 @@ var (
 // Status is the authoritative service projection. The HTTP boundary emits a
 // smaller object containing only Enabled when the feature is unavailable.
 type Status struct {
-	Asset          ledger.Asset
-	Enabled        bool
-	CheckedInToday bool
-	Balance        string
-	AwardMinimum   string
-	AwardMaximum   string
-	BalanceCap     string
+	Asset                 ledger.Asset
+	Enabled               bool
+	CheckedInToday        bool
+	MutuallyExclusive     bool
+	BlockedByOtherCheckin bool
+	Balance               string
+	AwardMinimum          string
+	AwardMaximum          string
+	BalanceCap            string
 }
 
 // Result is one committed check-in outcome in user-visible point units.

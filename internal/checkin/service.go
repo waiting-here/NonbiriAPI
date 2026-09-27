@@ -109,9 +109,13 @@ func (service *Service) StatusForAsset(ctx context.Context, userID int64, asset 
 	if err := service.authorize(ctx, tx, userID, now); err != nil {
 		return Status{}, err
 	}
+	mutuallyExclusive, err := readMutuallyExclusive(ctx, tx)
+	if err != nil {
+		return Status{}, err
+	}
 	day, config, err := readSiteDayAndConfig(ctx, tx, now, source)
 	if errors.Is(err, ErrFeatureDisabled) {
-		return Status{Enabled: false}, nil
+		return Status{Enabled: false, MutuallyExclusive: mutuallyExclusive}, nil
 	}
 	if err != nil {
 		return Status{}, err
@@ -122,33 +126,27 @@ func (service *Service) StatusForAsset(ctx context.Context, userID int64, asset 
 			return Status{}, err
 		}
 		if level < 3 {
-			return Status{Enabled: false}, nil
+			return Status{Enabled: false, MutuallyExclusive: mutuallyExclusive}, nil
 		}
 	}
 	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
 	if err != nil {
 		return Status{}, mapLedgerError("read status account", err)
 	}
-	var checked int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM `+source.table+` WHERE user_id=? AND site_day=?
-	)`, userID, day.siteDate).Scan(&checked); err != nil {
-		return Status{}, classifyDatabase("read status row", err)
+	checked, err := hasCheckinTx(ctx, tx, userID, asset, day.siteDate, now)
+	if err != nil {
+		return Status{}, err
 	}
-	if checked != 0 && checked != 1 {
-		return Status{}, ErrInvariant
-	}
-	if checked == 0 {
-		claimed, err := continuity.HasEligibilityTx(ctx, tx, userID, continuityKind(asset), "v1", day.siteDate, now)
+	blockedByOther := false
+	if mutuallyExclusive && !checked {
+		blockedByOther, err = hasCheckinTx(ctx, tx, userID, otherCheckinAsset(asset), day.siteDate, now)
 		if err != nil {
-			return Status{}, classifyDatabase("read stable check-in eligibility", err)
-		}
-		if claimed {
-			checked = 1
+			return Status{}, err
 		}
 	}
 	return Status{
-		Enabled: true, Asset: asset, CheckedInToday: checked == 1, Balance: formatMilliPoints(wallet.Balance.Big()),
+		Enabled: true, Asset: asset, CheckedInToday: checked, Balance: formatMilliPoints(wallet.Balance.Big()),
+		MutuallyExclusive: mutuallyExclusive, BlockedByOtherCheckin: blockedByOther,
 		AwardMinimum: formatMilliPoints(big.NewInt(config.awardMin)),
 		AwardMaximum: formatMilliPoints(big.NewInt(config.awardMax)),
 		BalanceCap:   formatMilliPoints(big.NewInt(config.balanceCap)),
@@ -197,6 +195,19 @@ func (service *Service) CheckinForAsset(ctx context.Context, userID int64, asset
 	}
 	if config.mode == db.CheckinModeLevelGated && level < 3 {
 		return Result{}, ErrFeatureDisabled
+	}
+	mutuallyExclusive, err := readMutuallyExclusive(ctx, tx)
+	if err != nil {
+		return Result{}, err
+	}
+	if mutuallyExclusive {
+		otherClaimed, err := hasCheckinTx(ctx, tx, userID, otherCheckinAsset(asset), day.siteDate, now)
+		if err != nil {
+			return Result{}, err
+		}
+		if otherClaimed {
+			return Result{}, ErrOtherCheckedIn
+		}
 	}
 	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
 	if err != nil {
@@ -271,6 +282,32 @@ func continuityKind(asset ledger.Asset) continuity.EligibilityKind {
 		return continuity.CheckinGame
 	}
 	return continuity.CheckinGeneral
+}
+
+func otherCheckinAsset(asset ledger.Asset) ledger.Asset {
+	if asset == ledger.General {
+		return ledger.Game
+	}
+	return ledger.General
+}
+
+func hasCheckinTx(ctx context.Context, tx *sql.Tx, userID int64, asset ledger.Asset, date string, now int64) (bool, error) {
+	source, err := sourceForAsset(asset)
+	if err != nil {
+		return false, err
+	}
+	var checked bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+source.table+` WHERE user_id=? AND site_day=?)`, userID, date).Scan(&checked); err != nil {
+		return false, classifyDatabase("read check-in day", err)
+	}
+	if checked {
+		return true, nil
+	}
+	claimed, err := continuity.HasEligibilityTx(ctx, tx, userID, continuityKind(asset), "v1", date, now)
+	if err != nil {
+		return false, classifyDatabase("read stable check-in eligibility", err)
+	}
+	return claimed, nil
 }
 
 func (service *Service) authorize(ctx context.Context, tx *sql.Tx, userID, now int64) error {

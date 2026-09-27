@@ -164,6 +164,7 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"level_display_name_6":              {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
 		"request_error_body_budget_mib":     {kind: generationTwoConfigUint, seed: generationTwoSeed("1024"), minimum: 1, maximum: 65536},
 		"checkin_mode":                      {kind: generationTwoConfigEnum, seed: generationTwoSeed(CheckinModeDisabled), allowed: []string{CheckinModeEnabled, CheckinModeLevelGated, CheckinModeDisabled}},
+		"checkin_mutually_exclusive":        {kind: generationTwoConfigBool}, // Absence preserves independent check-ins.
 		"checkin_award_min_milli":           amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMinMilli)), 0),
 		"checkin_award_max_milli":           amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMaxMilli)), 0),
 		"credits_cap_milli":                 amountSpec(formatGenerationTwoUint(uint64(DefaultCreditsCapMilli)), 0),
