@@ -57,23 +57,49 @@ INSERT INTO risk_scan_result_sources(scan_id,row_no,request_log_id)
  SELECT scan_id,ordinal,request_log_id FROM risk_client_scan_matches;
 CREATE TRIGGER risk_scan_user_retired BEFORE DELETE ON users
 BEGIN
- UPDATE risk_client_scans SET changed=1 WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE user_id=OLD.id
- UNION SELECT scan_id FROM risk_scan_result_users WHERE user_id=OLD.id);
+ UPDATE risk_client_scans SET changed=1,
+ state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
+ reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
+ checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
+ WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE user_id=OLD.id
+ UNION SELECT scan_id FROM risk_scan_result_users WHERE user_id=OLD.id)
+ OR json_extract(checkpoint_json,'$.pending_user')=OLD.id OR json_extract(checkpoint_json,'$.after_user')=OLD.id;
  DELETE FROM risk_scan_results WHERE user_id=OLD.id OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_users WHERE user_id=OLD.id);
 END;
 CREATE TRIGGER risk_scan_result_source_retired AFTER UPDATE OF user_id ON request_source_facts WHEN NEW.user_id IS NULL
 BEGIN
- UPDATE risk_client_scans SET changed=1 WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=NEW.request_log_id
- UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=NEW.request_log_id);
+ UPDATE risk_client_scans SET changed=1,
+ state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
+ reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
+ checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
+ WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=NEW.request_log_id
+ UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=NEW.request_log_id)
+ OR json_extract(checkpoint_json,'$.pending_user')=OLD.user_id OR json_extract(checkpoint_json,'$.after_user')=OLD.user_id
+ OR (OLD.effective_ip<>'' AND (json_extract(checkpoint_json,'$.pending_ip')=OLD.effective_ip OR json_extract(checkpoint_json,'$.after_ip')=OLD.effective_ip));
  DELETE FROM risk_scan_results WHERE request_log_id=NEW.request_log_id
  OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_sources WHERE request_log_id=NEW.request_log_id);
 END;
 CREATE TRIGGER risk_scan_result_source_deleted BEFORE DELETE ON request_source_facts
 BEGIN
- UPDATE risk_client_scans SET changed=1 WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
- UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id);
+ UPDATE risk_client_scans SET changed=1,
+ state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
+ reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
+ checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
+ WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
+ UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id)
+ OR json_extract(checkpoint_json,'$.pending_user')=OLD.user_id OR json_extract(checkpoint_json,'$.after_user')=OLD.user_id
+ OR (OLD.effective_ip<>'' AND (json_extract(checkpoint_json,'$.pending_ip')=OLD.effective_ip OR json_extract(checkpoint_json,'$.after_ip')=OLD.effective_ip));
  DELETE FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
  OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id);
+END;
+DROP TRIGGER risk_scan_authority_changed;
+CREATE TRIGGER risk_scan_authority_changed AFTER UPDATE OF is_admin,level,auto_level,is_banned,banned_until ON users
+BEGIN
+ UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',
+ checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
+ WHERE user_id=NEW.id
+ AND ((admin=1 AND NEW.is_admin<>1) OR (admin=0 AND (NEW.is_admin<>0 OR COALESCE(NEW.level,NEW.auto_level)<>6))
+ OR (NEW.is_banned=1 AND (NEW.banned_until IS NULL OR NEW.banned_until>unixepoch())));
 END;
 ALTER TABLE game_rank_expiry_work ADD COLUMN net_bidding_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_bidding_delta_sign IN(-1,0,1));
 ALTER TABLE game_rank_expiry_work ADD COLUMN net_bidding_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000' CHECK(length(net_bidding_delta_mag)=32 AND (net_bidding_delta_sign=0)=(net_bidding_delta_mag=zeroblob(32)));
