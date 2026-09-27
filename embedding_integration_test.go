@@ -31,6 +31,7 @@ import (
 type embeddingHTTPFixture struct {
 	store                  *db.Store
 	app                    *application
+	forward                *publicForwardRuntime
 	server                 *httptest.Server
 	caller                 string
 	userID, donorID, keyID int64
@@ -155,6 +156,7 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = runtime.Close() })
+	f.forward = runtime
 	handler, err := stationBoundary(auditConfig(), f.app.audits.Wrap(httpmw.API(runtime.handler)))
 	if err != nil {
 		t.Fatal(err)

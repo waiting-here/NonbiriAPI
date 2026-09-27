@@ -464,7 +464,7 @@ func newLifecycleCoordinator(
 			RequestLogs:    lifecycleadapters.NewRequestLogRetention(logRepository),
 			Audits:         lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
 			Observability:  diagnosticRetention{audits.observations},
-			RiskAudit:      riskRetention{audits.risk},
+			RiskAudit:      riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
 			Issues:         lifecycleadapters.NewIssueRetention(issueService),
 			Fishing:        fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
