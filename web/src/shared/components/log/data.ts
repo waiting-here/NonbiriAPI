@@ -80,6 +80,7 @@ export type UserLogRow = UserSelfLogRow | UserCharityLogRow;
 export interface AdminLogRow extends LogRowCommon {
   charity_model?: string | null;
   role: 'admin';
+  usage_total_mismatch: boolean;
   user_id: string | null;
   caller_identity: CallerIdentity | null;
   attempt_count: string;
@@ -88,6 +89,7 @@ export interface AdminLogRow extends LogRowCommon {
 export interface StewardLogRow extends LogRowCommon {
   charity_model?: string | null;
   role: 'steward';
+  usage_total_mismatch: boolean;
   user_id: string | null;
   caller_identity: CallerIdentity | null;
   attempt_count: string;
@@ -118,9 +120,11 @@ export interface UserLogAttempt extends LogAttemptCommon {
 
 export interface AdminLogAttempt extends LogAttemptCommon {
   role: 'admin';
+  usage_total_mismatch: boolean;
 }
 export interface StewardLogAttempt extends LogAttemptCommon {
   role: 'steward';
+  usage_total_mismatch: boolean;
 }
 export type RoleLogAttempt = UserLogAttempt | AdminLogAttempt | StewardLogAttempt;
 
@@ -148,6 +152,7 @@ export interface LogFiltersValue {
   status?: string;
   from?: number;
   to?: number;
+  usage_total_mismatch?: boolean;
 }
 
 const ROUTE_KINDS = [...MODEL_CALL_ROUTES, 'model_discovery'] as const;
@@ -370,9 +375,16 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
 export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   const root = record(
     value,
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'charity_model'],
+    [
+      ...COMMON_ROW_FIELDS,
+      'user_id',
+      'caller_identity',
+      'attempt_count',
+      'charity_model',
+      'usage_total_mismatch',
+    ],
     'administrator log row',
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'usage_total_mismatch'],
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
@@ -382,6 +394,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   return {
     ...common,
     role: 'admin',
+    usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
     charity_model: managementCharityModel(root, common.route_kind),
@@ -419,9 +432,16 @@ function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
 export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   const root = record(
     value,
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'charity_model'],
+    [
+      ...COMMON_ROW_FIELDS,
+      'user_id',
+      'caller_identity',
+      'attempt_count',
+      'charity_model',
+      'usage_total_mismatch',
+    ],
     'steward log row',
-    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count', 'usage_total_mismatch'],
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
@@ -431,6 +451,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   return {
     ...common,
     role: 'steward',
+    usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
     charity_model: managementCharityModel(root, common.route_kind),
@@ -513,13 +534,25 @@ export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
 }
 
 export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
-  const root = record(value, ATTEMPT_FIELDS, 'administrator log attempt');
-  return { ...commonAttempt(root), role: 'admin' };
+  const root = record(
+    value,
+    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
+    'administrator log attempt',
+  );
+  return {
+    ...commonAttempt(root),
+    role: 'admin',
+    usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
+  };
 }
 
 export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
-  const root = record(value, ATTEMPT_FIELDS, 'steward log attempt');
-  return { ...commonAttempt(root), role: 'steward' };
+  const root = record(value, [...ATTEMPT_FIELDS, 'usage_total_mismatch'], 'steward log attempt');
+  return {
+    ...commonAttempt(root),
+    role: 'steward',
+    usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
+  };
 }
 
 export function normalizeUserLogDetail(value: unknown): UserLogDetail {
@@ -665,5 +698,6 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
   assign('error_code', 96);
   const status = raw.status?.trim();
   if (status && /^(?:[1-5][0-9]{2})$/.test(status)) result.status = status;
+  if (role !== 'user' && raw.usage_total_mismatch === 'true') result.usage_total_mismatch = true;
   return result;
 }

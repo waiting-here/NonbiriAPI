@@ -43,6 +43,7 @@ function commonRow(index: number, routeKind = 'openai_chat_completions') {
 function adminRow(index: number) {
   return {
     ...commonRow(index),
+    usage_total_mismatch: false,
     user_id: String(index + 1),
     caller_identity: null,
     attempt_count: '1',
@@ -68,6 +69,7 @@ function attempt(sequence: number) {
     upstream_code: null,
     diag: null,
     usage,
+    usage_total_mismatch: false,
     started_at: 1,
     completed_at: 2,
   };
@@ -389,6 +391,129 @@ describe('numbered role log panel', () => {
     expect(query.get('page')).toBe('1');
     expect(query.get('user_id')).toBe('7');
     expect(query.get('anchor')).toBe('keep');
+  });
+
+  it('persists the management mismatch filter, resets the page, and omits it for all', async () => {
+    const row = adminRow(7);
+    const mismatchRow = { ...row, usage_total_mismatch: true };
+    const fetchMock = installJsonFetchFixtures([
+      timeZoneFixture('/admin/api/time-zones'),
+      {
+        method: 'GET',
+        path: '/admin/api/logs?page=4&page_size=20',
+        body: listBody([row], pagination('4', 20, 61, 4)),
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/logs?usage_total_mismatch=true&page=1&page_size=20',
+        body: listBody([mismatchRow], pagination()),
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/logs?page=1&page_size=20',
+        body: listBody([row], pagination()),
+      },
+    ]);
+    const view = await renderWithProviders(
+      <>
+        <LocationProbe />
+        <RoleLogPanel accountId="viewer" role="admin" />
+      </>,
+      {
+        station: 'admin',
+        role: 'admin',
+        route: '/logs?page=4&page_size=20&anchor=keep',
+      },
+    );
+
+    const mismatchFilter = screen.getByRole('combobox', { name: 'Usage total' });
+    expect(mismatchFilter).toHaveValue('');
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        '/admin/api/logs?page=4&page_size=20',
+      ),
+    );
+    expect(
+      fetchMock.mock.calls
+        .map(([path]) => String(path))
+        .some((path) => path.includes('usage_total_mismatch')),
+    ).toBe(false);
+
+    await view.user.selectOptions(mismatchFilter, 'true');
+    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        '/admin/api/logs?usage_total_mismatch=true&page=1&page_size=20',
+      ),
+    );
+    expect(queryFromProbe(view.container).get('usage_total_mismatch')).toBe('true');
+    expect(queryFromProbe(view.container).get('page')).toBe('1');
+    expect(queryFromProbe(view.container).get('anchor')).toBe('keep');
+
+    await view.user.selectOptions(mismatchFilter, '');
+    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        '/admin/api/logs?page=1&page_size=20',
+      ),
+    );
+    expect(queryFromProbe(view.container).has('usage_total_mismatch')).toBe(false);
+  });
+
+  it('shows mismatch badges only in management logs and attempts', async () => {
+    const row = {
+      ...adminRow(8),
+      usage_total_mismatch: true,
+      usage: { ...usage, usage_unknown: true },
+    };
+    const mismatchAttempt = {
+      ...attempt(1),
+      usage_total_mismatch: true,
+      usage: { ...usage, usage_unknown: true },
+    };
+    installJsonFetchFixtures([
+      timeZoneFixture('/admin/api/time-zones'),
+      {
+        method: 'GET',
+        path: '/admin/api/logs?page=1&page_size=20',
+        body: listBody([row], pagination()),
+      },
+      {
+        method: 'GET',
+        path: `/admin/api/logs/${row.id}?attempt_page=1&attempt_page_size=20`,
+        body: detailBody(row, [mismatchAttempt]),
+      },
+    ]);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/logs?page=1&page_size=20',
+    });
+    expect(await screen.findByText('Usage total mismatch')).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Details' }));
+    const explanation =
+      'Usage total mismatch. The upstream-reported total differs from the sum of valid usage components. Billing uses those components.';
+    await waitFor(() => expect(screen.getAllByLabelText(explanation)).toHaveLength(3));
+  });
+
+  it('does not expose the management mismatch filter or badge to ordinary users', async () => {
+    const row = userCharityRow(31);
+    installJsonFetchFixtures([
+      timeZoneFixture('/api/time-zones'),
+      {
+        method: 'GET',
+        path: '/api/logs?page=1&page_size=20',
+        body: listBody([row], pagination()),
+      },
+    ]);
+    await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
+      station: 'user',
+      role: 'user',
+      route: '/logs?page=1&page_size=20',
+    });
+    await screen.findByRole('button', { name: 'Details' });
+    expect(screen.queryByRole('combobox', { name: 'Usage total' })).toBeNull();
+    expect(screen.queryByText('Usage total mismatch')).toBeNull();
   });
 
   it('submits the user filter from the steward management station', async () => {
