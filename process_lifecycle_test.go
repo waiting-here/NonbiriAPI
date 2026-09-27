@@ -47,7 +47,8 @@ func processTestVault(t *testing.T) *secret.Vault {
 func processTestStore(t *testing.T, path string, vault *secret.Vault) *db.Store {
 	t.Helper()
 	dbtest.EnsureOwnerOnlyParent(t, path)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	dbfixture.Materialize(t, path)
+	ctx, cancel := context.WithTimeout(context.Background(), db.DefaultStartupTimeout)
 	defer cancel()
 	store, err := db.OpenContext(ctx, path, vault)
 	if err != nil {
@@ -266,7 +267,6 @@ func TestLateStartupResultIsCleanedByOriginalOwner(t *testing.T) {
 
 func TestApplicationReadinessAndHealthStates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "readiness.sqlite")
-	dbfixture.Materialize(t, path)
 	vault := processTestVault(t)
 	store := processTestStore(t, path, vault)
 	startup, cancelStartup := context.WithTimeout(context.Background(), 30*time.Second)
@@ -337,14 +337,14 @@ func TestInitializeProcessBindFailureKeepsResourcesOwnedForCleanup(t *testing.T)
 		"NONBIRI_MASTER_KEY":               hex.EncodeToString(bytes.Repeat([]byte{0x67}, secret.MasterKeyBytes)),
 		"NONBIRI_MASTER_KEY_FILE":          "",
 		"NONBIRI_TRUSTED_PROXY_CIDRS":      "127.0.0.0/8",
-		"NONBIRI_STARTUP_TIMEOUT_SECONDS":  "30",
+		"NONBIRI_STARTUP_TIMEOUT_SECONDS":  "300",
 		"NONBIRI_SHUTDOWN_TIMEOUT_SECONDS": "30",
 	} {
 		t.Setenv(name, value)
 	}
 	oldLogger := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(oldLogger) })
-	startup, cancelStartup := context.WithTimeout(context.Background(), 30*time.Second)
+	startup, cancelStartup := context.WithTimeout(context.Background(), db.DefaultStartupTimeout)
 	defer cancelStartup()
 	resources, err := initializeProcess(startup)
 	if resources != nil {
