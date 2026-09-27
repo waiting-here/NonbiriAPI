@@ -25,7 +25,7 @@ This entry describes the unreleased rc.4 source candidate. The latest published 
 
 ### Fixed
 
-- Contradictory or overflowing upstream token totals now make usage unknown without discarding otherwise valid response content. Gateway usage with duplicate token fields is rejected.
+- A reported token total that disagrees with valid individual buckets is now marked in administrator and steward request logs, with a matching filter. Billing continues from those buckets. Invalid or ambiguous individual buckets remain unknown; Gateway usage with duplicate token fields is rejected.
 - OpenAI streaming requests normalize null stream options to request usage and reject invalid option shapes before dispatch. Usage-only streams cannot become successful completions, and named completion events accept the standard `[DONE]` marker.
 
 ## [1.0.0-rc.3] - 2026-09-25

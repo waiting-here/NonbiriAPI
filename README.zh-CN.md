@@ -6,7 +6,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 >
 > **未发布候选：** v1.0.0-rc.4 开发候选新增绘本模型能力与尺寸定价、审计和账号保护、饲养大肥鱼编辑器及本地玩法、游戏榜单与实时展示、公益调度和请求适配，以及 schema 11 类型化账号导出。完整范围见[更新日志](CHANGELOG.md)。该候选尚未发布或部署。
 >
-> **兼容性：** 支持从 rc.2 修复提交 `db959c64674afc531046a63066de0464725d439c` 和管理功能修复提交 `84018acbd594765c563cc0ee4083d206e0bd6a77` 升级，保留现有数据、配置和实例法律正文。继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。未知中间结构不在保证内；Alpha/Generation 1 仍须全新切换。详见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
+> **兼容性：** rc.4 候选的正式升级验证来源为 rc.3 修复提交 `37e060ab0d0f29d632fe6b8036839b413388812a` 的完整数据库，保留现有数据、凭据、配置和实例法律正文。继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。未知中间结构不在保证内；Alpha/Generation 1 仍须全新切换。详见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -122,13 +122,13 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-新版源码保持 Generation 2，支持从完整的 rc.2 修复版 db959c6 及管理功能修复版 84018ac 升级。账号、余额、捐赠、模型绑定、游戏、运营配置与实例法律正文保持，旧协管迁为 6 级，新增活动资产独立建账。未发布的中间结构不在保证内；降级须恢复相匹配的完整停服快照。新库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+rc.4 候选保持 Generation 2，正式升级来源为完整的 rc.3 修复版 37e060a。账号、余额、捐赠、模型绑定、游戏、凭据、运营配置与实例法律正文保持，新增活动资产独立建账。未发布的中间结构不在保证内；降级须恢复相匹配的完整停服快照。新库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
-Beta.3 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
+本项目采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
 
 ## GitHub 自动化
 
-仓库包含只读 CI 流程。GitHub Actions 会在推送到 `master` 和 Pull Request 时运行 Go 与前端门禁，不会部署应用。发布产物自动化会等支持平台和签名策略确定后再单独添加。
+仓库包含只读 CI 流程。GitHub Actions 在 Pull Request 和手动触发时运行 Go 与前端门禁，不会部署应用。受保护的 `master` 正常合并后，手动对 `master` 运行同一工作流，并核对最终合并提交。发布产物自动化会等支持平台和签名策略确定后再单独添加。
 
 ## API
 
