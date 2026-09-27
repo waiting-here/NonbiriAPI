@@ -534,3 +534,82 @@ test('real linked size editors preserve drafts and quote all four modes without 
     await user.close();
   }
 });
+
+test('real endpoint adaptation hides saved values and blocks stale browser writes', async ({
+  browser,
+}) => {
+  const owner = await context(browser);
+  const other = await context(browser, 1);
+  try {
+    const created = await api(owner, '/api/endpoints', 'POST', {
+      source: 'custom',
+      connector_type: 'openai-compatible',
+      base_url: 'https://adaptation.example/v1',
+      note: 'Browser adaptation',
+      enabled: true,
+    });
+    expect(created.status()).toBe(201);
+    const endpoint = await created.json();
+    const path = '/api/endpoints/' + endpoint.id + '/request-adaptation';
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints/' + endpoint.id);
+    const fixed = page.getByRole('group', { name: 'Fixed outbound headers', exact: true });
+    await fixed.getByRole('button', { name: 'Add field' }).click();
+    await fixed.getByLabel('Header or path').fill('X-Synthetic-Header');
+    await fixed.getByLabel('Value', { exact: true }).fill('synthetic-private-header');
+    const forced = page.getByRole('group', { name: 'Forced body values', exact: true });
+    await forced.getByRole('button', { name: 'Add field' }).click();
+    await forced.getByLabel('Header or path').fill('/reasoning_effort');
+    await forced.getByLabel('Value', { exact: true }).fill('"medium"');
+    await page
+      .getByRole('group', { name: 'Client headers to forward', exact: true })
+      .getByRole('textbox')
+      .fill('X-Client-Tag');
+    const saved = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === path && response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Save request adaptation' }).click();
+    const receipt = await saved;
+    expect(receipt.status()).toBe(200);
+    expect(await receipt.text()).not.toContain('synthetic-private-header');
+    await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
+    await page.reload();
+    await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
+    await fixed.getByRole('combobox').selectOption('replace');
+    await expect(fixed.getByLabel('Value', { exact: true })).toHaveValue('');
+    await fixed.getByLabel('Value', { exact: true }).fill('synthetic-replacement');
+    const currentResponse = await api(owner, path);
+    expect(currentResponse.status()).toBe(200);
+    const current = await currentResponse.json();
+    expect(current.forward_headers.values).toEqual(['X-Client-Tag']);
+    expect(JSON.stringify(current)).not.toContain('synthetic-private-header');
+    expect((await api(other, path)).status()).toBe(404);
+    const concurrent = await api(owner, path, 'PUT', {
+      expected_revision: current.revision,
+      body_forced: {
+        mode: 'replace',
+        values: { '/reasoning_effort': { action: 'replace', value: 'low' } },
+      },
+    });
+    expect(concurrent.status()).toBe(200);
+    const stale = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === path && response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Save request adaptation' }).click();
+    expect((await stale).status()).toBe(409);
+    await expect(page.getByRole('button', { name: 'Save request adaptation' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Refresh configuration', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save request adaptation' })).toBeEnabled();
+    await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+      ),
+    ).not.toContain('synthetic-');
+  } finally {
+    await owner.close();
+    await other.close();
+  }
+});
