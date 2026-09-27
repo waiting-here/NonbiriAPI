@@ -114,6 +114,9 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 	}
+	if role != roleAdmin && input.AffinityTTLSeconds != nil {
+		return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
+	}
 	mask := 63
 	if input.AllowedLevels != nil {
 		mask, err = charityaccess.Mask(input.AllowedLevels)
@@ -179,6 +182,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	if err := setRoutingStrategy(ctx, tx, modelID, defaultRouteStrategy(input.RouteStrategy)); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
+	if err := insertRoutingSettings(ctx, tx, modelID, input.AffinityTTLSeconds); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
+	}
 	if input.FlattenToolCalls {
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, false, true, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
@@ -225,6 +231,9 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	expected, err := parsePositiveID(input.ExpectedRevision)
 	if s == nil || ctx == nil || modelID <= 0 || err != nil || !validateModelPatch(input) {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+	}
+	if role != roleAdmin && input.AffinityTTLSeconds != nil {
+		return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
 	}
 	now, err := s.nowUnix()
 	if err != nil {
@@ -353,10 +362,19 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 	if err := requireOne(result); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
+	strategyChanged := false
 	if input.RouteStrategy != nil {
+		previousStrategy, err := readRoutingStrategy(ctx, tx, modelID)
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+		strategyChanged = previousStrategy != *input.RouteStrategy
 		if err := setRoutingStrategy(ctx, tx, modelID, *input.RouteStrategy); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
+	}
+	if err := updateRoutingSettings(ctx, tx, modelID, strategyChanged, input.AffinityTTLSeconds); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	value, err := getAdminModelTx(ctx, tx, modelID)
 	if err != nil {
@@ -609,6 +627,7 @@ cm.discount_start_at,cm.discount_end_at,cm.flatten_tool_calls,cm.revision,cm.bin
 (SELECT COUNT(*) FROM charity_model_bindings b WHERE b.charity_model_id=cm.id),
 COALESCE(s.sample_count,0),COALESCE(s.success_count,0),cm.created_at,cm.updated_at,
 COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expiry_weighted'),
+(SELECT affinity_ttl_seconds FROM charity_routing_settings WHERE model_id=cm.id),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
 (SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
 (SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields
@@ -624,6 +643,7 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	var requestUser, requestReward int64
 	var user, reward [4]int64
 	var start, end, tokenReserve sql.NullInt64
+	var affinityTTL sql.NullInt64
 	var samples, successes int
 	var mask int
 	var excluded string
@@ -631,7 +651,7 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -656,6 +676,10 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	if !validRouteStrategy(value.RouteStrategy) {
 		return AdminCharityModel{}, ErrInvariant
 	}
+	if !affinityTTL.Valid || !validAffinityTTL(int(affinityTTL.Int64)) {
+		return AdminCharityModel{}, ErrInvariant
+	}
+	value.AffinityTTLSeconds = int(affinityTTL.Int64)
 	value.Enabled = enabled == 1
 	value.FlattenToolCalls = flatten == 1
 	value.Revision = strconv.FormatInt(revision, 10)
@@ -713,8 +737,9 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		IsMainstream: value.IsMainstream, ExcludedRequestFields: append([]string{}, value.ExcludedRequestFields...),
 		TokenReserveCredits: copyString(value.TokenReserveCredits),
 		AllowedLevels:       append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
-		RouteStrategy: defaultRouteStrategy(value.RouteStrategy),
-		ID:            value.ID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
+		RouteStrategy:      defaultRouteStrategy(value.RouteStrategy),
+		AffinityTTLSeconds: value.AffinityTTLSeconds,
+		ID:                 value.ID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		Enabled: value.Enabled, Pricing: pricing,
 		Discount: StewardDiscount{Enabled: value.Discount.Enabled, Percent: value.Discount.Percent,
 			StartAt: copyInt(value.Discount.StartAt), EndAt: copyInt(value.Discount.EndAt)},
@@ -741,6 +766,9 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 	if !validRouteStrategy(defaultRouteStrategy(input.RouteStrategy)) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
+	if input.AffinityTTLSeconds != nil && !validAffinityTTL(*input.AffinityTTLSeconds) {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	if !validModelName(input.Provider) || !validModelName(input.Model) || !validDiscount(input.Discount) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
@@ -759,8 +787,11 @@ func validateModelPatch(input ModelPatch) bool {
 	if input.RouteStrategy != nil && !validRouteStrategy(*input.RouteStrategy) {
 		return false
 	}
+	if input.AffinityTTLSeconds != nil && !validAffinityTTL(*input.AffinityTTLSeconds) {
+		return false
+	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||

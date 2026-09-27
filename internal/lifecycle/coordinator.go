@@ -57,6 +57,7 @@ type DeleteAdapters struct {
 	Blackjack            DeleteAdapter
 	DebugAccountStream   DeleteAdapter
 	Governance           DeleteAdapter
+	CharityRouting       DeleteAdapter
 }
 
 func (adapters DeleteAdapters) ordered() []DeleteAdapter {
@@ -76,6 +77,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 		adapters.Blackjack,
 		adapters.DebugAccountStream,
 		adapters.Governance,
+		adapters.CharityRouting,
 	}
 }
 
@@ -83,20 +85,21 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 // runtime registry. Legal-hold expiry is owned by the coordinator and runs
 // before this list.
 type RecoveryAdapters struct {
-	Idempotency RecoveryAdapter
-	Discovery   RecoveryAdapter
-	Claims      RecoveryAdapter
-	Thursday    RecoveryAdapter
-	Reports     RecoveryAdapter
-	Fishing     RecoveryAdapter
-	LinkLink    RecoveryAdapter
-	RPS         RecoveryAdapter
-	Bidding     RecoveryAdapter
-	Likes       RecoveryAdapter
-	Blackjack   RecoveryAdapter
-	Donations   RecoveryAdapter
-	Secrets     RecoveryAdapter
-	Governance  RecoveryAdapter
+	Idempotency    RecoveryAdapter
+	Discovery      RecoveryAdapter
+	Claims         RecoveryAdapter
+	Thursday       RecoveryAdapter
+	Reports        RecoveryAdapter
+	Fishing        RecoveryAdapter
+	LinkLink       RecoveryAdapter
+	RPS            RecoveryAdapter
+	Bidding        RecoveryAdapter
+	Likes          RecoveryAdapter
+	Blackjack      RecoveryAdapter
+	Donations      RecoveryAdapter
+	Secrets        RecoveryAdapter
+	Governance     RecoveryAdapter
+	CharityRouting RecoveryAdapter
 }
 
 func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
@@ -115,30 +118,32 @@ func (adapters RecoveryAdapters) ordered() []RecoveryAdapter {
 		adapters.Donations,
 		adapters.Secrets,
 		adapters.Governance,
+		adapters.CharityRouting,
 	}
 }
 
 // RetentionAdapters fixes the six-hour cleanup order. Separate game fields
 // keep each reducer and retention cursor under its domain owner.
 type RetentionAdapters struct {
-	Sessions      RetentionAdapter
-	RequestLogs   RetentionAdapter
-	Audits        RetentionAdapter
-	Observability RetentionAdapter
-	RiskAudit     RetentionAdapter
-	Issues        RetentionAdapter
-	Fishing       RetentionAdapter
-	LinkLink      RetentionAdapter
-	RPS           RetentionAdapter
-	Bidding       RetentionAdapter
-	Likes         RetentionAdapter
-	Blackjack     RetentionAdapter
-	Reports       RetentionAdapter
-	Donations     RetentionAdapter
-	Charity       RetentionAdapter
-	Idempotency   RetentionAdapter
-	Secrets       RetentionAdapter
-	Governance    RetentionAdapter
+	Sessions       RetentionAdapter
+	RequestLogs    RetentionAdapter
+	Audits         RetentionAdapter
+	Observability  RetentionAdapter
+	RiskAudit      RetentionAdapter
+	Issues         RetentionAdapter
+	Fishing        RetentionAdapter
+	LinkLink       RetentionAdapter
+	RPS            RetentionAdapter
+	Bidding        RetentionAdapter
+	Likes          RetentionAdapter
+	Blackjack      RetentionAdapter
+	Reports        RetentionAdapter
+	Donations      RetentionAdapter
+	Charity        RetentionAdapter
+	Idempotency    RetentionAdapter
+	Secrets        RetentionAdapter
+	Governance     RetentionAdapter
+	CharityRouting RetentionAdapter
 }
 
 func (adapters RetentionAdapters) ordered() []RetentionAdapter {
@@ -161,6 +166,7 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.Idempotency,
 		adapters.Secrets,
 		adapters.Governance,
+		adapters.CharityRouting,
 	}
 }
 

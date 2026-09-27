@@ -315,16 +315,8 @@ func loadDeletionRequest(t *testing.T, database *sql.DB, requestID string) Reque
 
 func seedDeletionCharityProjection(t *testing.T, database *sql.DB, requestID string, userID, now int64) {
 	t.Helper()
-	zero := make([]byte, 16)
-	_, err := database.Exec(`INSERT INTO charity_reservations(
-logical_request_id,user_id,model_snapshot,state,pricing_mode,discount_percent,
-request_user_price_milli,request_donor_reward_milli,
-uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
-uncached_donor_reward_milli,cache_write_donor_reward_milli,cache_read_donor_reward_milli,output_donor_reward_milli,
-token_reserve_milli,user_reserved_milli,original_charge_milli,user_charge_milli,
-donor_reward_total_mag,created_at,updated_at)
-VALUES(?,?,'fixture','reserved','per_request',0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,?,?,?)`, requestID, userID, zero, now, now)
+	_, err := database.Exec(`UPDATE charity_reservations SET model_snapshot='fixture',updated_at=?
+WHERE logical_request_id=? AND user_id=?`, now, requestID, userID)
 	if err != nil {
 		t.Fatalf("seed charity deletion projection: %v", err)
 	}

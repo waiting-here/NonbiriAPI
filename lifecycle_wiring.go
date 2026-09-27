@@ -346,6 +346,10 @@ func newLifecycleCoordinator(
 	}
 
 	ledgerAdapter := lifecycleadapters.NewLedgerAdapter()
+	routingLifecycle, err := claim.NewCharityRoutingLifecycle(store.DB())
+	if err != nil {
+		return nil, err
+	}
 	activityAdapter := lifecycleadapters.NewActivity(activityRepository)
 	donationAdapter := lifecycleadapters.NewDonation(donationService)
 	charityAdapter := lifecycleadapters.NewCharity(charityService)
@@ -378,6 +382,7 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			CharityRouting:       routingLifecycle,
 			Governance:           activityEngines,
 			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,
 			IssuesAnnouncements: lifecycleadapters.NewIssueAnnouncementDelete(issueService.Sources()),
@@ -387,30 +392,32 @@ func newLifecycleCoordinator(
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
-			Governance:  activityEngines,
-			Idempotency: idempotencyAdapter,
-			Discovery:   lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
-			Claims:      lifecycleadapters.NewClaimRecovery(claimService),
-			Thursday:    lifecycleadapters.NewThursdayRecovery(activityService),
-			Reports:     reportAdapter,
-			Fishing:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
-			LinkLink:    lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
-			RPS:         lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
-			Bidding:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
-			Likes:       lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
-			Blackjack:   lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
-			Donations:   lifecycleadapters.NewDonationRecovery(donationService),
-			Secrets:     secretAdapter,
+			CharityRouting: routingLifecycle,
+			Governance:     activityEngines,
+			Idempotency:    idempotencyAdapter,
+			Discovery:      lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
+			Claims:         lifecycleadapters.NewClaimRecovery(claimService),
+			Thursday:       lifecycleadapters.NewThursdayRecovery(activityService),
+			Reports:        reportAdapter,
+			Fishing:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
+			LinkLink:       lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
+			RPS:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
+			Bidding:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
+			Likes:          lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
+			Blackjack:      lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
+			Donations:      lifecycleadapters.NewDonationRecovery(donationService),
+			Secrets:        secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
-			Governance:    activityEngines,
-			Sessions:      lifecycleadapters.NewAuthSessionRetention(authRuntime),
-			RequestLogs:   lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:        lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
-			Observability: diagnosticRetention{audits.observations},
-			RiskAudit:     riskRetention{audits.risk},
-			Issues:        lifecycleadapters.NewIssueRetention(issueService),
-			Fishing:       fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			CharityRouting: routingLifecycle,
+			Governance:     activityEngines,
+			Sessions:       lifecycleadapters.NewAuthSessionRetention(authRuntime),
+			RequestLogs:    lifecycleadapters.NewRequestLogRetention(logRepository),
+			Audits:         lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Observability:  diagnosticRetention{audits.observations},
+			RiskAudit:      riskRetention{audits.risk},
+			Issues:         lifecycleadapters.NewIssueRetention(issueService),
+			Fishing:        fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,

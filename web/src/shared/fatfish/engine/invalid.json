@@ -1,0 +1,190 @@
+{
+  "base": {
+    "format": "nonbiri-fatfish-level",
+    "format_version": 1,
+    "engine_version": 1,
+    "scoring_version": 1,
+    "duration_seconds": 10,
+    "speed_pixels_per_second": 160,
+    "thresholds": [
+      1,
+      1,
+      1
+    ],
+    "fish": [
+      {
+        "id": 1,
+        "x": 6400,
+        "y": 6400,
+        "heading": 0
+      }
+    ],
+    "tools": [
+      {
+        "id": 2,
+        "resource_key": "barrier",
+        "polygon": {
+          "outer": [
+            {
+              "x": -64,
+              "y": -64
+            },
+            {
+              "x": 64,
+              "y": -64
+            },
+            {
+              "x": 64,
+              "y": 64
+            },
+            {
+              "x": -64,
+              "y": 64
+            }
+          ],
+          "holes": null
+        },
+        "placed": false,
+        "x": 0,
+        "y": 0
+      }
+    ],
+    "solids": null,
+    "hazards": null,
+    "bowls": [
+      {
+        "id": 3,
+        "polygon": {
+          "outer": [
+            {
+              "x": 25600,
+              "y": 25600
+            },
+            {
+              "x": 26240,
+              "y": 25600
+            },
+            {
+              "x": 26240,
+              "y": 26240
+            },
+            {
+              "x": 25600,
+              "y": 26240
+            }
+          ],
+          "holes": null
+        },
+        "required": 0,
+        "capacity": 1
+      }
+    ],
+    "switches": null,
+    "gates": null,
+    "directions": null
+  },
+  "levels": [
+    {
+      "name": "duplicate-root-key",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "fractional-duration",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10.5,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "negative-zero-heading",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":-0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "unsafe-integer",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":9007199254740992,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "extra-star-threshold",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "missing-fish-heading",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "null-placed-flag",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":null,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "missing-tool-coordinates",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "unknown-field",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null,\"external_url\":\"https://invalid.test\"}"
+    },
+    {
+      "name": "self-crossing-solid",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":[{\"id\":5,\"polygon\":{\"outer\":[{\"x\":100,\"y\":100},{\"x\":300,\"y\":300},{\"x\":100,\"y\":300},{\"x\":300,\"y\":100}],\"holes\":null}}],\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "touching-hazard-hole",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":[{\"id\":5,\"polygon\":{\"outer\":[{\"x\":12800,\"y\":12800},{\"x\":14080,\"y\":12800},{\"x\":14080,\"y\":14080},{\"x\":12800,\"y\":14080}],\"holes\":[[{\"x\":12800,\"y\":13120},{\"x\":13120,\"y\":13120},{\"x\":13120,\"y\":13440},{\"x\":12800,\"y\":13440}]]}}],\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "bowl-hazard-overlap",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":[{\"id\":5,\"polygon\":{\"outer\":[{\"x\":25728,\"y\":25728},{\"x\":25984,\"y\":25728},{\"x\":25984,\"y\":25984},{\"x\":25728,\"y\":25984}],\"holes\":null}}],\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "thin-solid",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":[{\"id\":5,\"polygon\":{\"outer\":[{\"x\":12800,\"y\":12800},{\"x\":12864,\"y\":12800},{\"x\":12864,\"y\":13440},{\"x\":12800,\"y\":13440}],\"holes\":null}}],\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "thin-triangle",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":[{\"id\":5,\"polygon\":{\"outer\":[{\"x\":12800,\"y\":12800},{\"x\":12864,\"y\":12800},{\"x\":12800,\"y\":13440}],\"holes\":null}}],\"hazards\":null,\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    },
+    {
+      "name": "thin-hole-border",
+      "raw": "{\"format\":\"nonbiri-fatfish-level\",\"format_version\":1,\"engine_version\":1,\"scoring_version\":1,\"duration_seconds\":10,\"speed_pixels_per_second\":160,\"thresholds\":[1,1,1],\"fish\":[{\"id\":1,\"x\":6400,\"y\":6400,\"heading\":0}],\"tools\":[{\"id\":2,\"resource_key\":\"barrier\",\"polygon\":{\"outer\":[{\"x\":-64,\"y\":-64},{\"x\":64,\"y\":-64},{\"x\":64,\"y\":64},{\"x\":-64,\"y\":64}],\"holes\":null},\"placed\":false,\"x\":0,\"y\":0}],\"solids\":null,\"hazards\":[{\"id\":5,\"polygon\":{\"outer\":[{\"x\":12800,\"y\":12800},{\"x\":14080,\"y\":12800},{\"x\":14080,\"y\":14080},{\"x\":12800,\"y\":14080}],\"holes\":[[{\"x\":12864,\"y\":12864},{\"x\":14016,\"y\":12864},{\"x\":14016,\"y\":14016},{\"x\":12864,\"y\":14016}]]}}],\"bowls\":[{\"id\":3,\"polygon\":{\"outer\":[{\"x\":25600,\"y\":25600},{\"x\":26240,\"y\":25600},{\"x\":26240,\"y\":26240},{\"x\":25600,\"y\":26240}],\"holes\":null},\"required\":0,\"capacity\":1}],\"switches\":null,\"gates\":null,\"directions\":null}"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "null-input-list",
+      "raw": "null"
+    },
+    {
+      "name": "unknown-tool",
+      "raw": "[[0,1,\"place\",99,0,0]]"
+    },
+    {
+      "name": "duplicate-sequence",
+      "raw": "[[0,1,\"place\",2,0,0],[0,1,\"return\",2]]"
+    },
+    {
+      "name": "third-effective-event",
+      "raw": "[[0,1,\"place\",2,0,0],[0,2,\"return\",2],[0,3,\"abandon\",0]]"
+    },
+    {
+      "name": "fractional-tick",
+      "raw": "[[0.5,1,\"place\",2,0,0]]"
+    },
+    {
+      "name": "negative-zero-coordinate",
+      "raw": "[[0,1,\"place\",2,-0,0]]"
+    },
+    {
+      "name": "unknown-operation",
+      "raw": "[[0,1,\"move\",2,0,0]]"
+    },
+    {
+      "name": "terminal-trailing",
+      "raw": "[[0,1,\"abandon\",0],[1,2,\"return\",2]]"
+    },
+    {
+      "name": "at-timeout",
+      "raw": "[[600,1,\"return\",2]]"
+    },
+    {
+      "name": "finish-tool-id",
+      "raw": "[[0,1,\"finish\",2]]"
+    }
+  ]
+}

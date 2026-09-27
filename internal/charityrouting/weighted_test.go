@@ -1,7 +1,6 @@
 package charityrouting
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/binary"
@@ -65,158 +64,6 @@ func (environment *routingTestEnv) useEntropy(t *testing.T, entropy io.Reader) {
 	environment.service = service
 }
 
-func TestRuntimeCandidateWeightBoundaries(t *testing.T) {
-	tests := []struct {
-		name       string
-		expiresAt  sql.NullInt64
-		wantWeight uint64
-		wantOK     bool
-	}{
-		{name: "no expiry", expiresAt: sql.NullInt64{}, wantWeight: weightLater, wantOK: true},
-		{name: "already expired", expiresAt: sql.NullInt64{Int64: routingTestNow - 1, Valid: true}},
-		{name: "expires at decision", expiresAt: sql.NullInt64{Int64: routingTestNow, Valid: true}},
-		{name: "one second", expiresAt: sql.NullInt64{Int64: routingTestNow + 1, Valid: true}, wantWeight: weightWithinDay, wantOK: true},
-		{name: "one day", expiresAt: sql.NullInt64{Int64: routingTestNow + secondsPerDay, Valid: true}, wantWeight: weightWithinDay, wantOK: true},
-		{name: "after one day", expiresAt: sql.NullInt64{Int64: routingTestNow + secondsPerDay + 1, Valid: true}, wantWeight: weightWithinWeek, wantOK: true},
-		{name: "one week", expiresAt: sql.NullInt64{Int64: routingTestNow + secondsPerWeek, Valid: true}, wantWeight: weightWithinWeek, wantOK: true},
-		{name: "after one week", expiresAt: sql.NullInt64{Int64: routingTestNow + secondsPerWeek + 1, Valid: true}, wantWeight: weightWithinMonth, wantOK: true},
-		{name: "thirty days", expiresAt: sql.NullInt64{Int64: routingTestNow + secondsPerMonth, Valid: true}, wantWeight: weightWithinMonth, wantOK: true},
-		{name: "after thirty days", expiresAt: sql.NullInt64{Int64: routingTestNow + secondsPerMonth + 1, Valid: true}, wantWeight: weightLater, wantOK: true},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			weight, ok, err := runtimeCandidateWeight(routingTestNow, test.expiresAt)
-			if err != nil || weight != test.wantWeight || ok != test.wantOK {
-				t.Fatalf("weight = %d, eligible = %v, error = %v; want %d, %v", weight, ok, err, test.wantWeight, test.wantOK)
-			}
-		})
-	}
-	for _, input := range []struct {
-		now       int64
-		expiresAt sql.NullInt64
-	}{
-		{now: -1},
-		{now: maxUnixSecond + 1},
-		{now: routingTestNow, expiresAt: sql.NullInt64{Int64: -1, Valid: true}},
-		{now: routingTestNow, expiresAt: sql.NullInt64{Int64: maxUnixSecond + 1, Valid: true}},
-	} {
-		if _, _, err := runtimeCandidateWeight(input.now, input.expiresAt); !errors.Is(err, ErrInvariant) {
-			t.Fatalf("invalid weight input (%d, %+v) error = %v, want invariant", input.now, input.expiresAt, err)
-		}
-	}
-}
-
-func TestUniformUint64nRejectsModuloBiasAndBoundsAttempts(t *testing.T) {
-	value, err := uniformUint64n(bytes.NewReader(entropyWords(0, 4)), 3)
-	if err != nil || value != 1 {
-		t.Fatalf("rejection sample = %d, %v; want 1", value, err)
-	}
-
-	rejected := &fixedByteEntropy{}
-	if _, err := uniformUint64n(rejected, 3); !errors.Is(err, ErrEntropyUnavailable) {
-		t.Fatalf("bounded rejection error = %v, want ordering unavailable", err)
-	}
-	if rejected.reads != maxRejectedSamples {
-		t.Fatalf("bounded rejection reads = %d, want %d", rejected.reads, maxRejectedSamples)
-	}
-	for name, source := range map[string]io.Reader{
-		"nil":           nil,
-		"read failure":  failedEntropy{},
-		"no progress":   stalledEntropy{},
-		"short entropy": bytes.NewReader([]byte{1}),
-	} {
-		t.Run(name, func(t *testing.T) {
-			if _, err := uniformUint64n(source, 3); !errors.Is(err, ErrEntropyUnavailable) ||
-				errors.Is(err, ErrUnavailable) {
-				t.Fatalf("entropy error = %v, want dedicated entropy sentinel", err)
-			}
-		})
-	}
-	if _, err := uniformUint64n(bytes.NewReader(entropyWords(1)), 0); !errors.Is(err, ErrInvariant) {
-		t.Fatalf("zero upper bound error = %v, want invariant", err)
-	}
-}
-
-func TestWeightedRuntimeCandidateOrderGoldenAndBounds(t *testing.T) {
-	empty, err := orderWeightedRuntimeCandidates(failedEntropy{}, nil)
-	if err != nil || empty == nil || len(empty) != 0 {
-		t.Fatalf("empty order = %+v, %v", empty, err)
-	}
-	one := []weightedRuntimeCandidate{{candidate: RuntimeCandidate{DonationKeyID: 9}, weight: weightLater}}
-	ordered, err := orderWeightedRuntimeCandidates(failedEntropy{}, one)
-	if err != nil || len(ordered) != 1 || ordered[0].DonationKeyID != 9 {
-		t.Fatalf("single order = %+v, %v", ordered, err)
-	}
-
-	candidates := []weightedRuntimeCandidate{
-		{candidate: RuntimeCandidate{DonationKeyID: 1}, weight: weightWithinDay},
-		{candidate: RuntimeCandidate{DonationKeyID: 2}, weight: weightWithinWeek},
-		{candidate: RuntimeCandidate{DonationKeyID: 3}, weight: weightWithinMonth},
-		{candidate: RuntimeCandidate{DonationKeyID: 4}, weight: weightLater},
-	}
-	ordered, err = orderWeightedRuntimeCandidates(bytes.NewReader(entropyWords(14, 12, 8)), candidates)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []int64{4, 3, 2, 1}
-	if got := runtimeCandidateIDs(ordered); !equalInt64s(got, want) {
-		t.Fatalf("golden order = %v, want %v", got, want)
-	}
-	if got := []int64{
-		candidates[0].candidate.DonationKeyID,
-		candidates[1].candidate.DonationKeyID,
-		candidates[2].candidate.DonationKeyID,
-		candidates[3].candidate.DonationKeyID,
-	}; !equalInt64s(got, []int64{1, 2, 3, 4}) {
-		t.Fatalf("input order mutated: %v", got)
-	}
-
-	counts := make([]int, len(candidates))
-	for draw := uint64(0); draw < 15; draw++ {
-		index, err := weightedRuntimeCandidateIndex(candidates, draw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		counts[index]++
-	}
-	if counts[0] != 8 || counts[1] != 4 || counts[2] != 2 || counts[3] != 1 {
-		t.Fatalf("selection intervals = %v, want [8 4 2 1]", counts)
-	}
-
-	maximum := make([]weightedRuntimeCandidate, MaxRuntimeCandidates)
-	for index := range maximum {
-		maximum[index] = weightedRuntimeCandidate{
-			candidate: RuntimeCandidate{DonationKeyID: int64(index + 1)},
-			weight:    weightLater,
-		}
-	}
-	source := &fixedByteEntropy{value: 0xff}
-	ordered, err = orderWeightedRuntimeCandidates(source, maximum)
-	if err != nil || len(ordered) != MaxRuntimeCandidates {
-		t.Fatalf("maximum order length = %d, error = %v", len(ordered), err)
-	}
-	if source.reads != MaxRuntimeCandidates-1 {
-		t.Fatalf("maximum order entropy reads = %d, want %d", source.reads, MaxRuntimeCandidates-1)
-	}
-	seen := make(map[int64]struct{}, len(ordered))
-	for _, candidate := range ordered {
-		seen[candidate.DonationKeyID] = struct{}{}
-	}
-	if len(seen) != MaxRuntimeCandidates {
-		t.Fatalf("maximum order contains %d unique candidates, want %d", len(seen), MaxRuntimeCandidates)
-	}
-
-	tooMany := append(append([]weightedRuntimeCandidate(nil), maximum...),
-		weightedRuntimeCandidate{candidate: RuntimeCandidate{DonationKeyID: 101}, weight: weightLater})
-	unread := &fixedByteEntropy{value: 0xff}
-	if _, err := orderWeightedRuntimeCandidates(unread, tooMany); !errors.Is(err, ErrResourceLimit) {
-		t.Fatalf("oversized order error = %v, want resource limit", err)
-	}
-	if unread.reads != 0 {
-		t.Fatalf("oversized order consumed %d entropy reads", unread.reads)
-	}
-}
-
 func TestSnapshotWeightsEligibleCandidatesAndFreezesOrder(t *testing.T) {
 	environment := newRoutingTestEnv(t)
 	environment.seedUser(t, true, nil)
@@ -236,9 +83,9 @@ func TestSnapshotWeightsEligibleCandidatesAndFreezesOrder(t *testing.T) {
 		})
 		if index < 3 {
 			expiry := []int64{
-				routingTestNow + secondsPerDay,
-				routingTestNow + secondsPerWeek,
-				routingTestNow + secondsPerMonth,
+				routingTestNow + 86_400,
+				routingTestNow + 604_800,
+				routingTestNow + 2_592_000,
 			}[index]
 			if _, err := environment.store.DB().Exec("UPDATE donation_keys SET expires_at=? WHERE id=?", expiry, donationKeyID); err != nil {
 				t.Fatal(err)
@@ -264,13 +111,13 @@ func TestSnapshotWeightsEligibleCandidatesAndFreezesOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	environment.useEntropy(t, bytes.NewReader(entropyWords(14, 12, 8)))
+	environment.useEntropy(t, &fixedByteEntropy{value: 0})
 	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantFrozen := []int64{donationKeyIDs[3], donationKeyIDs[2], donationKeyIDs[1], donationKeyIDs[0]}
+	wantFrozen := []int64{donationKeyIDs[0], donationKeyIDs[1], donationKeyIDs[2], donationKeyIDs[3]}
 	if got := runtimeCandidateIDs(snapshot.Candidates()); !equalInt64s(got, wantFrozen) {
 		t.Fatalf("weighted snapshot order = %v, want %v", got, wantFrozen)
 	}
@@ -300,7 +147,7 @@ func TestSnapshotWeightsEligibleCandidatesAndFreezesOrder(t *testing.T) {
 		}}}); err != nil {
 		t.Fatal(err)
 	}
-	environment.useEntropy(t, &fixedByteEntropy{value: 0xff})
+	environment.useEntropy(t, &fixedByteEntropy{value: 0})
 	current, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil {
@@ -348,7 +195,7 @@ func TestSnapshotFiltersCapabilityBeforeCandidateLimitAndEntropy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entropy := &fixedByteEntropy{value: 0xff}
+	entropy := &fixedByteEntropy{value: 0}
 	environment.useEntropy(t, entropy)
 	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
@@ -405,7 +252,7 @@ func TestSnapshotAllUnsupportedConsumesNoEntropyAndWritesNothing(t *testing.T) {
 		_, err := tx.ExecContext(ctx, "UPDATE site_config SET updated_at=updated_at+1 WHERE key='charity_enabled'")
 		return err
 	}
-	entropy := &fixedByteEntropy{value: 0xff}
+	entropy := &fixedByteEntropy{value: 0}
 	environment.useEntropy(t, entropy)
 
 	_, err = environment.service.Snapshot(context.Background(), modelID, routingTestNow,
