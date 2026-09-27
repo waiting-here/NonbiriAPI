@@ -3,6 +3,7 @@ import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { useGameCopy } from '../copy';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
 import { formatCredits } from '../common/strict';
+import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { useLinkLinkLeaderboard } from './api';
 
 export function LinkLinkLeaderboard({
@@ -69,10 +70,12 @@ export function LinkLinkLeaderboard({
                 <tr key={row.rank} className={row.isMe ? 'is-me' : undefined}>
                   <td>{row.rank}</td>
                   <td>
-                    {row.identity.kind === 'public'
-                      ? row.identity.displayName
-                      : text('linklink.leaderboard.anonymous')}
-                    {row.isMe ? ` · ${text('fishing.leaderboard.me')}` : ''}
+                    <PublicGameIdentity
+                      identity={row.identity}
+                      anonymousLabel={text('linklink.leaderboard.anonymous')}
+                      isMe={row.isMe}
+                      meLabel={text('fishing.leaderboard.me')}
+                    />
                   </td>
                   <td>{formatCredits(row.score)}</td>
                   <td>

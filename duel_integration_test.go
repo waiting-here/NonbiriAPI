@@ -362,6 +362,17 @@ func TestDuelProductionCancellationEntrypointsAreAtomic(t *testing.T) {
 			}
 			f.assertCancelled("bidding", bid.ID, reason)
 			f.assertCancelled("likes", likes.ID, reason)
+			var aborts int
+			if err := f.store.DB().QueryRow(`SELECT count(*) FROM self_deletion_duel_aborts WHERE former_user_id=?`, f.users[0]).Scan(&aborts); err != nil {
+				t.Fatal(err)
+			}
+			wantAborts := 0
+			if kind == "deletion" {
+				wantAborts = 2
+			}
+			if aborts != wantAborts {
+				t.Fatalf("self-deletion events=%d want=%d", aborts, wantAborts)
+			}
 			for game, id := range map[string]string{"bidding": bid.ID, "likes": likes.ID} {
 				proof := readRandomProof(f, 1, game, id)
 				if proof.Commitment != openings[game] || len(proof.Seed) != 64 {

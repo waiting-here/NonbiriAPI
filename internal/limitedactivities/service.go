@@ -142,7 +142,7 @@ func (s *Service) detailTx(ctx context.Context, tx *sql.Tx, key string, now int6
 	case now >= *c.end:
 		status = "ended"
 	}
-	return Detail{key, d.name, c.visible, c.start, c.end, c.paused, strconv.FormatInt(c.revision, 10), status, module}, nil
+	return Detail{Key: key, Name: d.name, CoverKey: d.coverKey, Visible: c.visible, StartsAt: c.start, EndsAt: c.end, Paused: c.paused, Revision: strconv.FormatInt(c.revision, 10), Status: status, ModuleConfig: module}, nil
 }
 
 // CheckAdmissionTx is only for new economic intentions. Continuing accepted

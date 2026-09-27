@@ -22,6 +22,7 @@ import { useUserSession } from '../../data';
 import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
 import '@shared/limitedactivities/limited.css';
+import pictureBookCover from '@shared/limitedactivities/picture-book-cover.svg';
 
 import { limitedActivityKeys } from './queries';
 
@@ -47,15 +48,49 @@ export function LimitedActivitiesSection() {
         <p>{t('暂无公开的限时活动。', 'No limited-time activities are listed.')}</p>
       ) : null}
       <div className="limited-grid">
-        {query.data?.map((activity) => (
-          <Card key={activity.key}>
-            <h3>{t('喵帕斯的绘本', 'Picture book')}</h3>
-            <p>{statusLabel(activity.status, t)}</p>
-            <Link className="btn btn-secondary" to={'/activities/' + activity.key}>
-              {t('查看活动', 'View activity')}
-            </Link>
-          </Card>
-        ))}
+        {query.data?.map((activity) => {
+          const isBook = activity.key === 'picture-book';
+          const name = isBook
+            ? t('喵帕斯的绘本', 'Picture book')
+            : t('饲养大肥鱼', 'Raise a big fish');
+          return (
+            <Card key={activity.key} className="limited-entry">
+              <div className={`limited-entry__cover limited-entry__cover--${activity.cover_key}`}>
+                {isBook ? (
+                  <img
+                    src={pictureBookCover}
+                    alt={t('打开的绘本与星星', 'Open picture book with stars')}
+                    width="960"
+                    height="540"
+                  />
+                ) : (
+                  <span role="img" aria-label={t('水中的大肥鱼', 'A big fish in water')}>
+                    🐟
+                  </span>
+                )}
+              </div>
+              <div className="limited-entry__copy">
+                <p className="limited-entry__eyebrow">{t('限时活动', 'Limited-time activity')}</p>
+                <h3>{name}</h3>
+                <p>
+                  {isBook
+                    ? t(
+                        '翻开绘本，收集草稿纸与画笔。',
+                        'Open the picture book and collect sketch paper and brushes.',
+                      )
+                    : t(
+                        '在独立的鱼缸中探索、培养并挑战。',
+                        'Explore, grow and take on challenges in a dedicated tank.',
+                      )}
+                </p>
+                <p className="limited-entry__status">{statusLabel(activity.status, t)}</p>
+                <Link className="btn btn-secondary" to={'/activities/' + activity.key}>
+                  {t('查看活动', 'View activity')}: {name}
+                </Link>
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </section>
   );

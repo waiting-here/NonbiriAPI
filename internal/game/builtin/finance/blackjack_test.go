@@ -17,11 +17,12 @@ import (
 )
 
 type blackjackFinanceFixture struct {
-	t       *testing.T
-	ctx     context.Context
-	tx      *sql.Tx
-	user    int64
-	wallets ledger.AccountPair
+	t        *testing.T
+	ctx      context.Context
+	tx       *sql.Tx
+	database *sql.DB
+	user     int64
+	wallets  ledger.AccountPair
 }
 
 func (f blackjackFinanceFixture) id(prefix string) string {
@@ -43,7 +44,7 @@ func (f blackjackFinanceFixture) exec(query string, args ...any) sql.Result {
 
 func blackjackWallet(t *testing.T, database *sql.DB, total, gamePaid int64) blackjackFinanceFixture {
 	t.Helper()
-	f := blackjackFinanceFixture{t: t, ctx: context.Background()}
+	f := blackjackFinanceFixture{t: t, ctx: context.Background(), database: database}
 	var err error
 	f.tx, err = database.BeginTx(f.ctx, nil)
 	if err != nil {
@@ -56,6 +57,7 @@ func blackjackWallet(t *testing.T, database *sql.DB, total, gamePaid int64) blac
 	if err != nil {
 		t.Fatal(err)
 	}
+	bindFinanceUser(t, database, f.tx, f.user)
 	for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
 		wallet, err := ledger.CreateUserAssetAccount(f.ctx, f.tx, f.user, asset, 100)
 		if err != nil {

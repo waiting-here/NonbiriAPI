@@ -144,7 +144,7 @@ func (service *Service) enqueue(ctx context.Context, input EnqueueInput, rulesVe
 	if queueCount < 0 || queueCount >= rpsconfig.RPSQueueCapacity {
 		return QueueMutationResult{}, ErrResourceLimit
 	}
-	startReservation, _, err := service.limiter.Reserve(input.UserID)
+	startReservation, _, err := service.limiter.ReserveTx(ctx, tx, input.UserID)
 	if err != nil {
 		return QueueMutationResult{}, mapLimiter(err)
 	}

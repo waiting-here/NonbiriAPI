@@ -1,0 +1,26 @@
+.public-game-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.public-game-identity img,
+.public-game-identity__placeholder {
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.public-game-identity__placeholder {
+  display: inline-grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent, #8779d9) 18%, var(--nb-color-surface, #fff));
+  color: var(--nb-color-text, #302d3e);
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.public-game-identity__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

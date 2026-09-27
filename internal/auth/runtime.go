@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -48,6 +49,7 @@ type Runtime struct {
 	routes                          map[string]struct{}
 	userSessionInvalidationObserver UserSessionInvalidationObserver
 	userLifecycle                   *lifecyclegate.Gate
+	continuity                      *continuity.Service
 	frozen, closed                  bool
 	userHandler, adminHandler       http.Handler
 }
@@ -153,6 +155,11 @@ func NewRuntime(c RuntimeConfig) (*Runtime, error) {
 		now = time.Now
 	}
 	r := &Runtime{db: c.Store.DB(), provider: c.Provider, clientID: c.DiscordClientID, redirectURI: redirect, siteOrigin: origin, adminUsername: c.AdminUsername, adminPasswordDigest: sha256.Sum256([]byte(c.AdminPassword)), adminCredentialGeneration: generation, authorizer: c.Authorizer, maintenance: c.Maintenance, states: states, elevation: elev, oauthThrottle: oauthThrottle, adminThrottle: adminThrottle, now: now, idleTTL: idle, absoluteTTL: absolute, userMux: http.NewServeMux(), adminMux: http.NewServeMux(), routes: make(map[string]struct{})}
+	r.continuity, err = continuity.New(c.Store.DB(), c.CredentialKeyDeriver)
+	if err != nil {
+		_ = r.Close()
+		return nil, err
+	}
 	if err := r.registerBuiltins(); err != nil {
 		_ = r.Close()
 		return nil, err
@@ -602,7 +609,7 @@ func (r *Runtime) Close() error {
 	r.closed = true
 	r.mu.Unlock()
 	var first error
-	for _, closeFn := range []func() error{r.states.Close, r.elevation.Close, r.oauthThrottle.Close} {
+	for _, closeFn := range []func() error{r.states.Close, r.elevation.Close, r.oauthThrottle.Close, r.continuity.Close} {
 		if err := closeFn(); err != nil && first == nil {
 			first = err
 		}

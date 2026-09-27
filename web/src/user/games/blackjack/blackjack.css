@@ -191,14 +191,14 @@
 }
 .bj-seats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.6rem;
   margin-top: 1rem;
 }
-.bj-seats.bj-seats--seating {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.bj-board--viewer-participant:not(.bj-board--phase-seating) .bj-seats--eight {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-.bj-seats--seating .bj-seat header {
+.bj-seats--nine .bj-seat header {
   display: grid;
   justify-content: center;
   overflow-wrap: anywhere;
@@ -211,6 +211,26 @@
   min-width: 0;
   background: #00000010;
   text-align: center;
+}
+.bj-seat .public-game-identity {
+  width: 100%;
+  justify-content: center;
+  color: #fff6df;
+  font-size: 0.75rem;
+}
+.bj-seat .public-game-identity__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bj-mine .public-game-identity {
+  justify-content: center;
+  color: #fff6df;
+}
+@media (max-width: 700px) {
+  .bj-seats,
+  .bj-board--viewer-participant:not(.bj-board--phase-seating) .bj-seats--eight {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .bj-seat.is-occupied {
   background: #00000018;

@@ -247,7 +247,7 @@ func TestNetProfitRoutesOnlyAcceptSevenDayWindow(t *testing.T) {
 	if err := RegisterRoutes(routes, s); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/games/leaderboards/net-profit", "/api/games/fishing/net-profit", "/api/games/blackjack/net-profit"} {
+	for _, path := range []string{"/api/games/leaderboards/net-profit", "/api/games/fishing/net-profit", "/api/games/blackjack/net-profit", "/api/games/bidding/net-profit"} {
 		for _, query := range []string{"", "?window=7d", "?window=30d", "?window=history", "?window=7d&window=7d", "?page=1"} {
 			response := httptest.NewRecorder()
 			routes["GET "+path](response, httptest.NewRequest(http.MethodGet, path+query, nil), resources.UserPrincipal{UserID: u})

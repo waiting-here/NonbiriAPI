@@ -111,7 +111,7 @@ func TestWindowCapacityRejectsWithoutEvictionAndRestorationFailsClosed(t *testin
 	if _, err = tx.Exec(`INSERT INTO abuse_windows VALUES(?,'short_content',0,0,4097,?)`, user, now); err != nil {
 		t.Fatal(err)
 	}
-	stmt, err := tx.Prepare(`INSERT INTO abuse_window_events VALUES(?,'short_content',?,?,?,1)`)
+	stmt, err := tx.Prepare(`INSERT INTO abuse_window_events(user_id,violation_kind,seq,occurred_at,request_id,content_chars) VALUES(?,'short_content',?,?,?,1)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestWindowCapacityRejectsWithoutEvictionAndRestorationFailsClosed(t *testin
 	if _, err = f.store.DB().Exec(`UPDATE abuse_windows SET next_event_seq=4098 WHERE user_id=?`, user); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.store.DB().Exec(`INSERT INTO abuse_window_events VALUES(?,'short_content',4097,?,?,1)`, user, now, id); err != nil {
+	if _, err = f.store.DB().Exec(`INSERT INTO abuse_window_events(user_id,violation_kind,seq,occurred_at,request_id,content_chars) VALUES(?,'short_content',4097,?,?,1)`, user, now, id); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = NewService(f.service.config); !errors.Is(err, charityrouting.ErrResourceLimit) {

@@ -105,4 +105,29 @@ WHEN NEW.id<>OLD.id OR NEW.scope<>OLD.scope OR NEW.endpoint_id IS NOT OLD.endpoi
  OR NEW.secret_context<>OLD.secret_context OR NEW.revision<OLD.revision
  OR (NEW.revision=OLD.revision AND (NEW.secret_ciphertext<>OLD.secret_ciphertext OR NEW.structure_json<>OLD.structure_json OR NEW.updated_at<>OLD.updated_at))
 BEGIN SELECT RAISE(ABORT,'invalid request adaptation revision'); END;
+CREATE TABLE request_adaptation_audits (
+ id INTEGER PRIMARY KEY,
+ scope TEXT NOT NULL CHECK(scope IN ('endpoint','charity_model','binding')),
+ resource_id INTEGER NOT NULL CHECK(resource_id>0),
+ actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+ actor_role TEXT NOT NULL CHECK(actor_role IN ('owner','admin')),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ changed_partitions TEXT NOT NULL CHECK(json_valid(changed_partitions) AND json_type(changed_partitions)='array' AND json_array_length(changed_partitions)<=5 AND length(CAST(changed_partitions AS BLOB))<=256),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ UNIQUE(scope,resource_id,revision),
+ CHECK((scope='endpoint')=(actor_role='owner'))
+) STRICT;
+CREATE INDEX idx_request_adaptation_audits_expiry ON request_adaptation_audits(created_at,id);
+CREATE INDEX idx_request_adaptation_audits_actor ON request_adaptation_audits(actor_user_id,id);
+CREATE TRIGGER request_adaptation_audit_partitions BEFORE INSERT ON request_adaptation_audits
+WHEN EXISTS(SELECT 1 FROM json_each(NEW.changed_partitions) WHERE type<>'text' OR value NOT IN ('forward_headers','fixed_headers','body_defaults','body_forced','native_extension_paths'))
+ OR json_array_length(NEW.changed_partitions)<>(SELECT count(DISTINCT value) FROM json_each(NEW.changed_partitions))
+BEGIN SELECT RAISE(ABORT,'invalid request adaptation audit partitions'); END;
+CREATE TRIGGER request_adaptation_audit_immutable BEFORE UPDATE ON request_adaptation_audits
+WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
+ AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.actor_user_id)
+ AND NEW.id=OLD.id AND NEW.scope=OLD.scope AND NEW.resource_id=OLD.resource_id
+ AND NEW.actor_role=OLD.actor_role AND NEW.revision=OLD.revision
+ AND NEW.changed_partitions=OLD.changed_partitions AND NEW.created_at=OLD.created_at)
+BEGIN SELECT RAISE(ABORT,'request adaptation audit is immutable'); END;
 `
