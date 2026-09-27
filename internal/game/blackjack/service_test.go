@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -106,6 +107,11 @@ func newFixture(t *testing.T, count int) *fixture {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
+	identity, err := continuity.New(f.db, dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer identity.Close()
 	zero := db.EncodeU128(db.U128{})
 	for range count {
 		r, err := tx.Exec(`INSERT INTO users(discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, f.id("bja_"), "player", zero, zero, zero, zero, zero, zero, zero, zero, 100, 100)
@@ -114,6 +120,9 @@ func newFixture(t *testing.T, count int) *fixture {
 		}
 		user, err := r.LastInsertId()
 		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := identity.BindUserTx(f.ctx, tx, user); err != nil {
 			t.Fatal(err)
 		}
 		hash := sha256.Sum256([]byte(strconv.FormatInt(user, 10)))

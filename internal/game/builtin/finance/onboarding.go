@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"slices"
 
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -31,11 +32,19 @@ func (port onboarding) reserve(ctx context.Context, tx *sql.Tx, userID int64, ta
 	if _, err := port.module.OnboardingReward(task); err != nil {
 		return ledger.ErrInvalidPlan
 	}
+	scope, err := continuity.OnboardingScope(port.module.ID, task)
+	if err != nil {
+		return err
+	}
+	claimed, err := continuity.HasEligibilityTx(ctx, tx, userID, continuity.GameOnboarding, scope, "v1", now)
+	if err != nil {
+		return err
+	}
 	var completed bool
 	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM game_onboarding_completions WHERE user_id=? AND game_key=? AND task_key=?)", userID, port.module.ID, task).Scan(&completed); err != nil {
 		return err
 	}
-	if completed {
+	if completed || claimed {
 		return nil
 	}
 	where, args := parent.predicate()
@@ -71,6 +80,14 @@ func (port onboarding) complete(ctx context.Context, tx *sql.Tx, userID int64, t
 	if err != nil {
 		return ledger.ErrInvalidPlan
 	}
+	scope, err := continuity.OnboardingScope(port.module.ID, task)
+	if err != nil {
+		return err
+	}
+	claimed, err := continuity.HasEligibilityTx(ctx, tx, userID, continuity.GameOnboarding, scope, "v1", now)
+	if err != nil {
+		return err
+	}
 	where, args := parent.predicate()
 	args = append(args, userID, port.module.ID, task, userID, port.module.ID, task)
 	var holdID sql.NullString
@@ -78,7 +95,7 @@ func (port onboarding) complete(ctx context.Context, tx *sql.Tx, userID int64, t
 	if err := tx.QueryRowContext(ctx, "SELECT (SELECT id FROM game_onboarding_holds WHERE "+where+" AND user_id=? AND game_key=? AND task_key=?), EXISTS(SELECT 1 FROM game_onboarding_completions WHERE user_id=? AND game_key=? AND task_key=?)", args...).Scan(&holdID, &completed); err != nil {
 		return err
 	}
-	if completed {
+	if completed || claimed {
 		if holdID.Valid {
 			return releaseOnboardingHold(ctx, tx, holdID.String)
 		}
@@ -86,6 +103,13 @@ func (port onboarding) complete(ctx context.Context, tx *sql.Tx, userID int64, t
 	}
 	if !holdID.Valid {
 		return ledger.ErrInvalidReservation
+	}
+	consumed, err := continuity.ClaimEligibilityTx(ctx, tx, userID, continuity.GameOnboarding, scope, "v1", now, nil)
+	if err != nil {
+		return err
+	}
+	if !consumed {
+		return releaseOnboardingHold(ctx, tx, holdID.String)
 	}
 	var wallet, external int64
 	if err := tx.QueryRowContext(ctx, `SELECT u.id,e.id FROM credit_accounts u CROSS JOIN credit_accounts e

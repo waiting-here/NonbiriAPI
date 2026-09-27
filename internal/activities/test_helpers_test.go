@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -31,6 +32,7 @@ func (activityCursorKeys) DeriveGenerationTwoSubkey([]byte) ([]byte, error) {
 type activityFixture struct {
 	t          *testing.T
 	store      *db.Store
+	continuity *continuity.Service
 	repository *Repository
 	clock      atomic.Int64
 	adminID    int64
@@ -52,6 +54,11 @@ func newActivityFixture(t *testing.T, now int64) *activityFixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	fixture := &activityFixture{t: t, store: store}
+	fixture.continuity, err = continuity.New(store.DB(), vault)
+	if err != nil {
+		t.Fatalf("continuity.New: %v", err)
+	}
+	t.Cleanup(func() { _ = fixture.continuity.Close() })
 	fixture.clock.Store(now)
 	repository, err := NewRepository(RepositoryConfig{
 		Store: store, UserFinalAuth: allowActivityAuth{}, AdminFinalAuth: allowActivityAuth{},
@@ -98,6 +105,11 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, "activity-"+label, label, adminValue, zero, 
 	}
 	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, fixture.clock.Load()); err != nil {
 		fixture.t.Fatal(err)
+	}
+	if !admin {
+		if _, err := fixture.continuity.BindUserTx(context.Background(), tx, userID); err != nil {
+			fixture.t.Fatalf("bind activity user: %v", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		fixture.t.Fatalf("commit user: %v", err)
