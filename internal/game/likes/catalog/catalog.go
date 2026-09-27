@@ -12,12 +12,12 @@ import (
 	"slices"
 )
 
-const DesignVersion = "0.18.0"
+const DesignVersion = "0.18.1"
 const SchemaVersion = 16
 const RulesVersion = 1
 const BehaviorVersion = 2
 
-//go:embed quick.json standard.json legacy/quick.json legacy/standard.json
+//go:embed quick.json standard.json previous/quick.json previous/standard.json legacy/quick.json legacy/standard.json
 var presets embed.FS
 
 var ErrCatalog = errors.New("likes: invalid catalog")
@@ -180,22 +180,28 @@ type Config struct {
 
 // Load returns a fresh snapshot; caller mutations never change another game.
 func Load(mode string) (Config, string, error) {
-	return load(mode, false)
+	return load(mode, "")
+}
+
+// LoadHistorical preserves the previous character-passive catalog and its
+// content identity for active games and history created before the time change.
+func LoadHistorical(mode string) (Config, string, error) {
+	return load(mode, "previous")
 }
 
 // LoadLegacy loads the exact supported catalog before character passives.
 // Saved JSON is compared with these trusted bytes, never executed as rules.
 func LoadLegacy(mode string) (Config, string, error) {
-	return load(mode, true)
+	return load(mode, "legacy")
 }
 
-func load(mode string, legacy bool) (Config, string, error) {
+func load(mode, version string) (Config, string, error) {
 	if mode != "quick" && mode != "standard" {
 		return Config{}, "", ErrCatalog
 	}
 	path := mode + ".json"
-	if legacy {
-		path = "legacy/" + path
+	if version != "" {
+		path = version + "/" + path
 	}
 	body, err := presets.ReadFile(path)
 	if err != nil {
@@ -210,13 +216,17 @@ func load(mode string, legacy bool) (Config, string, error) {
 	if config.Mode != mode {
 		return Config{}, "", ErrCatalog
 	}
-	if err := config.Validate(); err != nil {
-		return Config{}, "", err
+	seconds := int64(30)
+	if version != "" {
+		seconds = 20
+	}
+	if err := config.Validate(); err != nil || config.Parameters["TURN_SECONDS"] != seconds {
+		return Config{}, "", ErrCatalog
 	}
 	// Pin the shared-energy exception, settlement split and manual casting rule.
 	hash := sha256.New()
 	prefix := "likes@1;positive-energy-overload;separate-round-start;manual-main-unless-stunned;overload-state\n"
-	if !legacy {
+	if version != "legacy" {
 		prefix = "likes@2;step-likes;role-passives;layer-resistance;stable-sota\n"
 	}
 	hash.Write([]byte(prefix))
@@ -240,7 +250,7 @@ func (c Config) Validate() error {
 			return ErrCatalog
 		}
 	}
-	if c.Parameters["PREP_MAX"] != 2 || c.Parameters["INSERT_CAP"] != 1 || c.Parameters["POWER_GENERATION"] != 10 || c.Parameters["TURN_SECONDS"] != 20 || c.Parameters["TOKEN_FLOOR"] != 1 || c.Parameters["ENERGY_FLOOR"] != 1 {
+	if c.Parameters["PREP_MAX"] != 2 || c.Parameters["INSERT_CAP"] != 1 || c.Parameters["POWER_GENERATION"] != 10 || (c.Parameters["TURN_SECONDS"] != 20 && c.Parameters["TURN_SECONDS"] != 30) || (c.SchemaVersion == 15 && c.Parameters["TURN_SECONDS"] != 20) || c.Parameters["TOKEN_FLOOR"] != 1 || c.Parameters["ENERGY_FLOOR"] != 1 {
 		return ErrCatalog
 	}
 	if c.Parameters["ENERGY_START"] > c.Parameters["ENERGY_CAP"] || c.Parameters["SUB_START"] != c.Parameters["BURST_CAP"]*2 || c.Parameters["SUB_TOTAL_UPGRADE"] != c.Parameters["SUB_BURST_UPGRADE"]*2 {

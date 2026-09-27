@@ -15,10 +15,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
+// Discord identifiers below are synthetic decimal fixtures, never account data.
 func TestForbiddenManagementWritesDoNotRetireTargetRequests(t *testing.T) {
 	f, actor := newStewardUsersFixture(t)
 	target := f.seedUser("protected-peer", false)
-	const discordID = "123456789012345950"
+	const discordID = "123456789012340001"
 	if _, err := f.store.DB().Exec(`UPDATE users SET discord_id=?,level=6 WHERE id=?`, discordID, target); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +82,7 @@ func TestBlacklistFirstEventStewardAccessAndPromotionRecheck(t *testing.T) {
 	if err := RegisterStewardRoutes(f.registrar, f.service); err != nil {
 		t.Fatal(err)
 	}
-	const discordID = "123456789012345900"
+	const discordID = "123456789012340002"
 	target := f.seedUser("blacklist-target", false)
 	if _, err := f.store.DB().Exec(`UPDATE users SET discord_id=?,level=5 WHERE id=?`, discordID, target); err != nil {
 		t.Fatal(err)
@@ -113,7 +114,7 @@ func TestBlacklistFirstEventStewardAccessAndPromotionRecheck(t *testing.T) {
 	if len(eventPage.Data) != 2 || eventPage.Data[0].ActorKind != "steward6" || eventPage.Data[1].ActorKind != "admin" {
 		t.Fatalf("events=%+v", eventPage.Data)
 	}
-	const adminOriginID = "123456789012345910"
+	const adminOriginID = "123456789012340003"
 	adminOrigin := managementRequest(f, f.adminID, "POST", routeBlacklist, routeBlacklist, `{"discord_id":"`+adminOriginID+`","reason":"administrator origin"}`, "AAABBBCCCDDDEEEFFFGGGF")
 	if adminOrigin.Code != http.StatusNoContent {
 		t.Fatalf("admin origin=%d %s", adminOrigin.Code, adminOrigin.Body.String())
@@ -170,7 +171,7 @@ func TestStewardCannotWriteOrReadCurrentAdministratorBlacklistTarget(t *testing.
 	if err := RegisterStewardRoutes(f.registrar, f.service); err != nil {
 		t.Fatal(err)
 	}
-	const adminDiscord = "123456789012345911"
+	const adminDiscord = "123456789012340004"
 	// A protected administrator cannot be added through the management API.
 	if _, err := f.store.DB().Exec(`UPDATE users SET discord_id=? WHERE id=?`, adminDiscord, f.adminID); err != nil {
 		t.Fatal(err)
@@ -232,7 +233,7 @@ func TestDeletedAccountsMixedFiltersAndReadOnlyAuthorization(t *testing.T) {
 	if err := RegisterStewardRoutes(f.registrar, f.service); err != nil {
 		t.Fatal(err)
 	}
-	const discordID = "123456789012345901"
+	const discordID = "123456789012340005"
 	active := f.seedUser("history-current", false)
 	if _, err := f.store.DB().Exec(`UPDATE users SET discord_id=? WHERE id=?`, discordID, active); err != nil {
 		t.Fatal(err)
@@ -279,7 +280,7 @@ func TestDeletedAccountsMixedFiltersAndReadOnlyAuthorization(t *testing.T) {
 
 func TestBlacklistUnicodeNoteLimitAndPagedFilters(t *testing.T) {
 	f := newAdminUsersFixture(t)
-	const discordID = "123456789012345902"
+	const discordID = "123456789012340006"
 	note := strings.Repeat("界", 2000)
 	response := managementRequest(f, f.adminID, "POST", routeBlacklist, routeBlacklist,
 		`{"discord_id":"`+discordID+`","reason":"`+note+`"}`, "AAABBBCCCDDDEEEFFFGGGD")
@@ -319,7 +320,7 @@ func TestBlacklistUnicodeNoteLimitAndPagedFilters(t *testing.T) {
 
 func TestDeletionDuelAbortExactDiscordAndRetentionWindow(t *testing.T) {
 	f := newAdminUsersFixture(t)
-	const discordID = "123456789012345903"
+	const discordID = "123456789012340007"
 	for index, occurred := range []int64{adminUsersTestNow - 1, adminUsersTestNow - 7776000} {
 		_, err := f.store.DB().Exec(`INSERT INTO self_deletion_duel_aborts(discord_id,game_key,match_id,former_user_id,reason,occurred_at,expires_at) VALUES(?,'bidding',?,123,'self_deletion_cancelled_match',?,?)`, discordID, fmt.Sprintf("match-%d", index), occurred, occurred+7776000)
 		if err != nil {
@@ -330,7 +331,7 @@ func TestDeletionDuelAbortExactDiscordAndRetentionWindow(t *testing.T) {
 	if err != nil || len(page.Data) != 1 || page.Data[0].MatchID != "match-0" || page.Pagination.TotalItems != "1" {
 		t.Fatalf("retained=%+v %v", page, err)
 	}
-	other, err := f.service.listDeletionDuelAborts(context.Background(), f.adminID, "123456789012345904", &pagination.Request{Page: 1, Size: 20})
+	other, err := f.service.listDeletionDuelAborts(context.Background(), f.adminID, "123456789012340008", &pagination.Request{Page: 1, Size: 20})
 	if err != nil || len(other.Data) != 0 {
 		t.Fatalf("cross Discord=%+v %v", other, err)
 	}

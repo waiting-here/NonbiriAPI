@@ -33,16 +33,17 @@ const manifest = JSON.parse(fs.readFileSync(new URL('manifest.json', root), 'utf
   svg: SvgEntry[];
   character: { atlas_url: string; default_display_height: number; frame_count: number; files: FileEntry[] };
   cover: FileEntry;
+  music: FileEntry & { title: string; artist: string; license_file: string; attribution_url: string };
 };
 const assetFile = (url: string) => {
-  expect(url).toMatch(/^\/assets\/fatfish\/[a-z0-9/.-]+$/);
+  expect(url).toMatch(/^\/assets\/fatfish\/[A-Za-z0-9/.-]+$/);
   expect(url).not.toContain('..');
   return new URL(`.${url.replace('/assets/fatfish', '')}`, root);
 };
-const verifyFile = (entry: FileEntry) => {
+const verifyFile = (entry: FileEntry, license = 'AGPL-3.0') => {
   expect(entry.source.length).toBeGreaterThan(0);
   expect(entry.transform.length).toBeGreaterThan(0);
-  expect(entry.license).toBe('AGPL-3.0');
+  expect(entry.license).toBe(license);
   const data = fs.readFileSync(assetFile(entry.url));
   expect(data.length).toBe(entry.bytes);
   expect(createHash('sha256').update(data).digest('hex')).toBe(entry.sha256);
@@ -136,10 +137,22 @@ describe('fat fish public art', () => {
     for (const frame of animated) expect(atlas.frames[frame]).toBeDefined();
   });
 
-  it('provides a separately hashed original SVG cover without active or external content', () => {
-    expect(manifest.cover.url).toBe('/assets/fatfish/cover.svg');
-    const text = assertStaticSVG(verifyFile(manifest.cover));
-    expect(text).toContain('<title');
-    expect(text).toContain('<desc');
+  it('provides a separately hashed illustrated raster cover', () => {
+    expect(manifest.cover.url).toBe('/assets/fatfish/cover.png');
+    expect(pngSize(verifyFile(manifest.cover))).toEqual([1536, 1024]);
+  });
+
+  it('bundles the original music with its separate license and attribution', () => {
+    expect(manifest.music.title).toBe('Monkeys Spinning Monkeys');
+    expect(manifest.music.artist).toBe('Kevin MacLeod');
+    const data = verifyFile(manifest.music, 'CC-BY-4.0');
+    expect(data.length).toBeGreaterThan(1_000_000);
+    const license = fs.readFileSync(assetFile(manifest.music.license_file), 'utf8');
+    expect(license).toContain('Attribution 4.0 International');
+    const notice = fs.readFileSync(assetFile(manifest.music.attribution_url), 'utf8');
+    expect(notice).toContain(manifest.music.title);
+    expect(notice).toContain(manifest.music.artist);
+    expect(notice).toContain('https://creativecommons.org/licenses/by/4.0/');
+    expect(notice).toContain('without editing or transcoding');
   });
 });

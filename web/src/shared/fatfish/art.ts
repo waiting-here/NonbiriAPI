@@ -19,7 +19,8 @@ export interface FatFishArt {
 }
 
 const iconNames = [
-  'keycap-barrier', 'cache-puck', 'cooling-fan', 'canteen-monitor', 'rice-sack',
+  'floor-tile', 'server-wall', 'server-rack', 'router-wedge',
+  'keycap-barrier', 'keycap-barrier-vertical', 'cache-puck', 'cooling-fan', 'canteen-monitor', 'rice-sack',
   'rice-goal', 'rice-goal-full', 'switch-off', 'switch-on', 'gate-closed', 'gate-open',
   'rice-arrow', 'offline-pool', 'offline-bubble',
 ] as const;
@@ -44,7 +45,9 @@ function image(src: string): Promise<HTMLImageElement> {
 function validAtlas(value: unknown): value is FishAtlas {
   if (!value || typeof value !== 'object') return false;
   const atlas = value as Partial<FishAtlas>;
-  if (atlas.format !== 'fat-fish-atlas-v1' || atlas.sources?.walk?.file !== 'walk.png' ||
+  if (atlas.format !== 'fat-fish-atlas-v1' || !Number.isFinite(atlas.defaultDisplayHeight) ||
+      atlas.defaultDisplayHeight! < 8 || atlas.defaultDisplayHeight! > 128 ||
+      atlas.sources?.walk?.file !== 'walk.png' ||
       atlas.sources?.expressions?.file !== 'expressions.png' ||
       typeof atlas.animations !== 'object' || atlas.animations === null ||
       typeof atlas.frames !== 'object' || atlas.frames === null) return false;

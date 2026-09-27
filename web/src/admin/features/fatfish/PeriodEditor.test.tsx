@@ -47,4 +47,18 @@ describe('Fat Fish period editor', () => {
     await waitFor(() => expect(api.changePeriodState).toHaveBeenCalledTimes(1));
     expect(api.changePeriodState.mock.calls[0].slice(0, 3)).toEqual(['ffp_period', 'publish', '1']);
   });
+  it('does not invent an unsaved date edit while the site time zone is unconfigured', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ mode: 'site', offset_minutes: null }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    })));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const view = await renderWithProviders(<PeriodManager />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await screen.findByText(/site.*time zone is not configured/);
+    expect(screen.queryByText('Unsaved changes.')).not.toBeInTheDocument();
+    await view.user.click(await screen.findByRole('button', { name: /Autumn · draft/ }));
+    await screen.findByDisplayValue('Autumn');
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
 });

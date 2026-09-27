@@ -9,7 +9,7 @@ export interface GameResponse<T> {
 }
 
 export interface GameRequestOptions {
-  readonly method?: 'GET' | 'POST' | 'DELETE';
+  readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly json?: unknown;
   readonly idempotencyKey?: string;
   readonly signal?: AbortSignal;

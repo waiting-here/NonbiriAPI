@@ -21,6 +21,15 @@ const base = (fish, duration_seconds, speed_pixels_per_second, thresholds) => ({
 
 const firstRice = base(fishRows(8, 80, 105, 380, 20), 90, 80, [5, 7, 8]);
 firstRice.tools.push(tool(100, 'memory', rect(-5, -55, 5, 55), 170, 420));
+firstRice.tools.push(
+  { ...tool(101, 'barrier', rect(-36, -9, 36, 9), 0, 0), placed: false },
+  { ...tool(102, 'memory', { outer: [
+    { x: px(-18), y: px(-28) }, { x: px(18), y: px(-28) },
+    { x: px(28), y: px(-18) }, { x: px(28), y: px(18) },
+    { x: px(18), y: px(28) }, { x: px(-18), y: px(28) },
+    { x: px(-28), y: px(18) }, { x: px(-28), y: px(-18) },
+  ], holes: [] }, 0, 0), placed: false },
+);
 firstRice.directions.push(direction(700, rect(245, 365, 290, 470), 'entry', 3072));
 firstRice.bowls.push(bowl(400, rect(236, 145, 300, 195), 0, 8));
 

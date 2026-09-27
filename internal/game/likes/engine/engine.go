@@ -26,24 +26,24 @@ type Engine struct {
 }
 
 func New(mode string) (*Engine, error) {
-	return newEngine(mode, false)
+	return newEngine(mode, catalog.Load)
+}
+
+func NewHistorical(mode string) (*Engine, error) {
+	return newEngine(mode, catalog.LoadHistorical)
 }
 
 func NewLegacy(mode string) (*Engine, error) {
-	return newEngine(mode, true)
+	return newEngine(mode, catalog.LoadLegacy)
 }
 
-func newEngine(mode string, legacy bool) (*Engine, error) {
-	load := catalog.Load
-	if legacy {
-		load = catalog.LoadLegacy
-	}
+func newEngine(mode string, load func(string) (catalog.Config, string, error)) (*Engine, error) {
 	c, hash, err := load(mode)
 	if err != nil {
 		return nil, err
 	}
 	e := &Engine{c: c, hash: hash, skills: map[string]catalog.Skill{}, buffs: map[string]catalog.Buff{}, roles: map[string]catalog.Role{}, harnesses: map[string]catalog.Harness{}, passives: map[string]catalog.Passive{}}
-	e.characterPassives = !legacy
+	e.characterPassives = c.SchemaVersion == catalog.SchemaVersion
 	for _, sk := range c.Skills {
 		e.skills[sk.ID] = sk
 	}
@@ -64,6 +64,7 @@ func newEngine(mode string, legacy bool) (*Engine, error) {
 
 func (e *Engine) ContentHash() string     { return e.hash }
 func (e *Engine) Catalog() catalog.Config { return clone(e.c) }
+func (e *Engine) TurnSeconds() int64      { return e.param("TURN_SECONDS") }
 func (e *Engine) param(key string) int64  { return e.c.Parameters[key] }
 func ptr[T any](value T) *T               { return &value }
 func optional[T any](value *T, fallback T) T {

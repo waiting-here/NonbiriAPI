@@ -68,6 +68,10 @@ describe('importable example levels', () => {
       expect(createHash('sha256').update(data).digest('hex')).toBe(entry!.raw_sha256);
       const level = parseLevel(data.toString('utf8'));
       expect(contentHash(level)).toBe(entry!.content_hash);
+      if (id === '01-first-rice') {
+        expect(level.tools.filter((item) => item.placed).map((item) => item.id)).toEqual([100]);
+        expect(level.tools.filter((item) => !item.placed).map((item) => item.id)).toEqual([101, 102]);
+      }
       if (id === '03-narrow-bridge') {
         const partialFish = level.fish[0];
         expect(polygonIntersectionArea(fishFootprint(partialFish.x, partialFish.y), level.solids[0].polygon).sign()).toBeGreaterThan(0);

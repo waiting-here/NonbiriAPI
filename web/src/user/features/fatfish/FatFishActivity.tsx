@@ -133,7 +133,11 @@ function Content({ account }: { account: string }) {
     if (!window.confirm(t(`正式开局将扣除 ${challenge.ticket_price} 通用积分；准备阶段不收费。确定开始？`,
       `Starting charges ${challenge.ticket_price} general credits. Preparation is free. Start now?`))) return;
     setWorking(true); setError(null);
-    try { client.setQueryData([...keys, 'current'], await controller.start()); await refresh(); }
+    try {
+      client.setQueryData([...keys, 'current'], await controller.start());
+      setNotice('');
+      await refresh();
+    }
     catch (failure) { setError(failure); }
     finally { setWorking(false); }
   };
@@ -141,6 +145,7 @@ function Content({ account }: { account: string }) {
     controllerRef.current?.dispose();
     controllerRef.current = null;
     setController(null);
+    setNotice('');
     void refresh();
   };
   const abandonReadOnly = async (challenge: FatFishChallenge) => {

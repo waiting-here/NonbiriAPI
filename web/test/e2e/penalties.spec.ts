@@ -171,7 +171,7 @@ for (const role of ['user', 'admin', 'steward'] as const) {
     const row =
       role === 'user'
         ? { ...base, model: '[公益]p/m' }
-        : { ...base, user_id: '7', caller_identity: null, attempt_count: '0' };
+        : { ...base, user_id: '7', caller_identity: null, attempt_count: '0', usage_total_mismatch: false };
     const filters: string[] = [];
     await page.route(`**${path}**`, (route) => {
       const url = new URL(route.request().url());

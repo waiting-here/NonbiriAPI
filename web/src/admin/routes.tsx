@@ -32,7 +32,7 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/PictureBookSettingsPage')).PictureBookSettingsPage }),
       },
       {
-        path: 'limited-activities/fat-fish',
+        path: pathFor('admin-fat-fish'),
         lazy: async () => ({ Component: (await import('./pages/FatFishPage')).FatFishPage }),
       },
       {

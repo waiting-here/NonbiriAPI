@@ -10,6 +10,10 @@ from ChatGPT. It is distributed with NonbiriAPI under the same AGPL-3.0 terms.
 Visual research references and asset-specific details are recorded in
 web/src/shared/assets/NOTICE.md.
 
+Fat Fish includes "Monkeys Spinning Monkeys" by Kevin MacLeod
+(incompetech.com), licensed under Creative Commons Attribution 4.0.
+See web/public/assets/fatfish/NOTICE.md and its bundled license text.
+
 The embedded time zone archive is compiled from the public-domain IANA
 Time Zone Database. Its source and pinned digest are recorded in
 internal/calendar/NOTICE.md.

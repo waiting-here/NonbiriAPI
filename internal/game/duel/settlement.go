@@ -45,7 +45,11 @@ func (s *Service) enterPhase(v *sessionRecord, now int64, advance bool) error {
 		v.Deadline = &deadline
 		return nil
 	}
-	if info.Seconds < 1 || info.Seconds > 20 {
+	maxSeconds := int64(20)
+	if s.rules.ID() == "likes" {
+		maxSeconds = 30
+	}
+	if info.Seconds < 1 || info.Seconds > maxSeconds {
 		return ErrInvariant
 	}
 	deadline := now + info.Seconds

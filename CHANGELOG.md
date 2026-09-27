@@ -12,20 +12,22 @@ This entry describes the unreleased rc.4 source candidate. The latest published 
 
 - Image-model setup now has capability discovery and reviewable profile changes, parameter forms across both stations, size-tier prices with exact width/height overrides and an optional per-model default, and a price preview that does not generate an image or charge credits. Legacy model prices and accepted task snapshots retain their existing meaning.
 - Fat Fish adds a deterministic local game, revisioned level and period editing, condition-aware node maps, eight hash-checked example levels, import/export, and version-bound no-charge administrator playtests. Formal challenges use explicit General-credit unlock and ticket confirmations, original-tab recovery, server replay verification, and period leaderboards.
+- Fat Fish includes an illustrated rice-and-obstacle cover and optional looping background music, "Monkeys Spinning Monkeys" by Kevin MacLeod under CC BY 4.0, with local delivery and an off-by-default music control.
 - Risk and audit screens can page through all six result lists. Alert details cover twelve alert kinds with safe current-target resolution, related-log links, and explicit resolution or worker status.
 - Game presentation now includes full-row activity covers, anonymous large-donor display, avatars on leaderboard rows, a seven-day Bidding net-profit board, and live Blackjack identities for seated players and spectators while keeping those identities out of history and account exports.
+- Turn-based Battle Minigame (Test) adds up to 10 private Custom preset slots per account, saved across devices with explicit overwrite; loading only fills pre-match choices and never queues or charges. New matches use 30-second planning periods in both modes.
 - Account protection adds configured automatic bans for eligible new charity requests, same-Discord continuity for eligible once-only rewards and active enforcement windows, and long-lived minimal deleted-account snapshots for administrator and level-6 review. Manual policy, role, and game progress are not restored to a re-registered account. Self-deletion during an active restriction, charity suspension, or negative general/game balance creates a lasting blacklist entry; only administrators can remove it, and role boundaries prevent peer-level management.
 - Charity dispatch gains expiring key affinity and continuous expiry-weighted selection. Scoped request adaptations can add or replace outbound headers and JSON-body fields at authorized endpoint, model, and binding levels.
 - SQLite lock and shared-memory handles now follow one coordinated lifecycle. Startup and shutdown apply bounded lock and recovery budgets, readiness reflects critical worker failure, and diagnostics preserve the primary initialization or worker-failure stage.
 
 ### Changed
 
-- SQLite remains Generation 2. The account export advances to schema 11 with typed safe `request_adaptations`, `continuity`, and `fat_fish` projections; full play inputs, prompts, credentials, unrevealed seeds, and other players' private results remain excluded. Oversized exports fail as a whole instead of truncating.
+- SQLite remains Generation 2. The account export advances to schema 11 with typed safe `request_adaptations`, `continuity`, and `fat_fish` projections plus optional owner-only `likes.loadouts`; full play inputs, prompts, credentials, unrevealed seeds, and other players' private results remain excluded. Oversized exports fail as a whole instead of truncating.
 - The supported rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Upgrades preserve existing account and game data, credentials, configuration, and instance legal text. Instance legal-text publication remains a separate operator action.
 
 ### Fixed
 
-- Contradictory or overflowing upstream token totals now make usage unknown without discarding otherwise valid response content. Gateway usage with duplicate token fields is rejected.
+- A reported token total that disagrees with valid individual buckets is now marked in administrator and steward request logs, with a matching filter. Billing continues from those buckets. Invalid or ambiguous individual buckets remain unknown; Gateway usage with duplicate token fields is rejected.
 - OpenAI streaming requests normalize null stream options to request usage and reject invalid option shapes before dispatch. Usage-only streams cannot become successful completions, and named completion events accept the standard `[DONE]` marker.
 
 ## [1.0.0-rc.3] - 2026-09-25

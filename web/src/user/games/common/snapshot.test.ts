@@ -3,6 +3,22 @@ import { normalizeGamesSnapshot } from './snapshot';
 import { gamesSnapshotWire } from './testFixtures';
 
 describe('games snapshot normalizer', () => {
+  it('accepts current and historical battle durations without accepting intermediate values', () => {
+    const wire = gamesSnapshotWire();
+    if (!('plan_seconds' in wire.likes) || !('bid_seconds' in wire.bidding))
+      throw new Error('Unexpected game fixture');
+    for (const seconds of [30, 20]) {
+      wire.likes.plan_seconds = seconds;
+      expect(() => normalizeGamesSnapshot(wire)).not.toThrow();
+    }
+    for (const seconds of [19, 21, 29, 31, 30.5]) {
+      wire.likes.plan_seconds = seconds;
+      expect(() => normalizeGamesSnapshot(wire)).toThrow(/phase duration/i);
+    }
+    wire.likes.plan_seconds = 30;
+    wire.bidding.bid_seconds = 30;
+    expect(() => normalizeGamesSnapshot(wire)).toThrow(/phase duration/i);
+  });
   it('accepts disabled quick buttons and rejects invalid configured amounts', () => {
     const wire = gamesSnapshotWire();
     wire.blackjack.quick_stakes = [];

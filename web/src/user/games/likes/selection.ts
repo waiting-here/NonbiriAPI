@@ -9,6 +9,11 @@ export function initialSelection(c: ModeCatalog): Selection {
   };
 }
 export function selectionProblem(c: ModeCatalog, s: Selection): 'slots' | 'sustainable' | null {
+  if (
+    !c.roles.some((role) => role.id === s.role) ||
+    (s.harness !== null && !c.harnesses.some((h) => h.id === s.harness))
+  )
+    return 'slots';
   const slots = 4 + (c.harnesses.find((h) => h.id === s.harness)?.activeSlots ?? 0);
   if (
     s.skills.length < 1 ||
@@ -28,7 +33,10 @@ export function selectionProblem(c: ModeCatalog, s: Selection): 'slots' | 'susta
         sk.id !== 'PUB41' &&
         sk.maxUses === null &&
         sk.effects.base.likes > 0 &&
-        (sk.payment !== 'sub' || s.role !== 'DeepSeek')
+        (sk.payment !== 'sub' || s.role !== 'DeepSeek') &&
+        Object.entries(sk.resourceCosts).every(
+          ([key, cost]) => cost <= 0 || (key === 'R_IMAGE' && !!c.resources[0]?.subscription),
+        )
       );
     })
   )

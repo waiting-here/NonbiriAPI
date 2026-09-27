@@ -155,6 +155,7 @@ const buildOnly = new Set([...devClosure].filter((name) => !runtimeClosure.has(n
 
 const runtimeTable = await markdownTable(runtimeClosure);
 const buildTable = await markdownTable(buildOnly);
+const fishAssetNotice = await readFile(join(webDir, 'public/assets/fatfish/NOTICE.md'), 'utf8');
 
 const output = `# Third-Party Notices
 
@@ -177,6 +178,10 @@ ${buildTable}
 The classification above is derived from the dependency closure of
 \`package-lock.json\`; the lockfile remains the authoritative full dependency
 tree.
+
+## Bundled Fat Fish media
+
+${fishAssetNotice.trimEnd().replace(/^# /, '### ').replace(/^## /gm, '#### ')}
 `;
 
 await writeFile(join(webDir, 'THIRD_PARTY_NOTICES.md'), output);

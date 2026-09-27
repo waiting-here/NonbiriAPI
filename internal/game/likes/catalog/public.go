@@ -13,18 +13,24 @@ type Snapshot struct {
 }
 
 func Public(mode string) (Snapshot, error) {
-	return public(mode, false)
+	return public(mode, "")
+}
+
+func PublicHistorical(mode string) (Snapshot, error) {
+	return public(mode, "previous")
 }
 
 func PublicLegacy(mode string) (Snapshot, error) {
-	return public(mode, true)
+	return public(mode, "legacy")
 }
 
-func public(mode string, legacy bool) (Snapshot, error) {
+func public(mode, version string) (Snapshot, error) {
 	load := Load
 	design := DesignVersion
-	if legacy {
+	if version == "legacy" {
 		load, design = LoadLegacy, "0.17.0"
+	} else if version == "previous" {
+		load, design = LoadHistorical, "0.18.0"
 	}
 	c, hash, err := load(mode)
 	if err != nil {

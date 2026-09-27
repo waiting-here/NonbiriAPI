@@ -98,6 +98,11 @@ func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int
 	if err != nil {
 		return nil, err
 	}
+	if s.rules.ID() == "likes" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM game_likes_loadouts WHERE user_id=?`, user); err != nil {
+			return nil, err
+		}
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT p.session_id FROM game_duel_seats p JOIN game_duel_sessions g ON g.id=p.session_id WHERE p.user_id=? AND g.game_key=?`, user, s.rules.ID())
 	if err != nil {
 		return nil, err
@@ -319,6 +324,7 @@ type Export struct {
 	Current       *State        `json:"current"`
 	CurrentRounds []RoundView   `json:"current_rounds"`
 	History       []ExportMatch `json:"history"`
+	Loadouts      []LoadoutItem `json:"loadouts,omitempty"`
 }
 type ExportMatch struct {
 	Detail HistoryDetail `json:"detail"`
@@ -342,6 +348,18 @@ func (s *Service) ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, lim
 			return ErrResourceLimit
 		}
 		return nil
+	}
+	if s.rules.ID() == "likes" {
+		var err error
+		result.Loadouts, err = s.LoadoutsTx(ctx, tx, user)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, item := range result.Loadouts {
+			if err := charge(item); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 	var qid, sid sql.NullString
 	err := tx.QueryRowContext(ctx, `SELECT queue_id,session_id FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, user, s.rules.ID()).Scan(&qid, &sid)
