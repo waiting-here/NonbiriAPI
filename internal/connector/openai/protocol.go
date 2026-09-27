@@ -102,6 +102,14 @@ func validateChunk(data []byte) ([]byte, Usage, bool, error) {
 	return compact.Bytes(), usage, malformed, nil
 }
 
+// A usage-only chunk cannot establish a successful response on its own.
+func chunkHasChoices(data []byte) bool {
+	var root struct {
+		Choices []json.RawMessage `json:"choices"`
+	}
+	return json.Unmarshal(data, &root) == nil && len(root.Choices) != 0
+}
+
 func hasUpstreamError(root map[string]json.RawMessage) bool {
 	raw, ok := root["error"]
 	return ok && !isJSONNull(raw)
@@ -208,6 +216,9 @@ func parseUsage(raw json.RawMessage) (Usage, error) {
 	if !decodeNonNegativeInt(values["prompt_tokens"], &prompt) ||
 		!decodeNonNegativeInt(values["completion_tokens"], &completion) ||
 		!decodeNonNegativeInt(values["total_tokens"], &total) {
+		return Usage{}, errUsageMalformed
+	}
+	if summed, ok := addChecked(prompt, completion); !ok || summed != total {
 		return Usage{}, errUsageMalformed
 	}
 	var cacheRead, cacheWrite int64

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -39,16 +40,28 @@ func waitForStartupOwnershipRelease(t *testing.T, path string) {
 }
 
 func TestStartupCancellationAtEveryDatabaseStage(t *testing.T) {
+	// Build the canonical source once, then copy it only after its Store has
+	// closed. Fault cases retain independent inodes without repeatedly running
+	// the expensive fresh-schema compiler under race instrumentation.
+	vault := bootstrapTestVault(t)
+	template := bootstrapTestPath(t, "template.sqlite")
+	initial, err := Open(template, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := initial.Close(); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(content)
 	for _, target := range []StartupStage{StagePathPreflight, StageSnapshotCopy, StageSnapshotValidation,
 		StageSourceRecheck, StageRawHandlesClosed, StageSourceOpen, StageSchemaUpgrade, StageDomainRecovery} {
 		t.Run(string(target), func(t *testing.T) {
 			path := bootstrapTestPath(t, string(target)+".sqlite")
-			vault := bootstrapTestVault(t)
-			initial, err := Open(path, vault)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := initial.Close(); err != nil {
+			if err := os.WriteFile(path, content, 0600); err != nil {
 				t.Fatal(err)
 			}
 			before := snapshotBootstrapSources(t, path)

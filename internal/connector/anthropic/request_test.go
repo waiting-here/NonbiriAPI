@@ -342,6 +342,9 @@ func TestAnthropicRequestRejectionMatrix(t *testing.T) {
 		body string
 	}{
 		{name: "unknown top level", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"n":1}`},
+		{name: "OpenAI thinking extension", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"enabled","budget_tokens":4096}}`},
+		{name: "OpenAI reasoning effort", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"low"}`},
+		{name: "unified reasoning effort", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"reasoning":{"effort":"medium"}}`},
 		{name: "store is OpenAI only", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"store":false}`},
 		{name: "unknown role", body: `{"model":"p/m","messages":[{"role":"observer","content":"hi"}]}`},
 		{name: "message name", body: `{"model":"p/m","messages":[{"role":"user","name":"x","content":"hi"}]}`},
