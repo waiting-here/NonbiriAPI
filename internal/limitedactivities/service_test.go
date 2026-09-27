@@ -65,6 +65,35 @@ func TestDirectoryTimeAndReadiness(t *testing.T) {
 		t.Fatalf("nil runtime accepted: %v", e)
 	}
 }
+func TestBuiltInCoversAndUnavailableFishRuntime(t *testing.T) {
+	f := newFixture(t)
+	ctx := f.ctx(f.user)
+	book, err := f.service.Detail(ctx, f.user, PictureBook)
+	if err != nil || book.CoverKey != PictureBook {
+		t.Fatal(book, err)
+	}
+	fish, err := f.service.Detail(ctx, f.user, FatFish)
+	if err != nil || fish.CoverKey != FatFish || fish.Visible || string(fish.ModuleConfig) != "{}" {
+		t.Fatal(fish, err)
+	}
+	start, end := testNow-1, testNow+30
+	if _, err := f.database.Exec(`UPDATE limited_activity_configs SET visible=1,starts_at=?,ends_at=? WHERE activity_key='fat-fish'`, start, end); err != nil {
+		t.Fatal(err)
+	}
+	fish, err = f.service.Detail(ctx, f.user, FatFish)
+	if err != nil || fish.Status != "unavailable" {
+		t.Fatal("missing runtime appeared playable", fish, err)
+	}
+	if registry := NewRegistry(f.runtime, nil, nil); registry != nil {
+		t.Fatal("ambiguous runtime registration accepted")
+	}
+	if _, err := (emptyConfiguration{}).Normalize(json.RawMessage(`{ }`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (emptyConfiguration{}).Normalize(json.RawMessage(`{"secret":1}`)); !errors.Is(err, ErrInvalid) {
+		t.Fatal(err)
+	}
+}
 func TestExchangeAtomicReplayAndPersistentCap(t *testing.T) {
 	f := newFixture(t)
 	f.open(t, "2")

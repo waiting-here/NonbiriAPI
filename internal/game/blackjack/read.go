@@ -26,6 +26,12 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	if err != nil {
 		return Home{}, err
 	}
+	if result.Table != nil {
+		result.Table.RealtimeIdentities, err = liveIdentities(ctx, tx, result.Table.ID)
+		if err != nil {
+			return Home{}, err
+		}
+	}
 	on, err := maintenanceOn(ctx, tx)
 	if err != nil {
 		return Home{}, err

@@ -40,11 +40,15 @@ func ExportTx(ctx context.Context, tx *sql.Tx, user, now int64, limit int) (Pers
 	if !ready {
 		return PersonalExport{}, ErrCatchingUp
 	}
+	bidding, err := readBiddingRebuild(ctx, tx)
+	if err != nil {
+		return PersonalExport{}, err
+	}
 	result := PersonalExport{Totals: []TotalExport{}, Events: []EventExport{}}
 	if err := tx.QueryRowContext(ctx, `SELECT started_at FROM game_statistics_epoch WHERE id=1`).Scan(&result.StatisticsStart); err != nil {
 		return PersonalExport{}, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT board,window,amount_sign,amount_mag,achieved_at FROM game_rank_totals WHERE user_id=? ORDER BY board,window LIMIT ?`, user, limit+1)
+	rows, err := tx.QueryContext(ctx, `SELECT board,window,amount_sign,amount_mag,achieved_at FROM game_rank_totals WHERE user_id=? AND (?='completed' OR board<>?) ORDER BY board,window LIMIT ?`, user, bidding.state, biddingBoard, limit+1)
 	if err != nil {
 		return PersonalExport{}, err
 	}

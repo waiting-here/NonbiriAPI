@@ -22,6 +22,7 @@ func RegisterRoutes(registrar resources.UserRouteRegistrar, s *Service) error {
 		{"/api/games/leaderboards/net-profit", "game_net_profit"},
 		{"/api/games/fishing/net-profit", "fishing_net_profit"},
 		{"/api/games/blackjack/net-profit", "blackjack_net_profit"},
+		{"/api/games/bidding/net-profit", biddingBoard},
 	} {
 		if err := registrar.RegisterUserRoute(http.MethodGet, route.path, func(w http.ResponseWriter, r *http.Request, p resources.UserPrincipal) {
 			if r.ContentLength != 0 || len(r.TransferEncoding) != 0 {

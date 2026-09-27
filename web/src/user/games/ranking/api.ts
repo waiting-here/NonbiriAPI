@@ -19,14 +19,16 @@ export type RankBoard =
   | 'blackjack'
   | 'game_net_profit'
   | 'fishing_net_profit'
-  | 'blackjack_net_profit';
+  | 'blackjack_net_profit'
+  | 'bidding_net_profit';
 export type RankWindow = '7d' | '30d' | 'history';
 
 export function isNetProfitBoard(board: RankBoard) {
   return (
     board === 'game_net_profit' ||
     board === 'fishing_net_profit' ||
-    board === 'blackjack_net_profit'
+    board === 'blackjack_net_profit' ||
+    board === 'bidding_net_profit'
   );
 }
 
@@ -42,10 +44,21 @@ function row(value: unknown) {
 
 export function normalizeRanking(value: unknown, board: RankBoard, window: RankWindow, page = '1') {
   if (isNetProfitBoard(board) && window !== '7d') invalidResponse('rank window');
+  const bidding = board === 'bidding_net_profit';
   const v = exactRecord(
     value,
-    ['as_of', 'statistics_start', 'window', 'rows', 'me'],
-    board === 'charity' ? ['pagination'] : [],
+    [
+      'as_of',
+      'statistics_start',
+      'window',
+      'rows',
+      'me',
+      ...(bidding ? ['rebuild_status', 'missing_events'] : []),
+    ],
+    [
+      ...(board === 'charity' ? ['pagination'] : []),
+      ...(bidding ? ['history_coverage_start'] : []),
+    ],
   );
   const asOf = unixTime(v.as_of, 'rank as of');
   const statisticsStart = unixTime(v.statistics_start, 'statistics start');
@@ -58,6 +71,22 @@ export function normalizeRanking(value: unknown, board: RankBoard, window: RankW
   const rows = v.rows.map(row);
   const me = v.me === null ? null : row(v.me);
   const pagination = board === 'charity' ? normalizePageMetadata(v.pagination) : null;
+  const rebuildStatus = bidding
+    ? enumValue(
+        v.rebuild_status,
+        ['pending', 'scanning', 'publishing', 'completed'] as const,
+        'bidding rebuild',
+      )
+    : null;
+  const missingEvents = bidding
+    ? decimalValue(v.missing_events, { bits: 128 }, 'missing events')
+    : null;
+  const historyCoverageStart =
+    bidding && v.history_coverage_start !== undefined
+      ? unixTime(v.history_coverage_start, 'history coverage')
+      : null;
+  if (bidding && rebuildStatus !== 'completed' && (rows.length !== 0 || me !== null))
+    invalidResponse('unpublished bidding board');
   let offset = 0n;
   if (pagination) {
     validatePageResponse(pagination, page, 20, rows.length);
@@ -81,7 +110,17 @@ export function normalizeRanking(value: unknown, board: RankBoard, window: RankW
         creditsToMilli(me.amount) > creditsToMilli(rows[19].amount)))
   )
     invalidResponse('rank owner');
-  return { asOf, statisticsStart, window, rows, me, pagination };
+  return {
+    asOf,
+    statisticsStart,
+    window,
+    rows,
+    me,
+    pagination,
+    rebuildStatus,
+    missingEvents,
+    historyCoverageStart,
+  };
 }
 
 export function loadRanking(
@@ -94,6 +133,7 @@ export function loadRanking(
     game_net_profit: '/api/games/leaderboards/net-profit',
     fishing_net_profit: '/api/games/fishing/net-profit',
     blackjack_net_profit: '/api/games/blackjack/net-profit',
+    bidding_net_profit: '/api/games/bidding/net-profit',
   };
   const path =
     board === 'charity'

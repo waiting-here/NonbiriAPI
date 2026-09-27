@@ -1,0 +1,1 @@
+The picture-book cover is an original code-native SVG created for this project and distributed under the repository's AGPL-3.0 license. It contains no external image, font, script or network reference.
