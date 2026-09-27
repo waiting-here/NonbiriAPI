@@ -123,26 +123,32 @@ func TestChatReasoningControlsReachMockUpstreamUnchanged(t *testing.T) {
 	}
 }
 
-func TestContradictoryOpenAIUsageIsUnknown(t *testing.T) {
+func TestOpenAIUsageTotalMismatchKeepsValidatedBuckets(t *testing.T) {
 	for _, raw := range []string{
 		`{"prompt_tokens":3,"completion_tokens":4,"total_tokens":6}`,
 		`{"prompt_tokens":3,"completion_tokens":4,"total_tokens":8}`,
-		`{"prompt_tokens":9223372036854775807,"completion_tokens":1,"total_tokens":9223372036854775807}`,
 	} {
 		t.Run(raw, func(t *testing.T) {
-			if usage, err := parseUsage([]byte(raw)); !errors.Is(err, errUsageMalformed) || usage.Present {
-				t.Fatalf("contradictory usage was trusted: %+v, %v", usage, err)
+			if usage, err := parseUsage([]byte(raw)); err != nil || !usage.Present || !usage.TotalMismatch ||
+				usage.UncachedInputTokens != 3 || usage.OutputTokens != 4 {
+				t.Fatalf("valid buckets and mismatch = %+v, %v", usage, err)
 			}
 			completion := []byte(`{"id":"x","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{}}],"usage":` + raw + `}`)
-			if usage, err := validateCompletion(completion); err != nil || usage.Present {
+			if usage, err := validateCompletion(completion); err != nil || !usage.Present || !usage.TotalMismatch {
 				t.Fatalf("completion usage = %+v, %v", usage, err)
 			}
 			chunk := []byte(`{"id":"x","object":"chat.completion.chunk","created":1,"model":"m","choices":[],"usage":` + raw + `}`)
 			_, usage, malformed, err := validateChunk(chunk)
-			if err != nil || !malformed || usage.Present {
+			if err != nil || malformed || !usage.Present || !usage.TotalMismatch {
 				t.Fatalf("stream usage = %+v, malformed %v, err %v", usage, malformed, err)
 			}
 		})
+	}
+	if usage, err := parseUsage([]byte(`{"prompt_tokens":9223372036854775807,"completion_tokens":1,"total_tokens":9223372036854775807}`)); !errors.Is(err, errUsageMalformed) || usage.Present || !usage.TotalMismatch {
+		t.Fatalf("overflow must remain unbillable with observed mismatch: %+v, %v", usage, err)
+	}
+	if usage, err := parseUsage([]byte(`{"prompt_tokens":3,"completion_tokens":4,"total_tokens":6,"prompt_tokens_details":{"cached_tokens":-1}}`)); !errors.Is(err, errUsageMalformed) || usage.Present || !usage.TotalMismatch {
+		t.Fatalf("invalid bucket remains unknown while observed mismatch survives: %+v, %v", usage, err)
 	}
 }
 

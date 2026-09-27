@@ -21,15 +21,16 @@ func embeddingResponse(encoding, usage string) string {
 func TestEmbeddingProjectionPreservesVectorsAndSeparatesUsage(t *testing.T) {
 	for _, encoding := range []string{"float", "base64"} {
 		for _, tc := range []struct {
-			usage   string
-			present bool
-			tokens  int64
+			usage    string
+			present  bool
+			tokens   int64
+			mismatch bool
 		}{
-			{`{"prompt_tokens":0,"total_tokens":0}`, true, 0},
-			{`{"prompt_tokens":3,"total_tokens":3,"prompt_tokens_details":{"cached_tokens":2}}`, true, 3},
-			{`null`, false, 0}, {`[]`, false, 0}, {`{"prompt_tokens":3}`, false, 0},
-			{`{"prompt_tokens":3,"total_tokens":4}`, false, 0}, {`{"prompt_tokens":-1,"total_tokens":-1}`, false, 0},
-			{`{"prompt_tokens":1.0,"total_tokens":1}`, false, 0}, {`{"prompt_tokens":2147483648,"total_tokens":2147483648}`, false, 0},
+			{`{"prompt_tokens":0,"total_tokens":0}`, true, 0, false},
+			{`{"prompt_tokens":3,"total_tokens":3,"prompt_tokens_details":{"cached_tokens":2}}`, true, 3, false},
+			{`null`, false, 0, false}, {`[]`, false, 0, false}, {`{"prompt_tokens":3}`, false, 0, false},
+			{`{"prompt_tokens":3,"total_tokens":4}`, true, 3, true}, {`{"prompt_tokens":-1,"total_tokens":-1}`, false, 0, false},
+			{`{"prompt_tokens":1.0,"total_tokens":1}`, false, 0, false}, {`{"prompt_tokens":2147483648,"total_tokens":2147483648}`, false, 0, false},
 		} {
 			t.Run(encoding+"/"+tc.usage, func(t *testing.T) {
 				r := &EmbeddingRequest{Model: "public/model", InputCount: 2, EncodingFormat: encoding, Dimensions: 2}
@@ -38,7 +39,8 @@ func TestEmbeddingProjectionPreservesVectorsAndSeparatesUsage(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer clear(out)
-				if usage.Present != tc.present || usage.UncachedInputTokens != tc.tokens || usage.CacheReadInputTokens != 0 || usage.OutputTokens != 0 {
+				if usage.Present != tc.present || usage.UncachedInputTokens != tc.tokens || usage.CacheReadInputTokens != 0 ||
+					usage.OutputTokens != 0 || usage.TotalMismatch != tc.mismatch {
 					t.Fatalf("usage=%+v", usage)
 				}
 				var root struct {

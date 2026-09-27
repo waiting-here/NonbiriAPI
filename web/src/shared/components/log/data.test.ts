@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeAdminLogAttempt,
   normalizeAdminLogRow,
+  normalizeStewardLogAttempt,
   normalizeStewardLogDetail,
   normalizeStewardLogRow,
+  normalizeUserLogAttempt,
   normalizeUserLogDetail,
   normalizeUserLogRow,
   roleLogExportPath,
@@ -40,6 +42,7 @@ const commonRow = {
 
 const row = {
   ...commonRow,
+  usage_total_mismatch: false,
   user_id: '1',
   caller_identity: null,
   attempt_count: '1',
@@ -53,6 +56,7 @@ const userRow = {
 
 const stewardRow = {
   ...commonRow,
+  usage_total_mismatch: false,
   user_id: '1',
   caller_identity: null,
   attempt_count: '1',
@@ -74,6 +78,7 @@ const attempt = {
   upstream_code: null,
   diag: null,
   usage,
+  usage_total_mismatch: false,
   started_at: 1,
   completed_at: 2,
 };
@@ -94,7 +99,12 @@ describe('role log wire', () => {
     };
     expect(normalizeUserLogRow({ ...refusal, model: '' }).phase).toBe('pre_handler');
     for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
-      const managed = { ...refusal, user_id: '1', caller_identity: null };
+      const managed = {
+        ...refusal,
+        usage_total_mismatch: false,
+        user_id: '1',
+        caller_identity: null,
+      };
       expect(normalize(managed).phase).toBe('pre_handler');
       for (const patch of [
         { attempt_count: '1' },
@@ -198,6 +208,30 @@ describe('role log wire', () => {
         completed_at: null,
       }),
     ).toThrow(/cancelled/i);
+  });
+
+  it('keeps usage-total mismatch markers strict and management-only', () => {
+    for (const normalize of [normalizeAdminLogRow, normalizeStewardLogRow]) {
+      expect(
+        normalize({
+          ...row,
+          usage_total_mismatch: true,
+          usage: { ...usage, usage_unknown: true },
+        }),
+      ).toMatchObject({ usage_total_mismatch: true, usage: { usage_unknown: true } });
+    }
+    expect(() => normalizeUserLogRow({ ...userRow, usage_total_mismatch: true })).toThrow();
+
+    for (const normalize of [normalizeAdminLogAttempt, normalizeStewardLogAttempt]) {
+      expect(
+        normalize({
+          ...attempt,
+          usage_total_mismatch: true,
+          usage: { ...usage, usage_unknown: true },
+        }),
+      ).toMatchObject({ usage_total_mismatch: true, usage: { usage_unknown: true } });
+    }
+    expect(() => normalizeUserLogAttempt({ ...attempt, usage_total_mismatch: true })).toThrow();
   });
 
   it('accepts synthetic attempts without a status and discovery empty model ids', () => {

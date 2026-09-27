@@ -57,7 +57,8 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 		Phase:  filter.Phase,
 		UserID: filter.UserID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
 		UpstreamModel: filter.UpstreamModel, ErrorCode: filter.ErrorCode,
-		Status: filter.Status, From: filter.From, To: filter.To, Limit: maximumLimit,
+		Status: filter.Status, UsageTotalMismatch: filter.UsageTotalMismatch,
+		From: filter.From, To: filter.To, Limit: maximumLimit,
 	}, "admin")
 	if err != nil {
 		return nil, err
@@ -95,6 +96,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND l.caller_status=?`
 		args = append(args, *normalized.Status)
 	}
+	if normalized.UsageTotalMismatch != nil {
+		query += ` AND l.usage_total_mismatch=?`
+		args = append(args, *normalized.UsageTotalMismatch)
+	}
 	if normalized.From != nil {
 		query += ` AND l.started_at>=?`
 		args = append(args, *normalized.From)
@@ -129,7 +134,8 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			CallerResultClass: resultClassPointer(record.callerResultClass),
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-			UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
+			UsageTotalMismatch: record.usageTotalMismatch == 1,
+			UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -165,7 +171,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 		"id", "route_kind", "caller_result_class", "caller_status", "caller_error_code",
 		"started_at", "completed_at", "user_id", "attempt_count",
 		"uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens",
-		"output_tokens", "total_tokens", "usage_unknown", "charge",
+		"output_tokens", "total_tokens", "usage_unknown", "usage_total_mismatch", "charge",
 		"caller_discord_nickname", "caller_discord_id",
 		"phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "charity_model",
 	}
@@ -182,7 +188,8 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 			csvInt(row.CallerStatus), csvString(row.CallerErrorCode), strconv.FormatInt(row.StartedAt, 10),
 			csvInt64(row.CompletedAt), csvString(row.UserID), row.AttemptCount,
 			row.Usage.UncachedInputTokens, row.Usage.CacheWriteInputTokens, row.Usage.CacheReadInputTokens,
-			row.Usage.OutputTokens, row.Usage.TotalTokens, strconv.FormatBool(row.Usage.UsageUnknown), row.Usage.Charge,
+			row.Usage.OutputTokens, row.Usage.TotalTokens, strconv.FormatBool(row.Usage.UsageUnknown),
+			strconv.FormatBool(row.UsageTotalMismatch), row.Usage.Charge,
 			csvString(nickname), csvString(discordID),
 			csvSafe(row.Phase), csvString(row.RejectionStage), csvString(row.RejectionReason), csvString(row.RequestMethod), csvString(row.RequestPath), csvString(row.CharityModel),
 		}

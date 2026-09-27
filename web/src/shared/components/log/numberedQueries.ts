@@ -89,6 +89,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'from',
     'to',
     'phase',
+    'usage_total_mismatch',
   ],
   admin: [
     'user_id',
@@ -100,6 +101,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'from',
     'to',
     'phase',
+    'usage_total_mismatch',
   ],
 };
 const MAX_LOG_UNIX_SECOND = 253_402_300_799;
@@ -139,6 +141,11 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
       )
         invalidRequest(`log ${key} filter`);
       result[key] = raw as never;
+      continue;
+    }
+    if (key === 'usage_total_mismatch') {
+      if (raw !== true) invalidRequest('log usage total mismatch filter');
+      result.usage_total_mismatch = true;
       continue;
     }
     const text = requestString(raw, `log ${key} filter`, key === 'status' ? 3 : 512);

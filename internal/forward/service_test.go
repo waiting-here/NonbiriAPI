@@ -108,7 +108,7 @@ func TestDispatchMarkerPrecedesCredentialAndConnectorAndTerminalizes(t *testing.
 	fixture.openAI.results = []connectorcontract.AttemptResult{{
 		Success: true, Committed: true, Failure: connectorcontract.FailureNone,
 		UpstreamStatus: http.StatusOK, ClientStatus: http.StatusOK,
-		Usage: connectorcontract.Usage{Present: true, UncachedInputTokens: 2, OutputTokens: 3},
+		Usage: connectorcontract.Usage{Present: true, TotalMismatch: true, UncachedInputTokens: 2, OutputTokens: 3},
 	}}
 	fixture.openAI.bodies = [][]byte{[]byte(`{"id":"chatcmpl_test","object":"chat.completion"}`)}
 	request := decodeChatForTest(t, `{"model":"provider/model","messages":[{"role":"user","content":"hello"}]}`)
@@ -130,7 +130,8 @@ func TestDispatchMarkerPrecedesCredentialAndConnectorAndTerminalizes(t *testing.
 		t.Fatalf("attempt outcomes=%d", len(fixture.claims.outcomes))
 	}
 	outcome := fixture.claims.outcomes[0]
-	if !outcome.ProtocolSuccess || !outcome.ResponseStarted || !outcome.Usage.Present {
+	if !outcome.ProtocolSuccess || !outcome.ResponseStarted || !outcome.Usage.Present || !outcome.Usage.TotalMismatch ||
+		outcome.Usage.UncachedInputTokens != 2 || outcome.Usage.OutputTokens != 3 {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	terminal := fixture.claims.requestResults[0]
