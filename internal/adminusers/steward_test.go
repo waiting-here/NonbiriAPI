@@ -49,7 +49,7 @@ func newStewardUsersFixture(t *testing.T) (*adminUsersFixture, int64) {
 	if err := RegisterStewardRoutes(f.registrar, f.service); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.registrar.routes) != 25 {
+	if len(f.registrar.routes) != 32 {
 		t.Fatalf("unexpected route count: %d", len(f.registrar.routes))
 	}
 	return f, actor

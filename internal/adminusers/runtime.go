@@ -712,12 +712,28 @@ func (service *Service) profile(ctx context.Context, adminID, userID int64, role
 	if !validNow(now) {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
+	var lockedDiscord string
+	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 6 {
+		return MutationResult[AdminUser]{}, ErrForbidden
+	}
+	if input.LevelSet {
+		var release func()
+		var err error
+		lockedDiscord, release, err = service.lockUserIdentity(ctx, adminID, userID, role)
+		if err != nil {
+			return MutationResult[AdminUser]{}, err
+		}
+		defer release()
+	}
 	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
 	if err != nil {
 		return MutationResult[AdminUser]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if input.LevelSet && decision.Kind != idempotency.Replay && (!row.discordID.Valid || row.discordID.String != lockedDiscord) {
+		return MutationResult[AdminUser]{}, ErrConflict
+	}
 	if role == roleSteward && input.LevelSet && input.Level != nil && *input.Level == 6 {
 		return MutationResult[AdminUser]{}, ErrForbidden
 	}
@@ -951,12 +967,20 @@ func (service *Service) setBan(ctx context.Context, adminID, userID int64, role 
 	if !validNow(now) {
 		return MutationResult[struct{}]{}, ErrUnavailable
 	}
+	lockedDiscord, release, err := service.lockUserIdentity(ctx, adminID, userID, role)
+	if err != nil {
+		return MutationResult[struct{}]{}, err
+	}
+	defer release()
 	tx, row, decision, err := service.beginUserMutation(ctx, adminID, userID, role, control, now)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
+	if decision.Kind != idempotency.Replay && (!row.discordID.Valid || row.discordID.String != lockedDiscord) {
+		return MutationResult[struct{}]{}, ErrConflict
+	}
 	if decision.Kind == idempotency.Replay {
 		result := MutationResult[struct{}]{Status: decision.HTTPStatus, Body: append([]byte(nil), decision.ResponseBody...), Replayed: true}
 		if err := commitTx(tx, "commit ban replay"); err != nil {
