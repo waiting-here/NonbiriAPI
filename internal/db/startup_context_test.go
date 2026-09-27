@@ -99,11 +99,13 @@ func TestCloseContextDeadlineRetainsOwnershipUntilConnectionRelease(t *testing.T
 	if err := store.CloseContext(wait); err != nil {
 		t.Fatalf("second CloseContext did not await actual close: %v", err)
 	}
-	reopened, err := OpenContext(wait, path, vault)
+	// This is a new startup; the prior close budget has already served its purpose.
+	reopened, err := Open(path, vault)
 	if err != nil {
 		t.Fatalf("reopen after actual close: %v", err)
 	}
-	if err := reopened.CloseContext(wait); err != nil {
+	defer func() { _ = reopened.Close() }()
+	if err := reopened.Close(); err != nil {
 		t.Fatalf("close reopened database: %v", err)
 	}
 }
