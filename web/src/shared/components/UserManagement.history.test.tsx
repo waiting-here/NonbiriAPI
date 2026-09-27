@@ -31,7 +31,7 @@ it('shows a former account to a steward without management actions or administra
   }));
   const view = await renderWithProviders(
     <UserManagement role="steward" account="9" scopeReady sessionError={null} />,
-    { station: 'user', role: 'level5', route: '/steward?tab=users', locale: 'en' },
+    { station: 'user', role: 'level6', route: '/steward?tab=users', locale: 'en' },
   );
   await screen.findByRole('button', { name: 'View' });
   await view.user.click(screen.getByRole('button', { name: 'View' }));

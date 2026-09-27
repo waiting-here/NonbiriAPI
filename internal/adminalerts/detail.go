@@ -240,7 +240,11 @@ func (repository *Repository) GetDetail(ctx context.Context, adminID, alertID in
 		detail.Targets = append(detail.Targets, projected)
 	}
 	if alert.Kind == KindDonationFailureDisabled {
-		if err := enrichDonationDetail(ctx, tx, &detail); err != nil {
+		now, err := repository.nowUnix()
+		if err != nil {
+			return AlertDetail{}, err
+		}
+		if err := enrichDonationDetail(ctx, tx, &detail, now); err != nil {
 			return AlertDetail{}, err
 		}
 	}
@@ -330,7 +334,7 @@ func readTarget(ctx context.Context, tx *sql.Tx, target alertEventTarget) (Alert
 	return result, nil
 }
 
-func enrichDonationDetail(ctx context.Context, tx *sql.Tx, detail *AlertDetail) error {
+func enrichDonationDetail(ctx context.Context, tx *sql.Tx, detail *AlertDetail, now int64) error {
 	var keyID string
 	for _, target := range detail.Targets {
 		if target.Kind == "donation_key" {
@@ -419,7 +423,9 @@ func enrichDonationDetail(ctx context.Context, tx *sql.Tx, detail *AlertDetail) 
 	}
 	window := &AlertLogWindow{EndpointKeyID: endpointID, From: from, To: to, UnavailableReason: "not_retained"}
 	var exists int
-	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM request_logs WHERE started_at>=? AND started_at<=? AND endpoint_key_id=? LIMIT 1)`, from, to, endpointKeyID.Int64).Scan(&exists)
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM request_logs l
+ WHERE l.started_at>=? AND l.started_at<? AND (l.completed_at IS NULL OR l.completed_at>?)
+ AND EXISTS(SELECT 1 FROM request_attempts a WHERE a.request_log_id=l.id AND a.endpoint_key_id_snapshot=?) LIMIT 1)`, from, to, now-30*24*60*60, endpointKeyID.Int64).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("administrator alerts: inspect related logs: %w", err)
 	}

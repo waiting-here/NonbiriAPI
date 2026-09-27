@@ -167,6 +167,34 @@ func TestAlertDetailDonationUsesVerifiedDistinctEndpointKey(t *testing.T) {
 	if wrong.Available || wrong.UnavailableReason != "association_changed" || !correct.Available || !seen["donation:"+strconv.FormatInt(donationID, 10)].Available {
 		t.Fatalf("cross-key navigation: %+v", detail.Targets)
 	}
+	if detail.RelatedLogs == nil || detail.RelatedLogs.Available {
+		t.Fatalf("missing logs were reported available: %+v", detail.RelatedLogs)
+	}
+	requestID, err := db.GenerateOpaqueID("req_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(`INSERT INTO logical_requests(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at) VALUES(?,?,'openai_chat_completions','model','terminal',2,'success',200,'none','user',zeroblob(16),?,?)`, requestID, environment.adminID, alertTestNow, alertTestNow)
+	logID := must(`INSERT INTO request_logs(logical_request_id,user_id,endpoint_key_id,started_at,completed_at,caller_result_class,caller_status,status_code,attempt_count) VALUES(?,?,?,?,?,'success',200,200,2)`, requestID, environment.adminID, endpointKeys[0], alertTestNow, alertTestNow)
+	claimID, err := db.GenerateOpaqueID("clm_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,endpoint_key_id_snapshot,connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,started_at,completed_at) VALUES(?,?,1,?,'openai-compatible','https://example.invalid/v1','model','response',500,?,?)`, claimID, logID, endpointKeys[1], alertTestNow, alertTestNow)
+	secondClaim, err := db.GenerateOpaqueID("clm_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,endpoint_key_id_snapshot,connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,started_at,completed_at) VALUES(?,?,2,?,'openai-compatible','https://example.invalid/v1','model','response',200,?,?)`, secondClaim, logID, endpointKeys[0], alertTestNow, alertTestNow)
+	detail, err = environment.repository.GetDetail(context.Background(), environment.adminID, alertID)
+	if err != nil || detail.RelatedLogs == nil || !detail.RelatedLogs.Available || detail.RelatedLogs.EndpointKeyID != strconv.FormatInt(endpointKeys[1], 10) {
+		t.Fatalf("failed attempt was hidden by the final endpoint key: %+v, %v", detail.RelatedLogs, err)
+	}
+	must(`DELETE FROM request_attempts WHERE claim_id=?`, claimID)
+	detail, err = environment.repository.GetDetail(context.Background(), environment.adminID, alertID)
+	if err != nil || detail.RelatedLogs == nil || detail.RelatedLogs.Available {
+		t.Fatalf("retired attempt remained available: %+v, %v", detail.RelatedLogs, err)
+	}
 	// The source ID remains as history after key revocation; no live endpoint
 	// target may be inferred from it or from another key with the same number.
 	if _, err := database.Exec(`UPDATE donation_keys SET endpoint_key_id=NULL,enabled=0,ended_at=?,ended_reason='withdrawn',report_match_until=?,updated_at=? WHERE id=?`, alertTestNow, alertTestNow+7776000, alertTestNow, keyID); err != nil {
