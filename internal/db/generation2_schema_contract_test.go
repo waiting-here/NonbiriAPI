@@ -143,7 +143,7 @@ func TestGenerationTwoCanonicalDDLExecutes(t *testing.T) {
 }
 
 func TestGenerationTwoRequestAttemptModelUsesUnicodeScalarBoundary(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	userID := hostileInsertUser(t, database, "request-attempt-model", 0, 0)
 
 	insertLog := func(requestID, route, upstreamModelID string) int64 {
@@ -197,7 +197,7 @@ VALUES(?,?,'model',?,'openai_chat_completions','https://upstream.example/v1',0)`
 }
 
 func TestGenerationTwoOIDConstraintsRejectHostileValues(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	good := "op_" + strings.Repeat("A", 21) + "Q"
 	cases := []struct {
 		name string
@@ -225,7 +225,7 @@ func TestGenerationTwoOIDConstraintsRejectHostileValues(t *testing.T) {
 }
 
 func TestGenerationTwoSM128ConstraintsRejectHostileValues(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	zero := []byte(strings.Repeat("\x00", 16))
 	high := append([]byte{0x80}, []byte(strings.Repeat("\x00", 15))...)
 	if _, err := db.Exec(`INSERT INTO credit_accounts(kind,code,balance_sign,balance_mag,created_at,updated_at) VALUES('platform','hostile-zero',1,?,1,1)`, zero); err == nil {

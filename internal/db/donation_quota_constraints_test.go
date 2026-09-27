@@ -4,15 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func quotaConstraintFixture(t *testing.T) (*sql.DB, string) {
 	t.Helper()
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	hostileMustExec(t, database, `INSERT INTO credit_capacity(id,last_ledger_seq,reserved_future_rows,revision) VALUES(1,0,zeroblob(16),zeroblob(16))`)
 	uid := hostileInsertUser(t, database, "quota-user", 0, 0)
 	endpoint := hostileInsertEndpoint(t, database, uid, "https://fixture.example/v1")
@@ -27,19 +25,50 @@ func quotaConstraintFixture(t *testing.T) (*sql.DB, string) {
 	return database, rule
 }
 
+func quotaConstraintCopies(t *testing.T) func(*testing.T) (*sql.DB, string) {
+	t.Helper()
+	baseline, rule := quotaConstraintFixture(t)
+	image := snapshotGenerationTwoDDLTestImage(t, baseline)
+	paths := make(map[string]bool)
+	return func(t *testing.T) (*sql.DB, string) {
+		t.Helper()
+		database, path := openGenerationTwoDDLTestImage(t, image)
+		if paths[path] {
+			t.Fatal("quota cases share a database file")
+		}
+		paths[path] = true
+		var mode, alignment string
+		var retiredAt, currentPeriod sql.NullInt64
+		if err := database.QueryRow(`SELECT mode,alignment,retired_at,current_period_start FROM donation_quota_epochs WHERE rule_id=? AND epoch=1`, rule).Scan(&mode, &alignment, &retiredAt, &currentPeriod); err != nil {
+			t.Fatal(err)
+		}
+		if mode != "reset" || alignment != "first_success" || retiredAt.Valid || currentPeriod.Valid {
+			t.Fatal("quota fixture retained another case's epoch changes")
+		}
+		for _, table := range []string{"donation_quota_periods", "donation_quota_buckets"} {
+			var rows int
+			if err := database.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&rows); err != nil || rows != 0 {
+				t.Fatalf("quota fixture retained %s rows=%d, err=%v", table, rows, err)
+			}
+		}
+		return database, rule
+	}
+}
+
 func TestQuotaSameSecondAndPreUnixBoundaries(t *testing.T) {
+	fixture := quotaConstraintCopies(t)
 	t.Run("same-second-retirement", func(t *testing.T) {
-		database, rule := quotaConstraintFixture(t)
+		database, rule := fixture(t)
 		hostileMustExec(t, database, `UPDATE donation_quota_epochs SET retired_at=1000 WHERE rule_id=?`, rule)
 		hostileMustFail(t, database, `UPDATE donation_quota_epochs SET retired_at=999 WHERE rule_id=?`, rule)
 	})
 	t.Run("sliding-left-boundary", func(t *testing.T) {
-		database, rule := quotaConstraintFixture(t)
+		database, rule := fixture(t)
 		hostileMustExec(t, database, `UPDATE donation_quota_epochs SET mode='sliding',alignment=NULL,window_left=-85400,window_at=1000,window_used=?,window_reserved=? WHERE rule_id=?`, hostileBlob16(0), hostileBlob16(0), rule)
 		hostileMustFail(t, database, `UPDATE donation_quota_epochs SET window_left=window_at`)
 	})
 	t.Run("deferred-current-period", func(t *testing.T) {
-		database, rule := quotaConstraintFixture(t)
+		database, rule := fixture(t)
 		tx, err := database.BeginTx(context.Background(), nil)
 		if err != nil {
 			t.Fatal(err)
@@ -61,41 +90,10 @@ func TestQuotaSameSecondAndPreUnixBoundaries(t *testing.T) {
 }
 
 func TestQuotaRejectsInvalidStateCombinations(t *testing.T) {
-	// Build the expensive DDL and seeded rule once. VACUUM INTO leaves a
-	// standalone image after the in-memory source is closed; every case gets
-	// an independent copy so one accepted mutation cannot mask another.
-	baseline, _ := quotaConstraintFixture(t)
-	baselinePath := filepath.Join(privateDBDir(t), "quota-baseline.sqlite")
-	if _, err := baseline.Exec(`VACUUM INTO ?`, baselinePath); err != nil {
-		t.Fatalf("snapshot quota fixture: %v", err)
-	}
-	if err := baseline.Close(); err != nil {
-		t.Fatalf("close quota fixture: %v", err)
-	}
-	if err := os.Chmod(baselinePath, 0o600); err != nil {
-		t.Fatalf("secure quota fixture snapshot: %v", err)
-	}
-	image, err := os.ReadFile(baselinePath)
-	if err != nil {
-		t.Fatalf("read quota fixture snapshot: %v", err)
-	}
+	fixture := quotaConstraintCopies(t)
 	openCopy := func(t *testing.T) *sql.DB {
 		t.Helper()
-		database, err := sql.Open("sqlite", copyPrivateSQLiteTestImage(t, image))
-		if err != nil {
-			t.Fatalf("open quota fixture copy: %v", err)
-		}
-		database.SetMaxOpenConns(1)
-		if _, err := database.Exec(`PRAGMA foreign_keys=ON`); err != nil {
-			_ = database.Close()
-			t.Fatalf("enable quota fixture foreign keys: %v", err)
-		}
-		var foreignKeys int
-		if err := database.QueryRow(`PRAGMA foreign_keys`).Scan(&foreignKeys); err != nil || foreignKeys != 1 {
-			_ = database.Close()
-			t.Fatalf("quota fixture foreign keys=%d, err=%v", foreignKeys, err)
-		}
-		t.Cleanup(func() { _ = database.Close() })
+		database, _ := fixture(t)
 		return database
 	}
 	for _, tc := range []struct{ name, query string }{
@@ -130,9 +128,10 @@ func TestQuotaRejectsInvalidStateCombinations(t *testing.T) {
 }
 
 func TestQuotaAggregateModeCannotDrift(t *testing.T) {
+	fixture := quotaConstraintCopies(t)
 	for _, sliding := range []bool{false, true} {
 		t.Run(fmt.Sprintf("sliding-%v", sliding), func(t *testing.T) {
-			database, rule := quotaConstraintFixture(t)
+			database, rule := fixture(t)
 			period := `INSERT INTO donation_quota_periods(rule_id,epoch,start_at,end_at,used_mag,reserved_mag) VALUES(?,1,1000,2000,?,?)`
 			bucket := `INSERT INTO donation_quota_buckets(rule_id,epoch,success_at,used_mag,reserved_mag) VALUES(?,1,1000,?,?)`
 			if sliding {
@@ -172,7 +171,7 @@ VALUES(?,?,1,'started',?,?,1000,1000,'attached')`
 }
 
 func TestHandlingProcessingActorMatchesState(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, database, "processing-actor", 0, 0)
 	donation := hostileInsertDonation(t, database, nil)
 	for _, state := range []string{"legacy", "pending", "closed"} {
@@ -195,7 +194,7 @@ func TestHandlingProcessingActorMatchesState(t *testing.T) {
 }
 
 func TestPublicModelDescriptionTextBoundary(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	hostileMustExec(t, database, `INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,created_at,updated_at) VALUES('fixture','model','[公益]fixture/model',0,'per_request',0,0)`)
 	hostileMustExec(t, database, `INSERT INTO charity_model_access(model_id) SELECT id FROM charity_models`)
 	for _, value := range []string{"", "<b>literal</b>\n\ttext", strings.Repeat("界", 1024), strings.Repeat("🙂", 1024)} {

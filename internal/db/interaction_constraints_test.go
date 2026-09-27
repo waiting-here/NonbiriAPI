@@ -8,7 +8,7 @@ import (
 
 func interactionFishFixture(t *testing.T) (*sql.DB, int64) {
 	t.Helper()
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	t.Cleanup(func() { _ = database.Close() })
 	user := hostileInsertUser(t, database, "fish", 0, 1)
 	hostileMustExec(t, database, `INSERT INTO fatfish_capacity VALUES(1,0,0)`)
@@ -67,7 +67,7 @@ func TestInteractionFishFinancialAndScoreInvariants(t *testing.T) {
 }
 
 func TestInteractionContinuityAndPermanentProjection(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	defer database.Close()
 	hostileMustFail(t, database, `INSERT INTO identity_continuity_facts VALUES(zeroblob(32),'game_onboarding','game','once','{}',1,2)`)
 	hostileMustExec(t, database, `INSERT INTO identity_continuity_facts VALUES(zeroblob(32),'game_onboarding','game','once','{}',1,NULL)`)
@@ -81,7 +81,7 @@ func TestInteractionContinuityAndPermanentProjection(t *testing.T) {
 func TestInteractionAggregateScanSourceRemoval(t *testing.T) {
 	for _, remove := range []string{`DELETE FROM request_source_facts WHERE request_log_id=?`, `UPDATE request_source_facts SET user_id=NULL WHERE request_log_id=?`} {
 		t.Run(remove, func(t *testing.T) {
-			database := openGenerationTwoDDLForTest(t)
+			database := openGenerationTwoConstraintFixture(t)
 			defer database.Close()
 			user := hostileInsertUser(t, database, "scan", 1, 1)
 			req := hostileOID("req_")

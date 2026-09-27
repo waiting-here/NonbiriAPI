@@ -140,7 +140,7 @@ func TestEmbeddingExtensionRollsBackAndResetsConnection(t *testing.T) {
 }
 
 func TestEmbeddingRouteChecksAcceptOnlyKnownOperations(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	defer database.Close()
 	user := hostileInsertUser(t, database, "embedding-route-owner", 0, 0)
 	for i, route := range []string{"openai_embeddings", "charity_embeddings"} {

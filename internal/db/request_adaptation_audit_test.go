@@ -3,7 +3,7 @@ package db
 import "testing"
 
 func TestRequestAdaptationAuditContainsOnlyImmutablePartitionNames(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	defer database.Close()
 	insert := `INSERT INTO request_adaptation_audits(scope,resource_id,actor_role,revision,changed_partitions,created_at) VALUES('endpoint',42,'owner',?, ?,100)`
 	for _, partitions := range []string{`["secret_value"]`, `["fixed_headers","fixed_headers"]`, `[1]`, `[null]`, `[{}]`} {
