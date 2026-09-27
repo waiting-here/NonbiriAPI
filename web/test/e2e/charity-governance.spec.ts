@@ -676,6 +676,7 @@ test('level-six stewardship shows the shared owner projection and caller identit
     user_id: '42',
     caller_identity: { discord_nickname: CALLER_NICKNAME, discord_id: DISCORD_ID },
     attempt_count: '1',
+    usage_total_mismatch: false,
   };
 
   await page.route('**/*', async (route) => {

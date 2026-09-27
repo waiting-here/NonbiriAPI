@@ -215,7 +215,7 @@ test('level six can read administrator-origin blacklist events without a removal
     }
   });
   await page.goto(`${USER_ORIGIN}/steward?tab=blacklist`);
-  await expect(page.getByRole('cell', { name: 'admin #9' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Administrator #9' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove from blacklist' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Events' }).click();
   await expect(page.getByText(/Additional note: Original administrative note/)).toBeVisible();
