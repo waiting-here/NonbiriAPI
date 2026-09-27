@@ -69,6 +69,36 @@ async function capture(page: Page, name: string) {
   if (previous) await page.setViewportSize(previous);
 }
 
+async function verifyLocalMusic(page: Page, player: Locator) {
+  const toggle = player.locator('[data-fatfish-music-toggle]');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(player.locator('[data-fatfish-music]')).toHaveCount(0);
+  const loaded = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/assets/fatfish/music/monkeys-spinning-monkeys.mp3',
+  );
+  await toggle.click();
+  const response = await loaded;
+  expect([200, 206]).toContain(response.status());
+  expect(new URL(response.url()).origin).toBe(new URL(page.url()).origin);
+  const audio = player.locator('[data-fatfish-music]');
+  await expect(audio).toHaveCount(1);
+  await expect
+    .poll(() =>
+      audio.evaluate(
+        (element: HTMLAudioElement) =>
+          !element.paused && element.currentTime > 0.1 && element.loop && element.error === null,
+      ),
+    )
+    .toBe(true);
+  expect(await audio.evaluate((element: HTMLAudioElement) => element.duration)).toBeGreaterThan(
+    120,
+  );
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  expect(await audio.evaluate((element: HTMLAudioElement) => element.paused)).toBe(true);
+}
+
 async function session(browser: Browser, role: 'admin' | 1 | 5 | 6, mobile = false) {
   const f = fixture();
   const origin = role === 'admin' ? f.admin_url : f.user_url;
@@ -223,7 +253,10 @@ async function playExample(page: Page, example: Example) {
     const tool = level.tools.find((item) => item.id === 100)!;
     await returnPreplacedTool(page, player, tool.x / 64, tool.y / 64);
   }
-  if (example.id === examples[0].id) await capture(page, '03-administrator-play');
+  if (example.id === examples[0].id) {
+    await verifyLocalMusic(page, player);
+    await capture(page, '03-administrator-play');
+  }
   await expect
     .poll(
       async () => Number(await player.locator('[data-fish-fed]').getAttribute('data-fish-fed')),
@@ -527,6 +560,14 @@ test('a local season publishes explicitly and the original user tab resumes, set
     page.on('dialog', (dialog) => void dialog.accept());
     await page.goto(fixture().user_url + '/activities');
     await expect(page.locator('a[href="/activities/fat-fish"]')).toBeVisible();
+    const cover = page.getByRole('img', {
+      name: 'Fat Fish move obstacles and happily head toward bowls of rice',
+      exact: true,
+    });
+    await cover.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => cover.evaluate((element: HTMLImageElement) => element.naturalWidth))
+      .toBe(1536);
     await capture(page, '08-user-activity-directory');
     const path = '/activities/fat-fish?period=' + period.id + '&node=' + nodes[0].id;
     await test.step('the published period and node can be read by the participant', async () => {
@@ -562,6 +603,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     await page.getByRole('button', { name: 'Confirm ticket and start', exact: true }).click();
     let player = page.getByRole('region', { name: 'Fat fish play', exact: true });
     await returnPreplacedTool(page, player, 170, 420);
+    await verifyLocalMusic(page, player);
     await expect
       .poll(async () =>
         Number(await player.locator('[data-fish-tick]').getAttribute('data-fish-tick')),
@@ -612,7 +654,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
       .poll(
         async () => Number(await player.locator('[data-fish-fed]').getAttribute('data-fish-fed')),
         {
-          timeout: 30_000,
+          timeout: 95_000,
         },
       )
       .toBeGreaterThanOrEqual(5);

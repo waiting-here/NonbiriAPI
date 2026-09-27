@@ -299,6 +299,10 @@ async function serveStation(request, response, station) {
   }
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (isAPIPath(url.pathname)) {
+    if (request.method === 'GET' && url.pathname === '/api/games/likes/loadouts') {
+      send(response, 200, 'application/json', JSON.stringify({ capacity: 10, slots: [] }));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/api/endpoint-create-options') {
       send(response, 200, 'application/json', JSON.stringify({
         base_connector_types: ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'],

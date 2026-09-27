@@ -108,6 +108,90 @@ async function safeSink(page: Page) {
     0,
   );
 }
+
+test('custom presets persist across reloads without matchmaking, payment or cross-owner disclosure', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 1);
+  const other = await session(browser, 5);
+  try {
+    const page = await owner.newPage();
+    const failures: string[] = [];
+    page.on('pageerror', (error) => failures.push(error.message));
+    const beforeResponse = await api(owner, '/api/games');
+    expect(beforeResponse.status()).toBe(200);
+    const before = (await beforeResponse.json()) as {
+      balance: string;
+      game_balance: string;
+      likes: { plan_seconds: number };
+    };
+    expect(before.likes.plan_seconds).toBe(30);
+    await page.goto(fixture().user_url + '/games/likes');
+    const presets = page.getByRole('region', { name: 'Custom presets', exact: true });
+    await expect(presets.getByRole('button', { name: /^Save to Preset\d+$/ })).toHaveCount(10);
+    await page.locator('.likes-role-option').nth(1).click();
+    await page.locator('.likes-harness-option [data-guide^="harness:"]').first().click();
+    await presets.getByRole('button', { name: 'Save to Preset1', exact: true }).click();
+    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset1 saved.');
+    const savedResponse = await api(owner, '/api/games/likes/loadouts');
+    expect(savedResponse.status()).toBe(200);
+    const saved = (await savedResponse.json()) as {
+      capacity: number;
+      slots: {
+        slot: number;
+        revision: string;
+        loadout: { role: string; harness: string; skills: string[] };
+      }[];
+    };
+    expect(saved.capacity).toBe(10);
+    expect(saved.slots).toHaveLength(1);
+    expect(saved.slots[0].revision).toBe('1');
+    expect(saved.slots[0].loadout.harness).not.toBeNull();
+    await page.reload();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await presets.getByRole('button', { name: 'Load Preset1', exact: true }).click();
+    await expect(presets.getByRole('status')).toContainText(
+      'loaded. You have not joined matchmaking.',
+    );
+    const selected = page.locator('.likes-role-option[aria-pressed="true"]');
+    expect(await selected.getAttribute('data-guide')).toBe('role:' + saved.slots[0].loadout.role);
+    expect(
+      await page.locator('.likes-harness-option [aria-pressed="true"]').getAttribute('data-guide'),
+    ).toBe('harness:' + saved.slots[0].loadout.harness);
+    const selectedSkills = await page
+      .locator('.likes-skill-grid input:checked')
+      .evaluateAll((items) =>
+        items.map((item) => item.getAttribute('data-guide')!.slice('equip:'.length)),
+      );
+    expect(selectedSkills.sort()).toEqual([...saved.slots[0].loadout.skills].sort());
+    await presets.getByRole('button', { name: 'Save to Preset10', exact: true }).click();
+    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset10 saved.');
+    await presets.getByRole('button', { name: 'Overwrite Preset1', exact: true }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Overwrite custom presets', exact: true });
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect((await (await api(owner, '/api/games/likes/loadouts')).json()).slots[0].revision).toBe(
+      '1',
+    );
+    await presets.getByRole('button', { name: 'Overwrite Preset1', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Confirm overwrite', exact: true }).click();
+    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset1 overwritten.');
+    expect((await (await api(owner, '/api/games/likes/loadouts')).json()).slots[0].revision).toBe(
+      '2',
+    );
+    const privateResponse = await api(other, '/api/games/likes/loadouts');
+    expect(privateResponse.status()).toBe(200);
+    expect(await privateResponse.json()).toEqual({ capacity: 10, slots: [] });
+    const state = await (await api(owner, '/api/games/likes/state')).json();
+    expect(state.current).toBeFalsy();
+    expect(state.queue).toBeFalsy();
+    const after = await (await api(owner, '/api/games')).json();
+    expect([after.balance, after.game_balance]).toEqual([before.balance, before.game_balance]);
+    expect(failures).toEqual([]);
+  } finally {
+    await owner.close();
+    await other.close();
+  }
+});
 async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) {
   const f = fixture();
   const path = admin ? '/logs?' : '/steward?tab=logs&';
