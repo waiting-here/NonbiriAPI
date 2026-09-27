@@ -42,6 +42,30 @@ func interactionSourceFixture(t *testing.T) *sql.DB {
 	return database
 }
 
+func TestWorkerSuccessTimestampUpgradePreservesUnknownHistory(t *testing.T) {
+	database := interactionSourceFixture(t)
+	hostileMustExec(t, database, `INSERT INTO worker_checkpoints(worker_key,generation,attempt_count,next_attempt_at,updated_at) VALUES('lifecycle_recovery_v1',1,0,0,100)`)
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	var recorded sql.NullInt64
+	if err := database.QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key='lifecycle_recovery_v1'`).Scan(&recorded); err != nil || recorded.Valid {
+		t.Fatal("upgrade invented a successful checkpoint", recorded, err)
+	}
+	for _, value := range []any{1.5, int64(-1), int64(101), "not-a-timestamp"} {
+		if _, err := database.Exec(`UPDATE worker_checkpoints SET last_success_at=? WHERE worker_key='lifecycle_recovery_v1'`, value); err == nil {
+			t.Fatalf("invalid last-success timestamp accepted: %v", value)
+		}
+	}
+	hostileMustExec(t, database, `UPDATE worker_checkpoints SET last_success_at=100 WHERE worker_key='lifecycle_recovery_v1'`)
+	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`SELECT last_success_at FROM worker_checkpoints WHERE worker_key='lifecycle_recovery_v1'`).Scan(&recorded); err != nil || !recorded.Valid || recorded.Int64 != 100 {
+		t.Fatal("reentry changed the successful checkpoint", recorded, err)
+	}
+}
+
 // Preserve every original column and row, including opaque credentials and
 // arbitrary instance text, while permitting only the new hidden activity row.
 func interactionOriginalRows(t *testing.T, database *sql.DB, source generationManifest) map[string][]string {

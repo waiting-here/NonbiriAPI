@@ -79,6 +79,18 @@ type Condition struct {
 	Value         string `json:"value"`
 	CaseSensitive bool   `json:"case_sensitive"`
 }
+
+// AutoBan is a privileged binding. A nil DurationSeconds means a permanent ban.
+// A nil Rule.AutoBan means the rule has no binding at all.
+type AutoBan struct {
+	Enabled         bool   `json:"enabled"`
+	DurationSeconds *int64 `json:"duration_seconds"`
+}
+
+func (a AutoBan) valid() bool {
+	return a.DurationSeconds == nil || *a.DurationSeconds >= 1 && *a.DurationSeconds <= 315360000
+}
+
 type Rule struct {
 	ID              string      `json:"id"`
 	Name            string      `json:"name"`
@@ -86,6 +98,7 @@ type Rule struct {
 	Enabled         bool        `json:"enabled"`
 	Revision        int64       `json:"revision"`
 	Conditions      []Condition `json:"conditions"`
+	AutoBan         *AutoBan    `json:"auto_ban"`
 	EvidenceNote    string      `json:"evidence_note"`
 	EvidenceURL     string      `json:"evidence_url"`
 	CreatedByRole   string      `json:"created_by_role"`
@@ -108,7 +121,7 @@ func safeText(s string, min, max int) bool {
 	return true
 }
 func validateRule(r Rule) error {
-	if !safeText(r.Name, 1, 120) || (r.Status != "suspected" && r.Status != "confirmed") || !safeText(r.EvidenceNote, 0, 4096) || len(r.EvidenceNote) > 4096 || len(r.EvidenceURL) > 2048 || len(r.Conditions) < 1 || len(r.Conditions) > 8 {
+	if !safeText(r.Name, 1, 120) || (r.Status != "suspected" && r.Status != "confirmed") || !safeText(r.EvidenceNote, 0, 4096) || len(r.EvidenceNote) > 4096 || len(r.EvidenceURL) > 2048 || len(r.Conditions) < 1 || len(r.Conditions) > 8 || r.AutoBan != nil && !r.AutoBan.valid() {
 		return ErrInvalid
 	}
 	if r.EvidenceURL != "" {

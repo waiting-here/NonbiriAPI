@@ -1,6 +1,7 @@
 package db
 
 const auditProjectionSchema = `
+ALTER TABLE worker_checkpoints ADD COLUMN last_success_at INTEGER CHECK(last_success_at IS NULL OR (typeof(last_success_at)='integer' AND last_success_at BETWEEN 0 AND 253402300799 AND last_success_at<=updated_at));
 ALTER TABLE admin_alerts ADD COLUMN context_version INTEGER NOT NULL DEFAULT 0 CHECK(context_version IN (0,1));
 ALTER TABLE admin_alerts ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(context_json) AND json_type(context_json)='object' AND length(CAST(context_json AS BLOB))<=16384);
 ALTER TABLE admin_alerts ADD COLUMN resolution_kind TEXT NOT NULL DEFAULT '' CHECK(resolution_kind IN ('','manual','automatic_blacklist','worker_recovered','legacy'));
