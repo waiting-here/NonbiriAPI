@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -67,27 +69,41 @@ type Decision struct {
 type ruleRef struct {
 	ID       string `json:"id"`
 	Revision int64  `json:"revision"`
+	Name     string `json:"-"`
 }
 
-type banReason struct {
-	Source         string    `json:"source"`
-	RequestID      string    `json:"request_id"`
-	Rules          []ruleRef `json:"rules"`
-	RuleCount      int       `json:"rule_count"`
-	RulesTruncated bool      `json:"rules_truncated,omitempty"`
-	Previous       string    `json:"previous,omitempty"`
-}
-
-func boundedReason(requestID string, refs []ruleRef, previous string) (string, error) {
-	for included := len(refs); included >= 0; included-- {
-		raw, err := json.Marshal(banReason{Source: "client_rule", RequestID: requestID, Rules: refs[:included], RuleCount: len(refs), RulesTruncated: included < len(refs), Previous: previous})
-		if err != nil {
-			return "", ErrInvariant
+func boundedReason(refs []ruleRef, previous string) (string, error) {
+	if len(refs) == 0 || len(refs) > riskaudit.MaxAutoBanRules {
+		return "", ErrInvariant
+	}
+	names := make([]string, 0, len(refs))
+	seen := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		// Names come from the rule snapshot, never from a raw client header.
+		name := strings.Join(strings.Fields(ref.Name), " ")
+		if name == "" {
+			name = "未命名规则"
 		}
-		if len(raw) <= 4096 && utf8.RuneCount(raw) <= 1024 {
-			return string(raw), nil
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
 		}
 	}
+	sort.Strings(names)
+	for included := len(names); included >= 0; included-- {
+		reason := "识别到违规第三方客户端特征：" + strings.Join(names[:included], "、")
+		if included < len(names) {
+			reason += fmt.Sprintf("（另有%d项）", len(names)-included)
+		}
+		if previous != "" && previous != reason {
+			reason += "\n既有封禁原因：" + previous
+		}
+		if len(reason) <= 4096 && utf8.RuneCountInString(reason) <= 1024 {
+			return reason, nil
+		}
+	}
+	// Preserve existing evidence when the management field is already full.
+	// The independent receipt still retains every matching rule revision.
 	if previous != "" {
 		return previous, nil
 	}
@@ -136,7 +152,7 @@ func candidates(ctx context.Context, q ruleQuerier, source riskaudit.Source, now
 		if !ok || !action.Enabled || len(refs) >= riskaudit.MaxAutoBanRules {
 			return nil, nil, ErrInvariant
 		}
-		refs = append(refs, ruleRef{ID: match.RuleID, Revision: match.Revision})
+		refs = append(refs, ruleRef{ID: match.RuleID, Revision: match.Revision, Name: match.Name})
 		if action.DurationSeconds == nil {
 			permanent = true
 			continue
@@ -275,7 +291,7 @@ func (s *Service) CheckCharityCall(parent context.Context, userID int64, model s
 	if priorActive {
 		previous = priorReason
 	}
-	reason, err := boundedReason(requestID, refs, previous)
+	reason, err := boundedReason(refs, previous)
 	if err != nil {
 		return Decision{}, err
 	}

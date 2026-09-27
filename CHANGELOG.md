@@ -24,6 +24,7 @@ This entry describes the unreleased rc.4 source candidate. The latest published 
 
 ### Changed
 
+- Automatic bans caused by configured client rules now show a readable reason such as `识别到违规第三方客户端特征：Tavo`. Multiple matching names are combined within the reason limit, while complete rule revisions remain in the separate administrative receipt and prior active-ban evidence is preserved.
 - SQLite remains Generation 2. The account export advances to schema 11 with typed safe `request_adaptations`, `continuity`, and `fat_fish` projections plus optional owner-only `likes.loadouts`; full play inputs, prompts, credentials, unrevealed seeds, and other players' private results remain excluded. Oversized exports fail as a whole instead of truncating.
 - The supported rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Upgrades preserve existing account and game data, credentials, configuration, and instance legal text. Instance legal-text publication remains a separate operator action.
 
