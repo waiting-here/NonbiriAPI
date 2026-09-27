@@ -748,7 +748,7 @@ describe('admin per-user limit explanations', () => {
       },
       {
         method: 'GET',
-        path: '/admin/api/users?page=1&page_size=20',
+        path: '/admin/api/users?account_state=all&page=1&page_size=20',
         body: {
           data: [adminUser],
           next_cursor: null,

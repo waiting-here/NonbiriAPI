@@ -236,6 +236,8 @@ func (s *Service) periodTx(ctx context.Context, tx *sql.Tx, userID int64, id str
 	}
 	defer rows.Close()
 	p.Nodes = []NodeView{}
+	conditions := make(map[string]Condition)
+	visibleNodes := make(map[string]bool)
 	for rows.Next() {
 		var n NodeView
 		var revision int64
@@ -255,6 +257,7 @@ func (s *Service) periodTx(ctx context.Context, tx *sql.Tx, userID int64, id str
 			return p, ErrInvariant
 		}
 		n.Eligible = condition.Eligible(best)
+		conditions[n.ID] = condition
 		n.Progress, err = readProgressTx(ctx, tx, userID, id, n.ID)
 		if err != nil {
 			return p, err
@@ -265,6 +268,7 @@ func (s *Service) periodTx(ctx context.Context, tx *sql.Tx, userID int64, id str
 			n.VersionID = ""
 			n.Revision = ""
 		} else {
+			visibleNodes[n.ID] = true
 			n.ContentHash = hex.EncodeToString(hash)
 			n.Amounts = &Amounts{}
 			for i, raw := range mags {
@@ -289,6 +293,13 @@ func (s *Service) periodTx(ctx context.Context, tx *sql.Tx, userID int64, id str
 			}
 		}
 		p.Nodes = append(p.Nodes, n)
+	}
+	for i := range p.Nodes {
+		n := &p.Nodes[i]
+		if visibleNodes[n.ID] {
+			hint := conditions[n.ID].Project(best, visibleNodes)
+			n.ConditionHint = &hint
+		}
 	}
 	return p, rows.Err()
 }

@@ -1,0 +1,164 @@
+{
+  "format": "nonbiri-fatfish-level",
+  "format_version": 1,
+  "engine_version": 1,
+  "scoring_version": 1,
+  "duration_seconds": 120,
+  "speed_pixels_per_second": 80,
+  "thresholds": [
+    8,
+    9,
+    10
+  ],
+  "fish": [
+    {
+      "id": 1,
+      "x": 5120,
+      "y": 24320,
+      "heading": 0
+    },
+    {
+      "id": 2,
+      "x": 6720,
+      "y": 24320,
+      "heading": 0
+    },
+    {
+      "id": 3,
+      "x": 5120,
+      "y": 25600,
+      "heading": 0
+    },
+    {
+      "id": 4,
+      "x": 6720,
+      "y": 25600,
+      "heading": 0
+    },
+    {
+      "id": 5,
+      "x": 5120,
+      "y": 26880,
+      "heading": 0
+    },
+    {
+      "id": 6,
+      "x": 6720,
+      "y": 26880,
+      "heading": 0
+    },
+    {
+      "id": 7,
+      "x": 5120,
+      "y": 28160,
+      "heading": 0
+    },
+    {
+      "id": 8,
+      "x": 6720,
+      "y": 28160,
+      "heading": 0
+    },
+    {
+      "id": 9,
+      "x": 5120,
+      "y": 29440,
+      "heading": 0
+    },
+    {
+      "id": 10,
+      "x": 6720,
+      "y": 29440,
+      "heading": 0
+    }
+  ],
+  "tools": [
+    {
+      "id": 100,
+      "resource_key": "memory",
+      "polygon": {
+        "outer": [
+          {
+            "x": -1280,
+            "y": -3840
+          },
+          {
+            "x": 1280,
+            "y": -3840
+          },
+          {
+            "x": 1280,
+            "y": 3840
+          },
+          {
+            "x": -1280,
+            "y": 3840
+          }
+        ],
+        "holes": []
+      },
+      "placed": true,
+      "x": 14080,
+      "y": 26880
+    }
+  ],
+  "solids": [],
+  "hazards": [],
+  "bowls": [
+    {
+      "id": 400,
+      "polygon": {
+        "outer": [
+          {
+            "x": 13440,
+            "y": 23360
+          },
+          {
+            "x": 16000,
+            "y": 23360
+          },
+          {
+            "x": 16000,
+            "y": 30400
+          },
+          {
+            "x": 13440,
+            "y": 30400
+          }
+        ],
+        "holes": []
+      },
+      "required": 3,
+      "capacity": 4
+    },
+    {
+      "id": 401,
+      "polygon": {
+        "outer": [
+          {
+            "x": 23680,
+            "y": 23360
+          },
+          {
+            "x": 26880,
+            "y": 23360
+          },
+          {
+            "x": 26880,
+            "y": 30400
+          },
+          {
+            "x": 23680,
+            "y": 30400
+          }
+        ],
+        "holes": []
+      },
+      "required": 3,
+      "capacity": 6
+    }
+  ],
+  "switches": [],
+  "gates": [],
+  "directions": []
+}

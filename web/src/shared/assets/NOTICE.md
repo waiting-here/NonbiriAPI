@@ -29,3 +29,11 @@ transparent silhouette and aspect ratio; slot metadata retains a logical source
 identifier and crop focus. Fishing artwork bundles 35 catch illustrations,
 including the unknown catch, as local WebP derivatives and keeps a code-native
 SVG fallback for image load failures and high-contrast display.
+
+Raising a Fat Fish bundles 68 supplied SVG illustrations (65 unchanged and three
+buttons repaired), two supplied PNG sprite sheets with 24 animation frames, an
+original SVG cover, and eight adapted supplied level designs under AGPL-3.0.
+The public [asset manifest](/assets/fatfish/manifest.json) and
+[example manifest](/examples/fatfish/manifest.json) record per-file source
+identifiers, transformations, licenses, and SHA-256 hashes. No original Flash
+program, prototype HTML, external media, font, or audio is bundled with them.
