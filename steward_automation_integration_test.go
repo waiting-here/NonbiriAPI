@@ -111,7 +111,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = f.store.Close() })
-	f.app, err = buildApplication(auditConfig(), f.store, vault)
+	f.app, err = buildApplication(context.Background(), auditConfig(), f.store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}

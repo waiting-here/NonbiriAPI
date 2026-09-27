@@ -46,7 +46,7 @@ func newGameWireFixtureWithClock(t *testing.T, nowFunc func() time.Time) gameWir
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	app, err := buildApplicationWithGameClock(auditConfig(), store, vault, nowFunc)
+	app, err := buildApplicationWithGameClock(context.Background(), auditConfig(), store, vault, nowFunc)
 	if err != nil {
 		t.Fatal(err)
 	}

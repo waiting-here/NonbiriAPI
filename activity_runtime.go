@@ -164,13 +164,19 @@ func (a *activityRuntime) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, 
 	}, nil
 }
 
-func (a *activityRuntime) Start(failures chan<- error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (a *activityRuntime) Start(parent context.Context, failures chan<- error, unavailable func()) {
+	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
 	a.workers.Add(2)
 	go func() {
 		defer a.workers.Done()
-		if err := a.images.Run(ctx); err != nil && ctx.Err() == nil {
+		if err := a.images.Run(ctx); ctx.Err() == nil {
+			if unavailable != nil {
+				unavailable()
+			}
+			if err == nil {
+				err = errors.New("image worker stopped unexpectedly")
+			}
 			select {
 			case failures <- err:
 			default:

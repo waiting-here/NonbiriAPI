@@ -113,7 +113,7 @@ func TestStartupRankingBacklogCancellationAndExpiredGameRestart(t *testing.T) {
 	f.clock.Store(decisionNow)
 	restart := func() {
 		t.Helper()
-		app, err := buildApplicationWithGameClock(auditConfig(), f.store, vault, func() time.Time { return time.Unix(f.clock.Load(), 0) })
+		app, err := buildApplicationWithGameClock(context.Background(), auditConfig(), f.store, vault, func() time.Time { return time.Unix(f.clock.Load(), 0) })
 		if err != nil {
 			t.Fatal(err)
 		}

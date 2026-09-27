@@ -4,6 +4,8 @@ package db
 
 import "errors"
 
+func inspectActiveDBFiles(path string) error { return secureDBFiles(path) }
+
 // The release gate promises the hardened database path only on Linux/amd64.
 // Other Unix targets must not inherit a partially equivalent implementation
 // and then continue to a writable SQLite open.

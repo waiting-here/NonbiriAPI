@@ -70,7 +70,7 @@ func (f *imageBrowserFixture) open() error {
 		_ = store.Close()
 		return err
 	}
-	app, err := buildApplicationWithRuntimeOptions(f.cfg, store, f.vault,
+	app, err := buildApplicationWithRuntimeOptions(context.Background(), f.cfg, store, f.vault,
 		applicationRuntimeOptions{Egress: stack, ActivityNow: f.now})
 	if err != nil {
 		_ = store.Close()

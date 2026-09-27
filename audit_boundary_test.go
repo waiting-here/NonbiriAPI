@@ -224,7 +224,7 @@ func TestGenerationTwoFreshAndCurrentApplicationBoot(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pass %d db.Open: %v", pass, err)
 		}
-		app, err := buildApplication(auditConfig(), store, vault)
+		app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 		if err != nil {
 			_ = store.Close()
 			t.Fatalf("pass %d buildApplication: %v", pass, err)
@@ -263,7 +263,7 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
-	app, err := buildApplication(auditConfig(), store, vault)
+	app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,7 +618,7 @@ func TestApplicationCloseIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
-	app, err := buildApplication(auditConfig(), store, vault)
+	app, err := buildApplication(context.Background(), auditConfig(), store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
