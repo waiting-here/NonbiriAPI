@@ -50,8 +50,18 @@ func interactionTableSQL(table, previous string) (string, error) {
 }
 
 func interactionAdditiveSchema() string {
-	return routingPolicySchema + accountContinuitySchema + imageCapabilitySchema + imageCapabilityGuardsSchema() + auditProjectionSchema + fatFishSchema
+	return routingPolicySchema + accountContinuitySchema + imageCapabilitySchema + imageCapabilityGuardsSchema() + auditProjectionSchema + fatFishSchema + usageDiscrepancySchema
 }
+
+// A recorded discrepancy is independent of whether the individual usage
+// buckets are valid. Existing rows have no retained upstream total to compare.
+const usageDiscrepancySchema = `
+ALTER TABLE request_logs ADD COLUMN usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1));
+ALTER TABLE request_attempts ADD COLUMN usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1));
+CREATE INDEX idx_request_logs_usage_mismatch ON request_logs(started_at DESC,id DESC) WHERE usage_total_mismatch=1;
+`
 
 func interactionBootstrapSchema(previous string) string {
 	for _, table := range interactionChangedTables {
