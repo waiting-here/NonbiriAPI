@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -100,6 +101,11 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
+	identity, err := continuity.New(f.db, deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer identity.Close()
 	descriptor := bidconfig.Descriptor()
 	f.rules = bidding.Rules{}
 	f.mode = "tier1"
@@ -144,6 +150,9 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 		r := exec(`INSERT INTO users(discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, "player", zero, zero, zero, zero, zero, zero, zero, zero, 100, 100)
 		f.users[seat], err = r.LastInsertId()
 		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := identity.BindUserTx(f.ctx, tx, f.users[seat]); err != nil {
 			t.Fatal(err)
 		}
 		exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at) VALUES(?,?,100,3700,7300,100)`, f.identity(seat).SessionBinding, f.users[seat])

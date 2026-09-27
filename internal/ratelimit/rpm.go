@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"crypto/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -121,7 +122,9 @@ const (
 )
 
 type rpmEvent struct {
+	id       string
 	at       time.Time
+	expires  time.Time
 	user     string
 	state    atomic.Uint32
 	observer RPMObserver
@@ -140,9 +143,10 @@ type RPM struct {
 	maxEvents   int
 	maxKeyBytes int
 
-	global []*rpmEvent
-	users  map[string][]*rpmEvent
-	closed bool
+	global     []*rpmEvent
+	users      map[string][]*rpmEvent
+	closed     bool
+	eventCount int
 }
 
 // NewRPM constructs one shared global/per-user RPM limiter.
@@ -261,7 +265,7 @@ func (r *RPM) check(userKey string, userLimit int) (RPMDecision, error) {
 	}
 	decision := r.decisionLocked(userKey, userLimit, now)
 	if decision.Allowed {
-		if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys {
+		if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys || r.eventCount >= r.maxEvents {
 			decision.Allowed = false
 			decision.Reason = RPMCapacity
 		}
@@ -323,7 +327,7 @@ func (r *RPM) record(userKey string, userLimit int) (RPMDecision, error) {
 	if !decision.Allowed {
 		return decision, nil
 	}
-	if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys {
+	if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys || r.eventCount >= r.maxEvents {
 		decision.Allowed = false
 		decision.Reason = RPMCapacity
 		return decision, ErrCapacity
@@ -417,7 +421,7 @@ func (r *RPM) reserveObserved(ctx context.Context, userKey string, userLimit int
 		r.observeLocked(observer, "denied", now, now, decision)
 		return nil, decision, nil
 	}
-	if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys {
+	if _, exists := r.users[userKey]; !exists && len(r.users) >= r.maxUserKeys || r.eventCount >= r.maxEvents {
 		decision.Allowed = false
 		decision.Reason = RPMCapacity
 		r.observeLocked(observer, "denied", now, now, decision)
@@ -458,10 +462,11 @@ func (r *RPM) decisionLocked(userKey string, userLimit int, now time.Time) RPMDe
 }
 
 func (r *RPM) newEventLocked(userKey string, now time.Time, state rpmEventState) *rpmEvent {
-	event := &rpmEvent{at: now, user: userKey}
+	event := &rpmEvent{id: rand.Text(), at: now, expires: now.Add(r.window), user: userKey}
 	event.state.Store(uint32(state))
 	r.global = append(r.global, event)
 	r.users[userKey] = append(r.users[userKey], event)
+	r.eventCount++
 	return event
 }
 
@@ -471,7 +476,7 @@ func (r *RPM) earliestExpiryLocked(events []*rpmEvent, now time.Time) time.Durat
 		if event == nil || event.state.Load() == uint32(rpmEventReleased) {
 			continue
 		}
-		expires := event.at.Add(r.window)
+		expires := event.expires
 		if !expires.After(now) {
 			continue
 		}
@@ -486,10 +491,9 @@ func (r *RPM) earliestExpiryLocked(events []*rpmEvent, now time.Time) time.Durat
 }
 
 func (r *RPM) pruneLocked(now time.Time) {
-	cutoff := now.Add(-r.window)
 	globalWrite := 0
 	for _, event := range r.global {
-		if event != nil && event.at.After(cutoff) && event.state.Load() != uint32(rpmEventReleased) {
+		if event != nil && event.expires.After(now) && event.state.Load() != uint32(rpmEventReleased) {
 			r.global[globalWrite] = event
 			globalWrite++
 		}
@@ -499,10 +503,11 @@ func (r *RPM) pruneLocked(now time.Time) {
 	}
 	r.global = r.global[:globalWrite]
 
+	r.eventCount = 0
 	for userKey, events := range r.users {
 		write := 0
 		for _, event := range events {
-			if event != nil && event.at.After(cutoff) && event.state.Load() != uint32(rpmEventReleased) {
+			if event != nil && event.expires.After(now) && event.state.Load() != uint32(rpmEventReleased) {
 				events[write] = event
 				write++
 			}
@@ -514,6 +519,7 @@ func (r *RPM) pruneLocked(now time.Time) {
 			delete(r.users, userKey)
 		} else {
 			r.users[userKey] = events[:write]
+			r.eventCount += write
 		}
 	}
 }

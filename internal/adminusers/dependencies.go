@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -56,6 +57,41 @@ type Service struct {
 	now               func() time.Time
 	newID             func(string) (string, error)
 	cancelUserDuelsTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error)
+	identityMu        sync.RWMutex
+	identityBarrier   func(context.Context, string) (func(), error)
+}
+
+// AttachIdentityMutationBarrier connects management writes to the process-wide
+// stable Discord identity gate. It must be called once before routes are used.
+// The returned release must be safe to invoke on both commit and rollback.
+func (service *Service) AttachIdentityMutationBarrier(lock func(context.Context, string) (func(), error)) error {
+	if service == nil || lock == nil {
+		return ErrInvalidRequest
+	}
+	service.identityMu.Lock()
+	defer service.identityMu.Unlock()
+	if service.identityBarrier != nil {
+		return ErrConflict
+	}
+	service.identityBarrier = lock
+	return nil
+}
+
+func (service *Service) lockIdentity(ctx context.Context, discordID string) (func(), error) {
+	service.identityMu.RLock()
+	lock := service.identityBarrier
+	service.identityMu.RUnlock()
+	if lock == nil {
+		return nil, ErrUnavailable
+	}
+	release, err := lock(ctx, discordID)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, ErrInvariant
+	}
+	return release, nil
 }
 
 func NewService(config ServiceConfig) (*Service, error) {

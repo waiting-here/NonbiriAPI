@@ -7,8 +7,18 @@ import (
 	"fmt"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 )
+
+// IdentityContinuity exposes the single domain owner to application wiring.
+// Its secret stays private and is erased when the authentication runtime closes.
+func (r *Runtime) IdentityContinuity() *continuity.Service {
+	if r == nil {
+		return nil
+	}
+	return r.continuity
+}
 
 // UserSessionBindingState is the closed authority result for an irreversible
 // user-session binding. Callers must fail closed on UserSessionBindingUncertain.

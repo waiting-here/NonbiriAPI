@@ -21,8 +21,12 @@ import (
 )
 
 const (
-	routeUsers                 = "/admin/api/users"
-	routeUser                  = "/admin/api/users/{id}"
+	routeUsers = "/admin/api/users"
+	routeUser  = "/admin/api/users/{id}"
+	// A shared wildcard keeps /users/deleted/{recordID} compatible with
+	// /users/{id}/loans and /users/{id}/penalties in the standard router.
+	routeDeletedUser           = "/admin/api/users/{id}/{recordID}"
+	routeDeletionDuelAborts    = "/admin/api/users/deletion-duel-aborts"
 	routeBan                   = "/admin/api/users/{id}/ban"
 	routeUnban                 = "/admin/api/users/{id}/unban"
 	routeUsage                 = "/admin/api/usage"
@@ -45,6 +49,7 @@ type managementRoute struct {
 func (api *httpAPI) userRoutes() []managementRoute {
 	return []managementRoute{
 		{http.MethodGet, api.role.route(routeUsers), api.listUsers},
+		{http.MethodGet, api.role.route(routeDeletedUser), api.getDeletedUser},
 		{http.MethodGet, api.role.route(routeUser), api.getUser},
 		{http.MethodGet, api.role.route(routeUserLoans), api.getLoans},
 		{http.MethodGet, api.role.route(routeUserPenalties), api.getPenalties},
@@ -61,7 +66,12 @@ func RegisterStewardRoutes(registrar StewardRouteRegistrar, service *Service) er
 		return errors.New("adminusers: route registrar and service are required")
 	}
 	api := &httpAPI{service: service, role: roleSteward}
-	for _, route := range api.userRoutes() {
+	routes := append(api.userRoutes(), []managementRoute{
+		{http.MethodGet, api.role.route(routeBlacklist), api.listBlacklist},
+		{http.MethodPost, api.role.route(routeBlacklist), api.addBlacklist},
+		{http.MethodGet, api.role.route(routeBlacklistEvents), api.listBlacklistEvents},
+	}...)
+	for _, route := range routes {
 		if err := registrar.RegisterStewardRoute(route.method, route.pattern, route.handler); err != nil {
 			return fmt.Errorf("adminusers: register %s %s: %w", route.method, route.pattern, err)
 		}
@@ -77,7 +87,9 @@ func RegisterRoutes(registrar AdminRouteRegistrar, service *Service) error {
 	routes := append(api.userRoutes(), []managementRoute{
 		{http.MethodGet, routeBlacklist, api.listBlacklist},
 		{http.MethodPost, routeBlacklist, api.addBlacklist},
+		{http.MethodGet, routeBlacklistEvents, api.listBlacklistEvents},
 		{http.MethodPost, routeBlacklistRemove, api.removeBlacklist},
+		{http.MethodGet, routeDeletionDuelAborts, api.listDeletionDuelAborts},
 		{http.MethodGet, routeUsage, api.getUsage},
 		{http.MethodGet, routeActivity, api.getActivity},
 		{http.MethodGet, routeEndpointOverview, api.getEndpointOverview},
@@ -95,11 +107,18 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "is_banned", "level", "q", "user_id", "cursor", "limit", "page", "page_size")
+	values, ok := strictQuery(writer, request, "account_state", "is_banned", "level", "q", "discord_id", "user_id", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
 	query := UserListQuery{}
+	if raw, set := singleQuery(values, "account_state"); set {
+		if raw != "all" && raw != "active" && raw != "deleted" {
+			writeError(writer, ErrInvalidRequest)
+			return
+		}
+		query.AccountState = raw
+	}
 	if raw, set := singleQuery(values, "level"); set {
 		value, err := strconv.Atoi(raw)
 		if err != nil || strconv.Itoa(value) != raw || value < 1 || value > 6 {
@@ -123,6 +142,13 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 		}
 		query.Q = raw
 	}
+	if raw, set := singleQuery(values, "discord_id"); set {
+		if !validDiscordID(raw) {
+			writeError(writer, ErrInvalidRequest)
+			return
+		}
+		query.DiscordID = raw
+	}
 	if raw, set := singleQuery(values, "user_id"); set {
 		value, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || value <= 0 || strconv.FormatInt(value, 10) != raw {
@@ -134,7 +160,64 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
-	page, err := api.service.listUsers(request.Context(), principal.UserID, api.role, query)
+	if query.AccountState == "" && query.DiscordID == "" && (query.Cursor != "" || query.Limit != 0) {
+		page, err := api.service.listUsers(request.Context(), principal.UserID, api.role, query)
+		if err != nil {
+			writeError(writer, err)
+			return
+		}
+		writeJSON(writer, http.StatusOK, page)
+		return
+	}
+	page, err := api.service.listManagedAccounts(request.Context(), principal.UserID, api.role, query)
+	if err != nil {
+		writeError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, page)
+}
+
+func (api *httpAPI) getDeletedUser(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
+	if request.PathValue("id") != "deleted" {
+		writeError(writer, ErrNotFound)
+		return
+	}
+	if !requireReadRequest(writer, request) {
+		return
+	}
+	raw := request.PathValue("recordID")
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != raw {
+		writeError(writer, ErrNotFound)
+		return
+	}
+	item, err := api.service.getDeletedAccount(request.Context(), principal.UserID, id, api.role)
+	if err != nil {
+		writeError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, item)
+}
+
+func (api *httpAPI) listDeletionDuelAborts(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
+	if !requireNoBody(writer, request) {
+		return
+	}
+	values, ok := strictQuery(writer, request, "discord_id", "page", "page_size")
+	if !ok {
+		return
+	}
+	discordID, set := singleQuery(values, "discord_id")
+	if !set || !validDiscordID(discordID) {
+		writeError(writer, ErrInvalidRequest)
+		return
+	}
+	requested, _, err := pagination.Parse(values)
+	if err != nil {
+		writeError(writer, ErrInvalidRequest)
+		return
+	}
+	page, err := api.service.listDeletionDuelAborts(request.Context(), principal.UserID, discordID, &requested)
 	if err != nil {
 		writeError(writer, err)
 		return

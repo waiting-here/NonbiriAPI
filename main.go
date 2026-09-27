@@ -45,6 +45,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
@@ -778,6 +779,16 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create authentication runtime: %w", err)
 	}
+	for cursor := int64(0); ; {
+		next, count, err := authRuntime.IdentityContinuity().BackfillBatch(startupContext, cursor, 1000)
+		if err != nil {
+			return nil, fmt.Errorf("bind account continuity: %w", err)
+		}
+		if count < 1000 {
+			break
+		}
+		cursor = next
+	}
 	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
 	audits, err = newAuditRuntime(startupContext, store, vault, roleAuthorizer)
 	if err != nil {
@@ -1007,7 +1018,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("create administrator user service: %w", err)
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
-		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
+		store, vault, authRuntime.IdentityContinuity(), claimService, charityService, charityRoutingService, resourceRepository,
 		connectorRegistry, localBackend, debugHub, gate, rpmLimits, activityEngines.CancelUserTx, audits, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
@@ -1015,6 +1026,22 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	if err := authRuntime.AttachUserLifecycleGate(forwardRuntime.lifecycle); err != nil {
 		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
+	}
+	if err := adminUserService.AttachIdentityMutationBarrier(func(ctx context.Context, discordID string) (func(), error) {
+		key, err := authRuntime.IdentityContinuity().KeyForDiscord(discordID)
+		if err != nil {
+			return nil, err
+		}
+		change, err := forwardRuntime.lifecycle.BeginIdentityChange(ctx, [32]byte(key))
+		if errors.Is(err, lifecyclegate.ErrRetiring) {
+			return nil, adminusers.ErrConflict
+		}
+		if err != nil {
+			return nil, err
+		}
+		return func() { change.Abort() }, nil
+	}); err != nil {
+		return nil, fmt.Errorf("attach account management identity barrier: %w", err)
 	}
 	audits.flow = forwardRuntime.flow
 	userInvalidations.limitsChanged = forwardRuntime.flow.NotifyUserLimitsChanged

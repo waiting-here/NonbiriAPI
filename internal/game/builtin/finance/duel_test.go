@@ -64,6 +64,7 @@ func TestDuelRealLedgerMatchTerminalAndRollbackAtCapacityBoundary(t *testing.T) 
 					if err != nil {
 						t.Fatal(err)
 					}
+					bindFinanceUser(t, database, tx, users[seat])
 					// Activity wallets coexist with the two closed game payment assets.
 					for _, asset := range []ledger.Asset{ledger.SketchPaper, ledger.SketchBrush} {
 						if _, err := ledger.CreateUserAssetAccount(ctx, tx, users[seat], asset, 100); err != nil {

@@ -362,6 +362,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Rankings:   exports, Penalties: exports, Governance: exports,
 		},
 		Delete: DeleteAdapters{
+			Continuity:           noopDelete("continuity"),
 			CharityRouting:       noopDelete("charity_routing"),
 			Governance:           noopDelete("governance"),
 			AuthSessionCallerKey: noopDelete("auth"), Resources: noopDelete("resources"), ClaimLog: noopDelete("claim_log"),
@@ -379,6 +380,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
+			Continuity:     noopRetention("continuity"),
 			CharityRouting: noopRetention("charity_routing"),
 			Governance:     noopRetention("governance"),
 			Sessions:       noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),

@@ -163,3 +163,66 @@ it('builds a two-condition website and title rule without silently saving it', a
   expect(screen.getAllByLabelText('Match value')).toHaveLength(2);
   expect(api.saveRule).not.toHaveBeenCalled();
 });
+
+it('converts a bounded administrator ban duration exactly and keeps it off ordinary rules', async () => {
+  const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+  await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
+  await view.user.click(screen.getByRole('button', { name: 'Tavo' }));
+  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'days');
+  await view.user.clear(screen.getByRole('spinbutton', { name: /Ban duration/ }));
+  await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '3651');
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'hours');
+  await view.user.clear(screen.getByRole('spinbutton', { name: /Ban duration/ }));
+  await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '2');
+  await view.user.click(screen.getByRole('checkbox', { name: 'Automatic ban enabled' }));
+  await view.user.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() =>
+    expect(api.saveRule).toHaveBeenCalledWith(
+      expect.objectContaining({ auto_ban: { enabled: true, duration_seconds: 7200 } }),
+      undefined,
+    ),
+  );
+});
+
+it('blocks steward editing of a bound rule even when its ban is disabled', async () => {
+  api.rules.mockResolvedValue({
+    items: [
+      {
+        id: 'rsk_AAAAAAAAAAAAAAAAAAAAAA',
+        name: 'Protected',
+        status: 'suspected',
+        enabled: true,
+        revision: 3,
+        conditions: [
+          { field: 'user_agent', operator: 'prefix', value: 'App/', case_sensitive: false },
+        ],
+        evidence_note: '',
+        evidence_url: '',
+        created_at: 1790000640,
+        updated_at: 1790000640,
+        created_by_role: 'admin',
+        updated_by_role: 'admin',
+        created_by_user_id: null,
+        updated_by_user_id: null,
+        auto_ban: { enabled: false, duration_seconds: null },
+      },
+    ],
+    total: 1,
+    next: '',
+    has_more: false,
+  });
+  const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
+    station: 'user',
+  });
+  await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+  expect(
+    await screen.findByText(/Only an administrator can edit or remove this bound rule/),
+  ).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+});

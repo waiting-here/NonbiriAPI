@@ -27,16 +27,19 @@ type Validator func(context.Context, int64, string) (bool, error)
 
 // Config controls the bounded process-local state table.
 type Config struct {
-	MaxUsers int
+	MaxUsers         int
+	IdentityResolver IdentityResolver
 }
 
 // Gate is one process-wide lifecycle admission boundary shared by browser
 // sessions and CallerKeys. It never stores raw credentials.
 type Gate struct {
-	mu       sync.Mutex
-	users    map[int64]*userState
-	maxUsers int
-	closed   bool
+	mu               sync.Mutex
+	users            map[int64]*userState
+	maxUsers         int
+	closed           bool
+	identities       map[[32]byte]*identityState
+	identityResolver IdentityResolver
 }
 
 type userState struct {
@@ -53,12 +56,14 @@ type retirementWait struct {
 }
 
 type lease struct {
-	gate     *Gate
-	state    *userState
-	ctx      context.Context
-	cancel   context.CancelFunc
-	userID   int64
-	released atomic.Bool
+	gate        *Gate
+	state       *userState
+	ctx         context.Context
+	cancel      context.CancelFunc
+	userID      int64
+	released    atomic.Bool
+	identity    *identityState
+	identityKey [32]byte
 }
 
 // New creates a bounded lifecycle gate.
@@ -70,7 +75,7 @@ func New(config Config) (*Gate, error) {
 	if maxUsers < 1 || maxUsers > DefaultMaxUsers {
 		return nil, ErrCapacity
 	}
-	return &Gate{users: make(map[int64]*userState), maxUsers: maxUsers}, nil
+	return &Gate{users: make(map[int64]*userState), identities: make(map[[32]byte]*identityState), maxUsers: maxUsers, identityResolver: config.IdentityResolver}, nil
 }
 
 // Admit establishes a cancellable user request context and then repeats the
@@ -91,10 +96,30 @@ func (g *Gate) Admit(ctx context.Context, userID int64, binding string, validate
 }
 
 func (g *Gate) acquire(parent context.Context, userID int64, binding string, validate Validator) (*lease, error) {
+	var key [32]byte
+	if g.identityResolver != nil {
+		var err error
+		key, err = g.identityResolver(parent, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	g.mu.Lock()
 	if g.closed {
 		g.mu.Unlock()
 		return nil, ErrClosed
+	}
+	var identity *identityState
+	if g.identityResolver != nil {
+		identity = g.identities[key]
+		if identity != nil && identity.changing {
+			g.mu.Unlock()
+			return nil, ErrRetiring
+		}
+		if identity == nil && len(g.identities) >= g.maxUsers {
+			g.mu.Unlock()
+			return nil, ErrCapacity
+		}
 	}
 	state := g.users[userID]
 	if state == nil {
@@ -110,7 +135,15 @@ func (g *Gate) acquire(parent context.Context, userID int64, binding string, val
 		return nil, ErrRetiring
 	}
 	cancelCtx, cancel := context.WithCancel(parent)
-	l := &lease{gate: g, state: state, ctx: cancelCtx, cancel: cancel, userID: userID}
+	l := &lease{gate: g, state: state, ctx: cancelCtx, cancel: cancel, userID: userID, identity: identity, identityKey: key}
+	if g.identityResolver != nil {
+		if identity == nil {
+			identity = &identityState{active: make(map[*lease]struct{})}
+			g.identities[key] = identity
+			l.identity = identity
+		}
+		identity.active[l] = struct{}{}
+	}
 	// The private marker lets a context-aware retirement exclude the request
 	// that is itself applying an automatic ban after its admission decision.
 	l.ctx = context.WithValue(cancelCtx, leaseContextKey{}, l)
@@ -154,6 +187,19 @@ func (l *lease) Release() {
 		return
 	}
 	g.mu.Lock()
+	if l.identity != nil {
+		delete(l.identity.active, l)
+		if wait := l.identity.wait; wait != nil && !wait.closed && wait.excluded != l {
+			wait.remaining--
+			if wait.remaining == 0 {
+				wait.closed = true
+				close(wait.done)
+			}
+		}
+		if len(l.identity.active) == 0 && !l.identity.changing && g.identities[l.identityKey] == l.identity {
+			delete(g.identities, l.identityKey)
+		}
+	}
 	delete(l.state.active, l)
 	if wait := l.state.retireWait; wait != nil && !wait.closed {
 		// A context-aware retirement does not wait for its excluded lease.
@@ -176,37 +222,55 @@ func (l *lease) Release() {
 // request represented by the supplied context, which is needed when an
 // automatic ban is triggered from that request's own denial callback.
 type UserRetirement struct {
-	gate   *Gate
-	userID int64
-	state  *userState
-	wait   *retirementWait
-	done   atomic.Bool
+	gate     *Gate
+	userID   int64
+	state    *userState
+	wait     *retirementWait
+	done     atomic.Bool
+	identity *IdentityChange
 }
 
 // BeginUserRetirement closes new admission, cancels active user contexts, and
 // waits for all active leases to release.
 func (g *Gate) BeginUserRetirement(userID int64) (*UserRetirement, error) {
-	return g.beginUserRetirement(userID, nil, false)
+	return g.beginUserRetirement(context.Background(), userID, nil, false)
 }
 
 // BeginUserRetirementContext is the context-aware form used by request-driven
 // automatic bans. The request carrying ctx is cancelled but not waited on by
 // the barrier, preventing the denial callback from waiting on itself.
 func (g *Gate) BeginUserRetirementContext(ctx context.Context, userID int64) (*UserRetirement, error) {
-	return g.beginUserRetirement(userID, leaseFromContext(ctx), true)
+	return g.beginUserRetirement(ctx, userID, leaseFromContext(ctx), true)
 }
 
 // BeginUserRetirementExcludingContext is the account-deletion form. It keeps
 // the retiring request usable while excluding it from the drain wait; every
 // other admitted request is still cancelled and drained before it returns.
 func (g *Gate) BeginUserRetirementExcludingContext(ctx context.Context, userID int64) (*UserRetirement, error) {
-	return g.beginUserRetirement(userID, leaseFromContext(ctx), false)
+	return g.beginUserRetirement(ctx, userID, leaseFromContext(ctx), false)
 }
 
-func (g *Gate) beginUserRetirement(userID int64, excluded *lease, cancelExcluded bool) (*UserRetirement, error) {
-	if g == nil || userID <= 0 {
+func (g *Gate) beginUserRetirement(ctx context.Context, userID int64, excluded *lease, cancelExcluded bool) (*UserRetirement, error) {
+	if g == nil || ctx == nil || userID <= 0 {
 		return nil, ErrInvalid
 	}
+	var identity *IdentityChange
+	if g.identityResolver != nil {
+		key, err := g.identityResolver(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		identity, err = g.BeginIdentityChange(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	accepted := false
+	defer func() {
+		if !accepted && identity != nil {
+			identity.Abort()
+		}
+	}()
 	g.mu.Lock()
 	if g.closed {
 		g.mu.Unlock()
@@ -226,7 +290,7 @@ func (g *Gate) beginUserRetirement(userID int64, excluded *lease, cancelExcluded
 		return nil, ErrRetiring
 	}
 	if excluded != nil {
-		if excluded.userID != userID {
+		if excluded.gate != g || excluded.userID != userID {
 			excluded = nil
 		} else if _, exists := state.active[excluded]; !exists {
 			excluded = nil
@@ -257,7 +321,8 @@ func (g *Gate) beginUserRetirement(userID int64, excluded *lease, cancelExcluded
 		cancel()
 	}
 	<-wait.done
-	return &UserRetirement{gate: g, userID: userID, state: state, wait: wait}, nil
+	accepted = true
+	return &UserRetirement{gate: g, userID: userID, state: state, wait: wait, identity: identity}, nil
 }
 
 // Commit permanently retires the state after the authoritative DB mutation.
@@ -272,6 +337,9 @@ func (r *UserRetirement) Commit() bool {
 		delete(r.gate.users, r.userID)
 	}
 	r.gate.mu.Unlock()
+	if r.identity != nil {
+		r.identity.Commit()
+	}
 	return true
 }
 
@@ -291,6 +359,9 @@ func (r *UserRetirement) Abort() bool {
 		}
 	}
 	r.gate.mu.Unlock()
+	if r.identity != nil {
+		r.identity.Abort()
+	}
 	return true
 }
 

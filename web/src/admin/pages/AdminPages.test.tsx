@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivitiesPage } from './ActivitiesPage';
 import { EndpointsPage } from './EndpointsPage';
 import { UsersPage } from './UsersPage';
-import { adminPageKeys } from '../features/operations/adminPages';
 import { renderWithProviders } from '../../../test/unit/support';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -195,8 +194,7 @@ describe('administrator paged operation pages', () => {
     denied = true;
     await act(async () => {
       await view.queryClient.refetchQueries({
-        queryKey: adminPageKeys.users('fixture-admin', '', '', '1', 20),
-        exact: true,
+        queryKey: ['admin', 'operations', 'users'],
       });
     });
     await waitFor(() => expect(screen.queryByText(/Count limits/)).toBeNull());

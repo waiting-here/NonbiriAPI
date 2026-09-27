@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -137,6 +138,15 @@ func (service *Service) StatusForAsset(ctx context.Context, userID int64, asset 
 	if checked != 0 && checked != 1 {
 		return Status{}, ErrInvariant
 	}
+	if checked == 0 {
+		claimed, err := continuity.HasEligibilityTx(ctx, tx, userID, continuityKind(asset), "v1", day.siteDate, now)
+		if err != nil {
+			return Status{}, classifyDatabase("read stable check-in eligibility", err)
+		}
+		if claimed {
+			checked = 1
+		}
+	}
 	return Status{
 		Enabled: true, Asset: asset, CheckedInToday: checked == 1, Balance: formatMilliPoints(wallet.Balance.Big()),
 		AwardMinimum: formatMilliPoints(big.NewInt(config.awardMin)),
@@ -214,6 +224,14 @@ func (service *Service) CheckinForAsset(ctx context.Context, userID int64, asset
 	if checked != 0 {
 		return Result{}, ErrAlreadyCheckedIn
 	}
+	expiresAt := day.activityDay + 86400
+	claimed, err := continuity.ClaimEligibilityTx(ctx, tx, userID, continuityKind(asset), "v1", day.siteDate, now, &expiresAt)
+	if err != nil {
+		return Result{}, classifyDatabase("reserve stable check-in eligibility", err)
+	}
+	if !claimed {
+		return Result{}, ErrAlreadyCheckedIn
+	}
 	awardPlan := ledger.NewCheckinAward
 	if asset == ledger.Game {
 		awardPlan = ledger.NewGameCheckinAward
@@ -246,6 +264,13 @@ func (service *Service) CheckinForAsset(ctx context.Context, userID int64, asset
 	}
 	committed = true
 	return Result{Asset: asset, Award: formatMilliPoints(big.NewInt(award)), Balance: formatMilliPoints(new(big.Int).Add(wallet.Balance.Big(), big.NewInt(award)))}, nil
+}
+
+func continuityKind(asset ledger.Asset) continuity.EligibilityKind {
+	if asset == ledger.Game {
+		return continuity.CheckinGame
+	}
+	return continuity.CheckinGeneral
 }
 
 func (service *Service) authorize(ctx context.Context, tx *sql.Tx, userID, now int64) error {

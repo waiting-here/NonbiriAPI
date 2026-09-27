@@ -155,7 +155,8 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 	request lifecycle.DeleteRequest,
 	deletionOperationID string,
 ) error {
-	if a == nil || !validDeleteCall(ctx, tx, request) ||
+	if a == nil || !validDeleteCall(ctx, tx, request) || !request.Source.Valid() || request.Before == nil ||
+		request.Before.UserID != request.UserID || request.Before.DecisionNow != request.DecisionNow || request.Before.Source != string(request.Source) ||
 		!db.ValidateOpaqueID(deletionOperationID, "op_") {
 		return lifecycle.ErrInvalid
 	}
@@ -180,7 +181,7 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 		}
 		wallets = append(wallets, ledger.AssetWallet{Asset: asset, WalletID: wallet.ID, ExternalID: external.ID})
 	}
-	if err := adminalerts.RecordAccountDeletionTx(ctx, tx, request.UserID, request.DecisionNow); err != nil {
+	if err := adminalerts.RecordAccountDeletionTx(ctx, tx, request.Before, deletionOperationID); err != nil {
 		return fmt.Errorf("lifecycle adapters: record deletion alert: %w", err)
 	}
 	plan, err := ledger.NewAssetWalletsDeleteZero(ledger.Meta{

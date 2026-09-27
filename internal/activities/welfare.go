@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -59,11 +60,11 @@ func (r *Repository) ClaimWelfare(ctx context.Context, userID int64, mutation Co
 	if err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
 	}
-	var claimed int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM welfare_claims WHERE user_id=? AND site_day=?)`, userID, day).Scan(&claimed); err != nil {
-		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyDatabaseError("read welfare claim slot", err)
+	claimed, err := readWelfareClaimTx(ctx, tx, userID, day, now)
+	if err != nil {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
 	}
-	if claimed != 0 {
+	if claimed {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, ErrConflict
 	}
 
@@ -112,6 +113,20 @@ func (r *Repository) ClaimWelfare(ctx context.Context, userID int64, mutation Co
 	award, err := ledger.AmountFromBig(awardBig)
 	if err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, ErrResourceLimit
+	}
+	periodDay, expiresAt, err := continuity.DailyPeriodTx(ctx, tx, now)
+	if err != nil {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyDatabaseError("read welfare eligibility period", err)
+	}
+	if periodDay != day {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, ErrInvariant
+	}
+	consumed, err := continuity.ClaimEligibilityTx(ctx, tx, userID, continuity.Welfare, "v1", day, now, &expiresAt)
+	if err != nil {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyDatabaseError("claim welfare eligibility", err)
+	}
+	if !consumed {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, ErrConflict
 	}
 	operationID, err := generateCanonical(r.operationID, "op_")
 	if err != nil {
@@ -278,13 +293,17 @@ func addWelfareU128(total *big.Int, raw []byte) error {
 	return nil
 }
 
-func readWelfareClaimTx(ctx context.Context, tx *sql.Tx, userID int64, day string) (bool, error) {
+func readWelfareClaimTx(ctx context.Context, tx *sql.Tx, userID int64, day string, now int64) (bool, error) {
+	claimed, err := continuity.HasEligibilityTx(ctx, tx, userID, continuity.Welfare, "v1", day, now)
+	if err != nil {
+		return false, classifyDatabaseError("read welfare eligibility", err)
+	}
 	var exists int
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM welfare_claims WHERE user_id=? AND site_day=?)`, userID, day).Scan(&exists)
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM welfare_claims WHERE user_id=? AND site_day=?)`, userID, day).Scan(&exists)
 	if err != nil {
 		return false, classifyDatabaseError("read welfare claim", err)
 	}
-	return exists != 0, nil
+	return claimed || exists != 0, nil
 }
 
 func welfareClaimForExport(rows *sql.Rows) (WelfareClaimExport, error) {

@@ -98,7 +98,7 @@ func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult,
 	if count >= config.QueueCapacity {
 		return MutationResult{}, ErrLimit
 	}
-	start, _, err := s.limiter.Reserve(in.UserID)
+	start, _, err := s.limiter.ReserveTx(ctx, tx, in.UserID)
 	if err != nil {
 		if errors.Is(err, game.ErrStartRateLimited) {
 			return MutationResult{}, ErrRateLimited

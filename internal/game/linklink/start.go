@@ -137,7 +137,7 @@ func (service *Service) start(ctx context.Context, input StartInput, rulesVersio
 	if specConfig.PriceMilli <= 0 || specConfig.PriceMilli > game.MaxMoneyMilli {
 		return Result{}, ErrInvariant
 	}
-	reservation, _, err := service.limiter.Reserve(input.UserID)
+	reservation, _, err := service.limiter.ReserveTx(ctx, tx, input.UserID)
 	if err != nil {
 		return Result{}, mapLimiter(err)
 	}

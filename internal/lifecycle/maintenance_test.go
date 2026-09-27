@@ -42,6 +42,7 @@ func retentionAdaptersWithRecorder(record func(string)) RetentionAdapters {
 		}}
 	}
 	return RetentionAdapters{
+		Continuity:     makeAdapter("continuity"),
 		CharityRouting: makeAdapter("charity_routing"),
 		Governance:     makeAdapter("governance"),
 		Sessions:       makeAdapter("sessions"), RequestLogs: makeAdapter("request_logs"), Audits: makeAdapter("audits"),
@@ -67,7 +68,7 @@ func TestMaintenanceRunsFrozenRecoveryThenRetentionOrder(t *testing.T) {
 		"recovery:idempotency", "recovery:discovery", "recovery:claims", "recovery:thursday", "recovery:reports",
 		"recovery:fishing", "recovery:linklink", "recovery:rps", "recovery:bidding", "recovery:likes", "recovery:blackjack", "recovery:donations", "recovery:secrets",
 		"recovery:governance", "recovery:charity_routing",
-		"retention:sessions", "retention:request_logs", "retention:audits", "retention:observability", "retention:risk_audit", "retention:issues", "retention:fishing",
+		"retention:continuity", "retention:sessions", "retention:request_logs", "retention:audits", "retention:observability", "retention:risk_audit", "retention:issues", "retention:fishing",
 		"retention:linklink", "retention:rps", "retention:bidding", "retention:likes", "retention:blackjack", "retention:reports", "retention:donations", "retention:charity",
 		"retention:idempotency", "retention:secrets", "retention:governance", "retention:charity_routing",
 	}

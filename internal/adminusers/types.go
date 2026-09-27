@@ -103,13 +103,15 @@ type EndpointOverview struct {
 }
 
 type UserListQuery struct {
-	Level    int
-	IsBanned *bool
-	Q        string
-	UserID   int64
-	Cursor   string
-	Limit    int
-	Page     *pagination.Request
+	AccountState string
+	Level        int
+	IsBanned     *bool
+	Q            string
+	DiscordID    string
+	UserID       int64
+	Cursor       string
+	Limit        int
+	Page         *pagination.Request
 }
 
 type PageQuery struct {

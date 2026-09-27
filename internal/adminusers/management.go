@@ -53,6 +53,38 @@ func (s *Service) beginManagement(ctx context.Context, actorID int64, role manag
 	return tx, nil
 }
 
+// The preflight is deliberately outside the write transaction. Identity
+// resolution may use another SQL connection, and the target is rechecked
+// inside the subsequent write transaction after the identity gate is held.
+func (s *Service) lockUserIdentity(ctx context.Context, actorID, userID int64, role managementRole) (string, func(), error) {
+	if s == nil || userID <= 0 || ctx == nil {
+		return "", nil, ErrNotFound
+	}
+	tx, err := s.beginManagement(ctx, actorID, role, true)
+	if err != nil {
+		return "", nil, err
+	}
+	defer tx.Rollback()
+	row, err := readUserRow(ctx, tx, userID)
+	if err != nil {
+		return "", nil, err
+	}
+	if role == roleSteward && (actorID == userID || row.manualLevel.Valid && row.manualLevel.Int64 == 6) {
+		return "", nil, ErrForbidden
+	}
+	if !row.discordID.Valid || row.discordID.String == "" {
+		return "", nil, ErrConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return "", nil, classifyDatabaseError("commit identity authorization", err)
+	}
+	release, err := s.lockIdentity(ctx, row.discordID.String)
+	if err != nil {
+		return "", nil, err
+	}
+	return row.discordID.String, release, nil
+}
+
 // The target check precedes replay for stewards. A cached response cannot
 // authorize editing oneself or an account that has since become a steward.
 func (s *Service) beginUserMutation(ctx context.Context, actorID, userID int64, role managementRole, control ControlMutation, now int64) (*sql.Tx, userRow, idempotency.Decision, error) {
