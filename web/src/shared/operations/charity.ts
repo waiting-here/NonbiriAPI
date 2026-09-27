@@ -623,7 +623,8 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
 export interface CharityModel {
   is_mainstream?: boolean;
   excluded_request_fields?: string[];
-  route_strategy: 'ordered' | 'random' | 'expiry_weighted';
+  route_strategy: 'ordered' | 'random' | 'expiry_weighted' | 'cache_balanced';
+  affinity_ttl_seconds?: number;
   id: string;
   provider: string;
   model: string;
@@ -709,6 +710,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     [
       ...required,
       'route_strategy',
+      'affinity_ttl_seconds',
       'token_reserve_credits',
       'is_mainstream',
       'excluded_request_fields',
@@ -804,9 +806,13 @@ function normalizeModel(value: unknown, label: string): CharityModel {
         ? 'expiry_weighted'
         : oneOf(
             root.route_strategy,
-            ['ordered', 'random', 'expiry_weighted'] as const,
+            ['ordered', 'random', 'expiry_weighted', 'cache_balanced'] as const,
             `${label} route strategy`,
           ),
+    affinity_ttl_seconds:
+      root.affinity_ttl_seconds === undefined
+        ? 300
+        : integer(root.affinity_ttl_seconds, `${label} affinity lifetime`, 1, 86_400),
     enabled: boolean(root.enabled, `${label} enabled`),
     allowed_levels: allowedLevels,
     public_description: publicDescription,
