@@ -73,6 +73,7 @@ export function decodeDetail(value: unknown) {
     [
       'key',
       'name',
+      'cover_key',
       'visible',
       'starts_at',
       'ends_at',
@@ -87,19 +88,32 @@ export function decodeDetail(value: unknown) {
     end = nullableUnixSecond(v.ends_at, 'closing time');
   if ((start === null) !== (end === null) || (start !== null && end !== null && start >= end))
     invalidResponse('activity time range');
-  return {
-    key: oneOf(v.key, ['picture-book'] as const, 'activity key'),
+  const key = oneOf(v.key, ['picture-book', 'fat-fish'] as const, 'activity key');
+  const coverKey = oneOf(v.cover_key, ['picture-book', 'fat-fish'] as const, 'activity cover');
+  if (key !== coverKey) invalidResponse('activity cover');
+  const common = {
     name: string(v.name, 'activity name', { min: 1, max: 128 }),
+    cover_key: coverKey,
     visible: boolean(v.visible, 'visibility'),
     starts_at: start,
     ends_at: end,
     paused: boolean(v.paused, 'pause'),
     revision: sequence(v.revision),
     status: oneOf(v.status, statuses, 'activity status'),
-    module_config: decodeSupply(v.module_config),
   };
+  if (key === 'picture-book')
+    return { ...common, key, module_config: decodeSupply(v.module_config) };
+  record(v.module_config, [], 'activity module');
+  return { ...common, key, module_config: {} };
 }
-export type ActivityDetail = ReturnType<typeof decodeDetail>;
+export type DirectoryActivity = ReturnType<typeof decodeDetail>;
+export type ActivityDetail = Extract<DirectoryActivity, { key: 'picture-book' }>;
+export type PictureBookDetail = ActivityDetail;
+function decodePictureBookDetail(value: unknown): PictureBookDetail {
+  const detail = decodeDetail(value);
+  if (detail.key !== 'picture-book') invalidResponse('picture book activity');
+  return detail;
+}
 export function decodeWallet(value: unknown) {
   const v = record(value, ['general', 'sketch_paper', 'sketch_brush'], 'activity wallet');
   return {
@@ -161,10 +175,11 @@ export interface ActivityConfigInput {
 }
 export const getDirectory = () =>
   decoded('/api/limited-activities', (v) => array(v, 'limited activities', 64).map(decodeDetail));
-export const getDetail = () => decoded('/api/limited-activities/picture-book', decodeDetail);
+export const getDetail = () =>
+  decoded('/api/limited-activities/picture-book', decodePictureBookDetail);
 export const getWallet = () => decoded('/api/limited-activities/picture-book/wallet', decodeWallet);
 export const getAdminConfig = () =>
-  decoded('/admin/api/limited-activities/picture-book', decodeDetail);
+  decoded('/admin/api/limited-activities/picture-book', decodePictureBookDetail);
 export function exchange(input: ExchangeInput, key: string) {
   try {
     units(input.quantity, true);
@@ -195,7 +210,7 @@ export function updateConfig(input: ActivityConfigInput, key: string) {
   }
   return decoded(
     '/admin/api/limited-activities/picture-book',
-    decodeDetail,
+    decodePictureBookDetail,
     idempotentOptions(key, { method: 'PUT', json: input }),
   );
 }

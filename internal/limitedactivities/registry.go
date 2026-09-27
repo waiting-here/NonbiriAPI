@@ -9,9 +9,9 @@ import (
 )
 
 type definition struct {
-	key, name     string
-	runtime       Runtime
-	configuration moduleConfiguration
+	key, name, coverKey string
+	runtime             Runtime
+	configuration       moduleConfiguration
 }
 
 // Module configuration is compiled code. Public projection cannot accidentally
@@ -29,9 +29,17 @@ type Registry struct {
 	keys    []string
 }
 
-func NewRegistry(pictureBook Runtime) *Registry {
+func NewRegistry(pictureBook Runtime, fatFish ...Runtime) *Registry {
+	if len(fatFish) > 1 {
+		return nil
+	}
 	r := &Registry{modules: map[string]definition{}}
-	r.modules[PictureBook] = definition{PictureBook, "喵帕斯的绘本", pictureBook, pictureBookConfiguration{}}
+	r.modules[PictureBook] = definition{PictureBook, "喵帕斯的绘本", "picture-book", pictureBook, pictureBookConfiguration{}}
+	var fishRuntime Runtime
+	if len(fatFish) == 1 {
+		fishRuntime = fatFish[0]
+	}
+	r.modules[FatFish] = definition{FatFish, "饲养大肥鱼", "fat-fish", fishRuntime, emptyConfiguration{}}
 	for key := range r.modules {
 		r.keys = append(r.keys, key)
 	}

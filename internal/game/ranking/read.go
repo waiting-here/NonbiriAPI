@@ -40,12 +40,15 @@ type Row struct {
 }
 
 type Board struct {
-	AsOf            int64                `json:"as_of"`
-	StatisticsStart int64                `json:"statistics_start"`
-	Window          string               `json:"window"`
-	Rows            []Row                `json:"rows"`
-	Me              *Row                 `json:"me"`
-	Pagination      *pagination.Metadata `json:"pagination,omitempty"`
+	AsOf                 int64                `json:"as_of"`
+	StatisticsStart      int64                `json:"statistics_start"`
+	Window               string               `json:"window"`
+	Rows                 []Row                `json:"rows"`
+	Me                   *Row                 `json:"me"`
+	Pagination           *pagination.Metadata `json:"pagination,omitempty"`
+	RebuildStatus        string               `json:"rebuild_status,omitempty"`
+	HistoryCoverageStart *int64               `json:"history_coverage_start,omitempty"`
+	MissingEvents        *string              `json:"missing_events,omitempty"`
 }
 
 // ReadTx uses current identity preferences, restrictions and role in the same
@@ -54,6 +57,21 @@ func ReadTx(ctx context.Context, tx *sql.Tx, user int64, board, window string, p
 	result := Board{AsOf: now, Window: window, Rows: make([]Row, 0, 20)}
 	if err := tx.QueryRowContext(ctx, `SELECT started_at FROM game_statistics_epoch WHERE id=1`).Scan(&result.StatisticsStart); err != nil {
 		return Board{}, err
+	}
+	if board == biddingBoard {
+		rebuild, err := readBiddingRebuild(ctx, tx)
+		if err != nil {
+			return Board{}, err
+		}
+		result.RebuildStatus = rebuild.state
+		if rebuild.coverage.Valid {
+			result.HistoryCoverageStart = &rebuild.coverage.Int64
+		}
+		missing := strconv.FormatInt(rebuild.missing, 10)
+		result.MissingEvents = &missing
+		if rebuild.state != "completed" {
+			return result, nil
+		}
 	}
 	query := `SELECT t.user_id,t.amount_mag,t.achieved_at,t.achieved_phase,t.achieved_seq FROM game_rank_totals t JOIN users u ON u.id=t.user_id WHERE t.board=? AND t.window=? AND t.amount_sign=1 AND u.is_admin=0`
 	args := []any{board, window}
@@ -151,7 +169,7 @@ func identity(public bool, username, nick, discord, avatar, guild string) Identi
 		return Identity{Kind: "anonymous"}
 	}
 	result := Identity{Kind: "public", DisplayName: string(name)}
-	if parsed, err := url.Parse(guild); err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil {
+	if parsed, err := url.Parse(guild); err == nil && len(guild) <= 2048 && parsed.Scheme == "https" && parsed.User == nil && parsed.Port() == "" && (parsed.Hostname() == "cdn.discordapp.com" || parsed.Hostname() == "media.discordapp.net") {
 		result.AvatarURL = &guild
 	} else if safeAtom(discord) && safeAtom(avatar) {
 		result.AvatarURL = new("https://cdn.discordapp.com/avatars/" + discord + "/" + avatar + ".png")

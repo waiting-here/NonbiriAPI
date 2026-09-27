@@ -100,16 +100,25 @@ type TableFact struct {
 	Settlements []SeatSettlement `json:"settlements"`
 	Refunds     []SeatRefund     `json:"refunds,omitempty"`
 }
+
+// RealtimeIdentity is reconstructed for the current table read only. It is
+// never part of TableFact, retained history or personal export.
+type RealtimeIdentity struct {
+	Seat        int     `json:"seat"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url"`
+}
 type TableView struct {
-	ID          string    `json:"id"`
-	Revision    string    `json:"revision"`
-	StartedAt   int64     `json:"started_at"`
-	Phase       string    `json:"phase"`
-	Deadline    int64     `json:"deadline"`
-	NextRoundAt int64     `json:"next_round_at"`
-	TerminalAt  *int64    `json:"terminal_at"`
-	Reason      string    `json:"reason,omitempty"`
-	Fact        TableFact `json:"fact"`
+	ID                 string             `json:"id"`
+	Revision           string             `json:"revision"`
+	StartedAt          int64              `json:"started_at"`
+	Phase              string             `json:"phase"`
+	Deadline           int64              `json:"deadline"`
+	NextRoundAt        int64              `json:"next_round_at"`
+	TerminalAt         *int64             `json:"terminal_at"`
+	Reason             string             `json:"reason,omitempty"`
+	Fact               TableFact          `json:"fact"`
+	RealtimeIdentities []RealtimeIdentity `json:"realtime_identities,omitempty"`
 }
 type Home struct {
 	ServerNow   int64       `json:"server_now"`

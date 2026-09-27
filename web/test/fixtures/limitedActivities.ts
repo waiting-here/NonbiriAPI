@@ -1,8 +1,9 @@
-import type { ActivityDetail, ExchangeResult } from '../../src/shared/limitedactivities/api';
-export function limitedActivity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
+import type { PictureBookDetail, ExchangeResult } from '../../src/shared/limitedactivities/api';
+export function limitedActivity(overrides: Partial<PictureBookDetail> = {}): PictureBookDetail {
   return {
     key: 'picture-book',
     name: 'Picture book',
+    cover_key: 'picture-book',
     visible: false,
     starts_at: 1_800_000_000,
     ends_at: 1_800_003_600,

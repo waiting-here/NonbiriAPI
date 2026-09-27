@@ -9,6 +9,7 @@ import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
+import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { GamePayment } from '../common/GamePayment';
 import { GameWallets } from '../common/GameWallets';
 import { RandomnessProof } from '../common/RandomnessProof';
@@ -423,10 +424,6 @@ function LeaderboardCard({
             </thead>
             <tbody>
               {[...rows, ...missingMe].map((row) => {
-                const identity =
-                  row.identity.kind === 'public'
-                    ? row.identity.displayName
-                    : text('fishing.leaderboard.anonymous');
                 const score = isSingleBoard ? (
                   <span className="fishing-board__catch">
                     {(row as FishingSingleRow).blueFatFishLengthCM !== null ? (
@@ -463,8 +460,12 @@ function LeaderboardCard({
                   >
                     <td>{row.rank}</td>
                     <td>
-                      {identity}
-                      {row.isMe ? ` · ${text('fishing.leaderboard.me')}` : ''}
+                      <PublicGameIdentity
+                        identity={row.identity}
+                        anonymousLabel={text('fishing.leaderboard.anonymous')}
+                        isMe={row.isMe}
+                        meLabel={text('fishing.leaderboard.me')}
+                      />
                     </td>
                     <td>{score}</td>
                   </tr>

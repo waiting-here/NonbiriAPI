@@ -13,7 +13,7 @@ import (
 var netBoards = [...]string{"game_net_profit", "fishing_net_profit", "blackjack_net_profit"}
 
 func isNetBoard(board string) bool {
-	return board == netBoards[0] || board == netBoards[1] || board == netBoards[2]
+	return board == netBoards[0] || board == netBoards[1] || board == netBoards[2] || board == biddingBoard
 }
 
 func netGameIndex(game string) int {

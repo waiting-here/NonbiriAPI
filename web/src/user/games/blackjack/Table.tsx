@@ -7,6 +7,7 @@ import type {
 } from '@shared/games/blackjack';
 import { useDuelText } from '../common/duel/copy';
 import { creditsFromMilli, formatCredits } from '../common/strict';
+import { PublicGameIdentity } from '../common/PublicGameIdentity';
 
 const ranks = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const suits = ['♠', '♥', '♣', '♦'];
@@ -108,8 +109,18 @@ export function BlackjackBoard({
   const cards = table.fact.cards;
   const mine = cards?.seats.find((seat) => seat.number === ownSeat);
   const myTerms = table.fact.seats.find((seat) => seat.seat === ownSeat);
+  const hasOwnArea = ownSeat !== null && table.phase !== 'seating';
+  const identityFor = (seat: number) => {
+    const value = table.realtime_identities?.find((identity) => identity.seat === seat);
+    return value
+      ? { kind: 'public' as const, displayName: value.display_name, avatarURL: value.avatar_url }
+      : { kind: 'anonymous' as const };
+  };
   return (
-    <section className="bj-board" aria-label={t('二十一点牌桌', 'Blackjack table')}>
+    <section
+      className={`bj-board bj-board--viewer-${ownSeat === null ? 'spectator' : 'participant'} bj-board--phase-${table.phase}`}
+      aria-label={t('二十一点牌桌', 'Blackjack table')}
+    >
       <div className="bj-table-watermark" aria-hidden="true">
         BLACKJACK <span>3 : 2</span>
       </div>
@@ -148,18 +159,24 @@ export function BlackjackBoard({
           )}
         </p>
       </section>
-      {mine && (
+      {hasOwnArea && (
         <section className="bj-mine" aria-label={t('你的手牌', 'Your hands')}>
           <h2>
-            {t('你的手牌', 'Your hands')} <small>#{mine.number + 1}</small>
+            {t('你的手牌', 'Your hands')} <small>#{ownSeat + 1}</small>
           </h2>
+          <PublicGameIdentity
+            identity={identityFor(ownSeat)}
+            anonymousLabel={t('匿名牌手', 'Anonymous card player')}
+            isMe
+            meLabel={t('你', 'You')}
+          />
           {myTerms?.emote && (
             <span className="bj-emote" role="status">
               {emoteText(myTerms.emote, t)}
             </span>
           )}
           <div className="bj-hands">
-            {mine.hands.map((hand, i) => (
+            {mine?.hands.map((hand, i) => (
               <section key={i}>
                 <h3>
                   {mine.hands.length > 1 ? `${t('手牌', 'Hand')} ${i + 1}` : t('本手', 'Your hand')}
@@ -172,11 +189,11 @@ export function BlackjackBoard({
       )}
       {controls}
       <div
-        className={`bj-seats ${table.phase === 'seating' ? 'bj-seats--seating' : ''}`}
+        className={`bj-seats ${hasOwnArea ? 'bj-seats--eight' : 'bj-seats--nine'}`}
         aria-label={t('同桌玩家', 'Other seats')}
       >
         {Array.from({ length: 9 }, (_, number) => {
-          if (number === ownSeat && mine) return null;
+          if (number === ownSeat && hasOwnArea) return null;
           const terms = table.fact.seats.find((s) => s.seat === number),
             seat = cards?.seats.find((s) => s.number === number);
           return (
@@ -192,6 +209,15 @@ export function BlackjackBoard({
                 </strong>
                 <span>{terms ? formatCredits(terms.stake) : t('空位', 'Open')}</span>
               </header>
+              {terms && (
+                <PublicGameIdentity
+                  identity={identityFor(number)}
+                  anonymousLabel={t('匿名牌手', 'Anonymous card player')}
+                  isMe={number === ownSeat}
+                  meLabel={t('你', 'You')}
+                  size={24}
+                />
+              )}
               {seat ? (
                 seat.hands.map((hand, i) => (
                   <HandCards

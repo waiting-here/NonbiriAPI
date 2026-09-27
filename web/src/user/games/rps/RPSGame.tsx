@@ -21,6 +21,7 @@ import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GameMoney } from '../common/GameMoney';
+import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { GamePayment } from '../common/GamePayment';
 import { spendableGameCredits } from '../common/spendable';
 import { useGameSettlement } from '../common/useGameSettlement';
@@ -739,10 +740,12 @@ function Leaderboard({
                 >
                   <td>{row.rank}</td>
                   <td>
-                    {row.identity.kind === 'public'
-                      ? row.identity.displayName
-                      : text('rps.leaderboard.anonymous')}
-                    {row.isMe ? ` · ${text('rps.leaderboard.me')}` : ''}
+                    <PublicGameIdentity
+                      identity={row.identity}
+                      anonymousLabel={text('rps.leaderboard.anonymous')}
+                      isMe={row.isMe}
+                      meLabel={text('rps.leaderboard.me')}
+                    />
                   </td>
                   <td>
                     {row.board === 'profit_rate' ? (
