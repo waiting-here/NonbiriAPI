@@ -103,6 +103,8 @@ jobs:
         run: git diff --exit-code -- THIRD_PARTY_NOTICES.md
       - name: Install Chromium
         run: npm exec -- playwright install --with-deps chromium
+      - name: Deterministic game engine in Chromium
+        run: node test/fatfish-engine/check.mjs chromium
       - name: Browser smoke
         env:
           PLAYWRIGHT_HTML_OPEN: never
@@ -117,3 +119,8 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
         run: npx playwright test -c playwright.audit.config.ts
+      - name: Fish game browser integration
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          CGO_ENABLED: "0"
+        run: npx playwright test -c playwright.fatfish.config.ts
