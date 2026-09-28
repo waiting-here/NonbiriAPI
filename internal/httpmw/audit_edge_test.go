@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/host"
@@ -15,7 +16,7 @@ import (
 func spoofConfig() httpmw.Config {
 	return httpmw.Config{
 		UserHost: "user.example", AdminHost: "admin.example", SiteBaseURL: "https://user.example",
-		TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("10.0.0.0/8")},
+		TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32"), netip.MustParsePrefix("::1/128"), netip.MustParsePrefix("10.0.0.0/8")},
 	}
 }
 
@@ -48,23 +49,41 @@ func TestAuditEdgeUntrustedPeerHeadersIgnored(t *testing.T) {
 	}
 	// An untrusted peer supplies forged forwarding headers; the edge must
 	// ignore them and keep the direct peer as the client identity.
-	for _, headers := range []map[string]string{
-		{"X-Forwarded-For": "6.6.6.6"},
-		{"X-Forwarded-For": "6.6.6.6, 7.7.7.7"},
-		{"X-Real-IP": "6.6.6.6"},
-		{"Forwarded": "for=6.6.6.6;proto=https"},
-		{"X-Forwarded-Proto": "https"},
-		{"X-Forwarded-Host": "user.example"},
-	} {
-		req := spoofRequest("198.51.100.7:4000", "user.example")
-		for name, value := range headers {
-			req.Header.Set(name, value)
-		}
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		body := rec.Body.String()
-		if body != "station=user client=198.51.100.7 peer=198.51.100.7 https=0 trusted=0" {
-			t.Fatalf("untrusted spoof %v => %q", headers, body)
+	for _, station := range []struct{ host, name string }{{"user.example", "user"}, {"admin.example", "admin"}} {
+		for _, peer := range []struct{ name, remote, ip string }{
+			{"ipv4", "198.51.100.7:4000", "198.51.100.7"},
+			{"ipv6", "[2001:db8::7]:4000", "2001:db8::7"},
+			{"cloudflare", "173.245.48.10:4000", "173.245.48.10"},
+			{"other_loopback", "127.0.0.2:4000", "127.0.0.2"},
+		} {
+			for _, tc := range []struct {
+				name    string
+				headers map[string]string
+			}{
+				{"xff", map[string]string{"X-Forwarded-For": "6.6.6.6"}},
+				{"xff_chain", map[string]string{"X-Forwarded-For": "6.6.6.6, 7.7.7.7"}},
+				{"real_ip", map[string]string{"X-Real-IP": "6.6.6.6"}},
+				{"forwarded", map[string]string{"Forwarded": "for=6.6.6.6;proto=https"}},
+				{"proto", map[string]string{"X-Forwarded-Proto": "https"}},
+				{"host", map[string]string{"X-Forwarded-Host": "user.example"}},
+				{"cf_ip", map[string]string{"CF-Connecting-IP": "203.0.113.66"}},
+				{"cf_ipv6", map[string]string{"CF-Connecting-IPv6": "2001:db8::66"}},
+				{"true_client_ip", map[string]string{"True-Client-IP": "203.0.113.66"}},
+				{"combined", map[string]string{"CF-Connecting-IP": "203.0.113.66", "X-Forwarded-For": "203.0.113.9, 10.1.1.1", "X-Real-IP": "192.0.2.66", "X-Forwarded-Proto": "https"}},
+			} {
+				t.Run(station.name+"/"+peer.name+"/"+tc.name, func(t *testing.T) {
+					req := spoofRequest(peer.remote, station.host)
+					for name, value := range tc.headers {
+						req.Header.Set(name, value)
+					}
+					rec := httptest.NewRecorder()
+					handler.ServeHTTP(rec, req)
+					want := "station=" + station.name + " client=" + peer.ip + " peer=" + peer.ip + " https=0 trusted=0"
+					if rec.Code != http.StatusOK || rec.Body.String() != want {
+						t.Fatalf("untrusted spoof => %d %q, want %q", rec.Code, rec.Body.String(), want)
+					}
+				})
+			}
 		}
 	}
 }
@@ -74,27 +93,36 @@ func TestAuditEdgeTrustedProxyChainLeftmostUntrusted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := spoofRequest("127.0.0.1:4000", "user.example")
-	// Chain: 203.0.113.9 -> 10.1.1.1 (trusted) -> 127.0.0.1 (trusted peer).
-	// The leftmost untrusted address is 203.0.113.9 and proto is honored
-	// from the trusted proxy.
-	req.Header.Set("X-Forwarded-For", "203.0.113.9, 10.1.1.1")
-	req.Header.Set("X-Forwarded-Proto", "https")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	body := rec.Body.String()
-	if body != "station=user client=203.0.113.9 peer=127.0.0.1 https=1 trusted=1" {
-		t.Fatalf("trusted chain => %q", body)
-	}
-
-	// A chain where every hop is trusted falls back to the leftmost entry.
-	req = spoofRequest("127.0.0.1:4000", "user.example")
-	req.Header.Set("X-Forwarded-For", "10.1.1.2, 10.1.1.1")
-	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	body = rec.Body.String()
-	if body != "station=user client=10.1.1.2 peer=127.0.0.1 https=0 trusted=1" {
-		t.Fatalf("all-trusted chain => %q", body)
+	for _, station := range []struct{ host, name string }{{"user.example", "user"}, {"admin.example", "admin"}} {
+		for _, tc := range []struct {
+			name, remote, peer, forward, client string
+			https                               bool
+		}{
+			{"ipv4", "127.0.0.1:4000", "127.0.0.1", "203.0.113.9", "203.0.113.9", true},
+			{"ipv6", "[::1]:4000", "::1", "2001:db8::9", "2001:db8::9", true},
+			{"mapped_ipv4", "[::1]:4000", "::1", "::ffff:192.0.2.7", "192.0.2.7", true},
+			{"trusted_hop", "127.0.0.1:4000", "127.0.0.1", "203.0.113.9, 10.1.1.1", "203.0.113.9", true},
+			{"forged_leftmost", "127.0.0.1:4000", "127.0.0.1", "192.0.2.66, 198.51.100.7, 10.1.1.1", "198.51.100.7", true},
+			{"mixed_chain", "[::1]:4000", "::1", "203.0.113.9, 2001:db8::7, 10.1.1.1", "2001:db8::7", true},
+			{"all_trusted", "127.0.0.1:4000", "127.0.0.1", "10.1.1.2, 10.1.1.1", "10.1.1.2", false},
+			{"maximum_hops", "127.0.0.1:4000", "127.0.0.1", "203.0.113.9, " + strings.Repeat("10.1.1.1, ", 30) + "10.1.1.1", "203.0.113.9", true},
+		} {
+			t.Run(station.name+"/"+tc.name, func(t *testing.T) {
+				req := spoofRequest(tc.remote, station.host)
+				req.Header.Set("X-Forwarded-For", tc.forward)
+				req.Header.Set("X-Real-IP", "192.0.2.66")
+				req.Header.Set("CF-Connecting-IP", "203.0.113.66")
+				if tc.https {
+					req.Header.Set("X-Forwarded-Proto", "https")
+				}
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, req)
+				want := "station=" + station.name + " client=" + tc.client + " peer=" + tc.peer + " https=" + boolStr(tc.https) + " trusted=1"
+				if rec.Code != http.StatusOK || rec.Body.String() != want {
+					t.Fatalf("trusted chain => %d %q, want %q", rec.Code, rec.Body.String(), want)
+				}
+			})
+		}
 	}
 }
 
@@ -123,25 +151,52 @@ func TestAuditEdgeMalformedForwardedHeadersRejected(t *testing.T) {
 	}
 	// From a trusted peer, malformed or duplicate forwarding headers must be
 	// rejected wholesale (fall back to the peer, not partially trusted).
-	cases := []map[string][]string{
-		{"X-Forwarded-For": {"203.0.113.9", "203.0.113.10"}}, // duplicate header
-		{"X-Forwarded-For": {"203.0.113.9, garbage"}},        // unparsable element
-		{"X-Forwarded-For": {"203.0.113.9, " + "10.1.1.1, 10.1.1.2, 10.1.1.3, 10.1.1.4, 10.1.1.5, 10.1.1.6, 10.1.1.7, 10.1.1.8, 10.1.1.9, 10.1.1.10, 10.1.1.11, 10.1.1.12, 10.1.1.13, 10.1.1.14, 10.1.1.15, 10.1.1.16, 10.1.1.17, 10.1.1.18, 10.1.1.19, 10.1.1.20, 10.1.1.21, 10.1.1.22, 10.1.1.23, 10.1.1.24, 10.1.1.25, 10.1.1.26, 10.1.1.27, 10.1.1.28, 10.1.1.29, 10.1.1.30, 10.1.1.31, 10.1.1.32, 10.1.1.33"}}, // too many hops
-		{"X-Real-IP": {"6.6.6.6, 7.7.7.7"}},    // comma in real-ip
-		{"X-Forwarded-Proto": {"https, http"}}, // duplicate proto values
+	cases := []struct {
+		name    string
+		headers map[string][]string
+	}{
+		{"duplicate_xff", map[string][]string{"X-Forwarded-For": {"203.0.113.9", "203.0.113.10"}}},
+		{"identical_duplicate_xff", map[string][]string{"X-Forwarded-For": {"203.0.113.9", "203.0.113.9"}}},
+		{"invalid_hop", map[string][]string{"X-Forwarded-For": {"203.0.113.9, garbage"}}},
+		{"invalid_left_of_untrusted", map[string][]string{"X-Forwarded-For": {"garbage, 203.0.113.9, 10.1.1.1"}}},
+		{"too_many_hops", map[string][]string{"X-Forwarded-For": {"203.0.113.9, " + strings.Repeat("10.1.1.1, ", 31) + "10.1.1.1"}}},
+		{"too_many_bytes", map[string][]string{"X-Forwarded-For": {strings.Repeat(" ", 4096) + "203.0.113.9"}}},
+		{"empty_xff", map[string][]string{"X-Forwarded-For": {""}}},
+		{"empty_hop", map[string][]string{"X-Forwarded-For": {"203.0.113.9, "}}},
+		{"quoted_ip", map[string][]string{"X-Forwarded-For": {`"203.0.113.9"`}}},
+		{"control_xff", map[string][]string{"X-Forwarded-For": {"203.0.113.9\r\n"}}},
+		{"zoned_ipv6", map[string][]string{"X-Forwarded-For": {"fe80::1%eth0"}}},
+		{"invalid_ipv6", map[string][]string{"X-Forwarded-For": {"2001:db8::invalid"}}},
+		{"comma_real_ip", map[string][]string{"X-Real-IP": {"6.6.6.6, 7.7.7.7"}}},
+		{"duplicate_real_ip", map[string][]string{"X-Real-IP": {"203.0.113.9", "203.0.113.10"}}},
+		{"duplicate_proto_values", map[string][]string{"X-Forwarded-Proto": {"https, http"}}},
+		{"cf_header_only", map[string][]string{}},
 	}
-	for i, headers := range cases {
-		req := spoofRequest("127.0.0.1:4000", "user.example")
-		for name, values := range headers {
-			for _, value := range values {
-				req.Header.Add(name, value)
+	for _, station := range []struct{ host, name string }{{"user.example", "user"}, {"admin.example", "admin"}} {
+		for _, peer := range []struct{ name, remote, ip string }{{"ipv4", "127.0.0.1:4000", "127.0.0.1"}, {"ipv6", "[::1]:4000", "::1"}} {
+			for _, tc := range cases {
+				t.Run(station.name+"/"+peer.name+"/"+tc.name, func(t *testing.T) {
+					req := spoofRequest(peer.remote, station.host)
+					req.Header.Set("CF-Connecting-IP", "203.0.113.66")
+					req.Header.Set("CF-Connecting-IPv6", "2001:db8::66")
+					req.Header.Set("True-Client-IP", "203.0.113.66")
+					if _, present := tc.headers["X-Forwarded-For"]; present {
+						// An invalid XFF must not fall through to another IP header.
+						req.Header.Set("X-Real-IP", "192.0.2.66")
+					}
+					for name, values := range tc.headers {
+						for _, value := range values {
+							req.Header.Add(name, value)
+						}
+					}
+					rec := httptest.NewRecorder()
+					handler.ServeHTTP(rec, req)
+					want := "station=" + station.name + " client=" + peer.ip + " peer=" + peer.ip + " https=0 trusted=1"
+					if rec.Code != http.StatusOK || rec.Body.String() != want {
+						t.Fatalf("malformed headers => %d %q, want %q", rec.Code, rec.Body.String(), want)
+					}
+				})
 			}
-		}
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		body := rec.Body.String()
-		if body != "station=user client=127.0.0.1 peer=127.0.0.1 https=0 trusted=1" {
-			t.Fatalf("case %d malformed headers => %q", i, body)
 		}
 	}
 }

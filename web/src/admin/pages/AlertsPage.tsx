@@ -619,7 +619,7 @@ export function AlertsPage() {
                           {alert.account_deletion ? (
                             <>
                               <p>{t('admin.alerts.deletionSnapshot')}</p>
-                              <dl className="ops-kv">
+                              <dl className="ops-kv" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
                                 <dt>Discord ID</dt>
                                 <dd>{alert.account_deletion.discord_id || '—'}</dd>
                                 <dt>{t('admin.alerts.deletedUser')}</dt>

@@ -290,8 +290,8 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
                     {result.data.data.map((item) => (
                       <tr key={item.discord_id}>
                         <td data-label="Discord ID">{item.discord_id}</td>
-                        <td className="ops-wrap" data-label={label.reason}>
-                          {item.reason}
+                        <td data-label={label.reason}>
+                          <span className="ops-blacklist-note">{item.reason}</span>
                         </td>
                         <td data-label={label.firstActor}>{actorLabels[item.first_actor_kind]}{item.first_actor_user_id ? ` #${item.first_actor_user_id}` : ''}</td>
                         <td data-label={label.account}>
@@ -350,7 +350,12 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
             <button type="button" className="btn btn-quiet" onClick={() => setSelected('')}>{zh ? '关闭' : 'Close'}</button>
           </div>
           {events.isPending ? <LoadingState /> : events.error ? <ErrorState error={events.error} onRetry={() => void events.refetch()} /> : events.data.data.length === 0 ? <p>{label.noEvents}</p> : (
-            <ul>{events.data.data.map((event) => <li key={event.id}>{formatDateTime(event.created_at)} · {actorLabels[event.actor_kind]}{event.actor_user_id ? ` #${event.actor_user_id}` : ''} · {label.eventNote}: {event.safe_note}</li>)}</ul>
+            <ul>{events.data.data.map((event) => (
+              <li key={event.id}>
+                {formatDateTime(event.created_at)} · {actorLabels[event.actor_kind]}{event.actor_user_id ? ` #${event.actor_user_id}` : ''} · {label.eventNote}:{' '}
+                <span className="ops-blacklist-note">{event.safe_note}</span>
+              </li>
+            ))}</ul>
           )}
           <div className="ops-actions">
             <button type="button" className="btn btn-secondary" disabled={eventsPage <= 1 || events.isFetching} onClick={() => setEventsPage(eventsPage - 1)}>{label.previous}</button>

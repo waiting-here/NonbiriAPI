@@ -30,6 +30,9 @@ This entry describes the unreleased rc.4 source candidate. The latest published 
 
 ### Fixed
 
+- Alert lists and details accept complete historical and current account-deletion snapshots, fixing invalid-response errors when viewing all alert types or filtering by account deletion.
+- Automatic blacklisting after self-deletion during a ban now includes the original ban reason captured inside the deletion transaction. Existing first reasons and actors remain intact, and administrator/steward blacklist views preserve multiline notes.
+- Deployment guidance now covers restoring Cloudflare visitor addresses on both virtual hosts before forwarding a canonical client IP to the application. Proxy regressions cover IPv4/IPv6, forged and malformed headers, and exclusion of raw forwarding headers from audit metadata; missing historical visitor addresses are not inferred.
 - A reported token total that disagrees with valid individual buckets is now marked in administrator and steward request logs, with a matching filter. Billing continues from those buckets. Invalid or ambiguous individual buckets remain unknown; Gateway usage with duplicate token fields is rejected.
 - OpenAI streaming requests normalize null stream options to request usage and reject invalid option shapes before dispatch. Usage-only streams cannot become successful completions, and named completion events accept the standard `[DONE]` marker.
 

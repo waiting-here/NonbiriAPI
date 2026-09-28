@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures } from '../../../../test/unit/support';
+import deletionSnapshots from '../../../../test/fixtures/account-deletion-alerts.json';
 import {
   adminAlertPageKeys,
   getAdminAlertPage,
@@ -42,6 +43,27 @@ function page(
 }
 
 describe('administrator alert page contract', () => {
+  it('reads mixed legacy and current deletion alerts for all status and type filters', () => {
+    const data = [
+      alert('4', true),
+      alert('3', true, { kind: 'account_deleted', account_deletion: deletionSnapshots.v2 }),
+      alert('2', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.v1 }),
+      alert('1', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.legacy }),
+    ];
+    expect(normalizeAdminAlertPageResponse(page(data), 'all', '1', 20, 'all').data).toEqual(data);
+  });
+
+  it.each(['all', 'true', 'false'] as const)('preserves deletion snapshots for the %s status filter', (resolved) => {
+    const rows = [
+      alert('2', true, { kind: 'account_deleted', account_deletion: deletionSnapshots.v2 }),
+      alert('1', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.v1 }),
+    ].filter((row) => resolved === 'all' || row.resolved === (resolved === 'true'));
+    expect(normalizeAdminAlertPageResponse(page(rows), resolved, '1', 20, 'account_deleted').data)
+      .toEqual(rows);
+    expect(() => normalizeAdminAlertPageResponse(page(rows), resolved, '1', 20, 'fetch_failed'))
+      .toThrow();
+  });
+
   it('preserves normalized alert fields and accepts a complete page window', () => {
     expect(
       normalizeAdminAlertPageResponse(

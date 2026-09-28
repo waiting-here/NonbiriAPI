@@ -1,4 +1,4 @@
-import { normalizeUsageSummary } from '@shared/operations/managedUsers';
+import { normalizeUsageSummary, type DeletedAccount } from '@shared/operations/managedUsers';
 export {
   normalizeAdminUser,
   normalizeUsageSummary,
@@ -171,7 +171,7 @@ export const ALERT_KINDS = [
   'account_deleted',
 ] as const;
 
-export interface AccountDeletion {
+interface AccountDeletionBalances {
   user_id: string;
   discord_id: string;
   general_balance: string;
@@ -180,28 +180,95 @@ export interface AccountDeletion {
   sketch_paper: string;
   sketch_brush: string;
 }
-function normalizeAccountDeletion(value: unknown): AccountDeletion {
-  const root = record(
-    value,
-    [
-      'user_id',
-      'discord_id',
-      'general_balance',
-      'game_balance',
-      'donation_credit',
-      'sketch_paper',
-      'sketch_brush',
-    ],
-    'account deletion',
-  );
+type AccountDeletionMetadata = Pick<
+  DeletedAccount,
+  | 'snapshot_version'
+  | 'registered_at'
+  | 'deleted_at'
+  | 'effective_level'
+  | 'ban'
+  | 'charity_pause'
+  | 'source'
+  | 'actor_user_id'
+  | 'blacklist_action'
+  | 'blacklist_reason_codes'
+>;
+export type AccountDeletion =
+  | AccountDeletionBalances
+  | (AccountDeletionBalances & AccountDeletionMetadata);
+
+function normalizeAlertDeletionPenalty(value: unknown, label: string): DeletedAccount['ban'] {
+  const root = record(value, ['state', 'active_at_deletion', 'reason', 'until'], label);
   return {
+    state: oneOf(root.state, ['known', 'unknown'] as const, `${label} state`),
+    active_at_deletion:
+      root.active_at_deletion === null ? null : boolean(root.active_at_deletion, `${label} active`),
+    reason: nullableString(root.reason, `${label} reason`, {
+      max: 1024,
+      bytes: 4096,
+      multiline: true,
+    }),
+    until: nullableUnixSecond(root.until, `${label} until`),
+  };
+}
+
+function normalizeAccountDeletion(value: unknown): AccountDeletion {
+  const balances = [
+    'user_id',
+    'discord_id',
+    'general_balance',
+    'game_balance',
+    'donation_credit',
+    'sketch_paper',
+    'sketch_brush',
+  ];
+  const metadata = [
+    'snapshot_version',
+    'registered_at',
+    'deleted_at',
+    'effective_level',
+    'ban',
+    'charity_pause',
+    'source',
+    'actor_user_id',
+    'blacklist_action',
+    'blacklist_reason_codes',
+  ];
+  const root = record(value, [...balances, ...metadata], 'account deletion', balances);
+  const amounts: AccountDeletionBalances = {
     user_id: decimalID(root.user_id, 'deleted user'),
-    discord_id: string(root.discord_id, 'Discord ID', { max: 64, bytes: 256 }),
+    discord_id: string(root.discord_id, 'Discord ID', { max: 128, bytes: 128 }),
     general_balance: amount(root.general_balance, 'general balance'),
     game_balance: amount(root.game_balance, 'game balance'),
     donation_credit: amount(root.donation_credit, 'donation credit', false, (1n << 128n) - 1n),
     sketch_paper: amount(root.sketch_paper, 'paper', false),
     sketch_brush: amount(root.sketch_brush, 'brush', false),
+  };
+  if (!metadata.some((field) => Object.hasOwn(root, field))) return amounts;
+  record(root, [...balances, ...metadata], 'account deletion');
+  return {
+    ...amounts,
+    snapshot_version: integer(root.snapshot_version, 'deletion snapshot version', 1, 2) as 1 | 2,
+    registered_at: nullableUnixSecond(root.registered_at, 'deleted user registration time'),
+    deleted_at: nullableUnixSecond(root.deleted_at, 'deletion time'),
+    effective_level:
+      root.effective_level === null ? null : integer(root.effective_level, 'deleted user level', 1, 6),
+    ban: normalizeAlertDeletionPenalty(root.ban, 'deleted user ban'),
+    charity_pause: normalizeAlertDeletionPenalty(root.charity_pause, 'deleted user charity pause'),
+    source: oneOf(root.source, ['unknown', 'self', 'admin', 'system'] as const, 'deletion source'),
+    actor_user_id:
+      root.actor_user_id === null ? null : decimalID(root.actor_user_id, 'deletion actor'),
+    blacklist_action: oneOf(
+      root.blacklist_action,
+      ['unknown', 'none', 'added', 'appended'] as const,
+      'deletion blacklist action',
+    ),
+    blacklist_reason_codes: array(root.blacklist_reason_codes, 'deletion blacklist reasons', 2)
+      .map((code) => oneOf(
+        code,
+        ['deletion_penalty_evasion', 'deletion_debt_evasion'] as const,
+        'deletion blacklist reason',
+      )),
   };
 }
 export interface AdminAlert {

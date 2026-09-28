@@ -129,13 +129,17 @@ sensitive data an upstream may return. Treat each caller key as a sensitive cred
 protect it at the proxy, storage, and logging boundary; the guard is one layer, not a
 substitute for choosing trusted upstreams and keeping key material private.
 
-Do not trust arbitrary `X-Forwarded-*` headers. The application accepts forwarding metadata only from configured trusted proxy addresses; malformed or duplicate values are discarded wholesale and the direct proxy peer metadata is used instead.
+The application accepts forwarding metadata only from configured trusted proxy addresses. An invalid or duplicate `X-Forwarded-For` falls back to the direct peer address, even if another IP header is valid. The application does not use `CF-Connecting-IP` or `True-Client-IP` as an alternative source.
 
 Source auditing distinguishes a direct peer, a validated forwarded client and a fallback peer. Before using shared-IP findings, verify the complete direct/CDN → Nginx → application chain for both IPv4 and IPv6, including an untrusted client-supplied forwarding header and malformed or duplicate values. A proxy address incorrectly treated as a client can associate many unrelated users. Fallback-quality addresses are excluded from shared-IP findings, but configuration still determines whether a forwarded address is trustworthy. Client headers are self-reported clues and cannot establish the identity of a relay or application.
 
 ### Nginx and Cloudflare notes
 
-When Nginx is on the same host, keep the application on loopback and set `NONBIRI_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`; the application trusts Nginx, not the whole Cloudflare address space. If Cloudflare proxies the public host, configure Nginx `set_real_ip_from` from Cloudflare's **current official IPv4/IPv6 lists**, use `real_ip_header CF-Connecting-IP`, enable `real_ip_recursive`, and preferably firewall the public TLS ports to those ranges. Do not copy a stale hard-coded range list from this document.
+When Nginx is on the same host, keep the application on loopback and set `NONBIRI_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`. These are the application's trusted Nginx peers; configure Cloudflare's trusted ranges at Nginx instead.
+
+If Cloudflare proxies the public hosts, configure the Nginx realip module for **both the user and administrator `server` blocks**. Set `set_real_ip_from` using Cloudflare's current official [IPv4 list](https://www.cloudflare.com/ips-v4/) and [IPv6 list](https://www.cloudflare.com/ips-v6/), and use `real_ip_header CF-Connecting-IP`. Both servers can inherit the same settings from `http` or include the same validated configuration. An administrator-only setting leaves the user host recording Cloudflare peers. Preferably firewall public origin TLS ports to those ranges; keep the range configuration current.
+
+`real_ip_recursive` defaults to `off`. Cloudflare's standard `CF-Connecting-IP` contains one address, so recursive search is unnecessary for this setup. Recursion matters when the chosen header contains a chain: `on` selects its last non-trusted address, while `off` selects its last address after the original peer matches `set_real_ip_from`. Choose it according to the actual trusted proxy chain. See the [Nginx realip directives](https://nginx.org/en/docs/http/ngx_http_realip_module.html) and [Cloudflare header semantics](https://developers.cloudflare.com/fundamentals/reference/http-headers/).
 
 After Nginx has validated the direct peer, discard any client-supplied forwarding chain and send one canonical client address to the application. A representative location block is:
 
@@ -146,6 +150,7 @@ location / {
     proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Real-IP $remote_addr;
 
     proxy_buffering off;
     proxy_read_timeout 1200s;
@@ -154,6 +159,12 @@ location / {
 ```
 
 Use separate `server` blocks/certificates for user and administrator hosts so the administrator host can have stricter network or identity controls. Adjust the upstream port and timeouts to the actual deployment; test SSE through the complete Cloudflare → Nginx → application path.
+
+Overwrite forwarding headers with the validated `$remote_addr`; do not append a client-supplied chain using `$proxy_add_x_forwarded_for` at this boundary. Validate the Nginx configuration before reload, then check both hosts with IPv4/IPv6 clients and direct requests carrying forged Cloudflare/XFF headers. A direct peer outside the configured Cloudflare ranges must not control the forwarded client address.
+
+The audit address is the network address reported by this trusted path. It does not establish a final device's identity or bypass a visitor's own proxy. Cloudflare Worker subrequests and Pseudo IPv4 can also change the address reported in visitor headers; account for those [documented header behaviors](https://developers.cloudflare.com/fundamentals/reference/http-headers/).
+
+A proxy correction affects new captures. Source records retain the selected address and its quality, without raw `CF-Connecting-IP`, `X-Forwarded-For` or `CF-Ray`. If earlier trusted per-request evidence was not retained, historical visitor addresses cannot be reconstructed from those records. Do not replace them using an account's newer address or approximate time/User-Agent matches.
 
 Model calls allow up to 900 seconds for upstream response headers and 1200 seconds for the whole logical request, including retries and streaming. Keep proxy timeouts at least 1200 seconds. These are application defaults, not editable site settings. Model discovery retains its separate five-minute worker budget.
 
