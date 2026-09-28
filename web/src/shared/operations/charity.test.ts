@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   getManagedBindings,
+  normalizeCharityBindingCandidate,
   normalizeAdminCharityModel,
   normalizeAdminDonation,
   normalizeStewardCharityModel,
@@ -26,6 +27,31 @@ const common = {
   created_at: 1,
   updated_at: 1,
 };
+
+const bindingSourceFixture = {
+  connector_type: 'openai-compatible',
+  canonical_base_url: 'https://example.test/v1',
+  display_head: 'A'.repeat(16),
+  display_tail: 'Z'.repeat(16),
+};
+
+const bindingDTO = (sourceTypes: unknown) => ({
+  id: '31',
+  ord: 0,
+  donation_key_id: '21',
+  donation_id: '11',
+  source: bindingSourceFixture,
+  upstream_model_id: 'model-without-sources',
+  source_types: sourceTypes,
+});
+
+const candidateDTO = (sourceTypes: unknown) => ({
+  donation_key_id: '21',
+  donation_id: '11',
+  source: bindingSourceFixture,
+  upstream_model_id: 'model-without-sources',
+  source_types: sourceTypes,
+});
 
 describe.each([normalizeAdminDonation, normalizeStewardDonation])(
   'terminal donation review',
@@ -456,5 +482,82 @@ describe('charity model wire', () => {
       bindings: [],
       binding_revision: '0',
     });
+  });
+
+  it.each(['admin', 'steward'] as const)(
+    'accepts an existing %s binding with no remaining catalogue sources',
+    async (role) => {
+      const binding = bindingDTO([]);
+      const fetchMock = vi.fn<typeof fetch>(
+        async () =>
+          new Response(JSON.stringify({ bindings: [binding], binding_revision: '2' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(getManagedBindings(role, '1')).resolves.toMatchObject({
+        bindings: [{ id: '31', ord: 0, source_types: [] }],
+        binding_revision: '2',
+      });
+      expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+        role === 'admin'
+          ? '/admin/api/charity-models/1/bindings'
+          : '/api/steward/charity-models/1/bindings',
+      );
+    },
+  );
+
+  it.each(['admin', 'steward'] as const)(
+    'continues to reject unknown source types in %s bindings',
+    async (role) => {
+      const binding = bindingDTO(['catalogue-v3']);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(
+          async () =>
+            new Response(JSON.stringify({ bindings: [binding], binding_revision: '2' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+        ),
+      );
+
+      await expect(getManagedBindings(role, '1')).rejects.toThrow(/source types/i);
+    },
+  );
+
+  it('keeps candidate source lists nonempty and rejects unknown source types', () => {
+    const candidate = candidateDTO([]);
+
+    expect(() => normalizeCharityBindingCandidate(candidate, 'candidate')).toThrow(
+      /candidate source types/i,
+    );
+    expect(() =>
+      normalizeCharityBindingCandidate(
+        candidateDTO(['catalogue-v3']),
+        'candidate',
+      ),
+    ).toThrow(/candidate source types/i);
+  });
+
+  it('keeps binding order continuity strict when an empty-source binding is present', async () => {
+    const binding = bindingDTO([]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              bindings: [binding, { ...bindingDTO(['manual']), id: '32', ord: 2 }],
+              binding_revision: '2',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+      ),
+    );
+
+    await expect(getManagedBindings('admin', '1')).rejects.toThrow(/binding order/i);
   });
 });

@@ -2448,6 +2448,15 @@ function BindingsPanel({
                     >
                       {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
                       {entry.source.display_head}…{entry.source.display_tail}
+                      {entry.source_types.length === 0 ? (
+                        <>
+                          <br />
+                          <StatusBadge
+                            active={false}
+                            label={t('common.operations.charity.sourceBrowser.sourceMissing')}
+                          />
+                        </>
+                      ) : null}
                       <KeyLimitSummary
                         concurrency={entry.source.max_concurrency}
                         rpm={entry.source.max_rpm}
