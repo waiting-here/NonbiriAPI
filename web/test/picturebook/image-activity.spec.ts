@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
@@ -32,6 +32,7 @@ const adminBase = '/admin/api/limited-activities/picture-book';
 const modelName = 'Browser canvas <svg onload=alert(1)> is plain text.';
 const modelDescription = '<img src=x onerror=alert(1)> is displayed as text.';
 const statePath = process.env.NONBIRI_IMAGE_BROWSER_STATE!;
+const previewDir = process.env.NONBIRI_IMAGE_BROWSER_PREVIEW || join(dirname(statePath), 'preview');
 function fixture(): FixtureState {
   return JSON.parse(readFileSync(statePath, 'utf8')) as FixtureState;
 }
@@ -113,6 +114,15 @@ async function submit(page: Page, prompt: string, n: number): Promise<ImageTask>
 function details(page: Page) {
   return page.getByRole('heading', { name: 'Task details', exact: true }).locator('..');
 }
+async function preview(page: Page, name: string) {
+  mkdirSync(previewDir, { recursive: true });
+  await page.screenshot({ path: join(previewDir, name), fullPage: true });
+}
+async function noHorizontalOverflow(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  );
+}
 function privacy(page: Page) {
   const requests: string[] = [],
     bodies: string[] = [],
@@ -163,12 +173,15 @@ test('real queue cancellation and partial success retain exact accounting and br
   try {
     const page = await user.newPage(),
       checkPrivacy = privacy(page);
+    await page.clock.install({ time: new Date() });
     await page.goto(fixture().user_url + '/activities/picture-book');
     await expect(page.getByRole('heading', { name: 'Create images' })).toBeVisible();
     await expect(
       page.getByText('<img src=x onerror=alert(1)> is displayed as text.'),
     ).toBeVisible();
     expect(await page.locator('img[src="x"]').count()).toBe(0);
+    await noHorizontalOverflow(page);
+    await preview(page, 'user-form-en-1280.png');
     await page.getByLabel('Width', { exact: true }).fill('288');
     await page.getByLabel('Height', { exact: true }).fill('400');
     const acceptedRequest = page.waitForRequest(
@@ -177,6 +190,72 @@ test('real queue cancellation and partial success retain exact accounting and br
     );
     const held = await submit(page, 'hold private-browser-prompt', 1);
     await waitTask(user, held.id, 'running');
+    await page.clock.runFor(5000);
+    const waiting = details(page).locator('.picturebook-wait');
+    const frames = waiting.locator('img');
+    const visibleFrame = waiting.locator('.picturebook-wait__frame--visible');
+    const pause = waiting.getByRole('button', { name: 'Pause waiting animation', exact: true });
+    const resume = waiting.getByRole('button', { name: 'Resume waiting animation', exact: true });
+    await expect(pause).toBeVisible();
+    await expect(frames).toHaveCount(4);
+    await expect(waiting.locator('.picturebook-wait__frames')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    await expect
+      .poll(() =>
+        frames.evaluateAll((images) =>
+          images.map((node) => {
+            const image = node as HTMLImageElement;
+            return {
+              complete: image.complete,
+              width: image.naturalWidth,
+              height: image.naturalHeight,
+            };
+          }),
+        ),
+      )
+      .toEqual(Array.from({ length: 4 }, () => ({ complete: true, width: 1280, height: 720 })));
+    const frameSources = await frames.evaluateAll((images) =>
+      images.map((image) => image.getAttribute('src')!),
+    );
+    expect(new Set(frameSources).size).toBe(4);
+    expect(
+      frameSources.every((src) => new URL(src, fixture().user_url).origin === fixture().user_url),
+    ).toBe(true);
+    await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 1000));
+    const initialFrame = frameSources.indexOf((await visibleFrame.getAttribute('src'))!);
+    expect(initialFrame).toBeGreaterThanOrEqual(0);
+    await page.clock.runFor(2000);
+    const nextFrame = frameSources[(initialFrame + 1) % frameSources.length];
+    await expect(visibleFrame).toHaveAttribute('src', nextFrame);
+    await noHorizontalOverflow(page);
+    await preview(page, 'user-wait-running-en-1280.png');
+    await pause.focus();
+    await page.keyboard.press('Space');
+    await expect(resume).toHaveAttribute('aria-pressed', 'true');
+    await page.clock.runFor(4000);
+    await expect(visibleFrame).toHaveAttribute('src', nextFrame);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await noHorizontalOverflow(page);
+    await preview(page, 'user-wait-paused-en-390.png');
+    await page.keyboard.press('Space');
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+    await page.clock.runFor(2000);
+    await expect(visibleFrame).toHaveAttribute(
+      'src',
+      frameSources[(initialFrame + 2) % frameSources.length],
+    );
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(pause).toHaveCount(0);
+    await expect(resume).toHaveCount(0);
+    await expect(visibleFrame).toHaveAttribute('src', frameSources[0]);
+    await page.clock.runFor(4000);
+    await expect(visibleFrame).toHaveAttribute('src', frameSources[0]);
+    await noHorizontalOverflow(page);
+    await preview(page, 'user-wait-reduced-en-390.png');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.setViewportSize({ width: 1280, height: 900 });
     const request = await acceptedRequest;
     const beforeReplay = await control(user, 'stats');
     const replay = await user.request.post(fixture().user_url + base + '/tasks', {
@@ -199,6 +278,18 @@ test('real queue cancellation and partial success retain exact accounting and br
     expect(conflict.status()).toBe(409);
     const queued = await submit(page, 'success queued private-browser-prompt', 2);
     expect(queued.charge).toEqual({ paper: '4', brush: '2' });
+    await expect(waiting).toBeVisible();
+    await expect(visibleFrame).toHaveAttribute('src', frameSources[0]);
+    await expect(waiting.getByRole('button')).toHaveCount(0);
+    await page.clock.runFor(6000);
+    await expect(visibleFrame).toHaveAttribute('src', frameSources[0]);
+    await noHorizontalOverflow(page);
+    await preview(page, 'user-wait-queued-en-1280.png');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await noHorizontalOverflow(page);
+    await preview(page, 'user-wait-queued-en-390.png');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.clock.resume();
     const admin = await context(browser, 0, 'en', true);
     try {
       const current = await (
@@ -254,6 +345,7 @@ test('real queue cancellation and partial success retain exact accounting and br
     expect((await api(other, base + '/tasks/' + held.id)).status()).toBe(404);
     await details(page).getByRole('button', { name: 'Cancel and refund reservation' }).click();
     const cancelled = await waitTask(user, queued.id, 'cancelled');
+    await expect(waiting).toHaveCount(0);
     expect(cancelled.billing_state).toBe('refunded');
     expect(cancelled.charge).toEqual({ paper: '0', brush: '0' });
     expect(cancelled.refund).toEqual({ paper: '4', brush: '2' });
@@ -264,12 +356,14 @@ test('real queue cancellation and partial success retain exact accounting and br
     await expect(page.getByRole('heading', { name: 'Create images' })).toBeVisible();
     const partial = await submit(page, 'partial private-browser-prompt', 4);
     expect(partial.charge).toEqual({ paper: '8', brush: '4' });
-    await control(user, 'advance', { seconds: 5 });
+    await waitTask(user, partial.id, 'running');
+    await control(user, 'advance', { seconds: 6 });
     const finished = await waitTask(user, partial.id, 'succeeded');
     expect(finished.actual_images).toBe(2);
     expect(finished.charge).toEqual({ paper: '8', brush: '4' });
     expect(finished.refund).toEqual({ paper: '0', brush: '0' });
     await expect(details(page).getByRole('img', { name: /Generated image/ })).toHaveCount(2);
+    await expect(waiting).toHaveCount(0);
     await expect
       .poll(() =>
         details(page)
@@ -300,10 +394,7 @@ test('real queue cancellation and partial success retain exact accounting and br
     await expect(details(page).getByText(/remain downloadable until you leave/)).toBeVisible();
     await expect(details(page).getByRole('img', { name: /Generated image/ })).toHaveCount(2);
     expect((await task(user, partial.id)).billing_state).toBe('charged');
-    await page.screenshot({
-      path: join(dirname(statePath), 'user-results-en.png'),
-      fullPage: true,
-    });
+    await preview(page, 'user-results-en.png');
     expect(
       await page.evaluate(() =>
         JSON.stringify({
@@ -357,7 +448,8 @@ test('real close and restart restore known work, refund lost queue memory and ne
     await expect(page.getByRole('textbox', { name: /^Prompt/ })).toHaveValue('');
     await expect(page.getByText(/service restarted; queued tasks were refunded/i)).toHaveCount(0);
     const failed = await submit(page, 'fail private-browser-prompt', 2);
-    await control(user, 'advance', { seconds: 5 });
+    await waitTask(user, failed.id, 'running');
+    await control(user, 'advance', { seconds: 6 });
     const failure = await waitTask(user, failed.id, 'failed');
     expect(failure.billing_state).toBe('refunded');
     expect(failure.refund).toEqual({ paper: '4', brush: '2' });
@@ -461,10 +553,7 @@ test('real administrator editor and narrow bilingual user pages preserve role an
         await api(admin, adminBase + '/upstream/capability-profile', 'GET', undefined, true)
       ).status(),
     ).toBe(404);
-    await page.screenshot({
-      path: join(dirname(statePath), 'admin-settings-en.png'),
-      fullPage: true,
-    });
+    await preview(page, 'admin-settings-en.png');
   } finally {
     await admin.close();
   }
@@ -500,11 +589,7 @@ test('real administrator editor and narrow bilingual user pages preserve role an
         expect([401, 403]).toContain(result.status());
       }
       await checkPrivacy();
-      if (index === 0)
-        await page.screenshot({
-          path: join(dirname(statePath), 'user-form-zh-390.png'),
-          fullPage: true,
-        });
+      if (index === 0) await preview(page, 'user-form-zh-390.png');
     } finally {
       await user.close();
     }
