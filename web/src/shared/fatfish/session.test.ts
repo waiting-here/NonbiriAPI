@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import golden from './engine/golden.json';
-import { seedCommit } from './engine/canonical';
+import motionV2Golden from './engine/motion_v2_golden.json';
+import { seedCommit, seedCommitForVersion } from './engine/canonical';
 import { decodeHex } from './engine/sha256';
 import type { Level } from './engine/types';
 import type { FatFishChallenge, FatFishChallengeTransport } from './api';
@@ -63,6 +64,15 @@ const base: FatFishChallenge = {
 };
 const active: FatFishChallenge = {
   ...base, state: 'active', seed, level: case0.level as unknown as Level,
+  start_at_ms: 1000, end_at_ms: 11000, submit_until_ms: 1811000,
+};
+const v2Case = motionV2Golden.cases.find((fixture) => fixture.name === 'minimum-and-capacity-v2')!;
+const v2Base: FatFishChallenge = {
+  ...base, engine_version: 2, content_hash: v2Case.result.content_hash,
+  seed_commit: seedCommitForVersion(id, 'ffp_test', 'ffn_test', v2Case.result.content_hash, 2, 1, decodeHex(v2Case.seed)),
+};
+const v2Active: FatFishChallenge = {
+  ...active, ...v2Base, state: 'active', seed: v2Case.seed, level: v2Case.level as unknown as Level,
   start_at_ms: 1000, end_at_ms: 11000, submit_until_ms: 1811000,
 };
 const locks = new Set<string>();
@@ -223,16 +233,18 @@ describe('fat fish tab session', () => {
     await expect(session.start()).rejects.toThrow(/closed/i);
     expect(disposedAtBatch).toBe(true);
   });
-  it('recovers the real engine and retains one submit key and payload after a lost response', async () => {
+  it.each([
+    [1, base, active, case0], [2, v2Base, v2Active, v2Case],
+  ] as const)('recovers v%i and retains one submit key and payload after a lost response', async (version, prepared, playing, fixture) => {
     const attempts: { key: string; payload: unknown }[] = [];
-    let read = active;
+    let read = playing;
     const transport: FatFishChallengeTransport = {
       prepareScope: 'user:ffp_test:ffn_test:1',
-      prepare: async () => base, start: async () => active, read: async () => read,
+      prepare: async () => prepared, start: async () => playing, read: async () => read,
       submit: async (_id, payload, key) => {
         attempts.push({ key, payload: structuredClone(payload) });
         if (attempts.length === 1) throw new Error('network failed');
-        read = { ...active, state: 'verifying' };
+        read = { ...playing, state: 'verifying' };
         return read;
       },
     };
@@ -246,19 +258,74 @@ describe('fat fish tab session', () => {
     expect(restored.snapshot().state?.tick).toBe(0);
     vi.spyOn(performance, 'now').mockReturnValue(200);
     restored.advance(64);
-    expect(restored.snapshot().provisional?.final_state_hash).toBe(case0.result.final_state_hash);
+    expect(restored.snapshot().provisional).toMatchObject({
+      engine_version: version, scoring_version: 1, content_hash: fixture.result.content_hash,
+      final_state_hash: fixture.result.final_state_hash,
+    });
+    expect(restored.snapshot().challenge?.level?.engine_version).toBe(version);
     await expect(restored.submit()).rejects.toThrow(/network failed/);
     expect(saved.has(id)).toBe(true);
     await restored.submit();
     expect(attempts).toHaveLength(2);
     expect(attempts[0]).toEqual(attempts[1]);
     expect(restored.snapshot().phase).toBe('verifying');
-    read = { ...active, state: 'settled_pass' };
+    read = { ...playing, state: 'settled_pass' };
     await restored.poll();
     expect(saved.has(id)).toBe(false);
     expect(capabilities.has(id)).toBe(false);
     restored.dispose();
   });
+  it.each([[3, 1], [1, 2]])('rejects an unsupported prepared engine/scoring version %i/%i before storing a challenge', async (engineVersion, scoringVersion) => {
+    const transport: FatFishChallengeTransport = {
+      prepareScope: 'user:ffp_test:ffn_test:1',
+      prepare: async () => ({ ...base, engine_version: engineVersion, scoring_version: scoringVersion }),
+      start: async () => active, read: async () => active, submit: async () => active,
+    };
+    const session = createFatFishSessionController(transport);
+    try {
+      await expect(session.prepare()).rejects.toThrow(/unsupported rules version/);
+      expect(saved.size).toBe(0);
+      expect(locks.size).toBe(0);
+    } finally { session.dispose(); }
+  });
+  for (const action of ['start', 'recover'] as const) {
+    it.each([
+      { name: 'v2 metadata with a v1 level', prepared: base, playing: active, invalid: { ...active, engine_version: 2 } },
+      { name: 'v1 metadata with a v2 level', prepared: base, playing: active, invalid: { ...active, level: v2Active.level } },
+      { name: 'a version change after preparation', prepared: base, playing: active,
+        invalid: { ...active, engine_version: 2, level: v2Active.level } },
+      { name: 'scoring metadata with a mismatched level', prepared: base, playing: active,
+        invalid: { ...active, level: { ...active.level!, scoring_version: 2 } as unknown as Level } },
+      { name: 'unknown engine version', prepared: base, playing: active, invalid: { ...active, engine_version: 3 } },
+      { name: 'unknown scoring version', prepared: base, playing: active, invalid: { ...active, scoring_version: 2 } },
+      { name: 'v2 using a v1 seed commitment', prepared: v2Base, playing: v2Active,
+        invalid: { ...v2Active, seed_commit: seedCommit(id, 'ffp_test', 'ffn_test', v2Base.content_hash, decodeHex(v2Case.seed)) } },
+    ])(`rejects $name on ${action} and keeps the persisted input log`, async ({ prepared, playing, invalid }) => {
+      let current: FatFishChallenge = playing;
+      const transport: FatFishChallengeTransport = {
+        prepareScope: 'user:ffp_test:ffn_test:1', prepare: async () => prepared,
+        start: async () => current, read: async () => current, submit: async () => current,
+      };
+      const first = createFatFishSessionController(transport);
+      let restored: ReturnType<typeof createFatFishSessionController> | null = null;
+      try {
+        await first.prepare();
+        if (action === 'recover') {
+          await first.start();
+          first.dispose();
+          await vi.waitFor(() => expect(locks.size).toBe(0));
+          restored = createFatFishSessionController(transport);
+        }
+        const inputLog = structuredClone((saved.get(id) as { inputs: unknown[] }).inputs);
+        current = invalid;
+        const session = restored ?? first;
+        await expect(action === 'recover' ? session.recover(id) : session.start()).rejects.toThrow(/version|commitment/);
+        expect(session.snapshot().state).toBeNull();
+        expect((saved.get(id) as { inputs: unknown[] }).inputs).toEqual(inputLog);
+        expect(playing.level?.engine_version).toBe(prepared.engine_version);
+      } finally { first.dispose(); restored?.dispose(); }
+    });
+  }
   it('reposts only the persisted accepted digest while verifying and clears on the terminal receipt', async () => {
     const attempts: { key: string; payload: unknown }[] = [];
     let status: FatFishChallenge = { ...active, state: 'verifying' };

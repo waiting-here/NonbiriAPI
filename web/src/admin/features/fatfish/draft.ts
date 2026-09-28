@@ -1,7 +1,7 @@
 import { containsPolygon, translatePolygon } from '@shared/fatfish/engine/geometry';
 import { compileEllipse, compileRoundedRectangle } from '@shared/fatfish/engine/trig_helpers';
 import {
-  FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, MAX_LEVEL_BYTES,
+  ENGINE_VERSION, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, MAX_LEVEL_BYTES,
   type Level, type Point, type Polygon,
 } from '@shared/fatfish/engine/types';
 import { validateLevel } from '@shared/fatfish/engine/validate';
@@ -34,7 +34,7 @@ export function toolPolygon(resourceKey: string): Polygon {
 }
 export function blankLevel(): Level {
   return {
-    format: 'nonbiri-fatfish-level', format_version: 1, engine_version: 1, scoring_version: 1,
+    format: 'nonbiri-fatfish-level', format_version: 1, engine_version: ENGINE_VERSION, scoring_version: 1,
     duration_seconds: 90, speed_pixels_per_second: 72, thresholds: [1, 1, 1],
     fish: [{ id: 1, x: unit(88), y: unit(400), heading: 0 }],
     tools: [], solids: [], hazards: [],
@@ -43,6 +43,9 @@ export function blankLevel(): Level {
   };
 }
 export function cloneLevel(level: Level): Level { return structuredClone(level); }
+export function convertToCurrentDraft(level: Level): Level {
+  return { ...cloneLevel(level), engine_version: ENGINE_VERSION };
+}
 export function allIDs(level: Level): number[] {
   return [...level.fish, ...level.tools, ...level.solids, ...level.hazards,
     ...level.bowls, ...level.switches, ...level.gates, ...level.directions].map((item) => item.id);

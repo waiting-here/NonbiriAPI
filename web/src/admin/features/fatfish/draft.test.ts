@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contentHash } from '@shared/fatfish/engine/canonical';
 import { fishCollision, polygonPath } from './LevelCanvas';
-import { blankLevel, cloneLevel, hitTest, importDraft, localValidation, moveSelection, rect, toolPolygon, unit } from './draft';
+import { blankLevel, cloneLevel, convertToCurrentDraft, hitTest, importDraft, localValidation, moveSelection, rect, toolPolygon, unit } from './draft';
 import { laidOutLevel } from '@shared/fatfish/workspace';
 
 describe('Fat Fish level authoring', () => {
@@ -28,6 +28,7 @@ describe('Fat Fish level authoring', () => {
   });
   it('starts from a valid draft, supports undoable immutable movement and export/import round trip', () => {
     const first = blankLevel();
+    expect(first.engine_version).toBe(2);
     expect(localValidation(first)).toBeNull();
     const beforeHash = contentHash(first);
     const moved = moveSelection(first, { kind: 'fish', id: 1 }, unit(16), 0, true);
@@ -38,6 +39,20 @@ describe('Fat Fish level authoring', () => {
     expect(imported.title).toBe('Round trip');
     expect(imported.level).toEqual(moved);
     expect(imported.pendingFishCount).toBe(0);
+  });
+
+  it('preserves imported v1 rules until an explicit conversion changes only the draft version', () => {
+    const legacy = { ...blankLevel(), engine_version: 1 as const, speed_pixels_per_second: 76 };
+    legacy.tools.push({ id: 3, resource_key: 'barrier', polygon: toolPolygon('barrier'), placed: false, x: unit(-48), y: unit(624) });
+    const imported = importDraft(JSON.stringify({ title: 'Legacy', description: 'Preserved', draft: legacy }));
+    expect(imported.level).toEqual(legacy);
+    const converted = convertToCurrentDraft(imported.level);
+    expect(converted).toEqual({ ...legacy, engine_version: 2 });
+    expect(localValidation(converted)).toBeNull();
+    expect(contentHash(converted)).not.toBe(contentHash(legacy));
+    converted.fish[0].x += 64;
+    expect(imported.level).toEqual(legacy);
+    expect(legacy.engine_version).toBe(1);
   });
 
   it('renders hazard holes and tests fish body against polygon geometry', () => {
