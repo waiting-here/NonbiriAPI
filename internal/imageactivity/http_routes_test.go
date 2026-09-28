@@ -25,7 +25,7 @@ func (m muxRoutes) RegisterAdminRoute(method, path string, handler AuthorizedAdm
 	return nil
 }
 
-func TestModelCapabilityAndRefreshRoutesShareRealMux(t *testing.T) {
+func TestReadOnlyModelAndRefreshRoutesShareRealMux(t *testing.T) {
 	f := newFixture(t)
 	f.configure(t)
 	routes := muxRoutes{mux: http.NewServeMux(), user: f.user, admin: f.admin}
@@ -40,7 +40,9 @@ func TestModelCapabilityAndRefreshRoutesShareRealMux(t *testing.T) {
 		path   string
 		status int
 	}{
-		{"/models/" + f.model + "/capabilities", http.StatusOK},
+		{"/models/" + f.model, http.StatusOK},
+		{"/models/" + f.model + "/capabilities", http.StatusNotFound},
+		{"/upstream/capability-profile", http.StatusNotFound},
 		{"/models/refresh/" + refreshID, http.StatusOK},
 		{"/models/" + f.model + "/unknown", http.StatusNotFound},
 		{"/models/refresh/capabilities", http.StatusBadRequest},

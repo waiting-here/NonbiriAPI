@@ -83,7 +83,7 @@ func modelTx(ctx context.Context, tx *sql.Tx, id string, revision int64) (modelS
 	return out, nil
 }
 func adminModelView(m modelSnapshot) AdminModel {
-	out := AdminModel{ID: m.id, UpstreamModelID: m.upstreamID, Metadata: m.metadata, Configured: m.revision > 0, Revision: strconv.FormatInt(m.revision, 10), DisplayName: m.input.DisplayName, Description: m.input.Description, Enabled: m.input.Enabled, Price: m.input.Price, Parameters: m.input.Parameters, ParameterCapabilities: []AdminParameterCapability{}, Combinations: m.input.Combinations, Mapping: m.input.Mapping}
+	out := AdminModel{ID: m.id, UpstreamModelID: m.upstreamID, Metadata: m.metadata, Configured: m.revision > 0, Revision: strconv.FormatInt(m.revision, 10), DisplayName: m.input.DisplayName, Description: m.input.Description, Enabled: m.input.Enabled, Price: m.input.Price, Parameters: m.input.Parameters, ParameterCapabilities: []AdminParameterCapability{}, Combinations: m.input.Combinations, Mapping: m.input.Mapping, CapabilityIssues: []CheckIssue{}}
 	if m.revision > 0 {
 		out.ParameterCapabilities = m.parameterCapabilities
 		out.CapabilityRevision = strconv.FormatInt(m.capabilityRevision, 10)
@@ -92,6 +92,16 @@ func adminModelView(m modelSnapshot) AdminModel {
 		out.Pricing = &m.pricing
 		out.SizeCapability = m.size
 		out.CatalogType = m.catalogType
+		if m.readiness == "pending" {
+			out.CapabilityIssues = fixedCapabilityIssues(m.id, compileFixedCapability(m.metadata).compiled)
+		}
+	} else {
+		capability := compileFixedCapability(m.metadata)
+		out.CapabilityRevision, out.PricingRevision = "0", "0"
+		out.DisplayName = fixedDisplayName(m.upstreamID, capability.name)
+		out.Parameters, out.Combinations, out.Mapping = capability.rules, []CombinationRule{}, fixedMapping()
+		out.SizeCapability, out.CatalogType, out.CapabilityReadiness = capability.compiled.Size, capability.compiled.CatalogType, capability.compiled.Readiness
+		out.CapabilityIssues = fixedCapabilityIssues(m.id, capability.compiled)
 	}
 	return out
 }
@@ -196,9 +206,12 @@ func (s *Service) PutModel(ctx context.Context, admin int64, id, key string, inp
 	if !db.ValidateOpaqueID(id, "imdl_") {
 		return out, ErrInvalid
 	}
-	input, err := normalizeModel(input)
-	if err != nil {
-		return out, err
+	var err error
+	if !input.automatic {
+		input, err = normalizeModel(input)
+		if err != nil {
+			return out, err
+		}
 	}
 	input.Mapping = normalizeMapping(input.Mapping)
 	if input.Combinations == nil {
@@ -244,6 +257,16 @@ func (s *Service) PutModel(ctx context.Context, admin int64, id, key string, inp
 	}
 	if expected == math.MaxInt64 {
 		return out, ErrCapacity
+	}
+	if input.automatic {
+		input, err = automaticModelInput(old, input, true)
+		if err != nil {
+			return out, err
+		}
+		snapshot, err = ensureFixedUpstreamTx(ctx, tx, snapshot, now)
+		if err != nil {
+			return out, err
+		}
 	}
 	if expected == 0 {
 		var count int

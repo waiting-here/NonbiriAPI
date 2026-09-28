@@ -94,17 +94,6 @@ func (s *Service) PutModels(ctx context.Context, admin int64, key string, input 
 			continue
 		}
 		seen[item.ID] = true
-		draft, validation := normalizeModel(item.Input)
-		if validation != nil {
-			if _, revisionErr := decimalRevision(item.Input.ExpectedRevision, true); revisionErr != nil {
-				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input.expected_revision", "invalid_revision", "Use the revision from the selected model."))
-			} else if _, priceErr := parsePayment(item.Input.Price, 1); priceErr != nil {
-				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input.price", "invalid_price", "Review the model's base price."))
-			} else {
-				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input", "invalid_rule", "Review this model's name, rules, and mapping."))
-			}
-			continue
-		}
 		old, e := modelTx(ctx, tx, item.ID, 0)
 		if errors.Is(e, ErrNotFound) {
 			out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "id", "stale_catalog", "Reload the model from the current catalog."))
@@ -115,6 +104,26 @@ func (s *Service) PutModels(ctx context.Context, admin int64, key string, input 
 		}
 		if old.controlID != upstream.controlID {
 			out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "id", "stale_catalog", "Reload the model from the current catalog."))
+			continue
+		}
+		var draft ModelInput
+		var validation error
+		if item.Input.automatic {
+			draft, validation = automaticModelInput(old, item.Input, true)
+		} else {
+			draft, validation = normalizeModel(item.Input)
+		}
+		if validation != nil {
+			var policyErr *policyValidationError
+			if errors.As(validation, &policyErr) {
+				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, policyErr.path, policyErr.code, policyErr.message))
+			} else if _, revisionErr := decimalRevision(item.Input.ExpectedRevision, true); revisionErr != nil {
+				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input.expected_revision", "invalid_revision", "Use the revision from the selected model."))
+			} else if _, priceErr := parsePayment(item.Input.Price, 1); priceErr != nil {
+				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input.price", "invalid_price", "Review the model's base price."))
+			} else {
+				out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input", "invalid_rule", "Review this model's name, rules, and mapping."))
+			}
 			continue
 		}
 		startIssues := len(out.Value.Issues)
@@ -132,7 +141,7 @@ func (s *Service) PutModels(ctx context.Context, admin int64, key string, input 
 		if draft.SizeCapability != nil && draft.SizeCapability.Validate() != nil {
 			out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input.size_capability", "invalid_size", "Review the linked size capability."))
 		}
-		if draft.Enabled && old.readiness != "legacy" && old.readiness != "ready" && !draft.CapabilityConfirmed {
+		if !draft.automatic && draft.Enabled && old.readiness != "legacy" && old.readiness != "ready" && !draft.CapabilityConfirmed {
 			out.Value.Issues = append(out.Value.Issues, batchIssue(item.ID, "input.capability_confirmed", "capability_unconfirmed", "Confirm supported parameters before enabling this model."))
 		}
 		if draft.CatalogType != "" && draft.CatalogType != "image" && draft.CatalogType != "unknown" && draft.CatalogType != "other" {
@@ -193,6 +202,14 @@ func (s *Service) PutModels(ctx context.Context, admin int64, key string, input 
 	}
 	if len(out.Value.Issues) > 0 {
 		return out, nil
+	}
+	for _, item := range input.Models {
+		if item.Input.automatic {
+			if _, err = ensureFixedUpstreamTx(ctx, tx, upstream, now); err != nil {
+				return out, err
+			}
+			break
+		}
 	}
 	out.Value.Applied = true
 	out.Value.Receipts = make([]ModelReceipt, 0, len(validated))

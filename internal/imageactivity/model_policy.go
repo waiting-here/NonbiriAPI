@@ -164,6 +164,9 @@ func conflictPolicy(path, message string) error {
 // prepareModelPolicyTx performs every policy check and source read before the
 // caller writes a model revision. It does not mutate the database.
 func prepareModelPolicyTx(ctx context.Context, tx *sql.Tx, modelID string, previous modelSnapshot, input ModelInput) (preparedModelPolicy, error) {
+	if input.automaticSource != nil {
+		return prepareAutomaticPolicy(input, previous.metadata)
+	}
 	var prepared preparedModelPolicy
 	pricing := legacyPricing(input.Price)
 	if input.Pricing != nil {

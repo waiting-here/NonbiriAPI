@@ -49,6 +49,7 @@ type SecretInput struct {
 	Value *string `json:"value,omitempty"`
 }
 type UpstreamInput struct {
+	fixed                   bool
 	ExpectedRevision        string      `json:"expected_revision"`
 	BaseURL                 string      `json:"base_url"`
 	Secret                  SecretInput `json:"secret"`
@@ -129,6 +130,7 @@ type AdminModel struct {
 	SizeCapability        *SizeCapability            `json:"size_capability,omitempty"`
 	CatalogType           string                     `json:"catalog_type,omitempty"`
 	Missing               bool                       `json:"missing,omitempty"`
+	CapabilityIssues      []CheckIssue               `json:"capability_issues"`
 }
 
 // AdminParameterCapability describes the accepted rule's persisted origin.
@@ -141,6 +143,8 @@ type AdminParameterCapability struct {
 	Conflict   bool              `json:"conflict"`
 }
 type ModelInput struct {
+	automatic           bool
+	automaticSource     *CompiledCapability
 	ExpectedRevision    string            `json:"expected_revision"`
 	DisplayName         string            `json:"display_name"`
 	Description         string            `json:"description"`

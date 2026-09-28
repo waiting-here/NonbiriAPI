@@ -116,7 +116,7 @@ func newUpstream(t *testing.T) *fakeUpstream {
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/models":
+		case "/models", "/v1/models":
 			f.models.Add(1)
 			if status := f.catalogStatus.Load(); status != 0 {
 				w.WriteHeader(int(status))
