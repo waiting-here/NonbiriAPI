@@ -6,202 +6,109 @@ personal and charity API models do not expose image-generation requests.
 
 ## Configuration and charging
 
-Administrators configure the endpoint, encrypted activity key, HTTP request
-limit, concurrent generation limit, and a declarative protocol adapter. Model
-discovery creates a private catalog. A model becomes available only after an
-administrator assigns its public name, supported parameter rules, and price.
-User responses contain local model identifiers and approved parameter rules;
-they never contain the upstream endpoint, credentials, actual model identifiers,
-upstream task identifiers, adapter, or raw upstream errors.
+The picture-book activity uses a single administrator-configured connection to its
+supported upstream image-service specification. Administrators set the endpoint
+and encrypted key, enable or disable discovered models, and set each model's
+prices. Model discovery supplies the catalog, supported parameters, and size
+capabilities automatically. Administrators do not configure protocol details,
+request or response formats, parameter catalogs, or mappings. User responses
+contain local model identifiers and model-specific supported parameters; they
+never contain the endpoint, credentials, upstream model or task identifiers, or
+raw upstream errors.
 
 The activity starts hidden with no opening period. Hidden activities remain
-accessible by their direct link; participation still requires an open period
-and a ready backend. Reopening preserves balances and exchange history.
-The default exchange prices are 1,000 general points for one draft paper and
-10,000 for one brush. Paper has no supply cap. The initial brush cap is ten
-cumulative exchanges across all users. Reducing that cap never removes existing
-balances; task refunds restore the user's balance without restoring exchange
-supply. Neither activity currency can be exchanged back or into the other.
+accessible by their direct link; participation still requires an open period and
+a ready backend. Reopening preserves balances and exchange history. The default
+exchange prices are 1,000 general points for one draft paper and 10,000 for one
+brush. Paper has no supply cap. The initial brush cap is ten cumulative
+exchanges across all users. Reducing that cap never removes existing balances;
+task refunds restore the user's balance without restoring exchange supply.
+Neither activity currency can be exchanged back or into the other.
 
-The common activity write requires `expected_revision`, `visible`, `starts_at`,
-`ends_at`, `paused` and `module_config`. Times are Unix seconds with start before
-end, or both null for an unconfigured period. For this activity, `module_config`
-contains `paper_price` and `brush_price` as positive general-point strings with
-up to three decimal places, and `brush_cap` as a nonnegative whole-unit string.
+The common activity write requires `expected_revision`, `visible`,
+`starts_at`, `ends_at`, `paused`, and `module_config`. Times are Unix seconds
+with start before end, or both null for an unconfigured period. For this
+activity, `module_config` contains `paper_price` and `brush_price` as positive
+general-point strings with up to three decimal places, and `brush_cap` as a
+nonnegative whole-unit string.
 
-Upstream configuration uses the following required integer fields:
+The upstream write at `PUT A/upstream` requires `expected_revision`,
+`base_url`, and `secret`. Use `{"mode":"keep"}` to retain the existing key, or
+`{"mode":"replace","value":"..."}` to replace it. Reads expose
+`secret_set`, never the key. The service manages request limits and integration
+details; they are not writable fields. Upstream saves return `{revision}`.
+Refetch authoritative state after saving or replaying a save.
 
-| Field | Initial value | Allowed range |
-| --- | --- | --- |
-| `rpm` | Must be configured | 1–10,000 |
-| `concurrency` | Must be configured | 1–32 |
-| `per_user_limit` | 1 unfinished task | 1–100 |
-| `global_limit` | 100 unfinished tasks | 1–10,000 |
-| `queue_timeout_seconds` | 1,800 | 60–86,400 |
-| `execution_timeout_seconds` | 1,800 | 60–86,400 |
-| `memory_budget_mib` | 512 | 512–4,096 |
+Model writes at `PUT A/models/{id}` require `expected_revision`, `enabled`,
+and `price`; `pricing` is optional. `price` gives whole-unit draft-paper and
+brush amounts per image, for example:
 
-Administrator writes include the current `expected_revision`. The upstream
-write also requires `base_url`, `secret`, `image_origins`, and `adapter`.
-Use `secret: {"mode":"keep"}` to retain an existing key, or
-`secret: {"mode":"replace","value":"..."}` to replace it. Reads expose only
-`secret_set`, never the key. Keep real endpoints, keys, model IDs and adapter
-mappings in the administrator configuration; do not publish them in examples
-or repository files. Upstream saves return `{revision}` and model saves return
-`{id,revision}`. Refetch the authoritative configuration after saving or replaying
-a save. These request bodies are limited to 1 MiB. Model writes require
-`expected_revision`, `display_name`, `description`, `enabled`, `price`,
-`parameters`, `combinations` and `mapping`.
+~~~json
+{"paper":"2","brush":"1"}
+~~~
 
-Prices are whole quantities of draft paper and brushes per requested image:
-`price: {"paper":"2","brush":"1"}`. Both currencies are reserved together when
-the task is accepted. At least one currency must have a positive price.
-The model can also have a `pricing` policy with `default`, `fallback`, `tiers`
-and exact `sizes` prices. An exact width and height price takes precedence,
-then a declared tier price, then the default if `fallback` is `default`.
-`fallback:"unavailable"` refuses an unmatched selection. The total is the
-selected unit price multiplied by the requested image count. A price does not
-make an unsupported size available.
-A complete, valid terminal response containing at least one valid image charges
-that entire total, including partial success. A malformed or truncated response
-does not establish successful generation.
+At least one currency must have a positive price. When present, `pricing`
+contains `default`, `fallback`, `tiers`, and `sizes`. The `default` pair must
+match `price`. Each `tiers` item contains a discovered tier with paper and
+brush amounts; each `sizes` item contains width, height, and its paper and brush
+amounts. An exact width and height price takes precedence over a matching tier.
+If neither applies, `fallback` set to `default` uses the default pair; setting
+it to `unavailable` rejects the unmatched selection. Pricing does not make an
+unsupported size available. If `pricing` is omitted for an existing model, its
+tiers, exact-size prices, and fallback are retained while `price` updates its
+default. For a new model, `price` supplies the default.
 
-The no-charge `POST /api/limited-activities/picture-book/quote` resolves the
+A successful task reserves both currencies at the selected per-image price
+times the requested image count. A complete, valid terminal response with at
+least one valid image charges the accepted total, including partial success.
+An invalid or truncated response does not establish successful generation.
+
+The no-charge `POST /api/limited-activities/picture-book/quote` resolves a
 selection and returns `model_revision`, `pricing_revision`,
-`effective_selection`, `unit`, `total`, `basis` and `price_key`. It creates no
+`effective_selection`, `unit`, `total`, `basis`, and `price_key`. It creates no
 task and sends no generation request. Submission includes the model revision
-and `expected_pricing_revision` the user reviewed; if a price revision or capability changes before acceptance,
-the server returns `409 refresh_required` so the user can review a fresh quote.
-Accepted tasks keep both original revisions, selected price and execution
-configuration. Disabling a model cancels its queued tasks and refunds them;
-tasks already sent upstream finish under their original configuration.
+and `expected_pricing_revision` the user reviewed. If price or capability
+changes before acceptance, the server returns `409 refresh_required` so the
+user can review a fresh quote. Accepted tasks retain their original revisions,
+selected price, and execution configuration. Disabling a model cancels its
+queued tasks and refunds them; tasks already dispatched finish under their
+original configuration.
 
-### Capability discovery and administrator review
+### Automatic model catalog and readiness
 
-An administrator can save a bounded declarative `capability-profile` for
-discovery metadata. It maps known model fields, size capabilities and catalog
-classification without executing scripts or trusting arbitrary metadata as a
-public rule. Discovery keeps candidate snapshots for review; it does not
-silently replace an accepted model policy. The catalog can show image,
-unknown and other models, including missing previously configured models.
-An administrator reviews source changes and conflicts at
-`GET A/models/{id}/capabilities`, then explicitly applies a candidate with
-`POST A/models/{id}/capabilities/apply` using `snapshot_id`,
-`expected_revision` and `confirm:true`. Stale or conflicting changes require
-another review. Ordinary model saves preserve discovered source and record
-only actual manual differences. Private model reads show each effective
-parameter's accepted `source` (`discovered`, `profile`, `manual` or an explicit
-unknown/legacy state), `support`, `overridden` and `conflict`; user model
-responses never expose this provenance.
+`POST A/models/refresh` refreshes the discovered catalog. The administrator
+model list reports `capability_readiness` and `capability_issues`;
+`capability_issues` is always an array of safe
+`{model_id,field_path,code,safe_message}` items. It also returns read-only
+`capability_revision`, `pricing_revision`, `parameters`, `combinations`,
+`size_capability`, `catalog_type`, and `missing` facts. Unconfigured models
+report capability and pricing revisions as `"0"`. Administrators cannot edit
+these capability or parameter fields. A newly discovered model with unsupported
+or incomplete metadata remains pending and cannot be newly enabled for quotes
+or tasks. Existing valid model settings are preserved across refreshes.
 
-`POST A/models/check` checks one draft and test selection against saved local
-configuration only, returning `valid`, bounded `issues`, resolved parameters,
-selection and quote. It does not call the upstream or spend currency. Batch
-save accepts at most 50 models at `POST A/models/batch`, validates the entire
-set before writing, and returns `{applied,receipts,issues}`. Any issue means
-`applied:false`, empty receipts and no model change; each issue identifies its
-`model_id`, `field_path`, `code` and safe message. An administrator draft with
-unsaved edits asks for Save, Discard or Continue Editing before switching
-models or leaving through site navigation. Reloading or closing the page uses
-the browser's unsaved-changes confirmation; drafts live only in page memory.
+The user model list exposes each model's available parameters and size
+capability. Task requests may include `prompt`, `negative_prompt`, `n`,
+`size`, `aspect_ratio`, `resolution`, `seed`, `steps`, `guidance`, and
+`quality`; availability and accepted values vary by model and come from the
+model list. Unsupported fields or values are rejected.
 
-## Declarative adapter and public parameters
-
-The adapter contains `discovery`, `submit`, optional `poll`, and `response`.
-Discovery and polling use GET; generation uses POST. Paths are bounded relative
-paths, with one `{task_id}` placeholder permitted only in the polling path.
-Mappings use JSON Pointers, a model destination, declared parameter destinations
-and scalar constants. A model may override the complete submission mapping;
-an empty model mapping inherits the upstream mapping. No scripts, expressions,
-dynamic headers or user-supplied destination paths are evaluated.
-
-This fictional adapter illustrates the schema; it does not identify an upstream:
-
-```json
-{
-  "discovery": {"method":"GET","path":"/catalog","items_pointer":"/items","id_pointer":"/name"},
-  "submit": {
-    "method":"POST",
-    "path":"/render",
-    "mapping": {
-      "model_pointer":"/engine",
-      "parameters":{"prompt":"/text","n":"/count","size":"/canvas"},
-      "constants":[]
-    },
-    "receipt":{"indicator_pointer":"/queued","indicator_value":true}
-  },
-  "poll": {"method":"GET","path":"/work/{task_id}"},
-  "response": {
-    "task_id_pointer":"/ticket",
-    "state_pointer":"/phase",
-    "working_states":["rendering"],
-    "success_states":["complete"],
-    "failure_states":["rejected"],
-    "images_pointer":"/pictures",
-    "base64_pointer":"/bytes"
-  }
-}
-```
-
-Optional `submit.receipt` separates submission receipts from polling states.
-Its indicator is compared exactly with a configured boolean or nonempty string
-of at most 128 UTF-8 bytes. A matching indicator and a nonempty safe task ID
-accept an asynchronous receipt without requiring a state field. Alternatively,
-a complete, nonempty image array without a receipt or task ID can be a
-synchronous result. Image decoding and validation still determine success.
-Explicit failure states, conflicting receipt/state/image facts, malformed JSON,
-and oversized image arrays cannot be treated as successful images.
-The indicator, task ID, image and state pointer trees must not overlap.
-Polling continues to use the configured explicit state lists; unknown states
-are retried within the original execution deadline. Without `submit.receipt`,
-the existing common state decoder handles both submission and polling.
-
-Image extraction uses `images_pointer` with `base64_pointer` and/or
-`url_pointer` relative to each image item. URL image downloads require
-an explicitly configured origin in `image_origins`, at most eight entries.
-All requests still use the shared egress policy. Adapter JSON is limited to
-256 KiB, pointer/path text to 512 bytes, and JSON nesting to 32 levels.
-
-Public model rules support `prompt`, `negative_prompt`, `n`, `size`,
-`aspect_ratio`, `resolution`, `seed`, `steps`, `guidance` and `quality`.
-A rule declares support, requirement, scalar type, bounds, step, enum and/or
-default. String lengths use `utf8_bytes`, `unicode_scalars` or `utf16_units`.
-Allowed combinations restrict tuples of declared values. Rules, defaults,
-enums and combinations are validated by the server. `n` is an integer from
-1 to 16, subject to tighter model limits; an omitted value uses the model's
-configured default, or one when no default is configured.
-User submissions are limited to 256 KiB; prompt and negative prompt together
-are limited to 64 KiB.
-
-A supported string `size` may additionally declare independent dimensions:
-
-```json
-{
-  "key":"size","supported":true,"required":false,
-  "type":"string","length_unit":"utf8_bytes",
-  "dimensions":{
-    "format":"width_height",
-    "width":{"minimum":120,"maximum":920,"step":40},
-    "height":{"minimum":150,"maximum":950,"step":50}
-  },
-  "default":"200x250"
-}
-```
-
-Each axis requires integer `minimum`, `maximum` and `step` from 1 to 65,536;
-minimum must not exceed maximum. Steps start at each axis's own minimum.
-Values remain strings in canonical `WIDTHxHEIGHT` form: positive decimal
-integers, lowercase `x`, no spaces, leading zeros, signs or exponents.
-Length, enum and combination restrictions still apply. The public schema
-contains only these approved constraints, not private metadata or mappings.
+`POST A/models/check` validates a reduced model draft and a sample task
+selection against local configuration. It returns `valid`, `issues`,
+`effective_parameters`, `effective_selection`, and a quote without contacting
+the upstream service or charging currency. `POST A/models/batch` accepts up
+to 50 model settings in `{models:[{id,input}]}` and validates the full batch
+before saving; any issue leaves every model unchanged. Unsaved administrator
+edits remain in page memory and prompt before switching models or leaving the
+page.
 
 ## API endpoints
 
-Use the session authentication, station and CSRF requirements in the
+Use the session authentication, station, and CSRF requirements in the
 [API contract](api-contract.md). Activity execution uses user sessions; private
 configuration and recovery require an administrator. Activity mutations require
 one `Idempotency-Key` and JSON content. Retry an uncertain site request with the
-same key and payload. This never authorizes a second upstream generation POST.
+same key and payload. This never authorizes a second generation request.
 
 In the table, `U` means `/api/limited-activities/picture-book` and `A` means
 `/admin/api/limited-activities/picture-book`.
@@ -210,9 +117,9 @@ In the table, `U` means `/api/limited-activities/picture-book` and `A` means
 | --- | --- | --- |
 | User | `GET /api/limited-activities` | Visible activity directory |
 | User | `GET U` | Activity status and exchange supply |
-| User | `GET U/wallet` | General points, draft paper and brushes |
-| User | `POST U/exchange` | `{asset,quantity}`; receipt, wallet and supply |
-| User | `GET U/models` | Public model page |
+| User | `GET U/wallet` | General points, draft paper, and brushes |
+| User | `POST U/exchange` | `{asset,quantity}`; receipt, wallet, and supply |
+| User | `GET U/models` | Public model page and automatically discovered capabilities |
 | User | `POST U/quote` | Resolve the selection and exact price without reserving or generating |
 | User | `GET U/queue` | Queue totals and the caller's positions |
 | User | `GET U/tasks` | Caller's recent task page |
@@ -220,30 +127,27 @@ In the table, `U` means `/api/limited-activities/picture-book` and `A` means
 | User | `GET U/tasks/{id}` | Task state and billing result |
 | User | `POST U/tasks/{id}/cancel` | Empty object; `{task}` |
 | User | `GET U/tasks/{id}/images/{index}` | Original image bytes; zero-based index |
-| Administrator | `GET / PUT A` | Opening period, visibility, pause and exchange configuration |
-| Administrator | `GET / PUT A/upstream` | Private upstream configuration |
-| Administrator | `GET / PUT A/upstream/capability-profile` | Declarative discovery rules and revision |
+| Administrator | `GET / PUT A` | Opening period, visibility, pause, and exchange configuration |
+| Administrator | `GET / PUT A/upstream` | Private endpoint and key settings |
 | Administrator | `GET A/upstream/controls` | Current and older physical upstream controls |
 | Administrator | `POST A/upstream/resume` | `{control_id,expected_revision,reason}`; `{control}` |
-| Administrator | `GET A/models` | Private discovered/configured model page |
+| Administrator | `GET A/models` | Private discovered model catalog and readiness |
 | Administrator | `GET A/models?type=all&page=1&page_size=20` | Numbered catalog, including unconfigured and missing models |
-| Administrator | `GET / PUT A/models/{id}` | Model rules, mapping and price |
+| Administrator | `GET / PUT A/models/{id}` | Read model facts; write enablement and prices |
 | Administrator | `POST A/models/check` | Local draft validation and no-charge preview |
-| Administrator | `POST A/models/batch` | Atomic validation and save of at most 50 models |
-| Administrator | `GET A/models/{id}/capabilities` | Review latest candidate and changes |
-| Administrator | `POST A/models/{id}/capabilities/apply` | Confirm an accepted capability revision |
+| Administrator | `POST A/models/batch` | Atomic validation and save of at most 50 model settings |
 | Administrator | `POST A/models/refresh` | Empty object; `{operation}` |
 | Administrator | `GET A/models/refresh/{id}` | Discovery operation state |
 
 The administrator catalog uses `type=image|unknown|other|all`, optional
-`q,configured,enabled,catalog_revision`, and `page` 1–1000 with `page_size`
-20, 50 or 100; it returns `{data,total,revision,page,page_size}`. The default
-catalog type is `image`. Other image model, task and control lists use
-`page_size` (1–100, default 20) and optional `cursor`, returning
-`{data,next_cursor}`. Task status reads return a bare
-task; submit/cancel return a `task` wrapper. Currency amounts and revisions are
-decimal strings. Exchange `asset` is `sketch_paper` or `sketch_brush` and
-`quantity` is a positive whole-unit string.
+`q`, `configured`, `enabled`, and `catalog_revision`, and `page` 1–1000
+with `page_size` 20, 50, or 100; it returns
+`{data,total,revision,page,page_size}`. The default catalog type is `image`.
+Other model, task, and control lists use `page_size` (1–100, default 20) and
+optional `cursor`, returning `{data,next_cursor}`. Task status reads return a
+bare task; submit and cancel return a `task` wrapper. Currency amounts and
+revisions are decimal strings. Exchange `asset` is `sketch_paper` or
+`sketch_brush` and `quantity` is a positive whole-unit string.
 
 ## Queue, limits, and uncertain results
 
