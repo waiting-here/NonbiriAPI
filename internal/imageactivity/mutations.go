@@ -83,6 +83,11 @@ func (s *Service) prepareSubmission(ctx context.Context, user int64, key string,
 	if !prepared.model.input.Enabled || prepared.model.readiness == "pending" {
 		return prepared, nil, ErrUnavailable
 	}
+	if isFixedAdapter(prepared.upstream) {
+		if err = validateFixedNumbers(input, prepared.model.input.Parameters); err != nil {
+			return prepared, nil, err
+		}
+	}
 	linked, rules, err := linkedSubmission(input, prepared.model)
 	if err != nil {
 		return prepared, nil, err
@@ -101,6 +106,9 @@ func (s *Service) prepareSubmission(ctx context.Context, user int64, key string,
 		return prepared, nil, err
 	}
 	mapping := prepared.model.input.Mapping
+	if isFixedAdapter(prepared.upstream) {
+		mapping = fixedMapping()
+	}
 	if mapping.ModelPointer == "" {
 		mapping = prepared.upstream.adapter.Submit.Mapping
 	}

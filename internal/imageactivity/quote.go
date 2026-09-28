@@ -164,6 +164,11 @@ func (s *Service) Quote(ctx context.Context, user int64, input SubmitInput) (Quo
 	if model.controlID != upstream.controlID || !model.input.Enabled || model.readiness == "pending" {
 		return out, ErrUnavailable
 	}
+	if isFixedAdapter(upstream) {
+		if err = validateFixedNumbers(input, model.input.Parameters); err != nil {
+			return out, err
+		}
+	}
 	input.ExpectedModelRevision = strconv.FormatInt(model.revision, 10)
 	input, rules, err := linkedSubmission(normalizeSubmitText(input), model)
 	if err != nil {

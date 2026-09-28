@@ -270,6 +270,11 @@ func (s *Service) PutUpstream(ctx context.Context, admin int64, key string, inpu
 	if err = requireOne(tx.ExecContext(ctx, "UPDATE image_activity_state SET revision=?,upstream_revision=?,updated_at=? WHERE id=1 AND revision=?", next, next, now, expected)); err != nil {
 		return out, err
 	}
+	if input.fixed {
+		if err = refreshAutomaticModelsTx(ctx, tx, controlID, now); err != nil {
+			return out, err
+		}
+	}
 	out.Value = UpstreamReceipt{Revision: strconv.FormatInt(next, 10)}
 	if err = finishReplay(ctx, tx, d, out.Value); err != nil {
 		return out, err
