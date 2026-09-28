@@ -26,6 +26,7 @@ describe('Fat Fish level editor', () => {
     api.validateLevelOnServer.mockResolvedValue({ content_hash: 'a'.repeat(64) });
     api.saveLevel.mockReset();
     api.deleteLevel.mockReset();
+    api.publishVersion.mockReset();
   });
 
   it('supports undo/redo and sends the edited validated draft with a retained key', async () => {
@@ -46,8 +47,41 @@ describe('Fat Fish level editor', () => {
     await waitFor(() => expect(api.saveLevel).toHaveBeenCalledTimes(1));
     const [id, input, key] = api.saveLevel.mock.calls[0];
     expect(id).toBeNull();
-    expect(input).toMatchObject({ title: 'New level', draft: { duration_seconds: 120 } });
+    expect(input).toMatchObject({ title: 'New level', draft: { engine_version: 2, duration_seconds: 120 } });
     expect(key).toMatch(/^[A-Za-z0-9_-]{22}$/);
+  });
+
+  it('converts only an explicitly selected legacy draft, with undo and a required save before publication', async () => {
+    const legacy = { ...first, draft: { ...first.draft, engine_version: 1 as const, speed_pixels_per_second: 76 } };
+    api.getLevel.mockResolvedValue(legacy);
+    api.saveLevel.mockImplementation(async (_id, input) => ({ ...legacy, ...input, revision: '2' }));
+    const view = await renderWithProviders(<LevelManager />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('button', { name: /First level · r1/ }));
+    expect(await screen.findByText('Draft rules version: 1 · Legacy')).toBeInTheDocument();
+    const publish = screen.getByRole('button', { name: 'Publish immutable version from saved draft' });
+    expect(publish).toBeEnabled();
+    await view.user.click(screen.getByRole('button', { name: 'Convert to new draft' }));
+    expect(screen.getByText('Draft rules version: 2 · Current')).toBeInTheDocument();
+    expect(screen.getByLabelText('Speed (pixels/second)')).toHaveValue(76);
+    expect(publish).toBeDisabled();
+    expect(api.saveLevel).not.toHaveBeenCalled();
+    expect(api.publishVersion).not.toHaveBeenCalled();
+    await view.user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getByText('Draft rules version: 1 · Legacy')).toBeInTheDocument();
+    expect(publish).toBeEnabled();
+    await view.user.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(screen.getByText('Draft rules version: 2 · Current')).toBeInTheDocument();
+    expect(publish).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(api.saveLevel).toHaveBeenCalledTimes(1));
+    expect(api.saveLevel.mock.calls[0].slice(0, 2)).toEqual([legacy.id, {
+      title: legacy.title, description: legacy.description,
+      draft: { ...legacy.draft, engine_version: 2 }, expected_revision: '1',
+    }]);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish immutable version from saved draft' })).toBeEnabled());
+    expect(legacy.draft.engine_version).toBe(1);
+    expect(api.publishVersion).not.toHaveBeenCalled();
   });
 
   it('keeps an edited draft after a revision conflict and refuses a directory switch', async () => {

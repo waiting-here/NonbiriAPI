@@ -3,7 +3,7 @@
     {
       "adaptation": "All fish and a movable obstacle start on the board, with two optional tools on the outside workbench; a turn zone leads to the bowl.",
       "bytes": 7521,
-      "content_hash": "4bede6c627996eeeed0c266f4e716ddf5d7b3a6ec08818140695fb3ff9dfa6f2",
+      "content_hash": "dbc36c2dd83e3df202c04f91316a70693e29f28d76fdcd0ac4aa77a84a9c1aaf",
       "coverage": [
         "all_initial",
         "preplaced_tool",
@@ -12,7 +12,7 @@
         "turn"
       ],
       "id": "01-first-rice",
-      "raw_sha256": "f3f3bc81121945da50e813682ae23912c31ed6aee5f3ae95017ba0e7eaf6085d",
+      "raw_sha256": "a0eb8cf49c3d19f5fc716ff76e662566dcf58fee2392e3b39f9c370846ac4cff",
       "source_example": "first-rice",
       "source_sha256": "b5bc881dbb4a38cb26c5a6a9c5bb06126249f90305f9bdef6646201b6ab5762b",
       "title": "转个弯，就开饭。",
@@ -21,13 +21,13 @@
     {
       "adaptation": "Separate obstacles exercise each fish's turn stream beside a hazard pool.",
       "bytes": 2788,
-      "content_hash": "3953777695b644661b4de2f1b69a8b090f8d5b9816c430a23941c6c75cfb1af5",
+      "content_hash": "6bedfafec4eb4f94a2c095f86cdf05bcafea12edfae3dd2efee5b5fe914ef71a",
       "coverage": [
         "independent_random_turn",
         "hazard"
       ],
       "id": "02-buffer-pool",
-      "raw_sha256": "15d9e751f432709e7b24d86d8833586ac5d87dc05b47420f5668d72ed54d26ff",
+      "raw_sha256": "b66bb6b258910c55a0b5629a38220b1ef4f0e1b732f7f2385676c2e4db396189",
       "source_example": "buffer-pool",
       "source_sha256": "4926b85b4bb25dcd57219b20219c72ad4621c0e27b3808e13f3bcd709faa962d",
       "title": "断流池，绕着走。",
@@ -36,14 +36,14 @@
     {
       "adaptation": "Fish traverse the passage between pools; one escapes partial cover and one begins on a safe island.",
       "bytes": 3575,
-      "content_hash": "8e6b2524085a107c63d907e8d237d7baa2a120fb7c7f48271aa04edb9bb27bb2",
+      "content_hash": "9c48bacb9720054794d075631fe0180ec52c56c4dc709be48f12e4548eecee6f",
       "coverage": [
         "partial_cover_recovery",
         "hazard_hole",
         "multiple_bowls"
       ],
       "id": "03-narrow-bridge",
-      "raw_sha256": "7516e08e0b24b75ae3356aa2ae5c2d39cd9a1fef0a382165e277a9eb8b379362",
+      "raw_sha256": "da705849752534f0a91efa9fb48653d2bf41cdb1c107b69dd64beb4d2c9f0ee6",
       "source_example": "narrow-bridge",
       "source_sha256": "0c85d89346910a6d8a29f85ec3c96ed0c88525cd0414ed5dd9dfdccec06e6622",
       "title": "带宽只够一座桥。",
@@ -52,14 +52,14 @@
     {
       "adaptation": "Two entry zones produce the two turns after clearing a movable barrier.",
       "bytes": 3135,
-      "content_hash": "ee4bee425c20ea069cb78be9c90d7f4f1ede70e9c8d94bcbb0d89b45f59ff250",
+      "content_hash": "d807745592f9aafdf5ba6aca21e505c48e3175e28a702829d9765ad0ff1d96d2",
       "coverage": [
         "turn",
         "direction_entry",
         "movable_tool"
       ],
       "id": "04-two-turns",
-      "raw_sha256": "9149dbeec48bb733bfc580eaa6663edc234686aac9b4963c2042a08c10bd9c55",
+      "raw_sha256": "97d38d8873f4f12daa645952d704368b0aec2538371c2f27f7a0a35f8bf76b92",
       "source_example": "two-turns",
       "source_sha256": "cad77a2210f0abbe54802b4aa1d392dd16f1e0ad64e0471ae1ea5bca203c1934",
       "title": "先左转，再右转。",
@@ -68,13 +68,13 @@
     {
       "adaptation": "A westbound group needs the last barrier removed between two hazard areas.",
       "bytes": 3089,
-      "content_hash": "d1f6b770ace0b35078449644f9f821a39c046405ae8fd918c93a60f67161cc51",
+      "content_hash": "085087e87c1252ca97f8eb78545b1ddec3d587b82051406b7557e32e7a13db71",
       "coverage": [
         "movable_tool",
         "hazard"
       ],
       "id": "05-last-barrier",
-      "raw_sha256": "ebfd58d0490187a7f7b28b84dec9d69be361d81803f8379d444a8cf16a5eaea8",
+      "raw_sha256": "9038a946010638605c39177f8c998677877102e9212e4523171c2b2c431acd2b",
       "source_example": "last-barrier",
       "source_sha256": "c18868575286108fb5fc7509ae7f8425fe61b62942cd48cbda5fd3a091844b05",
       "title": "最后一块挡板。",
@@ -83,13 +83,13 @@
     {
       "adaptation": "A latched switch opens the initially closed gate before fish reach the bowl.",
       "bytes": 2347,
-      "content_hash": "ba7db4c84191d9f828a9ca6d447be802642774253906f15d9eff8552f4abfd9e",
+      "content_hash": "4c6dc5a3a371a01f35e32c1636989bf9ce9280ff3c534c3757c3f55b24bad4e4",
       "coverage": [
         "switch",
         "gate"
       ],
       "id": "06-power-button",
-      "raw_sha256": "23f4cbae97889f21a80b74307c43b31d657bc32cf33c7e87322503cbfce4dacc",
+      "raw_sha256": "5026235bbdcffbccb1114ebd4e05e090eb64abf75b85d34b575b6428f745e865",
       "source_example": "power-button",
       "source_sha256": "f4971486e3d91cc0ad795ee251217294fff9f575326c7bcaa0fdd335477aa910",
       "title": "踩一下，开饭门。",
@@ -98,13 +98,13 @@
     {
       "adaptation": "An entry zone feeds a one-way stream toward the bowl.",
       "bytes": 2486,
-      "content_hash": "edb81031086c05a06522ab8f48c76a231ee8f9923f70ae3f32e796463dbd2ca0",
+      "content_hash": "8a0191cfd0381a32b8986942dc331ea3486cf6ea60e299e773faf6036cbe49eb",
       "coverage": [
         "direction_entry",
         "direction_oneway"
       ],
       "id": "07-one-way-stream",
-      "raw_sha256": "c640327a8aff29f4147f10823d759a3bcc9095d48407bc8034af9c90cefa8748",
+      "raw_sha256": "4789b1b73ce724080712c10ccbee681602ed6abdd1b9a7cbb714d7bc47220ccc",
       "source_example": "one-way-stream",
       "source_sha256": "7f6269d8309b5ed1d5aa02362464a22c53cd85ed0df5e37282377be7e8d097b6",
       "title": "跟着箭头，别逆行。",
@@ -113,14 +113,14 @@
     {
       "adaptation": "The first bowl fills at four fish; the others pass through to meet the second bowl quota.",
       "bytes": 2523,
-      "content_hash": "446840c3e02b7bd1dba4542804e307030403999e7c284186e9d94005fc6f80fe",
+      "content_hash": "0fe93cfa2ceab4b443280178c4b2881cdd356776ae22b6eed5a96ccb88ef9b5b",
       "coverage": [
         "multiple_bowls",
         "capacity",
         "movable_tool"
       ],
       "id": "08-rice-buffet",
-      "raw_sha256": "ad42cd074f26635c2f3772ee00cfbdd9953a323dc6fb0515a1e3662a0ec5b727",
+      "raw_sha256": "0551d884bedfb6bd2c5eb5f894f44728964dd210943dd06fa8072ae222259a08",
       "source_example": "rice-buffet",
       "source_sha256": "d0b3bf37a505fb9907e5594565497fa1ba724e929551a44b755845cc0c4d0621",
       "title": "两碗白饭，都要有鱼。",
@@ -129,6 +129,6 @@
   ],
   "format": "nonbiri-fatfish-examples",
   "license": "AGPL-3.0",
-  "source": "Owner-provided original example set v0.6.0, adapted to integer engine v1",
+  "source": "Original example set v0.6.0, adapted to integer engine v2",
   "version": 1
 }

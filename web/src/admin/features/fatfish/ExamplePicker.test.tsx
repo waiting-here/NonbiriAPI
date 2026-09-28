@@ -51,6 +51,7 @@ describe('Fat Fish example picker', () => {
       const file = readFileSync(`public${example.url}`, 'utf8');
       expect(new TextEncoder().encode(file).byteLength).toBeLessThanOrEqual(256 * 1024);
       const level = JSON.parse(file) as Level;
+      expect(level.engine_version).toBe(2);
       expect(localValidation(level)).toBeNull();
       expect(contentHash(level)).toBe(example.content_hash);
     }
