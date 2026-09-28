@@ -1,0 +1,49 @@
+{
+  "legacy": {
+    "user_id": "42",
+    "discord_id": "100000000000000042",
+    "general_balance": "-2.5",
+    "game_balance": "1",
+    "donation_credit": "0",
+    "sketch_paper": "1",
+    "sketch_brush": "0"
+  },
+  "v1": {
+    "snapshot_version": 1,
+    "registered_at": null,
+    "deleted_at": null,
+    "effective_level": null,
+    "ban": { "state": "unknown", "active_at_deletion": null, "reason": null, "until": null },
+    "charity_pause": { "state": "unknown", "active_at_deletion": null, "reason": null, "until": null },
+    "source": "unknown",
+    "actor_user_id": null,
+    "blacklist_action": "unknown",
+    "blacklist_reason_codes": [],
+    "user_id": "42",
+    "discord_id": "100000000000000042",
+    "general_balance": "-2.5",
+    "game_balance": "1",
+    "donation_credit": "0",
+    "sketch_paper": "1",
+    "sketch_brush": "0"
+  },
+  "v2": {
+    "snapshot_version": 2,
+    "registered_at": 1600000000,
+    "deleted_at": 1700000000,
+    "effective_level": 4,
+    "ban": { "state": "known", "active_at_deletion": true, "reason": "First line\nSecond\t<&>", "until": null },
+    "charity_pause": { "state": "known", "active_at_deletion": false, "reason": null, "until": 1699999999 },
+    "source": "self",
+    "actor_user_id": "99",
+    "blacklist_action": "added",
+    "blacklist_reason_codes": ["deletion_penalty_evasion", "deletion_debt_evasion"],
+    "user_id": "99",
+    "discord_id": "100000000000000099",
+    "general_balance": "-3.5",
+    "game_balance": "2",
+    "donation_credit": "120",
+    "sketch_paper": "1",
+    "sketch_brush": "0"
+  }
+}

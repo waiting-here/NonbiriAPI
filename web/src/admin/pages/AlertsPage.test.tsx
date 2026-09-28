@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
 import { adminKeys } from '../data';
 import { AlertsPage, validAlertReturnTo } from './AlertsPage';
+import deletionSnapshots from '../../../test/fixtures/account-deletion-alerts.json';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -826,4 +827,53 @@ it('filters deletion alerts and resolves only selected unresolved rows', async (
   await rendered.user.click(screen.getByRole('button', { name: 'Resolve selected (1)' }));
   await waitFor(() => expect(bulkBody).toEqual({ ids: ['7'] }));
   await waitFor(() => expect(screen.queryByText('123456789012345678')).not.toBeInTheDocument());
+});
+
+it('renders current deletion snapshots with all filters and opens both retained details', async () => {
+  const rows = [
+    alert('9', false),
+    alert('8', true, { kind: 'account_deleted', account_deletion: deletionSnapshots.v2 }),
+    alert('7', false, { kind: 'account_deleted', account_deletion: deletionSnapshots.v1 }),
+  ];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const target = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+    if (target.pathname === '/admin/api/session') return jsonResponse(session());
+    if (target.pathname === '/admin/api/alerts') {
+      const resolved = target.searchParams.get('resolved');
+      const kind = target.searchParams.get('kind');
+      return jsonResponse(page(rows.filter((row) =>
+        (resolved === null || row.resolved === (resolved === 'true')) &&
+        (kind === null || row.kind === kind),
+      )));
+    }
+    const selected = rows.find((row) => target.pathname === `/admin/api/alerts/${row.id}`);
+    if (selected) return jsonResponse({
+      alert: selected, context_version: 0, occurred_facts: [],
+      targets: [{ kind: 'deleted_account', id: selected.id, available: true, status: 'retained' }],
+      current_state: [], related_logs: null, resolution_kind: 'legacy',
+    });
+    throw new Error(`Unexpected request: ${target.pathname}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const rendered = await renderWithProviders(<AlertsPage />, {
+    station: 'admin', role: 'admin', route: '/alerts?resolved=all',
+  });
+  expect(await screen.findByText(deletionSnapshots.v1.discord_id)).toBeVisible();
+  expect(screen.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
+  expect(screen.getByText('Alert 9')).toBeVisible();
+  expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain('/admin/api/alerts?page=1&page_size=20');
+  await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Alert type' }), 'account_deleted');
+  await waitFor(() => expect(screen.queryByText('Alert 9')).not.toBeInTheDocument());
+  for (const [id, snapshot] of [['7', deletionSnapshots.v1], ['8', deletionSnapshots.v2]] as const) {
+    const row = screen.getByText(snapshot.discord_id).closest('tr');
+    await rendered.user.click(within(row!).getByRole('button', { name: 'Details' }));
+    expect(await screen.findByRole('heading', { name: `Alert details #${id}` })).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Close details' }));
+  }
+  await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Resolution status' }), 'true');
+  await waitFor(() => expect(screen.queryByText(deletionSnapshots.v1.discord_id)).not.toBeInTheDocument());
+  expect(screen.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
+  await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Resolution status' }), 'false');
+  expect(await screen.findByText(deletionSnapshots.v1.discord_id)).toBeVisible();
+  await waitFor(() => expect(screen.queryByText(deletionSnapshots.v2.discord_id)).not.toBeInTheDocument());
 });
