@@ -7,7 +7,7 @@ import (
 )
 
 func ValidateLevel(level Level) error {
-	if level.Format != "nonbiri-fatfish-level" || level.FormatVersion != 1 || level.EngineVersion != EngineVersion || level.ScoringVersion != ScoringVersion {
+	if level.Format != "nonbiri-fatfish-level" || level.FormatVersion != 1 || !supportedVersions(level.EngineVersion, level.ScoringVersion) {
 		return errors.New("level format or rules version is unsupported")
 	}
 	if len(level.Fish) < 1 || len(level.Fish) > 40 || level.DurationSeconds < 10 || level.DurationSeconds > 600 || level.SpeedPixelsPerSecond < 16 || level.SpeedPixelsPerSecond > 160 {
