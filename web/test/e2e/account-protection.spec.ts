@@ -7,9 +7,31 @@ async function setup(page: import('@playwright/test').Page) {
   await mockPublicConfig(page, 'admin');
   await page.emulateMedia({ reducedMotion: 'reduce' });
 }
-async function layout(page: import('@playwright/test').Page, name: string) {
+async function layout(
+  page: import('@playwright/test').Page,
+  name: string,
+  multilineNote?: import('@playwright/test').Locator,
+) {
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
+    if (multilineNote) {
+      await expect(multilineNote).toHaveCSS('white-space', 'pre-wrap');
+      await expect(multilineNote).toHaveCSS('overflow-wrap', 'anywhere');
+      const lineGeometry = await multilineNote.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const fragments = Array.from(range.getClientRects());
+        const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+        return {
+          fragmentCount: fragments.length,
+          fragmentHeight: fragments[0]?.height ?? 0,
+          height: range.getBoundingClientRect().height,
+          lineHeight,
+        };
+      });
+      expect(lineGeometry.fragmentCount).toBeGreaterThanOrEqual(3);
+      expect(lineGeometry.height).toBeGreaterThanOrEqual(lineGeometry.lineHeight * 3 - 1);
+    }
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
       .toBe(true);
@@ -103,6 +125,7 @@ test('deletion alerts can be filtered and resolved in a selected batch', async (
 test('blacklist add and remove work on desktop and narrow screens', async ({ page }) => {
   const errors = collectConsoleViolations(page);
   await setup(page);
+  const reason = `Policy review\n<img src=x onerror="window.blacklistNoteRan=true">\n${'x'.repeat(160)}`;
   let listed = false;
   await page.route('**/admin/api/blacklist**', async (route) => {
     const request = route.request();
@@ -113,7 +136,7 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
       if (listed)
         expect(request.postDataJSON()).toEqual({
           discord_id: '123456789012345678',
-          reason: 'Policy review',
+          reason,
         });
       await route.fulfill({ status: 204 });
       return;
@@ -122,7 +145,7 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
       ? [
           {
             discord_id: '123456789012345678',
-            reason: 'Policy review',
+            reason,
             created_at: 1800000000,
             user_id: '42',
           },
@@ -143,10 +166,14 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
   });
   await page.goto(`${ADMIN_ORIGIN}/blacklist`);
   await page.getByLabel('Discord ID', { exact: true }).fill('123456789012345678');
-  await page.getByLabel('Reason', { exact: true }).fill('Policy review');
+  await page.getByLabel('Reason', { exact: true }).fill(reason);
   await page.getByRole('button', { name: 'Add and permanently ban' }).click();
   await expect(page.getByRole('link', { name: '42', exact: true })).toBeVisible();
-  await layout(page, 'blacklist');
+  const reasonNote = page.locator('.ops-blacklist-note');
+  await expect(reasonNote).toBeVisible();
+  expect(await reasonNote.textContent()).toBe(reason);
+  await expect(reasonNote.locator('img')).toHaveCount(0);
+  await layout(page, 'blacklist', reasonNote);
   await page.getByRole('button', { name: 'Remove from blacklist' }).click();
   await expect(page.getByRole('link', { name: '42', exact: true })).toHaveCount(0);
   expect(listed).toBe(false);
@@ -198,17 +225,18 @@ test('level six can read administrator-origin blacklist events without a removal
   await mockRoleSession(page, 'user', 'level6');
   await mockPublicConfig(page, 'user');
   const discordID = '123456789012345678';
+  const note = `Account deletion attempt\n<img src=x onerror="window.blacklistNoteRan=true">\n${'y'.repeat(160)}`;
   await page.route('**/api/steward/blacklist**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/events')) {
       await route.fulfill({ json: {
-        data: [{ id: '1', actor_kind: 'admin', actor_user_id: '9', reason_codes: [], safe_note: 'Original administrative note', created_at: 1_800_000_000 }],
+        data: [{ id: '1', actor_kind: 'admin', actor_user_id: '9', reason_codes: [], safe_note: note, created_at: 1_800_000_000 }],
         next_cursor: null,
         pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
       } });
     } else {
       await route.fulfill({ json: {
-        data: [{ discord_id: discordID, reason: 'Original administrative note', created_at: 1_800_000_000, user_id: null, first_actor_kind: 'admin', first_actor_user_id: '9' }],
+        data: [{ discord_id: discordID, reason: note, created_at: 1_800_000_000, user_id: null, first_actor_kind: 'admin', first_actor_user_id: '9' }],
         next_cursor: null,
         pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
       } });
@@ -217,7 +245,16 @@ test('level six can read administrator-origin blacklist events without a removal
   await page.goto(`${USER_ORIGIN}/steward?tab=blacklist`);
   await expect(page.getByRole('cell', { name: 'Administrator #9' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove from blacklist' })).toHaveCount(0);
+  const reasonNote = page.locator('.ops-blacklist-note').first();
+  await expect(reasonNote).toBeVisible();
+  expect(await reasonNote.textContent()).toBe(note);
+  await expect(reasonNote.locator('img')).toHaveCount(0);
   await page.getByRole('button', { name: 'Events' }).click();
-  await expect(page.getByText(/Additional note: Original administrative note/)).toBeVisible();
+  const eventNote = page.locator('.ops-blacklist-note').nth(1);
+  await expect(eventNote).toBeVisible();
+  await expect(eventNote.locator('..')).toContainText('Additional note:');
+  expect(await eventNote.textContent()).toBe(note);
+  await expect(eventNote.locator('img')).toHaveCount(0);
+  await layout(page, 'steward-blacklist', eventNote);
   errors.assertNone();
 });

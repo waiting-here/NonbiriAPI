@@ -150,6 +150,11 @@ fieldset.ops-field-grid {
   font-variant-numeric: tabular-nums;
 }
 
+.ops-blacklist-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .ops-table--responsive .ops-id {
   width: 8rem;
 }
