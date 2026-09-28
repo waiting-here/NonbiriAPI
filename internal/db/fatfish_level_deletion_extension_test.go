@@ -10,12 +10,13 @@ import (
 )
 
 func TestLevelDeletionUpgradePreservesPublishedData(t *testing.T) {
-	priorDDL := strings.TrimSuffix(generationTwoSchema, fatFishLevelDeletionSchema)
+	priorDDL := strings.TrimSuffix(interactionBootstrapSchema(generationTwoWithoutInteractionsSchema), fatFishLevelDeletionSchema)
 	if got := fmt.Sprintf("%x", sha256.Sum256([]byte(priorDDL))); got != "eddc288821cd2b64f648a5ba4006626f38dc95d070471fe39fc9a5cf1f56a2f0" {
 		t.Fatalf("deployed source DDL drift: %s", got)
 	}
 	store := openTestStore(t, bootstrapTestPath(t, "level-library-upgrade.sqlite"))
 	database := store.DB()
+	makePreActivityRefinementFixture(t, database)
 	hostileMustExec(t, database, `DROP TABLE fatfish_deleted_levels`)
 	assertRetainedManifest(t, database, preLevelDeletionManifestHash)
 	level, version := hostileOID("ffl_"), hostileOID("ffv_")
@@ -55,6 +56,7 @@ func TestLevelDeletionUpgradePreservesPublishedData(t *testing.T) {
 func TestLevelDeletionUpgradeRejectsUnknownSource(t *testing.T) {
 	store := openTestStore(t, bootstrapTestPath(t, "level-library-drift.sqlite"))
 	database := store.DB()
+	makePreActivityRefinementFixture(t, database)
 	hostileMustExec(t, database, `DROP TABLE fatfish_deleted_levels; CREATE INDEX unexpected_level_index ON fatfish_levels(title)`)
 	if err := extendKnownGenerationTwoSchema(context.Background(), database); err == nil {
 		t.Fatal("unrecognized source accepted")

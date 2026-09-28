@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -417,8 +418,7 @@ func (s *Service) deleteBinding(ctx context.Context, role roleKind, actorUserID,
 	if err := requireOne(result); err != nil {
 		return resources.MutationResult[AdminBindings]{}, ErrNotFound
 	}
-	// Compact ord by rebuilding the bounded binding rows with their stable IDs;
-	// the frozen ord domain has no out-of-band staging value.
+	// Compact surviving bindings in place so their adaptation rows survive.
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM charity_model_bindings WHERE charity_model_id=? ORDER BY ord,id`, modelID)
 	if err != nil {
 		return resources.MutationResult[AdminBindings]{}, fmt.Errorf("charity routing: read compacted bindings: %w", err)
@@ -504,19 +504,7 @@ FROM charity_model_bindings WHERE charity_model_id=? ORDER BY id`, modelID)
 			return ErrConflict
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM charity_model_bindings WHERE charity_model_id=?`, modelID); err != nil {
-		return fmt.Errorf("charity routing: clear bindings for reorder: %w", err)
-	}
-	for ord, id := range order {
-		record := records[id]
-		if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_bindings(
-id,charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?,?)`, record.id, modelID, record.donationKeyID, record.endpointKeyID,
-			record.upstreamModelID, ord, record.createdAt, now); err != nil {
-			return fmt.Errorf("charity routing: rebuild binding order: %w", err)
-		}
-	}
-	return nil
+	return db.ReorderBindingsTx(ctx, tx, true, modelID, order, now)
 }
 
 func readAdminBindingsDB(ctx context.Context, database *sql.DB, modelID int64) (AdminBindings, error) {
@@ -672,7 +660,7 @@ func stewardBindings(value AdminBindings) StewardBindings {
 				DisplayHead: binding.Source.DisplayHead, DisplayTail: binding.Source.DisplayTail,
 				MaxConcurrency: binding.Source.MaxConcurrency, MaxRPM: binding.Source.MaxRPM,
 			},
-			UpstreamModelID: binding.UpstreamModelID, SourceTypes: append([]string(nil), binding.SourceTypes...),
+			UpstreamModelID: binding.UpstreamModelID, SourceTypes: append([]string{}, binding.SourceTypes...),
 		}
 	}
 	return out

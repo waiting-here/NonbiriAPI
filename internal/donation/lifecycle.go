@@ -251,6 +251,9 @@ WHERE donation_key_id IN (`+placeholders+`) ORDER BY charity_model_id`, args...)
 		return fmt.Errorf("donation: delete charity bindings: %w", err)
 	}
 	for _, modelID := range modelIDs {
+		if err := db.CompactCharityBindingsTx(ctx, tx, modelID); err != nil {
+			return fmt.Errorf("donation: compact surviving charity bindings: %w", err)
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE charity_models SET binding_revision=binding_revision+1,updated_at=?
 WHERE id=? AND binding_revision<9223372036854775807`, now, modelID)
 		if err != nil {

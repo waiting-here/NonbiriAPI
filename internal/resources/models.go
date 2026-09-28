@@ -611,18 +611,7 @@ func rebuildBindingOrderTx(ctx context.Context, tx *sql.Tx, modelID int64, rows 
 		}
 		seen[id] = struct{}{}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM model_bindings WHERE model_id=?`, modelID); err != nil {
-		return fmt.Errorf("resources: clear binding order: %w", err)
-	}
-	for ordinal, id := range order {
-		row := byID[id]
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO model_bindings(id,model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?)`, row.id, modelID, row.keyID, row.upstreamModelID, ordinal, row.createdAt, now); err != nil {
-			return fmt.Errorf("resources: rebuild binding order: %w", err)
-		}
-	}
-	return nil
+	return db.ReorderBindingsTx(ctx, tx, false, modelID, order, now)
 }
 
 func (r *Repository) OrderBindings(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedBindingRevision int64, order []int64) (MutationResult[BindingsResponse], error) {
