@@ -948,7 +948,13 @@ function normalizeSourceTypes(value: unknown, label: string): ('automatic' | 'ma
   const values = array(value, label, 2).map((item) =>
     oneOf(item, ['automatic', 'manual'] as const, label),
   );
-  if (values.length === 0 || new Set(values).size !== values.length) invalidResponse(label);
+  if (new Set(values).size !== values.length) invalidResponse(label);
+  return values;
+}
+
+function normalizeCandidateSourceTypes(value: unknown, label: string): ('automatic' | 'manual')[] {
+  const values = normalizeSourceTypes(value, label);
+  if (values.length === 0) invalidResponse(label);
   return values;
 }
 
@@ -991,7 +997,7 @@ export function normalizeCharityBindingCandidate(
       max: 512,
       bytes: 2_048,
     }),
-    source_types: normalizeSourceTypes(root.source_types, `${label} source types`),
+    source_types: normalizeCandidateSourceTypes(root.source_types, `${label} source types`),
   };
 }
 

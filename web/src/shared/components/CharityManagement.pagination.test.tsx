@@ -184,7 +184,11 @@ function install(pending = false, role: 'admin' | 'steward' = 'admin', keyCount 
     },
   };
 }
-function installBindingNavigation(role: 'admin' | 'steward', forbidden = false) {
+function installBindingNavigation(
+  role: 'admin' | 'steward',
+  forbidden = false,
+  sourceTypes: ('automatic' | 'manual')[] = ['manual'],
+) {
   const fixture = install(false, role);
   const root = role === 'admin' ? '/admin/api' : '/api/steward';
   const previousFetch = globalThis.fetch;
@@ -230,7 +234,7 @@ function installBindingNavigation(role: 'admin' | 'steward', forbidden = false) 
                 display_tail: 'tail',
               },
               upstream_model_id: 'embedding-model',
-              source_types: ['manual'],
+              source_types: sourceTypes,
             },
           ],
         });
@@ -244,6 +248,30 @@ function installBindingNavigation(role: 'admin' | 'steward', forbidden = false) 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('managed donation page integration', () => {
+  it.each([
+    { role: 'admin', locale: 'zh', unavailable: '来源已不可用' },
+    { role: 'admin', locale: 'en', unavailable: 'Source no longer available' },
+    { role: 'steward', locale: 'zh', unavailable: '来源已不可用' },
+    { role: 'steward', locale: 'en', unavailable: 'Source no longer available' },
+  ] as const)(
+    '$role shows an empty-source binding as unavailable in $locale',
+    async ({ role, locale, unavailable }) => {
+      installBindingNavigation(role, false, []);
+      await renderWithProviders(
+        <CharityManagement frame={role} accountId="1" />,
+        {
+          station: role === 'admin' ? 'admin' : 'user',
+          locale,
+          route: '/charity?charity_section=models&charity_model=1',
+        },
+      );
+
+      expect(await screen.findByText(unavailable)).toBeVisible();
+      const bindingRow = screen.getByRole('row', { name: /embedding-model/ });
+      expect(bindingRow).toHaveTextContent(unavailable);
+    },
+  );
+
   it.each(['admin', 'steward'] as const)(
     '%s opens a bound key on its own page and returns to the selected model and filters',
     async (role) => {
