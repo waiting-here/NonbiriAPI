@@ -352,6 +352,9 @@ func (s *Service) SaveNode(ctx context.Context, actorID int64, periodID, nodeID 
 	}
 	condition := string(input.Condition)
 	if nodeID == "" {
+		if err = availableVersionTx(ctx, tx, input.VersionID); err != nil {
+			return NodeView{}, err
+		}
 		nodeID, err = db.GenerateOpaqueID("ffn_")
 		if err != nil {
 			return NodeView{}, err
@@ -384,6 +387,9 @@ func (s *Service) SaveNode(ctx context.Context, actorID int64, periodID, nodeID 
 			}
 		}
 		if oldVersion != input.VersionID {
+			if err = availableVersionTx(ctx, tx, input.VersionID); err != nil {
+				return NodeView{}, err
+			}
 			var scored int
 			if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM fatfish_progress WHERE period_id=? AND node_id=? AND passed=1`, periodID, nodeID).Scan(&scored); err != nil {
 				return NodeView{}, err

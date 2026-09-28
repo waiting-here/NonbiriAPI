@@ -118,7 +118,7 @@ func (s *Service) SaveLevel(ctx context.Context, actorID int64, id string, input
 	} else {
 		var affected sql.Result
 		affected, err = tx.ExecContext(ctx, `UPDATE fatfish_levels SET title=?,description=?,draft_json=?,revision=revision+1,actor_user_id=?,updated_at=?
- WHERE id=? AND revision=?`, input.Title, input.Description, string(input.Draft), actorID, nowMS/1000, id, expected)
+ WHERE id=? AND revision=? AND NOT EXISTS(SELECT 1 FROM fatfish_deleted_levels WHERE level_id=fatfish_levels.id)`, input.Title, input.Description, string(input.Draft), actorID, nowMS/1000, id, expected)
 		if err == nil {
 			var count int64
 			count, err = affected.RowsAffected()
@@ -145,7 +145,7 @@ func readLevelTx(ctx context.Context, tx *sql.Tx, id string) (LevelView, error) 
 	var v LevelView
 	var draft string
 	var revision int64
-	err := tx.QueryRowContext(ctx, `SELECT id,title,description,draft_json,revision,created_at,updated_at FROM fatfish_levels WHERE id=?`, id).Scan(&v.ID, &v.Title, &v.Description, &draft, &revision, &v.CreatedAt, &v.UpdatedAt)
+	err := tx.QueryRowContext(ctx, `SELECT id,title,description,draft_json,revision,created_at,updated_at FROM fatfish_levels WHERE id=? AND NOT EXISTS(SELECT 1 FROM fatfish_deleted_levels WHERE level_id=fatfish_levels.id)`, id).Scan(&v.ID, &v.Title, &v.Description, &draft, &revision, &v.CreatedAt, &v.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -198,7 +198,7 @@ func (s *Service) Levels(ctx context.Context, actorID int64, page int) (LevelPag
 	if err = s.authorizeAdminTx(ctx, tx, actorID); err != nil {
 		return LevelPage{}, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,title,description,revision,created_at,updated_at FROM fatfish_levels ORDER BY updated_at DESC,id LIMIT ? OFFSET ?`, collectionPageSize+1, (page-1)*collectionPageSize)
+	rows, err := tx.QueryContext(ctx, `SELECT id,title,description,revision,created_at,updated_at FROM fatfish_levels WHERE NOT EXISTS(SELECT 1 FROM fatfish_deleted_levels WHERE level_id=fatfish_levels.id) ORDER BY updated_at DESC,id LIMIT ? OFFSET ?`, collectionPageSize+1, (page-1)*collectionPageSize)
 	if err != nil {
 		return LevelPage{}, err
 	}
