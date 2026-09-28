@@ -22,7 +22,7 @@ import { useUserSession } from '../../data';
 import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
 import '@shared/limitedactivities/limited.css';
-import pictureBookCover from '@shared/limitedactivities/picture-book-cover.svg';
+import pictureBookCover from '@shared/limitedactivities/picture-book-cover.webp';
 
 import { limitedActivityKeys } from './queries';
 
@@ -59,9 +59,12 @@ export function LimitedActivitiesSection() {
                 {isBook ? (
                   <img
                     src={pictureBookCover}
-                    alt={t('打开的绘本与星星', 'Open picture book with stars')}
-                    width="960"
-                    height="540"
+                    alt={t(
+                      '莲华在纸上认真画着笨拙的小画',
+                      'Renge carefully drawing a simple picture on paper',
+                    )}
+                    width="1280"
+                    height="720"
                   />
                 ) : (
                   <img

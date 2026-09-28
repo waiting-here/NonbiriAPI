@@ -223,7 +223,7 @@ func TestFixedServiceQueuedRunningAndDonePolling(t *testing.T) {
 		row, err := f.service.readTask(context.Background(), task.ID)
 		return err == nil && row.state == "running" && row.upstreamID != ""
 	})
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		row, err := f.service.readTask(context.Background(), task.ID)
 		return err == nil && row.pollCount >= 1
@@ -284,7 +284,7 @@ func TestFixedServiceFailuresRefundOnceWithoutResubmission(t *testing.T) {
 					return err == nil && row.state == "running"
 				})
 				mock.mode.Store(tc.mode)
-				f.now.Add(5)
+				f.now.Add(6)
 				f.wait(t, func() bool { return mock.polls.Load() > 0 })
 			}
 			if tc.mode == 4 {
@@ -328,7 +328,7 @@ func TestFixedServiceRecoveryPollsAcceptedJobWithoutGeneratingAgain(t *testing.T
 		t.Fatal(err)
 	}
 	mock.mode.Store(0)
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		result, err := fresh.GetTask(f.ctx(f.user), f.user, task.ID)
 		return err == nil && result.Status == "succeeded"

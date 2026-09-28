@@ -37,7 +37,7 @@ func TestMarkerReceiptAndDirectImagesShareOnePostBillingRules(t *testing.T) {
 		t.Fatalf("receipt state %+v %v", row, err)
 	}
 	f.upstream.mode.Store(11)
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		row, err := f.service.readTask(context.Background(), async.ID)
 		return err == nil && row.nextPoll.Valid && row.nextPoll.Int64 > f.now.Load()

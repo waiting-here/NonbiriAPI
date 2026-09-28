@@ -3,7 +3,6 @@ package imageactivity
 import (
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"errors"
 	"net/http"
 	"time"
@@ -13,6 +12,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
+
+const normalPollSeconds int64 = 6
 
 // Run starts only after the host finishes transactional startup recovery.
 func (s *Service) Run(ctx context.Context) error {
@@ -495,7 +496,7 @@ func (s *Service) acceptUpstreamID(ctx context.Context, id, upstreamID string) b
 		}
 		r, err := taskTx(ctx, tx, id)
 		if err == nil && r.upstreamRevision != 0 {
-			err = requireOne(tx.ExecContext(ctx, "UPDATE image_activity_tasks SET state='running',upstream_task_id=?,next_poll_at=?,updated_at=? WHERE id=? AND state='dispatching'", upstreamID, now+4, now, id))
+			err = requireOne(tx.ExecContext(ctx, "UPDATE image_activity_tasks SET state='running',upstream_task_id=?,next_poll_at=?,updated_at=? WHERE id=? AND state='dispatching'", upstreamID, now+normalPollSeconds, now, id))
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -592,23 +593,7 @@ func (s *Service) schedulePoll(ctx context.Context, id string, header http.Heade
 	if err != nil {
 		return err
 	}
-	row, err := s.readTask(ctx, id)
-	if err != nil {
-		return err
-	}
-	shift := row.pollCount
-	if shift > 4 {
-		shift = 4
-	}
-	delay := int64(4 << shift)
-	if delay > 60 {
-		delay = 60
-	}
-	hash := binary.BigEndian.Uint16([]byte(id[len(id)-2:]))
-	delay += int64(hash % 3)
-	if delay > 60 {
-		delay = 60
-	}
+	delay := normalPollSeconds
 	if retry := retrySeconds(header, now); retry > delay {
 		delay = retry
 	}

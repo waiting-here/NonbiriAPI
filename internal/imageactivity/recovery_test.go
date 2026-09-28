@@ -49,9 +49,9 @@ func TestQueryFailuresKeepOriginalDeadlineAndOneUserSource(t *testing.T) {
 		return e == nil && r.state == "running"
 	})
 	f.upstream.mode.Store(5)
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool { return f.upstream.polls.Load() > 0 })
-	f.now.Add(56)
+	f.now.Add(55)
 	f.wait(t, func() bool {
 		r, e := f.service.GetTask(f.ctx(f.user), f.user, task.ID)
 		return e == nil && r.Status == "unknown_refunded"
