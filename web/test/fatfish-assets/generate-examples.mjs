@@ -20,15 +20,13 @@ const base = (fish, duration_seconds, speed_pixels_per_second, thresholds) => ({
 });
 
 const firstRice = base(fishRows(8, 80, 105, 380, 20), 90, 80, [5, 7, 8]);
-firstRice.tools.push(tool(100, 'memory', rect(-5, -55, 5, 55), 170, 420));
+firstRice.tools.push(tool(100, 'memory', rect(-25, -61, 25, 61), 170, 420));
 firstRice.tools.push(
-  { ...tool(101, 'barrier', rect(-36, -9, 36, 9), 0, 0), placed: false },
-  { ...tool(102, 'memory', { outer: [
-    { x: px(-18), y: px(-28) }, { x: px(18), y: px(-28) },
-    { x: px(28), y: px(-18) }, { x: px(28), y: px(18) },
-    { x: px(18), y: px(28) }, { x: px(-18), y: px(28) },
-    { x: px(-28), y: px(18) }, { x: px(-28), y: px(-18) },
-  ], holes: [] }, 0, 0), placed: false },
+  { ...tool(101, 'barrier', rect(-61, -25, 61, 25), 136, 624), placed: false },
+  { ...tool(102, 'cup', { outer: Array.from({ length: 64 }, (_, index) => ({
+    x: Math.round(px(31) * Math.cos(index * Math.PI / 32)),
+    y: Math.round(px(25) * Math.sin(index * Math.PI / 32)),
+  })), holes: [] }, 270, 624), placed: false },
 );
 firstRice.directions.push(direction(700, rect(245, 365, 290, 470), 'entry', 3072));
 firstRice.bowls.push(bowl(400, rect(236, 145, 300, 195), 0, 8));
@@ -54,11 +52,11 @@ narrowBridge.bowls.push(bowl(400, rect(35, 435, 65, 465), 0, 1), bowl(401, rect(
 const twoTurns = base(fishRows(12, 80, 105, 370, 18), 120, 80, [8, 10, 12]);
 twoTurns.directions.push(direction(700, rect(190, 355, 240, 470), 'entry', 3072));
 twoTurns.directions.push(direction(701, rect(185, 205, 240, 245), 'entry', 0));
-twoTurns.tools.push(tool(100, 'barrier', rect(-5, -30, 5, 30), 270, 225));
+twoTurns.tools.push(tool(100, 'barrier', rect(-25, -61, 25, 61), 270, 225));
 twoTurns.bowls.push(bowl(400, rect(380, 205, 430, 245), 0, 12));
 
 const lastBarrier = base(fishRows(12, 390, 415, 380, 18, 2048), 150, 80, [10, 11, 12]);
-lastBarrier.tools.push(tool(100, 'barrier', rect(-5, -55, 5, 55), 230, 425));
+lastBarrier.tools.push(tool(100, 'barrier', rect(-25, -61, 25, 61), 230, 425));
 lastBarrier.hazards.push(shape(300, rect(150, 280, 205, 340)), shape(301, rect(260, 280, 315, 340)));
 lastBarrier.bowls.push(bowl(400, rect(45, 365, 100, 475), 0, 12));
 
@@ -73,7 +71,7 @@ oneWayStream.directions.push(direction(701, rect(185, 205, 445, 245), 'oneway', 
 oneWayStream.bowls.push(bowl(400, rect(415, 205, 455, 245), 0, 10));
 
 const riceBuffet = base(fishRows(10, 80, 105, 380, 20), 120, 80, [8, 9, 10]);
-riceBuffet.tools.push(tool(100, 'memory', rect(-20, -60, 20, 60), 220, 420));
+riceBuffet.tools.push(tool(100, 'memory', rect(-25, -61, 25, 61), 220, 420));
 riceBuffet.bowls.push(bowl(400, rect(210, 365, 250, 475), 3, 4), bowl(401, rect(370, 365, 420, 475), 3, 6));
 
 const examples = [

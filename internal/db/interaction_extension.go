@@ -50,7 +50,7 @@ func interactionTableSQL(table, previous string) (string, error) {
 }
 
 func interactionAdditiveSchema() string {
-	return routingPolicySchema + accountContinuitySchema + imageCapabilitySchema + imageCapabilityGuardsSchema() + auditProjectionSchema + fatFishSchema + usageDiscrepancySchema + likesLoadoutSchema
+	return routingPolicySchema + accountContinuitySchema + imageCapabilitySchema + imageCapabilityGuardsSchema() + auditProjectionSchema + fatFishSchema + usageDiscrepancySchema + likesLoadoutSchema + fatFishLevelDeletionSchema
 }
 
 // A recorded discrepancy is independent of whether the individual usage

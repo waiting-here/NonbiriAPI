@@ -305,6 +305,15 @@ func RegisterAdminRoutes(routes limitedactivities.AdminRouteRegistrar, s *Servic
 			}
 			return s.PublishVersion(r.Context(), p.UserID, r.PathValue("id"), in.ExpectedRevision, key)
 		})},
+		{http.MethodDelete, adminPrefix + "/levels/{id}", mutation(4096, func(r *http.Request, p limitedactivities.AdminPrincipal, key string, raw []byte) (any, error) {
+			var in struct {
+				ExpectedRevision string `json:"expected_revision"`
+			}
+			if err := decodeJSON(raw, &in); err != nil {
+				return nil, err
+			}
+			return s.DeleteLevel(r.Context(), p.UserID, r.PathValue("id"), in.ExpectedRevision, key)
+		})},
 		{http.MethodPost, adminPrefix + "/levels/validate", mutation((256<<10)+4096, func(r *http.Request, p limitedactivities.AdminPrincipal, _ string, raw []byte) (any, error) {
 			var in struct {
 				Level json.RawMessage `json:"level"`

@@ -87,30 +87,25 @@ describe('Fat Fish illustrated player controls', () => {
     expect(document.querySelector('[data-fatfish-music]')).toBeNull();
   });
 
-  it('keeps a preplaced tool on the board and shows unplaced pieces on an external bench', async () => {
+  it('shares one continuous field and workbench without a detached tool tray', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const active = controller();
     await renderWithProviders(<FatFishPlayer controller={active.value} />, { station: 'user', role: 'user' });
     expect(screen.getByRole('status')).toHaveAttribute('data-fish-tick', '60');
-    expect(screen.getByRole('status')).toHaveAttribute('data-fish-fed', '0');
-    expect(screen.getByText('Time left')).toBeInTheDocument();
     expect(screen.getByText('1:29')).toBeInTheDocument();
     expect(document.querySelector('[data-fish-board]')).toBeInstanceOf(HTMLCanvasElement);
-    expect(document.querySelector('[data-staging-area] [data-tool-id="100"]')).toBeNull();
-    const piece = document.querySelector('[data-staging-area] [data-tool-id="101"]');
-    expect(piece).toHaveTextContent('Keycap barrier');
-    expect(piece).not.toHaveTextContent('#101');
-    expect(piece?.querySelector('img')).toHaveAttribute('draggable', 'false');
+    expect(document.querySelector('[data-staging-area]')).toBeNull();
+    expect(screen.getByRole('option', { name: '1. Memory module' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '2. Space keycap' })).toBeInTheDocument();
   });
 
-  it('drags a preplaced narrow body with grab offset, returns it to the bench, and places a staged piece', async () => {
+  it('preserves a grab offset and sends real positions both inside and on the bench', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const active = controller();
     await renderWithProviders(<FatFishPlayer controller={active.value} />, { station: 'user', role: 'user' });
     const board = document.querySelector('.fatfish-player__board')!;
     const canvas = document.querySelector('[data-fish-board]')!;
-    const yard = document.querySelector('[data-staging-area]')!;
-    bounds(board, 0, 0, 480, 560); bounds(canvas, 0, 0, 480, 560); bounds(yard, 0, 600, 480, 100);
+    bounds(board, -128, -128, 736, 816); bounds(canvas, -128, -128, 736, 816);
     pointer(canvas, 'pointerdown', 174, 420);
     pointer(canvas, 'pointermove', 194, 420);
     pointer(canvas, 'pointerup', 194, 420);
@@ -118,27 +113,36 @@ describe('Fat Fish illustrated player controls', () => {
     pointer(canvas, 'pointerdown', 174, 420);
     pointer(canvas, 'pointermove', 174, 650);
     pointer(canvas, 'pointerup', 174, 650);
-    expect(active.returnTool).toHaveBeenCalledWith(100);
-    const piece = document.querySelector('[data-tool-id="101"]')!;
-    pointer(piece, 'pointerdown', 50, 650);
-    pointer(yard, 'pointermove', 250, 300);
-    pointer(yard, 'pointerup', 250, 300);
-    expect(active.place).toHaveBeenLastCalledWith(101, 250 * 64, 300 * 64);
+    expect(active.place).toHaveBeenLastCalledWith(100, 170 * 64, 650 * 64);
+    expect(active.returnTool).not.toHaveBeenCalled();
+    pointer(canvas, 'pointerdown', 136, 624);
+    pointer(canvas, 'pointermove', -72, 220);
+    pointer(canvas, 'pointerup', -72, 220);
+    expect(active.place).toHaveBeenLastCalledWith(101, -72 * 64, 220 * 64);
   });
 
-  it('does not move pieces during prepared preview', async () => {
+  it('does not move pieces during prepared preview or teleport a selection on an empty click', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const waiting = controller(false);
-    await renderWithProviders(<FatFishPlayer controller={waiting.value} />, { station: 'user', role: 'user' });
+    const view = await renderWithProviders(<FatFishPlayer controller={waiting.value} />, { station: 'user', role: 'user' });
     const canvas = document.querySelector('[data-fish-board]')!;
-    bounds(canvas, 0, 0, 480, 560);
+    bounds(canvas, -128, -128, 736, 816);
     pointer(canvas, 'pointerdown', 170, 420);
+    pointer(canvas, 'pointermove', 180, 420);
     pointer(canvas, 'pointerup', 180, 420);
     expect(waiting.place).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-tool-id="101"]')).toBeDisabled();
+    view.unmount();
+    const active = controller();
+    await renderWithProviders(<FatFishPlayer controller={active.value} />, { station: 'user', role: 'user' });
+    const activeCanvas = document.querySelector('[data-fish-board]')!;
+    bounds(activeCanvas, -128, -128, 736, 816);
+    fireEvent.keyDown(activeCanvas, { key: 'n' });
+    pointer(activeCanvas, 'pointerdown', 320, 300);
+    pointer(activeCanvas, 'pointerup', 320, 300);
+    expect(active.place).not.toHaveBeenCalled();
   });
 
-  it('lets a keyboard player choose a preplaced tool, adjust it, and return it', async () => {
+  it('lets a keyboard player choose, adjust, return, and select a bench piece', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const active = controller();
     await renderWithProviders(<FatFishPlayer controller={active.value} />, { station: 'user', role: 'user' });
@@ -148,9 +152,12 @@ describe('Fat Fish illustrated player controls', () => {
     expect(active.place).toHaveBeenCalledWith(100, 180 * 64, 420 * 64);
     fireEvent.keyDown(canvas, { key: 'Delete' });
     expect(active.returnTool).toHaveBeenCalledWith(100);
+    fireEvent.keyDown(canvas, { key: 'n' });
+    fireEvent.keyDown(canvas, { key: 'ArrowUp', shiftKey: true });
+    expect(active.place).toHaveBeenLastCalledWith(101, 136 * 64, 622 * 64);
   });
 
-  it('does not pick through a polygon hole, and pointer cancellation keeps the last sent position', async () => {
+  it('does not pick through holes and keeps the last applied position after pointer cancellation', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const hollow = structuredClone(level);
     hollow.tools[0].polygon.holes = [square(2, 2).outer];
@@ -158,7 +165,7 @@ describe('Fat Fish illustrated player controls', () => {
     await renderWithProviders(<FatFishPlayer controller={active.value} />, { station: 'user', role: 'user' });
     const board = document.querySelector('.fatfish-player__board')!;
     const canvas = document.querySelector('[data-fish-board]')!;
-    bounds(board, 0, 0, 480, 560); bounds(canvas, 0, 0, 480, 560);
+    bounds(board, -128, -128, 736, 816); bounds(canvas, -128, -128, 736, 816);
     pointer(canvas, 'pointerdown', 170, 420);
     pointer(canvas, 'pointermove', 190, 420);
     pointer(canvas, 'pointerup', 190, 420);
@@ -171,5 +178,26 @@ describe('Fat Fish illustrated player controls', () => {
     fireEvent(window, new Event('blur'));
     expect(active.returnTool).not.toHaveBeenCalled();
     expect(active.place).toHaveBeenCalledTimes(applied);
+    expect(active.place).toHaveBeenLastCalledWith(100, 191 * 64, 420 * 64);
+  });
+
+  it('keeps zoomed pointer coordinates accurate and does not place an uncommitted cancelled drag', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const active = controller();
+    await renderWithProviders(<FatFishPlayer controller={active.value} />, { station: 'user', role: 'user' });
+    fireEvent.click(screen.getByRole('button', { name: 'Enlarge field' }));
+    expect(document.querySelector('.fatfish-player__viewport')).toHaveAttribute('data-zoomed', 'true');
+    const board = document.querySelector('.fatfish-player__board')!;
+    const canvas = document.querySelector('[data-fish-board]')!;
+    bounds(board, -256, -256, 1472, 1632); bounds(canvas, -256, -256, 1472, 1632);
+    pointer(canvas, 'pointerdown', 348, 840);
+    pointer(canvas, 'pointermove', 388, 840);
+    pointer(canvas, 'pointerup', 388, 840);
+    expect(active.place).toHaveBeenLastCalledWith(100, 190 * 64, 420 * 64);
+    active.place.mockClear();
+    pointer(canvas, 'pointerdown', 272, 1248);
+    pointer(canvas, 'pointercancel', 272, 1248);
+    expect(active.place).not.toHaveBeenCalled();
+    expect(active.returnTool).not.toHaveBeenCalled();
   });
 });

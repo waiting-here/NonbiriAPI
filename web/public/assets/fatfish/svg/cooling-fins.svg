@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140" role="img">
+<title>散热鳍片</title>
+<defs><linearGradient id="metal" x2="0" y2="1"><stop stop-color="#f0f3ed"/><stop offset=".45" stop-color="#c6d7da"/><stop offset="1" stop-color="#84a6b7"/></linearGradient><linearGradient id="copper" x2="0" y2="1"><stop stop-color="#f6d8a6"/><stop offset=".6" stop-color="#c2915c"/><stop offset="1" stop-color="#9a6a49"/></linearGradient></defs>
+<rect x="20" y="26" width="283" height="103" rx="18" fill="#39576b" opacity=".2"/>
+<rect x="16" y="14" width="288" height="101" rx="17" fill="#6f99ac" stroke="#466b83" stroke-width="4"/>
+<g fill="url(#metal)" stroke="#7395a8" stroke-width="2"><rect x="25" y="12" width="16" height="92" rx="5"/><rect x="47" y="12" width="16" height="92" rx="5"/><rect x="69" y="12" width="16" height="92" rx="5"/><rect x="91" y="12" width="16" height="92" rx="5"/><rect x="113" y="12" width="16" height="92" rx="5"/><rect x="135" y="12" width="16" height="92" rx="5"/><rect x="157" y="12" width="16" height="92" rx="5"/><rect x="179" y="12" width="16" height="92" rx="5"/><rect x="201" y="12" width="16" height="92" rx="5"/><rect x="223" y="12" width="16" height="92" rx="5"/><rect x="245" y="12" width="16" height="92" rx="5"/><rect x="267" y="12" width="16" height="92" rx="5"/></g>
+<path d="M24 79C73 42 111 42 157 69S244 94 294 57" fill="none" stroke="#775744" stroke-width="15" stroke-linecap="round"/>
+<path d="M24 77C73 40 111 40 157 67S244 92 294 55" fill="none" stroke="url(#copper)" stroke-width="11" stroke-linecap="round"/>
+<path d="M28 73C73 38 111 40 157 65S244 90 290 54" fill="none" stroke="#ffe0b3" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="23" cy="111" r="3" fill="#dfe8df"/><circle cx="294" cy="111" r="3" fill="#dfe8df"/>
+</svg>

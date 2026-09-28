@@ -3,21 +3,17 @@ import { useActivityText } from '@shared/limitedactivities/copy';
 import { normalizeLevel } from './engine/canonical';
 import { containsPolygon, pointInRing, translatePolygon } from './engine/geometry';
 import { DRAG_BUFFER, FIELD_HEIGHT, FIELD_WIDTH, type EngineState, type Level, type Point, type Polygon } from './engine/types';
-import { fishFootprint } from './engine/trig_helpers';
+import { drawableDraft, drawFatFishScene } from './scene';
+import { workspacePoint, toolPosition, WORKSPACE_WIDTH, WORKSPACE_HEIGHT } from './workspace';
 import { formatScoreUnits, type FatFishChallenge } from './api';
-import { loadFatFishArt, toolIcon, type FatFishArt } from './art';
+import { loadFatFishArt, toolNames, type FatFishArt } from './art';
 import type { FatFishSessionController } from './session';
 import { useFatFishMusic } from './useFatFishMusic';
 import './player.css';
 
 const unit = 64;
-const width = FIELD_WIDTH / unit;
-const height = FIELD_HEIGHT / unit;
-const toolNames: Readonly<Record<string, readonly [string, string]>> = {
-  barrier: ['键帽挡板', 'Keycap barrier'], memory: ['缓存圆墩', 'Cache puck'],
-  fan: ['加班小风扇', 'Desk fan'], light: ['今日供饭屏', 'Rice monitor'],
-  cup: ['白饭储备', 'Rice reserve'],
-};
+const width = WORKSPACE_WIDTH / unit;
+const height = WORKSPACE_HEIGHT / unit;
 interface ToolDrag {
   pointerID: number;
   toolID: number;
@@ -25,9 +21,7 @@ interface ToolDrag {
   startY: number;
   dx: number;
   dy: number;
-  mode: 'board' | 'tray' | 'place';
   moved: boolean;
-  hadPlacement: boolean;
 }
 interface Placement { toolID: number; x: number; y: number }
 function nearOutline(polygon: Polygon, point: Point, radius: number): boolean {
@@ -43,177 +37,11 @@ function nearOutline(polygon: Polygon, point: Point, radius: number): boolean {
   });
 }
 
-function polygonPath(ctx: CanvasRenderingContext2D, polygon: Polygon, offsetX = 0, offsetY = 0): void {
-  const ring = (points: Point[]) => {
-    points.forEach((point, index) => {
-      const x = (point.x + offsetX) / unit, y = (point.y + offsetY) / unit;
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.closePath();
-  };
-  ctx.beginPath();
-  ring(polygon.outer);
-  polygon.holes.forEach(ring);
-}
-function shapeBounds(polygon: Polygon, offsetX = 0, offsetY = 0) {
-  const xs = polygon.outer.map((point) => (point.x + offsetX) / unit);
-  const ys = polygon.outer.map((point) => (point.y + offsetY) / unit);
-  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs),
-    height: Math.max(...ys) - Math.min(...ys) };
-}
-function drawShape(ctx: CanvasRenderingContext2D, polygon: Polygon, fill: string,
-  stroke: string, icon?: HTMLImageElement, offsetX = 0, offsetY = 0,
-  minimumWidth = 52, minimumHeight = 52, rotation = 0, toolBody = false): void {
-  const box = shapeBounds(polygon, offsetX, offsetY);
-  polygonPath(ctx, polygon, offsetX, offsetY);
-  ctx.fillStyle = fill;
-  ctx.fill('evenodd');
-  if (toolBody) {
-    ctx.save();
-    polygonPath(ctx, polygon, offsetX, offsetY);
-    ctx.clip('evenodd');
-    ctx.beginPath();
-    for (let x = box.x - box.height; x < box.x + box.width; x += 10) {
-      ctx.moveTo(x, box.y);
-      ctx.lineTo(x + box.height, box.y + box.height);
-    }
-    ctx.strokeStyle = '#f8fbf58c'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.restore();
-  }
-  if (icon && icon.naturalWidth > 0 && icon.naturalHeight > 0) {
-    const detached = toolBody && (box.width < 32 || box.height < 32 || polygon.holes.length > 0);
-    const targetWidth = detached ? 42 : Math.min(180, Math.max(minimumWidth, box.width + 12));
-    const targetHeight = detached ? 42 : Math.min(160, Math.max(minimumHeight, box.height + 12));
-    const scale = Math.min(targetWidth / icon.naturalWidth, targetHeight / icon.naturalHeight);
-    const displayWidth = icon.naturalWidth * scale, displayHeight = icon.naturalHeight * scale;
-    ctx.save();
-    if (detached) {
-      const right = box.x + box.width + displayWidth + 12 <= width;
-      const iconX = right ? box.x + box.width + 8 + displayWidth / 2 : box.x - 8 - displayWidth / 2;
-      const iconY = Math.max(displayHeight / 2 + 4, Math.min(height - displayHeight / 2 - 4,
-        box.y + Math.min(box.height / 2, 28)));
-      ctx.beginPath();
-      ctx.moveTo(box.x + box.width / 2, iconY);
-      ctx.lineTo(iconX, iconY);
-      ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
-      ctx.translate(iconX, iconY);
-      ctx.fillStyle = '#fff9e5e8'; ctx.strokeStyle = stroke; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.roundRect(-displayWidth / 2 - 3, -displayHeight / 2 - 3,
-        displayWidth + 6, displayHeight + 6, 7); ctx.fill(); ctx.stroke();
-    } else ctx.translate(box.x + box.width / 2, box.y + box.height / 2);
-    ctx.rotate(rotation);
-    ctx.shadowColor = '#233f4670';
-    ctx.shadowBlur = 5;
-    ctx.shadowOffsetY = 3;
-    ctx.drawImage(icon, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
-    ctx.restore();
-  }
-  polygonPath(ctx, polygon, offsetX, offsetY);
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = 1.7;
-  ctx.stroke();
-}
-function drawFatFishScene(ctx: CanvasRenderingContext2D, level: Level, state?: EngineState | null,
-  art?: FatFishArt | null): void {
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#faf2df';
-  ctx.fillRect(0, 0, width, height);
-  const floor = art?.icons.get('floor-tile');
-  if (floor) {
-    ctx.save(); ctx.globalAlpha = .56;
-    for (let y = 0; y < height; y += 160) for (let x = 0; x < width; x += 160) {
-      ctx.drawImage(floor, x, y, 160, 160);
-    }
-    ctx.restore();
-  }
-  level.directions.forEach((item) => drawShape(ctx, item.polygon, '#62b9c535', '#2d7486',
-    art?.icons.get('rice-arrow'), 0, 0, 52, 52, item.heading * Math.PI * 2 / 4096));
-  level.solids.forEach((item) => {
-    const box = shapeBounds(item.polygon);
-    const icon = box.width > box.height * 1.4 ? 'server-wall' : box.height > box.width * 1.4 ? 'server-rack' : 'router-wedge';
-    drawShape(ctx, item.polygon, '#5e829955', '#345c75', art?.icons.get(icon), 0, 0, 42, 42);
-  });
-  level.hazards.forEach((item) => drawShape(ctx, item.polygon, '#e8867960', '#ae4e52',
-    art?.icons.get('offline-pool'), 0, 0, 58, 48));
-  level.bowls.forEach((item) => {
-    const count = state?.bowls.find((entry) => entry.id === item.id)?.count ?? 0;
-    drawShape(ctx, item.polygon, '#f9cf8c66', '#9a693e',
-      art?.icons.get(count >= item.capacity ? 'rice-goal-full' : 'rice-goal'), 0, 0, 68, 62);
-  });
-  level.switches.forEach((item) => {
-    const active = state?.switches.find((entry) => entry.id === item.id)?.active;
-    drawShape(ctx, item.polygon, active ? '#8bd19f66' : '#f1db9766', '#64866d',
-      art?.icons.get(active ? 'switch-on' : 'switch-off'));
-  });
-  level.gates.forEach((item) => {
-    const open = state?.gates.find((entry) => entry.id === item.id)?.open ?? item.initially_open;
-    drawShape(ctx, item.polygon, open ? '#8bd19f55' : '#59697855', open ? '#519b70' : '#354c5b',
-      art?.icons.get(open ? 'gate-open' : 'gate-closed'), 0, 0, 60, 48);
-  });
-  level.tools.forEach((item) => {
-    const current = state?.tools.find((entry) => entry.id === item.id) ?? item;
-    if (current.placed) {
-      const box = shapeBounds(item.polygon);
-      const icon = item.resource_key === 'barrier' && box.height > box.width * 1.4
-        ? 'keycap-barrier-vertical' : toolIcon(item.resource_key) ?? '';
-      drawShape(ctx, item.polygon, '#3e98c799', '#285d83', art?.icons.get(icon), current.x, current.y,
-        item.resource_key === 'barrier' ? 58 : 64, item.resource_key === 'barrier' ? 58 : 64, 0, true);
-    }
-  });
-  const atlas = art?.atlas;
-  const elapsed = (state?.tick ?? 0) * 1000 / 60;
-  for (const fish of state?.fish ?? level.fish) {
-    const status = 'status' in fish ? fish.status : 'walking';
-    const x = fish.x / unit, y = fish.y / unit;
-    const heading = ((fish.heading + 512) % 4096) >> 10;
-    const animationName = status === 'fed' ? 'eat' : status === 'lost' || state?.terminal ? 'idle' :
-      ['walk-right', 'walk-down', 'walk-left', 'walk-up'][heading];
-    const animation = atlas?.animations[animationName];
-    let frameID: string | undefined;
-    if (animation?.frames.length && animation.frames.length === animation.durationsMs.length) {
-      const duration = animation.durationsMs.reduce((sum, value) => sum + value, 0);
-      let cursor = duration > 0 ? elapsed % duration : 0;
-      for (let index = 0; index < animation.frames.length; index++) {
-        cursor -= animation.durationsMs[index];
-        if (cursor < 0) { frameID = animation.frames[index]; break; }
-      }
-    }
-    const frame = frameID ? atlas?.frames[frameID] : undefined;
-    const sprite = frame ? art?.sources[frame.source] : undefined;
-    ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = '#254d5660';
-    ctx.beginPath(); ctx.ellipse(0, 1, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
-    if (status === 'lost') ctx.globalAlpha = .5;
-    if (frame && sprite && frame.referenceHeight > 0) {
-      const scale = (atlas?.defaultDisplayHeight ?? 48) / frame.referenceHeight;
-      const [sx, sy, sw, sh] = frame.rect;
-      ctx.drawImage(sprite, sx, sy, sw, sh, -frame.pivot[0] * scale,
-        -frame.pivot[1] * scale, sw * scale, sh * scale);
-    } else {
-      ctx.rotate(fish.heading * Math.PI * 2 / 4096);
-      ctx.fillStyle = '#426f9b';
-      ctx.beginPath(); ctx.ellipse(0, 0, 8, 5.5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-13, -5); ctx.lineTo(-13, 5); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#f8faf6'; ctx.beginPath(); ctx.arc(3, -2, 1.2, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-    polygonPath(ctx, { outer: fishFootprint(fish.x, fish.y), holes: [] });
-    ctx.lineWidth = 1; ctx.strokeStyle = status === 'lost' ? '#aa4444' : status === 'fed' ? '#3d925d' : '#184f71b0'; ctx.stroke();
-    if (status === 'lost') {
-      const bubble = art?.icons.get('offline-bubble');
-      if (bubble) ctx.drawImage(bubble, x - 10, y - 18, 20, 20);
-    } else if (status === 'walking' && 'turn_dir' in fish && fish.turn_dir !== 0) {
-      ctx.beginPath(); ctx.arc(x, y, 11, -.6, .6);
-      ctx.lineWidth = 1.3; ctx.strokeStyle = '#277b91'; ctx.stroke();
-    }
-  }
-}
-
-export function FatFishCanvas({ level, state, decorative = false, keyboardHelpID,
+export function FatFishCanvas({ level, state, selectedTool, decorative = false, keyboardHelpID,
   onPointerDown, onPointerMove, onPointerEnd, onPointerCancel, onKeyDown }: {
   level: Level;
   state?: EngineState | null;
+  selectedTool?: number | null;
   decorative?: boolean;
   keyboardHelpID?: string;
   onPointerDown?: (point: Point, event: React.PointerEvent<HTMLCanvasElement>) => boolean | void;
@@ -223,25 +51,42 @@ export function FatFishCanvas({ level, state, decorative = false, keyboardHelpID
   onKeyDown?: (key: string, shift: boolean) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const normalized = useMemo(() => normalizeLevel(level), [level]);
+  // Draft previews remain editable while validation errors are being fixed.
+  // A playable level must still pass the canonical protocol validator.
+  const normalized = useMemo(() => decorative ? drawableDraft(level) : normalizeLevel(level), [level, decorative]);
   const [art, setArt] = useState<FatFishArt | null>(null);
   useEffect(() => {
     let live = true;
     void loadFatFishArt().then((value) => { if (live) setArt(value); });
     return () => { live = false; };
   }, []);
+  const [pixels, setPixels] = useState({ width, height });
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const density = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      if (rect.width > 0) setPixels({ width: Math.round(rect.width * density),
+        height: Math.round(rect.width * height / width * density) });
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas); resize();
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const ctx = ref.current?.getContext('2d');
-    if (ctx) drawFatFishScene(ctx, normalized, state, art);
-  }, [normalized, state, art]);
+    if (ctx) {
+      const sx = pixels.width / width, sy = pixels.height / height;
+      ctx.setTransform(sx, 0, 0, sy, 128 * sx, 128 * sy);
+      drawFatFishScene(ctx, normalized, state, art, selectedTool);
+    }
+  }, [normalized, state, art, selectedTool, pixels]);
   const point = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
-    return {
-      x: Math.round((event.clientX - rect.left) * FIELD_WIDTH / rect.width),
-      y: Math.round((event.clientY - rect.top) * FIELD_HEIGHT / rect.height),
-    };
+    return workspacePoint(event.clientX, event.clientY, rect);
   };
-  return <canvas ref={ref} className="fatfish-canvas" width={width} height={height}
+  return <canvas ref={ref} className="fatfish-canvas" width={pixels.width} height={pixels.height}
     data-fish-board={onPointerDown ? '' : undefined}
     role={decorative ? 'presentation' : 'img'} aria-label={decorative ? undefined : 'Fat fish playfield'}
     aria-describedby={onKeyDown ? keyboardHelpID : undefined}
@@ -276,7 +121,9 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const yardRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [zoomed, setZoomed] = useState(false);
+  const pan = useRef<{ pointerID: number; x: number; y: number; left: number; top: number } | null>(null);
   const drag = useRef<ToolDrag | null>(null);
   const pendingPlacement = useRef<Placement | null>(null);
   const placementFrame = useRef<number | null>(null);
@@ -307,7 +154,7 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
   }, [controller, onTerminal]);
   useEffect(() => {
     const blur = () => {
-      drag.current = null;
+      drag.current = null; pan.current = null;
       pendingPlacement.current = null;
       if (placementFrame.current !== null) cancelAnimationFrame(placementFrame.current);
       placementFrame.current = null;
@@ -337,18 +184,13 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
   const boardPoint = (clientX: number, clientY: number): Point | null => {
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect?.width || !rect.height) return null;
-    const point = { x: Math.round((clientX - rect.left) * FIELD_WIDTH / rect.width),
-      y: Math.round((clientY - rect.top) * FIELD_HEIGHT / rect.height) };
+    const point = workspacePoint(clientX, clientY, rect);
     return point.x >= -DRAG_BUFFER && point.x <= FIELD_WIDTH + DRAG_BUFFER &&
       point.y >= -DRAG_BUFFER && point.y <= FIELD_HEIGHT + DRAG_BUFFER ? point : null;
   };
   const placementAt = (active: ToolDrag, point: Point): Placement => ({ toolID: active.toolID,
     x: Math.max(-DRAG_BUFFER, Math.min(FIELD_WIDTH + DRAG_BUFFER, point.x + active.dx)),
     y: Math.max(-DRAG_BUFFER, Math.min(FIELD_HEIGHT + DRAG_BUFFER, point.y + active.dy)) });
-  const inYard = (clientX: number, clientY: number) => {
-    const rect = yardRef.current?.getBoundingClientRect();
-    return !!rect && clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
-  };
   const sendPlacement = (placement: Placement) => {
     const previous = lastPlacement.current;
     if (previous?.toolID === placement.toolID && previous.x === placement.x && previous.y === placement.y) return;
@@ -367,7 +209,6 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
   };
   const queuePlacement = (placement: Placement) => {
     pendingPlacement.current = placement;
-    if (drag.current) drag.current.hadPlacement = true;
     if (placementFrame.current === null) placementFrame.current = requestAnimationFrame(flushPlacement);
   };
   const cancelPending = () => {
@@ -377,70 +218,65 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
   };
   const pickTool = (point: Point, pointerType: string) => {
     const radius = (pointerType === 'touch' ? 18 : 8) * unit;
-    return [...tools].reverse().find((tool) => {
+    return [...tools].sort((a, b) => Number(a.id === selectedTool) - Number(b.id === selectedTool)).reverse().find((tool) => {
       const current = currentTool(tool.id);
-      if (!current?.placed) return false;
-      const polygon = translatePolygon(tool.polygon, current.x, current.y);
+      const position = toolPosition(tool, tools.indexOf(tool), current);
+      const polygon = translatePolygon(tool.polygon, position.x, position.y);
       return containsPolygon(polygon, point) || nearOutline(polygon, point, radius);
     });
   };
   const moveDrag = (clientX: number, clientY: number, pointerID: number) => {
+    const movingView = pan.current;
+    if (movingView?.pointerID === pointerID && viewportRef.current) {
+      viewportRef.current.scrollLeft = movingView.left + movingView.x - clientX;
+      viewportRef.current.scrollTop = movingView.top + movingView.y - clientY;
+      return;
+    }
     const active = drag.current;
-    if (!active || active.pointerID !== pointerID || !snapshot.canPlay) return;
+    if (!active || active.pointerID !== pointerID || !controller.snapshot().canPlay) return;
     if (Math.hypot(clientX - active.startX, clientY - active.startY) > 4) active.moved = true;
-    if (!active.moved && active.mode !== 'place') return;
-    if (inYard(clientX, clientY)) { cancelPending(); return; }
+    if (!active.moved) return;
     const point = boardPoint(clientX, clientY);
     if (point) queuePlacement(placementAt(active, point));
   };
   const endDrag = (clientX: number, clientY: number, pointerID: number, cancelled = false) => {
+    if (pan.current?.pointerID === pointerID) { pan.current = null; return; }
     const active = drag.current;
     if (!active || active.pointerID !== pointerID) return;
-    if (!cancelled && snapshot.canPlay) {
-      if (inYard(clientX, clientY)) {
-        cancelPending();
-        if (active.mode === 'board' || active.hadPlacement) {
-          void controller.returnTool(active.toolID).catch((error: unknown) =>
-            setActionError(error instanceof Error ? error.message : String(error)));
-        }
-      } else if (active.moved || active.mode === 'place') {
-        const point = boardPoint(clientX, clientY);
-        if (point) queuePlacement(placementAt(active, point));
-        flushPlacement();
-      }
-    } else cancelPending();
+    if (!cancelled && controller.snapshot().canPlay && active.moved) {
+      const point = boardPoint(clientX, clientY);
+      if (point) queuePlacement(placementAt(active, point));
+      flushPlacement();
+    } else {
+      cancelPending();
+    }
     drag.current = null;
     setDraggingTool(null);
   };
   const startBoard = (point: Point, event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (drag.current || !snapshot.canPlay) return false;
+    if (drag.current || pan.current) return false;
     const hit = pickTool(point, event.pointerType);
-    const toolID = hit?.id ?? selectedTool;
-    if (toolID === null || toolID === undefined || !currentTool(toolID)) return false;
-    const current = currentTool(toolID)!;
-    drag.current = { pointerID: event.pointerId, toolID, startX: event.clientX, startY: event.clientY,
-      dx: hit ? current.x - point.x : 0, dy: hit ? current.y - point.y : 0,
-      mode: hit ? 'board' : 'place', moved: false, hadPlacement: false };
+    if (!hit || !controller.snapshot().canPlay) {
+      if (event.pointerType === 'touch' && zoomed && viewportRef.current) {
+        pan.current = { pointerID: event.pointerId, x: event.clientX, y: event.clientY,
+          left: viewportRef.current.scrollLeft, top: viewportRef.current.scrollTop };
+        return true;
+      }
+      if (!hit) setSelectedTool(null);
+      return false;
+    }
+    const current = currentTool(hit.id)!;
+    const position = toolPosition(hit, tools.indexOf(hit), current);
+    drag.current = { pointerID: event.pointerId, toolID: hit.id, startX: event.clientX, startY: event.clientY,
+      dx: position.x - point.x, dy: position.y - point.y,
+      moved: false };
     lastPlacement.current = null;
-    setSelectedTool(toolID); setDraggingTool(toolID);
+    setSelectedTool(hit.id); setDraggingTool(hit.id);
     event.currentTarget.focus({ preventScroll: true });
-    if (!hit) queuePlacement({ toolID, x: point.x, y: point.y });
     return true;
-  };
-  const startTray = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!event.isPrimary || event.button !== 0 || drag.current || !snapshot.canPlay) return;
-    const element = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('[data-tool-id]') : null;
-    const toolID = Number(element?.dataset.toolId);
-    if (!element || !Number.isSafeInteger(toolID) || currentTool(toolID)?.placed) return;
-    drag.current = { pointerID: event.pointerId, toolID, startX: event.clientX, startY: event.clientY,
-      dx: 0, dy: 0, mode: 'tray', moved: false, hadPlacement: false };
-    lastPlacement.current = null;
-    setSelectedTool(toolID); setDraggingTool(toolID);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const rescued = snapshot.state?.fish.filter((fish) => fish.status === 'fed').length ?? 0;
   const lost = snapshot.state?.fish.filter((fish) => fish.status === 'lost').length ?? 0;
-  const stagedTools = tools.filter((tool) => !currentTool(tool.id)?.placed);
   const remainingSeconds = Math.max(0, Math.ceil(((level?.duration_seconds ?? 0) * 60 - (snapshot.state?.tick ?? 0)) / 60));
   const timeLeft = `${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, '0')}`;
   return <section className="fatfish-player" aria-label={t('大肥鱼游玩', 'Fat fish play')}
@@ -472,8 +308,14 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
       {snapshot.state ? <span className="fatfish-player__stat"><small>{t('已救', 'Rescued')}</small><strong>{rescued}/{snapshot.state.fish.length}</strong></span> : null}
       {snapshot.state ? <span className="fatfish-player__stat"><small>{t('失去', 'Lost')}</small><strong>{lost}</strong></span> : null}
     </div>
-    {level ? <div className="fatfish-player__board" ref={boardRef}>
-      <FatFishCanvas level={level} state={snapshot.state}
+    {level ? <div className="fatfish-player__workspace">
+      <div className="fatfish-player__workspace-heading">
+        <div><strong>{t('开饭工作台', 'Dinner workshop')}</strong><span>{t('场内、场外连在一起，直接拖动道具摆放。', 'Drag pieces freely between the field and its surrounding bench.')}</span></div>
+        <button type="button" onClick={() => setZoomed((value) => !value)}>{zoomed ? t('适应屏幕', 'Fit screen') : t('放大场地', 'Enlarge field')}</button>
+      </div>
+      <div className="fatfish-player__viewport" ref={viewportRef} data-zoomed={zoomed}>
+      <div className="fatfish-player__board" ref={boardRef}>
+      <FatFishCanvas level={level} state={snapshot.state} selectedTool={selectedTool}
       keyboardHelpID={keyboardHelpID}
       onPointerDown={startBoard}
       onPointerMove={(_point, event) => moveDrag(event.clientX, event.clientY, event.pointerId)}
@@ -488,16 +330,20 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
           }
           return;
         }
-        if (key === 'Escape') { setSelectedTool(null); return; }
+        if (key === 'Escape') {
+          const active = drag.current;
+          if (active) endDrag(active.startX, active.startY, active.pointerID, true);
+          setSelectedTool(null); return;
+        }
         if (selectedTool === null) return;
         if (key === 'Backspace' || key === 'Delete') {
           void controller.returnTool(selectedTool).catch((failure: unknown) =>
             setActionError(failure instanceof Error ? failure.message : String(failure)));
           return;
         }
-        const tool = snapshot.state?.tools.find((item) => item.id === selectedTool) ??
-          normalizedLevel?.tools.find((item) => item.id === selectedTool);
-        if (!tool) return;
+        const source = tools.find((item) => item.id === selectedTool);
+        if (!source) return;
+        const tool = toolPosition(source, tools.indexOf(source), currentTool(source.id));
         const step = (shift ? 2 : 10) * unit;
         const dx = key === 'ArrowLeft' ? -step : key === 'ArrowRight' ? step : 0;
         const dy = key === 'ArrowUp' ? -step : key === 'ArrowDown' ? step : 0;
@@ -506,32 +352,16 @@ export function FatFishPlayer({ controller, onTerminal, mode = 'user' }: {
         void controller.place(selectedTool, x, y).catch((failure: unknown) =>
           setActionError(failure instanceof Error ? failure.message : String(failure)));
       }} />
-    </div> : null}
-    {level ? <div className="fatfish-player__yard" ref={yardRef} data-staging-area
-      onPointerDown={startTray}
-      onPointerMove={(event) => moveDrag(event.clientX, event.clientY, event.pointerId)}
-      onPointerUp={(event) => endDrag(event.clientX, event.clientY, event.pointerId)}
-      onPointerCancel={(event) => endDrag(event.clientX, event.clientY, event.pointerId, true)}>
-      <div className="fatfish-player__yard-heading"><strong>{t('道具台', 'Tool bench')}</strong>
-        <span>{snapshot.canPlay ? t('拖到场内摆放；场上的道具可拖回来。', 'Drag pieces into the field, or return them here.')
-          : t('开始后才能摆放。', 'Pieces unlock after start.')}</span></div>
-      <div className="fatfish-player__yard-pieces">
-        {stagedTools.length ? stagedTools.map((tool) => {
-          const name = toolNames[tool.resource_key];
-          const icon = toolIcon(tool.resource_key);
-          const copies = tools.filter((candidate) => candidate.resource_key === tool.resource_key);
-          const copyNumber = copies.findIndex((candidate) => candidate.id === tool.id) + 1;
-          return <button type="button" key={tool.id} data-tool-id={tool.id}
-            className={`fatfish-player__piece${selectedTool === tool.id ? ' is-selected' : ''}`}
-            aria-pressed={selectedTool === tool.id} disabled={!snapshot.canPlay}
-            onDragStart={(event) => event.preventDefault()}
-            onClick={() => { setSelectedTool(tool.id); boardRef.current?.querySelector('canvas')?.focus({ preventScroll: true }); }}>
-            {icon ? <img src={`/assets/fatfish/svg/${icon}.svg`} alt="" aria-hidden="true" draggable={false} /> : null}
-            <span>{name ? t(name[0], name[1]) : t('道具', 'Piece')}
-              {copies.length > 1 ? <small>{copyNumber}/{copies.length}</small> : null}</span>
-          </button>;
-        }) : <span className="fatfish-player__yard-empty">{t('道具都在场上', 'All pieces are on the field')}</span>}
-      </div>
+      </div></div>
+      {zoomed ? <p className="fatfish-player__pan-hint">{t('触屏可拖动空白处移动视野，道具仍可直接拖动。', 'On touch screens, drag empty space to pan and drag pieces to move them.')}</p> : null}
+      <label className="fatfish-player__selection">{t('选择道具（也可直接拖动）', 'Choose a piece (or drag it directly)')}
+        <select value={selectedTool ?? ''} onChange={(event) => setSelectedTool(event.target.value === '' ? null : Number(event.target.value))}>
+          <option value="">{t('未选择', 'None selected')}</option>
+          {tools.map((tool, index) => { const name = toolNames[tool.resource_key];
+            return <option key={tool.id} value={tool.id}>{index + 1}. {name ? t(name[0], name[1]) : t('道具', 'Piece')}</option>;
+          })}
+        </select>
+      </label>
     </div> : null}
     {level ? <p className="fatfish-player__keyboard-hint" id={keyboardHelpID}>
       {t('键盘：聚焦场地后按 N 切换道具，方向键移动，Delete 收回。',

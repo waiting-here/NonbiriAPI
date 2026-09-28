@@ -19,16 +19,22 @@ export interface FatFishArt {
 }
 
 const iconNames = [
-  'floor-tile', 'server-wall', 'server-rack', 'router-wedge',
+  'floor-tile', 'floor-portrait', 'server-wall', 'server-rack', 'router-wedge',
   'keycap-barrier', 'keycap-barrier-vertical', 'cache-puck', 'cooling-fan', 'canteen-monitor', 'rice-sack',
+  'memory-module', 'inference-card', 'cooling-fins',
   'rice-goal', 'rice-goal-full', 'switch-off', 'switch-on', 'gate-closed', 'gate-open',
   'rice-arrow', 'offline-pool', 'offline-bubble',
 ] as const;
 const toolIcons: Readonly<Record<string, string>> = {
-  barrier: 'keycap-barrier', memory: 'cache-puck', fan: 'cooling-fan',
-  light: 'canteen-monitor', cup: 'rice-sack',
+  barrier: 'keycap-barrier', memory: 'memory-module', fan: 'inference-card',
+  light: 'cooling-fins', cup: 'cache-puck',
 };
 export function toolIcon(resourceKey: string): string | null { return toolIcons[resourceKey] ?? null; }
+export const toolNames: Readonly<Record<string, readonly [string, string]>> = {
+  barrier: ['空格键帽', 'Space keycap'], memory: ['内存条', 'Memory module'],
+  fan: ['推理加速卡', 'Inference card'], light: ['散热鳍片', 'Cooling fins'],
+  cup: ['缓存圆墩', 'Cache puck'],
+};
 
 function sameOriginAsset(file: string): string {
   if (!/^[a-z0-9][a-z0-9._-]{0,80}\.(?:png|svg)$/.test(file)) throw new Error('Invalid art asset name.');
