@@ -148,6 +148,15 @@ func configureFixedService(t *testing.T) (*fixture, *fixedServiceMock, muxRoutes
 	if err != nil || len(catalog.Data) != 1 || catalog.Data[0].CapabilityReadiness != "ready" || catalog.Data[0].CapabilityIssues == nil {
 		t.Fatalf("automatic catalog not ready: %+v %v", catalog, err)
 	}
+	if catalog.Data[0].Configured || catalog.Data[0].CatalogType != "image" || len(catalog.Data[0].Parameters) == 0 {
+		t.Fatalf("fresh automatic model lost its discovery state: %+v", catalog.Data[0])
+	}
+	for _, rule := range catalog.Data[0].Parameters {
+		capability := acceptedParameterCapability(t, catalog.Data[0], rule.Key)
+		if capability.Source != "discovered" || capability.Overridden || capability.Conflict || (capability.Support == CapabilitySupported) != rule.Supported {
+			t.Fatalf("fresh automatic parameter lost its origin: %+v", capability)
+		}
+	}
 	f.model = catalog.Data[0].ID
 	output = fixedAdminRequest(t, f, routes, http.MethodPut, "/models/"+f.model, ModelSettingsInput{ExpectedRevision: "0", Enabled: true, Price: Price{"2", "1"}})
 	if output.Code != http.StatusOK {

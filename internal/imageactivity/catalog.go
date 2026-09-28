@@ -113,7 +113,11 @@ func (s *Service) ListCatalog(ctx context.Context, admin int64, query CatalogQue
 		}
 		configured := current.Valid
 		if !configured {
-			display = fixedDisplayName(upstreamID, compileFixedCapability([]byte(metadata)).name)
+			capability := compileFixedCapability([]byte(metadata))
+			display = fixedDisplayName(upstreamID, capability.name)
+			if capability.recognized {
+				kind = capability.compiled.CatalogType
+			}
 		}
 		if query.Type != "all" && kind != query.Type ||
 			query.Configured == "true" && !configured || query.Configured == "false" && configured ||

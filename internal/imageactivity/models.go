@@ -100,6 +100,7 @@ func adminModelView(m modelSnapshot) AdminModel {
 		out.CapabilityRevision, out.PricingRevision = "0", "0"
 		out.DisplayName = fixedDisplayName(m.upstreamID, capability.name)
 		out.Parameters, out.Combinations, out.Mapping = capability.rules, []CombinationRule{}, fixedMapping()
+		out.ParameterCapabilities = parameterCapabilityView(capability.compiled, effectivePolicy{}, capability.rules, false)
 		out.SizeCapability, out.CatalogType, out.CapabilityReadiness = capability.compiled.Size, capability.compiled.CatalogType, capability.compiled.Readiness
 		out.CapabilityIssues = fixedCapabilityIssues(m.id, capability.compiled)
 	}
