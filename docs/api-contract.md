@@ -523,7 +523,7 @@ Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` a
 
 `POST /admin/api/games/blackjack/history/export` accepts `{dataset,cursor?}` and returns `{format:"blackjack-history/v1",dataset,items,next_cursor}` in bounded batches of at most 10 records. Clients may save each successful batch as NDJSON and resume only from its returned cursor. Signed cursors expire after one hour and bind the account/session, dataset, limit, endpoint kind, high-water mark and page position. Exporting or reading history does not pause play.
 
-Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export v10 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 11 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
 
 ### 5.9 Loans and leaderboards
 
@@ -991,12 +991,48 @@ Decay and protective ban have independent inactive-day thresholds. Positive avai
 
 ## 13. Limited activities and image generation
 
-Existing activities remain permanent activities. Limited activities have separate pages, administrator-only opening/visibility/pause settings and module-specific configuration. Hidden means omitted from the directory, not inaccessible by a known link. An unconfigured opening period means closed. Reopening preserves balances and history.
+Existing activities remain permanent activities. Limited activities have
+separate pages, administrator-only opening, visibility, and pause settings,
+and module-specific configuration. Hidden means omitted from the directory, not
+inaccessible by a known link. An unconfigured opening period means closed.
+Reopening preserves balances and history.
 
-The picture-book activity's exact routes, strict public/private DTOs, declarative adapter, exchange prices, queue limits, billing and recovery rules are documented in [the image activity guide](image-activity.md). Its public models use only local IDs and approved parameters; real model IDs, endpoint, key, internal task identifiers and original failures stay out of ordinary user responses. No CallerKey image endpoint is added.
+The picture-book activity uses a built-in integration for its supported upstream
+image-service specification. Administrators configure the endpoint and key,
+enable or disable discovered models, and set each model's paper and brush
+prices. Model capabilities and supported parameters are discovered
+automatically; the administration API does not accept manual protocol,
+request/response, mapping, or parameter-catalog definitions. Model settings
+use `expected_revision`, `enabled`, and `price`, with optional `pricing` for
+default, tier, and exact width/height prices.
+`GET /admin/api/limited-activities/picture-book/models` exposes read-only
+`capability_readiness`, `capability_issues`, `capability_revision`,
+`pricing_revision`, `parameters`, `combinations`, `size_capability`,
+`catalog_type`, and `missing` facts. `capability_issues` is always a safe
+issue array. Unconfigured capability and pricing revisions are `"0"`;
+unsupported new metadata remains pending. The public
+`GET /api/limited-activities/picture-book/models` response provides local model
+IDs, prices, and automatically supported parameter and size choices. Full
+routes and field behavior are in [the image activity guide](image-activity.md).
+Public models use local identifiers; real model IDs, the endpoint, key,
+internal task identifiers, and original failures stay out of ordinary user
+responses. No CallerKey image endpoint is added.
 
-Submission atomically reserves both activity currencies at per-image price times requested count. Partial successful generation still charges the full accepted task; failure, unknown-result timeout or cancellation before dispatch refunds both currencies. Closing the page is not cancellation. Prompts and execution parameters remain in RAM; lost queued payloads refund after restart, known asynchronous tasks resume queries, and uncertain submissions are never sent twice. Original images have a ten-minute RAM pickup window; successful generation is not refunded if a result is lost or not downloaded. Natural activity end lets accepted tasks finish; manual pause/maintenance cancels undispatched tasks with refunds. Ban/deletion and model withdrawal follow the documented atomic cleanup rules. Safe task history lasts 30 days; accounting follows ledger retention and export v10.
-
+Quotes are free previews. Submission atomically reserves both activity
+currencies at the selected per-image price times the requested image count. If
+price or capability changes before acceptance, the caller must review the
+current quote and revisions. Accepted tasks retain their configuration and
+price snapshots after later settings changes. Partial successful generation
+still charges the full accepted task; failure, unknown-result timeout, or
+cancellation before dispatch refunds both currencies. Closing the page is not
+cancellation. Prompts and execution parameters remain in RAM; lost queued
+payloads refund after restart, known asynchronous tasks resume queries, and
+uncertain submissions are never sent twice. Original images have a ten-minute
+RAM pickup window; successful generation is not refunded if a result is lost or
+not downloaded. Natural activity end lets accepted tasks finish; manual pause
+or maintenance cancels undispatched tasks with refunds. Ban, deletion, and
+model withdrawal follow the documented atomic cleanup rules. Safe task history
+lasts 30 days; accounting follows ledger retention and account export schema 11.
 
 ### Account protection and historical records
 
