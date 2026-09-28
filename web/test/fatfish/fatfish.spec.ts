@@ -163,10 +163,12 @@ async function boardPoint(player: Locator, x: number, y: number) {
   if (!box) throw new Error('The playfield is not visible.');
   return { x: box.x + ((x + 128) * box.width) / 736, y: box.y + ((y + 128) * box.height) / 816 };
 }
-async function returnPreplacedTool(page: Page, player: Locator, x: number, y: number) {
-  await started(player);
-  const point = await boardPoint(player, x, y);
-  await page.mouse.click(point.x, point.y);
+async function returnPreplacedTool(player: Locator, toolID: number) {
+  // Select during the countdown so scrolling and pointer targeting do not
+  // delay the first move until after nearby fish meet the obstacle.
+  await player
+    .getByRole('combobox', { name: /^Choose a piece \(or drag it directly\)/ })
+    .selectOption(String(toolID));
   await player.getByRole('button', { name: 'Return tool', exact: true }).click();
 }
 async function recordedInputs(page: Page, hash: string): Promise<InputTuple[]> {
@@ -252,7 +254,7 @@ async function playExample(page: Page, example: Example) {
   const level = parseLevel(readFileSync('public' + example.url, 'utf8'));
   if (level.tools.some((tool) => tool.id === 100)) {
     const tool = level.tools.find((item) => item.id === 100)!;
-    await returnPreplacedTool(page, player, tool.x / 64, tool.y / 64);
+    await returnPreplacedTool(player, tool.id);
   }
   if (example.id === examples[0].id) {
     await verifyLocalMusic(page, player);
@@ -315,7 +317,9 @@ test('eight examples import, roundtrip and pass actual administrator play with s
   }
 });
 
-test('workbench edits survive save and reload, and library deletion preserves published versions', async ({ browser }) => {
+test('workbench edits survive save and reload, and library deletion preserves published versions', async ({
+  browser,
+}) => {
   const context = await session(browser, 'admin');
   const page = await context.newPage();
   const errors: string[] = [];
@@ -329,21 +333,35 @@ test('workbench edits survive save and reload, and library deletion preserves pu
     await map.scrollIntoViewIfNeeded();
     const box = await map.boundingBox();
     if (!box) throw new Error('The editor map is not visible.');
-    const point = (x: number, y: number) => ({ x: box.x + (x + 128) * box.width / 736, y: box.y + (y + 128) * box.height / 816 });
-    const start = point(32, 624), finish = point(560, 250);
-    await page.mouse.move(start.x, start.y); await page.mouse.down();
-    await page.mouse.move(finish.x, finish.y, { steps: 5 }); await page.mouse.up();
-    await map.press('ArrowRight'); await map.press('Shift+ArrowLeft');
-    const saved = page.waitForResponse((response) => response.url().endsWith(base + '/levels') && response.request().method() === 'POST');
+    const point = (x: number, y: number) => ({
+      x: box.x + ((x + 128) * box.width) / 736,
+      y: box.y + ((y + 128) * box.height) / 816,
+    });
+    const start = point(32, 624),
+      finish = point(560, 250);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(finish.x, finish.y, { steps: 5 });
+    await page.mouse.up();
+    await map.press('ArrowRight');
+    await map.press('Shift+ArrowLeft');
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(base + '/levels') && response.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     const response = await saved;
     expect(response.status()).toBe(200);
-    const record = await response.json() as { id: string };
+    const record = (await response.json()) as { id: string };
     await page.reload();
-    await page.getByRole('button', { name: 'Workbench layout regression · r1', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Workbench layout regression · r1', exact: true })
+      .click();
     const detail = await adminAPI(context, '/levels/' + record.id);
     expect(detail.status()).toBe(200);
-    const layout = await detail.json() as { draft: { tools: { x: number; y: number; placed: boolean }[] } };
+    const layout = (await detail.json()) as {
+      draft: { tools: { x: number; y: number; placed: boolean }[] };
+    };
     expect(layout.draft.tools).toHaveLength(1);
     expect(layout.draft.tools[0].x / 64).toBeCloseTo(564, 0);
     expect(layout.draft.tools[0].y / 64).toBeCloseTo(250, 0);
@@ -359,21 +377,112 @@ test('workbench edits survive save and reload, and library deletion preserves pu
     await expect(page.locator('.fatfish-player__viewport[data-zoomed="true"]')).toBeVisible();
     await page.getByRole('button', { name: 'Fit screen', exact: true }).click();
     await capture(page, '15-workbench-saved-layout');
-    const published = page.waitForResponse((result) => result.url().endsWith('/versions') && result.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Publish immutable version from saved draft', exact: true }).click();
+    const published = page.waitForResponse(
+      (result) => result.url().endsWith('/versions') && result.request().method() === 'POST',
+    );
+    await page
+      .getByRole('button', { name: 'Publish immutable version from saved draft', exact: true })
+      .click();
     const versionResponse = await published;
     expect(versionResponse.status()).toBe(200);
-    const version = await versionResponse.json() as { id: string };
+    const version = (await versionResponse.json()) as { id: string };
     page.once('dialog', (dialog) => dialog.accept());
-    const deleted = page.waitForResponse((result) => result.url().endsWith('/levels/' + record.id) && result.request().method() === 'DELETE');
+    const deleted = page.waitForResponse(
+      (result) =>
+        result.url().endsWith('/levels/' + record.id) && result.request().method() === 'DELETE',
+    );
     await page.getByRole('button', { name: 'Delete level', exact: true }).click();
     expect((await deleted).status()).toBe(200);
     await expect(page.getByRole('heading', { name: 'New level draft', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Workbench layout regression ·/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Workbench layout regression ·/ })).toHaveCount(
+      0,
+    );
     expect((await adminAPI(context, '/levels/' + record.id)).status()).toBe(404);
     expect((await adminAPI(context, '/versions/' + version.id)).status()).toBe(200);
     expect(errors).toEqual([]);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
+});
+
+test('legacy rules convert only through a saved draft and retain the published version', async ({
+  browser,
+}) => {
+  const context = await session(browser, 'admin');
+  try {
+    const draft = {
+      ...parseLevel(readFileSync('public' + examples[0].url, 'utf8')),
+      engine_version: 1,
+    };
+    const created = await adminAPI(context, '/levels', 'POST', {
+      title: 'Legacy rules conversion',
+      description: 'Preserved layout and speed',
+      draft,
+    });
+    expect(created.status()).toBe(200);
+    const level = (await created.json()) as { id: string; revision: string };
+    const published = await adminAPI(context, '/levels/' + level.id + '/versions', 'POST', {
+      expected_revision: level.revision,
+    });
+    expect(published.status()).toBe(200);
+    const original = (await published.json()) as {
+      id: string;
+      engine_version: number;
+      content_hash: string;
+    };
+    expect(original.engine_version).toBe(1);
+    const originalContent = await (await adminAPI(context, '/versions/' + original.id)).json();
+    expect(originalContent.content).toEqual(draft);
+    const page = await context.newPage();
+    await page.goto(fixture().admin_url + '/limited-activities/fat-fish');
+    await page.getByRole('button', { name: 'Legacy rules conversion · r1', exact: true }).click();
+    await expect(page.getByText('Draft rules version: 1 · Legacy', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Convert to new draft', exact: true }).click();
+    await expect(page.getByText('Draft rules version: 2 · Current', { exact: true })).toBeVisible();
+    const publish = page.getByRole('button', {
+      name: 'Publish immutable version from saved draft',
+      exact: true,
+    });
+    await expect(publish).toBeDisabled();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.getByText('Draft rules version: 1 · Legacy', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    const saving = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(base + '/levels/' + level.id) &&
+        response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    expect((await saving).status()).toBe(200);
+    const saved = await (await adminAPI(context, '/levels/' + level.id)).json();
+    expect(saved.draft).toEqual({ ...draft, engine_version: 2 });
+    await expect(publish).toBeEnabled();
+    const publishing = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(base + '/levels/' + level.id + '/versions') &&
+        response.request().method() === 'POST',
+    );
+    await publish.click();
+    const response = await publishing;
+    expect(response.status()).toBe(200);
+    const converted = (await response.json()) as {
+      id: string;
+      engine_version: number;
+      content_hash: string;
+    };
+    expect(converted.engine_version).toBe(2);
+    expect(converted.id).not.toBe(original.id);
+    expect(converted.content_hash).not.toBe(original.content_hash);
+    expect(await (await adminAPI(context, '/versions/' + original.id)).json()).toEqual(
+      originalContent,
+    );
+    const proofs = await adminAPI(context, '/playtests?version_id=' + converted.id);
+    expect(proofs.status()).toBe(200);
+    expect(await proofs.json()).toEqual([]);
+    await capture(page, '16-explicit-rules-conversion');
+  } finally {
+    await context.close();
+  }
 });
 
 test('ordinary users and both steward levels cannot read or mutate the editor', async ({
@@ -480,10 +589,7 @@ for (const touch of [false, true]) {
       await expect(player.locator('[data-tool-id="100"]')).toHaveCount(0);
       await drag(await boardPoint(player, 174, 430), await boardPoint(player, 214, 440));
       await expect.poll(() => lastToolInput(100)).toEqual(['place', 100, 210 * 64, 430 * 64]);
-      await drag(
-        await boardPoint(player, 136, 624),
-        await boardPoint(player, 350, 80),
-      );
+      await drag(await boardPoint(player, 136, 624), await boardPoint(player, 350, 80));
       await expect.poll(() => lastToolInput(101)).toEqual(['place', 101, 350 * 64, 80 * 64]);
       await drag(await boardPoint(player, 350, 80), await boardPoint(player, 350, 150));
       await expect.poll(() => lastToolInput(101)).toEqual(['place', 101, 350 * 64, 150 * 64]);
@@ -529,7 +635,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     let levels = (await (await adminAPI(administrator, '/levels?page=1')).json()) as {
       items: { id: string; title: string }[];
     };
-    if (levels.items.length === 0) {
+    if (!levels.items.some((item) => item.title === examples[0].title)) {
       const preparation = await administrator.newPage();
       await playExample(preparation, examples[0]);
       await preparation.close();
@@ -658,7 +764,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     await capture(page, '10-prepared-challenge');
     await page.getByRole('button', { name: 'Confirm ticket and start', exact: true }).click();
     let player = page.getByRole('region', { name: 'Fat fish play', exact: true });
-    await returnPreplacedTool(page, player, 170, 420);
+    await returnPreplacedTool(player, 100);
     await verifyLocalMusic(page, player);
     await expect
       .poll(async () =>
