@@ -118,6 +118,31 @@ func TestRecoveryPreservesPersistedNextPollAndDeadline(t *testing.T) {
 	f.checkLedger(t)
 }
 
+func TestFirstQueryHonorsReceiptRetryAfterThenReturnsToNormalWait(t *testing.T) {
+	f, mock, _ := configureFixedService(t)
+	mock.mode.Store(1)
+	mock.receiptRetryAfter.Store(17)
+	task := fixedSubmit(t, f, 1)
+	f.wait(t, func() bool {
+		row, err := f.service.readTask(context.Background(), task.ID)
+		return err == nil && row.state == "running"
+	})
+	row, err := f.service.readTask(context.Background(), task.ID)
+	if err != nil || row.nextPoll.Int64 != testNow+17 || row.executionDeadline.Int64 != testNow+60 || row.pollCount != 0 {
+		t.Fatalf("receipt wait or deadline %+v %v", row, err)
+	}
+	f.now.Store(testNow + 17)
+	f.wait(t, func() bool {
+		row, err := f.service.readTask(context.Background(), task.ID)
+		return err == nil && row.pollCount == 1
+	})
+	row, err = f.service.readTask(context.Background(), task.ID)
+	if err != nil || row.nextPoll.Int64 != testNow+23 || row.executionDeadline.Int64 != testNow+60 || mock.posts.Load() != 1 || mock.polls.Load() != 1 {
+		t.Fatalf("normal wait after receipt %+v %v", row, err)
+	}
+	f.checkLedger(t)
+}
+
 func TestNormalWorkerQueriesKeepSixSecondWaitAcrossResponses(t *testing.T) {
 	f, mock, _ := configureFixedService(t)
 	mock.mode.Store(1)

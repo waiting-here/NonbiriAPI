@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,7 @@ type fixedServiceMock struct {
 	server                 *httptest.Server
 	mode                   atomic.Int32
 	posts, polls, catalogs atomic.Int64
+	receiptRetryAfter      atomic.Int64
 	mu                     sync.Mutex
 	catalog                []json.RawMessage
 	bodies                 []map[string]any
@@ -61,6 +63,9 @@ func newFixedServiceMock(t *testing.T, image []byte) *fixedServiceMock {
 			}
 			switch mock.mode.Load() {
 			case 1, 2:
+				if delay := mock.receiptRetryAfter.Load(); delay > 0 {
+					w.Header().Set("Retry-After", strconv.FormatInt(delay, 10))
+				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"async": true, "task_id": "opaque/../job", "status": "queued"})
 			case 3:
 				_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": map[string]string{"message": "private synthetic upstream detail"}})

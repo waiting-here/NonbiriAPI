@@ -394,7 +394,7 @@ func (s *Service) runTask(id string, submit bool) {
 				if !s.markUnknown(ctx, id) {
 					return
 				}
-			} else if !s.acceptUpstreamID(ctx, id, upstreamID) {
+			} else if !s.acceptUpstreamID(ctx, id, upstreamID, response.header) {
 				return
 			}
 		}
@@ -481,7 +481,7 @@ func (s *Service) captureTaskFailure(ctx context.Context, row taskRow, response 
 	scoped := s.config.Diagnostics.ErrorScope(ctx, observability.DiagnosticRef{TaskID: row.id, AttemptSeq: response.seq})
 	upstreamerror.CaptureEvent(scoped, response.status, response.header.Get("Content-Type"), response.body)
 }
-func (s *Service) acceptUpstreamID(ctx context.Context, id, upstreamID string) bool {
+func (s *Service) acceptUpstreamID(ctx context.Context, id, upstreamID string, header http.Header) bool {
 	for ctx.Err() == nil {
 		now, err := s.now()
 		if err != nil {
@@ -496,7 +496,7 @@ func (s *Service) acceptUpstreamID(ctx context.Context, id, upstreamID string) b
 		}
 		r, err := taskTx(ctx, tx, id)
 		if err == nil && r.upstreamRevision != 0 {
-			err = requireOne(tx.ExecContext(ctx, "UPDATE image_activity_tasks SET state='running',upstream_task_id=?,next_poll_at=?,updated_at=? WHERE id=? AND state='dispatching'", upstreamID, now+normalPollSeconds, now, id))
+			err = requireOne(tx.ExecContext(ctx, "UPDATE image_activity_tasks SET state='running',upstream_task_id=?,next_poll_at=?,updated_at=? WHERE id=? AND state='dispatching'", upstreamID, now+pollDelay(header, now), now, id))
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -593,12 +593,14 @@ func (s *Service) schedulePoll(ctx context.Context, id string, header http.Heade
 	if err != nil {
 		return err
 	}
-	delay := normalPollSeconds
-	if retry := retrySeconds(header, now); retry > delay {
-		delay = retry
-	}
-	_, err = s.config.Database.ExecContext(ctx, "UPDATE image_activity_tasks SET next_poll_at=?,poll_count=MIN(poll_count+1,2147483647),updated_at=? WHERE id=? AND upstream_revision IS NOT NULL", now+delay, now, id)
+	_, err = s.config.Database.ExecContext(ctx, "UPDATE image_activity_tasks SET next_poll_at=?,poll_count=MIN(poll_count+1,2147483647),updated_at=? WHERE id=? AND upstream_revision IS NOT NULL", now+pollDelay(header, now), now, id)
 	return err
+}
+func pollDelay(header http.Header, now int64) int64 {
+	if retry := retrySeconds(header, now); retry > normalPollSeconds {
+		return retry
+	}
+	return normalPollSeconds
 }
 func (s *Service) settle(ctx context.Context, id, state, code string, images []imageBytes) bool {
 	for ctx.Err() == nil {
