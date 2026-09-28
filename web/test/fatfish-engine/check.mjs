@@ -30,12 +30,13 @@ try {
       const result = await page.evaluate(async () => {
         const prefix = '/src/shared/fatfish/engine/';
         const [
-          { parseLevel, seedCommit, stateDigest },
+          { parseLevel, seedCommit, seedCommitForVersion, stateDigest },
           { replay },
           { decodeHex, hex, sha256, utf8 },
-          { initialFishRNG, nextTurnBit },
+          { initialFishRNG, nextTurnBit, nextTurnWord },
           { SIN_TABLE, TRIG_SOURCE_SHA256 },
           suite,
+          motionSuite,
         ] = await Promise.all([
           import(prefix + 'canonical.ts'),
           import(prefix + 'engine.ts'),
@@ -43,6 +44,7 @@ try {
           import(prefix + 'protocol.ts'),
           import(prefix + 'trig.ts'),
           fetch(prefix + 'golden.json').then((value) => value.json()),
+          fetch(prefix + 'motion_v2_golden.json').then((value) => value.json()),
         ]);
         const equal = (a, b) => {
           const sorted = (value) =>
@@ -59,6 +61,7 @@ try {
         };
         if (
           TRIG_SOURCE_SHA256 !== suite.trig_sha256 ||
+          TRIG_SOURCE_SHA256 !== motionSuite.trig_sha256 ||
           hex(sha256(utf8(`${SIN_TABLE.join('\n')}\n`))) !== suite.trig_sha256
         )
           throw new Error('Trigonometric source changed');
@@ -73,9 +76,17 @@ try {
         let bits = '';
         for (let i = 0; i < 128; i++) bits += String(nextTurnBit(random));
         if (bits !== suite.turn_bits) throw new Error('Random stream changed');
+        const motionFirst = motionSuite.cases[0];
+        const motionSeed = decodeHex(motionFirst.seed);
+        if (seedCommitForVersion('challenge_1', 'period_1', 'node_1',
+          motionFirst.result.content_hash, 2, 1, motionSeed) !== motionSuite.seed_commit)
+          throw new Error('Versioned seed commitment changed');
+        const motionRandom = initialFishRNG(motionSeed, 1);
+        const words = motionSuite.turn_words.map(() => nextTurnWord(motionRandom));
+        if (!equal(words, motionSuite.turn_words)) throw new Error('Turn word stream changed');
         let ticks = 0;
         const started = performance.now();
-        for (const vector of suite.cases) {
+        for (const vector of [...suite.cases, ...motionSuite.cases]) {
           let tick = 0;
           const actual = replay(
             parseLevel(JSON.stringify(vector.level)),
@@ -94,7 +105,9 @@ try {
           ticks += tick;
         }
         return {
-          cases: suite.cases.length,
+          cases: suite.cases.length + motionSuite.cases.length,
+          v1_cases: suite.cases.length,
+          v2_cases: motionSuite.cases.length,
           ticks,
           elapsed_ms: Math.round(performance.now() - started),
         };
