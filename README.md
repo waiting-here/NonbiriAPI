@@ -226,6 +226,8 @@ When a user deletes their account, the service retains a minimal read-only recor
 
 The unreleased rc.4 source adds a General-credit-only Fat Fish limited activity. Its browser flow keeps full play inputs with the original tab and sends them to bounded server verification memory; the service keeps 30-day safe terminal summaries and account-lifetime unlock/best-score progress. Account export schema 11 adds safe request-adaptation structure, current eligibility, Fat Fish summaries/progress and optional owner-only `likes.loadouts`, under the existing 10,000-row and 16 MiB limits. Administrator alerts gain bounded read-only context and exact internal targets; administrator/level-6 risk scans remain management-only and outside personal exports. These features belong to the unreleased candidate and are not part of the published rc.3 release.
 
+Self-deletion during an effective ban appends the ban reason captured at the start of deletion to the automatic blacklist note. Empty reasons are omitted, and an expired ban is not treated as active. The original blacklist reason and initiator remain unchanged when an entry already exists; administrators and level-6 stewards can read the additional note with its line breaks preserved.
+
 See [docs/data-lifecycle-checklist.md](docs/data-lifecycle-checklist.md) for the data export, deletion, retention, and privacy invariants.
 
 ## Security

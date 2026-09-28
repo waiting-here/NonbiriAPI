@@ -8,6 +8,8 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -125,13 +127,7 @@ func RecordAccountDeletionTx(ctx context.Context, tx *sql.Tx, before *DeletionBe
 			if _, err := tx.ExecContext(ctx, `UPDATE users SET is_banned=1,banned_until=NULL WHERE id=? AND is_admin=0`, userID); err != nil {
 				return err
 			}
-			note := "Self-deletion while subject to an active penalty."
-			if negative {
-				note = "Self-deletion with outstanding credit debt."
-			}
-			if negative && len(snapshot.BlacklistReasonCodes) == 2 {
-				note = "Self-deletion while subject to an active penalty and with outstanding credit debt."
-			}
+			note := deletionBlacklistNote(before, negative)
 			action, err := blacklist.AppendTx(ctx, tx, blacklist.Event{DiscordID: snapshot.DiscordID, OperationKey: "account-delete:" + snapshot.UserID + ":" + operationID, ActorKind: blacklist.Automatic, ReasonCodes: snapshot.BlacklistReasonCodes, Note: note, At: at})
 			if err != nil {
 				return err
@@ -166,6 +162,47 @@ func RecordAccountDeletionTx(ctx context.Context, tx *sql.Tx, before *DeletionBe
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO admin_account_deletions(alert_id,snapshot_json,snapshot_version,former_user_id,discord_id,registered_at,deleted_at,effective_level,source,actor_user_id,ban_active,pause_active,blacklist_action) VALUES(?,?,2,?,?,?,?,?,?,?,?,?,?)`, id, string(body), userID, before.DiscordID, before.RegisteredAt, at, before.EffectiveLevel, before.Source, before.ActorUserID, *before.Ban.ActiveAtDeletion, *before.CharityPause.ActiveAtDeletion, snapshot.BlacklistAction)
 	return err
+}
+
+func deletionBlacklistNote(before *DeletionBefore, negative bool) string {
+	if !*before.Ban.ActiveAtDeletion {
+		if negative && *before.CharityPause.ActiveAtDeletion {
+			return "Self-deletion while subject to an active penalty and with outstanding credit debt."
+		}
+		if negative {
+			return "Self-deletion with outstanding credit debt."
+		}
+		return "Self-deletion while subject to an active penalty."
+	}
+	prefix := "试图通过删号逃避处罚"
+	suffix := ""
+	if negative {
+		suffix = "\n试图通过删号逃避负债"
+	}
+	if before.Ban.Reason == nil {
+		return prefix + suffix
+	}
+	// Only the new note is normalized and bounded. The captured original stays
+	// in the deletion snapshot, including when old data is outside input limits.
+	reason := strings.ReplaceAll(*before.Ban.Reason, "\r\n", "\n")
+	reason = strings.ReplaceAll(reason, "\r", "\n")
+	reason = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, strings.ToValidUTF8(reason, ""))
+	if strings.TrimSpace(reason) == "" {
+		return prefix + suffix
+	}
+	prefix += "\n封禁原因："
+	const maxNoteRunes = 2000
+	budget := maxNoteRunes - utf8.RuneCountInString(prefix+suffix)
+	runes := []rune(reason)
+	if len(runes) > budget {
+		reason = string(runes[:budget-1]) + "…"
+	}
+	return prefix + reason + suffix
 }
 
 func deletionSnapshot(ctx context.Context, tx *sql.Tx, alertID int64) (*AccountDeletion, error) {
