@@ -171,6 +171,20 @@ async function returnPreplacedTool(player: Locator, toolID: number) {
     .selectOption(String(toolID));
   await player.getByRole('button', { name: 'Return tool', exact: true }).click();
 }
+async function submitCurrentResult(player: Locator) {
+  const finish = player.getByRole('button', { name: 'Finish', exact: true });
+  const submit = player.getByRole('button', { name: 'Submit for verification', exact: true });
+  if (await finish.isEnabled()) {
+    try {
+      await finish.click({ timeout: 2000 });
+    } catch (error) {
+      // The last fish can finish while Playwright scrolls to the button.
+      // Accept that transition only when the automatic result is ready.
+      if ((await finish.isEnabled()) || !(await submit.isVisible())) throw error;
+    }
+  }
+  await submit.click();
+}
 async function recordedInputs(page: Page, hash: string): Promise<InputTuple[]> {
   return page.evaluate(
     (expectedHash) =>
@@ -266,9 +280,7 @@ async function playExample(page: Page, example: Example) {
       { timeout: 45_000, message: example.id + ' reaches one-star rescue threshold' },
     )
     .toBeGreaterThanOrEqual(level.thresholds[0]);
-  const finish = player.getByRole('button', { name: 'Finish', exact: true });
-  if (await finish.isEnabled()) await finish.click();
-  await player.getByRole('button', { name: 'Submit for verification', exact: true }).click();
+  await submitCurrentResult(player);
   await expect(
     page.getByText('Server-verified one-star proof is available.', { exact: true }),
   ).toBeVisible();
@@ -821,9 +833,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
       )
       .toBeGreaterThanOrEqual(5);
     await capture(page, '12-restored-challenge');
-    if (await player.getByRole('button', { name: 'Finish', exact: true }).isEnabled())
-      await player.getByRole('button', { name: 'Finish', exact: true }).click();
-    await player.getByRole('button', { name: 'Submit for verification', exact: true }).click();
+    await submitCurrentResult(player);
     await expect(
       page.locator('.fatfish-history').getByText('Passed', { exact: true }),
     ).toBeVisible();
