@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
@@ -287,39 +288,92 @@ func TestRPMOnlyCountsPerUserLimitAndRevokesAtThreshold(t *testing.T) {
 }
 
 func TestConcurrentShortCallsKeepUniqueLogsExactBalanceAndConservation(t *testing.T) {
-	f := newAbuseFixture(t)
-	user := f.user()
-	f.set(KeyCharityViolationDeductMilli, "7")
-	const count = 24
-	var wg sync.WaitGroup
-	failures := make(chan error, count)
-	for range count {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err := f.service.RecordShort(context.Background(), user, "[公益]provider/model", 1)
-			failures <- err
+	// Exercise all concurrent transactions independently of the wall-clock
+	// cost of race instrumentation. Keep the fixture and its workers together.
+	synctest.Test(t, func(t *testing.T) {
+		f := newAbuseFixture(t)
+		user := f.user()
+		f.set(KeyCharityViolationDeductMilli, "7")
+		const count = 24
+		var wg sync.WaitGroup
+		failures := make(chan error, count)
+		for range count {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := f.service.RecordShort(context.Background(), user, "[公益]provider/model", 1)
+				failures <- err
+			}()
+		}
+		wg.Wait()
+		close(failures)
+		for err := range failures {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		page := f.history(user)
+		if page.CurrentBalance != "-0.168" || page.Total != strconv.Itoa(count) || f.scalar(`SELECT COUNT(*) FROM request_logs`) != count || f.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='anti_abuse_penalty'`) != count {
+			t.Fatalf("concurrent balance/count=%+v", page)
+		}
+		seen := map[string]bool{}
+		for _, entry := range page.Data {
+			if entry.RequestID == nil || seen[*entry.RequestID] {
+				t.Fatal("missing/duplicate request association")
+			}
+			seen[*entry.RequestID] = true
+		}
+		if f.scalar(`SELECT COUNT(*) FROM credit_entries WHERE account_kind_snapshot='external' AND delta_sign=1`) != count {
+			t.Fatal("external ledger conservation missing")
+		}
+	})
+}
+
+func TestShortCallBudgetIncludesQueueWithoutPartialEffects(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newAbuseFixture(t)
+		user := f.user()
+		f.set(KeyCharityViolationDeductMilli, "7")
+		f.service.gate <- struct{}{}
+		locked := true
+		defer func() {
+			if locked {
+				<-f.service.gate
+			}
 		}()
-	}
-	wg.Wait()
-	close(failures)
-	for err := range failures {
-		if err != nil {
-			t.Fatal(err)
+		finished := make(chan error, 1)
+		go func() {
+			_, err := f.service.RecordShort(context.Background(), user, "[公益]provider/model", 1)
+			finished <- err
+		}()
+		synctest.Wait()
+		time.Sleep(5*time.Second - time.Nanosecond)
+		synctest.Wait()
+		select {
+		case err := <-finished:
+			t.Fatalf("request ended before its queue budget: %v", err)
+		default:
 		}
-	}
-	page := f.history(user)
-	if page.CurrentBalance != "-0.168" || page.Total != strconv.Itoa(count) || f.scalar(`SELECT COUNT(*) FROM request_logs`) != count || f.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='anti_abuse_penalty'`) != count {
-		t.Fatalf("concurrent balance/count=%+v", page)
-	}
-	seen := map[string]bool{}
-	for _, entry := range page.Data {
-		if entry.RequestID == nil || seen[*entry.RequestID] {
-			t.Fatal("missing/duplicate request association")
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		select {
+		case err := <-finished:
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("queue expiry: %v", err)
+			}
+		default:
+			t.Fatal("queue wait exceeded the five-second budget")
 		}
-		seen[*entry.RequestID] = true
-	}
-	if f.scalar(`SELECT COUNT(*) FROM credit_entries WHERE account_kind_snapshot='external' AND delta_sign=1`) != count {
-		t.Fatal("external ledger conservation missing")
-	}
+		if len(f.service.windows) != 0 || f.service.events != 0 || f.scalar(`SELECT COUNT(*) FROM request_logs`) != 0 || f.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='anti_abuse_penalty'`) != 0 || f.history(user).CurrentBalance != "0" {
+			t.Fatal("expired queued request changed durable or in-memory state")
+		}
+		<-f.service.gate
+		locked = false
+		if _, err := f.service.RecordShort(context.Background(), user, "[公益]provider/model", 1); err != nil {
+			t.Fatalf("request after queue expiry: %v", err)
+		}
+		if f.history(user).CurrentBalance != "-0.007" || f.scalar(`SELECT COUNT(*) FROM request_logs`) != 1 || f.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='anti_abuse_penalty'`) != 1 {
+			t.Fatal("queue expiry prevented a subsequent valid transaction")
+		}
+	})
 }
