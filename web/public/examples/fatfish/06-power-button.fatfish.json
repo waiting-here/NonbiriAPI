@@ -1,7 +1,7 @@
 {
   "format": "nonbiri-fatfish-level",
   "format_version": 1,
-  "engine_version": 1,
+  "engine_version": 2,
   "scoring_version": 1,
   "duration_seconds": 120,
   "speed_pixels_per_second": 76,

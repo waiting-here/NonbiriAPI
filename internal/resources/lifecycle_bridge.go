@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 func (r *Repository) reconcileRoutingTargetsTx(
@@ -15,6 +17,9 @@ func (r *Repository) reconcileRoutingTargetsTx(
 	targets []bindingRevisionTarget,
 ) error {
 	for _, target := range targets {
+		if err := db.CompactModelBindingsTx(ctx, tx, target.modelID); err != nil {
+			return fmt.Errorf("resources: compact surviving model bindings: %w", err)
+		}
 		if err := r.projection.ReconcileRoutingProjection(ctx, tx, ownerUserID, target.modelID); err != nil {
 			return fmt.Errorf("resources: reconcile routing projection for model %d: %w", target.modelID, err)
 		}

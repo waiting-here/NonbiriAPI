@@ -15,6 +15,9 @@ export function initialFishRNG(seed: Uint8Array, fishID: number): [number, numbe
 function rotateLeft(value: number, count: number): number { return (value << count) | (value >>> (32 - count)); }
 // Blackman and Vigna's xoshiro128** 1.1, with explicit uint32 overflow.
 export function nextTurnBit(state: [number, number, number, number]): number {
+  return nextTurnWord(state) & 1;
+}
+export function nextTurnWord(state: [number, number, number, number]): number {
   const result = Math.imul(rotateLeft(Math.imul(state[1], 5), 7), 9) >>> 0;
   const t = state[1] << 9;
   state[2] = (state[2] ^ state[0]) >>> 0;
@@ -23,7 +26,7 @@ export function nextTurnBit(state: [number, number, number, number]): number {
   state[0] = (state[0] ^ state[3]) >>> 0;
   state[2] = (state[2] ^ t) >>> 0;
   state[3] = rotateLeft(state[3], 11) >>> 0;
-  return result & 1;
+  return result;
 }
 
 export function scoreUnits(total: number, fed: number, durationSeconds: number, terminalTick: number): number {

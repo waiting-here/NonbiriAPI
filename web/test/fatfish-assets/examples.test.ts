@@ -28,15 +28,15 @@ const manifest = JSON.parse(fs.readFileSync(new URL('manifest.json', directory),
   examples: ExampleEntry[];
 };
 const seed = Uint8Array.from({ length: 32 }, (_, index) => index);
-const cases: [string, InputTuple[], number, number][] = [
-  ['01-first-rice', [[0, 0, 'return', 100]], 8, 308],
-  ['02-buffer-pool', [], 10, 1782],
-  ['03-narrow-bridge', [], 9, 245],
-  ['04-two-turns', [[0, 0, 'return', 100]], 12, 387],
-  ['05-last-barrier', [[0, 0, 'return', 100]], 12, 237],
-  ['06-power-button', [], 8, 233],
-  ['07-one-way-stream', [], 10, 403],
-  ['08-rice-buffet', [[0, 0, 'return', 100]], 10, 218],
+const cases: [string, InputTuple[], number, number, 'all_resolved' | 'timeout'][] = [
+  ['01-first-rice', [[0, 0, 'return', 100]], 8, 308, 'all_resolved'],
+  ['02-buffer-pool', [], 8, 6000, 'timeout'],
+  ['03-narrow-bridge', [], 9, 245, 'all_resolved'],
+  ['04-two-turns', [[0, 0, 'return', 100]], 12, 387, 'all_resolved'],
+  ['05-last-barrier', [[0, 0, 'return', 100]], 12, 237, 'all_resolved'],
+  ['06-power-button', [], 8, 233, 'all_resolved'],
+  ['07-one-way-stream', [], 10, 403, 'all_resolved'],
+  ['08-rice-buffet', [[0, 0, 'return', 100]], 10, 218, 'all_resolved'],
 ];
 
 describe('importable example levels', () => {
@@ -59,7 +59,7 @@ describe('importable example levels', () => {
     }
   });
 
-  for (const [id, inputs, expectedFed, expectedTick] of cases) {
+  for (const [id, inputs, expectedFed, expectedTick, expectedReason] of cases) {
     it(id, () => {
       const entry = manifest.examples.find((item) => item.id === id);
       expect(entry).toBeDefined();
@@ -67,6 +67,7 @@ describe('importable example levels', () => {
       expect(data.length).toBe(entry!.bytes);
       expect(createHash('sha256').update(data).digest('hex')).toBe(entry!.raw_sha256);
       const level = parseLevel(data.toString('utf8'));
+      expect(level.engine_version).toBe(2);
       expect(contentHash(level)).toBe(entry!.content_hash);
       if (id === '01-first-rice') {
         expect(level.tools.filter((item) => item.placed).map((item) => item.id)).toEqual([100]);
@@ -97,11 +98,13 @@ describe('importable example levels', () => {
       const replaySeed = Uint8Array.from(seed);
       if (id === '02-buffer-pool') replaySeed[0] = 3;
       const result = replay(level, replaySeed, inputs, { onTick: observe });
+      expect(result.engine_version).toBe(2);
+      expect(result.scoring_version).toBe(1);
       expect(result.content_hash).toBe(entry!.content_hash);
       expect(result.passed).toBe(true);
       expect(result.fed).toBe(expectedFed);
       expect(result.terminal_tick).toBe(expectedTick);
-      expect(result.reason).toBe('all_resolved');
+      expect(result.reason).toBe(expectedReason);
       if (id === '02-buffer-pool') {
         expect(firstTurns.size).toBe(2);
         expect(firstTurns.get(1)).not.toBe(firstTurns.get(2));

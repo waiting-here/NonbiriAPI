@@ -1,7 +1,7 @@
-import { seedCommit } from './engine/canonical';
+import { seedCommitForVersion } from './engine/canonical';
 import { Engine } from './engine/engine';
 import { decodeHex } from './engine/sha256';
-import { DRAG_BUFFER, FIELD_HEIGHT, FIELD_WIDTH, MAX_INPUT_BYTES, MAX_INPUTS, TICKS_PER_SECOND,
+import { DRAG_BUFFER, FIELD_HEIGHT, FIELD_WIDTH, MAX_INPUT_BYTES, MAX_INPUTS, TICKS_PER_SECOND, supportedVersions,
   type EngineState, type InputTuple, type ReplayResult } from './engine/types';
 import { stars, validateInputs } from './engine/protocol';
 import type { FatFishChallenge, FatFishChallengeTransport, FatFishSubmission } from './api';
@@ -38,6 +38,14 @@ export function targetTickWithWall(startAtMS: number, serverNowMS: number,
 const terminalState = (state: string) =>
   state === 'settled_pass' || state === 'settled_fail' || state === 'abandoned' ||
   state === 'expired' || state === 'cancelled_refunded';
+
+function validateChallengeVersion(view: FatFishChallenge): void {
+  if (!supportedVersions(view.engine_version, view.scoring_version))
+    throw new Error('The challenge uses an unsupported rules version.');
+  if (view.level && (view.level.engine_version !== view.engine_version ||
+      view.level.scoring_version !== view.scoring_version))
+    throw new Error('The challenge rules version does not match its level.');
+}
 
 export class FatFishSessionController {
   private readonly transport: FatFishChallengeTransport;
@@ -159,6 +167,12 @@ export class FatFishSessionController {
     return true;
   }
   private setView(view: FatFishChallenge): void {
+    validateChallengeVersion(view);
+    if (this.record && (view.id !== this.record.id || view.content_hash !== this.record.content_hash))
+      throw new Error('The challenge content does not match its local record.');
+    if (this.view && (view.engine_version !== this.view.engine_version ||
+        view.scoring_version !== this.view.scoring_version || view.seed_commit !== this.view.seed_commit))
+      throw new Error('The challenge version or seed commitment changed.');
     this.view = view;
     this.error = null;
     this.anchorServerNowMS = view.server_now_ms;
@@ -186,6 +200,7 @@ export class FatFishSessionController {
       }
       if (view.state !== 'prepared' || !view.id || !/^[0-9a-f]{64}$/.test(view.content_hash))
         throw new Error('The server returned an invalid prepared challenge.');
+      validateChallengeVersion(view);
       if (!await this.acquire(view.id)) throw new Error('This challenge is active in another tab.');
       this.capability = pending.capability;
       const record: StoredFishSession = {
@@ -279,8 +294,8 @@ export class FatFishSessionController {
     const seed = decodeHex(view.seed);
     const engine = new Engine(view.level, seed);
     if (seed.length !== 32 || engine.contentHash !== view.content_hash ||
-        seedCommit(view.id, view.period_id ?? view.version_id, view.node_id ?? view.version_id,
-          view.content_hash, seed) !== view.seed_commit)
+        seedCommitForVersion(view.id, view.period_id ?? view.version_id, view.node_id ?? view.version_id,
+          view.content_hash, view.engine_version, view.scoring_version, seed) !== view.seed_commit)
       throw new Error('The challenge version or seed commitment changed.');
     validateInputs(record.inputs, engine.level);
     this.engine = engine;

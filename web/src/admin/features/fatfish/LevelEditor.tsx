@@ -4,7 +4,7 @@ import { ErrorState, LoadingState } from '@shared/components/States';
 import { useActivityText } from '@shared/limitedactivities/copy';
 import { operationKey, responseOutcomeUnknown } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
-import { FISH_RADIUS, type Level, type Point, type Polygon } from '@shared/fatfish/engine/types';
+import { LEGACY_ENGINE_VERSION, FISH_RADIUS, type Level, type Point, type Polygon } from '@shared/fatfish/engine/types';
 import { formatScoreUnits } from '@shared/fatfish/api';
 import { toolIcon, toolNames } from '@shared/fatfish/art';
 import { laidOutLevel } from '@shared/fatfish/workspace';
@@ -17,7 +17,7 @@ import { LevelCanvas } from './LevelCanvas';
 import { ShapeInspector } from './ShapeInspector';
 import { ExamplePicker } from './ExamplePicker';
 import { PlaytestPane } from './PlaytestPane';
-import { blankLevel, cloneLevel, importDraft, localValidation, nextID, rect, snap, toolPolygon, utf8Bytes, type ObjectKind, type Selection, unit } from './draft';
+import { blankLevel, cloneLevel, convertToCurrentDraft, importDraft, localValidation, nextID, rect, snap, toolPolygon, utf8Bytes, type ObjectKind, type Selection, unit } from './draft';
 import { useHistory } from './history';
 import { useDraftGuard } from './useDraftGuard';
 
@@ -188,6 +188,12 @@ function LevelDraftEditor({ initial, onSaved, onDirty, onDeleted }: { initial: L
   return <div className="fatfish-editor">
     <section className="fatfish-toolbar">
       <h2>{initial ? t('编辑关卡草稿', 'Edit level draft') : t('新建关卡草稿', 'New level draft')}</h2>
+      <p>{t('草稿规则版本', 'Draft rules version')}: {level.engine_version} · {level.engine_version === LEGACY_ENGINE_VERSION ? t('旧版', 'Legacy') : t('新版', 'Current')}</p>
+      {level.engine_version === LEGACY_ENGINE_VERSION ? <div>
+        <button type="button" disabled={editingLocked} onClick={() => commit(convertToCurrentDraft(level))}>{t('转换为新版草稿', 'Convert to new draft')}</button>
+        <p>{t('转换保留布局、速度和其他设置。', 'Conversion keeps the layout, speed and other settings.')}</p>
+      </div> : null}
+      <p>{t('修改后请保存、发布新版本并重新试玩。已有版本和游玩保持原规则。', 'After editing, save and publish a new version, then playtest it. Existing versions and plays keep their rules.')}</p>
       <div className="fatfish-fields" inert={editingLocked}>
         <label>{t('标题', 'Title')}<input value={title} maxLength={128} onChange={(event) => setTitle(event.target.value)} /></label>
         <label>{t('说明', 'Description')}<textarea value={description} maxLength={4096} onChange={(event) => setDescription(event.target.value)} /></label>

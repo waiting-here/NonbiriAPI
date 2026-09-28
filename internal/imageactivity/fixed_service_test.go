@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,7 @@ type fixedServiceMock struct {
 	server                 *httptest.Server
 	mode                   atomic.Int32
 	posts, polls, catalogs atomic.Int64
+	receiptRetryAfter      atomic.Int64
 	mu                     sync.Mutex
 	catalog                []json.RawMessage
 	bodies                 []map[string]any
@@ -61,6 +63,9 @@ func newFixedServiceMock(t *testing.T, image []byte) *fixedServiceMock {
 			}
 			switch mock.mode.Load() {
 			case 1, 2:
+				if delay := mock.receiptRetryAfter.Load(); delay > 0 {
+					w.Header().Set("Retry-After", strconv.FormatInt(delay, 10))
+				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"async": true, "task_id": "opaque/../job", "status": "queued"})
 			case 3:
 				_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": map[string]string{"message": "private synthetic upstream detail"}})
@@ -223,7 +228,7 @@ func TestFixedServiceQueuedRunningAndDonePolling(t *testing.T) {
 		row, err := f.service.readTask(context.Background(), task.ID)
 		return err == nil && row.state == "running" && row.upstreamID != ""
 	})
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		row, err := f.service.readTask(context.Background(), task.ID)
 		return err == nil && row.pollCount >= 1
@@ -284,7 +289,7 @@ func TestFixedServiceFailuresRefundOnceWithoutResubmission(t *testing.T) {
 					return err == nil && row.state == "running"
 				})
 				mock.mode.Store(tc.mode)
-				f.now.Add(5)
+				f.now.Add(6)
 				f.wait(t, func() bool { return mock.polls.Load() > 0 })
 			}
 			if tc.mode == 4 {
@@ -328,7 +333,7 @@ func TestFixedServiceRecoveryPollsAcceptedJobWithoutGeneratingAgain(t *testing.T
 		t.Fatal(err)
 	}
 	mock.mode.Store(0)
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		result, err := fresh.GetTask(f.ctx(f.user), f.user, task.ID)
 		return err == nil && result.Status == "succeeded"

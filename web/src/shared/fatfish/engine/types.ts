@@ -1,5 +1,9 @@
-export const ENGINE_VERSION = 1;
+export const LEGACY_ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 export const SCORING_VERSION = 1;
+export function supportedVersions(engineVersion: unknown, scoringVersion: unknown): boolean {
+  return (engineVersion === LEGACY_ENGINE_VERSION || engineVersion === ENGINE_VERSION) && scoringVersion === SCORING_VERSION;
+}
 export const FIELD_WIDTH = 480 * 64;
 export const FIELD_HEIGHT = 560 * 64;
 export const DRAG_BUFFER = 128 * 64;
@@ -23,7 +27,7 @@ export interface Direction extends Shape { mode: "entry" | "oneway"; heading: nu
 export interface Level {
   format: "nonbiri-fatfish-level";
   format_version: 1;
-  engine_version: 1;
+  engine_version: 1 | 2;
   scoring_version: 1;
   duration_seconds: number;
   speed_pixels_per_second: number;
@@ -56,7 +60,9 @@ export interface FishState {
   x_remainder: number;
   y_remainder: number;
   rng: [number, number, number, number];
+  motion?: MotionState;
 }
+export interface MotionState { turn_remainder: number; ambiguous_turn_dir: number }
 export interface ToolState { id: number; placed: boolean; x: number; y: number }
 export interface SwitchState { id: number; active: boolean; triggered: boolean; occupied: boolean }
 export interface GateState { id: number; open: boolean; pending: boolean }

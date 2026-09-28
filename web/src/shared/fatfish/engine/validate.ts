@@ -1,5 +1,5 @@
 import { containsPolygon, polygonsInteriorOverlap, translatePolygon, validatePolygon } from "./geometry";
-import { DRAG_BUFFER, ENGINE_VERSION, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, SCORING_VERSION, type Level, type Point, type Polygon } from "./types";
+import { DRAG_BUFFER, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, supportedVersions, type Level, type Point, type Polygon } from "./types";
 
 function keys(value: unknown, allowed: string[], required: string[], location: string): void {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${location} must be an object`);
@@ -24,7 +24,7 @@ function polygonKeys(polygon: Polygon, location: string): void {
 export function validateLevel(level: Level): void {
   const fields = ["format", "format_version", "engine_version", "scoring_version", "duration_seconds", "speed_pixels_per_second", "thresholds", "fish", "tools", "solids", "hazards", "bowls", "switches", "gates", "directions"];
   keys(level, fields, fields.filter((field) => !["tools", "solids", "hazards", "switches", "gates", "directions"].includes(field)), "level");
-  if (level.format !== "nonbiri-fatfish-level" || level.format_version !== 1 || level.engine_version !== ENGINE_VERSION || level.scoring_version !== SCORING_VERSION) throw new Error("level format or rules version is unsupported");
+  if (level.format !== "nonbiri-fatfish-level" || level.format_version !== 1 || !supportedVersions(level.engine_version, level.scoring_version)) throw new Error("level format or rules version is unsupported");
   integer(level.duration_seconds, 10, 600, "duration_seconds");
   integer(level.speed_pixels_per_second, 16, 160, "speed_pixels_per_second");
   if (!Array.isArray(level.fish) || level.fish.length < 1 || level.fish.length > 40) throw new Error("fish count exceeds bounds");

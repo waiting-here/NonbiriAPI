@@ -4,9 +4,9 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [1.0.0-rc.4] - Unreleased
+## [1.0.0-rc.4] - 2026-09-28
 
-This entry describes the unreleased rc.4 source candidate. The latest published source prerelease remains 1.0.0-rc.3; this entry does not announce publication or deployment.
+This entry describes the rc.4 source prerelease dated 2026-09-28 UTC for Linux/amd64. No official prebuilt binaries are provided. Source publication does not by itself deploy an instance.
 
 ### Added
 
@@ -24,9 +24,12 @@ This entry describes the unreleased rc.4 source candidate. The latest published 
 
 ### Changed
 
+- Deleting a charity binding compacts the remaining order. Reordering preserves binding IDs and keeps each binding's request-adaptation settings and revision attached to it. An existing binding can remain readable with `source_types:[]` when no current source is available; the management page marks it unavailable. New candidates still require a non-empty list of known source types, and unknown values remain invalid.
+- Picture-book upstream status checks are scheduled six seconds apart for the first and ordinary subsequent polls. A valid bounded `Retry-After` that requests a longer wait can extend either delay; the shared request limit and original task deadline still apply. The user page's refresh schedule is independent. The Renge cover has a four-frame, two-second-per-frame waiting animation with reduced-motion, manual-pause, and background-tab behavior.
+- Fat Fish records engine and scoring versions on immutable level versions. New levels and all eight example levels use engine version 2 with scoring version 1. Existing immutable versions, active challenges, retained history, and period node selections remain bound to what they already reference. Administrators can explicitly convert an older draft to version 2, save and publish it, playtest the new immutable version, then manually select it for a node; conversion does not publish or switch a node automatically.
 - Automatic bans caused by configured client rules now show a readable reason such as `识别到违规第三方客户端特征：Tavo`. Multiple matching names are combined within the reason limit, while complete rule revisions remain in the separate administrative receipt and prior active-ban evidence is preserved.
 - SQLite remains Generation 2. The account export advances to schema 11 with typed safe `request_adaptations`, `continuity`, and `fat_fish` projections plus optional owner-only `likes.loadouts`; full play inputs, prompts, credentials, unrevealed seeds, and other players' private results remain excluded. Oversized exports fail as a whole instead of truncating.
-- The supported rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Upgrades preserve existing account and game data, credentials, configuration, and instance legal text. Instance legal-text publication remains a separate operator action.
+- The formal rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. The exact preceding deployed source `4e06025c6bf23fbb0f34db96673b45ed01c42e97` (tree `6af9d8349d9049197366f29984e2e413090b7814`) is a separately verified compatibility case; no other intermediate schema is covered. Upgrades preserve existing account and game data, credentials, configuration, and instance legal text. Instance legal-text publication remains a separate operator action.
 
 ### Fixed
 

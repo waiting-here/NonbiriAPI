@@ -181,7 +181,7 @@ func TestFixedServiceIncompatibleRefreshKeepsEnabledPricesAndAcceptedSnapshot(t 
 		t.Fatal("incompatible metadata rewrote an accepted snapshot")
 	}
 	mock.mode.Store(0)
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		result, err := f.service.GetTask(f.ctx(f.user), f.user, task.ID)
 		return err == nil && result.Status == "succeeded"

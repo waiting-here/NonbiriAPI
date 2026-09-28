@@ -44,6 +44,9 @@ func NewEngine(level Level, seed [32]byte) (*Engine, error) {
 	engine.state.Fish = make([]FishState, len(level.Fish))
 	for index, fish := range level.Fish {
 		engine.state.Fish[index] = FishState{ID: fish.ID, X: fish.X, Y: fish.Y, Heading: fish.Heading, Status: "walking", RNG: InitialFishRNG(seed, fish.ID)}
+		if level.EngineVersion == EngineVersion {
+			engine.state.Fish[index].Motion = &MotionState{}
+		}
 	}
 	sort.Slice(engine.state.Fish, func(i, j int) bool { return engine.state.Fish[i].ID < engine.state.Fish[j].ID })
 	engine.state.Tools = make([]ToolState, len(level.Tools))
@@ -95,6 +98,12 @@ func (engine *Engine) ContentHash() string { return engine.contentHash }
 func (engine *Engine) State() EngineState {
 	state := engine.state
 	state.Fish = append([]FishState{}, state.Fish...)
+	for index := range state.Fish {
+		if state.Fish[index].Motion != nil {
+			motion := *state.Fish[index].Motion
+			state.Fish[index].Motion = &motion
+		}
+	}
 	state.Tools = append([]ToolState{}, state.Tools...)
 	state.Switches = append([]SwitchState{}, state.Switches...)
 	state.Gates = append([]GateState{}, state.Gates...)
@@ -283,15 +292,25 @@ func (engine *Engine) moveSubstep(fish *FishState) {
 	} else {
 		if zone.ID != fish.FlowID {
 			fish.Heading, fish.TurnDir, fish.TurnDistance = zone.Heading, 0, 0
+			if fish.Motion != nil {
+				*fish.Motion = MotionState{}
+			}
 		}
 		fish.FlowID = zone.ID
 	}
 	if zone != nil && zone.Mode == "oneway" {
 		fish.Heading, fish.TurnDir, fish.TurnDistance = zone.Heading, 0, 0
+		if fish.Motion != nil {
+			*fish.Motion = MotionState{}
+		}
 		if next, xRema, yRema, ok := engine.canMove(fish, zone.Heading, distance); ok {
 			fish.X, fish.Y, fish.XRema, fish.YRema = next.X, next.Y, xRema, yRema
 			engine.resolveContact(fish, start, next)
 		}
+		return
+	}
+	if engine.level.EngineVersion == EngineVersion {
+		engine.moveSubstepV2(fish, start, distance)
 		return
 	}
 	if fish.TurnDir != 0 {
@@ -546,7 +565,7 @@ func (engine *Engine) Result() (ReplayResult, error) {
 		return ReplayResult{}, err
 	}
 	return ReplayResult{
-		EngineVersion: EngineVersion, ScoringVersion: ScoringVersion, ContentHash: engine.contentHash,
+		EngineVersion: engine.level.EngineVersion, ScoringVersion: engine.level.ScoringVersion, ContentHash: engine.contentHash,
 		FinalStateHash: digest, TerminalTick: engine.state.Tick, Reason: engine.state.Reason,
 		Fed: fed, Total: len(engine.state.Fish), BowlCounts: append([]BowlState(nil), engine.state.Bowls...),
 		Passed: passed, Stars: stars, ScoreUnits: score,

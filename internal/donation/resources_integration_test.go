@@ -321,3 +321,66 @@ VALUES(?,?,?,?,?,?,?)`, modelID, donationKeyIDs[index], endpointKeyIDs[index], u
 	}
 	return modelID
 }
+
+func TestDonationLifecycleCompactsSurvivingCharityBindings(t *testing.T) {
+	for _, action := range []string{"expiry", "key-removal", "account-deletion"} {
+		t.Run(action, func(t *testing.T) {
+			env := newDonationTestEnv(t)
+			level := int64(6)
+			owner := env.seedUser(t, "removed-donor", &level, false)
+			other := env.seedUser(t, "retained-donor", &level, false)
+			env.seedUser(t, "", nil, true)
+			_, firstKey := env.seedEndpointKey(t, owner, 'a')
+			_, secondKey := env.seedEndpointKey(t, other, 'b')
+			first := env.createDonationWithSeed(t, owner, 'A', firstKey)
+			second := env.createDonationWithSeed(t, other, 'B', secondKey)
+			firstDonationKey := parseTestID(t, first.Keys[0].ID)
+			secondDonationKey := parseTestID(t, second.Keys[0].ID)
+			model := seedBulkDeletionCharityBindings(t, env, []int64{firstDonationKey, secondDonationKey}, []int64{firstKey, secondKey})
+			var survivor int64
+			if err := env.store.DB().QueryRow(`SELECT id FROM charity_model_bindings WHERE charity_model_id=? AND ord=1`, model).Scan(&survivor); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := env.store.DB().Exec(`INSERT INTO request_adaptations(scope,binding_id,revision,secret_context,secret_ciphertext,structure_json,updated_at) VALUES('binding',?,7,zeroblob(16),'retained-cipher','{}',6)`, survivor); err != nil {
+				t.Fatal(err)
+			}
+			if action == "expiry" {
+				if _, err := env.store.DB().Exec(`UPDATE donation_keys SET expires_at=? WHERE id=?`, donationTestNow+1, firstDonationKey); err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < 2; i++ {
+					if _, err := env.service.MaterializeExpiries(context.Background(), donationTestNow+1, 100); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				tx, err := env.store.DB().Begin()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if action == "key-removal" {
+					err = env.service.PrepareEndpointKeyDeletion(context.Background(), tx, owner, []int64{firstKey}, donationTestNow+1)
+				} else {
+					err = env.service.PrepareAccountDeletion(context.Background(), tx, owner, donationTestNow+1)
+				}
+				if err != nil {
+					tx.Rollback()
+					t.Fatal(err)
+				}
+				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var count, ord, revision, intact int
+			if err := env.store.DB().QueryRow(`SELECT count(*),MIN(ord) FROM charity_model_bindings WHERE charity_model_id=?`, model).Scan(&count, &ord); err != nil || count != 1 || ord != 0 {
+				t.Fatal("remaining binding gap", count, ord, err)
+			}
+			if err := env.store.DB().QueryRow(`SELECT binding_revision FROM charity_models WHERE id=?`, model).Scan(&revision); err != nil || revision != 8 {
+				t.Fatal("revision not advanced once", revision, err)
+			}
+			if err := env.store.DB().QueryRow(`SELECT count(*) FROM request_adaptations WHERE binding_id=? AND revision=7 AND secret_ciphertext='retained-cipher' AND updated_at=6`, survivor).Scan(&intact); err != nil || intact != 1 {
+				t.Fatal("surviving adaptation changed", intact, err)
+			}
+		})
+	}
+}

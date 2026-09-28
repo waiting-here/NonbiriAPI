@@ -1,9 +1,9 @@
-# NonbiriAPI HTTP API Contract (`v1.0.0-rc.4` candidate)
+# NonbiriAPI HTTP API Contract (`v1.0.0-rc.4`)
 
-- Status: **unreleased rc.4 source candidate contract**. The latest published source prerelease remains rc.3; deployment status is specific to each instance.
+- Status: **rc.4 source prerelease contract, dated 2026-09-28 UTC**. Instance deployment status is specific to each operator.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. Image generation is available only through the session-authenticated limited activity, not ordinary `/v1/images/generations` or personal/charity model routes.
-- Release boundary: rc.4 additions describe the candidate contract and are not available on a deployed rc.3 instance. This document does not announce publication or deployment.
+- Release boundary: rc.4 additions are part of this source release; instances still running rc.3 do not provide them. Publishing the source does not itself upgrade a running instance.
 
 ## 1. Shared wire rules
 
@@ -82,7 +82,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. The last published rc.3 prerelease supported the complete rc.2 maintenance database at `db959c64674afc531046a63066de0464725d439c` and the administration maintenance database at `84018acbd594765c563cc0ee4083d206e0bd6a77`. For the unreleased rc.4 candidate, the supported upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Extensions and role migration are atomic; unknown or partial structures are rejected before source writes. Existing identities, balances, settled charges, saved games, configuration and legal overrides remain intact. Old manual level 5 becomes level 6; former model level-5 admission moves to level 6 and new level-5 admission initially copies level 4. Historical audit roles and idempotent receipts keep their original meaning and wire values; current GETs show current authority and masks. New input/output counters never invent a split of old total Tokens. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. The last published rc.3 prerelease supported the complete rc.2 maintenance database at `db959c64674afc531046a63066de0464725d439c` and the administration maintenance database at `84018acbd594765c563cc0ee4083d206e0bd6a77`. The formal rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. A separate verified path covers the exact preceding deployed source at commit `4e06025c6bf23fbb0f34db96673b45ed01c42e97` (tree `6af9d8349d9049197366f29984e2e413090b7814`); other intermediate schemas are unsupported. Extensions and role migration are atomic; unknown or partial structures are rejected before source writes. Existing identities, balances, settled charges, saved games, configuration and legal overrides remain intact. Old manual level 5 becomes level 6; former model level-5 admission moves to level 6 and new level-5 admission initially copies level 4. Historical audit roles and idempotent receipts keep their original meaning and wire values; current GETs show current authority and masks. New input/output counters never invent a split of old total Tokens. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. See [deployment compatibility](deployment.md#database-compatibility-and-version-changes).
 
 Account export `schema_version=11` is independent of SQLite `user_version`. Its filename is `nonbiriapi-account-export-v11.json`; SQLite remains Generation 2. See §9 for the three added safe projections.
 
@@ -273,6 +273,8 @@ Administrator and level-6 steward donation-key projections include read-only `ma
 | `DELETE /api/models/{id}/bindings/{bId}` | Expected binding revision; returns the complete new binding set. |
 
 Provider/model parts are bounded opaque strings and form the external `provider/model` name. `[公益]` is reserved. Binding DTOs contain only owner-safe endpoint/key display data, Connector type, upstream model ID, and order.
+
+Deleting a binding compacts the remaining order positions. An order update uses the exact current binding-ID permutation, so each surviving binding keeps its identity while positions change.
 
 Numbered resource filters combine with AND, and counts and rows use the same bounded read snapshot. Endpoint `q` searches the base URL, note and mainstream channel name; `source=mainstream|custom`, `state=available|endpoint_disabled|no_keys|no_usable_key`, and a registered `connector_type` are optional. Key `q` searches only displayed fragments and notes; `enabled` and `donated` accept `true|false`, while `suspension_state=none|security_processing` is independent of donation membership. Model `q` searches the full model name and every binding's upstream ID without duplicate rows; `provider` is exact, `route_strategy=ordered|random`, and `connection_state=available|unavailable|unconfigured`. Empty optional choices, unknown/repeated filters and unsupported combinations are rejected. Omit a filter to clear it. Sizes remain 10/20/50/100, default 20, with out-of-range pages clamped. Legacy cursor behavior remains unchanged and does not acquire these new filters.
 
@@ -552,7 +554,7 @@ The additional net-profit boards reuse retained seven-day net game facts: final 
 
 Fishing's administrator configuration also controls the probability that a legendary catch becomes the blue fat fish: default 10%, range 0–100% in 0.01% steps. New accepted batches capture the setting; legendary species, length and reward rules are unchanged.
 
-### 5.10 Fat Fish limited activity (unreleased rc.4)
+### 5.10 Fat Fish limited activity (rc.4)
 
 Fat Fish is a session-authenticated limited activity under `/api/limited-activities/fat-fish`; it is not a `/v1/*` API or an ordinary game-center route. Only the environment administrator can edit content under `/admin/api/limited-activities/fat-fish`. Ordinary users and level-5/6 stewards have no editor authority. Mutations use same-origin/CSRF protection, strict JSON, a 22–128-character `Idempotency-Key`, and no query parameters; GETs have no body. A repeated key and identical request return its receipt, while a changed request conflicts. Responses and errors use `no-store` and the shared error envelope.
 
@@ -570,6 +572,8 @@ In the player, press N to cycle tool selection, use arrow keys to move a selecte
 | `POST /challenges/{id}/submit` | `{ "tab_capability":"<original capability>", "inputs":[], "terminal_tick":0 }`; the actual `inputs` array carries the complete bounded operation trace. Returns HTTP 202 while `verifying`, otherwise HTTP 200 with the retained challenge/result. Client score is never accepted as authority. |
 | `POST /challenges/{id}/abandon` | `{ "tab_capability":"" }` is sufficient for the authenticated owner; a tab may include its own capability. Returns the terminal challenge and does not refund a started ticket. |
 | `GET /history?page=1&limit=20`; `GET /periods/{p}/leaderboard?page=1&page_size=20&node_id=ffn_…` | Own 30-day terminal history uses `limit` of 20, 50 or 100 and `{items,page,page_size,has_more}`. Whole-period or optional node leaderboard uses `page_size` of 20, 50 or 100 and `{period_id,node_id?,final,page,page_size,total,rows}`. |
+
+Each immutable level version records `engine_version` and `scoring_version`. New levels and the eight bundled examples use `engine_version=2` and `scoring_version=1`; version 1 remains supported. Existing immutable versions, active challenges, retained history, and period node bindings keep the version they reference. Updating the application does not convert a draft or switch a node. To move an older draft, an administrator explicitly converts it to version 2 in the existing editor, saves and publishes the immutable version, playtests that version, then manually selects it for a node. Conversion does not publish or switch a node by itself.
 
 Collection `page` is 1–1,000,000; period, level and version collections have a fixed page size of 20. A period has at most 128 nodes; a node binds an immutable content version and current revision. `amounts` contains canonical nonnegative General-credit strings `unlock_cost,ticket_price,first_clear_reward,star_rewards[3]`; game credits, paper and brushes cannot pay these charges. A period's `state` (`draft|open|closed`), `visible`, `paused` and `past_public` are separate controls. A closed period with `past_public=false` does not expose its public detail or board, while a caller can still read their authorized retained history. Rankings expose only current public identity or an anonymous projection, never another player's private result.
 
@@ -798,6 +802,8 @@ Administrator donation and source reads use the management filters and paginatio
 
 Request-adaptation reads are `GET /admin/api/charity-models/{id}/request-adaptation` and `GET /admin/api/charity-models/{id}/bindings/{bindingId}/request-adaptation`, with matching `PUT` routes for administrators only. A current level-6 steward can use the corresponding `/api/steward` GET routes for redacted structure and presence, including a binding's effective partition sources; level 5 has no access, and no steward PUT route exists. The independent canonical-string `expected_revision`, `Idempotency-Key`, five closed partitions, whole-partition `inherit|replace` binding choice, redacted GET response, budgets and conflict rules are described in §3.1. A binding's `effective` projection shows which partition came from its model or binding, without revealing fixed header or body values. Only administrators can change these shared charity rules; donor-owned endpoint rules are not inherited into charity.
 
+For both administrator and current level-6 steward charity management, an existing binding may have `source_types:[]` when no current source confirms it. The binding remains readable and the page presents its source as unavailable. A new binding candidate requires at least one known source type (`automatic` or `manual`); empty, repeated, or unknown values are invalid. Deleting a charity binding compacts the order. Reordering preserves each binding ID and its binding-scoped request-adaptation settings and revision.
+
 ### 7.5 Recurring donation-key limits
 
 `GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. Administrator/owner GET accepts no query or body; trainee steward calls require the charity_model_id query scope. Administrators, current level-6 stewards and scoped level-5 trainees can PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
@@ -858,7 +864,7 @@ Blackjack contains the owner's safe current queue, payment composition and retai
 
 Secrets, ciphertext, fingerprints, request/response bodies, report data, IP material, other identities, complete pool ledgers, announcement copies, anti-collusion values, workers/checkpoints/replay internals, management notes, channel category/revision, internal source IDs, and administrator/steward audit material are excluded. If the result exceeds 16 MiB or any collection exceeds 10,000 rows, export fails atomically with 413; it is never silently truncated.
 
-### Export schema 11 (unreleased rc.4)
+### Export schema 11 (rc.4)
 
 `POST /api/account/export` keeps its elevated user-session authorization and returns the attachment `nonbiriapi-account-export-v11.json` with `schema_version:11`. Existing safe fields remain; the following **top-level** fields are added (an excerpt, not a complete export):
 
@@ -947,7 +953,7 @@ Source facts contain normalized full IP and provenance (`direct_peer`, `trusted_
 
 The management rule editor provides populated, suspected-client presets: Tavo (`user_agent` prefix `Tavo/`), New API (`openrouter_title` equals `New API`) and One API (`legacy_title` equals `One API`). Title matching defaults to case-insensitive. New API and One API presets do not require a particular HTTP-Referer origin. These headers occur only on some forwarding paths; forks retaining them may match, while renamed or hidden markers require separate evidence-based custom rules. Presets are drafts until explicitly saved and enabled; they neither rewrite existing rules nor establish abuse. A preset alone does not enable the separate administrator-controlled automatic-ban binding below.
 
-### Automatic bans from new charity requests (unreleased rc.4)
+### Automatic bans from new charity requests (rc.4)
 
 Rule create/update bodies may include administrator-only `auto_ban:{enabled,duration_seconds}`. Both fields are required when the object is present; `duration_seconds` is an integer from 1 through 315360000, or `null` for a permanent ban. Omission creates no binding on a new rule and preserves the binding on update; explicit `null` removes an existing binding and is invalid during creation. The binding and rule share the rule revision. At most 100 rules can have a binding, including disabled bindings. Level-6 stewards may read bindings but cannot create, change or remove one, or edit/delete a bound rule; existing authority for unbound rules remains unchanged.
 
@@ -957,7 +963,7 @@ The saved account-ban reason uses the configured rule name, for example `识别�
 
 `GET /admin/api/abuse-audit/client-rule-ban-receipts/{request_id}` is administrator-only and returns `{request_id,user_id,source,rules,banned_until,created_at,expires_at}`. `user_id` is a decimal string, `source` is `client_rule`, `rules` contains every matched `{id,revision}` (at most 100), and `banned_until` is a Unix second or `null`. Receipts last 90 days, are removed with the account, and enforce one set of effects per logical request. Missing/expired receipts return 404; unauthorized roles receive 403. Rule identifiers remain management-only and are not added to ordinary caller errors or personal exports.
 
-### Persistent client scans (deployed rc.3 behavior; compatible path in rc.4)
+### Persistent client scans (rc.3 compatibility and rc.4 additions)
 
 Creation accepts `{"request_token":"unique_attempt_token","lookback_hours":24,"kind":"total"}` or an explicit `from,to` epoch-second window instead of `lookback_hours`. Optional `model` is exact; `kind` is `total|self|charity|unclassified`. The range is at most 30 days. `request_token` is 16–64 ASCII letters, digits, `_` or `-`; retry the same token and identical body after a lost response. A different body with a retained token returns 409. Tokens expire with their scan; a token still awaiting expiry cleanup also returns 409. Creation returns 202, including an immediate empty/completed result. Current actor/session authority and CSRF are required; the token is not a credential.
 
@@ -967,7 +973,7 @@ Scan metadata is `id,state,reason,from,to,kind,model,candidates,scanned,matched,
 
 Cancellation accepts `{}` and is idempotent. Tasks are private to their creating actor and role, even between administrators; another actor gets 404. Permission loss invalidates all of that actor's scans, including completed ones, and restoration does not revive them. Account/source deletion removes related references; expiry and revocation cleanup use bounded batches. These transient management records are excluded from personal exports, never collect request bodies and do not change existing source retention or create automatic penalties. Legacy cursor-based client observations remain compatible.
 
-### Full-range audit navigation (unreleased rc.4)
+### Full-range audit navigation (rc.4)
 
 For current administrator or level-6 steward sessions, the following operations are registered under both role prefixes. The deployed `/client-scans` path above remains compatible; its `kind` is a call-kind filter and its result pages still accept 10/20/50/100. The new `/scans` path has a separate three-value result `kind` and only 20/50/100 page sizes.
 
@@ -1023,6 +1029,16 @@ Public models use local identifiers; real model IDs, the endpoint, key,
 internal task identifiers, and original failures stay out of ordinary user
 responses. No CallerKey image endpoint is added.
 
+The Renge cover and four-frame waiting animation are presentation only. The
+animation advances every two seconds per frame and respects reduced-motion
+settings, manual pause, and background-tab pause. Browser refresh remains on its
+existing schedule. The server schedules the first upstream status query six
+seconds after the receipt and each ordinary later query six seconds after
+handling the previous response; a valid bounded
+`Retry-After` requesting a longer wait may extend either delay. The shared
+request limit, original execution deadline, and stored wait across restart still
+apply.
+
 Quotes are free previews. Submission atomically reserves both activity
 currencies at the selected per-image price times the requested image count. If
 price or capability changes before acceptance, the caller must review the
@@ -1043,7 +1059,7 @@ lasts 30 days; accounting follows ledger retention and account export schema 11.
 
 `GET /admin/api/alerts` accepts optional `kind` alongside `resolved` and either cursor or numbered pagination. Kind is a closed alert-kind value, including `account_deleted`; cursors are bound to both filters. `POST /admin/api/alerts/resolve` accepts `{"ids":["1","2"]}` with 1–100 distinct positive decimal ID strings. It atomically marks those alerts resolved, preserves previously resolved timestamps, and returns `{"resolved_count":2}`. A missing ID returns 404 without partial writes. All alert routes require an administrator session; writes retain same-origin/CSRF checks.
 
-**Unreleased rc.4 alert detail:** `GET /admin/api/alerts/{id}` returns `{alert,context_version,occurred_facts,targets,current_state,related_logs,resolution_kind}`. This is a read-only detail, with no request body or query. `alert` retains the compatible `kind,message,ref` and resolution fields; the new `context_version` is 1 for a recorded event context or 0 for a legacy row. Each event/current fact is `{key,value}`. A target is `{kind,id,available,status,unavailable_reason?}` and is at most eight per alert; the persisted context is at most 16 KiB. `related_logs` is null or `{endpoint_key_id,from,to,available,unavailable_reason?}` and uses the actual physical endpoint-key ID and an explicit UTC window. `resolution_kind` distinguishes manual, automatic-blacklist, recovered-worker and legacy outcomes when known. Current resource state is separately rechecked and can be unavailable after deletion, loss of authority or log expiry; old references are parsed only when their known format matches exactly. A `ref`, message or upstream string is data, never a navigation URL.
+**Rc.4 alert detail:** `GET /admin/api/alerts/{id}` returns `{alert,context_version,occurred_facts,targets,current_state,related_logs,resolution_kind}`. This is a read-only detail, with no request body or query. `alert` retains the compatible `kind,message,ref` and resolution fields; `context_version` is 1 for a recorded event context or 0 for a legacy row. Each event/current fact is `{key,value}`. A target is `{kind,id,available,status,unavailable_reason?}` and is at most eight per alert; the persisted context is at most 16 KiB. `related_logs` is null or `{endpoint_key_id,from,to,available,unavailable_reason?}` and uses the actual physical endpoint-key ID and an explicit UTC window. `resolution_kind` distinguishes manual, automatic-blacklist, recovered-worker and legacy outcomes when known. Current resource state is separately rechecked and can be unavailable after deletion, loss of authority or log expiry; old references are parsed only when their known format matches exactly. A `ref`, message or upstream string is data, never a navigation URL.
 
 `GET /admin/api/alerts/targets/{kind}/{target_id}` is a separate administrator-only, read-only diagnostic for an **exact** target. The only accepted `kind` values are `issue`, `issue_user`, `fishing_batch` and `rps_session`; `target_id` must be the corresponding valid opaque ID, or a canonical positive user ID for `issue_user`. It accepts no query or body and returns HTTP 200 with `{kind,id,facts,related_issue_ids}` under `no-store`, rechecking administrator authority in the same bounded read transaction. Facts are fixed `{key,value}` safe operational strings: issue state/source/count/times, a fishing batch's retry/settlement stage, or an RPS session's current retry phase or retained terminal summary. `issue_user` returns the projection phase, counts and at most 20 retained issue IDs, **only** when an `issue_projection_incomplete` alert for that user exists. Invalid kind/ID is 400; an absent, expired or unqualified target is 404. No full game inputs, randomness, another player's identity, secret, free-form SQL/URL selector or mutation is exposed. Level-6 stewards have no route to this diagnostic.
 

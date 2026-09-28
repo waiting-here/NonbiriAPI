@@ -55,7 +55,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash, preEmbeddingManifestHash, preBetaFourManifestHash, preRCOneManifestHash, preBlackjackManifestHash, preRandomnessManifestHash, preGatewayPolicyManifestHash, preProgressionManifestHash, preGovernanceManifestHash, preAccountProtectionManifestHash, preAuditScanManifestHash, preInteractionManifestHash, preLevelDeletionManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash, preEmbeddingManifestHash, preBetaFourManifestHash, preRCOneManifestHash, preBlackjackManifestHash, preRandomnessManifestHash, preGatewayPolicyManifestHash, preProgressionManifestHash, preGovernanceManifestHash, preAccountProtectionManifestHash, preAuditScanManifestHash, preInteractionManifestHash, preLevelDeletionManifestHash, preActivityRefinementManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -93,7 +93,9 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest == preLevelDeletionManifestHash {
+	if digest == preActivityRefinementManifestHash {
+		// The immediate predecessor already includes all earlier extensions.
+	} else if digest == preLevelDeletionManifestHash {
 		if _, err := tx.ExecContext(ctx, fatFishLevelDeletionSchema); err != nil {
 			return err
 		}
@@ -212,6 +214,9 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 		if err := applyInteractionExtension(ctx, tx); err != nil {
 			return err
 		}
+	}
+	if err := applyActivityRefinementExtension(ctx, tx); err != nil {
+		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
 		return err
