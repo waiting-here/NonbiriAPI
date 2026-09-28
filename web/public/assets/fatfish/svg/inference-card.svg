@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140" width="320" height="140" role="img">
+<title>推理加速卡</title>
+<defs><linearGradient id="body" x2="0" y2="1"><stop stop-color="#9eaed6"/><stop offset=".45" stop-color="#7289b5"/><stop offset="1" stop-color="#4d608c"/></linearGradient><linearGradient id="rim" x2="1" y2="1"><stop stop-color="#e2eafa"/><stop offset="1" stop-color="#98aac7"/></linearGradient><radialGradient id="fan"><stop stop-color="#7796b6"/><stop offset="1" stop-color="#304863"/></radialGradient></defs>
+<rect x="19" y="27" width="284" height="103" rx="20" fill="#3c536a" opacity=".2"/>
+<path d="M69 109h15v16H69zM91 109h15v16H91zM113 109h15v16h-15zM135 109h15v16h-15zM167 109h15v16h-15zM189 109h15v16h-15zM211 109h15v16h-15zM233 109h15v16h-15z" fill="#e3c485" stroke="#ad8751" stroke-width="2"/>
+<rect x="14" y="12" width="290" height="101" rx="19" fill="url(#body)" stroke="#3e5478" stroke-width="4"/>
+<path d="M32 24H281M28 99H284" stroke="#c7d4ec" stroke-width="3" opacity=".7"/>
+<g stroke="#485f7e" stroke-width="3"><circle cx="86" cy="61" r="37" fill="url(#rim)"/><circle cx="236" cy="61" r="37" fill="url(#rim)"/><circle cx="86" cy="61" r="29" fill="url(#fan)"/><circle cx="236" cy="61" r="29" fill="url(#fan)"/></g>
+<g fill="none" stroke="#91abc7" stroke-width="6" stroke-linecap="round"><path d="M86 61l19-15M86 61l-6-23M86 61l-23-6M86 61l-15 20M86 61l12 22M86 61l25 3M236 61l19-15M236 61l-6-23M236 61l-23-6M236 61l-15 20M236 61l12 22M236 61l25 3"/></g>
+<circle cx="86" cy="61" r="10" fill="#d9e5f0" stroke="#53768e" stroke-width="3"/><circle cx="236" cy="61" r="10" fill="#d9e5f0" stroke="#53768e" stroke-width="3"/>
+<rect x="140" y="41" width="40" height="40" rx="8" fill="#c5d0e6" stroke="#516586" stroke-width="2"/><text x="160" y="67" text-anchor="middle" fill="#4c668b" font-family="sans-serif" font-size="20" font-weight="700">AI</text>
+<circle cx="29" cy="63" r="4" fill="#bbe8cf"/>
+</svg>

@@ -58,6 +58,9 @@ func (s *Service) PreparePlaytest(ctx context.Context, actorID int64, input Play
 	if err = s.expireDueTx(ctx, tx, nowMS); err != nil {
 		return ChallengeView{}, err
 	}
+	if err = availableVersionTx(ctx, tx, input.VersionID); err != nil {
+		return ChallengeView{}, err
+	}
 	version, err := readVersionTx(ctx, tx, input.VersionID)
 	if err != nil {
 		return ChallengeView{}, err

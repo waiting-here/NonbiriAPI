@@ -523,7 +523,7 @@ Administrator-only `/admin/api/games/blackjack/history` and `.../history/{id}` a
 
 `POST /admin/api/games/blackjack/history/export` accepts `{dataset,cursor?}` and returns `{format:"blackjack-history/v1",dataset,items,next_cursor}` in bounded batches of at most 10 records. Clients may save each successful batch as NDJSON and resume only from its returned cursor. Signed cursors expire after one hour and bind the account/session, dataset, limit, endpoint kind, high-water mark and page position. Exporting or reading history does not pause play.
 
-Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export v10 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
+Restart cancels only the unfinished table and refunds original assets, preserving waiters and committed outcomes. Maintenance/closure releases waiters and undealt seats while dealt games finish. Ban stops a seat's actions and auto-stands it. Deletion detaches identity and continues settlement without cancelling other players; unavailable proceeds use the corresponding external asset account and cannot recreate a wallet. Queue game-credit reserves remain part of welfare assets. Account export schema 11 includes `blackjack:{current,history}` and safe per-game `randomness` proofs while retaining all previous fields and existing 10,000-row/16-MiB bounds.
 
 ### 5.9 Loans and leaderboards
 
@@ -556,7 +556,9 @@ Fishing's administrator configuration also controls the probability that a legen
 
 Fat Fish is a session-authenticated limited activity under `/api/limited-activities/fat-fish`; it is not a `/v1/*` API or an ordinary game-center route. Only the environment administrator can edit content under `/admin/api/limited-activities/fat-fish`. Ordinary users and level-5/6 stewards have no editor authority. Mutations use same-origin/CSRF protection, strict JSON, a 22–128-character `Idempotency-Key`, and no query parameters; GETs have no body. A repeated key and identical request return its receipt, while a changed request conflicts. Responses and errors use `no-store` and the shared error envelope.
 
-The play view centers a portrait board with the bundled character and obstacle artwork. Preplaced tools and spare pieces remain fixed until you choose **Start**; then drag pieces from the bench onto the board, or drag placed pieces back to the bench. Keyboard users press **N** to cycle the selection, use the arrow keys to move it, and press **Delete** to return it to the bench. Piece orientation stays fixed.
+The player and level editor share one continuous field-and-workbench space. The editor can place tools within the opening scene or on the surrounding bench. The opening layout stays fixed during preview; after a challenge starts, the player can drag pieces between them. The board preserves its proportions and stays centered, fits narrow screens, and offers optional enlargement and panning.
+
+In the player, press N to cycle tool selection, use arrow keys to move a selected tool, hold Shift for smaller moves, and press Delete to return it to the bench. In the editor, arrow keys move the selection, Shift makes smaller adjustments, Delete or Backspace removes the selected object, Esc clears selection or cancels placement, Ctrl/Command+Z undoes, and Ctrl/Command+Shift+Z redoes. Piece orientation stays fixed. Updated workspace presentation and default geometry for newly added or converted tools do not rewrite already published immutable versions.
 
 | User method and suffix | Request and result |
 | --- | --- |
@@ -580,12 +582,15 @@ Prepare lasts 60 seconds without a charge. Start fixes `start_at_ms` at acceptan
 | `GET /levels`, `/levels/{id}`, `/levels/{id}/versions`, `/versions/{id}`, `/levels/{id}/export` | Drafts, immutable versions and safe JSON export. Collection GETs use only `page` and `{items,page,page_size,has_more}`. |
 | `POST /levels`, `POST /levels/import`, `PUT /levels/{id}` | `{title,description,draft,expected_revision?}`; creation omits the revision, update requires it. JSON draft is bounded and validated as inert content. |
 | `POST /levels/{id}/versions`; `POST /levels/validate` | `{expected_revision}` publishes an immutable version; `{level:<level JSON>}` validates without publishing. |
+| `DELETE /levels/{id}` | `{"expected_revision":"1"}` and required `Idempotency-Key`; returns HTTP 200 `{id,revision,deleted_at}` (deleted_at is Unix seconds). |
 | `GET /periods`, `/periods/{id}`, `/periods/{id}/nodes/{node}`, `/periods/{id}/validate` | Period/node details and publishability/reachability evidence; collection uses `page`. |
 | `POST /periods`, `PUT /periods/{id}` | `{title,description,visible,paused,past_public,starts_at,ends_at,expected_revision?}`; update requires the current revision. |
 | `POST /periods/{id}/nodes`, `PUT /periods/{id}/nodes/{node}` | `{title,description,map_x,map_y,order,version_id,condition,hidden_until_eligible,amounts,expected_revision?,expected_period_revision}`; node update requires its current revision. |
 | `POST /periods/{id}/publish`, `POST /periods/{id}/close`, `POST /periods/{id}/reopen` | `{expected_revision}`; publish checks version playtests, graph reachability and in-progress entitlement. |
 | `GET /playtests?version_id=ffv_…`, `GET /playtests/{id}`; `POST /playtests`, `POST /playtests/{id}/start`, `POST /playtests/{id}/submit` | Version-bound no-charge playtests. The version-filtered list returns at most 100 recent records without pagination. Prepare uses `{version_id,tab_capability_hash}`; start and submit use the same capability and submit body shape as the user challenge. |
 | `POST /challenges/{id}/cancel` | `{reason:"<bounded administrator reason>"}`; explicitly cancels and refunds an unsettled started ticket. |
+
+Deleting a level requires administrator authority, its current revision, and an idempotency key. A stale revision conflicts; an identical replay returns the original receipt. Deletion removes the editable source from the library and prevents new period nodes or playtests from binding its versions. Published immutable versions, existing activity-node references, accepted challenges, and retained scores keep their original versions.
 
 The editor uses General credits only for formal user play; playtests never charge, reward or rank. User unlock/prepare/start/abandon and administrator state/cancel/playtest control bodies are capped at 4 KiB; level create/import/update bodies at 256 KiB + 8 KiB, level validation at 256 KiB + 4 KiB, period bodies at 16 KiB and node bodies at 48 KiB. Submit uses the separate 4 MiB + 1 KiB envelope above. State-change and cancellation results are HTTP 200, as are successful content mutations; an accepted verifying submit is HTTP 202. Validation and admission failures use the shared 400/401/403/404/409/429/503 codes. New periods cannot overwrite an earlier period's progress, and content with formal results cannot be changed in place. Pausing, hiding, maintenance, and normal closing stop new admission as specified by the activity state; they do not silently erase an accepted game's original deadline. Administrator cancellation, ban and administrator/system deletion refund an unsettled ticket; explicit abandon and self-deletion do not. None refunds a past unlock. Terminal summaries and seed commitments expire after 30 days; per-period unlock/progress/best score and once-only reward claims persist for the account lifetime, subject to deletion and the minimum cross-account anti-duplicate reward fact. Full inputs and per-tick replay are never stored server-side.
 
@@ -991,12 +996,48 @@ Decay and protective ban have independent inactive-day thresholds. Positive avai
 
 ## 13. Limited activities and image generation
 
-Existing activities remain permanent activities. Limited activities have separate pages, administrator-only opening/visibility/pause settings and module-specific configuration. Hidden means omitted from the directory, not inaccessible by a known link. An unconfigured opening period means closed. Reopening preserves balances and history.
+Existing activities remain permanent activities. Limited activities have
+separate pages, administrator-only opening, visibility, and pause settings,
+and module-specific configuration. Hidden means omitted from the directory, not
+inaccessible by a known link. An unconfigured opening period means closed.
+Reopening preserves balances and history.
 
-The picture-book activity's exact routes, strict public/private DTOs, declarative adapter, exchange prices, queue limits, billing and recovery rules are documented in [the image activity guide](image-activity.md). Its public models use only local IDs and approved parameters; real model IDs, endpoint, key, internal task identifiers and original failures stay out of ordinary user responses. No CallerKey image endpoint is added.
+The picture-book activity uses a built-in integration for its supported upstream
+image-service specification. Administrators configure the endpoint and key,
+enable or disable discovered models, and set each model's paper and brush
+prices. Model capabilities and supported parameters are discovered
+automatically; the administration API does not accept manual protocol,
+request/response, mapping, or parameter-catalog definitions. Model settings
+use `expected_revision`, `enabled`, and `price`, with optional `pricing` for
+default, tier, and exact width/height prices.
+`GET /admin/api/limited-activities/picture-book/models` exposes read-only
+`capability_readiness`, `capability_issues`, `capability_revision`,
+`pricing_revision`, `parameters`, `combinations`, `size_capability`,
+`catalog_type`, and `missing` facts. `capability_issues` is always a safe
+issue array. Unconfigured capability and pricing revisions are `"0"`;
+unsupported new metadata remains pending. The public
+`GET /api/limited-activities/picture-book/models` response provides local model
+IDs, prices, and automatically supported parameter and size choices. Full
+routes and field behavior are in [the image activity guide](image-activity.md).
+Public models use local identifiers; real model IDs, the endpoint, key,
+internal task identifiers, and original failures stay out of ordinary user
+responses. No CallerKey image endpoint is added.
 
-Submission atomically reserves both activity currencies at per-image price times requested count. Partial successful generation still charges the full accepted task; failure, unknown-result timeout or cancellation before dispatch refunds both currencies. Closing the page is not cancellation. Prompts and execution parameters remain in RAM; lost queued payloads refund after restart, known asynchronous tasks resume queries, and uncertain submissions are never sent twice. Original images have a ten-minute RAM pickup window; successful generation is not refunded if a result is lost or not downloaded. Natural activity end lets accepted tasks finish; manual pause/maintenance cancels undispatched tasks with refunds. Ban/deletion and model withdrawal follow the documented atomic cleanup rules. Safe task history lasts 30 days; accounting follows ledger retention and export v10.
-
+Quotes are free previews. Submission atomically reserves both activity
+currencies at the selected per-image price times the requested image count. If
+price or capability changes before acceptance, the caller must review the
+current quote and revisions. Accepted tasks retain their configuration and
+price snapshots after later settings changes. Partial successful generation
+still charges the full accepted task; failure, unknown-result timeout, or
+cancellation before dispatch refunds both currencies. Closing the page is not
+cancellation. Prompts and execution parameters remain in RAM; lost queued
+payloads refund after restart, known asynchronous tasks resume queries, and
+uncertain submissions are never sent twice. Original images have a ten-minute
+RAM pickup window; successful generation is not refunded if a result is lost or
+not downloaded. Natural activity end lets accepted tasks finish; manual pause
+or maintenance cancels undispatched tasks with refunds. Ban, deletion, and
+model withdrawal follow the documented atomic cleanup rules. Safe task history
+lasts 30 days; accounting follows ledger retention and account export schema 11.
 
 ### Account protection and historical records
 

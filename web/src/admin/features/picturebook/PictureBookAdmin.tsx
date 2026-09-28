@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
@@ -17,10 +17,8 @@ import {
   type CatalogFilter,
   type ModelInput,
 } from './adminApi';
-import { UpstreamForm } from './UpstreamForm';
+import { UpstreamForm, type UpstreamDraftHandle } from './UpstreamForm';
 import { ModelEditor, type ModelDraftHandle } from './ModelEditor';
-import { CapabilityProfilePanel, type ProfileDraftHandle } from './CapabilityProfilePanel';
-import { CapabilityReviewPanel } from './CapabilityReviewPanel';
 import { RecoveryPanel } from './RecoveryPanel';
 import { DiscoveryFailureDiagnostics } from './DiscoveryFailureDiagnostics';
 import { discoveryError } from './discoveryError';
@@ -36,8 +34,15 @@ const Catalog = forwardRef<
   {
     readonly account: string;
     readonly onDirty: (dirty: boolean) => void;
+    readonly onLocked: (locked: boolean) => void;
+    readonly upstreamDirty: boolean;
+    readonly upstreamLocked: boolean;
+    readonly onRefreshed: () => Promise<void>;
   }
->(function Catalog({ account, onDirty }, ref) {
+>(function Catalog(
+  { account, onDirty, onLocked, upstreamDirty, upstreamLocked, onRefreshed },
+  ref,
+) {
   const t = usePictureBookText(),
     client = useQueryClient();
   const [filter, setFilter] = useState<CatalogFilter>({
@@ -64,8 +69,10 @@ const Catalog = forwardRef<
   const [batchResult, setBatchResult] = useState<Awaited<
     ReturnType<typeof saveModelsBatch>
   > | null>(null);
+  const [reloading, setReloading] = useState(false);
+  const completedRefresh = useRef('');
   const batch = useImageOperation('admin', saveModelsBatch);
-  const locked = Object.values(lockedEditors).some(Boolean) || batch.locked;
+  const locked = Object.values(lockedEditors).some(Boolean) || batch.locked || reloading;
   const finishSelection = (model: AdminModel | null) => {
     if (model) setOpenModels((current) => ({ ...current, [model.id]: current[model.id] ?? model }));
     setSelected(model);
@@ -78,28 +85,17 @@ const Catalog = forwardRef<
     }
     finishSelection(model);
   };
-  const anyDirty = Object.values(dirty).some(Boolean);
-  useEffect(() => onDirty(anyDirty), [anyDirty, onDirty]);
-  useImperativeHandle(ref, () => ({
-    saveDrafts: async () => {
-      for (const id of Object.keys(dirty).filter((item) => dirty[item])) {
-        if (!(await editorRefs.current[id]?.saveDraft())) return false;
-      }
-      return true;
-    },
-    discardDrafts: () => {
-      const ids = Object.keys(dirty).filter((id) => dirty[id]);
-      setEpochs((current) => ({
-        ...current,
-        ...Object.fromEntries(ids.map((id) => [id, (current[id] ?? 0) + 1])),
-      }));
-      setDirty((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, false])) }));
-      setPendingSelection(null);
-    },
-  }));
-  const reloadModels = (ids: string[]) => {
-    void Promise.all(ids.map((id) => stationSessionWrite(client, 'admin', () => getAdminModel(id))))
-      .then((fresh) => {
+  const draftDirty = Object.values(dirty).some(Boolean);
+  const reloadModels = useCallback(
+    async (ids: string[]) => {
+      setReloading(true);
+      try {
+        const [fresh] = await Promise.all([
+          Promise.all(
+            ids.map((id) => stationSessionWrite(client, 'admin', () => getAdminModel(id))),
+          ),
+          onRefreshed(),
+        ]);
         setOpenModels((current) => ({
           ...current,
           ...Object.fromEntries(fresh.map((model) => [model.id, model])),
@@ -109,10 +105,20 @@ const Catalog = forwardRef<
           ...current,
           ...Object.fromEntries(ids.map((id) => [id, false])),
         }));
-        void client.invalidateQueries({ queryKey: ['admin', 'picture-book', account, 'models'] });
-      })
-      .catch(setReloadError);
-  };
+        setEpochs((current) => ({
+          ...current,
+          ...Object.fromEntries(ids.map((id) => [id, (current[id] ?? 0) + 1])),
+        }));
+        setReloadError(null);
+        await client.invalidateQueries({ queryKey: ['admin', 'picture-book', account, 'models'] });
+      } catch (error) {
+        setReloadError(error);
+      } finally {
+        setReloading(false);
+      }
+    },
+    [client, account, onRefreshed],
+  );
   const root = ['admin', 'picture-book', account, 'models'] as const;
   const models = useQuery({
     queryKey: [...root, filter],
@@ -144,24 +150,61 @@ const Catalog = forwardRef<
         : 2000,
   });
   const state = operation.data?.state;
+  const refreshActive = reloading || discovery.locked || state === 'queued' || state === 'running';
+  const anyDirty = draftDirty || batch.locked || discovery.locked;
+  useEffect(() => onDirty(anyDirty), [anyDirty, onDirty]);
+  useEffect(() => onLocked(locked || refreshActive), [locked, refreshActive, onLocked]);
+  useImperativeHandle(ref, () => ({
+    saveDrafts: async () => {
+      if (batch.locked || refreshActive) return false;
+      for (const id of Object.keys(dirty).filter((item) => dirty[item])) {
+        if (!(await editorRefs.current[id]?.saveDraft())) return false;
+      }
+      return true;
+    },
+    discardDrafts: () => {
+      if (locked || refreshActive) return;
+      const ids = Object.keys(dirty).filter((id) => dirty[id]);
+      setEpochs((current) => ({
+        ...current,
+        ...Object.fromEntries(ids.map((id) => [id, (current[id] ?? 0) + 1])),
+      }));
+      setDirty((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, false])) }));
+      setPendingSelection(null);
+    },
+  }));
+  const openModelIDs = useRef<string[]>([]);
   useEffect(() => {
-    if (state === 'succeeded') {
-      void client.invalidateQueries({ queryKey: ['admin', 'picture-book', account, 'models'] });
+    openModelIDs.current = Object.keys(openModels);
+  }, [openModels]);
+  useEffect(() => {
+    if (state === 'succeeded' && completedRefresh.current !== operationID) {
+      completedRefresh.current = operationID;
+      void reloadModels(openModelIDs.current);
     }
-  }, [client, account, operationID, state]);
+  }, [operationID, state, onRefreshed, reloadModels]);
   return (
     <div className="picturebook-stack">
       <Card>
         <h2>{t('图像模型目录', 'Image model catalog')}</h2>
         <p>
           {t(
-            '拉取使用已保存的服务地址、密钥和适配配置；修改后请先保存。拉取目录不会自动向用户开放模型，需逐个设置名称、价格和支持参数。',
-            'Discovery uses the saved URL, key and adapter settings; save edits first. Refreshing does not expose models to users. Set their display names, prices and supported parameters before enabling them.',
+            '拉取使用已保存的服务地址和密钥，支持参数与尺寸自动配置。选择模型、填写价格后即可开放；刷新会保留已有价格和开放状态，不会自动开放新模型。',
+            'Discovery uses the saved URL and key and automatically configures supported parameters and sizes. Choose a model, set prices and enable it. Refreshing preserves prices and availability and does not enable new models.',
           )}
         </p>
         <button
           className="btn btn-primary"
-          disabled={discovery.pending || state === 'queued' || state === 'running'}
+          disabled={
+            discovery.pending ||
+            reloading ||
+            state === 'queued' ||
+            state === 'running' ||
+            locked ||
+            draftDirty ||
+            upstreamDirty ||
+            upstreamLocked
+          }
           onClick={() => {
             if (!discovery.uncertain) setOperationID('');
             void discovery.run(discovery.input ?? {}, (result) => {
@@ -176,6 +219,14 @@ const Catalog = forwardRef<
               ? t('重新拉取模型目录', 'Start a new model refresh')
               : t('拉取模型目录', 'Refresh model catalog')}
         </button>
+        {draftDirty || upstreamDirty ? (
+          <p role="status">
+            {t(
+              '请先保存或放弃草稿，再刷新模型目录。',
+              'Save or discard drafts before refreshing the model catalog.',
+            )}
+          </p>
+        ) : null}
         {discovery.uncertain ? (
           <p role="status">
             {t(
@@ -211,8 +262,8 @@ const Catalog = forwardRef<
             {state === 'succeeded'
               ? operation.data.model_count === 0
                 ? t(
-                    '服务返回了空模型目录。请核对服务地址和模型目录字段路径。',
-                    'The service returned an empty catalog. Check the service URL and discovery field paths.',
+                    '服务返回了空模型目录。请核对服务地址，或稍后再刷新。',
+                    'The service returned an empty catalog. Check the service URL or refresh again later.',
                   )
                 : t('目录已更新，模型数：', 'Catalog updated. Models: ') +
                   operation.data.model_count
@@ -307,7 +358,7 @@ const Catalog = forwardRef<
           <label>
             {t('选择要配置的模型', 'Choose a model to configure')}
             <select
-              disabled={locked}
+              disabled={locked || refreshActive || upstreamLocked}
               value={selected?.id ?? ''}
               onChange={(event) =>
                 selectModel(
@@ -358,7 +409,9 @@ const Catalog = forwardRef<
               <button
                 className="btn btn-secondary"
                 type="button"
+                disabled={locked || refreshActive || upstreamLocked}
                 onClick={() => {
+                  if (locked || refreshActive || upstreamLocked) return;
                   if (selected) {
                     setEpochs((current) => ({
                       ...current,
@@ -387,7 +440,12 @@ const Catalog = forwardRef<
                 <input
                   type="checkbox"
                   checked={batchIDs.includes(model.id)}
-                  disabled={locked || (!batchIDs.includes(model.id) && batchIDs.length >= 50)}
+                  disabled={
+                    locked ||
+                    refreshActive ||
+                    upstreamLocked ||
+                    (!batchIDs.includes(model.id) && batchIDs.length >= 50)
+                  }
                   onChange={(event) => {
                     setBatchResult(null);
                     if (event.target.checked) {
@@ -415,6 +473,10 @@ const Catalog = forwardRef<
               disabled={
                 !batchIDs.length ||
                 batch.pending ||
+                refreshActive ||
+                upstreamLocked ||
+                upstreamDirty ||
+                Object.values(lockedEditors).some(Boolean) ||
                 (!batch.uncertain && batchIDs.some((id) => !drafts[id]))
               }
               onClick={() => {
@@ -424,7 +486,8 @@ const Catalog = forwardRef<
                     : { models: batchIDs.map((id) => ({ id, input: drafts[id]! })) };
                 void batch.run(input, (result) => {
                   setBatchResult(result);
-                  if (result.applied) reloadModels(result.receipts.map((receipt) => receipt.id));
+                  if (result.applied)
+                    void reloadModels(result.receipts.map((receipt) => receipt.id));
                 });
               }}
             >
@@ -488,21 +551,14 @@ const Catalog = forwardRef<
           {selected ? (
             <button
               className="btn btn-secondary"
-              disabled={locked || models.isFetching}
+              disabled={locked || refreshActive || upstreamLocked || models.isFetching}
               onClick={async () => {
-                try {
-                  setReloadError(null);
-                  const fresh = await stationSessionWrite(client, 'admin', () =>
-                    getAdminModel(selected.id),
-                  );
-                  setSelected(fresh);
-                  setOpenModels((current) => ({ ...current, [fresh.id]: fresh }));
-                } catch (error) {
-                  setReloadError(error);
-                }
+                await reloadModels([selected.id]);
               }}
             >
-              {t('重新读取选中模型', 'Reload selected model')}
+              {dirty[selected.id]
+                ? t('放弃草稿并重新读取模型', 'Discard draft and reload model')
+                : t('重新读取选中模型', 'Reload selected model')}
             </button>
           ) : null}
         </div>
@@ -516,6 +572,9 @@ const Catalog = forwardRef<
             }}
             key={model.id + ':' + model.revision + ':' + (epochs[model.id] ?? 0)}
             value={model}
+            disabled={
+              batch.locked || refreshActive || upstreamLocked || upstreamDirty || !!reloadError
+            }
             onLocked={(value) =>
               setLockedEditors((current) =>
                 current[model.id] === value ? current : { ...current, [model.id]: value },
@@ -533,7 +592,7 @@ const Catalog = forwardRef<
             }
             onSaved={(receipt) => {
               setReloadError(null);
-              reloadModels([receipt.id]);
+              void reloadModels([receipt.id]);
               if (pendingSelection) {
                 finishSelection(pendingSelection.model);
               }
@@ -541,17 +600,6 @@ const Catalog = forwardRef<
           />
         </div>
       ))}
-      {selected ? (
-        <>
-          <CapabilityReviewPanel
-            account={account}
-            model={selected}
-            onApplied={(id) => {
-              reloadModels([id]);
-            }}
-          />
-        </>
-      ) : null}
     </div>
   );
 });
@@ -560,11 +608,13 @@ export function AdminContent({ account }: { readonly account: string }) {
     key = ['admin', 'picture-book', account, 'upstream'] as const;
   const t = usePictureBookText();
   const catalogRef = useRef<CatalogDraftHandle>(null);
-  const profileRef = useRef<ProfileDraftHandle>(null);
+  const upstreamRef = useRef<UpstreamDraftHandle>(null);
   const [modelDirty, setModelDirty] = useState(false);
-  const [profileDirty, setProfileDirty] = useState(false);
+  const [upstreamDirty, setUpstreamDirty] = useState(false);
+  const [modelLocked, setModelLocked] = useState(false);
+  const [upstreamLocked, setUpstreamLocked] = useState(false);
   const [savingDrafts, setSavingDrafts] = useState(false);
-  const anyDirty = modelDirty || profileDirty;
+  const anyDirty = modelDirty || upstreamDirty;
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       anyDirty &&
@@ -584,15 +634,15 @@ export function AdminContent({ account }: { readonly account: string }) {
     if (savingDrafts) return;
     setSavingDrafts(true);
     try {
-      if (profileDirty && !(await profileRef.current?.saveDraft())) return;
       if (modelDirty && !(await catalogRef.current?.saveDrafts())) return;
+      if (upstreamDirty && !(await upstreamRef.current?.saveDraft())) return;
       if (blocker.state === 'blocked') blocker.proceed();
     } finally {
       setSavingDrafts(false);
     }
   };
   const discardAndLeave = () => {
-    if (profileDirty) profileRef.current?.discardDraft();
+    if (upstreamDirty) upstreamRef.current?.discardDraft();
     if (modelDirty) catalogRef.current?.discardDrafts();
     if (blocker.state === 'blocked') blocker.proceed();
   };
@@ -602,6 +652,11 @@ export function AdminContent({ account }: { readonly account: string }) {
     refetchOnWindowFocus: false,
     retry: false,
   });
+  const refetchUpstream = upstream.refetch;
+  const onRefreshed = useCallback(async () => {
+    const result = await refetchUpstream();
+    if (result.error) throw result.error;
+  }, [refetchUpstream]);
   return (
     <div className="picturebook-stack">
       {blocker.state === 'blocked' ? (
@@ -625,7 +680,7 @@ export function AdminContent({ account }: { readonly account: string }) {
               <button
                 className="btn btn-secondary"
                 type="button"
-                disabled={savingDrafts}
+                disabled={savingDrafts || modelLocked || upstreamLocked}
                 onClick={discardAndLeave}
               >
                 {t('放弃草稿并离开', 'Discard drafts and leave')}
@@ -649,8 +704,12 @@ export function AdminContent({ account }: { readonly account: string }) {
       ) : null}
       {upstream.data ? (
         <UpstreamForm
+          ref={upstreamRef}
           key={upstream.data.revision}
           value={upstream.data}
+          onDirty={setUpstreamDirty}
+          onLocked={setUpstreamLocked}
+          disabled={modelDirty || modelLocked || upstream.isFetching || upstream.isError}
           onSaved={() => {
             void client.invalidateQueries({ queryKey: key });
             void client.invalidateQueries({
@@ -665,12 +724,15 @@ export function AdminContent({ account }: { readonly account: string }) {
       ) : null}
       {upstream.data?.configured ? (
         <>
-          <CapabilityProfilePanel ref={profileRef} account={account} onDirty={setProfileDirty} />
           <Catalog
             ref={catalogRef}
             key={upstream.data.control?.id}
             account={account}
             onDirty={setModelDirty}
+            onLocked={setModelLocked}
+            upstreamDirty={upstreamDirty}
+            upstreamLocked={upstreamLocked || upstream.isFetching || upstream.isError}
+            onRefreshed={onRefreshed}
           />
         </>
       ) : null}

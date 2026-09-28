@@ -1,20 +1,36 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import {
+  test,
+  expect,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import type { ImageTask } from '../../src/shared/picturebook/publicTypes';
 import type { SizeCapability } from '../../src/shared/picturebook/capabilities';
+import type { AdminModel } from '../../src/admin/features/picturebook/adminApi';
 
 interface FixtureState {
   user_url: string;
   admin_url: string;
   control_url: string;
   control_token: string;
-  users: { id: string; level: number; cookie: { Name: string; Value: string } }[];
+  users: {
+    id: string;
+    level: number;
+    cookie: { Name: string; Value: string };
+  }[];
   admin_cookie: { Name: string; Value: string };
   private_markers: string[];
+  model_id: string;
 }
 const base = '/api/limited-activities/picture-book';
+const adminBase = '/admin/api/limited-activities/picture-book';
+const modelName = 'Browser canvas <svg onload=alert(1)> is plain text.';
+const modelDescription = '<img src=x onerror=alert(1)> is displayed as text.';
 const statePath = process.env.NONBIRI_IMAGE_BROWSER_STATE!;
 function fixture(): FixtureState {
   return JSON.parse(readFileSync(statePath, 'utf8')) as FixtureState;
@@ -23,7 +39,9 @@ async function context(browser: Browser, index = 0, language = 'en', admin = fal
   const state = fixture();
   const origin = admin ? state.admin_url : state.user_url;
   const cookie = admin ? state.admin_cookie : state.users[index].cookie;
-  const result = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const result = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+  });
   await result.addCookies([
     {
       name: cookie.Name,
@@ -52,7 +70,10 @@ async function api(
   return context.request.fetch(origin + path, {
     method,
     data,
-    headers: { Origin: origin, 'Idempotency-Key': randomBytes(16).toString('base64url') },
+    headers: {
+      Origin: origin,
+      'Idempotency-Key': randomBytes(16).toString('base64url'),
+    },
   });
 }
 async function control(context: BrowserContext, action: string, data = {}) {
@@ -77,7 +98,7 @@ async function waitTask(context: BrowserContext, id: string, status: ImageTask['
   return task(context, id);
 }
 async function submit(page: Page, prompt: string, n: number): Promise<ImageTask> {
-  await page.getByLabel('Prompt', { exact: false }).fill(prompt);
+  await page.getByRole('textbox', { name: /^Prompt/ }).fill(prompt);
   await page.getByLabel('Image count').fill(String(n));
   const receipt = page.waitForResponse(
     (response) =>
@@ -122,14 +143,14 @@ function privacy(page: Page) {
   };
 }
 
-async function chooseLinkedSize(page: Page, mode: SizeCapability['mode']) {
+async function chooseLinkedSize(page: Page | Locator, mode: SizeCapability['mode']) {
   if (mode === 'width_height') {
     await page.getByLabel('Width', { exact: true }).fill('1024');
     await page.getByLabel('Height', { exact: true }).fill('768');
   } else {
     await page.getByLabel('Aspect ratio', { exact: true }).selectOption('4:3');
-    if (mode !== 'ratio_size_map')
-      await page.getByLabel('Resolution', { exact: true }).selectOption('standard');
+    const resolution = page.getByLabel('Resolution', { exact: true });
+    if (await resolution.count()) await resolution.selectOption('standard');
   }
 }
 
@@ -148,14 +169,84 @@ test('real queue cancellation and partial success retain exact accounting and br
       page.getByText('<img src=x onerror=alert(1)> is displayed as text.'),
     ).toBeVisible();
     expect(await page.locator('img[src="x"]').count()).toBe(0);
-    await page.getByLabel('Width', { exact: true }).fill('112');
-    await page.getByLabel('Height', { exact: true }).fill('176');
+    await page.getByLabel('Width', { exact: true }).fill('288');
+    await page.getByLabel('Height', { exact: true }).fill('400');
+    const acceptedRequest = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname === base + '/tasks' && request.method() === 'POST',
+    );
     const held = await submit(page, 'hold private-browser-prompt', 1);
     await waitTask(user, held.id, 'running');
+    const request = await acceptedRequest;
+    const beforeReplay = await control(user, 'stats');
+    const replay = await user.request.post(fixture().user_url + base + '/tasks', {
+      data: request.postDataJSON(),
+      headers: {
+        Origin: fixture().user_url,
+        'Idempotency-Key': request.headers()['idempotency-key'],
+      },
+    });
+    expect(replay.status()).toBe(200);
+    expect((await replay.json()).task.id).toBe(held.id);
+    expect((await control(user, 'stats')).submissions).toBe(beforeReplay.submissions);
+    const conflict = await user.request.post(fixture().user_url + base + '/tasks', {
+      data: { ...request.postDataJSON(), prompt: 'changed replay prompt' },
+      headers: {
+        Origin: fixture().user_url,
+        'Idempotency-Key': request.headers()['idempotency-key'],
+      },
+    });
+    expect(conflict.status()).toBe(409);
     const queued = await submit(page, 'success queued private-browser-prompt', 2);
     expect(queued.charge).toEqual({ paper: '4', brush: '2' });
+    const admin = await context(browser, 0, 'en', true);
+    try {
+      const current = await (
+        await api(admin, adminBase + '/models/' + fixture().model_id, 'GET', undefined, true)
+      ).json();
+      const repriced = await api(
+        admin,
+        adminBase + '/models/' + current.id,
+        'PUT',
+        {
+          expected_revision: current.revision,
+          enabled: true,
+          price: { paper: '7', brush: '3' },
+        },
+        true,
+      );
+      expect(repriced.status()).toBe(200);
+      expect((await task(user, queued.id)).charge).toEqual({
+        paper: '4',
+        brush: '2',
+      });
+      expect((await task(user, held.id)).charge).toEqual({
+        paper: '2',
+        brush: '1',
+      });
+      const receipt = await repriced.json();
+      expect(
+        (
+          await api(
+            admin,
+            adminBase + '/models/' + current.id,
+            'PUT',
+            {
+              expected_revision: receipt.revision,
+              enabled: true,
+              price: { paper: '2', brush: '1' },
+            },
+            true,
+          )
+        ).status(),
+      ).toBe(200);
+    } finally {
+      await admin.close();
+    }
     await expect(
-      details(page).getByRole('button', { name: 'Cancel and refund reservation' }),
+      details(page).getByRole('button', {
+        name: 'Cancel and refund reservation',
+      }),
     ).toBeVisible();
     const queue = await (await api(other, base + '/queue')).json();
     expect(queue.own).toEqual([]);
@@ -169,6 +260,8 @@ test('real queue cancellation and partial success retain exact accounting and br
     await control(user, 'release');
     await control(user, 'advance', { seconds: 30 });
     await waitTask(user, held.id, 'succeeded');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Create images' })).toBeVisible();
     const partial = await submit(page, 'partial private-browser-prompt', 4);
     expect(partial.charge).toEqual({ paper: '8', brush: '4' });
     await control(user, 'advance', { seconds: 5 });
@@ -213,7 +306,10 @@ test('real queue cancellation and partial success retain exact accounting and br
     });
     expect(
       await page.evaluate(() =>
-        JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+        JSON.stringify({
+          local: { ...localStorage },
+          session: { ...sessionStorage },
+        }),
       ),
     ).not.toContain('private-browser-prompt');
     await checkPrivacy();
@@ -258,7 +354,7 @@ test('real close and restart restore known work, refund lost queue memory and ne
     );
     page = await user.newPage();
     await page.goto(fixture().user_url + '/activities/picture-book');
-    await expect(page.getByLabel('Prompt', { exact: false })).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: /^Prompt/ })).toHaveValue('');
     await expect(page.getByText(/service restarted; queued tasks were refunded/i)).toHaveCount(0);
     const failed = await submit(page, 'fail private-browser-prompt', 2);
     await control(user, 'advance', { seconds: 5 });
@@ -267,7 +363,9 @@ test('real close and restart restore known work, refund lost queue memory and ne
     expect(failure.refund).toEqual({ paper: '4', brush: '2' });
     expect(failure.charge).toEqual({ paper: '0', brush: '0' });
     await expect(details(page).getByText('4 paper + 2 brushes', { exact: true })).toBeVisible();
-    const wallet = (await (await api(user, base + '/wallet')).json()) as { sketch_paper: string };
+    const wallet = (await (await api(user, base + '/wallet')).json()) as {
+      sketch_paper: string;
+    };
     expect(BigInt(wallet.sketch_paper)).toBeGreaterThan(0n);
     await expect(
       page
@@ -288,32 +386,81 @@ test('real administrator editor and narrow bilingual user pages preserve role an
     const page = await admin.newPage();
     await page.goto(fixture().admin_url + '/limited-activities');
     await expect(page.getByRole('heading', { name: 'Image generation service' })).toBeVisible();
-    const model = (
-      await (
-        await api(
-          admin,
-          '/admin/api/limited-activities/picture-book/models',
-          'GET',
-          undefined,
-          true,
-        )
-      ).json()
-    ).data[0] as { id: string };
+    const model = await (
+      await api(admin, adminBase + '/models/' + fixture().model_id, 'GET', undefined, true)
+    ).json();
     await page.getByLabel('Choose a model to configure').selectOption(model.id);
-    await expect(page.getByLabel('Public display name')).toHaveValue('Browser canvas');
-    await page
-      .getByLabel('Public description')
-      .fill('<svg onload=alert(1)> is plain description text.');
+    const editor = page
+      .getByRole('heading', { name: 'Model availability and pricing' })
+      .locator('..');
+    await expect(editor.getByText(modelName, { exact: true })).toBeVisible();
+    await expect(editor.getByText(modelDescription, { exact: true })).toBeVisible();
+    expect(await page.locator('svg[onload], img[src="x"]').count()).toBe(0);
+    await expect(
+      page.getByLabel(/Public display name|Public description|JSON|catalog_type_pointer/),
+    ).toHaveCount(0);
+    await editor.getByLabel('Sketch paper per image').fill('3');
     const saved = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname.endsWith('/models/' + model.id) &&
         response.request().method() === 'PUT',
     );
     await page.getByRole('button', { name: 'Save model settings' }).click();
-    expect((await saved).status()).toBe(200);
-    await expect(page.getByLabel('Public description')).toHaveValue(
-      '<svg onload=alert(1)> is plain description text.',
-    );
+    const receipt = await saved;
+    expect(receipt.status()).toBe(200);
+    expect(Object.keys(receipt.request().postDataJSON()).sort()).toEqual([
+      'enabled',
+      'expected_revision',
+      'price',
+      'pricing',
+    ]);
+    await expect(editor.getByLabel('Sketch paper per image')).toBeEnabled();
+    const current = await (
+      await api(admin, adminBase + '/models/' + model.id, 'GET', undefined, true)
+    ).json();
+    expect(current.description).toBe(modelDescription);
+    expect(current.display_name).toBe(modelName);
+    expect(current.price).toEqual({ paper: '3', brush: '1' });
+    expect(
+      (
+        await api(
+          admin,
+          adminBase + '/models/' + model.id,
+          'PUT',
+          {
+            expected_revision: current.revision,
+            enabled: true,
+            price: current.price,
+            parameters: [],
+          },
+          true,
+        )
+      ).status(),
+    ).toBe(400);
+    const upstream = await (
+      await api(admin, adminBase + '/upstream', 'GET', undefined, true)
+    ).json();
+    expect(
+      (
+        await api(
+          admin,
+          adminBase + '/upstream',
+          'PUT',
+          {
+            expected_revision: upstream.revision,
+            base_url: upstream.base_url,
+            secret: { mode: 'keep' },
+            adapter: {},
+          },
+          true,
+        )
+      ).status(),
+    ).toBe(400);
+    expect(
+      (
+        await api(admin, adminBase + '/upstream/capability-profile', 'GET', undefined, true)
+      ).status(),
+    ).toBe(404);
     await page.screenshot({
       path: join(dirname(statePath), 'admin-settings-en.png'),
       fullPage: true,
@@ -329,13 +476,16 @@ test('real administrator editor and narrow bilingual user pages preserve role an
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(fixture().user_url + '/activities/picture-book');
       await expect(page.getByRole('heading', { name: '创作图片' })).toBeVisible();
-      await expect(
-        page.getByText('<svg onload=alert(1)> is plain description text.'),
-      ).toBeVisible();
-      expect(await page.locator('svg[onload]').count()).toBe(0);
-      await page.getByLabel('提示词', { exact: false }).focus();
+      await expect(page.getByText(modelDescription, { exact: true })).toBeVisible();
+      await expect(page.locator('select option:checked').filter({ hasText: modelName })).toHaveText(
+        modelName,
+      );
+      expect(await page.locator('svg[onload], img[src="x"]').count()).toBe(0);
+      await page.getByRole('textbox', { name: /^提示词/ }).focus();
       await page.keyboard.type('keyboard-only prompt');
-      await expect(page.getByLabel('提示词', { exact: false })).toHaveValue('keyboard-only prompt');
+      await expect(page.getByRole('textbox', { name: /^提示词/ })).toHaveValue(
+        'keyboard-only prompt',
+      );
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
       ).toBe(true);
@@ -366,7 +516,6 @@ test('real linked size editors preserve drafts and quote all four modes without 
 }) => {
   const admin = await context(browser, 0, 'en', true);
   const user = await context(browser);
-  const adminBase = '/admin/api/limited-activities/picture-book';
   try {
     const page = await admin.newPage();
     const userPage = await user.newPage();
@@ -377,86 +526,51 @@ test('real linked size editors preserve drafts and quote all four modes without 
     page.on('request', (request) => {
       if (request.method() !== 'GET') writes.push(new URL(request.url()).pathname);
     });
-    const models = await (await api(admin, adminBase + '/models', 'GET', undefined, true)).json();
-    const model = models.data[0] as { id: string };
-    const parameters = [
-      {
-        key: 'prompt',
-        supported: true,
-        required: true,
-        type: 'string',
-        min_length: 1,
-        max_length: 65536,
-        length_unit: 'utf8_bytes',
-      },
-      {
-        key: 'n',
-        supported: true,
-        required: false,
-        type: 'integer',
-        minimum: 1,
-        maximum: 4,
-        default: 1,
-      },
-      ...['size', 'aspect_ratio', 'resolution'].map((key) => ({
-        key,
-        supported: true,
-        required: false,
-        type: 'string',
-        length_unit: 'utf8_bytes',
-      })),
-    ];
-    const mapping = {
-      model_pointer: '/model',
-      parameters: {
-        prompt: '/prompt',
-        n: '/n',
-        size: '/canvas',
-        aspect_ratio: '/ratio',
-        resolution: '/resolution',
-      },
-      constants: [],
-    };
-    const capabilities: SizeCapability[] = [
-      {
-        mode: 'resolution_ratio_grid',
-        combinations: [
-          { ratio: '4:3', resolution: 'standard', width: 1024, height: 768, tier: 'standard' },
-        ],
-      },
-      {
-        mode: 'ratio_size_map',
-        combinations: [{ ratio: '4:3', width: 1024, height: 768, tier: 'standard' }],
-      },
-      {
-        mode: 'ratio_resolution',
-        combinations: [{ ratio: '4:3', resolution: 'standard', tier: 'standard' }],
-      },
-      {
-        mode: 'width_height',
-        width: { minimum: 256, maximum: 2048, step: 256 },
-        height: { minimum: 256, maximum: 2048, step: 256 },
-      },
-    ];
+    const models = (await (await api(admin, adminBase + '/models', 'GET', undefined, true)).json())
+      .data as AdminModel[];
+    expect(models).toHaveLength(5);
+    const model = models.find((item) => item.id === fixture().model_id)!;
+    const beforeIDs = models.map((item) => item.id).sort();
     await page.goto(fixture().admin_url + '/limited-activities');
-    await page.getByLabel('Choose a model to configure').selectOption(model.id);
-    for (const [index, capability] of capabilities.entries()) {
-      await page.setViewportSize({ width: index % 2 ? 390 : 1280, height: 900 });
-      await page.getByLabel('Parameter rules JSON').fill(JSON.stringify(parameters));
-      await page.getByLabel('Model-specific field mapping JSON').fill(JSON.stringify(mapping));
-      await page
-        .getByLabel('Linked size capability JSON (null if unknown)')
-        .fill(JSON.stringify(capability));
-      await page.getByText('Size tiers and exact-size prices', { exact: true }).click();
-      await page
-        .getByLabel('Per-image tier prices JSON')
-        .fill(JSON.stringify([{ tier: 'standard', paper: '4', brush: '2' }]));
-      await page
-        .getByLabel('Per-image width and height prices JSON')
-        .fill(JSON.stringify([{ width: 1024, height: 768, paper: '7', brush: '3' }]));
+    const editor = page
+      .getByRole('heading', { name: 'Model availability and pricing' })
+      .locator('..');
+    for (const [index, model] of models.entries()) {
+      const capability = model.size_capability!;
+      const hasTier = capability.combinations?.some((row) => row.tier === 'standard') ?? false;
+      await page.setViewportSize({
+        width: index % 2 ? 390 : 1280,
+        height: 900,
+      });
+      await page.getByLabel('Choose a model to configure').selectOption(model.id);
+      await expect(editor.getByText(model.display_name, { exact: true })).toBeVisible();
+      await expect(page.getByLabel(/JSON|catalog_type_pointer/)).toHaveCount(0);
+      await editor.getByLabel('Sketch paper per image').fill('2');
+      await editor.getByLabel('Brushes per image', { exact: true }).fill('1');
+      await editor.getByLabel('Make this model available').check();
+      if (hasTier) {
+        await page.getByRole('button', { name: 'Add tier price', exact: true }).click();
+        await editor.getByLabel('Tier sketch paper 1').fill('4');
+        await editor.getByLabel('Tier brushes 1').fill('2');
+      } else
+        await expect(
+          page.getByRole('button', { name: 'Add tier price', exact: true }),
+        ).toBeDisabled();
+      await page.getByRole('button', { name: 'Add size price', exact: true }).click();
+      await editor.getByLabel('Price width 1').fill('1024');
+      await editor.getByLabel('Price height 1').fill('768');
+      await editor.getByLabel('Size sketch paper 1').fill('7');
+      await editor.getByLabel('Size brushes 1').fill('3');
+      await editor.getByText('Try parameters and prices (no charge)', { exact: true }).click();
+      if (capability.mode === 'resolution_ratio_grid') {
+        await expect(editor.getByLabel('Aspect ratio', { exact: true })).toHaveValue('4:3');
+        await expect(
+          editor.getByLabel('Resolution', { exact: true }).locator('option'),
+        ).toHaveCount(1);
+      }
       await page.getByRole('textbox', { name: /^Prompt/ }).fill('Synthetic no-charge preview');
-      await page.getByLabel('Image count').fill('2');
-      await chooseLinkedSize(page, capability.mode);
+      await editor.getByLabel('Image count').fill('2');
+      await chooseLinkedSize(editor, capability.mode);
       const checked = page.waitForResponse(
         (response) => new URL(response.url()).pathname === adminBase + '/models/check',
       );
@@ -466,11 +580,21 @@ test('real linked size editors preserve drafts and quote all four modes without 
       const check = await checkResponse.json();
       expect(check.valid, JSON.stringify(check.issues)).toBe(true);
       const price =
-        capability.mode === 'ratio_resolution'
-          ? { paper: '8', brush: '4' }
-          : { paper: '14', brush: '6' };
+        capability.mode !== 'ratio_resolution'
+          ? { paper: '14', brush: '6' }
+          : hasTier
+            ? { paper: '8', brush: '4' }
+            : { paper: '4', brush: '2' };
       expect(check.quote.total).toEqual(price);
-      expect(check.quote.basis).toBe(capability.mode === 'ratio_resolution' ? 'tier' : 'size');
+      expect(check.quote.basis).toBe(
+        capability.mode !== 'ratio_resolution' ? 'size' : hasTier ? 'tier' : 'default',
+      );
+      if (
+        capability.mode === 'ratio_size_map' ||
+        (capability.mode === 'ratio_resolution' && !hasTier)
+      )
+        expect(check.effective_parameters).not.toHaveProperty('resolution');
+      else if (hasTier) expect(check.effective_parameters.resolution).toBe('standard');
       const saved = page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === adminBase + '/models/' + model.id &&
@@ -482,22 +606,46 @@ test('real linked size editors preserve drafts and quote all four modes without 
           response.request().method() === 'GET',
       );
       await page.getByRole('button', { name: 'Save model settings', exact: true }).click();
-      expect((await saved).status()).toBe(200);
+      const receipt = await saved;
+      expect(receipt.status()).toBe(200);
+      expect(Object.keys(receipt.request().postDataJSON()).sort()).toEqual([
+        'enabled',
+        'expected_revision',
+        'price',
+        'pricing',
+      ]);
       const accepted = await (await reread).json();
       expect(accepted.size_capability).toEqual(capability);
+      expect(accepted.capability_readiness).toBe('ready');
+      expect(accepted.capability_issues).toEqual([]);
+      expect(
+        accepted.parameter_capabilities.every(
+          (entry: { source: string }) => entry.source === 'discovered',
+        ),
+      ).toBe(true);
+      expect(accepted.display_name).toBe(model.display_name);
+      expect(accepted.description).toBe(model.description);
       await expect(
         page.getByRole('button', { name: 'Save model settings', exact: true }),
       ).toBeEnabled();
-      await userPage.setViewportSize({ width: index % 2 ? 1280 : 390, height: 844 });
+      await userPage.setViewportSize({
+        width: index % 2 ? 1280 : 390,
+        height: 844,
+      });
       await userPage.goto(fixture().user_url + '/activities/picture-book');
+      await userPage.getByRole('combobox', { name: /^Image model/ }).selectOption(model.id);
       await userPage.getByRole('textbox', { name: /^Prompt/ }).fill('Synthetic no-charge preview');
       await userPage.getByLabel('Image count').fill('2');
       await chooseLinkedSize(userPage, capability.mode);
       await expect(
-        userPage.getByText(`${price.paper} paper + ${price.brush} brushes`, { exact: true }),
+        userPage.getByText(`${price.paper} paper + ${price.brush} brushes`, {
+          exact: true,
+        }),
       ).toBeVisible();
       const quote = await api(user, base + '/quote', 'POST', {
         model_id: model.id,
+        expected_model_revision: accepted.revision,
+        expected_pricing_revision: accepted.pricing_revision,
         ...check.effective_parameters,
       });
       expect(quote.status()).toBe(200);
@@ -507,28 +655,88 @@ test('real linked size editors preserve drafts and quote all four modes without 
       ).toBe(true);
     }
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.getByLabel('catalog_type_pointer').fill('/kind');
-    await page.getByLabel('Public display name').fill('Saved browser canvas');
+    await page.getByLabel('Choose a model to configure').selectOption(model.id);
+    await expect(editor.getByText(model.display_name, { exact: true })).toBeVisible();
+    await editor.getByLabel('Sketch paper per image').fill('6');
     await page.locator('a[href="/"]').first().click();
     await expect(page.getByRole('button', { name: 'Save and leave' })).toBeVisible();
     await page.getByRole('button', { name: 'Continue editing' }).click();
-    await expect(page.getByLabel('Public display name')).toHaveValue('Saved browser canvas');
+    await expect(editor.getByLabel('Sketch paper per image')).toHaveValue('6');
     await page.locator('a[href="/"]').first().click();
     await page.getByRole('button', { name: 'Save and leave' }).click();
     await expect(page).toHaveURL(fixture().admin_url + '/');
     const savedModel = await (
       await api(admin, adminBase + '/models/' + model.id, 'GET', undefined, true)
     ).json();
-    expect(savedModel.display_name).toBe('Saved browser canvas');
-    const savedProfile = await (
-      await api(admin, adminBase + '/upstream/capability-profile', 'GET', undefined, true)
+    expect(savedModel.price).toEqual({ paper: '6', brush: '1' });
+    expect(savedModel.display_name).toBe(modelName);
+    expect(savedModel.description).toBe(modelDescription);
+    const second = await (
+      await api(
+        admin,
+        adminBase + '/models/' + models.find((item) => item.id !== model.id)!.id,
+        'GET',
+        undefined,
+        true,
+      )
     ).json();
-    expect(savedProfile.profile.catalog_type_pointer).toBe('/kind');
+    const changes = [savedModel, second].map((item) => ({
+      id: item.id,
+      input: {
+        expected_revision: item.revision,
+        enabled: true,
+        price: { paper: '8', brush: '1' },
+        pricing: { ...item.pricing, default: { paper: '8', brush: '1' } },
+      },
+    }));
+    const rejected = await api(
+      admin,
+      adminBase + '/models/batch',
+      'POST',
+      {
+        models: [
+          changes[0],
+          {
+            ...changes[1],
+            input: { ...changes[1].input, expected_revision: '999999' },
+          },
+        ],
+      },
+      true,
+    );
+    expect(rejected.status()).toBe(200);
+    const rejection = await rejected.json();
+    expect(rejection.applied).toBe(false);
+    expect(rejection.receipts).toEqual([]);
+    for (const unchanged of [savedModel, second]) {
+      const current = await (
+        await api(admin, adminBase + '/models/' + unchanged.id, 'GET', undefined, true)
+      ).json();
+      expect(current.revision).toBe(unchanged.revision);
+      expect(current.pricing).toEqual(unchanged.pricing);
+    }
+    const batch = await api(admin, adminBase + '/models/batch', 'POST', { models: changes }, true);
+    expect(batch.status()).toBe(200);
+    const batchReceipt = await batch.json();
+    expect(batchReceipt.applied).toBe(true);
+    expect(batchReceipt.receipts).toHaveLength(2);
+    for (const change of changes) {
+      const current = await (
+        await api(admin, adminBase + '/models/' + change.id, 'GET', undefined, true)
+      ).json();
+      expect(current.pricing).toEqual(change.input.pricing);
+    }
+    const afterModels = (
+      await (await api(admin, adminBase + '/models', 'GET', undefined, true)).json()
+    ).data as AdminModel[];
+    expect(afterModels.map((item) => item.id).sort()).toEqual(beforeIDs);
     expect(await control(user, 'stats')).toEqual(beforeStats);
     expect(await (await api(user, base + '/wallet')).json()).toEqual(beforeWallet);
     expect(await (await api(user, base + '/tasks')).json()).toEqual(beforeTasks);
     expect(writes.filter((path) => /\/quote|\/tasks/.test(path))).toEqual([]);
-    expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toContain('/kind');
+    expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toContain(
+      'private-browser-prompt',
+    );
   } finally {
     await admin.close();
     await user.close();
@@ -553,11 +761,17 @@ test('real endpoint adaptation hides saved values and blocks stale browser write
     const path = '/api/endpoints/' + endpoint.id + '/request-adaptation';
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints/' + endpoint.id);
-    const fixed = page.getByRole('group', { name: 'Fixed outbound headers', exact: true });
+    const fixed = page.getByRole('group', {
+      name: 'Fixed outbound headers',
+      exact: true,
+    });
     await fixed.getByRole('button', { name: 'Add field' }).click();
     await fixed.getByLabel('Header or path').fill('X-Synthetic-Header');
     await fixed.getByLabel('Value', { exact: true }).fill('synthetic-private-header');
-    const forced = page.getByRole('group', { name: 'Forced body values', exact: true });
+    const forced = page.getByRole('group', {
+      name: 'Forced body values',
+      exact: true,
+    });
     await forced.getByRole('button', { name: 'Add field' }).click();
     await forced.getByLabel('Header or path').fill('/reasoning_effort');
     await forced.getByLabel('Value', { exact: true }).fill('"medium"');
@@ -605,7 +819,10 @@ test('real endpoint adaptation hides saved values and blocks stale browser write
     await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
     expect(
       await page.evaluate(() =>
-        JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+        JSON.stringify({
+          local: { ...localStorage },
+          session: { ...sessionStorage },
+        }),
       ),
     ).not.toContain('synthetic-');
   } finally {

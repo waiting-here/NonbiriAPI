@@ -2,9 +2,7 @@ import { expect, test } from './test';
 import { ADMIN_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 
-test('administrator preview and draft guard save both drafts without generation', async ({
-  page,
-}) => {
+test('administrator preview and draft guard save prices without generation', async ({ page }) => {
   const errors = collectConsoleViolations(page);
   await mockRoleSession(page, 'admin', 'admin');
   await mockPublicConfig(page, 'admin');
@@ -41,6 +39,7 @@ test('administrator preview and draft guard save both drafts without generation'
         default: 1,
       },
     ],
+    capability_issues: [],
     parameter_capabilities: [
       {
         key: 'prompt',
@@ -59,22 +58,6 @@ test('administrator preview and draft guard save both drafts without generation'
     pricing: { default: { paper: '2', brush: '1' }, fallback: 'default', tiers: [], sizes: [] },
     catalog_type: 'image',
     missing: false,
-  };
-  const profile = {
-    version: 1,
-    fields: [
-      {
-        rule: {
-          key: 'prompt',
-          type: 'string',
-          supported: true,
-          required: true,
-          length_unit: 'utf8_bytes',
-          min_length: 1,
-          max_length: 65536,
-        },
-      },
-    ],
   };
   const adapter = {
     discovery: { method: 'GET', path: '/v1/models', items_pointer: '/data', id_pointer: '/id' },
@@ -95,13 +78,6 @@ test('administrator preview and draft guard save both drafts without generation'
     const request = route.request();
     const path = new URL(request.url()).pathname;
     requests.push(request.method() + ' ' + path);
-    if (path.endsWith('/upstream/capability-profile')) {
-      if (request.method() === 'PUT') {
-        writes.push('profile');
-        return route.fulfill({ json: { revision: '2', profile: request.postDataJSON().profile } });
-      }
-      return route.fulfill({ json: { revision: '1', profile } });
-    }
     if (path.endsWith('/upstream'))
       return route.fulfill({
         json: {
@@ -126,7 +102,8 @@ test('administrator preview and draft guard save both drafts without generation'
     if (path.endsWith('/models/' + modelID)) {
       if (request.method() === 'PUT') {
         writes.push('model');
-        model.display_name = request.postDataJSON().display_name;
+        model.price = request.postDataJSON().price;
+        model.pricing = request.postDataJSON().pricing;
         model.revision = '3';
         return route.fulfill({ json: { id: modelID, revision: '3' } });
       }
@@ -158,21 +135,22 @@ test('administrator preview and draft guard save both drafts without generation'
     });
   });
   await page.goto(ADMIN_ORIGIN + '/limited-activities');
-  await expect(page.getByLabel('catalog_type_pointer')).toBeVisible();
-  await page.getByLabel('catalog_type_pointer').fill('/kind');
+  await expect(page.getByLabel(/JSON/)).toHaveCount(0);
   await expect(page.getByRole('option', { name: /synthetic-image/ })).toBeAttached();
   await page.getByLabel('Choose a model to configure').selectOption(modelID);
-  await page.getByLabel('Public display name').fill('Saved synthetic image');
+  await page.getByLabel('Sketch paper per image').fill('5');
+  await page.getByText('Try parameters and prices (no charge)', { exact: true }).click();
   await expect(page.getByLabel(/^Prompt/)).toBeVisible();
   await page.locator('a[href="/"]').first().click();
   await expect(page.getByRole('button', { name: 'Save and leave' })).toBeVisible();
   await expect(page).toHaveURL(ADMIN_ORIGIN + '/limited-activities');
   await page.getByRole('button', { name: 'Continue editing' }).click();
-  await expect(page.getByLabel('Public display name')).toHaveValue('Saved synthetic image');
+  await expect(page.getByLabel('Sketch paper per image')).toHaveValue('5');
   errors.assertNone();
   await page.locator('a[href="/"]').first().click();
   await page.getByRole('button', { name: 'Save and leave' }).click();
   await expect(page).toHaveURL(ADMIN_ORIGIN + '/');
-  expect(writes).toEqual(['profile', 'model']);
+  expect(writes).toEqual(['model']);
+  expect(requests.some((entry) => /capability-profile|capabilities/.test(entry))).toBe(false);
   expect(requests.filter((entry) => /\/quote|\/tasks|\/models\/check/.test(entry))).toEqual([]);
 });

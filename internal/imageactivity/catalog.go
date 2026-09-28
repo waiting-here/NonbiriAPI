@@ -84,7 +84,7 @@ func (s *Service) ListCatalog(ctx context.Context, admin int64, query CatalogQue
 		return out, ErrConflict
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT m.id,m.upstream_model_id,m.current_revision,
-	 COALESCE(r.display_name,''),COALESCE(r.enabled,0),
+	 COALESCE(r.display_name,''),COALESCE(r.enabled,0),m.metadata_json,
 	 COALESCE(json_extract(c.effective_json,'$.catalog_type'),json_extract(candidate.source_json,'$.catalog_type'),
 	 CASE WHEN c.readiness='legacy' THEN 'image' ELSE 'unknown' END),
 	 candidate.model_id IS NULL
@@ -104,14 +104,21 @@ func (s *Service) ListCatalog(ctx context.Context, admin int64, query CatalogQue
 	matched := make([]entry, 0)
 	search := strings.ToLower(query.Q)
 	for rows.Next() {
-		var id, upstreamID, display, kind string
+		var id, upstreamID, display, kind, metadata string
 		var current sql.NullInt64
 		var enabled, missing bool
-		if err = rows.Scan(&id, &upstreamID, &current, &display, &enabled, &kind, &missing); err != nil {
+		if err = rows.Scan(&id, &upstreamID, &current, &display, &enabled, &metadata, &kind, &missing); err != nil {
 			_ = rows.Close()
 			return out, err
 		}
 		configured := current.Valid
+		if !configured {
+			capability := compileFixedCapability([]byte(metadata))
+			display = fixedDisplayName(upstreamID, capability.name)
+			if capability.recognized {
+				kind = capability.compiled.CatalogType
+			}
+		}
 		if query.Type != "all" && kind != query.Type ||
 			query.Configured == "true" && !configured || query.Configured == "false" && configured ||
 			query.Enabled == "true" && !enabled || query.Enabled == "false" && enabled ||

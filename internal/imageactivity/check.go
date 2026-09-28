@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -40,20 +42,6 @@ func (s *Service) CheckModel(ctx context.Context, admin int64, input CheckInput)
 		out.Issues = append(out.Issues, CheckIssue{ModelID: input.ModelID, FieldPath: path, Code: code, SafeMessage: message})
 		return out, nil
 	}
-	draft, err := normalizeModel(input.Draft)
-	if err != nil {
-		return issue("draft", "invalid_rule", "Review the model rules, mapping, and base price.")
-	}
-	pricing := legacyPricing(draft.Price)
-	if draft.Pricing != nil {
-		pricing = *draft.Pricing
-	}
-	if pricing.Default != draft.Price || ValidatePricingPolicy(pricing) != nil {
-		return issue("draft.pricing", "invalid_price", "Review the size pricing policy.")
-	}
-	if draft.SizeCapability != nil && draft.SizeCapability.Validate() != nil {
-		return issue("draft.size_capability", "invalid_size", "Review the linked size capability.")
-	}
 	tx, err := s.config.Database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
@@ -72,6 +60,33 @@ func (s *Service) CheckModel(ctx context.Context, admin int64, input CheckInput)
 	}
 	if model.controlID != upstream.controlID {
 		return out, ErrConflict
+	}
+	var draft ModelInput
+	if input.Draft.automatic {
+		draft, err = automaticModelInput(model, input.Draft, true)
+	} else {
+		draft, err = normalizeModel(input.Draft)
+	}
+	if err != nil {
+		var validation *policyValidationError
+		if errors.As(err, &validation) {
+			return issue(strings.Replace(validation.path, "input.", "draft.", 1), validation.code, validation.message)
+		}
+		return issue("draft", "invalid_rule", "Review the model settings and base price.")
+	}
+	if draft.automaticSource != nil && draft.automaticSource.Readiness != "ready" {
+		out.Issues = fixedCapabilityIssues(input.ModelID, *draft.automaticSource)
+		return out, nil
+	}
+	pricing := legacyPricing(draft.Price)
+	if draft.Pricing != nil {
+		pricing = *draft.Pricing
+	}
+	if pricing.Default != draft.Price || ValidatePricingPolicy(pricing) != nil {
+		return issue("draft.pricing", "invalid_price", "Review the size pricing policy.")
+	}
+	if draft.SizeCapability != nil && draft.SizeCapability.Validate() != nil {
+		return issue("draft.size_capability", "invalid_size", "Review the linked size capability.")
 	}
 	if draft.Enabled && !draft.CapabilityConfirmed && model.readiness != "legacy" && model.readiness != "ready" {
 		return issue("draft.capability_confirmed", "capability_unconfirmed", "Confirm supported parameters before enabling this model.")
@@ -94,6 +109,11 @@ func (s *Service) CheckModel(ctx context.Context, admin int64, input CheckInput)
 		parameters.ExpectedModelRevision = "1"
 	} else {
 		parameters.ExpectedModelRevision = draft.ExpectedRevision
+	}
+	if draft.automatic || isFixedAdapter(upstream) {
+		if err = validateFixedNumbers(parameters, draft.Parameters); err != nil {
+			return issue("parameters", "invalid_parameters", "Review the exact numeric values, ranges, and allowed choices.")
+		}
 	}
 	parameters, rules, err := linkedSubmission(parameters, model)
 	if err != nil {

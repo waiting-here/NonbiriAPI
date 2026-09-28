@@ -34,6 +34,14 @@ func refreshTx(ctx context.Context, tx *sql.Tx, id string) (Refresh, error) {
 	return out, err
 }
 func (s *Service) RefreshModels(ctx context.Context, admin int64, key string) (MutationResult[RefreshResult], error) {
+	return s.refreshModels(ctx, admin, key, false)
+}
+
+func (s *Service) RefreshServiceModels(ctx context.Context, admin int64, key string) (MutationResult[RefreshResult], error) {
+	return s.refreshModels(ctx, admin, key, true)
+}
+
+func (s *Service) refreshModels(ctx context.Context, admin int64, key string, fixed bool) (MutationResult[RefreshResult], error) {
 	var out MutationResult[RefreshResult]
 	now, err := s.now()
 	if err != nil {
@@ -61,6 +69,12 @@ func (s *Service) RefreshModels(ctx context.Context, admin int64, key string) (M
 	snapshot, err := currentUpstreamTx(ctx, tx)
 	if err != nil {
 		return out, err
+	}
+	if fixed {
+		snapshot, err = ensureFixedUpstreamTx(ctx, tx, snapshot, now)
+		if err != nil {
+			return out, err
+		}
 	}
 	var pending, global int
 	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM image_model_refreshes WHERE control_id=? AND state IN ('queued','running')", snapshot.controlID).Scan(&pending); err != nil {
@@ -307,9 +321,17 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 	result := "failed"
 	if code == "" {
 		result = "succeeded"
-		profile, e := profileTx(ctx, tx, control)
+		upstream, e := upstreamTx(ctx, tx, upstreamRevision)
 		if e != nil {
 			return e
+		}
+		fixed := isFixedAdapter(upstream)
+		profile := ProfileState{Revision: "0"}
+		if !fixed {
+			profile, e = profileTx(ctx, tx, control)
+			if e != nil {
+				return e
+			}
 		}
 		profileRevision, e := decimalRevision(profile.Revision, true)
 		if e != nil {
@@ -340,7 +362,13 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 		aggregateInput := make([]byte, 0, len(ordered)*32)
 		for _, model := range ordered {
 			source := []byte("{}")
-			if profile.Profile != nil {
+			if fixed {
+				compiled := compileFixedCapability(model.metadata).compiled
+				source, e = json.Marshal(compiled)
+				if e != nil || len(source) > maxJSON {
+					return ErrInvalid
+				}
+			} else if profile.Profile != nil {
 				compiled, compileErr := CompileCapability(*profile.Profile, model.metadata, nil)
 				if compileErr != nil {
 					return compileErr
@@ -379,6 +407,11 @@ func (s *Service) finishRefresh(ctx context.Context, id string, models []discove
 			 VALUES(?,?,?,?,?)`, snapshotID, storedID, string(item.source), string(model.metadata), item.hash[:])
 			if err != nil {
 				return err
+			}
+			if fixed {
+				if err = refreshAutomaticModelTx(ctx, tx, storedID, now); err != nil {
+					return err
+				}
 			}
 		}
 	}

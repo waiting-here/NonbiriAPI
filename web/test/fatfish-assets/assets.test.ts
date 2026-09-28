@@ -67,12 +67,12 @@ const pngSize = (data: Buffer) => {
 };
 
 describe('fat fish public art', () => {
-  it('provides exactly 68 hashed, attributed, static SVGs with corrected buttons', () => {
+  it('provides exactly 71 hashed, attributed, static SVGs with corrected buttons', () => {
     expect(manifest.format).toBe('nonbiri-fatfish-assets');
     expect(manifest.version).toBe(1);
     expect(manifest.license).toBe('AGPL-3.0');
-    expect(manifest.svg).toHaveLength(68);
-    expect(new Set(manifest.svg.map((entry) => entry.id)).size).toBe(68);
+    expect(manifest.svg).toHaveLength(71);
+    expect(new Set(manifest.svg.map((entry) => entry.id)).size).toBe(71);
     expect(fs.readdirSync(new URL('svg/', root)).filter((name) => name.endsWith('.svg')).sort()).toEqual(
       manifest.svg.map((entry) => `${entry.id}.svg`).sort(),
     );
@@ -90,8 +90,10 @@ describe('fat fish public art', () => {
     }
   });
 
-  it('maps only supported movable resource keys to supplied vector art', () => {
+  it('maps supported movable pieces to their matching vector art', () => {
     expect(Object.keys(manifest.tool_visuals).sort()).toEqual(['barrier', 'cup', 'fan', 'light', 'memory']);
+    expect(manifest.tool_visuals).toEqual({ barrier: 'keycap-barrier', memory: 'memory-module',
+      fan: 'inference-card', light: 'cooling-fins', cup: 'cache-puck' });
     const ids = new Set(manifest.svg.map((entry) => entry.id));
     for (const id of Object.values(manifest.tool_visuals)) expect(ids.has(id)).toBe(true);
   });

@@ -30,6 +30,7 @@ function decodeManifest(value: unknown): Example[] {
 export function ExamplePicker({ onImport }: { onImport(value: ImportedDraft): void }) {
   const t = useActivityText();
   const [error, setError] = useState<unknown>(null);
+  const [selectedID, setSelectedID] = useState('');
   const manifest = useQuery({ queryKey: ['fatfish', 'examples'], queryFn: async () => {
     const response = await fetch('/examples/fatfish/manifest.json', { credentials: 'same-origin' });
     if (!response.ok) throw new Error('Example manifest could not be loaded');
@@ -64,12 +65,14 @@ export function ExamplePicker({ onImport }: { onImport(value: ImportedDraft): vo
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (cause) { setError(cause); }
   };
-  return <div className="fatfish-examples"><h3>{t('示例关卡', 'Example levels')}</h3>
+  const selected = manifest.data?.find((item) => item.id === selectedID) ?? manifest.data?.[0];
+  return <div className="fatfish-examples">
     {manifest.isPending ? <p>{t('读取示例目录…', 'Loading examples…')}</p> : manifest.error ? <ErrorState error={manifest.error} /> : <div className="fatfish-actions">
-      {manifest.data?.map((example) => <div key={example.id} className="fatfish-actions">
-        <button type="button" onClick={() => void choose(example)}>{example.title}</button>
-        <button type="button" onClick={() => void download(example)}>{t('下载 JSON', 'Download JSON')} · {example.title}</button>
-      </div>)}
+      <label>{t('示例关卡', 'Example level')}<select aria-label={t('示例关卡', 'Example level')} value={selected?.id ?? ''} onChange={(event) => setSelectedID(event.target.value)}>
+        {manifest.data?.map((example) => <option key={example.id} value={example.id}>{example.title}</option>)}
+      </select></label>
+      {selected ? <><button type="button" onClick={() => void choose(selected)}>{selected.title}</button>
+        <button type="button" onClick={() => void download(selected)}>{t('下载 JSON', 'Download JSON')} · {selected.title}</button></> : null}
     </div>}
     {error ? <ErrorState error={error} /> : null}
   </div>;

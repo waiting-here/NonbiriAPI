@@ -12,8 +12,8 @@ export function discoveryError(
     );
   if (status === 404)
     return t(
-      '模型目录地址不存在。请检查服务地址和适配配置中的 discovery.path；该服务也可能不提供模型列表接口。',
-      'The model catalog endpoint was not found. Check the service URL and discovery.path; the provider may not offer model discovery.',
+      '模型目录地址不存在。请检查服务地址；该服务也可能不提供所需的模型目录。',
+      'The model catalog endpoint was not found. Check the service URL; the provider may not offer the required catalog.',
     );
   if (status === 429)
     return t(
@@ -37,8 +37,8 @@ export function discoveryError(
     );
   if (code === 'invalid_result')
     return t(
-      '未取得有效的模型目录。请核对返回的是 JSON 模型列表，以及 discovery.items_pointer 和 id_pointer 对应的字段；目录最多 1,000 个模型，ID 不能重复。若未收到 HTTP 响应，也请检查服务连通性。',
-      'No valid model catalog was received. Check the JSON list and discovery.items_pointer / id_pointer; at most 1,000 unique model IDs are allowed. If no HTTP response was received, also check connectivity.',
+      '未取得有效的模型目录。请检查服务地址；该服务返回的目录可能暂不支持。若未收到 HTTP 响应，也请检查服务连通性。',
+      'No valid model catalog was received. Check the service URL; its catalog format may be unsupported. If no HTTP response was received, also check connectivity.',
     );
   if (code === 'response_too_large')
     return t(
@@ -47,8 +47,8 @@ export function discoveryError(
     );
   if (code === 'execution_timeout')
     return t(
-      '排队或拉取模型目录超时。请检查服务连通性、RPM 和并发配置后重试。',
-      'Waiting for or fetching the catalog timed out. Check connectivity, RPM and concurrency settings, then retry.',
+      '排队或拉取模型目录超时。请检查服务连通性，稍后重试。',
+      'Waiting for or fetching the catalog timed out. Check connectivity and retry later.',
     );
   if (code === 'service_restarted')
     return t(

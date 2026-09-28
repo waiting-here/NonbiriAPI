@@ -113,4 +113,29 @@ describe('image size and price policy', () => {
       }),
     ).toBe(false);
   });
+
+  it('accepts ratio-only metadata without inventing a resolution and rejects unknown resolution choices', () => {
+    const capability: SizeCapability = {
+      mode: 'ratio_resolution',
+      combinations: [{ ratio: '1:1' }, { ratio: '16:9' }],
+    };
+    expect(validSizeCapability(capability)).toBe(true);
+    expect(resolveSize(capability, { aspect_ratio: '16:9', resolution: '' })).toEqual({
+      values: { aspect_ratio: '16:9' },
+      selection: {},
+    });
+    expect(resolveSize(capability, { aspect_ratio: '16:9', resolution: 'invented' })).toBeNull();
+    expect(
+      validSizeCapability({ ...capability, combinations: [{ ratio: '1:1', resolution: '' }] }),
+    ).toBe(false);
+    expect(
+      validSizeCapability({ ...capability, combinations: [{ ratio: '1:1' }, { ratio: '1:1' }] }),
+    ).toBe(false);
+    expect(
+      validSizeCapability({
+        mode: 'resolution_ratio_grid',
+        combinations: [{ ratio: '1:1', width: 512, height: 512 }],
+      }),
+    ).toBe(false);
+  });
 });

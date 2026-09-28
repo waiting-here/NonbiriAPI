@@ -153,12 +153,6 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			}
 			return s.GetUpstream(r.Context(), u)
 		}},
-		{"/upstream/capability-profile", func(r *http.Request, u int64) (any, error) {
-			if r.URL.RawQuery != "" {
-				return nil, ErrInvalid
-			}
-			return s.GetProfile(r.Context(), u)
-		}},
 		{"/upstream/controls", func(r *http.Request, u int64) (any, error) {
 			limit, cursor, err := listQuery(r)
 			if err != nil {
@@ -186,18 +180,6 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			}
 			return s.GetAdminModel(r.Context(), u, r.PathValue("id"))
 		}},
-		// A wildcard action keeps the existing /models/refresh/{id} route
-		// strictly more specific. Two crossing literal/wildcard patterns
-		// otherwise conflict in the real HTTP multiplexer.
-		{"/models/{id}/{action}", func(r *http.Request, u int64) (any, error) {
-			if r.PathValue("action") != "capabilities" {
-				return nil, ErrNotFound
-			}
-			if r.URL.RawQuery != "" {
-				return nil, ErrInvalid
-			}
-			return s.ReviewCapabilities(r.Context(), u, r.PathValue("id"))
-		}},
 		{"/models/refresh/{id}", func(r *http.Request, u int64) (any, error) {
 			if r.URL.RawQuery != "" {
 				return nil, ErrInvalid
@@ -210,8 +192,8 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 		}
 	}
 	if err := admins.RegisterAdminRoute(http.MethodPut, adminPrefix+"/upstream", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
-		var input UpstreamInput
-		if err := decodeInput(r, &input, 1<<20, []string{"expected_revision", "base_url", "secret", "rpm", "concurrency", "per_user_limit", "global_limit", "queue_timeout_seconds", "execution_timeout_seconds", "memory_budget_mib", "image_origins", "adapter"}); err != nil {
+		var input ConnectionInput
+		if err := decodeInput(r, &input, maxJSON, []string{"expected_revision", "base_url", "secret"}); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -220,27 +202,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			writeError(w, err)
 			return
 		}
-		result, err := s.PutUpstream(r.Context(), p.UserID, key, input)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, result.Value)
-	}); err != nil {
-		return err
-	}
-	if err := admins.RegisterAdminRoute(http.MethodPut, adminPrefix+"/upstream/capability-profile", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
-		var input ProfileInput
-		if err := decodeInput(r, &input, maxJSON, []string{"expected_revision", "profile"}); err != nil {
-			writeError(w, err)
-			return
-		}
-		key, err := requestKey(r)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		result, err := s.PutProfile(r.Context(), p.UserID, key, input)
+		result, err := s.PutConnection(r.Context(), p.UserID, key, input)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -250,8 +212,8 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 		return err
 	}
 	if err := admins.RegisterAdminRoute(http.MethodPut, adminPrefix+"/models/{id}", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
-		var input ModelInput
-		if err := decodeInput(r, &input, 1<<20, []string{"expected_revision", "display_name", "description", "enabled", "price", "parameters", "combinations", "mapping"}); err != nil {
+		var input ModelSettingsInput
+		if err := decodeInput(r, &input, 1<<20, []string{"expected_revision", "enabled", "price"}); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -260,7 +222,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			writeError(w, err)
 			return
 		}
-		result, err := s.PutModel(r.Context(), p.UserID, r.PathValue("id"), key, input)
+		result, err := s.PutModelSettings(r.Context(), p.UserID, r.PathValue("id"), key, input)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -270,12 +232,12 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 		return err
 	}
 	if err := admins.RegisterAdminRoute(http.MethodPost, adminPrefix+"/models/check", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
-		var input CheckInput
+		var input ModelSettingsCheck
 		if err := decodeInput(r, &input, 1<<20, []string{"model_id", "draft", "parameters"}); err != nil {
 			writeError(w, err)
 			return
 		}
-		result, err := s.CheckModel(r.Context(), p.UserID, input)
+		result, err := s.CheckModelSettings(r.Context(), p.UserID, input)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -285,7 +247,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 		return err
 	}
 	if err := admins.RegisterAdminRoute(http.MethodPost, adminPrefix+"/models/batch", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
-		var input BatchModelInput
+		var input ModelSettingsBatch
 		if err := decodeInput(r, &input, 8<<20, []string{"models"}); err != nil {
 			writeError(w, err)
 			return
@@ -295,27 +257,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			writeError(w, err)
 			return
 		}
-		result, err := s.PutModels(r.Context(), p.UserID, key, input)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, result.Value)
-	}); err != nil {
-		return err
-	}
-	if err := admins.RegisterAdminRoute(http.MethodPost, adminPrefix+"/models/{id}/capabilities/apply", func(w http.ResponseWriter, r *http.Request, p AdminPrincipal) {
-		var input CapabilityApplyInput
-		if err := decodeInput(r, &input, 8192, []string{"snapshot_id", "expected_revision", "confirm"}); err != nil {
-			writeError(w, err)
-			return
-		}
-		key, err := requestKey(r)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		result, err := s.ApplyCapabilities(r.Context(), p.UserID, key, r.PathValue("id"), input)
+		result, err := s.PutModelsSettings(r.Context(), p.UserID, key, input)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -335,7 +277,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, s *Ser
 			writeError(w, err)
 			return
 		}
-		result, err := s.RefreshModels(r.Context(), p.UserID, key)
+		result, err := s.RefreshServiceModels(r.Context(), p.UserID, key)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -574,6 +516,10 @@ func writeError(w http.ResponseWriter, err error) {
 		code, message = httperr.CodeFeatureDisabled, "This activity is not accepting new tasks."
 	case errors.Is(err, maintenance.ErrMaintenanceOn):
 		code, message = httperr.CodeMaintenance, "The site is under maintenance."
+	}
+	var policy *policyValidationError
+	if errors.As(err, &policy) && policy.code == "unsupported_metadata" {
+		message = policy.message
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	httperr.WriteError(w, httperr.New(code, message))

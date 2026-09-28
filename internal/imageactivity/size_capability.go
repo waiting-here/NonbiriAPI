@@ -68,6 +68,8 @@ func (c SizeCapability) Validate() error {
 	}
 	logical := map[string]bool{}
 	dimensions := map[[2]int]string{}
+	resolutionPresent := false
+	resolutionAbsent := false
 	for _, row := range c.Combinations {
 		if row.Tier != "" && !validSizeLabel(row.Tier) || row.Width < 0 || row.Height < 0 || (row.Width == 0) != (row.Height == 0) || row.Width > maxDimension || row.Height > maxDimension {
 			return ErrInvalid
@@ -85,7 +87,12 @@ func (c SizeCapability) Validate() error {
 			}
 			key = row.Ratio
 		case RatioResolution:
-			if !validSizeLabel(row.Ratio) || !validSizeLabel(row.Resolution) {
+			if !validSizeLabel(row.Ratio) || row.Resolution != "" && !validSizeLabel(row.Resolution) {
+				return ErrInvalid
+			}
+			resolutionPresent = resolutionPresent || row.Resolution != ""
+			resolutionAbsent = resolutionAbsent || row.Resolution == ""
+			if resolutionPresent && resolutionAbsent {
 				return ErrInvalid
 			}
 			key = row.Ratio + "\x00" + row.Resolution
@@ -188,7 +195,7 @@ func (c SizeCapability) ResolveSize(in SizeInput) (ResolvedSize, error) {
 			return out, ErrInvalid
 		}
 		out.Values[AspectRatio] = row.Ratio
-		if c.Mode != RatioSizeMap {
+		if c.Mode != RatioSizeMap && row.Resolution != "" {
 			out.Values[Resolution] = row.Resolution
 		}
 		out.Selection.Tier = row.Tier

@@ -284,7 +284,8 @@ tree.
 
 ### Fat Fish artwork and music
 
-The supplied mascot sprites and vector props, the original illustrated cover,
+The supplied mascot sprites and vector props, the original memory module,
+inference card and cooling-fin vectors, the original illustrated cover,
 and the project asset metadata are distributed under AGPL-3.0. The cover uses
 the supplied mascot design in a new rice-and-obstacle scene. Per-file hashes
 and transformations are recorded in `manifest.json`.

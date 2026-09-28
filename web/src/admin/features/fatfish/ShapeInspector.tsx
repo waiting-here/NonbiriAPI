@@ -1,4 +1,5 @@
 import type { Level, Point, Shape, Switch, Gate, Direction } from '@shared/fatfish/engine/types';
+import { toolNames } from '@shared/fatfish/art';
 import { useActivityText } from '@shared/limitedactivities/copy';
 import { cloneLevel, px, rect, type Selection, unit } from './draft';
 
@@ -70,9 +71,9 @@ export function ShapeInspector({ level, selected, commit, onDelete }: {
     </> : null}
     {item && selected.kind === 'tools' ? <>
       <label>{t('工具类型', 'Tool type')}<select value={item.resource_key} onChange={(event) => mutate((shape) => { shape.resource_key = event.target.value; })}>
-        {['barrier', 'memory', 'fan', 'light', 'cup'].map((key) => <option key={key} value={key}>{key}</option>)}
+        {Object.entries(toolNames).map(([key, name]) => <option key={key} value={key}>{t(name[0], name[1])}</option>)}
       </select></label>
-      <label><input type="checkbox" checked={!!item.placed} onChange={(event) => mutate((shape) => { shape.placed = event.target.checked; })} />{t('已放在场内（可移动）', 'Placed in field (movable)')}</label>
+      <label><input type="checkbox" checked={!!item.placed} onChange={(event) => mutate((shape) => { shape.placed = event.target.checked; })} />{t('开局启用碰撞（场内或操作台）', 'Active at start (field or workbench)')}</label>
       <PointFields label={t('放置中心', 'Placed center')} value={{ x: item.x ?? 0, y: item.y ?? 0 }} change={(point) => mutate((shape) => { shape.x = point.x; shape.y = point.y; })} />
     </> : null}
     {item && selected.kind === 'bowls' ? <>
@@ -99,7 +100,7 @@ export function ShapeInspector({ level, selected, commit, onDelete }: {
       </select></label>
       <NumberField label={t('朝向（0–4095）', 'Heading (0–4095)')} value={item.heading ?? 0} min={0} max={4095} onChange={(value) => mutate((shape) => { shape.heading = value; })} />
     </> : null}
-    {item ? <>
+    {item ? <details><summary>{t('高级轮廓与洞', 'Advanced contours and holes')}</summary>
       <p>{selected.kind === 'tools' ? t('轮廓坐标相对于工具中心。', 'Contour coordinates are relative to the tool center.') : t('轮廓坐标是场地坐标。', 'Contour coordinates use field coordinates.')}</p>
       {renderRing(item.polygon.outer, null)}
       {item.polygon.holes.map((hole, index) => renderRing(hole, index))}
@@ -108,7 +109,7 @@ export function ShapeInspector({ level, selected, commit, onDelete }: {
         const x = (Math.min(...xs) + Math.max(...xs)) / 2, y = (Math.min(...ys) + Math.max(...ys)) / 2;
         shape.polygon.holes.push(rect(Math.round(x), Math.round(y), unit(12), unit(12)).outer);
       })}>{t('新增洞', 'Add hole')}</button>
-    </> : null}
+    </details> : null}
     <button type="button" onClick={onDelete}>{t('删除对象', 'Delete object')}</button>
   </section>;
 }

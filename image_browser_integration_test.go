@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -25,22 +26,40 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 const imageFixtureSecret = "synthetic-image-credential"
 const imageFixtureModel = "synthetic-private-image-model"
+const imageFixtureName = "Browser canvas <svg onload=alert(1)> is plain text."
+const imageFixtureDescription = "<img src=x onerror=alert(1)> is displayed as text."
 
 type imageBrowserUser struct {
 	ID     string       `json:"id"`
 	Level  int          `json:"level"`
 	Cookie *http.Cookie `json:"cookie"`
 }
+
+type imageFixtureAdminAuthority struct {
+	actor      authz.Actor
+	authorizer *authz.Authorizer
+}
+
+func (a imageFixtureAdminAuthority) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, user int64) error {
+	if user != a.actor.UserID {
+		return authz.ErrUnauthorized
+	}
+	_, err := a.authorizer.Authorize(ctx, tx, a.actor, authz.Requirement{Role: authz.RoleAdministrator})
+	return err
+}
+
 type imageBrowserFixture struct {
 	t             *testing.T
 	cfg           *config.Config
@@ -55,6 +74,7 @@ type imageBrowserFixture struct {
 	upstreamState *imageFixtureUpstream
 	adminCookie   *http.Cookie
 	users         []imageBrowserUser
+	modelID       string
 }
 
 func (f *imageBrowserFixture) now() time.Time {
@@ -201,6 +221,7 @@ func TestImageBrowserFixture(t *testing.T) {
 		"user_url": users.URL, "admin_url": admins.URL, "control_url": control.URL,
 		"control_token": controlToken, "users": f.users, "admin_cookie": f.adminCookie,
 		"private_markers": []string{imageFixtureSecret, imageFixtureModel, "synthetic-private-metadata", "synthetic-job-"},
+		"model_id":        f.modelID,
 	}
 	raw, err := json.Marshal(state)
 	if err != nil {
@@ -260,6 +281,31 @@ func (f *imageBrowserFixture) initialize() {
 	if err := f.store.DB().QueryRow("SELECT id FROM users WHERE is_admin=1").Scan(&adminID); err != nil {
 		t.Fatal(err)
 	}
+	binding := sha256.Sum256([]byte(f.adminCookie.Value))
+	actor := authz.Actor{Kind: authz.ActorAdminSession, UserID: adminID, SessionTokenHash: hex.EncodeToString(binding[:])}
+	if err := f.store.DB().QueryRow("SELECT cred_gen FROM sessions WHERE token_hash=? AND user_id=?", actor.SessionTokenHash, adminID).Scan(&actor.SessionGeneration); err != nil {
+		t.Fatal(err)
+	}
+	stack, err := egress.NewStack(egress.StackOptions{AllowedOrigins: []string{f.upstream.URL}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := f.app.Load()
+	seed, err := imageactivity.New(imageactivity.Config{
+		Database: f.store.DB(), Vault: f.vault, Egress: stack,
+		Users:  limitedUserAuthority{app.authRuntime},
+		Admins: imageFixtureAdminAuthority{actor: actor, authorizer: app.authorizer},
+		Gate:   limitedAdmissionGate{app.maintenance, f.now}, Admission: app.activityRuntime.limited.CheckAdmissionTx,
+		Sources: app.audits.observations, Diagnostics: app.audits.observations, Now: f.now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := seed.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	for index, level := range []int{1, 1, 5, 6} {
 		f.users = append(f.users, f.seedUser(index, level, adminID))
 	}
@@ -271,25 +317,41 @@ func (f *imageBrowserFixture) initialize() {
 		"module_config": map[string]any{"paper_price": "1000", "brush_price": "10000", "brush_cap": "100"},
 	}, f.adminCookie, true)
 	upstream := f.call("GET", prefix+"/upstream", nil, f.adminCookie, true)
-	mapping := map[string]any{"model_pointer": "/model",
-		"parameters": map[string]any{"prompt": "/prompt", "n": "/n", "size": "/canvas"},
-		"constants":  []any{}}
-	adapter := map[string]any{
-		"discovery": map[string]any{"method": "GET", "path": "/v1/models",
-			"items_pointer": "/data", "id_pointer": "/id", "metadata_pointer": "/metadata"},
-		"submit": map[string]any{"method": "POST", "path": "/v1/images/generations", "mapping": mapping, "receipt": map[string]any{"indicator_pointer": "/ticket/accepted", "indicator_value": true}},
-		"poll":   map[string]any{"method": "GET", "path": "/jobs/{task_id}"},
-		"response": map[string]any{"task_id_pointer": "/ticket/reference", "state_pointer": "/phase",
-			"working_states": []string{"working"}, "success_states": []string{"complete"},
-			"failure_states": []string{"failed"}, "images_pointer": "/pictures", "base64_pointer": "/encoded"},
+	// Seed an existing installation's limits through the internal configuration
+	// API. Public connection saves must preserve its queue and recovery budgets.
+	metadata, taskID, state, encoded := "", "/task_id", "/status", "/b64_json"
+	credential := imageFixtureSecret
+	_, err = seed.PutUpstream(context.Background(), adminID,
+		fmt.Sprintf("%022d", f.sequence.Add(1)), imageactivity.UpstreamInput{
+			ExpectedRevision: upstream["revision"].(string), BaseURL: f.upstream.URL,
+			Secret: imageactivity.SecretInput{Mode: "replace", Value: &credential},
+			RPM:    10000, Concurrency: 1, PerUserLimit: 2, GlobalLimit: 100,
+			QueueTimeoutSeconds: 1800, ExecutionTimeoutSeconds: 1800, MemoryBudgetMiB: 512,
+			ImageOrigins: []string{}, Adapter: imageactivity.Adapter{
+				Discovery: imageactivity.DiscoveryAdapter{Method: "GET", Path: "/v1/models", ItemsPointer: "/data", IDPointer: "/id", MetadataPointer: &metadata},
+				Submit: imageactivity.SubmitAdapter{Method: "POST", Path: "/v1/images/generations", Mapping: imageactivity.Mapping{
+					ModelPointer: "/model", Parameters: map[imageactivity.ParameterKey]string{
+						imageactivity.Prompt: "/prompt", imageactivity.N: "/n", imageactivity.Size: "/size",
+					}, Constants: []imageactivity.Constant{},
+				}},
+				Poll: &imageactivity.PollAdapter{Method: "GET", Path: "/v1/images/jobs/{task_id}"},
+				Response: imageactivity.ResponseAdapter{TaskIDPointer: &taskID, StatePointer: &state,
+					WorkingStates: []string{"queued", "running"}, SuccessStates: []string{"done"}, FailureStates: []string{"error"}, ImagesPointer: "/data", Base64Pointer: &encoded},
+			},
+		})
+	if err != nil {
+		t.Fatal(err)
 	}
+	upstream = f.call("GET", prefix+"/upstream", nil, f.adminCookie, true)
+	controlID := upstream["control"].(map[string]any)["id"]
 	f.call("PUT", prefix+"/upstream", map[string]any{
 		"expected_revision": upstream["revision"], "base_url": f.upstream.URL,
-		"secret": map[string]any{"mode": "replace", "value": imageFixtureSecret},
-		"rpm":    10000, "concurrency": 1, "per_user_limit": 2, "global_limit": 100,
-		"queue_timeout_seconds": 1800, "execution_timeout_seconds": 1800,
-		"memory_budget_mib": 512, "image_origins": []string{}, "adapter": adapter,
+		"secret": map[string]any{"mode": "keep"},
 	}, f.adminCookie, true)
+	upstream = f.call("GET", prefix+"/upstream", nil, f.adminCookie, true)
+	if upstream["rpm"] != float64(10000) || upstream["concurrency"] != float64(1) || upstream["per_user_limit"] != float64(2) || upstream["control"].(map[string]any)["id"] != controlID {
+		t.Fatalf("connection save changed existing limits or identity: %v", upstream)
+	}
 	refresh := f.call("POST", prefix+"/models/refresh", map[string]any{}, f.adminCookie, true)
 	operationID := refresh["operation"].(map[string]any)["id"].(string)
 	deadline := time.Now().Add(20 * time.Second)
@@ -304,27 +366,55 @@ func (f *imageBrowserFixture) initialize() {
 		time.Sleep(50 * time.Millisecond)
 	}
 	models := f.call("GET", prefix+"/models", nil, f.adminCookie, true)["data"].([]any)
-	if len(models) != 1 {
+	if len(models) != 5 {
 		t.Fatalf("unexpected catalog size %d", len(models))
 	}
-	model := models[0].(map[string]any)
-	f.call("PUT", prefix+"/models/"+model["id"].(string), map[string]any{
-		"expected_revision": model["revision"], "display_name": "Browser canvas",
-		"description": "<img src=x onerror=alert(1)> is displayed as text.",
-		"enabled":     true, "capability_confirmed": true, "catalog_type": "image",
+	var model imageactivity.AdminModel
+	for _, candidate := range models {
+		var row imageactivity.AdminModel
+		if err := json.Unmarshal([]byte(wireBody(t, candidate)), &row); err != nil {
+			t.Fatal(err)
+		}
+		if row.Configured || row.Revision != "0" || row.CapabilityReadiness != "ready" || row.CatalogType != "image" || row.CapabilityIssues == nil || len(row.CapabilityIssues) != 0 || len(row.Parameters) == 0 || len(row.ParameterCapabilities) != len(row.Parameters) {
+			t.Fatalf("fresh automatic catalog model has incomplete capabilities: %+v", row)
+		}
+		for i, capability := range row.ParameterCapabilities {
+			support := imageactivity.CapabilityUnsupported
+			if row.Parameters[i].Supported {
+				support = imageactivity.CapabilitySupported
+			}
+			if capability.Key != row.Parameters[i].Key || capability.Source != "discovered" || capability.Support != support || capability.Overridden || capability.Conflict {
+				t.Fatalf("fresh model parameter source is not aligned: %+v", row)
+			}
+		}
+		if row.UpstreamModelID == imageFixtureModel {
+			model = row
+		}
+	}
+	if model.ID == "" || model.DisplayName != imageFixtureName || model.CapabilityReadiness != "ready" || len(model.CapabilityIssues) != 0 {
+		t.Fatalf("automatic catalog metadata was not ready: %+v", model)
+	}
+	f.modelID = model.ID
+	// Existing public descriptions remain immutable data when administrators
+	// switch to automatic capabilities and the reduced settings input.
+	legacy, err := seed.PutModel(context.Background(), adminID,
+		model.ID, fmt.Sprintf("%022d", f.sequence.Add(1)), imageactivity.ModelInput{
+			ExpectedRevision: model.Revision, DisplayName: model.DisplayName, Description: imageFixtureDescription,
+			Enabled: true, CapabilityConfirmed: true, CatalogType: "image",
+			Price: imageactivity.Price{Paper: "2", Brush: "1"}, Parameters: model.Parameters,
+			Combinations: model.Combinations, Mapping: model.Mapping, SizeCapability: model.SizeCapability,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.call("PUT", prefix+"/models/"+model.ID, map[string]any{
+		"expected_revision": legacy.Value.Revision, "enabled": true,
 		"price": map[string]string{"paper": "2", "brush": "1"},
-		"parameters": []any{
-			map[string]any{"key": "prompt", "supported": true, "required": true, "type": "string",
-				"min_length": 1, "max_length": 65536, "length_unit": "utf8_bytes"},
-			map[string]any{"key": "n", "supported": true, "required": false, "type": "integer",
-				"minimum": 1, "maximum": 4, "step": 1, "default": 1},
-			map[string]any{"key": "size", "supported": true, "required": true, "type": "string",
-				"length_unit": "utf8_bytes", "default": "80x144", "dimensions": map[string]any{
-					"format": "width_height", "width": map[string]int{"minimum": 48, "maximum": 240, "step": 16},
-					"height": map[string]int{"minimum": 80, "maximum": 272, "step": 32}}},
-		}, "combinations": []any{}, "mapping": map[string]any{
-			"model_pointer": "", "parameters": map[string]any{}, "constants": []any{}},
 	}, f.adminCookie, true)
+	saved := f.call("GET", prefix+"/models/"+model.ID, nil, f.adminCookie, true)
+	if saved["description"] != imageFixtureDescription || saved["display_name"] != imageFixtureName || saved["capability_readiness"] != "ready" {
+		t.Fatalf("automatic settings lost existing public metadata: %v", saved)
+	}
 	for _, user := range f.users {
 		for asset, quantity := range map[string]string{"sketch_paper": "100", "sketch_brush": "20"} {
 			f.call("POST", "/api/limited-activities/picture-book/exchange",
@@ -448,28 +538,60 @@ func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	defer u.mu.Unlock()
 	switch {
 	case r.URL.Path == "/v1/models" && r.Method == http.MethodGet:
-		writeImageFixtureJSON(w, map[string]any{"data": []any{map[string]any{
-			"id": imageFixtureModel, "metadata": map[string]string{"private": "synthetic-private-metadata"},
-		}}})
+		writeImageFixtureJSON(w, map[string]any{"data": imageFixtureCatalog()})
 	case r.URL.Path == "/v1/images/generations" && r.Method == http.MethodPost:
 		var input struct {
-			Model  string `json:"model"`
-			Prompt string `json:"prompt"`
-			N      int    `json:"n"`
-			Canvas string `json:"canvas"`
+			Model          string  `json:"model"`
+			Prompt         string  `json:"prompt"`
+			NegativePrompt string  `json:"negative_prompt"`
+			N              int     `json:"n"`
+			Size           string  `json:"size"`
+			Ratio          string  `json:"aspect_ratio"`
+			Resolution     string  `json:"resolution"`
+			Seed           *int    `json:"seed"`
+			Steps          int     `json:"steps"`
+			Guidance       float64 `json:"cfg_scale"`
+			Quality        string  `json:"quality"`
+			Async          bool    `json:"async"`
+			ResponseFormat string  `json:"response_format"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input); err != nil ||
-			input.Model != imageFixtureModel || input.N < 1 || input.N > 4 || input.Canvas == "" {
+		decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil || input.N < 1 || input.N > 4 ||
+			!input.Async || input.ResponseFormat != "b64_json" || input.Prompt == "" ||
+			input.Steps != 4 || input.Guidance != 1.5 || input.Quality != "low" ||
+			input.Seed != nil && (*input.Seed < 0 || *input.Seed > 999999999) {
 			http.Error(w, "invalid synthetic input", 400)
+			return
+		}
+		validSize := false
+		switch input.Model {
+		case imageFixtureModel:
+			var width, height int
+			_, err := fmt.Sscanf(input.Size, "%dx%d", &width, &height)
+			validSize = err == nil && width >= 256 && width <= 2048 && height >= 256 && height <= 2048 && width%8 == 0 && height%8 == 0 && input.Ratio == "" && input.Resolution == ""
+		case imageFixtureModel + "-grid", imageFixtureModel + "-mapped":
+			validSize = (input.Ratio == "4:3" && input.Size == "1024x768" || input.Ratio == "1:1" && input.Size == "1024x1024") && input.Resolution == ""
+			if input.Model == imageFixtureModel+"-grid" {
+				validSize = (input.Ratio == "4:3" && input.Size == "1024x768" || input.Ratio == "1:1" && input.Size == "1024x1024") && input.Resolution == "standard"
+			}
+		case imageFixtureModel + "-ratio", imageFixtureModel + "-ratio-only":
+			validSize = (input.Ratio == "4:3" || input.Ratio == "1:1") && input.Size == "" && input.Resolution == ""
+			if input.Model == imageFixtureModel+"-ratio" {
+				validSize = (input.Ratio == "4:3" || input.Ratio == "1:1") && input.Size == "" && input.Resolution == "standard"
+			}
+		}
+		if !validSize {
+			http.Error(w, "invalid synthetic dimensions", 400)
 			return
 		}
 		u.submissions++
 		if strings.HasPrefix(input.Prompt, "synchronous") {
 			images := []any{}
 			for range input.N {
-				images = append(images, map[string]string{"encoded": u.png})
+				images = append(images, map[string]string{"b64_json": u.png})
 			}
-			writeImageFixtureJSON(w, map[string]any{"pictures": images})
+			writeImageFixtureJSON(w, map[string]any{"status": "done", "data": images})
 			return
 		}
 		id := fmt.Sprintf("synthetic-job-%d", u.submissions)
@@ -481,31 +603,70 @@ func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		u.jobs[id] = &imageFixtureJob{count: input.N, scenario: scenario}
-		writeImageFixtureJSON(w, map[string]any{"ticket": map[string]any{"accepted": true, "reference": id}})
-	case strings.HasPrefix(r.URL.Path, "/jobs/") && r.Method == http.MethodGet:
+		writeImageFixtureJSON(w, map[string]any{"async": true, "task_id": id, "status": "queued"})
+	case strings.HasPrefix(r.URL.Path, "/v1/images/jobs/") && r.Method == http.MethodGet:
 		u.polls++
-		id := strings.TrimPrefix(r.URL.Path, "/jobs/")
+		id := strings.TrimPrefix(r.URL.Path, "/v1/images/jobs/")
 		job, ok := u.jobs[id]
 		if !ok {
 			http.NotFound(w, r)
 			return
 		}
-		state, count := "complete", job.count
+		state, count := "done", job.count
 		if job.scenario == "hold" && !job.released {
-			state, count = "working", 0
+			state, count = "running", 0
 		}
 		if job.scenario == "fail" {
-			state, count = "failed", 0
+			state, count = "error", 0
 		}
 		if job.scenario == "partial" {
 			count = max(1, count/2)
 		}
 		images := []any{}
 		for range count {
-			images = append(images, map[string]string{"encoded": u.png})
+			images = append(images, map[string]string{"b64_json": u.png})
 		}
-		writeImageFixtureJSON(w, map[string]any{"phase": state, "pictures": images})
+		writeImageFixtureJSON(w, map[string]any{"status": state, "data": images})
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func imageFixtureCatalog() []map[string]any {
+	items := []map[string]any{}
+	for _, variant := range []string{"", "-grid", "-mapped", "-ratio", "-ratio-only"} {
+		settings := map[string]any{
+			"promptCharacterLimit": 256,
+			"steps":                map[string]int{"max": 8, "default": 4},
+			"cfgScale":             map[string]any{"scale": []float64{1, 1.5, 2}, "default": 1.5},
+			"quality":              true,
+		}
+		switch variant {
+		case "-grid":
+			settings["customSizeMapping"] = map[string]any{"standard": map[string]any{
+				"1:1": map[string]int{"width": 1024, "height": 1024},
+				"4:3": map[string]int{"width": 1024, "height": 768},
+			}}
+			settings["aspectRatio"] = map[string]any{"default": "4:3"}
+			settings["resolution"] = map[string]any{"default": "standard"}
+		case "-mapped":
+			settings["customSizeMappingString"] = map[string]string{"1:1": "1024x1024", "4:3": "1024x768"}
+		case "-ratio", "-ratio-only":
+			settings["aspectRatio"] = map[string]any{"options": []string{"1:1", "4:3"}, "default": "4:3"}
+			if variant == "-ratio" {
+				settings["resolution"] = map[string]any{"options": []string{"standard"}, "default": "standard"}
+			}
+		}
+		name := imageFixtureName
+		if variant != "" {
+			name = "Automatic canvas " + strings.TrimPrefix(variant, "-")
+		}
+		items = append(items, map[string]any{
+			"id": imageFixtureModel + variant, "atelier_type": "image",
+			"atelier_friendly_name": name, "atelier_settings": settings,
+			"atelier_supports": map[string]bool{"negative_prompts": true, "steps": true},
+			"description":      "synthetic-private-metadata",
+		})
+	}
+	return items
 }
