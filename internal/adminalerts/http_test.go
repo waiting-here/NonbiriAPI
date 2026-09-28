@@ -5,11 +5,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
@@ -234,6 +237,130 @@ func TestAdminAlertKindAndDTOClosedSets(t *testing.T) {
 		if err := json.Unmarshal(row["id"], &id); err != nil || id == "" {
 			t.Fatalf("id is not a string: %s err=%v", row["id"], err)
 		}
+	}
+}
+
+func TestAccountDeletionHTTPMatchesSharedSnapshotFixture(t *testing.T) {
+	body, err := os.ReadFile("../../web/test/fixtures/account-deletion-alerts.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures struct {
+		Legacy json.RawMessage `json:"legacy"`
+		V1     json.RawMessage `json:"v1"`
+		V2     json.RawMessage `json:"v2"`
+	}
+	if err := json.Unmarshal(body, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	environment := newAlertTestEnvironment(t)
+	legacyID := environment.seedAlert(t, string(KindAccountDeleted), "Account deleted.", "", nil, alertTestNow-1, false)
+	if _, err := environment.store.DB().Exec(`INSERT INTO admin_account_deletions(alert_id,snapshot_json) VALUES(?,?)`, legacyID, string(fixtures.Legacy)); err != nil {
+		t.Fatal(err)
+	}
+	registeredAt, deletedAt, effectiveLevel := int64(1_600_000_000), alertTestNow, 4
+	active, inactive, pauseUntil := true, false, alertTestNow-1
+	reason, actorID := "First line\nSecond\t<&>", "99"
+	current := AccountDeletion{
+		SnapshotVersion: 2, RegisteredAt: &registeredAt, DeletedAt: &deletedAt, EffectiveLevel: &effectiveLevel,
+		Ban:          DeletionPenalty{State: "known", ActiveAtDeletion: &active, Reason: &reason},
+		CharityPause: DeletionPenalty{State: "known", ActiveAtDeletion: &inactive, Until: &pauseUntil},
+		Source:       "self", ActorUserID: &actorID, BlacklistAction: "added",
+		BlacklistReasonCodes: []string{"deletion_penalty_evasion", "deletion_debt_evasion"},
+		UserID:               "99", DiscordID: "100000000000000099", GeneralBalance: "-3.5", GameBalance: "2",
+		DonationCredit: "120", SketchPaper: "1", SketchBrush: "0",
+	}
+	currentBody, err := json.Marshal(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentID := environment.seedAlert(t, string(KindAccountDeleted), "Account deleted.", "", nil, alertTestNow-1, true)
+	if _, err := environment.store.DB().Exec(`INSERT INTO admin_account_deletions(alert_id,snapshot_json,snapshot_version,former_user_id,discord_id,registered_at,deleted_at,effective_level,source,actor_user_id,ban_active,pause_active,blacklist_action) VALUES(?,?,2,99,?,?,?,?, 'self',99,1,0,'added')`, currentID, string(currentBody), current.DiscordID, registeredAt, deletedAt, effectiveLevel); err != nil {
+		t.Fatal(err)
+	}
+	otherID := environment.seedAlert(t, string(KindFetchFailed), "Safe alert.", "", nil, alertTestNow, false)
+	expected := map[string]json.RawMessage{alertIDString(legacyID): fixtures.V1, alertIDString(currentID): fixtures.V2}
+	assertSnapshot := func(row json.RawMessage, expectedID string) {
+		t.Helper()
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(row, &fields); err != nil {
+			t.Fatal(err)
+		}
+		var id string
+		if err := json.Unmarshal(fields["id"], &id); err != nil {
+			t.Fatal(err)
+		}
+		if id != expectedID {
+			t.Fatalf("HTTP alert id=%q want=%q", id, expectedID)
+		}
+		want, exists := expected[id]
+		if !exists {
+			if fields["account_deletion"] != nil {
+				t.Fatal("a non-deletion alert gained a snapshot")
+			}
+			return
+		}
+		var gotValue, wantValue any
+		if err := json.Unmarshal(fields["account_deletion"], &gotValue); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(want, &wantValue); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(gotValue, wantValue) {
+			t.Fatalf("HTTP snapshot differs from the shared contract: got=%s want=%s", fields["account_deletion"], want)
+		}
+	}
+	for _, tc := range []struct {
+		query string
+		ids   []int64
+	}{
+		{"", []int64{otherID, currentID, legacyID}},
+		{"&kind=account_deleted", []int64{currentID, legacyID}},
+		{"&resolved=false", []int64{otherID, legacyID}},
+		{"&resolved=false&kind=account_deleted", []int64{legacyID}},
+		{"&resolved=true", []int64{currentID}},
+		{"&resolved=true&kind=account_deleted", []int64{currentID}},
+	} {
+		t.Run("list"+tc.query, func(t *testing.T) {
+			response := invokeAlertHandler(t, environment.handler(t, http.MethodGet, routeAlerts), http.MethodGet, routeAlerts+"?page=1&page_size=20"+tc.query, nil, "", environment.adminID, nil)
+			page := decodeAlertPage(t, response)
+			requireAlertIDs(t, page.Data, tc.ids...)
+			if page.Pagination == nil || page.Pagination.TotalItems != strconv.Itoa(len(tc.ids)) {
+				t.Fatalf("pagination=%+v", page.Pagination)
+			}
+			var wire struct {
+				Data []json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &wire); err != nil {
+				t.Fatal(err)
+			}
+			for index, row := range wire.Data {
+				assertSnapshot(row, alertIDString(tc.ids[index]))
+			}
+		})
+	}
+	for _, id := range []int64{legacyID, currentID} {
+		response := invokeAlertHandler(t, environment.handler(t, http.MethodGet, routeAlertDetail), http.MethodGet, routeAlertDetail, nil, alertIDString(id), environment.adminID, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("detail status=%d body=%s", response.Code, response.Body.String())
+		}
+		var detail struct {
+			Alert json.RawMessage `json:"alert"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil {
+			t.Fatal(err)
+		}
+		assertSnapshot(detail.Alert, alertIDString(id))
+		response = invokeAlertHandler(t, environment.handler(t, http.MethodPost, routeResolveAlert), http.MethodPost, routeResolveAlert, stringBody(`{"resolved":true}`), alertIDString(id), environment.adminID, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("resolve status=%d body=%s", response.Code, response.Body.String())
+		}
+		assertSnapshot(response.Body.Bytes(), alertIDString(id))
+	}
+	environment.authorizer.forced = authz.ErrForbidden
+	for _, route := range []struct{ method, pattern string }{{http.MethodGet, routeAlerts}, {http.MethodGet, routeAlertDetail}, {http.MethodPost, routeResolveAlert}} {
+		requireErrorCode(t, invokeAlertHandler(t, environment.handler(t, route.method, route.pattern), route.method, route.pattern, nil, alertIDString(legacyID), environment.adminID, nil), http.StatusForbidden, httperr.CodeForbidden)
 	}
 }
 

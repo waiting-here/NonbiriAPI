@@ -1,6 +1,7 @@
 import { expect, test } from './test';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
+import deletionSnapshots from '../fixtures/account-deletion-alerts.json' with { type: 'json' };
 
 async function setup(page: import('@playwright/test').Page) {
   await mockRoleSession(page, 'admin', 'admin');
@@ -119,6 +120,88 @@ test('deletion alerts can be filtered and resolved in a selected batch', async (
   await page.getByRole('button', { name: 'Resolve selected (1)' }).click();
   await expect(page.getByText('123456789012345678')).toHaveCount(0);
   expect(done).toBe(true);
+  errors.assertNone();
+});
+
+test('all alert filters and retained details accept current deletion snapshots and reject partial metadata', async ({ page }) => {
+  const errors = collectConsoleViolations(page);
+  await setup(page);
+  let resolved = false;
+  let malformed = false;
+  const rows = () => [
+    { id: '9', kind: 'fetch_failed', message: 'Other synthetic alert', resolved: false },
+    { id: '8', kind: 'account_deleted', message: 'Account deleted.', resolved: true, account_deletion: deletionSnapshots.v2 },
+    { id: '7', kind: 'account_deleted', message: 'Account deleted.', resolved, account_deletion: malformed ? { ...deletionSnapshots.legacy, snapshot_version: 1 } : deletionSnapshots.v1 },
+  ].map((row) => ({ ...row, ref: null, subject_user_id: null, created_at: 1_700_000_000, resolved_at: row.resolved ? 1_700_000_001 : null }));
+  await page.route('**/admin/api/alerts**', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === 'POST') {
+      expect(url.pathname).toBe('/admin/api/alerts/7/resolve');
+      expect(route.request().postDataJSON()).toEqual({ resolved: true });
+      resolved = true;
+      await route.fulfill({ json: rows()[2] });
+      return;
+    }
+    const focused = rows().find((row) => url.pathname === `/admin/api/alerts/${row.id}`);
+    if (focused) {
+      await route.fulfill({ json: {
+        alert: focused, context_version: 0, occurred_facts: [],
+        targets: [{ kind: 'deleted_account', id: focused.id, available: true, status: 'retained' }],
+        current_state: [], related_logs: null, resolution_kind: 'legacy',
+      } });
+      return;
+    }
+    expect(url.pathname).toBe('/admin/api/alerts');
+    expect(url.searchParams.get('page')).toBe('1');
+    expect(url.searchParams.get('page_size')).toBe('20');
+    const resolutionFilter = url.searchParams.get('resolved');
+    const kindFilter = url.searchParams.get('kind');
+    expect([null, 'true', 'false']).toContain(resolutionFilter);
+    expect([null, 'account_deleted']).toContain(kindFilter);
+    const data = rows().filter((row) =>
+      (resolutionFilter === null || row.resolved === (resolutionFilter === 'true')) &&
+      (kindFilter === null || row.kind === kindFilter),
+    );
+    await route.fulfill({ json: {
+      data, next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: String(data.length), total_pages: '1' },
+    } });
+  });
+  await page.goto(`${ADMIN_ORIGIN}/alerts?resolved=all`);
+  for (const width of [1280, 1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
+    await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await expect(page.getByText('Other synthetic alert')).toBeVisible();
+  await page.getByLabel('Alert type').selectOption('account_deleted');
+  await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
+  for (const [id, snapshot] of [['7', deletionSnapshots.v1], ['8', deletionSnapshots.v2]] as const) {
+    const row = page.getByRole('row').filter({ hasText: snapshot.discord_id });
+    await row.getByRole('button', { name: 'Details', exact: true }).click();
+    await expect(page.getByRole('heading', { name: `Alert details #${id}` })).toBeVisible();
+    await page.getByRole('button', { name: 'Close details' }).click();
+  }
+  await page.getByLabel('Resolution status').selectOption('true');
+  await expect(page.getByText(deletionSnapshots.v1.discord_id)).toHaveCount(0);
+  await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
+  await page.getByLabel('Resolution status').selectOption('false');
+  await expect(page.getByText(deletionSnapshots.v2.discord_id)).toHaveCount(0);
+  await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
+  await page.getByRole('button', { name: 'Resolve', exact: true }).click();
+  await expect(page.getByText(deletionSnapshots.v1.discord_id)).toHaveCount(0);
+  expect(resolved).toBe(true);
+  await page.getByLabel('Resolution status').selectOption('all');
+  await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
+  await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
+  await page.getByLabel('Alert type').selectOption('all');
+  await expect(page.getByText('Other synthetic alert')).toBeVisible();
+  malformed = true;
+  await page.reload();
+  await expect(page.getByText('The service returned an invalid response.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
   errors.assertNone();
 });
 
