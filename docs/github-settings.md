@@ -24,13 +24,20 @@ For a multi-part version, maintainers may use a version integration branch (for 
 
 Complete CI runs on pull requests and can also be started manually. After merging, verify that the resulting `master` tree matches the passing PR tree before reusing its evidence for release. A changed tree requires checks for the affected inputs. CodeQL keeps its independent triggers; removing redundant post-merge CI does not remove required PR checks or authorize direct updates.
 
+`Go checks` requires both the build/vet/test/upgrade job and every race shard.
+`Web checks` requires the unit/type/lint/build job and both browser suites. These
+aggregate jobs run even when a dependency fails or is cancelled, and succeed
+only when every dependency succeeded. Keep the protected check names stable
+when changing parallelism; a skipped or failed suite must not produce a green
+aggregate check.
+
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 
 ## Recommended repository options
 
 - Keep **Allow auto-merge** disabled until the checks and review process are familiar.
 - Enable Dependabot version updates using the committed `.github/dependabot.yml`.
-- Keep CodeQL default setup enabled for Go, JavaScript/TypeScript, and GitHub Actions. Require the aggregate result gate, review each alert against the exact data flow, and dismiss only a narrowly verified false positive rather than excluding the query globally.
+- Keep CodeQL default setup enabled for Go, JavaScript/TypeScript, Python, and GitHub Actions. Require the aggregate result gate, review each alert against the exact data flow, and dismiss only a narrowly verified false positive rather than excluding the query globally.
 - Enable secret scanning and push protection if the repository plan provides them.
 - Keep the default branch as `master`; publish every alpha, beta or release candidate as a pre-release. A development branch is not published until its authorized tag and release steps are complete.
 - Keep Actions permissions at the workflow default of read-only contents; do not add deployment secrets to the CI workflow.

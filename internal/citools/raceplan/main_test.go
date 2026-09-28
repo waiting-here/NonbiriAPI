@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -203,6 +205,56 @@ func TestBuildPlansIsDeterministicAndCoversLiveCatalogOnce(t *testing.T) {
 	}
 	if len(tests) != 3 {
 		t.Fatalf("split-test coverage = %#v", tests)
+	}
+}
+
+func TestBuildPlansKeepsLiveTestsWhenTimingHintsAreStale(t *testing.T) {
+	t.Parallel()
+
+	hints := plannerTestHints()
+	hints.TestSeconds = map[string]map[string]float64{
+		"example/slow": {"TestMeasured": 90, "TestRetired": 10000},
+	}
+	catalog := []catalogPackage{{ImportPath: "example/slow", Tests: []string{
+		"TestMeasured", "TestAdded", "FuzzAdded", "Example_added",
+	}}}
+	plans, err := buildPlans(catalog, hints, 3)
+	if err != nil {
+		t.Fatalf("build plans with stale hints: %v", err)
+	}
+	delete(hints.TestSeconds["example/slow"], "TestRetired")
+	withoutRetired, err := buildPlans(catalog, hints, 3)
+	if err != nil {
+		t.Fatalf("build plans without retired hint: %v", err)
+	}
+	if !reflect.DeepEqual(plans, withoutRetired) || planDigest(plans, "30m", 4) != planDigest(withoutRetired, "30m", 4) {
+		t.Fatal("an unused timing hint changed the live execution plan")
+	}
+	seen := make(map[string]int)
+	var estimated float64
+	for _, plan := range plans {
+		estimated += plan.EstimatedSeconds
+		for _, group := range executionGroups(plan, "30m", 4) {
+			pattern := regexp.MustCompile(group.Args[len(group.Args)-2])
+			if pattern.MatchString("TestRetired") {
+				t.Fatal("retired hint added a test to the live execution plan")
+			}
+			for _, name := range catalog[0].Tests {
+				if pattern.MatchString(name) {
+					seen[name]++
+				}
+			}
+		}
+	}
+	for _, name := range catalog[0].Tests {
+		if seen[name] != 1 {
+			t.Errorf("live test %s matched %d commands, want 1", name, seen[name])
+		}
+	}
+	// New tests retain the 100/2 baseline average even though the live catalog
+	// has grown, while the retired measurement contributes no weight.
+	if estimated != 240 {
+		t.Fatalf("estimated total = %.1f, want 240.0", estimated)
 	}
 }
 
@@ -553,6 +605,49 @@ func TestExecuteGroupsRejectsInvalidWorkerCount(t *testing.T) {
 			t.Fatalf("workers=%d unexpectedly accepted", workers)
 		}
 	}
+}
+
+func TestExecuteGroupsPreservesChildFailureAndContinues(t *testing.T) {
+	t.Parallel()
+
+	groups := []commandGroup{
+		{Label: "failed", Args: []string{"23"}, Weight: 2},
+		{Label: "remaining", Args: []string{"0"}, Weight: 1},
+	}
+	var output bytes.Buffer
+	var calls []string
+	err := executeGroups(groups, 1, func(group commandGroup, writer io.Writer) error {
+		calls = append(calls, group.Label)
+		command := exec.Command(os.Args[0], "-test.run=^TestRaceCommandExitHelper$")
+		command.Env = append(os.Environ(), "NONBIRI_RACEPLAN_TEST_EXIT="+group.Args[0], "NONBIRI_RACEPLAN_TEST_LABEL="+group.Label)
+		command.Stdout = writer
+		command.Stderr = writer
+		return command.Run()
+	}, &output)
+	if !reflect.DeepEqual(calls, []string{"failed", "remaining"}) {
+		t.Fatalf("executed groups = %v", calls)
+	}
+	if err == nil || !strings.Contains(err.Error(), "1 race command(s) failed") || !strings.Contains(err.Error(), "failed: exit status 23") {
+		t.Fatalf("executeGroups error = %v", err)
+	}
+	for _, label := range []string{"failed", "remaining"} {
+		if !strings.Contains(output.String(), "child output: "+label) || !strings.Contains(output.String(), "finished "+label) {
+			t.Errorf("missing child output or completion for %s: %q", label, output.String())
+		}
+	}
+}
+
+func TestRaceCommandExitHelper(t *testing.T) {
+	value := os.Getenv("NONBIRI_RACEPLAN_TEST_EXIT")
+	if value == "" {
+		return
+	}
+	code, err := strconv.Atoi(value)
+	if err != nil {
+		t.Fatalf("invalid child exit code: %v", err)
+	}
+	fmt.Fprintln(os.Stdout, "child output: "+os.Getenv("NONBIRI_RACEPLAN_TEST_LABEL"))
+	os.Exit(code)
 }
 
 func TestPackageHasTestMain(t *testing.T) {

@@ -6,11 +6,23 @@ import (
 )
 
 func TestScanCheckpointPrivacyWithoutPublishedResults(t *testing.T) {
+	image := generationTwoConstraintImageForTest(t)
+	paths := make(map[string]bool)
 	for _, change := range []string{"source_delete", "source_retire", "user_delete", "authority_change"} {
 		for _, cursor := range []string{"pending", "after"} {
 			t.Run(change+"/"+cursor, func(t *testing.T) {
-				database := openGenerationTwoDDLForTest(t)
+				database, path := openGenerationTwoDDLTestImage(t, image)
+				if paths[path] {
+					t.Fatal("privacy cases share a database file")
+				}
+				paths[path] = true
 				defer database.Close()
+				for _, table := range []string{"users", "request_logs", "request_source_facts", "risk_client_scans"} {
+					var rows int
+					if err := database.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&rows); err != nil || rows != 0 {
+						t.Fatalf("privacy fixture retained %s rows=%d, err=%v", table, rows, err)
+					}
+				}
 				actor := hostileInsertUser(t, database, "scan owner", 0, 1)
 				hostileMustExec(t, database, `UPDATE users SET level=6 WHERE id=?`, actor)
 				victim := hostileInsertUser(t, database, "scan subject", 0, 1)

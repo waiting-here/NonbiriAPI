@@ -57,7 +57,7 @@ func hostileTerminalDonationKeyArgs(t *testing.T, db *sql.DB, donationID int64) 
 }
 
 func TestGenerationTwoHostileMainstreamChannelMatrices(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 
 	// Canonical insert is a positive control.
 	valid := hostileOID("mch_")
@@ -164,7 +164,7 @@ UPDATE mainstream_channels SET state='retired',enabled=0,retired_at=20,updated_a
 }
 
 func TestGenerationTwoHostileEndpointChannelSnapshotMatrix(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	userID := hostileInsertUser(t, db, "channel-snapshot", 0, 0)
 	channelID := hostileOID("mch_")
 	hostileInsertChannelFixture(t, db, channelID, 1)
@@ -242,7 +242,7 @@ UPDATE mainstream_channels SET state='retired',enabled=0,retired_at=5,updated_at
 }
 
 func TestGenerationTwoHostileDonationKeyExpiryAndTraceMatrix(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	userID := hostileInsertUser(t, db, "donation-expiry", 0, 0)
 	donationID := hostileInsertDonation(t, db, userID)
 	fixtureEndpointID := hostileInsertEndpoint(t, db, userID, "https://fixture.example/v1")
@@ -440,7 +440,7 @@ INSERT INTO donation_keys(`+hostileDonationKeyColumns()+`,
 }
 
 func TestGenerationTwoHostileReportCursorAndTargetSourceMatrix(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 
 	// All-or-none cursor pair, closed source set, and endpoint cursor>0.
 	hostileMustFail(t, db, `

@@ -558,7 +558,7 @@ INSERT INTO game_rps_queue(
 }
 
 func TestGenerationTwoRPSUserSlotCardinality(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	defer db.Close()
 
 	sessionID := hostileOIDVariant("rps_", 'S', 'Q')
@@ -667,7 +667,7 @@ func hostileEnvelope(length int, version byte) []byte {
 }
 
 func TestGenerationTwoHostileScalarBoundaries(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "scalar", 0, 0)
 
 	hostileMustExec(t, db, `UPDATE users SET created_at=?,updated_at=? WHERE id=?`, hostileTimeMax, hostileTimeMax, uid)
@@ -741,7 +741,7 @@ VALUES(?,?,101,'self',0,'released',0,'not_applicable')`, hostileBadOID("clm_"), 
 }
 
 func TestGenerationTwoHostileWideIntegerCodecs(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	zero := hostileBlob16(0)
 	one := hostileBlob16(1)
 	max := hostileMaxU128()
@@ -882,7 +882,7 @@ UPDATE game_rps_seats SET starting_balance=?,current_balance=?,current_round_inp
 }
 
 func TestGenerationTwoHostileAdminAlertKinds(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	valid := []string{
 		"fetch_failed",
 		"forward_error",
@@ -904,7 +904,7 @@ func TestGenerationTwoHostileAdminAlertKinds(t *testing.T) {
 }
 
 func TestGenerationTwoHostileMaintenanceActorMatrix(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	adminID := hostileInsertUser(t, database, "maintenance-matrix-admin", 1, 0)
 	stewardID := hostileInsertUser(t, database, "maintenance-matrix-steward", 0, 0)
 
@@ -952,7 +952,7 @@ INSERT INTO maintenance_events(
 }
 
 func TestGenerationTwoHostileMaintenanceActorDeidentificationDeadline(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	adminID := hostileInsertUser(t, database, "maintenance-deidentify-admin", 1, 0)
 	stewardID := hostileInsertUser(t, database, "maintenance-deidentify-steward", 0, 0)
 
@@ -1141,7 +1141,7 @@ WHERE id=?`, heldID)
 }
 
 func TestGenerationTwoHostileOIDPrefixesAndNotNull(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "oid", 0, 0)
 
 	validOperation := hostileOID("op_")
@@ -1212,7 +1212,7 @@ VALUES(?, 'report_case',?, 'active',1,'hostile',?,0,100)`, hostileBadOID("lgh_")
 }
 
 func TestGenerationTwoHostileRequestClaimAttemptMatrices(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "request", 0, 0)
 
 	hostileInsertTerminalRequest(t, db, hostileOIDVariant("req_", 'T', 'Q'), uid, "openai_chat_completions", "success", 200, nil)
@@ -1417,7 +1417,7 @@ VALUES(?,?,'charity_chat_completions',0)`, logReq, uid)
 }
 
 func TestGenerationTwoHostileLogicalRequestTerminalSnapshot(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "terminal-snapshot", 0, 0)
 	requestID := hostileOIDVariant("req_", 'T', 'Q')
 	hostileInsertLogicalRequest(t, db, requestID, uid, "openai_chat_completions", 1)
@@ -1564,7 +1564,7 @@ VALUES(?,'model_discovery',?,'failed_blocked','invariant_violation',0,1)`, block
 }
 
 func TestGenerationTwoHostileSecretReportDonationMembership(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	twoTo63 := hostileTwoTo63U128()
 	high := hostileHigh128()
 	max := hostileMaxU128()
@@ -1710,7 +1710,7 @@ UPDATE donation_keys SET price_used_mag=?,price_reserved_mag=?,calls_used=?,call
 }
 
 func TestGenerationTwoHostileReportDecisionTerminalMatrix(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 
 	insert := func(t *testing.T, id string, fingerprint []byte, status, progress string, decisionAt, terminalAt any) {
 		t.Helper()
@@ -1779,7 +1779,7 @@ INSERT INTO report_cases(
 }
 
 func TestGenerationTwoHostileThursdaySharedPoolAndWelfareInvariants(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "thursday", 0, 0)
 	periodID, currentPoolID, nextPoolID := hostileInsertThursdayFixture(t, db)
 
@@ -2036,7 +2036,7 @@ WHERE period_id=? AND participant_ref=?`
 
 	// Each case starts from the same period; rollback isolates its rows
 	// without rebuilding every table and trigger for each mutation.
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	periodID, _, _ := hostileInsertThursdayFixture(t, db)
 	beginCase := func(t *testing.T) {
 		t.Helper()
@@ -2084,7 +2084,7 @@ INSERT INTO thursday_participants(
 }
 
 func TestGenerationTwoHostileRPSPhaseSeatEnvelope(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "rps", 0, 0)
 	zero := hostileBlob16(0)
 	one := hostileBlob16(1)
@@ -2322,7 +2322,7 @@ VALUES(?,?,?,0,?,0)`, gestureID, uid, leaseID, hostileTimeMax)
 }
 
 func TestGenerationTwoHostileGameParentAndProjectionMatrices(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	zero := hostileBlob16(0)
 	one := hostileBlob16(1)
 
@@ -2565,7 +2565,7 @@ INSERT INTO game_rps_rank_aggregates(
 }
 
 func TestGenerationTwoHostileAutomaticCatalogIdentity(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "catalog", 0, 0)
 	endpointID := hostileInsertEndpoint(t, db, uid, "https://upstream.example/v1")
 	secretID := hostileInsertSecret(t, db, "https://upstream.example/v1", 0)
@@ -2650,7 +2650,7 @@ VALUES('provider','charity','[公益]provider/charity','per_request',?, ?,0,0)`,
 }
 
 func TestGenerationTwoHostilePK64PositiveIDs(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	adminID := hostileInsertUser(t, db, "pk64-admin", 1, 0)
 	userID := hostileInsertUser(t, db, "pk64-user", 0, 0)
 	endpointID := hostileInsertEndpoint(t, db, userID, "https://pk64.example/v1")
@@ -2827,7 +2827,7 @@ INSERT INTO charity_models(
 }
 
 func TestGenerationTwoHostileAnnouncementAuditRevisionMatrix(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	adminID := hostileInsertUser(t, db, "announcement-revisions", 1, 0)
 	hostileInsertAnnouncementAudit(t, db, adminID, 0)
 
@@ -2860,7 +2860,7 @@ INSERT INTO announcement_audits(
 }
 
 func TestGenerationTwoHostileUnicodeScalarTextBounds(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "unicode-text", 0, 0)
 	adminID := hostileInsertUser(t, db, "unicode-text-admin", 1, 0)
 	text1024 := strings.Repeat("界", 1024)
@@ -2912,7 +2912,7 @@ VALUES(?,1,1,?,'reject',?,0)`, reportID, adminID, text2049)
 }
 
 func TestGenerationTwoHostileSQLiteIntegerAffinity(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	uid := hostileInsertUser(t, db, "integer-affinity", 0, 0)
 	adminID := hostileInsertUser(t, db, "integer-affinity-admin", 1, 0)
 
@@ -2958,7 +2958,7 @@ VALUES(?,0,'whitebait','small',5,1)`, fishingBatchID)
 }
 
 func TestLimitedActivityRejectsFractionalAccountingAndScheduleFacts(t *testing.T) {
-	database := openGenerationTwoDDLForTest(t)
+	database := openGenerationTwoConstraintFixture(t)
 	hostileMustExec(t, database, `INSERT INTO limited_activity_configs VALUES('strict-fixture',0,NULL,NULL,0,'{}',1,0)`)
 	hostileMustExec(t, database, `INSERT INTO limited_activity_revisions VALUES('strict-fixture',1,0,NULL,NULL,0,'{}',NULL,0)`)
 	hostileMustExec(t, database, `INSERT INTO activity_exchange_state VALUES('strict-fixture','sketch_paper',zeroblob(16),NULL,1)`)
@@ -3061,7 +3061,7 @@ WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 }
 
 func TestGenerationTwoHostileSQLiteIntegerAffinityRepresentative(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	zero := hostileBlob16(0)
 	uid := hostileInsertUser(t, db, "integer-representative", 0, 0)
 	adminID := hostileInsertUser(t, db, "integer-representative-admin", 1, 0)
@@ -3237,7 +3237,7 @@ VALUES(?,?, 'active',1.5,'hostile',?,0,100)`, holdID, "maintenance_event", maint
 }
 
 func TestGenerationTwoHostileIdempotencyExpiryAcrossScopes(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	scopes := []string{
 		"credential_report",
 		"control_mutation",
@@ -3297,7 +3297,7 @@ INSERT INTO idempotency_records(
 }
 
 func TestGenerationTwoHostileIdempotencyIdentityAndTransitions(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	actorHash := hostileBlob32(1)
 	keyHash := hostileBlob32(2)
 	requestHash := hostileBlob32(3)
@@ -3438,7 +3438,7 @@ VALUES(?,0,?,'user',1,?)`, opID, accountID, hostileBlob16(1))
 }
 
 func TestGenerationTwoHostileLegalHoldMarkersDeletesAndAudits(t *testing.T) {
-	db := openGenerationTwoDDLForTest(t)
+	db := openGenerationTwoConstraintFixture(t)
 	adminID := hostileInsertUser(t, db, "legal-admin", 1, 0)
 	userID := hostileInsertUser(t, db, "legal-user", 0, 0)
 	// announcement_audits has an INTEGER identity independent of the other
