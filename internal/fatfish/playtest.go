@@ -83,7 +83,7 @@ func (s *Service) PreparePlaytest(ctx context.Context, actorID int64, input Play
 	if _, err = io.ReadFull(s.random, seed[:]); err != nil {
 		return ChallengeView{}, err
 	}
-	commit, err := engine.SeedCommit(id, input.VersionID, input.VersionID, version.ContentHash, seed)
+	commit, err := engine.SeedCommitForVersion(id, input.VersionID, input.VersionID, version.ContentHash, version.EngineVersion, version.ScoringVersion, seed)
 	if err != nil {
 		return ChallengeView{}, err
 	}

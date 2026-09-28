@@ -40,13 +40,13 @@ func (s *Service) processVerification(ctx context.Context, job *verifyJob) error
 	if c.playtest {
 		periodID, nodeID = c.versionID, c.versionID
 	}
-	commit, err := engine.SeedCommit(c.id, periodID, nodeID, hex.EncodeToString(c.contentHash), seed)
+	commit, err := engine.SeedCommitForVersion(c.id, periodID, nodeID, hex.EncodeToString(c.contentHash), c.engineVersion, c.scoringVersion, seed)
 	if err != nil || subtle.ConstantTimeCompare([]byte(commit), []byte(hex.EncodeToString(c.seedCommit))) != 1 {
 		clear(job.inputs)
 		return s.refundVerificationFault(c.id, "commitment_mismatch")
 	}
 	level, err := engine.ParseLevel([]byte(c.levelJSON.String))
-	if err != nil {
+	if err != nil || level.EngineVersion != c.engineVersion || level.ScoringVersion != c.scoringVersion {
 		clear(job.inputs)
 		return s.refundVerificationFault(c.id, "version_invalid")
 	}
@@ -73,7 +73,7 @@ func (s *Service) processVerification(ctx context.Context, job *verifyJob) error
 		if premature {
 			reason = "premature_terminal"
 		}
-		replay = engine.ReplayResult{EngineVersion: engine.EngineVersion, ScoringVersion: engine.ScoringVersion,
+		replay = engine.ReplayResult{EngineVersion: c.engineVersion, ScoringVersion: c.scoringVersion,
 			ContentHash: hex.EncodeToString(c.contentHash), TerminalTick: 0, Reason: reason, BowlCounts: []engine.BowlState{}, ScoreUnits: 0}
 	}
 	durationMS := time.Since(verificationStart).Milliseconds()
@@ -234,7 +234,7 @@ func (s *Service) settleVerified(ctx context.Context, id string) error {
 	if err = json.Unmarshal([]byte(c.resultJSON.String), &result); err != nil {
 		return ErrInvariant
 	}
-	if result.ContentHash != hex.EncodeToString(c.contentHash) || result.SeedCommit != hex.EncodeToString(c.seedCommit) || !result.CommitmentVerified {
+	if result.ContentHash != hex.EncodeToString(c.contentHash) || result.SeedCommit != hex.EncodeToString(c.seedCommit) || !result.CommitmentVerified || result.EngineVersion != c.engineVersion || result.ScoringVersion != c.scoringVersion {
 		return ErrInvariant
 	}
 	if c.playtest {

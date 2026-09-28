@@ -30,6 +30,7 @@ type nodeSnapshot struct {
 	contentHash                                         []byte
 	levelJSON                                           string
 	durationSeconds                                     int
+	engineVersion, scoringVersion                       int
 	maximumStars                                        int
 	periodState                                         string
 	periodVisible, periodPaused                         bool
@@ -43,12 +44,12 @@ func readNodeSnapshotTx(ctx context.Context, tx *sql.Tx, periodID, nodeID string
 	err := tx.QueryRowContext(ctx, `SELECT n.period_id,n.id,n.current_revision,r.version_id,r.condition_json,
  r.hidden_until_eligible,r.unlock_cost_mag,r.ticket_price_mag,r.first_clear_reward_mag,
  r.star1_reward_mag,r.star2_reward_mag,r.star3_reward_mag,v.content_hash,v.content_json,
- v.duration_seconds,v.maximum_stars,p.state,p.visible,p.paused,p.starts_at,p.ends_at
+ v.duration_seconds,v.maximum_stars,v.engine_version,v.scoring_version,p.state,p.visible,p.paused,p.starts_at,p.ends_at
  FROM fatfish_nodes n JOIN fatfish_node_revisions r ON r.node_id=n.id AND r.revision=n.current_revision
  JOIN fatfish_level_versions v ON v.id=r.version_id JOIN fatfish_periods p ON p.id=n.period_id
  WHERE n.period_id=? AND n.id=?`, periodID, nodeID).Scan(&n.periodID, &n.nodeID, &n.revision, &n.versionID, &conditionJSON,
 		&hidden, &n.unlockCost, &n.price, &n.firstReward, &n.star1, &n.star2, &n.star3,
-		&n.contentHash, &n.levelJSON, &n.durationSeconds, &n.maximumStars,
+		&n.contentHash, &n.levelJSON, &n.durationSeconds, &n.maximumStars, &n.engineVersion, &n.scoringVersion,
 		&n.periodState, &visible, &paused, &n.periodStart, &n.periodEnd)
 	if errors.Is(err, sql.ErrNoRows) {
 		return n, ErrNotFound
@@ -197,7 +198,7 @@ func (s *Service) Prepare(ctx context.Context, userID int64, input PrepareInput,
 		return ChallengeView{}, err
 	}
 	contentHash := hex.EncodeToString(n.contentHash)
-	commit, err := engine.SeedCommit(id, n.periodID, n.nodeID, contentHash, seed)
+	commit, err := engine.SeedCommitForVersion(id, n.periodID, n.nodeID, contentHash, n.engineVersion, n.scoringVersion, seed)
 	if err != nil {
 		return ChallengeView{}, err
 	}

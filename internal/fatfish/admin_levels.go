@@ -246,7 +246,7 @@ func (s *Service) ValidateLevel(ctx context.Context, actorID int64, raw []byte) 
 	if err != nil {
 		return VersionView{}, err
 	}
-	v := VersionView{ContentHash: hash, EngineVersion: engine.EngineVersion, ScoringVersion: engine.ScoringVersion,
+	v := VersionView{ContentHash: hash, EngineVersion: level.EngineVersion, ScoringVersion: level.ScoringVersion,
 		DurationSeconds: level.DurationSeconds, MaximumStars: 3, Content: content}
 	return v, tx.Commit()
 }
@@ -300,14 +300,14 @@ func (s *Service) PublishVersion(ctx context.Context, actorID int64, levelID, ex
 	}
 	hashRaw, _ := hex.DecodeString(hash)
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT id FROM fatfish_level_versions WHERE level_id=? AND content_hash=? AND engine_version=? AND scoring_version=?`, levelID, hashRaw, engine.EngineVersion, engine.ScoringVersion).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT id FROM fatfish_level_versions WHERE level_id=? AND content_hash=? AND engine_version=? AND scoring_version=?`, levelID, hashRaw, level.EngineVersion, level.ScoringVersion).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		id, err = db.GenerateOpaqueID("ffv_")
 		if err != nil {
 			return VersionView{}, err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO fatfish_level_versions(id,level_id,content_hash,engine_version,scoring_version,content_json,duration_seconds,maximum_stars,created_at)
- VALUES(?,?,?,?,?,?,?,?,?)`, id, levelID, hashRaw, engine.EngineVersion, engine.ScoringVersion, string(content), level.DurationSeconds, 3, nowMS/1000)
+ VALUES(?,?,?,?,?,?,?,?,?)`, id, levelID, hashRaw, level.EngineVersion, level.ScoringVersion, string(content), level.DurationSeconds, 3, nowMS/1000)
 		if err != nil {
 			return VersionView{}, err
 		}
