@@ -6,17 +6,18 @@ package engine
 import "context"
 
 const (
-	EngineVersion  = 1
-	ScoringVersion = 1
-	FieldWidth     = 480 * 64
-	FieldHeight    = 560 * 64
-	DragBuffer     = 128 * 64
-	FishRadius     = 8 * 64
-	TicksPerSecond = 60
-	Substeps       = 2
-	MaxInputs      = 72000
-	MaxInputBytes  = 4 << 20
-	MaxLevelBytes  = 256 << 10
+	LegacyEngineVersion = 1
+	EngineVersion       = 2
+	ScoringVersion      = 1
+	FieldWidth          = 480 * 64
+	FieldHeight         = 560 * 64
+	DragBuffer          = 128 * 64
+	FishRadius          = 8 * 64
+	TicksPerSecond      = 60
+	Substeps            = 2
+	MaxInputs           = 72000
+	MaxInputBytes       = 4 << 20
+	MaxLevelBytes       = 256 << 10
 )
 
 type Point struct {
@@ -115,19 +116,27 @@ type InputTuple struct {
 }
 
 type FishState struct {
-	ID             int       `json:"id"`
-	X              int64     `json:"x"`
-	Y              int64     `json:"y"`
-	Heading        int       `json:"heading"`
-	Status         string    `json:"status"` // walking, fed, lost
-	BowlID         int       `json:"bowl_id"`
-	TurnDir        int       `json:"turn_dir"`
-	TurnDistance   int64     `json:"turn_distance"`
-	FlowID         int       `json:"flow_id"`
-	SpeedRemainder int64     `json:"speed_remainder"`
-	XRema          int64     `json:"x_remainder"`
-	YRema          int64     `json:"y_remainder"`
-	RNG            [4]uint32 `json:"rng"`
+	ID             int          `json:"id"`
+	X              int64        `json:"x"`
+	Y              int64        `json:"y"`
+	Heading        int          `json:"heading"`
+	Status         string       `json:"status"` // walking, fed, lost
+	BowlID         int          `json:"bowl_id"`
+	TurnDir        int          `json:"turn_dir"`
+	TurnDistance   int64        `json:"turn_distance"`
+	FlowID         int          `json:"flow_id"`
+	SpeedRemainder int64        `json:"speed_remainder"`
+	XRema          int64        `json:"x_remainder"`
+	YRema          int64        `json:"y_remainder"`
+	RNG            [4]uint32    `json:"rng"`
+	Motion         *MotionState `json:"motion,omitempty"`
+}
+
+// MotionState is serialized only by version 2. Version 1 keeps its original
+// fish state fields and digest bytes.
+type MotionState struct {
+	TurnRemainder    int64 `json:"turn_remainder"`
+	AmbiguousTurnDir int   `json:"ambiguous_turn_dir"`
 }
 
 type ToolState struct {

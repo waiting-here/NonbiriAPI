@@ -1,5 +1,5 @@
 import { concatBytes, decodeHex, hex, sha256, utf8 } from "./sha256";
-import { ENGINE_VERSION, MAX_LEVEL_BYTES, SCORING_VERSION, type EngineState, type Level, type Polygon } from "./types";
+import { LEGACY_ENGINE_VERSION, MAX_LEVEL_BYTES, SCORING_VERSION, supportedVersions, type EngineState, type Level, type Polygon } from "./types";
 import { validateLevel } from "./validate";
 
 export function strictJSON(source: string, maxDepth: number): unknown {
@@ -115,13 +115,29 @@ export function canonicalJSON(data: unknown): string {
 
 export function normalizedLevelBytes(level: Level): Uint8Array { return utf8(canonicalJSON(normalizeLevel(level))); }
 export function contentHash(level: Level): string { return hex(sha256(normalizedLevelBytes(level))); }
-export function stateDigest(state: EngineState): string { return hex(sha256(utf8(canonicalJSON(state)))); }
+export function stateDigest(state: EngineState): string {
+  let v2 = 0;
+  for (const fish of state.fish) {
+    if (fish.motion !== undefined) {
+      v2++;
+      const motion = fish.motion;
+      if (motion === null || typeof motion !== "object" || Object.keys(motion).length !== 2 || !Object.hasOwn(motion, "turn_remainder") || !Object.hasOwn(motion, "ambiguous_turn_dir") || ![motion.turn_remainder, motion.ambiguous_turn_dir, fish.turn_dir].every((value) => Number.isSafeInteger(value) && !Object.is(value, -0)) || motion.turn_remainder < 0 || motion.turn_remainder >= 5000 || Math.abs(motion.ambiguous_turn_dir) > 1 || Math.abs(fish.turn_dir) > 1 || fish.turn_distance !== 0) throw new Error("version 2 motion state is invalid");
+    }
+  }
+  if (v2 !== 0 && v2 !== state.fish.length) throw new Error("mixed motion state versions");
+  return hex(sha256(utf8(canonicalJSON(state))));
+}
 
 export function seedCommit(challengeID: string, periodID: string, nodeID: string, hash: string, seed: Uint8Array): string {
+  return seedCommitForVersion(challengeID, periodID, nodeID, hash, LEGACY_ENGINE_VERSION, SCORING_VERSION, seed);
+}
+
+export function seedCommitForVersion(challengeID: string, periodID: string, nodeID: string, hash: string, engineVersion: number, scoringVersion: number, seed: Uint8Array): string {
+  if (!supportedVersions(engineVersion, scoringVersion)) throw new Error("commit rules version is unsupported");
   if (![challengeID, periodID, nodeID].every((id) => /^[A-Za-z0-9_-]{1,128}$/.test(id))) throw new Error("commit ID is invalid");
   const content = decodeHex(hash);
   if (content.length !== 32 || seed.length !== 32) throw new Error("commit hash or seed length is invalid");
-  const fields = [utf8("nonbiri-fatfish-commit-v1"), utf8(challengeID), utf8(periodID), utf8(nodeID), content, utf8(String(ENGINE_VERSION)), utf8(String(SCORING_VERSION)), seed];
+  const fields = [utf8("nonbiri-fatfish-commit-v1"), utf8(challengeID), utf8(periodID), utf8(nodeID), content, utf8(String(engineVersion)), utf8(String(scoringVersion)), seed];
   const prefixed = fields.map((field) => {
     const prefix = new Uint8Array(4);
     new DataView(prefix.buffer).setUint32(0, field.length, false);

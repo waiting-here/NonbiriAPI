@@ -24,7 +24,7 @@ func roundPixels(x, y, radius int64, vertices int) Polygon {
 // maxLoadLevel reaches every entity ceiling and exactly 2048 contour vertices.
 // The fish remain in a small, valid chamber, so the replay runs the full time.
 func maxLoadLevel() Level {
-	level := Level{Format: "nonbiri-fatfish-level", FormatVersion: 1, EngineVersion: EngineVersion,
+	level := Level{Format: "nonbiri-fatfish-level", FormatVersion: 1, EngineVersion: LegacyEngineVersion,
 		ScoringVersion: ScoringVersion, DurationSeconds: 600, SpeedPixelsPerSecond: 160,
 		Thresholds: [3]int{1, 20, 40}}
 	for index := 0; index < 40; index++ {
@@ -56,7 +56,17 @@ func maxLoadLevel() Level {
 }
 
 func TestMaxLoadReplay(t *testing.T) {
+	testMaxLoadReplay(t, maxLoadLevel())
+}
+
+func TestV2MaxLoadReplay(t *testing.T) {
 	level := maxLoadLevel()
+	level.EngineVersion = 2
+	testMaxLoadReplay(t, level)
+}
+
+func testMaxLoadReplay(t *testing.T, level Level) {
+	t.Helper()
 	if err := ValidateLevel(level); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +83,17 @@ func TestMaxLoadReplay(t *testing.T) {
 }
 
 func TestMaxLoadPartialGeometryReplay(t *testing.T) {
+	testMaxLoadPartialGeometryReplay(t, maxLoadLevel())
+}
+
+func TestV2MaxLoadPartialGeometryReplay(t *testing.T) {
 	level := maxLoadLevel()
+	level.EngineVersion = 2
+	testMaxLoadPartialGeometryReplay(t, level)
+}
+
+func testMaxLoadPartialGeometryReplay(t *testing.T, level Level) {
+	t.Helper()
 	for index := range level.Tools {
 		level.Tools[index].Placed = true
 		level.Tools[index].X = 94 * 64

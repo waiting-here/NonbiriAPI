@@ -271,6 +271,18 @@ func ContentHash(level Level) (string, error) {
 }
 
 func StateDigest(state EngineState) (string, error) {
+	v2 := 0
+	for _, fish := range state.Fish {
+		if fish.Motion != nil {
+			v2++
+			if fish.Motion.TurnRemainder < 0 || fish.Motion.TurnRemainder >= 5000 || fish.Motion.AmbiguousTurnDir < -1 || fish.Motion.AmbiguousTurnDir > 1 || fish.TurnDistance != 0 || fish.TurnDir < -1 || fish.TurnDir > 1 {
+				return "", errors.New("version 2 motion state is invalid")
+			}
+		}
+	}
+	if v2 != 0 && v2 != len(state.Fish) {
+		return "", errors.New("mixed motion state versions")
+	}
 	canonical, err := CanonicalJSON(state)
 	if err != nil {
 		return "", err
@@ -280,6 +292,18 @@ func StateDigest(state EngineState) (string, error) {
 }
 
 func SeedCommit(challengeID, periodID, nodeID, contentHash string, seed [32]byte) (string, error) {
+	return SeedCommitForVersion(challengeID, periodID, nodeID, contentHash, LegacyEngineVersion, ScoringVersion, seed)
+}
+
+func supportedVersions(engineVersion, scoringVersion int) bool {
+	return (engineVersion == LegacyEngineVersion || engineVersion == EngineVersion) && scoringVersion == ScoringVersion
+}
+
+// SeedCommitForVersion binds the actual immutable rules versions of a level.
+func SeedCommitForVersion(challengeID, periodID, nodeID, contentHash string, engineVersion, scoringVersion int, seed [32]byte) (string, error) {
+	if !supportedVersions(engineVersion, scoringVersion) {
+		return "", errors.New("commit rules version is unsupported")
+	}
 	if !canonicalID(challengeID) || !canonicalID(periodID) || !canonicalID(nodeID) {
 		return "", errors.New("commit ID is invalid")
 	}
@@ -290,7 +314,7 @@ func SeedCommit(challengeID, periodID, nodeID, contentHash string, seed [32]byte
 	var payload bytes.Buffer
 	for _, part := range [][]byte{
 		[]byte("nonbiri-fatfish-commit-v1"), []byte(challengeID), []byte(periodID), []byte(nodeID),
-		content, []byte(strconv.Itoa(EngineVersion)), []byte(strconv.Itoa(ScoringVersion)), seed[:],
+		content, []byte(strconv.Itoa(engineVersion)), []byte(strconv.Itoa(scoringVersion)), seed[:],
 	} {
 		if uint64(len(part)) > uint64(^uint32(0)) {
 			return "", errors.New("commit field is too large")

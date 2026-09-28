@@ -1,10 +1,10 @@
 import { contentHash, normalizeLevel, stateDigest } from "./canonical";
 import { boundsOverlap, containsPolygon, polygonIntersectionArea, Rat, ringBounds, translatePolygon, type Bounds } from "./geometry";
 import { preparedFootprintOverlap, preparedIntersectsFish, preparePolygon, extendBounds, rectIntersectsCenter, type PreparedPolygon } from "./prepared";
-import { initialFishRNG, nextTurnBit, scoreUnits, stars, validateInputs } from "./protocol";
+import { initialFishRNG, nextTurnBit, nextTurnWord, scoreUnits, stars, validateInputs } from "./protocol";
 import { firstSweptContact } from "./sweep";
 import { fishFootprint, positiveMod, sinCos } from "./trig_helpers";
-import { ENGINE_VERSION, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, SCORING_VERSION, SUBSTEPS, TICKS_PER_SECOND, type BowlState, type Direction, type EngineState, type FishState, type Gate, type InputTuple, type Level, type Point, type Polygon, type ReplayResult, type Switch } from "./types";
+import { ENGINE_VERSION, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, SUBSTEPS, TICKS_PER_SECOND, type BowlState, type Direction, type EngineState, type FishState, type Gate, type InputTuple, type Level, type Point, type Polygon, type ReplayResult, type Switch } from "./types";
 import type { OverlapResult } from "./geometry_union";
 
 const SCALE = 1 << 20;
@@ -32,7 +32,7 @@ export class Engine {
     this.contentHash = contentHash(this.level);
     this.current = {
       tick: 0, solid_revision: 0,
-      fish: this.level.fish.map((fish): FishState => ({ id: fish.id, x: fish.x, y: fish.y, heading: fish.heading, status: "walking", bowl_id: 0, turn_dir: 0, turn_distance: 0, flow_id: 0, speed_remainder: 0, x_remainder: 0, y_remainder: 0, rng: initialFishRNG(seed, fish.id) })).sort((a, b) => a.id - b.id),
+      fish: this.level.fish.map((fish): FishState => ({ id: fish.id, x: fish.x, y: fish.y, heading: fish.heading, status: "walking", bowl_id: 0, turn_dir: 0, turn_distance: 0, flow_id: 0, speed_remainder: 0, x_remainder: 0, y_remainder: 0, rng: initialFishRNG(seed, fish.id), ...(this.level.engine_version === ENGINE_VERSION ? { motion: { turn_remainder: 0, ambiguous_turn_dir: 0 } } : {}) })).sort((a, b) => a.id - b.id),
       tools: this.level.tools.map((tool) => ({ id: tool.id, placed: tool.placed, x: tool.x, y: tool.y })).sort((a, b) => a.id - b.id),
       switches: this.level.switches.map((object) => ({ id: object.id, active: false, triggered: false, occupied: false })).sort((a, b) => a.id - b.id),
       gates: this.level.gates.map((gate) => ({ id: gate.id, open: gate.initially_open, pending: false })).sort((a, b) => a.id - b.id),
@@ -53,7 +53,7 @@ export class Engine {
   state(): EngineState {
     return {
       ...this.current,
-      fish: this.current.fish.map((fish) => ({ ...fish, rng: [...fish.rng] as [number, number, number, number] })),
+      fish: this.current.fish.map((fish) => ({ ...fish, rng: [...fish.rng] as [number, number, number, number], ...(fish.motion ? { motion: { ...fish.motion } } : {}) })),
       tools: this.current.tools.map((tool) => ({ ...tool })),
       switches: this.current.switches.map((item) => ({ ...item })),
       gates: this.current.gates.map((item) => ({ ...item })),
@@ -169,15 +169,17 @@ export class Engine {
     const zone = this.activeDirection(fish);
     if (zone === null) fish.flow_id = 0;
     else {
-      if (zone.id !== fish.flow_id) { fish.heading = zone.heading; fish.turn_dir = 0; fish.turn_distance = 0; }
+      if (zone.id !== fish.flow_id) { fish.heading = zone.heading; fish.turn_dir = 0; fish.turn_distance = 0; if (fish.motion) { fish.motion.turn_remainder = 0; fish.motion.ambiguous_turn_dir = 0; } }
       fish.flow_id = zone.id;
     }
     if (zone?.mode === "oneway") {
       fish.heading = zone.heading; fish.turn_dir = 0; fish.turn_distance = 0;
+      if (fish.motion) { fish.motion.turn_remainder = 0; fish.motion.ambiguous_turn_dir = 0; }
       const move = this.canMove(fish, zone.heading, distance);
       if (move) { fish.x = move[0].x; fish.y = move[0].y; fish.x_remainder = move[1]; fish.y_remainder = move[2]; this.resolveContact(fish, start, move[0]); }
       return;
     }
+    if (this.level.engine_version === ENGINE_VERSION) { this.moveSubstepV2(fish, start, distance); return; }
     if (fish.turn_dir !== 0) fish.heading = positiveMod(fish.heading + fish.turn_dir * 23, 4096);
     else {
       const move = this.canMove(fish, fish.heading, distance);
@@ -198,6 +200,55 @@ export class Engine {
       if (fish.turn_distance >= 12 * 64) { fish.turn_dir = 0; fish.turn_distance = 0; }
       this.resolveContact(fish, start, move[0]);
     } else fish.turn_distance = 0;
+  }
+
+  private probeBlocked(fish: FishState, forward: number, right: number): boolean {
+    const [sine, cosine] = sinCos(fish.heading);
+    const point = {
+      x: fish.x + Math.trunc(64 * (forward * cosine - right * sine) / SCALE),
+      y: fish.y + Math.trunc(64 * (forward * sine + right * cosine) / SCALE),
+    };
+    return point.x < 0 || point.x > FIELD_WIDTH || point.y < 0 || point.y > FIELD_HEIGHT || this.centerShielded(point);
+  }
+
+  private clearMotionTurn(fish: FishState): void {
+    if (!fish.motion) throw new Error("version 2 motion state is missing");
+    fish.turn_dir = 0; fish.turn_distance = 0;
+    fish.motion.turn_remainder = 0; fish.motion.ambiguous_turn_dir = 0;
+  }
+
+  private moveSubstepV2(fish: FishState, start: Point, distance: number): void {
+    const motion = fish.motion;
+    if (!motion) throw new Error("version 2 motion state is missing");
+    fish.turn_distance = 0;
+    const move = this.canMove(fish, fish.heading, distance);
+    if (move && this.overlapAt(fish.x, fish.y).areas.some((area) => area.sign() > 0)) {
+      this.clearMotionTurn(fish);
+      fish.x = move[0].x; fish.y = move[0].y; fish.x_remainder = move[1]; fish.y_remainder = move[2];
+      this.resolveContact(fish, start, move[0]);
+      return;
+    }
+    let front = this.probeBlocked(fish, 15, 0);
+    const right = this.probeBlocked(fish, 9, 6), left = this.probeBlocked(fish, 9, -6);
+    if (!front && !right && !left && !move) front = true;
+    let base = 115;
+    if (front || right && left) {
+      base = 138;
+      if (motion.ambiguous_turn_dir === 0) motion.ambiguous_turn_dir = (nextTurnWord(fish.rng) & 1) === 0 ? -1 : 1;
+      fish.turn_dir = motion.ambiguous_turn_dir;
+    } else if (right) { motion.ambiguous_turn_dir = 0; fish.turn_dir = -1; }
+    else if (left) { motion.ambiguous_turn_dir = 0; fish.turn_dir = 1; }
+    else {
+      this.clearMotionTurn(fish);
+      if (!move) throw new Error("clear probes require a legal move");
+      fish.x = move[0].x; fish.y = move[0].y; fish.x_remainder = move[1]; fish.y_remainder = move[2];
+      this.resolveContact(fish, start, move[0]);
+      return;
+    }
+    const factor = 950 + Math.floor(nextTurnWord(fish.rng) * 101 / 4294967296);
+    const accumulated = motion.turn_remainder + base * factor;
+    motion.turn_remainder = accumulated % 5000;
+    fish.heading = positiveMod(fish.heading + fish.turn_dir * Math.trunc(accumulated / 5000), 4096);
   }
 
   private updateMechanisms(): void {
@@ -302,7 +353,7 @@ export class Engine {
     let [starsEarned, passed] = stars(this.level.thresholds, fed, this.level.bowls, this.current.bowls);
     if (this.current.reason === "abandon") { starsEarned = 0; passed = false; }
     return {
-      engine_version: ENGINE_VERSION, scoring_version: SCORING_VERSION, content_hash: this.contentHash,
+      engine_version: this.level.engine_version, scoring_version: this.level.scoring_version, content_hash: this.contentHash,
       final_state_hash: this.stateHash(), terminal_tick: this.current.tick, reason: this.current.reason,
       fed, total: this.current.fish.length, bowl_counts: this.current.bowls.map((item): BowlState => ({ ...item })),
       passed, stars: starsEarned, score_units: passed ? scoreUnits(this.current.fish.length, fed, this.level.duration_seconds, this.current.tick) : 0,

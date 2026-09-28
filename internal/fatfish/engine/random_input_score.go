@@ -33,6 +33,11 @@ func InitialFishRNG(seed [32]byte, fishID int) [4]uint32 {
 // NextTurnBit advances only this fish's xoshiro128** stream.
 // Algorithm: Blackman and Vigna, xoshiro128** 1.1 (public-domain dedication).
 func NextTurnBit(state *[4]uint32) uint32 {
+	return NextTurnWord(state) & 1
+}
+
+// NextTurnWord advances the same per-fish stream and returns its full word.
+func NextTurnWord(state *[4]uint32) uint32 {
 	result := bits.RotateLeft32(state[1]*5, 7) * 9
 	t := state[1] << 9
 	state[2] ^= state[0]
@@ -41,7 +46,7 @@ func NextTurnBit(state *[4]uint32) uint32 {
 	state[0] ^= state[3]
 	state[2] ^= t
 	state[3] = bits.RotateLeft32(state[3], 11)
-	return result & 1
+	return result
 }
 
 func ScoreUnits(total, fed, durationSeconds, terminalTick int) (int64, error) {
