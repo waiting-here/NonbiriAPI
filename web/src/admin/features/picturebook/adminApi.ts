@@ -223,16 +223,20 @@ export function decodeUpstream(value: unknown) {
   };
 }
 export type Upstream = ReturnType<typeof decodeUpstream>;
-export type UpstreamInput = Omit<
-  Upstream,
-  'revision' | 'configured' | 'secret_set' | 'control' | 'rpm' | 'concurrency' | 'adapter'
-> & {
+export type UpstreamInput = {
   expected_revision: string;
-  rpm: number;
-  concurrency: number;
-  adapter: Adapter;
+  base_url: string;
   secret: { mode: 'keep' } | { mode: 'replace'; value: string };
 };
+function decodeIssue(value: unknown) {
+  const v = record(value, ['model_id', 'field_path', 'code', 'safe_message'], 'model issue');
+  return {
+    model_id: opaqueID(v.model_id, 'imdl_', 'model id'),
+    field_path: string(v.field_path, 'field path', { max: 256, bytes: 256 }),
+    code: string(v.code, 'issue code', { max: 96, bytes: 96, ascii: true }),
+    safe_message: string(v.safe_message, 'model message', { max: 512, bytes: 512 }),
+  };
+}
 export function decodeAdminModel(value: unknown) {
   const v = record(
     value,
@@ -252,6 +256,7 @@ export function decodeAdminModel(value: unknown) {
       'mapping',
       'capability_revision',
       'capability_readiness',
+      'capability_issues',
       'pricing_revision',
       'pricing',
       'size_capability',
@@ -273,6 +278,7 @@ export function decodeAdminModel(value: unknown) {
       'parameter_capabilities',
       'combinations',
       'mapping',
+      'capability_issues',
     ],
   );
   jsonSize(v.metadata, 32768, 'model metadata');
@@ -325,10 +331,11 @@ export function decodeAdminModel(value: unknown) {
     price: decodePrice(v.price),
     parameters,
     parameter_capabilities: parameterCapabilities,
+    capability_issues: array(v.capability_issues, 'capability issues', 64).map(decodeIssue),
     combinations: decodeCombinations(v.combinations),
     mapping: decodeMapping(v.mapping),
     ...(Object.hasOwn(v, 'capability_revision')
-      ? { capability_revision: revision(v.capability_revision) }
+      ? { capability_revision: revision(v.capability_revision, true) }
       : {}),
     ...(Object.hasOwn(v, 'capability_readiness')
       ? {
@@ -340,7 +347,7 @@ export function decodeAdminModel(value: unknown) {
         }
       : {}),
     ...(Object.hasOwn(v, 'pricing_revision')
-      ? { pricing_revision: revision(v.pricing_revision) }
+      ? { pricing_revision: revision(v.pricing_revision, true) }
       : {}),
     ...(Object.hasOwn(v, 'pricing') ? { pricing: decodePricingPolicy(v.pricing) } : {}),
     ...(Object.hasOwn(v, 'size_capability')
@@ -353,21 +360,8 @@ export function decodeAdminModel(value: unknown) {
   };
 }
 export type AdminModel = ReturnType<typeof decodeAdminModel>;
-export type ModelInput = Pick<
-  AdminModel,
-  | 'display_name'
-  | 'description'
-  | 'enabled'
-  | 'price'
-  | 'parameters'
-  | 'combinations'
-  | 'mapping'
-  | 'pricing'
-  | 'size_capability'
-> & {
+export type ModelInput = Pick<AdminModel, 'enabled' | 'price' | 'pricing'> & {
   expected_revision: string;
-  capability_confirmed?: boolean;
-  catalog_type?: 'image' | 'unknown' | 'other';
 };
 export function decodeRefresh(value: unknown) {
   const v = record(
@@ -435,90 +429,6 @@ export const getCatalog = (filter: CatalogFilter, signal?: AbortSignal) =>
     },
     { signal },
   );
-export function decodeProfileState(value: unknown) {
-  const v = record(value, ['revision', 'profile'], 'capability profile state', [
-    'revision',
-    'profile',
-  ]);
-  if (v.profile !== null) jsonSize(v.profile, 262144, 'capability profile');
-  return { revision: revision(v.revision, true), profile: v.profile };
-}
-export const getCapabilityProfile = (signal?: AbortSignal) =>
-  decoded(base + '/upstream/capability-profile', decodeProfileState, { signal });
-export const saveCapabilityProfile = (
-  input: { expected_revision: string; profile: unknown },
-  key: string,
-) =>
-  decoded(
-    base + '/upstream/capability-profile',
-    decodeProfileState,
-    idempotentOptions(key, { method: 'PUT', json: input }),
-  );
-export function decodeCapabilityReview(value: unknown) {
-  const v = record(value, ['snapshot_id', 'expires_at', 'source', 'changes'], 'capability review', [
-    'snapshot_id',
-    'expires_at',
-    'source',
-    'changes',
-  ]);
-  jsonSize(v.source, 262144, 'candidate capability');
-  return {
-    snapshot_id: opaqueID(v.snapshot_id, 'ics_', 'capability snapshot'),
-    expires_at: unixSecond(v.expires_at, 'snapshot expiry'),
-    source: v.source,
-    changes: array(v.changes, 'capability changes', 32).map((item) => {
-      const change = record(item, ['key', 'kind', 'conflict'], 'capability change', [
-        'key',
-        'kind',
-        'conflict',
-      ]);
-      return {
-        key: oneOf(change.key, parameterKeys, 'parameter key'),
-        kind: oneOf(
-          change.kind,
-          ['added', 'removed', 'changed', 'default_changed', 'range_narrowed'],
-          'change kind',
-        ),
-        conflict: boolean(change.conflict, 'manual conflict'),
-      };
-    }),
-  };
-}
-export const getCapabilityReview = (id: string, signal?: AbortSignal) =>
-  decoded(
-    base + '/models/' + opaqueID(id, 'imdl_', 'model id') + '/capabilities',
-    decodeCapabilityReview,
-    { signal },
-  );
-export const applyCapabilities = (
-  input: { id: string; snapshot_id: string; expected_revision: string; confirm: boolean },
-  key: string,
-) =>
-  decoded(
-    base + '/models/' + opaqueID(input.id, 'imdl_', 'model id') + '/capabilities/apply',
-    (value) => {
-      const v = record(
-        value,
-        ['id', 'revision', 'capability_revision', 'pricing_revision'],
-        'capability apply receipt',
-        ['id', 'revision', 'capability_revision', 'pricing_revision'],
-      );
-      return {
-        id: opaqueID(v.id, 'imdl_', 'model id'),
-        revision: revision(v.revision),
-        capability_revision: revision(v.capability_revision),
-        pricing_revision: revision(v.pricing_revision),
-      };
-    },
-    idempotentOptions(key, {
-      method: 'POST',
-      json: {
-        snapshot_id: input.snapshot_id,
-        expected_revision: input.expected_revision,
-        confirm: input.confirm,
-      },
-    }),
-  );
 export const checkModel = (input: {
   model_id: string;
   draft: ModelInput;
@@ -533,20 +443,7 @@ export const checkModel = (input: {
         'local model check',
         ['valid', 'issues'],
       );
-      const issues = array(v.issues, 'check issues', 64).map((entry) => {
-        const item = record(
-          entry,
-          ['model_id', 'field_path', 'code', 'safe_message'],
-          'check issue',
-          ['model_id', 'field_path', 'code', 'safe_message'],
-        );
-        return {
-          model_id: opaqueID(item.model_id, 'imdl_', 'model id'),
-          field_path: string(item.field_path, 'field path', { max: 256, bytes: 256 }),
-          code: string(item.code, 'issue code', { max: 96, bytes: 96, ascii: true }),
-          safe_message: string(item.safe_message, 'check message', { max: 512, bytes: 512 }),
-        };
-      });
+      const issues = array(v.issues, 'check issues', 64).map(decodeIssue);
       const quote =
         v.quote === undefined
           ? null

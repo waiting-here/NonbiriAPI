@@ -1,0 +1,280 @@
+{
+  "id": "imdl_qXSaMv4WTRkcSajsb09DpQ",
+  "upstream_model_id": "atelier-test",
+  "metadata": {
+    "id": "atelier-test",
+    "atelier_type": "image",
+    "atelier_friendly_name": "Synthetic studio",
+    "atelier_settings": {
+      "customSizeMapping": {
+        "compact": {
+          "1:1": {
+            "width": 512,
+            "height": 512
+          },
+          "16:9": {
+            "width": 768,
+            "height": 432
+          }
+        }
+      },
+      "resolution": {
+        "default": "compact"
+      },
+      "aspectRatio": {
+        "default": "1:1"
+      },
+      "promptCharacterLimit": 128,
+      "steps": {
+        "max": 8,
+        "default": 4
+      },
+      "cfgScale": {
+        "scale": [1, 1.5, 2],
+        "default": 1.5
+      },
+      "quality": true
+    },
+    "atelier_supports": {
+      "negative_prompts": true,
+      "steps": true
+    }
+  },
+  "configured": true,
+  "revision": "2",
+  "display_name": "Synthetic studio",
+  "description": "",
+  "enabled": true,
+  "price": {
+    "paper": "2",
+    "brush": "1"
+  },
+  "parameters": [
+    {
+      "key": "prompt",
+      "supported": true,
+      "required": true,
+      "type": "string",
+      "min_length": 1,
+      "max_length": 128,
+      "length_unit": "utf16_units"
+    },
+    {
+      "key": "n",
+      "supported": true,
+      "required": false,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4,
+      "step": 1,
+      "default": 1
+    },
+    {
+      "key": "negative_prompt",
+      "supported": true,
+      "required": false,
+      "type": "string",
+      "max_length": 65536,
+      "length_unit": "utf8_bytes"
+    },
+    {
+      "key": "size",
+      "supported": true,
+      "required": false,
+      "type": "string",
+      "length_unit": "utf8_bytes"
+    },
+    {
+      "key": "aspect_ratio",
+      "supported": true,
+      "required": false,
+      "type": "string",
+      "enum": ["1:1", "16:9"],
+      "default": "1:1",
+      "length_unit": "utf8_bytes"
+    },
+    {
+      "key": "resolution",
+      "supported": true,
+      "required": false,
+      "type": "string",
+      "enum": ["compact"],
+      "default": "compact",
+      "length_unit": "utf8_bytes"
+    },
+    {
+      "key": "seed",
+      "supported": true,
+      "required": false,
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999999,
+      "step": 1
+    },
+    {
+      "key": "steps",
+      "supported": true,
+      "required": false,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "step": 1,
+      "default": 4
+    },
+    {
+      "key": "guidance",
+      "supported": true,
+      "required": false,
+      "type": "number",
+      "enum": [1, 1.5, 2],
+      "default": 1.5
+    },
+    {
+      "key": "quality",
+      "supported": true,
+      "required": false,
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "default": "low",
+      "length_unit": "utf8_bytes"
+    }
+  ],
+  "parameter_capabilities": [
+    {
+      "key": "prompt",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "n",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "negative_prompt",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "size",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "aspect_ratio",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "resolution",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "seed",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "steps",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "guidance",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    },
+    {
+      "key": "quality",
+      "source": "discovered",
+      "support": "supported",
+      "overridden": false,
+      "conflict": false
+    }
+  ],
+  "combinations": [],
+  "mapping": {
+    "model_pointer": "/model",
+    "parameters": {
+      "aspect_ratio": "/aspect_ratio",
+      "guidance": "/cfg_scale",
+      "n": "/n",
+      "negative_prompt": "/negative_prompt",
+      "prompt": "/prompt",
+      "quality": "/quality",
+      "resolution": "/resolution",
+      "seed": "/seed",
+      "size": "/size",
+      "steps": "/steps"
+    },
+    "constants": [
+      {
+        "pointer": "/async",
+        "value": true
+      },
+      {
+        "pointer": "/response_format",
+        "value": "b64_json"
+      }
+    ]
+  },
+  "capability_revision": "2",
+  "capability_readiness": "ready",
+  "pricing_revision": "2",
+  "pricing": {
+    "default": {
+      "paper": "2",
+      "brush": "1"
+    },
+    "fallback": "default",
+    "tiers": [],
+    "sizes": [
+      {
+        "width": 512,
+        "height": 512,
+        "paper": "5",
+        "brush": "0"
+      }
+    ]
+  },
+  "size_capability": {
+    "mode": "resolution_ratio_grid",
+    "combinations": [
+      {
+        "ratio": "1:1",
+        "resolution": "compact",
+        "width": 512,
+        "height": 512,
+        "tier": "compact"
+      },
+      {
+        "ratio": "16:9",
+        "resolution": "compact",
+        "width": 768,
+        "height": 432,
+        "tier": "compact"
+      }
+    ]
+  },
+  "catalog_type": "image",
+  "capability_issues": []
+}

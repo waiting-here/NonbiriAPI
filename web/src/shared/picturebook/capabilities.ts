@@ -156,8 +156,9 @@ export function validSizeCapability(capability: SizeCapability): boolean {
         identity = row.ratio;
         break;
       case 'ratio_resolution':
-        if (!label(row.ratio) || !label(row.resolution)) return false;
-        identity = `${row.ratio}\0${row.resolution}`;
+        if (!label(row.ratio) || (row.resolution !== undefined && !label(row.resolution)))
+          return false;
+        identity = `${row.ratio}\0${row.resolution ?? ''}`;
         break;
       case 'width_height':
         if (
@@ -216,7 +217,7 @@ export function resolveSize(c: SizeCapability, input: SizeInput): ResolvedSize |
   const row = c.combinations?.find(
     (item) =>
       item.ratio === input.aspect_ratio &&
-      (c.mode === 'ratio_size_map' || item.resolution === input.resolution),
+      (c.mode === 'ratio_size_map' || (item.resolution ?? '') === (input.resolution ?? '')),
   );
   if (!row) return null;
   const size = row.width ? `${row.width}x${row.height}` : undefined;
@@ -224,7 +225,7 @@ export function resolveSize(c: SizeCapability, input: SizeInput): ResolvedSize |
   return {
     values: {
       aspect_ratio: row.ratio,
-      ...(c.mode === 'ratio_size_map' ? {} : { resolution: row.resolution }),
+      ...(c.mode !== 'ratio_size_map' && row.resolution ? { resolution: row.resolution } : {}),
       ...(size ? { size } : {}),
     },
     selection: {

@@ -49,8 +49,6 @@ for (const locale of ['zh', 'en'] as const) {
       await page.route('**/admin/api/limited-activities/**', async (route) => {
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith('/upstream')) return route.fulfill({ json: upstream });
-        if (path.endsWith('/upstream/capability-profile'))
-          return route.fulfill({ json: { revision: '0', profile: null } });
         if (path.endsWith('/models/refresh')) {
           keys.push(route.request().headers()['idempotency-key']);
           const operation = {
@@ -103,22 +101,13 @@ for (const locale of ['zh', 'en'] as const) {
         });
       });
       await page.goto(ADMIN_ORIGIN + '/limited-activities');
-      await expect(
-        page.getByText(zh ? /返回 base64 图片时可留空/ : /leave blank for base64 images/),
-      ).toBeVisible();
+      await expect(page.getByLabel(zh ? '服务地址' : 'Service base URL')).toBeVisible();
       await expect(
         page.getByRole('heading', {
           name: zh ? '模型能力提取配置' : 'Model capability profile',
         }),
-      ).toBeVisible();
-      await page
-        .getByText(zh ? '查看填写示例与字段说明' : 'Examples and field guide', { exact: true })
-        .click();
-      await expect(
-        page.getByRole('button', {
-          name: zh ? '用 OpenAI 兼容示例替换配置' : 'Use the OpenAI-compatible example',
-        }),
-      ).toBeVisible();
+      ).toHaveCount(0);
+      await expect(page.getByLabel(/JSON/)).toHaveCount(0);
       await page
         .getByRole('button', { name: zh ? '拉取模型目录' : 'Refresh model catalog', exact: true })
         .click();
