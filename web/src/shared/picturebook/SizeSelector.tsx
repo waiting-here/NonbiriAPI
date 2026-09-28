@@ -114,7 +114,7 @@ export function SizeSelector({
               </option>
             ))}
           </select>
-          {capability.mode !== 'ratio_size_map' ? (
+          {resolutions.length > 0 ? (
             <>
               <label htmlFor={id + 'resolution'}>{t('分辨率', 'Resolution')}</label>
               <select

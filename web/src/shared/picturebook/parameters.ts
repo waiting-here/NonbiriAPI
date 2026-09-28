@@ -38,12 +38,26 @@ export function initialValues(model: ImageModel): ParameterValues {
     if (initial !== undefined) values[rule.key] = String(initial);
   }
   if (model.size_capability) {
-    const first = model.size_capability.combinations?.[0];
-    if (first) {
-      if (first.ratio) values.aspect_ratio = first.ratio;
-      if (first.resolution) values.resolution = first.resolution;
-      if (first.width && first.height) values.size = `${first.width}x${first.height}`;
-    } else if (model.size_capability.auto) values.size = 'auto';
+    const capability = model.size_capability;
+    const resolved = resolveSize(capability, {
+      aspect_ratio: values.aspect_ratio, resolution: values.resolution,
+      size: values.size === 'auto' ? undefined : values.size, auto: values.size === 'auto',
+    });
+    if (resolved) Object.assign(values, resolved.values);
+    else {
+      const rows = capability.combinations;
+      const row = rows?.find((item) =>
+        (!values.aspect_ratio || item.ratio === values.aspect_ratio)
+        && (!values.resolution || item.resolution === values.resolution)
+        && (!values.size || `${item.width}x${item.height}` === values.size),
+      ) ?? rows?.[0];
+      if (row) {
+        delete values.aspect_ratio; delete values.resolution; delete values.size;
+        if (row.ratio) values.aspect_ratio = row.ratio;
+        if (row.resolution) values.resolution = row.resolution;
+        if (row.width && row.height) values.size = `${row.width}x${row.height}`;
+      } else if (capability.auto) values.size = 'auto';
+    }
   }
   return values;
 }

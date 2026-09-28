@@ -38,6 +38,16 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   gap: 1rem;
 }
+.picturebook-price-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem;
+}
+.picturebook-form fieldset.picturebook-card {
+  border: 1px solid var(--border, #8885);
+  border-radius: 0.6rem;
+  padding: 1rem;
+}
 .picturebook-actions {
   display: flex;
   flex-wrap: wrap;
