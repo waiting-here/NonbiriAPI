@@ -5,6 +5,7 @@ import {
   type Level, type Point, type Polygon,
 } from '@shared/fatfish/engine/types';
 import { validateLevel } from '@shared/fatfish/engine/validate';
+import { clampWorkspace } from '@shared/fatfish/workspace';
 
 export type ObjectKind = 'fish' | 'tools' | 'solids' | 'hazards' | 'bowls' | 'switches' | 'gates' | 'directions';
 export interface Selection { kind: ObjectKind; id: number }
@@ -21,6 +22,16 @@ export const rect = (x: number, y: number, width: number, height: number): Polyg
     { x: x - width / 2, y: y + height / 2 },
   ].map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) })), holes: [],
 });
+export function toolPolygon(resourceKey: string): Polygon {
+  const center = { x: unit(240), y: unit(280) };
+  const dimensions: Record<string, [number, number, number, number]> = {
+    barrier: [122, 50, 12, 0], memory: [50, 122, 8, 0],
+    fan: [122, 42, 8, 512], light: [122, 42, 8, 3584],
+  };
+  if (resourceKey === 'cup') return translatePolygon(compileEllipse(center, unit(31), unit(25), 0), -center.x, -center.y);
+  const [width, height, radius, heading] = dimensions[resourceKey] ?? dimensions.barrier;
+  return translatePolygon(compileRoundedRectangle(center, unit(width), unit(height), unit(radius), heading), -center.x, -center.y);
+}
 export function blankLevel(): Level {
   return {
     format: 'nonbiri-fatfish-level', format_version: 1, engine_version: 1, scoring_version: 1,
@@ -76,7 +87,10 @@ export function moveSelection(level: Level, selection: Selection, dx: number, dy
     if (fish) { fish.x = snap(fish.x + dx, grid); fish.y = snap(fish.y + dy, grid); }
   } else if (selection.kind === 'tools') {
     const tool = copy.tools.find((item) => item.id === selection.id);
-    if (tool) { tool.x = snap(tool.x + dx, grid); tool.y = snap(tool.y + dy, grid); tool.placed = true; }
+    if (tool) {
+      const point = clampWorkspace({ x: snap(tool.x + dx, grid), y: snap(tool.y + dy, grid) });
+      tool.x = point.x; tool.y = point.y; tool.placed = true;
+    }
   } else {
     const item = copy[selection.kind].find((shape) => shape.id === selection.id);
     if (item) {
@@ -200,7 +214,7 @@ export function importDraft(text: string): ImportedDraft {
     if (tool.locked) throw new Error(`tools[${index}]: locked legacy tools need manual remodeling`);
     if (!tool.kind || !keys[tool.kind]) throw new Error(`tools[${index}]: unknown kind`);
     return { id: id++, resource_key: keys[tool.kind], placed: !!tool.placed,
-      x: unit(tool.x ?? 0), y: unit(tool.y ?? 0), polygon: rect(0, 0, unit(40), unit(28)) };
+      x: unit(tool.x ?? 0), y: unit(tool.y ?? 0), polygon: toolPolygon(keys[tool.kind]) };
   });
   if (!Number.isInteger(level.thresholds[0]) || level.thresholds[0] < 1 || level.thresholds[0] > count) throw new Error('Legacy target is invalid');
   return {

@@ -5,10 +5,10 @@
   "rights": "Supplied and original artwork under AGPL-3.0; music retains its separate CC-BY-4.0 license. See NOTICE.md.",
   "tool_visuals": {
     "barrier": "keycap-barrier",
-    "memory": "cache-puck",
-    "fan": "cooling-fan",
-    "light": "canteen-monitor",
-    "cup": "rice-sack"
+    "memory": "memory-module",
+    "fan": "inference-card",
+    "light": "cooling-fins",
+    "cup": "cache-puck"
   },
   "svg": [
     {
@@ -1941,6 +1941,87 @@
       "license": "AGPL-3.0",
       "bytes": 4165153,
       "sha256": "c8cf3923a59a693f6ab133a91992addbabe96a134228aaf6aac9bc3eee01abc7"
+    },
+    {
+      "id": "memory-module",
+      "name": "内存条",
+      "url": "/assets/fatfish/svg/memory-module.svg",
+      "category": "props",
+      "role": "movable-tool",
+      "viewBox": [
+        0,
+        0,
+        160,
+        320
+      ],
+      "anchor": [
+        77,
+        154
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Original vector artwork",
+      "source_sha256": "df985052415e6d6c8201b2c23311ada0ffc92554175e2a9fd6d9ba28af711ffe",
+      "transform": "Original artwork",
+      "license": "AGPL-3.0",
+      "bytes": 1704,
+      "sha256": "df985052415e6d6c8201b2c23311ada0ffc92554175e2a9fd6d9ba28af711ffe"
+    },
+    {
+      "id": "inference-card",
+      "name": "推理加速卡",
+      "url": "/assets/fatfish/svg/inference-card.svg",
+      "category": "props",
+      "role": "movable-tool",
+      "viewBox": [
+        0,
+        0,
+        320,
+        140
+      ],
+      "anchor": [
+        159,
+        64
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Original vector artwork",
+      "source_sha256": "2552c8fa23550ffbbf8c0ad48d9cac0983f579ad2d0484d814ef9d24f60cfa88",
+      "transform": "Original artwork",
+      "license": "AGPL-3.0",
+      "bytes": 1944,
+      "sha256": "2552c8fa23550ffbbf8c0ad48d9cac0983f579ad2d0484d814ef9d24f60cfa88"
+    },
+    {
+      "id": "cooling-fins",
+      "name": "散热鳍片",
+      "url": "/assets/fatfish/svg/cooling-fins.svg",
+      "category": "props",
+      "role": "movable-tool",
+      "viewBox": [
+        0,
+        0,
+        320,
+        140
+      ],
+      "anchor": [
+        160,
+        64
+      ],
+      "footprint": null,
+      "motion": "none",
+      "states": [],
+      "minimumDisplayWidth": 32,
+      "source": "Original vector artwork",
+      "source_sha256": "03169b09254394f066cc73ebe6f604f3e88cbc60d541b33f719b132ef58b4e20",
+      "transform": "Original artwork",
+      "license": "AGPL-3.0",
+      "bytes": 1819,
+      "sha256": "03169b09254394f066cc73ebe6f604f3e88cbc60d541b33f719b132ef58b4e20"
     }
   ],
   "character": {

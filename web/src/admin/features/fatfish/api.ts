@@ -59,6 +59,7 @@ export const getVersion = (id: string) => apiFetch<VersionRecord>(`${base}/versi
 export const exportLevel = (id: string) => apiFetch<LevelInput>(`${base}/levels/${part(id)}/export`);
 export const validateLevelOnServer = (level: Level, key: string) => apiFetch<VersionRecord>(`${base}/levels/validate`, idempotentOptions(key, { method: 'POST', json: { level } }));
 export const saveLevel = (id: string | null, input: LevelInput, key: string) => apiFetch<LevelRecord>(id ? `${base}/levels/${part(id)}` : `${base}/levels`, idempotentOptions(key, { method: id ? 'PUT' : 'POST', json: input }));
+export const deleteLevel = (id: string, expected_revision: string, key: string) => apiFetch<{ id: string; revision: string; deleted_at: number }>(`${base}/levels/${part(id)}`, idempotentOptions(key, { method: 'DELETE', json: { expected_revision } }));
 export const publishVersion = (id: string, expected_revision: string, key: string) => apiFetch<VersionRecord>(`${base}/levels/${part(id)}/versions`, idempotentOptions(key, { method: 'POST', json: { expected_revision } }));
 
 export const listPeriods = (page = 1) => apiFetch<Page<PeriodRecord>>(queryPath(`${base}/periods`, { page }));

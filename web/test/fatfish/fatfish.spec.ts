@@ -161,7 +161,7 @@ async function boardPoint(player: Locator, x: number, y: number) {
   await board.scrollIntoViewIfNeeded();
   const box = await board.boundingBox();
   if (!box) throw new Error('The playfield is not visible.');
-  return { x: box.x + (x * box.width) / 480, y: box.y + (y * box.height) / 560 };
+  return { x: box.x + ((x + 128) * box.width) / 736, y: box.y + ((y + 128) * box.height) / 816 };
 }
 async function returnPreplacedTool(page: Page, player: Locator, x: number, y: number) {
   await started(player);
@@ -203,6 +203,7 @@ async function importedVersion(page: Page, example: Example) {
   page.on('dialog', (dialog) => void dialog.accept());
   await page.goto(fixture().admin_url + '/limited-activities/fat-fish');
   await expect(page.getByRole('heading', { name: 'Level directory' })).toBeVisible();
+  await page.getByLabel('Example level', { exact: true }).selectOption(example.id);
   await page.getByRole('button', { name: example.title, exact: true }).click();
   await expect(page.getByLabel('Title', { exact: true })).toHaveValue(example.title);
   if (example.id === examples[0].id) await capture(page, '01-level-editor');
@@ -314,6 +315,67 @@ test('eight examples import, roundtrip and pass actual administrator play with s
   }
 });
 
+test('workbench edits survive save and reload, and library deletion preserves published versions', async ({ browser }) => {
+  const context = await session(browser, 'admin');
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  try {
+    await page.goto(fixture().admin_url + '/limited-activities/fat-fish');
+    await page.getByLabel('Title', { exact: true }).fill('Workbench layout regression');
+    await page.getByLabel('Snap to 8-pixel grid').uncheck();
+    await page.getByRole('button', { name: 'Memory module', exact: true }).click();
+    const map = page.getByLabel('Fat Fish level map', { exact: true });
+    await map.scrollIntoViewIfNeeded();
+    const box = await map.boundingBox();
+    if (!box) throw new Error('The editor map is not visible.');
+    const point = (x: number, y: number) => ({ x: box.x + (x + 128) * box.width / 736, y: box.y + (y + 128) * box.height / 816 });
+    const start = point(32, 624), finish = point(560, 250);
+    await page.mouse.move(start.x, start.y); await page.mouse.down();
+    await page.mouse.move(finish.x, finish.y, { steps: 5 }); await page.mouse.up();
+    await map.press('ArrowRight'); await map.press('Shift+ArrowLeft');
+    const saved = page.waitForResponse((response) => response.url().endsWith(base + '/levels') && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    const response = await saved;
+    expect(response.status()).toBe(200);
+    const record = await response.json() as { id: string };
+    await page.reload();
+    await page.getByRole('button', { name: 'Workbench layout regression · r1', exact: true }).click();
+    const detail = await adminAPI(context, '/levels/' + record.id);
+    expect(detail.status()).toBe(200);
+    const layout = await detail.json() as { draft: { tools: { x: number; y: number; placed: boolean }[] } };
+    expect(layout.draft.tools).toHaveLength(1);
+    expect(layout.draft.tools[0].x / 64).toBeCloseTo(564, 0);
+    expect(layout.draft.tools[0].y / 64).toBeCloseTo(250, 0);
+    expect(layout.draft.tools[0].placed).toBe(true);
+    await page.getByText('Duration, speed and star thresholds', { exact: true }).click();
+    await page.getByLabel('Duration (seconds)', { exact: true }).fill('0');
+    await expect(page.getByRole('button', { name: /Local error/ })).toBeVisible();
+    await expect(map).toBeVisible();
+    await map.press('Control+z');
+    await expect(page.getByLabel('Duration (seconds)', { exact: true })).toHaveValue('90');
+    await expect(page.getByRole('button', { name: /Local error/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Enlarge field', exact: true }).click();
+    await expect(page.locator('.fatfish-player__viewport[data-zoomed="true"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Fit screen', exact: true }).click();
+    await capture(page, '15-workbench-saved-layout');
+    const published = page.waitForResponse((result) => result.url().endsWith('/versions') && result.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Publish immutable version from saved draft', exact: true }).click();
+    const versionResponse = await published;
+    expect(versionResponse.status()).toBe(200);
+    const version = await versionResponse.json() as { id: string };
+    page.once('dialog', (dialog) => dialog.accept());
+    const deleted = page.waitForResponse((result) => result.url().endsWith('/levels/' + record.id) && result.request().method() === 'DELETE');
+    await page.getByRole('button', { name: 'Delete level', exact: true }).click();
+    expect((await deleted).status()).toBe(200);
+    await expect(page.getByRole('heading', { name: 'New level draft', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Workbench layout regression ·/ })).toHaveCount(0);
+    expect((await adminAPI(context, '/levels/' + record.id)).status()).toBe(404);
+    expect((await adminAPI(context, '/versions/' + version.id)).status()).toBe(200);
+    expect(errors).toEqual([]);
+  } finally { await context.close(); }
+});
+
 test('ordinary users and both steward levels cannot read or mutate the editor', async ({
   browser,
 }) => {
@@ -323,6 +385,7 @@ test('ordinary users and both steward levels cannot read or mutate the editor', 
       for (const [path, method, data] of [
         ['/levels?page=1', 'GET', undefined],
         ['/levels', 'POST', {}],
+        ['/levels/ffl_forbidden', 'DELETE', { expected_revision: '1' }],
         ['/playtests', 'POST', {}],
       ] as const) {
         const response = await adminAPI(context, path, method, data);
@@ -371,8 +434,7 @@ for (const touch of [false, true]) {
       await page.getByRole('button', { name: 'Prepare playtest', exact: true }).click();
       const player = page.getByRole('region', { name: 'Fat fish play', exact: true });
       expect(await recordedInputs(page, version.content_hash)).toEqual([]);
-      for (const tool of await player.locator('[data-tool-id]').all())
-        await expect(tool).toBeDisabled();
+      await expect(player).toHaveAttribute('data-can-play', 'false');
       await page.getByRole('button', { name: 'Start playtest', exact: true }).click();
       await started(player);
       const board = player.locator('[data-fish-board]');
@@ -418,24 +480,18 @@ for (const touch of [false, true]) {
       await expect(player.locator('[data-tool-id="100"]')).toHaveCount(0);
       await drag(await boardPoint(player, 174, 430), await boardPoint(player, 214, 440));
       await expect.poll(() => lastToolInput(100)).toEqual(['place', 100, 210 * 64, 430 * 64]);
-      const spare = player.locator('[data-tool-id="101"]');
-      const spareBox = await spare.boundingBox();
-      if (!spareBox) throw new Error('The outside tool is not visible.');
       await drag(
-        { x: spareBox.x + spareBox.width / 2, y: spareBox.y + spareBox.height / 2 },
+        await boardPoint(player, 136, 624),
         await boardPoint(player, 350, 80),
       );
-      await expect(spare).toHaveCount(0);
       await expect.poll(() => lastToolInput(101)).toEqual(['place', 101, 350 * 64, 80 * 64]);
       await drag(await boardPoint(player, 350, 80), await boardPoint(player, 350, 150));
       await expect.poll(() => lastToolInput(101)).toEqual(['place', 101, 350 * 64, 150 * 64]);
-      const tray = await player.locator('[data-staging-area]').boundingBox();
-      if (!tray) throw new Error('The outside workbench is not visible.');
-      await drag(await boardPoint(player, 350, 150), {
-        x: tray.x + tray.width / 2,
-        y: tray.y + tray.height / 2,
-      });
-      await expect(spare).toBeVisible();
+      await drag(await boardPoint(player, 350, 150), await boardPoint(player, 400, 624));
+      await expect.poll(() => lastToolInput(101)).toEqual(['place', 101, 400 * 64, 624 * 64]);
+      await drag(await boardPoint(player, 400, 624), await boardPoint(player, 330, 620));
+      await expect.poll(() => lastToolInput(101)).toEqual(['place', 101, 330 * 64, 620 * 64]);
+      await player.getByRole('button', { name: 'Return tool', exact: true }).click();
       await expect.poll(() => lastToolInput(101)).toEqual(['return', 101]);
       const inputs = await recordedInputs(page, version.content_hash);
       expect(inputs.length).toBeGreaterThanOrEqual(4);

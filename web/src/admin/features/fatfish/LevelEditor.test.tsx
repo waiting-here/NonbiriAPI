@@ -6,7 +6,7 @@ import { blankLevel } from './draft';
 import { LevelManager } from './LevelEditor';
 
 const api = vi.hoisted(() => ({
-  listLevels: vi.fn(), getLevel: vi.fn(), saveLevel: vi.fn(),
+  listLevels: vi.fn(), getLevel: vi.fn(), saveLevel: vi.fn(), deleteLevel: vi.fn(),
   listVersions: vi.fn(), getVersion: vi.fn(), listPlaytests: vi.fn(),
   publishVersion: vi.fn(), validateLevelOnServer: vi.fn(),
 }));
@@ -25,6 +25,7 @@ describe('Fat Fish level editor', () => {
     api.listPlaytests.mockResolvedValue([]);
     api.validateLevelOnServer.mockResolvedValue({ content_hash: 'a'.repeat(64) });
     api.saveLevel.mockReset();
+    api.deleteLevel.mockReset();
   });
 
   it('supports undo/redo and sends the edited validated draft with a retained key', async () => {
@@ -76,5 +77,71 @@ describe('Fat Fish level editor', () => {
     fireEvent.change(title, { target: { value: '鱼'.repeat(42) } });
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
     expect(api.saveLevel).not.toHaveBeenCalled();
+  });
+
+  it('keeps an invalid draft visible and lets undo restore it instead of crashing the preview', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const view = await renderWithProviders(<LevelManager />, { station: 'admin', role: 'admin' });
+    await screen.findByRole('heading', { name: 'Level directory' });
+    fireEvent.change(screen.getByLabelText('Duration (seconds)'), { target: { value: '0' } });
+    expect(screen.getByLabelText('Fat Fish level map')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Local error/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getByLabelText('Duration (seconds)')).toHaveValue(90);
+    expect(screen.queryByRole('button', { name: /Local error/ })).not.toBeInTheDocument();
+  });
+
+  it('confirms library deletion, sends its revision, and clears the deleted editor', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    api.deleteLevel.mockImplementation(async () => {
+      api.listLevels.mockResolvedValue({ items: [second], page: 1, page_size: 20, has_more: false });
+      return { id: first.id, revision: '2', deleted_at: 10 };
+    });
+    const view = await renderWithProviders(<LevelManager />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('button', { name: /First level · r1/ }));
+    await view.user.click(await screen.findByRole('button', { name: 'Delete level' }));
+    expect(api.deleteLevel).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await view.user.click(screen.getByRole('button', { name: 'Delete level' }));
+    await waitFor(() => expect(api.deleteLevel).toHaveBeenCalledTimes(1));
+    expect(api.deleteLevel.mock.calls[0]).toEqual([first.id, '1', expect.stringMatching(/^[A-Za-z0-9_-]{22}$/)]);
+    expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining('Existing activities, plays and scores'));
+    await screen.findByRole('heading', { name: 'New level draft' });
+    expect(screen.getByLabelText('Title')).toHaveValue('');
+    await waitFor(() => expect(screen.queryByRole('button', { name: /First level · r1/ })).not.toBeInTheDocument());
+  });
+
+  it('freezes an uncertain deletion and retries the original request with the same key', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    api.deleteLevel.mockRejectedValueOnce(new ApiError('unavailable', 'Response lost', 502))
+      .mockResolvedValueOnce({ id: first.id, revision: '2', deleted_at: 10 });
+    const view = await renderWithProviders(<LevelManager />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('button', { name: /First level · r1/ }));
+    await view.user.click(await screen.findByRole('button', { name: 'Delete level' }));
+    await screen.findByText('Deletion outcome unknown. Retry the same deletion.');
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Publish immutable version from saved draft' })).toBeDisabled();
+    expect(screen.getByLabelText('Title').closest('[inert]')).not.toBeNull();
+    await view.user.click(screen.getByRole('button', { name: 'Retry same deletion' }));
+    await waitFor(() => expect(api.deleteLevel).toHaveBeenCalledTimes(2));
+    expect(api.deleteLevel.mock.calls[1]).toEqual(api.deleteLevel.mock.calls[0]);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    await screen.findByRole('heading', { name: 'New level draft' });
+  });
+
+  it('preserves the draft and revision when deletion conflicts', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    api.deleteLevel.mockRejectedValue(new ApiError('conflict', 'Level changed elsewhere', 409));
+    const view = await renderWithProviders(<LevelManager />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+    await view.user.click(await screen.findByRole('button', { name: /First level · r1/ }));
+    fireEvent.change(await screen.findByLabelText('Title'), { target: { value: 'Unsaved work' } });
+    await view.user.click(screen.getByRole('button', { name: 'Delete level' }));
+    await screen.findByText('Level changed elsewhere');
+    expect(screen.getByLabelText('Title')).toHaveValue('Unsaved work');
+    expect(screen.getByRole('button', { name: 'Delete level' })).toBeEnabled();
   });
 });
