@@ -1,8 +1,8 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **unreleased rc.4 source candidate** — this checklist describes the candidate's
-> export, deletion, retention, and privacy boundary. It does not announce publication or
-> deployment; instance status is specific to each operator.
+> Status: **rc.4 source prerelease (2026-09-28 UTC)** — this checklist describes the
+> release's export, deletion, retention, and privacy boundary. Source publication does
+> not itself upgrade an instance; deployment status is specific to each operator.
 >
 > Canonical DDL: `internal/db/schema.go` plus registered extension schemas; manifest: `internal/db/schema_manifest.go`;
 > target fingerprint: the build’s canonical `GenerationTwoSchemaHash` and complete manifest.
@@ -12,7 +12,7 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
-Account export schema 11 retains the prior schema-10 safe projections and adds only the three typed top-level families below. Its filename is `nonbiriapi-account-export-v11.json`; SQLite `user_version` remains 2. This describes the unreleased candidate contract and does not assert completed release validation or production deployment.
+Account export schema 11 retains the prior schema-10 safe projections and adds only the three typed top-level families below. Its filename is `nonbiriapi-account-export-v11.json`; SQLite `user_version` remains 2. This describes the rc.4 release contract and does not assert that any particular instance has been upgraded.
 
 Donated keys include the current U128 failure-disable threshold in owner, management and safe export projections. It follows the parent key/donation lifecycle and adds no retention window. Policy edits add no-secret donation review facts, retained under the existing donation-review policy; account deletion removes actor links. A zero threshold preserves error counting but never disables a key for errors. Expiry, withdrawal, bans, manual switches and quota limits remain effective.
 
@@ -131,7 +131,7 @@ Economy reports read the immutable ledger separately for each asset. They distin
 The table is the version coverage statement. New fields remain excluded from every
 wire/export until they are deliberately added to the relevant whitelist and tests.
 
-### Unreleased rc.4 source families and schema-11 additions
+### Rc.4 source families and schema-11 additions
 
 | Canonical family | Export | Deletion and late work | Retention and privacy |
 | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ Each schema-11 collection remains limited to 10,000 entries and the entire JSON 
 
 ## Linearization and lifecycle acceptance
 
-The deployed rc.3 `client-scans` behavior capped retained tasks at 32 and used one worker. Unreleased rc.4 retains that path for compatibility but uses the shared three-kind scan task machinery and the new 200-task/two-worker bounds above. Tasks remain private to their currently authorized creator. Source retirement, account deletion and role loss clear both published and pending associations and identity-bearing checkpoints in the authoritative transaction, while coverage records that the frozen input changed. Original request-source retention remains authoritative; no prompt or request body is collected.
+The deployed rc.3 `client-scans` behavior capped retained tasks at 32 and used one worker. Rc.4 retains that path for compatibility but uses the shared three-kind scan task machinery and the new 200-task/two-worker bounds above. Tasks remain private to their currently authorized creator. Source retirement, account deletion and role loss clear both published and pending associations and identity-bearing checkpoints in the authoritative transaction, while coverage records that the frozen input changed. Original request-source retention remains authoritative; no prompt or request body is collected.
 
 Image model discovery stores a bounded dispatch sidecar (`image_discovery_dispatches`) owned by the refresh operation: actual GET method/URL, empty request body/content type and dispatch time. It is written with the dispatch transition, survives later configuration edits, cascades with the refresh root and appears only through existing live diagnostic projections. It is excluded from personal exports and retains no Authorization headers or generation payload. Historical missing snapshots remain explicitly unavailable.
 
@@ -176,7 +176,7 @@ historical snapshots.
 
 Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
 existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. The formal source for this candidate is the complete rc.3 repair database identified below. Unreleased intermediate schemas are outside this guarantee. Existing economic facts, accounts, donations, model bindings, saved games, configuration and instance legal text are preserved. The role migration already present in that source is preserved, historical audit roles keep their meaning, and split Token counters never reconstruct old totals. New activity assets are separate, and existing inactivity-observation timestamps are preserved. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
+envelope/config, or an unsafe path fails closed. The formal source for this release is the complete rc.3 repair database identified below. The exact preceding deployed source at commit `4e06025c6bf23fbb0f34db96673b45ed01c42e97` (tree `6af9d8349d9049197366f29984e2e413090b7814`) is a separately verified compatibility case; other intermediate schemas are outside the guarantee. Existing economic facts, accounts, donations, model bindings, saved games, configuration and instance legal text are preserved. The role migration already present in that source is preserved, historical audit roles keep their meaning, and split Token counters never reconstruct old totals. New activity assets are separate, and existing inactivity-observation timestamps are preserved. Schema, asset ledgers and capacity are validated before commit. Arbitrary schema repair and old-generation
 data import are unsupported. Current and supported predecessor databases are validated
 before any source write and before writable open. Destructive fresh starts with
 maintenance on and registration/game/activity off, and does not merge a source
@@ -184,7 +184,7 @@ snapshot. Re-activating an old copy is an operator event that must disclose its 
 cutoff and repeat any needed revocation/configuration; it is not an online deletion
 guarantee.
 
-The supported rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Upgrade validation compares every original table projection and the fresh schema, decrypts retained credentials, and checks repeated startup. Operators must use a consistent source backup from their own instance before deploying.
+The formal rc.4 upgrade source is rc.3 repair commit `37e060ab0d0f29d632fe6b8036839b413388812a` at tree `4b44e6fb11ab6d72cea7fecf1ea45ea615594274`. Its upgrade validation compares every original table projection and the fresh schema, decrypts retained credentials, and checks repeated startup. The exact preceding deployed source at commit `4e06025c6bf23fbb0f34db96673b45ed01c42e97` (tree `6af9d8349d9049197366f29984e2e413090b7814`) is a separately verified compatibility case; other intermediate schemas are unsupported. Operators must use a consistent source backup from their own instance before deploying.
 
 ## Change discipline
 

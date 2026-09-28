@@ -149,6 +149,16 @@ bare task; submit and cancel return a `task` wrapper. Currency amounts and
 revisions are decimal strings. Exchange `asset` is `sketch_paper` or
 `sketch_brush` and `quantity` is a positive whole-unit string.
 
+The Renge cover accompanies a four-frame waiting animation that advances every
+two seconds per frame. The animation respects reduced-motion settings and can
+pause manually or while the tab is in the background. This does not change the
+browser's existing refresh schedule or stop server-side task processing. The
+server schedules the first upstream status query six seconds after the receipt,
+then schedules each normal query six seconds after handling the previous response.
+A valid bounded upstream `Retry-After` that requests a longer
+wait can extend either interval; the shared request limit, original deadline,
+and stored wait across restart still apply.
+
 ## Queue, limits, and uncertain results
 
 The global queue is first in, first out. Users see queue totals and positions
@@ -163,9 +173,14 @@ the limit for the same physical endpoint and key. Existing tasks retain the
 identity and configuration under which they were accepted. The administrator
 control list includes older identities with unresolved slots.
 
-A generation submission is sent at most once. The server polls an accepted
-upstream task with bounded backoff, preserving the original execution deadline.
-Failed status queries never cause another generation submission.
+A generation submission is sent at most once. Under ordinary conditions, the
+server schedules the first status query six seconds after the receipt and each
+subsequent query six seconds after handling the previous response. A valid,
+bounded upstream `Retry-After` that requests a longer
+wait may extend either delay, including the initial delay from the submission
+receipt. The original execution deadline and shared activity request limit still
+apply; a wait already stored for an accepted task is resumed after restart.
+Status queries never repeat generation submission.
 
 When a submission receipt is lost or the execution deadline expires without a
 known result, new generation dispatches for that upstream identity pause. At
