@@ -251,7 +251,7 @@ async function discoveryDiagnostics(page: Page, admin: boolean) {
     .first();
   await task.locator('summary').first().click();
   await task.getByRole('button', { name: 'Load error details and source' }).click();
-  await expect(task.locator('pre')).toContainText('"failed"');
+  await expect(task.locator('pre')).toHaveText('{"data":[],"status":"error"}');
 }
 async function clientRule(page: Page, name: string, editing = false) {
   await page
