@@ -168,7 +168,7 @@ func TestAsyncQueriesResumeWithoutAnotherPost(t *testing.T) {
 	if err != nil || result.Processed != 0 {
 		t.Fatalf("recovery %+v %v", result, err)
 	}
-	f.now.Add(5)
+	f.now.Add(6)
 	f.wait(t, func() bool {
 		r, e := fresh.GetTask(f.ctx(f.user), f.user, task.ID)
 		return e == nil && r.Status == "succeeded"

@@ -7,6 +7,7 @@ import { cancelTask } from '@shared/picturebook/publicApi';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { useImageReconcile, useImageTask, useImageTasks } from './queries';
 import { ImageResults } from './ImageResults';
+import { PictureBookWait } from './PictureBookWait';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 
 export function TaskDetail({ id, account }: { readonly id: string; readonly account: string }) {
@@ -34,6 +35,9 @@ export function TaskDetail({ id, account }: { readonly id: string; readonly acco
       {task ? (
         <>
           <p role="status">{taskStatusLabel(task.status, t)}</p>
+          {!query.error ? (
+            <PictureBookWait key={account + ':' + task.id} status={task.status} />
+          ) : null}
           <dl className="picturebook-facts">
             <dt>{t('请求张数', 'Requested images')}</dt>
             <dd>{task.n}</dd>
