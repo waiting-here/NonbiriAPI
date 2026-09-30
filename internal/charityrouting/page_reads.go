@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -120,7 +121,17 @@ pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_
 		statement += ` AND pc.normalized_model_id LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(query.Query)+"%")
 	}
-	return statement, args
+	if query.AfterKeyID > 0 {
+		statement += ` AND (dk.id>? OR (dk.id=? AND pc.normalized_model_id>?))`
+		args = append(args, query.AfterKeyID, query.AfterKeyID, query.AfterModelID)
+	}
+	manual := strings.Replace(statement, "CROSS JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id", "CROSS JOIN donation_key_manual_models pc ON pc.donation_key_id=dk.id", 1)
+	manual = strings.ReplaceAll(manual, "pc.automatic_supports", "0")
+	manual = strings.ReplaceAll(manual, "pc.manual_supports", "1")
+	manual += ` AND NOT EXISTS(SELECT 1 FROM model_pair_catalog physical WHERE physical.endpoint_key_id=k.id AND physical.normalized_model_id=pc.normalized_model_id )`
+	memberManual := `EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=pc.normalized_model_id)`
+	statement = strings.ReplaceAll(statement, "pc.manual_supports", "(pc.manual_supports+"+memberManual+")")
+	return statement + ` UNION ALL ` + manual, append(append([]any{}, args...), args...)
 }
 
 func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, modelID int64, query CandidateQuery, page pagination.Request) (Page[AdminBindingCandidate], error) {

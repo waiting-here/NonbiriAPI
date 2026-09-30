@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -57,41 +58,9 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: materialize candidate expiry: %w", err)
 	}
-	statement := `SELECT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
-pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
-FROM charity_models cm
-JOIN donation_keys dk
-JOIN donations d ON d.id=dk.donation_id
-JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
-JOIN endpoint_keys k ON k.id=m.endpoint_key_id
-LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id
-WHERE cm.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND dk.ended_at IS NULL AND (dk.id>? OR (dk.id=? AND pc.normalized_model_id>?))
-AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
- AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`
-	args := []any{modelID, now, query.AfterKeyID, query.AfterKeyID, query.AfterModelID}
+	statement, args := candidatePageSelection(modelID, now, query)
 	if scope.Trainee {
-		statement += ` AND dk.mainstream_channel_id IS NOT NULL`
-	}
-	if query.DonationID > 0 {
-		statement += ` AND d.id=?`
-		args = append(args, query.DonationID)
-	}
-	if query.DonationKeyID > 0 {
-		statement += ` AND dk.id=?`
-		args = append(args, query.DonationKeyID)
-	}
-	if query.Source == "automatic" {
-		statement += ` AND pc.automatic_supports>0`
-	} else if query.Source == "manual" {
-		statement += ` AND pc.manual_supports>0`
-	} else {
-		statement += ` AND (pc.automatic_supports>0 OR pc.manual_supports>0)`
-	}
-	if query.Query != "" {
-		statement += ` AND pc.normalized_model_id LIKE ? ESCAPE '\'`
-		args = append(args, "%"+escapeLike(query.Query)+"%")
+		statement = strings.ReplaceAll(statement, "WHERE cm.id=?", "WHERE cm.id=? AND dk.mainstream_channel_id IS NOT NULL")
 	}
 	statement += ` ORDER BY dk.id,pc.normalized_model_id LIMIT ?`
 	args = append(args, query.Limit+1)
@@ -239,10 +208,9 @@ func (s *Service) addBindings(ctx context.Context, role roleKind, actorUserID, m
 FROM donation_keys dk
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=m.endpoint_key_id AND pc.normalized_model_id=?
-WHERE dk.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND dk.ended_at IS NULL AND (pc.automatic_supports>0 OR pc.manual_supports>0)`,
-			selection.upstreamModelID, selection.donationKeyID, now).Scan(&endpointKeyID)
+WHERE `+charityscope.SupportSQL("dk.id", "m.endpoint_key_id", "?")+` AND dk.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
+AND dk.ended_at IS NULL`,
+			selection.upstreamModelID, selection.upstreamModelID, selection.donationKeyID, now).Scan(&endpointKeyID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return resources.MutationResult[AdminBindings]{}, ErrNotFound
 		}
@@ -530,7 +498,7 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 	}
 	out.BindingRevision = strconv.FormatInt(revision, 10)
 	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,b.upstream_model_id,COALESCE(pc.automatic_supports,0),COALESCE(pc.manual_supports,0),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
+dk.display_head,dk.display_tail,b.upstream_model_id,COALESCE(pc.automatic_supports,0),(COALESCE(pc.manual_supports,0)+EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=b.upstream_model_id)),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
 FROM charity_model_bindings b
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=b.endpoint_key_id
 JOIN donation_keys dk ON dk.id=b.donation_key_id

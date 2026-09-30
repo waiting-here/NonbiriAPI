@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"io"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -72,6 +73,9 @@ VALUES(?,?,?,?,?,NULL)`, rowContextID, input.CanonicalBaseURL, input.ConnectorTy
 	}
 	refID, err := result.LastInsertId()
 	if err != nil || refID <= 0 {
+		return resources.StoredSecret{}, ErrUnavailable
+	}
+	if err := r.review.RecordEndpointSecret(ctx, tx, refID, input.Plaintext, time.Unix(input.CreatedAt, 0)); err != nil {
 		return resources.StoredSecret{}, ErrUnavailable
 	}
 	return resources.StoredSecret{

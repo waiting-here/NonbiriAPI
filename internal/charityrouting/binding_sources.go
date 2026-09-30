@@ -31,10 +31,13 @@ JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 WHERE cm.id=? AND d.status='approved' AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=k.id
+AND (EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=k.id
  AND (pc.automatic_supports>0 OR pc.manual_supports>0)
  AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
-  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id))`
+  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id))
+ OR EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id
+ AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
+ AND b.donation_key_id=dk.id AND b.upstream_model_id=dm.normalized_model_id)))`
 
 func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, modelID, donationID, afterID int64, limit int) ([]BindingDonation, []BindingSourceKey, int64, error) {
 	if s == nil || ctx == nil || modelID <= 0 || donationID < 0 || afterID < 0 || limit < 1 || limit > maxPageLimit || (role != roleAdmin && role != roleSteward) || role == roleSteward && actorID <= 0 {

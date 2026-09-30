@@ -33,12 +33,12 @@ func (s *Service) EnsureOwnBindingInTransaction(ctx context.Context, tx *sql.Tx,
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id AND pc.normalized_model_id=?
+LEFT JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id AND pc.normalized_model_id=?
 JOIN model_discovery_evidence de ON de.endpoint_key_id=k.id
 WHERE dk.id=? AND d.user_id=? AND e.user_id=? AND d.status='approved'
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
-AND ((?=0 AND pc.manual_supports>0) OR (? > 0 AND de.state='succeeded' AND de.revision=? AND pc.automatic_revision=de.revision AND pc.automatic_supports>0))`,
-		upstreamModelID, donationKeyID, userID, userID, now, discoveryRevision, discoveryRevision, discoveryRevision).Scan(&keyID)
+AND ((?=0 AND (pc.manual_supports>0 OR EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=?))) OR (? > 0 AND de.state='succeeded' AND de.revision=? AND pc.automatic_revision=de.revision AND pc.automatic_supports>0))`,
+		upstreamModelID, donationKeyID, userID, userID, now, discoveryRevision, upstreamModelID, discoveryRevision, discoveryRevision).Scan(&keyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}

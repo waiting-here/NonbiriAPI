@@ -12,6 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type bulkDeletionBaseURLValidator struct{}
@@ -254,9 +255,17 @@ VALUES(?,'openai-compatible','https://bulk.example.test/v1','',1,1,?,?)`, owner,
 	for index := 1; index <= keyCount; index++ {
 		contextID := make([]byte, 16)
 		contextID[14], contextID[15] = byte(index>>8), byte(index)
+		credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := environment.vault.SealForGenerationTwoContext([]byte(fmt.Sprintf("fixture-key-%d", index)), credentialContext)
+		if err != nil {
+			t.Fatal(err)
+		}
 		result, err = tx.Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,'https://bulk.example.test/v1','openai-compatible','fixture-envelope',?)`, contextID, donationTestNow)
+VALUES(?,'https://bulk.example.test/v1','openai-compatible',?,?)`, contextID, encoded, donationTestNow)
 		if err != nil {
 			t.Fatalf("seed secret %d: %v", index, err)
 		}

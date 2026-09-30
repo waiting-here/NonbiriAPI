@@ -283,11 +283,16 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create administrator alert repository: %w", err)
 	}
+	donationReview, err := initializeDonationReview(startupContext, store.DB(), vault)
+	if err != nil {
+		return nil, fmt.Errorf("initialize donation review identities: %w", err)
+	}
 	donationService, err := donation.New(donation.Config{
 		Store:      store,
 		OwnerAuth:  authRuntime,
 		RoleAuth:   roleAuthorizer,
 		CursorKeys: vault,
+		Review:     donationReview,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create donation service: %w", err)
@@ -322,6 +327,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		Vault:      vault,
 		Claims:     claimService,
 		Backend:    localBackend,
+		Review:     donationReview,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create resource bridge: %w", err)

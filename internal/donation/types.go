@@ -12,16 +12,17 @@ import (
 )
 
 var (
-	ErrInvalidRequest  = errors.New("donation: invalid request")
-	ErrUnauthorized    = errors.New("donation: unauthorized")
-	ErrForbidden       = errors.New("donation: forbidden")
-	ErrFeatureDisabled = errors.New("donation: feature disabled")
-	ErrNotFound        = errors.New("donation: not found")
-	ErrConflict        = errors.New("donation: conflict")
-	ErrResourceLocked  = errors.New("donation: resource locked")
-	ErrResourceLimit   = errors.New("donation: resource limit exceeded")
-	ErrUnavailable     = errors.New("donation: unavailable")
-	ErrInvariant       = errors.New("donation: invariant violation")
+	ErrInvalidRequest            = errors.New("donation: invalid request")
+	ErrUnauthorized              = errors.New("donation: unauthorized")
+	ErrForbidden                 = errors.New("donation: forbidden")
+	ErrFeatureDisabled           = errors.New("donation: feature disabled")
+	ErrNotFound                  = errors.New("donation: not found")
+	ErrConflict                  = errors.New("donation: conflict")
+	ErrResourceLocked            = errors.New("donation: resource locked")
+	ErrResourceLimit             = errors.New("donation: resource limit exceeded")
+	ErrReviewMaterialUnavailable = errors.New("donation: review material unavailable")
+	ErrUnavailable               = errors.New("donation: unavailable")
+	ErrInvariant                 = errors.New("donation: invariant violation")
 )
 
 type OwnerFinalTxAuthorizer interface {
@@ -99,7 +100,14 @@ type DonationStreak struct {
 	FailureDisabled bool   `json:"failure_disabled"`
 }
 
+type ReviewState struct {
+	Required          bool    `json:"required"`
+	Revision          *string `json:"revision"`
+	MaterialAvailable bool    `json:"material_available"`
+}
+
 type DonationKey struct {
+	Review ReviewState `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string         `json:"failure_disable_threshold"`
 	ID                      string         `json:"id"`
@@ -121,6 +129,7 @@ type DonationKey struct {
 }
 
 type AdminDonationKey struct {
+	Review ReviewState `json:"review"`
 	TokenBreakdown
 	FailureDisableThreshold string          `json:"failure_disable_threshold"`
 	ID                      string          `json:"id"`
@@ -200,33 +209,39 @@ type DonationBadge struct {
 // Management roles expose identical donation facts after role authorization.
 // The ordinary owner's projection remains separate.
 type AdminDonation struct {
-	DiscordPublicThanks *bool              `json:"discord_public_thanks"`
-	ID                  string             `json:"id"`
-	Status              string             `json:"status"`
-	Revision            string             `json:"revision"`
-	Description         string             `json:"description"`
-	ReviewResult        *ReviewResult      `json:"review_result"`
-	Keys                []AdminDonationKey `json:"keys"`
-	Owner               *DonationOwner     `json:"owner"`
-	Reviewer            *DonationReviewer  `json:"reviewer"`
-	Handling            DonationHandling   `json:"handling"`
-	CreatedAt           int64              `json:"created_at"`
-	UpdatedAt           int64              `json:"updated_at"`
+	FirstApprovalOrigin          string             `json:"first_approval_origin"`
+	CanForceReject               bool               `json:"can_force_reject"`
+	ForceRejectUnavailableReason *string            `json:"force_reject_unavailable_reason"`
+	DiscordPublicThanks          *bool              `json:"discord_public_thanks"`
+	ID                           string             `json:"id"`
+	Status                       string             `json:"status"`
+	Revision                     string             `json:"revision"`
+	Description                  string             `json:"description"`
+	ReviewResult                 *ReviewResult      `json:"review_result"`
+	Keys                         []AdminDonationKey `json:"keys"`
+	Owner                        *DonationOwner     `json:"owner"`
+	Reviewer                     *DonationReviewer  `json:"reviewer"`
+	Handling                     DonationHandling   `json:"handling"`
+	CreatedAt                    int64              `json:"created_at"`
+	UpdatedAt                    int64              `json:"updated_at"`
 }
 
 type StewardDonation struct {
-	DiscordPublicThanks *bool                 `json:"discord_public_thanks"`
-	ID                  string                `json:"id"`
-	Status              string                `json:"status"`
-	Revision            string                `json:"revision"`
-	Description         string                `json:"description"`
-	ReviewResult        *ReviewResult         `json:"review_result"`
-	Keys                []StewardDonationKey  `json:"keys"`
-	Owner               *StewardDonationOwner `json:"owner"`
-	Reviewer            *DonationReviewer     `json:"reviewer"`
-	Handling            DonationHandling      `json:"handling"`
-	CreatedAt           int64                 `json:"created_at"`
-	UpdatedAt           int64                 `json:"updated_at"`
+	FirstApprovalOrigin          string                `json:"first_approval_origin"`
+	CanForceReject               bool                  `json:"can_force_reject"`
+	ForceRejectUnavailableReason *string               `json:"force_reject_unavailable_reason"`
+	DiscordPublicThanks          *bool                 `json:"discord_public_thanks"`
+	ID                           string                `json:"id"`
+	Status                       string                `json:"status"`
+	Revision                     string                `json:"revision"`
+	Description                  string                `json:"description"`
+	ReviewResult                 *ReviewResult         `json:"review_result"`
+	Keys                         []StewardDonationKey  `json:"keys"`
+	Owner                        *StewardDonationOwner `json:"owner"`
+	Reviewer                     *DonationReviewer     `json:"reviewer"`
+	Handling                     DonationHandling      `json:"handling"`
+	CreatedAt                    int64                 `json:"created_at"`
+	UpdatedAt                    int64                 `json:"updated_at"`
 }
 
 type CreateKeyInput struct {
@@ -258,15 +273,16 @@ type TerminateInput struct {
 }
 
 type KeySetting struct {
-	SplitTokens   KeyManagementInput
-	DonationKeyID int64
-	PriceLimit    *string
-	CallsLimit    *string
-	TokensLimit   *string
-	TokenReserve  int64
-	Enabled       bool
-	SafeNote      string
-	ExpiresAt     *int64
+	ExpectedReviewRevision *int64
+	SplitTokens            KeyManagementInput
+	DonationKeyID          int64
+	PriceLimit             *string
+	CallsLimit             *string
+	TokensLimit            *string
+	TokenReserve           int64
+	Enabled                bool
+	SafeNote               string
+	ExpiresAt              *int64
 }
 
 type ReviewInput struct {
@@ -305,7 +321,14 @@ type ExportDonation struct {
 
 // ExportDonationKey is deliberately independent from owner and administrator
 // projections so future role-only fields cannot widen the personal export.
+type ManualModelExport struct {
+	UpstreamModelID string `json:"upstream_model_id"`
+	DisplayName     string `json:"display_name"`
+}
+
 type ExportDonationKey struct {
+	Review       ReviewState         `json:"review"`
+	ManualModels []ManualModelExport `json:"manual_models"`
 	TokenBreakdown
 	FailureDisableThreshold string                   `json:"failure_disable_threshold"`
 	RecurringLimits         []donationquota.RuleView `json:"recurring_limits"`

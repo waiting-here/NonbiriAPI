@@ -86,7 +86,9 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, DonationKeyExport{},
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
 		"physical_enabled", "charity_state", "limits", "usage", "token_reserve",
-		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits")
+		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "review", "manual_models")
+	assertClosedJSONKeys(t, DonationKeyReviewExport{}, "required", "revision", "material_available")
+	assertClosedJSONKeys(t, DonationManualModelExport{}, "upstream_model_id", "display_name")
 	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")
 	assertClosedJSONKeys(t, DonationSafeSourceExport{Kind: "custom"},
 		"kind", "connector_type", "base_url")

@@ -64,7 +64,7 @@ func TestKeyModelPagesRetainAllAssociationsWithoutLeakingOwnerResources(t *testi
 			t.Fatalf("bindings: %+v %v", bindings, err)
 		}
 		body, _ := json.Marshal(struct {
-			Models   Page[KeyModel]
+			Models   KeyModelPage
 			Bindings Page[KeyModelBinding]
 		}{out, bindings})
 		for _, secret := range []string{"private", "endpoint_key_id", "owner", "discord_id", "envelope", "head", "tail"} {
@@ -104,7 +104,7 @@ func TestKeyModelHTTPOnlyAcceptsNumberedPages(t *testing.T) {
 	owner := env.seedUser(t, false, nil)
 	did, kid, _ := env.seedCandidate(t, owner, 'z', "unbound")
 	api := &httpAPI{service: env.service}
-	for _, q := range []string{"cursor=", "limit=20", "q=test", "page=01", "page_size=30", "page=1&page=2", "page=1&limit="} {
+	for _, q := range []string{"cursor=", "limit=20", "page=01", "page_size=30", "page=1&page=2", "page=1&limit="} {
 		r := httptest.NewRequest("GET", "/?"+q, nil)
 		r.SetPathValue("id", strconv.FormatInt(did, 10))
 		r.SetPathValue("keyId", strconv.FormatInt(kid, 10))

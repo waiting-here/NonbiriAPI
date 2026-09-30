@@ -246,22 +246,35 @@ type DonationReviewExport struct {
 	ReviewedAt int64  `json:"reviewed_at"`
 }
 
+type DonationKeyReviewExport struct {
+	Required          bool    `json:"required"`
+	Revision          *string `json:"revision"`
+	MaterialAvailable bool    `json:"material_available"`
+}
+
+type DonationManualModelExport struct {
+	UpstreamModelID string `json:"upstream_model_id"`
+	DisplayName     string `json:"display_name"`
+}
+
 type DonationKeyExport struct {
-	RecurringLimits     []RecurringLimitExport   `json:"recurring_limits"`
-	ID                  string                   `json:"id"`
-	EndpointKeyID       *string                  `json:"endpoint_key_id"`
-	DisplayHead         string                   `json:"display_head"`
-	DisplayTail         string                   `json:"display_tail"`
-	SafeSource          DonationSafeSourceExport `json:"safe_source"`
-	PhysicalEnabled     bool                     `json:"physical_enabled"`
-	CharityState        string                   `json:"charity_state"`
-	Limits              DonationLimitsExport     `json:"limits"`
-	Usage               DonationUsageExport      `json:"usage"`
-	TokenReserve        int64                    `json:"token_reserve"`
-	AuthorizedExpiresAt *int64                   `json:"authorized_expires_at"`
-	ExpiresAt           *int64                   `json:"expires_at"`
-	Streak              DonationStreakExport     `json:"streak"`
-	EndedReason         *string                  `json:"ended_reason"`
+	Review              DonationKeyReviewExport     `json:"review"`
+	ManualModels        []DonationManualModelExport `json:"manual_models"`
+	RecurringLimits     []RecurringLimitExport      `json:"recurring_limits"`
+	ID                  string                      `json:"id"`
+	EndpointKeyID       *string                     `json:"endpoint_key_id"`
+	DisplayHead         string                      `json:"display_head"`
+	DisplayTail         string                      `json:"display_tail"`
+	SafeSource          DonationSafeSourceExport    `json:"safe_source"`
+	PhysicalEnabled     bool                        `json:"physical_enabled"`
+	CharityState        string                      `json:"charity_state"`
+	Limits              DonationLimitsExport        `json:"limits"`
+	Usage               DonationUsageExport         `json:"usage"`
+	TokenReserve        int64                       `json:"token_reserve"`
+	AuthorizedExpiresAt *int64                      `json:"authorized_expires_at"`
+	ExpiresAt           *int64                      `json:"expires_at"`
+	Streak              DonationStreakExport        `json:"streak"`
+	EndedReason         *string                     `json:"ended_reason"`
 }
 
 type RecurringLimitExport struct {

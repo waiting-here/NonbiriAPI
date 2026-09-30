@@ -17,6 +17,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -396,10 +397,9 @@ JOIN endpoints e ON e.id=k.endpoint_id
 JOIN charity_models cm ON cm.id=cr.charity_model_id
 JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.donation_key_id=dk.id
  AND b.endpoint_key_id=k.id AND b.upstream_model_id=?
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id
- AND pc.normalized_model_id=b.upstream_model_id AND pc.normalized_model_id=?
+AND b.upstream_model_id=?
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=? AND e.id=? AND k.id=?
-  AND (pc.automatic_supports>0 OR pc.manual_supports>0)
+  AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
 LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 		input.RequestID, input.ActorUserID, input.ActorUserID,
 		input.EndpointID, input.EndpointKeyID).Scan(

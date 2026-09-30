@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type donationEndpointSource struct {
@@ -50,6 +51,7 @@ func seedSourcedEndpointKey(
 	index int,
 	baseURL string,
 	source *donationEndpointSource,
+	body ...string,
 ) int64 {
 	t.Helper()
 	now := environment.clock.Load()
@@ -77,9 +79,21 @@ VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?,?,?,?,?)`, userID
 	contextID[0], fingerprint[0] = 0x58, 0x59
 	binary.BigEndian.PutUint64(contextID[8:], uint64(index+1))
 	binary.BigEndian.PutUint64(fingerprint[24:], uint64(index+1))
+	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plaintext := fmt.Sprintf("fixture-key-%d", index)
+	if len(body) > 0 {
+		plaintext = body[0]
+	}
+	encoded, err := environment.vault.SealForGenerationTwoContext([]byte(plaintext), credentialContext)
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,?,'openai-compatible','test-envelope',?)`, contextID, baseURL, now)
+VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, encoded, now)
 	if err != nil {
 		t.Fatalf("seed endpoint secret %d: %v", index, err)
 	}
