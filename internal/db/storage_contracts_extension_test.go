@@ -90,6 +90,7 @@ func TestStorageContractsUpgradeRetainsRowsReferencesAndSchema(t *testing.T) {
 		}
 		assertForeignKeyEnforcement(t, database)
 		assertRetainedManifest(t, database, PinnedGenerationTwoManifestHash)
+		assertLakeNotesDefault(t, database)
 		if after := interactionTableDigests(t, database, manifest); !reflect.DeepEqual(before, after) {
 			t.Fatal("deployed facts changed")
 		}
@@ -106,6 +107,18 @@ func TestStorageContractsUpgradeRetainsRowsReferencesAndSchema(t *testing.T) {
 		t.Fatal("autoincrement high water changed", highWater, err)
 	}
 	fresh := openGenerationTwoDDLForTest(t)
+	freshSeed, err := fresh.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer freshSeed.Rollback()
+	if err := seedGenerationTwo(context.Background(), freshSeed, hostileOID("b1e_")); err != nil {
+		t.Fatal(err)
+	}
+	if err := freshSeed.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	assertLakeNotesDefault(t, fresh)
 	want, err := readGenerationManifest(context.Background(), fresh)
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +198,7 @@ func TestStorageContractsCancelledTransactionRestoresForeignKeys(t *testing.T) {
 				// Reach a real schema mutation in the active transaction before
 				// cancellation. No wall-clock deadline chooses the test phase.
 				change := storageContractTableChanges[0]
-				if err := rebuildStorageContractTable(ctx, tx, change.table, change.before, change.after); err != nil {
+				if err := rebuildStorageContractTable(ctx, tx, change.table, change.before, change.after, change.occurrences); err != nil {
 					return err
 				}
 				var definition string
@@ -216,4 +229,18 @@ func TestStorageContractsCancelledTransactionRestoresForeignKeys(t *testing.T) {
 		t.Fatal("retry after completed rollback", err)
 	}
 	assertForeignKeyEnforcement(t, database)
+}
+
+func assertLakeNotesDefault(t *testing.T, database *sql.DB) {
+	t.Helper()
+	var defaults int
+	err := database.QueryRow(`SELECT count(*) FROM limited_activity_configs c
+JOIN limited_activity_revisions r ON r.activity_key=c.activity_key AND r.revision=c.revision
+WHERE c.activity_key='lake-notes' AND c.visible=0 AND c.paused=0
+ AND c.starts_at IS NULL AND c.ends_at IS NULL AND c.module_config='{}' AND c.revision=1
+ AND r.visible=0 AND r.paused=0 AND r.starts_at IS NULL AND r.ends_at IS NULL
+ AND r.module_config='{}' AND r.actor_user_id IS NULL`).Scan(&defaults)
+	if err != nil || defaults != 1 {
+		t.Fatalf("hidden lake defaults=%d: %v", defaults, err)
+	}
 }

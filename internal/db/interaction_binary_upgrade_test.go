@@ -177,7 +177,7 @@ func interactionTableDigests(t *testing.T, database *sql.DB, manifest generation
 		}
 		query := "SELECT " + strings.Join(columns, ",") + " FROM " + hostileQuoteIdent(table.Name)
 		if table.Name == "limited_activity_configs" || table.Name == "limited_activity_revisions" {
-			query += " WHERE activity_key<>'fat-fish'"
+			query += addedActivityRowsFilter(manifest)
 		}
 		rows, err := database.Query(query)
 		if err != nil {

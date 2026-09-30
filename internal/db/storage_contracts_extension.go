@@ -10,11 +10,15 @@ import (
 const preStorageContractsManifestHash = "3f773b6dca01058f2296f437c3666afde92a74e8eeb861fa8637756dcd859481"
 const storageContractsMarker = "\n-- Additive storage contracts"
 
-var storageContractTableChanges = []struct{ table, before, after string }{
-	{"idempotency_records", "'game_blackjack','activity_loan','donation'", "'game_blackjack','activity_loan','donation','lake_notes','personal_automation'"},
-	{"risk_client_scans", "kind IN ('client_hits','users','shared_ips')", "kind IN ('client_hits','users','shared_ips','user_ips')"},
-	{"fatfish_level_versions", "CHECK(engine_version IN (1,2))", "CHECK(engine_version IN (1,2,3))"},
-	{"donation_reviews", "'failure_streak_reset','failure_policy_update'", "'failure_streak_reset','failure_policy_update','force_reject'"},
+var storageContractTableChanges = []struct {
+	table, before, after string
+	occurrences          int
+}{
+	{"idempotency_records", "'game_blackjack','activity_loan','donation'", "'game_blackjack','activity_loan','donation','lake_notes','personal_automation'", 1},
+	{"risk_client_scans", "kind IN ('client_hits','users','shared_ips')", "kind IN ('client_hits','users','shared_ips','user_ips')", 1},
+	{"fatfish_level_versions", "CHECK(engine_version IN (1,2))", "CHECK(engine_version IN (1,2,3))", 1},
+	{"donation_reviews", "'failure_streak_reset','failure_policy_update'", "'failure_streak_reset','failure_policy_update','force_reject'", 1},
+	{"credit_operations", "'fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund'", "'fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange'", 2},
 }
 
 // Foreign-key enforcement is disabled on the isolated startup connection
@@ -29,7 +33,7 @@ func applyStorageContractsExtension(ctx context.Context, tx *sql.Tx) error {
 		return errors.New("unrecognized storage contracts source manifest")
 	}
 	for _, change := range storageContractTableChanges {
-		if err := rebuildStorageContractTable(ctx, tx, change.table, change.before, change.after); err != nil {
+		if err := rebuildStorageContractTable(ctx, tx, change.table, change.before, change.after, change.occurrences); err != nil {
 			return err
 		}
 	}
@@ -37,13 +41,15 @@ func applyStorageContractsExtension(ctx context.Context, tx *sql.Tx) error {
 	if !ok {
 		return errors.New("canonical storage contracts are missing")
 	}
-	_, err = tx.ExecContext(ctx, additive)
-	return err
+	if _, err := tx.ExecContext(ctx, additive); err != nil {
+		return err
+	}
+	return seedLakeNotesStorage(ctx, tx)
 }
 
 // Rebuilding retains table SQL, every column, index, trigger, and the high-water
 // autoincrement identity. It never edits SQLite's internal schema catalog.
-func rebuildStorageContractTable(ctx context.Context, tx *sql.Tx, table, before, after string) error {
+func rebuildStorageContractTable(ctx context.Context, tx *sql.Tx, table, before, after string, occurrences int) error {
 	var enforcement int
 	if err := tx.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&enforcement); err != nil {
 		return err
@@ -55,7 +61,7 @@ func rebuildStorageContractTable(ctx context.Context, tx *sql.Tx, table, before,
 	if err := tx.QueryRowContext(ctx, "SELECT sql FROM sqlite_schema WHERE type='table' AND name=?", table).Scan(&definition); err != nil {
 		return err
 	}
-	if strings.Count(definition, before) != 1 {
+	if strings.Count(definition, before) != occurrences {
 		return errors.New("storage contracts source constraint mismatch")
 	}
 	rows, err := tx.QueryContext(ctx, "SELECT sql FROM sqlite_schema WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name", table)
@@ -90,7 +96,7 @@ func rebuildStorageContractTable(ctx context.Context, tx *sql.Tx, table, before,
 	if _, err := tx.ExecContext(ctx, "DROP TABLE "+name); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, strings.Replace(definition, before, after, 1)); err != nil {
+	if _, err := tx.ExecContext(ctx, strings.Replace(definition, before, after, occurrences)); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO "+name+" SELECT * FROM temp.storage_contract_saved_rows"); err != nil {
@@ -115,4 +121,13 @@ func rebuildStorageContractTable(ctx context.Context, tx *sql.Tx, table, before,
 		}
 	}
 	return nil
+}
+
+func seedLakeNotesStorage(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+INSERT INTO limited_activity_configs(activity_key,visible,starts_at,ends_at,paused,module_config,revision,updated_at)
+ VALUES('lake-notes',0,NULL,NULL,0,'{}',1,0);
+INSERT INTO limited_activity_revisions(activity_key,revision,visible,starts_at,ends_at,paused,module_config,actor_user_id,created_at)
+ VALUES('lake-notes',1,0,NULL,NULL,0,'{}',NULL,0);`)
+	return err
 }

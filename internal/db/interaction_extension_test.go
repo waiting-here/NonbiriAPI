@@ -164,7 +164,7 @@ func interactionOriginalRows(t *testing.T, database *sql.DB, source generationMa
 		}
 		query := "SELECT " + strings.Join(columns, ",") + " FROM " + hostileQuoteIdent(table.Name)
 		if table.Name == "limited_activity_configs" || table.Name == "limited_activity_revisions" {
-			query += " WHERE activity_key<>'fat-fish'"
+			query += addedActivityRowsFilter(source)
 		}
 		rows, err := database.Query(query)
 		if err != nil {
@@ -305,4 +305,25 @@ func TestInteractionMigrationRollbackAndUnknownSource(t *testing.T) {
 	if err := extendKnownGenerationTwoSchema(ctx, database); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Exclude only bootstrap activities that did not exist in the source schema.
+func addedActivityRowsFilter(source generationManifest) string {
+	present := make(map[string]bool, len(source.Tables))
+	for _, table := range source.Tables {
+		present[table.Name] = true
+	}
+	var additions []string
+	for _, activity := range []struct{ table, key string }{
+		{"fatfish_levels", "'fat-fish'"},
+		{"lake_notes_periods", "'lake-notes'"},
+	} {
+		if !present[activity.table] {
+			additions = append(additions, activity.key)
+		}
+	}
+	if len(additions) == 0 {
+		return ""
+	}
+	return " WHERE activity_key NOT IN (" + strings.Join(additions, ",") + ")"
 }
