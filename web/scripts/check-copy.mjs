@@ -125,7 +125,8 @@ function visibleValueChecks(catalog, language, entries) {
     }
     if (language === 'en') {
       const withoutReservedPrefix = value.replaceAll('[公益]', '');
-      if (/[\u3400-\u9fff]/u.test(withoutReservedPrefix)) {
+      const nativeLanguageName = key.endsWith('.zh') && value === '中文';
+      if (!nativeLanguageName && /[\u3400-\u9fff]/u.test(withoutReservedPrefix)) {
         throw new Error(`${catalog}/en ${key} contains unexpected Chinese copy.`);
       }
     }

@@ -51,7 +51,9 @@ describe('CallerKey authority response ordering', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     await waitFor(() => expect(posts).toBe(1));
@@ -91,7 +93,9 @@ describe('CallerKey authority response ordering', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
     await screen.findByText('No account API key');
     const pending = rendered.queryClient.refetchQueries({
       queryKey: coreKeys.callerKey('1'),

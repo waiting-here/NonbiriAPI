@@ -35,7 +35,7 @@ import {
   validateScalarInput,
 } from './normalizers';
 import { coreRawRequest, coreRequest, operationHeaders } from './request';
-import { validateAccountExportV11 } from './accountExportValidation';
+import { validateAccountExportIdentity } from './accountExportValidation';
 import {
   CONNECTOR_TYPES,
   type AccountAuthority,
@@ -254,42 +254,6 @@ export async function patchCharityProfile(
   return normalizeUserEnvelope(response.payload);
 }
 
-const ACCOUNT_EXPORT_KEYS = [
-  'schema_version',
-  'generated_at',
-  'user',
-  'endpoints',
-  'catalog_pairs',
-  'models',
-  'caller_key',
-  'usage',
-  'log_summary',
-  'issues',
-  'credit_ledger',
-  'checkins',
-  'game_onboarding',
-  'game_onboarding_holds',
-  'loans',
-  'game_rankings',
-  'penalties',
-  'welfare_claims',
-  'thursday',
-  'donations',
-  'charity',
-  'fishing',
-  'linklink',
-  'rps',
-  'bidding',
-  'likes',
-  'blackjack',
-  'randomness',
-  'limited_activities',
-  'image_tasks',
-  'inactivity',
-  'request_adaptations',
-  'continuity',
-  'fat_fish',
-] as const;
 const ELEVATED_TOKEN = /^[A-Za-z0-9._-]{8,512}$/;
 
 function accountIdentity(value: string): string {
@@ -339,7 +303,7 @@ async function boundedAccountExport(response: Response): Promise<Uint8Array> {
   return bytes;
 }
 
-function validateAccountExport(bytes: Uint8Array, accountId: string): void {
+function validateAccountExport(bytes: Uint8Array, accountId: string): 11 | 12 {
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
@@ -349,15 +313,10 @@ function validateAccountExport(bytes: Uint8Array, accountId: string): void {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
   const record = value as Record<string, unknown>;
-  const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
-  if (
-    record.schema_version !== 11 ||
-    Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
-    Object.keys(record).some((key) => !expected.has(key))
-  ) {
+  if (record.schema_version !== 11 && record.schema_version !== 12)
     throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
-  }
-  validateAccountExportV11(record, accountId);
+  validateAccountExportIdentity(record, accountId);
+  return record.schema_version;
 }
 
 export async function exportAccount(
@@ -374,19 +333,24 @@ export async function exportAccount(
   expectedStatus(response.status, 200, 'account export');
   const contentType = response.headers.get('Content-Type')?.toLowerCase() ?? '';
   const disposition = response.headers.get('Content-Disposition') ?? '';
-  if (
-    !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v11.json"'
-  ) {
+  const fileVersion =
+    disposition === 'attachment; filename="nonbiriapi-account-export-v11.json"'
+      ? 11
+      : disposition === 'attachment; filename="nonbiriapi-account-export-v12.json"'
+        ? 12
+        : null;
+  if (!contentType.startsWith('application/json') || fileVersion === null) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
   const bytes = await boundedAccountExport(response);
-  validateAccountExport(bytes, accountId);
+  const schemaVersion = validateAccountExport(bytes, accountId);
+  if (schemaVersion !== fileVersion)
+    throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 11,
+    schemaVersion,
   };
 }
 

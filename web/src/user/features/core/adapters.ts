@@ -51,13 +51,14 @@ export const disabledAccountLifecycleAdapter: AccountLifecycleAdapter = Object.f
 
 export const productionAccountLifecycleAdapter = Object.freeze<AccountLifecycleAdapter>({
   capabilities: Object.freeze({ exportAccount: true, deleteAccount: true }),
-  beginElevation: async (_intent, accountId) => {
+  beginElevation: async (_intent, accountId, signal) => {
     if (!/^[1-9][0-9]*$/.test(accountId))
       throw new ApiError('invalid_request', 'Invalid account id.', 400);
-    return beginElevation();
+    return beginElevation(signal);
   },
-  exportAccount: ({ accountId, elevatedToken }) => exportAccount(accountId, elevatedToken),
-  deleteAccount: ({ accountId, elevatedToken, confirmation }) =>
-    deleteCurrentAccount(accountId, elevatedToken, confirmation),
+  exportAccount: ({ accountId, elevatedToken, signal }) =>
+    exportAccount(accountId, elevatedToken, signal),
+  deleteAccount: ({ accountId, elevatedToken, confirmation, signal }) =>
+    deleteCurrentAccount(accountId, elevatedToken, confirmation, signal),
   readAccountAuthority,
 });
