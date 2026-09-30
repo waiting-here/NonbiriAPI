@@ -169,7 +169,7 @@ func TestWideScalarsCanonicalAndHostile(t *testing.T) {
 
 func TestOpaqueIDCanonicalAndHostile(t *testing.T) {
 	prefixes := []string{
-		"ann_", "op_", "req_", "clm_", "pol_", "thu_", "fb_", "ll_", "rpsq_", "rps_", "rpc_", "rpt_", "iss_", "lgh_", "b1e_", "sse_", "thp_", "gle_", "dbs_", "dbt_", "dbe_",
+		"ann_", "op_", "req_", "clm_", "pol_", "thu_", "fb_", "ll_", "rpsq_", "rps_", "rpc_", "rpt_", "iss_", "lgh_", "b1e_", "sse_", "thp_", "gle_", "dbs_", "dbt_", "dbe_", "lnp_", "lnc_", "lne_",
 	}
 	raw := make([]byte, 16)
 	body := base64.RawURLEncoding.EncodeToString(raw)
