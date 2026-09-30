@@ -28,7 +28,7 @@ describe('Fat Fish level authoring', () => {
   });
   it('starts from a valid draft, supports undoable immutable movement and export/import round trip', () => {
     const first = blankLevel();
-    expect(first.engine_version).toBe(2);
+    expect(first.engine_version).toBe(3);
     expect(localValidation(first)).toBeNull();
     const beforeHash = contentHash(first);
     const moved = moveSelection(first, { kind: 'fish', id: 1 }, unit(16), 0, true);
@@ -47,7 +47,7 @@ describe('Fat Fish level authoring', () => {
     const imported = importDraft(JSON.stringify({ title: 'Legacy', description: 'Preserved', draft: legacy }));
     expect(imported.level).toEqual(legacy);
     const converted = convertToCurrentDraft(imported.level);
-    expect(converted).toEqual({ ...legacy, engine_version: 2 });
+    expect(converted).toEqual({ ...legacy, engine_version: 3 });
     expect(localValidation(converted)).toBeNull();
     expect(contentHash(converted)).not.toBe(contentHash(legacy));
     converted.fish[0].x += 64;

@@ -1,5 +1,11 @@
 package engine
 
+const (
+	turnDenominatorV3    int64 = 5_000_000_000_000
+	sideTurnNumeratorV3  int64 = 97_784_797_035
+	frontTurnNumeratorV3 int64 = 117_341_756_442
+)
+
 func (engine *Engine) probeBlocked(fish *FishState, forward, right int64) bool {
 	sine, cosine := sinCos(fish.Heading)
 	point := Point{
@@ -60,7 +66,16 @@ func (engine *Engine) moveSubstepV2(fish *FishState, start Point, distance int64
 		engine.resolveContact(fish, start, next)
 		return
 	}
+	denominator := int64(5000)
+	if engine.level.EngineVersion == EngineVersion {
+		denominator = turnDenominatorV3
+		if base == 138 {
+			base = frontTurnNumeratorV3
+		} else {
+			base = sideTurnNumeratorV3
+		}
+	}
 	accumulated := fish.Motion.TurnRemainder + base*turnFactor(NextTurnWord(&fish.RNG))
-	fish.Motion.TurnRemainder = accumulated % 5000
-	fish.Heading = positiveMod(fish.Heading+fish.TurnDir*int(accumulated/5000), 4096)
+	fish.Motion.TurnRemainder = accumulated % denominator
+	fish.Heading = positiveMod(fish.Heading+fish.TurnDir*int(accumulated/denominator), 4096)
 }

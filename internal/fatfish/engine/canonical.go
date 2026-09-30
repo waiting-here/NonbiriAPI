@@ -271,16 +271,31 @@ func ContentHash(level Level) (string, error) {
 }
 
 func StateDigest(state EngineState) (string, error) {
+	return stateDigest(state, 5000, false)
+}
+
+// StateDigestForVersion validates motion with the bound rules before hashing.
+func StateDigestForVersion(version int, state EngineState) (string, error) {
+	if !supportedVersions(version, ScoringVersion) {
+		return "", errors.New("unsupported state rules version")
+	}
+	if version == EngineVersion {
+		return stateDigest(state, turnDenominatorV3, true)
+	}
+	return StateDigest(state)
+}
+
+func stateDigest(state EngineState, denominator int64, requireMotion bool) (string, error) {
 	v2 := 0
 	for _, fish := range state.Fish {
 		if fish.Motion != nil {
 			v2++
-			if fish.Motion.TurnRemainder < 0 || fish.Motion.TurnRemainder >= 5000 || fish.Motion.AmbiguousTurnDir < -1 || fish.Motion.AmbiguousTurnDir > 1 || fish.TurnDistance != 0 || fish.TurnDir < -1 || fish.TurnDir > 1 {
+			if fish.Motion.TurnRemainder < 0 || fish.Motion.TurnRemainder >= denominator || fish.Motion.AmbiguousTurnDir < -1 || fish.Motion.AmbiguousTurnDir > 1 || fish.TurnDistance != 0 || fish.TurnDir < -1 || fish.TurnDir > 1 {
 				return "", errors.New("version 2 motion state is invalid")
 			}
 		}
 	}
-	if v2 != 0 && v2 != len(state.Fish) {
+	if (v2 != 0 || requireMotion) && v2 != len(state.Fish) {
 		return "", errors.New("mixed motion state versions")
 	}
 	canonical, err := CanonicalJSON(state)
@@ -296,7 +311,7 @@ func SeedCommit(challengeID, periodID, nodeID, contentHash string, seed [32]byte
 }
 
 func supportedVersions(engineVersion, scoringVersion int) bool {
-	return (engineVersion == LegacyEngineVersion || engineVersion == EngineVersion) && scoringVersion == ScoringVersion
+	return (engineVersion == LegacyEngineVersion || engineVersion == PreviousEngineVersion || engineVersion == EngineVersion) && scoringVersion == ScoringVersion
 }
 
 // SeedCommitForVersion binds the actual immutable rules versions of a level.
