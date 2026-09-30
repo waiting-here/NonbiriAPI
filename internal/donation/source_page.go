@@ -101,9 +101,9 @@ func sourceUsableSQL() string {
  CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER)) END)
  FROM charity_model_bindings b JOIN charity_models cm ON cm.id=b.charity_model_id
 JOIN charity_model_access a ON a.model_id=cm.id
- JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
+
  WHERE b.donation_key_id=dk.id AND b.endpoint_key_id=k.id AND cm.enabled=1 AND a.allowed_level_mask<>0
- AND (pc.automatic_supports>0 OR pc.manual_supports>0)
+ AND ` + charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id") + `
  AND e.connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3')) AS price_reserve
  FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
  LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id

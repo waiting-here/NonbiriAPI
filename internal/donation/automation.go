@@ -31,5 +31,5 @@ func (s *Service) ApproveOwnNewInTransaction(ctx context.Context, tx *sql.Tx, us
 	if err := requireManagedDonationTx(ctx, tx, reviewerSteward, donationID, now); err != nil {
 		return err
 	}
-	return reviewDonationTx(ctx, tx, donationID, userID, string(reviewerSteward), input, now)
+	return s.reviewDonationTx(ctx, tx, donationID, userID, string(reviewerSteward), input, now)
 }

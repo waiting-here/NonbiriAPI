@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -26,6 +27,13 @@ type KeyModel struct {
 	Enabled               bool   `json:"enabled"`
 	BindingCount          string `json:"binding_count"`
 	AvailableBindingCount string `json:"available_binding_count"`
+}
+
+type KeyModelPage struct {
+	Page[KeyModel]
+	Candidates            []ManualCandidate    `json:"candidates"`
+	CandidatesPagination  *pagination.Metadata `json:"candidates_pagination"`
+	ManualCatalogRevision string               `json:"manual_catalog_revision"`
 }
 
 type KeyModelBinding struct {
@@ -59,8 +67,8 @@ WHEN ` + catalogAvailableBindingSQL("rb.id") + ` THEN 'available'
 ELSE 'unavailable' END`
 }
 
-func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, donationID, keyID, modelID int64, page pagination.Request) (Page[KeyModel], Page[KeyModelBinding], error) {
-	var models Page[KeyModel]
+func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, donationID, keyID, modelID int64, page pagination.Request, query ...string) (KeyModelPage, Page[KeyModelBinding], error) {
+	var models KeyModelPage
 	var bindings Page[KeyModelBinding]
 	if ctx == nil || donationID <= 0 || keyID <= 0 || modelID < 0 || !page.Valid() {
 		return models, bindings, ErrInvalidRequest
@@ -135,7 +143,7 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 		return models, bindings, err
 	}
 	defer rows.Close()
-	models = Page[KeyModel]{Data: make([]KeyModel, 0), Pagination: &meta}
+	models.Page = Page[KeyModel]{Data: make([]KeyModel, 0), Pagination: &meta}
 	bindings = Page[KeyModelBinding]{Data: make([]KeyModelBinding, 0), Pagination: &meta}
 	for rows.Next() {
 		var id int64
@@ -161,6 +169,19 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 	}
 	if err = rows.Close(); err != nil {
 		return models, bindings, err
+	}
+	if modelID == 0 {
+		q := ""
+		if len(query) > 0 {
+			q = query[0]
+		}
+		if !utf8.ValidString(q) || utf8.RuneCountInString(q) > 512 {
+			return models, bindings, ErrInvalidRequest
+		}
+		models.Candidates, models.CandidatesPagination, models.ManualCatalogRevision, err = readManualCandidatesTx(ctx, tx, keyID, q, page)
+		if err != nil {
+			return models, bindings, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return models, bindings, err
@@ -195,7 +216,7 @@ func (api *httpAPI) keyModels(w http.ResponseWriter, r *http.Request, role roleK
 		return
 	}
 	for name, entries := range values {
-		if (name != "page" && name != "page_size") || len(entries) != 1 {
+		if (name != "page" && name != "page_size" && (expanded || name != "q")) || len(entries) != 1 {
 			writeRoutingError(w, ErrInvalidRequest)
 			return
 		}
@@ -223,7 +244,7 @@ func (api *httpAPI) keyModels(w http.ResponseWriter, r *http.Request, role roleK
 			return
 		}
 	}
-	models, bindings, err := api.service.keyModelPages(r.Context(), role, actorID, donationID, keyID, modelID, page)
+	models, bindings, err := api.service.keyModelPages(r.Context(), role, actorID, donationID, keyID, modelID, page, values.Get("q"))
 	if err != nil {
 		writeRoutingError(w, err)
 		return

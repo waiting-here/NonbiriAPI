@@ -31,6 +31,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 	}{
 		{http.MethodGet, routeAdminModels, api.listAdminModels},
 		{http.MethodGet, routeAdminKeyModels, api.adminKeyModels},
+		{http.MethodPost, routeAdminManual, api.adminAddManual},
+		{http.MethodDelete, routeAdminManual + "/{entryId}", api.adminDeleteManual},
 		{http.MethodGet, routeAdminKeyModelBindings, api.adminKeyModelBindings},
 		{http.MethodPost, routeAdminModels, api.createAdminModel},
 		{http.MethodGet, routeAdminModel, api.getAdminModel},
@@ -67,6 +69,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 	}{
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
 		{http.MethodGet, routeStewardKeyModels, api.stewardKeyModels},
+		{http.MethodPost, routeStewardManual, api.stewardAddManual},
+		{http.MethodDelete, routeStewardManual + "/{entryId}", api.stewardDeleteManual},
 		{http.MethodGet, routeStewardKeyModelBindings, api.stewardKeyModelBindings},
 		{http.MethodPost, routeStewardModels, api.createStewardModel},
 		{http.MethodGet, routeStewardModel, api.getStewardModel},

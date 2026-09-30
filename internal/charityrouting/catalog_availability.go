@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
@@ -31,10 +32,10 @@ func catalogAvailableBindingSQL(bindingID string) string {
  JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
  JOIN endpoint_keys k ON k.id=m.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
- JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
+
  WHERE b.charity_model_id=cm.id AND d.status='approved' AND d.user_id IS NOT NULL
  AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
- AND k.enabled=1 AND e.enabled=1 AND (pc.automatic_supports>0 OR pc.manual_supports>0)
+ AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id") + `
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
  AND (dk.expires_at IS NULL OR dk.expires_at>cx.decision_now)
  AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>nbi_u128(0)

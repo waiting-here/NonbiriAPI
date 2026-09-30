@@ -253,7 +253,12 @@ func mapDonationReview(value *donation.ReviewResult) *lifecycle.DonationReviewEx
 func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKeyExport {
 	out := make([]lifecycle.DonationKeyExport, len(values))
 	for index, value := range values {
+		manual := make([]lifecycle.DonationManualModelExport, len(value.ManualModels))
+		for i, item := range value.ManualModels {
+			manual[i] = lifecycle.DonationManualModelExport{UpstreamModelID: item.UpstreamModelID, DisplayName: item.DisplayName}
+		}
 		out[index] = lifecycle.DonationKeyExport{
+			Review: lifecycle.DonationKeyReviewExport{Required: value.Review.Required, Revision: cloneString(value.Review.Revision), MaterialAvailable: value.Review.MaterialAvailable}, ManualModels: manual,
 			RecurringLimits: mapRecurringLimits(value.RecurringLimits),
 			ID:              value.ID, EndpointKeyID: cloneString(value.EndpointKeyID),
 			DisplayHead: value.DisplayHead, DisplayTail: value.DisplayTail,

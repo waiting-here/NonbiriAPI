@@ -45,6 +45,9 @@ func applyStorageContractsExtension(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, additive); err != nil {
 		return err
 	}
+	if err := backfillDonationApprovalOrigins(ctx, tx); err != nil {
+		return err
+	}
 	return seedLakeNotesStorage(ctx, tx)
 }
 

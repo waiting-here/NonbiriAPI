@@ -76,8 +76,9 @@ VALUES(?,'openai-compatible','https://custom.example.test/v1','Private physical 
 		if !mainstream {
 			base = "https://custom.example.test/v1"
 		}
+		contextID, envelope := sealRootTestCredential(t)
 		secretID := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(randomblob(16),?,'openai-compatible','synthetic-envelope',?)`, base, f.now)
+VALUES(?,?,'openai-compatible',?,?)`, contextID, base, envelope, f.now)
 		physical := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
 VALUES(?,?,randomblob(32),'head','tail','Private physical key note',1,0,1,?,?)`, endpoint, secretID, f.now, f.now)
 		exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,manual_supports,updated_at)

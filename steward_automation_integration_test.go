@@ -162,7 +162,11 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bridge, err := resourcebridge.New(resourcebridge.Config{Store: f.store, Vault: vault, Claims: f.app.claims, Backend: local})
+	review, err := secret.NewDonationReview(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridge, err := resourcebridge.New(resourcebridge.Config{Store: f.store, Vault: vault, Claims: f.app.claims, Backend: local, Review: review})
 	if err != nil {
 		t.Fatal(err)
 	}

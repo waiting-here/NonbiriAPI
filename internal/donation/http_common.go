@@ -166,6 +166,7 @@ func writeDonationError(writer http.ResponseWriter, err error) {
 		httperr.Mapping{Err: ErrForbidden, Code: httperr.CodeForbidden, Message: "access denied"},
 		httperr.Mapping{Err: ErrFeatureDisabled, Code: httperr.CodeFeatureDisabled, Message: "feature disabled"},
 		httperr.Mapping{Err: ErrNotFound, Code: httperr.CodeNotFound, Message: "not found"},
+		httperr.Mapping{Err: ErrReviewMaterialUnavailable, Code: httperr.CodeConflict, Message: "donation review material is unavailable; restore the original material before reviewing"},
 		httperr.Mapping{Err: ErrConflict, Code: httperr.CodeConflict, Message: "request conflicts with current state"},
 		httperr.Mapping{Err: ErrResourceLocked, Code: httperr.CodeResourceLocked, Message: "resource is locked"},
 		httperr.Mapping{Err: ErrResourceLimit, Code: httperr.CodeResourceLimitExceeded, Message: "resource limit exceeded"},

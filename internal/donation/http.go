@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type httpAPI struct{ service *Service }
@@ -438,14 +439,15 @@ func (api *httpAPI) getSteward(writer http.ResponseWriter, request *http.Request
 
 type reviewKeyWire struct {
 	splitTokenWire
-	DonationKeyID requiredField[string] `json:"donation_key_id"`
-	PriceLimit    nullableField[string] `json:"price_limit"`
-	CallsLimit    nullableField[string] `json:"calls_limit"`
-	TokensLimit   nullableField[string] `json:"tokens_limit"`
-	TokenReserve  requiredField[int64]  `json:"token_reserve"`
-	Enabled       requiredField[bool]   `json:"enabled"`
-	SafeNote      requiredField[string] `json:"safe_note"`
-	ExpiresAt     nullableField[int64]  `json:"expires_at"`
+	ExpectedReviewRevision requiredField[string] `json:"expected_review_revision"`
+	DonationKeyID          requiredField[string] `json:"donation_key_id"`
+	PriceLimit             nullableField[string] `json:"price_limit"`
+	CallsLimit             nullableField[string] `json:"calls_limit"`
+	TokensLimit            nullableField[string] `json:"tokens_limit"`
+	TokenReserve           requiredField[int64]  `json:"token_reserve"`
+	Enabled                requiredField[bool]   `json:"enabled"`
+	SafeNote               requiredField[string] `json:"safe_note"`
+	ExpiresAt              nullableField[int64]  `json:"expires_at"`
 }
 
 type reviewWire struct {
@@ -459,6 +461,7 @@ func parseReviewWire(wire reviewWire) (ReviewInput, map[string]any, error) {
 	if !wire.Decision.Set || !wire.Reason.Set {
 		return ReviewInput{}, nil, ErrInvalidRequest
 	}
+	wire.Reason.Value = strings.ReplaceAll(strings.ReplaceAll(wire.Reason.Value, "\r\n", "\n"), "\r", "\n")
 	revision, err := requiredRevision(wire.ExpectedRevision)
 	if err != nil {
 		return ReviewInput{}, nil, err
@@ -467,7 +470,7 @@ func parseReviewWire(wire reviewWire) (ReviewInput, map[string]any, error) {
 		"reason": wire.Reason.Value}
 	input := ReviewInput{Decision: wire.Decision.Value, ExpectedRevision: revision, Reason: wire.Reason.Value}
 	switch wire.Decision.Value {
-	case "reject":
+	case "reject", "force_reject":
 		if wire.KeySettings.Set {
 			return ReviewInput{}, nil, ErrInvalidRequest
 		}
@@ -494,6 +497,14 @@ func parseReviewWire(wire reviewWire) (ReviewInput, map[string]any, error) {
 			split, fields, err := splitTokenInput(setting.splitTokenWire)
 			if err != nil {
 				return ReviewInput{}, nil, err
+			}
+			if setting.ExpectedReviewRevision.Set {
+				expected, err := requiredRevision(setting.ExpectedReviewRevision)
+				if err != nil {
+					return ReviewInput{}, nil, err
+				}
+				settings[index].ExpectedReviewRevision = &expected
+				canonicalSettings[index]["expected_review_revision"] = setting.ExpectedReviewRevision.Value
 			}
 			settings[index].SplitTokens = split
 			for name, value := range fields {
