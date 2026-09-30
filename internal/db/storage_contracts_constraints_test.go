@@ -156,3 +156,29 @@ func TestStorageContractsCredentialReviewIdentityAllowsOnlyInitialBackfill(t *te
 	hostileMustFail(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=NULL WHERE id=?", id)
 	hostileMustExec(t, database, "UPDATE endpoint_key_secrets SET orphaned_at=1 WHERE id=?", id)
 }
+
+func TestStorageContractsCharityBindingKeepsEndpointLifetime(t *testing.T) {
+	database := openGenerationTwoConstraintFixture(t)
+	_, charity, ids := seedBindingOrderFixture(t, database, 1)
+	var endpointKey int64
+	if err := database.QueryRow("SELECT endpoint_key_id FROM charity_model_bindings WHERE id=?", ids[0]).Scan(&endpointKey); err != nil {
+		t.Fatal(err)
+	}
+	// Member candidates are authorized by the binding writer. Their names
+	// need not exist in the owner's model catalog.
+	hostileMustExec(t, database, "UPDATE charity_model_bindings SET upstream_model_id='member-only' WHERE id=?", ids[0])
+	hostileMustFail(t, database, "UPDATE model_bindings SET upstream_model_id='member-only' WHERE id=?", ids[0])
+	hostileMustExec(t, database, "DELETE FROM model_pair_catalog WHERE endpoint_key_id=?", endpointKey)
+	var retained int
+	if err := database.QueryRow("SELECT count(*) FROM charity_model_bindings WHERE charity_model_id=?", charity).Scan(&retained); err != nil || retained != 1 {
+		t.Fatal("owner catalog deletion removed member binding", retained, err)
+	}
+	hostileMustExec(t, database, "UPDATE donation_keys SET enabled=0,ended_at=5,ended_reason='member_removed',report_match_until=7776005 WHERE endpoint_key_id=?", endpointKey)
+	hostileMustExec(t, database, "DELETE FROM endpoint_keys WHERE id=?", endpointKey)
+	if err := database.QueryRow("SELECT count(*) FROM charity_model_bindings WHERE charity_model_id=?", charity).Scan(&retained); err != nil || retained != 0 {
+		t.Fatal("deleted physical key retained binding", retained, err)
+	}
+	if err := foreignKeyCheck(context.Background(), database); err != nil {
+		t.Fatal(err)
+	}
+}
