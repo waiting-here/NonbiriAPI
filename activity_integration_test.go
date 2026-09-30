@@ -124,7 +124,7 @@ func TestImageActivityRootMaintenanceBanDeletionAndExport(t *testing.T) {
 	}
 	exported := lifecycleCall(0, "/api/account/export", nil)
 	var document lifecycle.ExportDocument
-	if exported.Code != http.StatusOK || json.Unmarshal(exported.Body.Bytes(), &document) != nil || document.SchemaVersion != 11 {
+	if exported.Code != http.StatusOK || json.Unmarshal(exported.Body.Bytes(), &document) != nil || document.SchemaVersion != lifecycle.SchemaVersion {
 		t.Fatalf("activity export: %d %s", exported.Code, exported.Body.String())
 	}
 	if len(document.ImageTasks) != 1 || document.ImageTasks[0].BillingState != "charged" || len(document.LimitedActivities.Exchanges) != 2 || document.LimitedActivities.Wallet.Paper != "98" || document.LimitedActivities.Wallet.Brush != "19" || document.Inactivity.Activity == nil {
