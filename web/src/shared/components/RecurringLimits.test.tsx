@@ -1,10 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAdminSession } from '../../admin/data';
 import {
   beginManagementSessionRequest,
+  clearStationSession,
   noteManagementSessionSuccess,
 } from '@shared/charityManagement';
 import { recurringLimitsKeys } from '@shared/operations/recurringLimits';
@@ -537,6 +538,39 @@ describe('RecurringLimits', () => {
     expect(onSaved).toHaveBeenCalledTimes(2);
   });
 
+  it('cancels a manual authority reload when logout precedes the old view unmount', async () => {
+    const { requests } = installQuotaFetch({
+      reads: [
+        response(),
+        jsonResponse({ error: { code: 'internal', message: 'temporary read failure' } }, 502),
+        response({ revision: '10', rules: [rule({ limit: '101' })] }),
+      ],
+    });
+    const onSaved = vi.fn();
+    const rendered = await renderAdmin({ onSaved });
+    const limit = await screen.findByLabelText('Limit');
+    await rendered.user.clear(limit);
+    await rendered.user.type(limit, '101');
+    await rendered.user.click(screen.getByRole('button', { name: 'Save recurring limits' }));
+    const reload = await screen.findByRole('button', { name: 'Reload current server rules' });
+    expect(getDetailRequests(requests)).toHaveLength(2);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    let readsAfterLogout = 0;
+    await act(async () => {
+      clearStationSession(rendered.queryClient, 'admin');
+      readsAfterLogout = getDetailRequests(requests).length;
+      fireEvent.click(reload);
+      expect(getDetailRequests(requests)).toHaveLength(readsAfterLogout);
+      rendered.unmount();
+      await Promise.resolve();
+    });
+    expect(rendered.queryClient.getQueryData(['admin', 'session'])).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Recurring charity limits' })).toBeNull();
+    expect(getDetailRequests(requests)).toHaveLength(readsAfterLogout);
+    expect(putRequests(requests)).toHaveLength(1);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
   it('loads authority on 409 while preserving the local draft for review', async () => {
     const { requests } = installQuotaFetch({
       reads: [
@@ -602,6 +636,51 @@ describe('RecurringLimits', () => {
     await rendered.user.clear(screen.getByLabelText('Limit'));
     await rendered.user.type(screen.getByLabelText('Limit'), '140');
     expect(screen.getByRole('button', { name: 'Save recurring limits' })).toBeDisabled();
+  });
+
+  it('ignores a late conflict comparison after the same account confirms a new session', async () => {
+    let resolveRead!: (value: Response) => void;
+    const pendingRead = new Promise<Response>((resolve) => {
+      resolveRead = resolve;
+    });
+    let reads = 0;
+    let writes = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const path = String(input);
+        if (path === '/admin/api/session')
+          return jsonResponse({ admin: { username: 'fixture-admin' } });
+        if (path === '/admin/api/time-zones') return jsonResponse(ZONES);
+        if (path === '/admin/api/donations/7/keys/8/recurring-limits') {
+          if (init?.method === 'PUT') {
+            writes += 1;
+            return jsonResponse({ error: { code: 'conflict', message: 'stale revision' } }, 409);
+          }
+          reads += 1;
+          return reads === 1 ? jsonResponse(response()) : pendingRead;
+        }
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const onSaved = vi.fn();
+    const rendered = await renderAdmin({ onSaved });
+    const limit = await screen.findByLabelText('Limit');
+    await rendered.user.clear(limit);
+    await rendered.user.type(limit, '120');
+    await rendered.user.click(screen.getByRole('button', { name: 'Save recurring limits' }));
+    await waitFor(() => expect(reads).toBe(2));
+    await act(async () => {
+      seedAdminSession(rendered.queryClient);
+      resolveRead(jsonResponse(response({ revision: '10', rules: [rule({ limit: '140' })] })));
+      await pendingRead;
+    });
+    expect(screen.getByLabelText('Limit')).toHaveValue('120');
+    expect(screen.queryByText('The rules changed while you were editing.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recurring limits saved.')).not.toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(writes).toBe(1);
+    expect(reads).toBe(2);
   });
 
   it('can discard a normal draft and restores the current baseline', async () => {
