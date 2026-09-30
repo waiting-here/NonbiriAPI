@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState } from '@shared/components/States';
 import { parameterLabel, usePictureBookText } from '@shared/picturebook/copy';
 import {
-  exactModelSizes,
   initialValues,
   retainModelValues,
   prepareSubmission,
@@ -235,7 +234,7 @@ export function ModelForm({
             value={snapshot?.id ?? ''}
             onChange={(event) => {
               const next = models.find((model) => model.id === event.target.value);
-              if (next && snapshot && !drafts[next.id] && exactModelSizes(next) !== null) {
+              if (next && snapshot && !drafts[next.id]) {
                 const previous = drafts[snapshot.id] ?? initialValues(snapshot);
                 setDrafts((old) => ({ ...old, [next.id]: retainModelValues(next, previous) }));
               }
