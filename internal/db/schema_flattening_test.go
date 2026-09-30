@@ -17,10 +17,10 @@ func TestCanonicalSchemaPreservesDeployedDDLBytes(t *testing.T) {
 		t.Fatal("canonical additive schema marker is missing")
 	}
 	for _, change := range storageContractTableChanges {
-		if strings.Count(prefix, change.after) != 1 {
+		if strings.Count(prefix, change.after) != change.occurrences {
 			t.Fatalf("unexpected canonical constraint for %s", change.table)
 		}
-		prefix = strings.Replace(prefix, change.after, change.before, 1)
+		prefix = strings.Replace(prefix, change.after, change.before, change.occurrences)
 	}
 	if prefix != deployedGenerationTwoSchema {
 		t.Fatal("canonical schema differs outside registered additions")
