@@ -145,6 +145,9 @@ VALUES(?,'manual',?,?,?,?,?,?)`, keyID, input.UpstreamModelID, input.UpstreamMod
 	if err != nil {
 		return MutationResult[ManualEntriesResponse]{}, err
 	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "catalog_manual", ResourceOperationResult{EndpointID: strconv.FormatInt(endpointID, 10), EndpointKeyID: strconv.FormatInt(keyID, 10), CatalogEntryIDs: catalogOperationIDs(created)}); err != nil {
+		return MutationResult[ManualEntriesResponse]{}, err
+	}
 	if err := commitTx(tx, &committed); err != nil {
 		return MutationResult[ManualEntriesResponse]{}, err
 	}

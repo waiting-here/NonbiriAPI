@@ -201,6 +201,9 @@ func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation 
 	if err != nil {
 		return MutationResult[Endpoint]{}, err
 	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "endpoint", ResourceOperationResult{EndpointID: item.ID}); err != nil {
+		return MutationResult[Endpoint]{}, err
+	}
 	if err := commitTx(tx, &committed); err != nil {
 		return MutationResult[Endpoint]{}, err
 	}
@@ -805,6 +808,9 @@ func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID i
 	}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusCreated, item)
 	if err != nil {
+		return MutationResult[EndpointKey]{}, err
+	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "key", ResourceOperationResult{EndpointID: item.EndpointID, EndpointKeyID: item.ID}); err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
 	if err := commitTx(tx, &committed); err != nil {

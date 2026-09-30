@@ -28,6 +28,7 @@ func RegisterRoutes(registrar UserRouteRegistrar, repository *Repository) error 
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodPost, routeOperationStatus, api.resourceOperationStatus},
 		{http.MethodGet, routeEndpoints, api.listEndpoints},
 		{http.MethodPost, routeEndpoints, api.createEndpoint},
 		{http.MethodGet, routeEndpointCreateOptions, api.endpointCreateOptions},
