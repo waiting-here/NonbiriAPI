@@ -1,0 +1,2 @@
+export const RULES_ID =
+  'lake-notes-d1be1134679327c43a38766d857cb0d3131659d2049cf7ea667034bcf727255e';

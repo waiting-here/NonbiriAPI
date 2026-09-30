@@ -2,7 +2,14 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
-import { clearStationSession, type CharityManagementFrame } from '@shared/charityManagement';
+import type { OperationContext } from '@shared/operations/useRetainedOperation';
+import {
+  captureStationSession,
+  clearStationSession,
+  isStationSessionChanged,
+  stationSessionMatches,
+  type CharityManagementFrame,
+} from '@shared/charityManagement';
 import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import { amount } from '@shared/operations/wire';
@@ -112,6 +119,10 @@ function sameRuleSet(
       return next !== undefined && sameRule(rule, next);
     })
   );
+}
+
+function sameWritePayload(a: RecurringLimitsWritePayload, b: RecurringLimitsWritePayload) {
+  return a.expected_revision === b.expected_revision && sameRuleSet(a.rules, b.rules);
 }
 
 function canonicalDecimal(value: string): boolean {
@@ -303,9 +314,8 @@ function RuleUsage({
 }) {
   const formatDateTime = useDateTimeFormatter();
   const context = useDisplayTimeContext();
-  const displayLabel = context.mode === 'site'
-    ? locale === 'zh' ? '站点时间' : 'Site time'
-    : copy.browserTime;
+  const displayLabel =
+    context.mode === 'site' ? (locale === 'zh' ? '站点时间' : 'Site time') : copy.browserTime;
   if (!view) {
     return <p className="recurring-limits__new-note">{copy.preserveUsage}</p>;
   }
@@ -318,7 +328,15 @@ function RuleUsage({
       ? draft.mode === 'sliding'
         ? copy.slidingRecovery
         : copy.noPeriod
-      : timeValue(view.next_transition_at, view.time_zone, locale, copy, 'transition', formatDateTime, displayLabel);
+      : timeValue(
+          view.next_transition_at,
+          view.time_zone,
+          locale,
+          copy,
+          'transition',
+          formatDateTime,
+          displayLabel,
+        );
   return (
     <div className="recurring-limits__usage" aria-label={copy.usage}>
       {view.effective_at !== undefined ? (
@@ -869,11 +887,23 @@ export function RecurringLimits({
       operation: { scope: string; payload: RecurringLimitsWritePayload },
       variables: RecurringLimitsWritePayload,
       forConflict: boolean,
+      context?: OperationContext,
     ): Promise<boolean> => {
+      let station: ReturnType<typeof captureStationSession>;
+      try {
+        station = captureStationSession(client, authorityFrame(role));
+      } catch (error) {
+        if (isStationSessionChanged(error)) return false;
+        throw error;
+      }
+      const sessionCurrent = () =>
+        (!context || context.isCurrent()) &&
+        stationSessionMatches(client, authorityFrame(role), station);
       if (
+        !sessionCurrent() ||
         operationRef.current !== operation ||
         operation.scope !== scope ||
-        operation.payload !== variables
+        !sameWritePayload(operation.payload, variables)
       )
         return false;
       if (!forConflict) {
@@ -882,9 +912,10 @@ export function RecurringLimits({
       }
       const current = await read.refetch();
       if (
+        !sessionCurrent() ||
         operationRef.current !== operation ||
         operation.scope !== scope ||
-        operation.payload !== variables
+        !sameWritePayload(operation.payload, variables)
       )
         return false;
       if (current.data && !current.error) {
@@ -917,14 +948,24 @@ export function RecurringLimits({
       }
       return false;
     },
-    [read, scope],
+    [client, read, role, scope],
   );
   const reconcile = useCallback(
-    async (variables: RecurringLimitsWritePayload, error: unknown | null) => {
+    async (
+      variables: RecurringLimitsWritePayload,
+      error: unknown | null,
+      context: OperationContext,
+    ) => {
       const operation = operationRef.current;
-      if (!operation || operation.scope !== scope || operation.payload !== variables) return;
+      if (
+        !context.isCurrent() ||
+        !operation ||
+        operation.scope !== scope ||
+        !sameWritePayload(operation.payload, variables)
+      )
+        return;
       if (error instanceof ApiError && error.status === 409) {
-        await syncAuthoritativeRead(operation, variables, true);
+        await syncAuthoritativeRead(operation, variables, true, context);
         return;
       }
       if (error && responseOutcomeUnknown(error)) {
@@ -932,7 +973,7 @@ export function RecurringLimits({
         return;
       }
       if (!error) {
-        await syncAuthoritativeRead(operation, variables, false);
+        await syncAuthoritativeRead(operation, variables, false, context);
       }
     },
     [scope, syncAuthoritativeRead],

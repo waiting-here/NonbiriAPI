@@ -227,7 +227,8 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
       credentials: 'same-origin',
       headers: requestHeaders,
     });
-  } catch {
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
     throw new ApiError('network_error', 'The network request failed.', 0);
   }
 

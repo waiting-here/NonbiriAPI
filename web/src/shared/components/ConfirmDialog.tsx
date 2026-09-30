@@ -41,6 +41,15 @@ export function ConfirmDialog({
   const previousActiveRef = useRef<HTMLElement | null>(null);
   const previousBusyRef = useRef(false);
 
+  useEffect(() => {
+    if (!open) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [open]);
+
   const restoreFocus = useCallback(() => {
     const previous = previousActiveRef.current;
     previousActiveRef.current = null;
@@ -152,7 +161,9 @@ export function ConfirmDialog({
             </button>
           ) : null}
         </div>
-        <p id={descriptionId}>{description}</p>
+        <div id={descriptionId} className="dialog-description">
+          {description}
+        </div>
         {children ? <div className="dialog-body">{children}</div> : null}
         <div className="dialog-actions nb-dialog-actions">
           <button

@@ -142,7 +142,17 @@ jobs:
           set -euo pipefail
           bash scripts/check-ci-results.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Confirm full Go coverage
+        if: needs.plan.outputs.mode == 'full'
+        env:
+          UPGRADE_APPLICABLE: ${{ needs.plan.outputs.upgrade }}
+        run: |
+          test "$UPGRADE_APPLICABLE" = true
+          printf 'Complete Go, race, and populated upgrade coverage passed.\n' >> "$GITHUB_STEP_SUMMARY"
+
   web_unit:
+    outputs:
+      artifact_id: ${{ steps.station_build.outputs.artifact-id }}
     needs: plan
     if: needs.plan.outputs.web == 'true'
     name: Web unit, types, lint, and build
@@ -177,6 +187,7 @@ jobs:
         run: git diff --exit-code -- THIRD_PARTY_NOTICES.md
 
       - name: Share verified station build
+        id: station_build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: station-build-${{ github.sha }}-${{ github.run_attempt }}
@@ -217,10 +228,14 @@ jobs:
           test "$(npm --version)" = "12.0.1"
       - name: Install dependencies
         run: npm ci
+      - name: Require the verified station artifact
+        env:
+          ARTIFACT_ID: ${{ needs.web_unit.outputs.artifact_id }}
+        run: test -n "$ARTIFACT_ID"
       - name: Download verified station build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: station-build-${{ github.sha }}-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.web_unit.outputs.artifact_id }}
           path: web/dist
       - name: Install Chromium
         run: npm exec -- playwright install --with-deps chromium
@@ -270,3 +285,6 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/check-ci-results.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Confirm full Web coverage
+        if: needs.plan.outputs.mode == 'full'
+        run: printf 'Complete Web and browser coverage passed.\n' >> "$GITHUB_STEP_SUMMARY"

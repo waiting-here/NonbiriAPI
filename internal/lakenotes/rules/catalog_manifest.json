@@ -1,0 +1,12 @@
+{
+  "source_sha256": "0111446f88d42e9dae1a215159fd230e3cc0e2a612512500e06bcfb92108eca2",
+  "catalog_sha256": "7669957327be3fb90be8cf493bfa23e4cd5f7f09cffc3f5d276804a0d79329cd",
+  "counts": {
+    "fish": 54,
+    "gear": 14,
+    "baits": 4,
+    "skills": 10,
+    "debris": 4,
+    "contractSlots": 5
+  }
+}

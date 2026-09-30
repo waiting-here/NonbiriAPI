@@ -1,0 +1,1287 @@
+{
+  "CONFIG": {
+    "gravity": 1.5845070422535212,
+    "holdAcceleration": -3.1690140845070425,
+    "maxSpeed": 2.4,
+    "bottomBounce": 0.6666666666666666,
+    "baseBarHeight": 0.16901408450704225,
+    "levelBarStep": 0.007042253521126761,
+    "maxBarHeight": 0.5,
+    "maxLevel": 20,
+    "initialProgress": 0.3,
+    "progressGainPerSecond": 0.12,
+    "progressLossPerSecond": 0.18,
+    "perfectAccuracy": 0.85,
+    "perfectMaxMissSeconds": 0.6,
+    "perfectXpMultiplier": 2.4,
+    "fixedStep": 0.016666666666666666,
+    "trashChance": 0.08,
+    "treasureChance": 0.15,
+    "treasureDelay": 2.2,
+    "treasureCaptureSeconds": 2
+  },
+  "RARITIES": {
+    "common": {
+      "label": "常见",
+      "rank": 1
+    },
+    "uncommon": {
+      "label": "少见",
+      "rank": 2
+    },
+    "rare": {
+      "label": "稀有",
+      "rank": 3
+    },
+    "epic": {
+      "label": "史诗",
+      "rank": 4
+    },
+    "legendary": {
+      "label": "传说",
+      "rank": 5
+    }
+  },
+  "DEFAULT_CHALLENGE": {
+    "difficulty": 20,
+    "fishSpeed": 1,
+    "tempo": 1,
+    "gain": 1,
+    "loss": 1
+  },
+  "LOCATIONS": {
+    "lake": {
+      "name": "湖泊",
+      "scene": "湖面很安静，适合钓鱼。",
+      "description": "宽阔平静的淡水，从小型鲫鱼到巨大的青鱼。"
+    },
+    "river": {
+      "name": "河流",
+      "scene": "水流穿过石滩，鱼儿藏在急缓交界处。",
+      "description": "水流多变的河道，游速快的溪鱼与洄游鱼更多。"
+    },
+    "coast": {
+      "name": "海岸",
+      "scene": "海风吹过栈桥，浪花轻拍岸边。",
+      "description": "咸水栈桥与近海，既有成群的小鱼，也有远游的大鱼。"
+    }
+  },
+  "FISH_TYPES": [
+    {
+      "name": "鲫鱼",
+      "kind": "gold",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 24,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        15,
+        35
+      ],
+      "difficulty": 15,
+      "basePrice": 22
+    },
+    {
+      "name": "鲤鱼",
+      "kind": "lake_carp",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 19,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        25,
+        75
+      ],
+      "difficulty": 33,
+      "basePrice": 32
+    },
+    {
+      "name": "黄颡鱼",
+      "kind": "lake_yellowcat",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 17,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        14,
+        32
+      ],
+      "difficulty": 25,
+      "basePrice": 28
+    },
+    {
+      "name": "鳊鱼",
+      "kind": "sky",
+      "location": "lake",
+      "rarity": "uncommon",
+      "weight": 12,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        22,
+        52
+      ],
+      "difficulty": 55,
+      "basePrice": 50
+    },
+    {
+      "name": "草鱼",
+      "kind": "lake_grasscarp",
+      "location": "lake",
+      "rarity": "uncommon",
+      "weight": 11,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        40,
+        100
+      ],
+      "difficulty": 48,
+      "basePrice": 55
+    },
+    {
+      "name": "鲶鱼",
+      "kind": "mud",
+      "location": "lake",
+      "rarity": "uncommon",
+      "weight": 10,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        35,
+        85
+      ],
+      "difficulty": 50,
+      "basePrice": 46
+    },
+    {
+      "name": "大口黑鲈",
+      "kind": "silver",
+      "location": "lake",
+      "rarity": "rare",
+      "weight": 8,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        28,
+        58
+      ],
+      "difficulty": 62,
+      "basePrice": 75
+    },
+    {
+      "name": "鳜鱼",
+      "kind": "violet",
+      "location": "lake",
+      "rarity": "rare",
+      "weight": 6,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        42,
+        92
+      ],
+      "difficulty": 72,
+      "basePrice": 90
+    },
+    {
+      "name": "乌鳢",
+      "kind": "lake_snakehead",
+      "location": "lake",
+      "rarity": "rare",
+      "weight": 6,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        35,
+        90
+      ],
+      "difficulty": 69,
+      "basePrice": 86
+    },
+    {
+      "name": "白鲢",
+      "kind": "lake_silvercarp",
+      "location": "lake",
+      "rarity": "epic",
+      "weight": 3,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        60,
+        120
+      ],
+      "difficulty": 77,
+      "basePrice": 130
+    },
+    {
+      "name": "鳙鱼",
+      "kind": "lake_bighead",
+      "location": "lake",
+      "rarity": "epic",
+      "weight": 3,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        65,
+        135
+      ],
+      "difficulty": 83,
+      "basePrice": 150
+    },
+    {
+      "name": "青鱼",
+      "kind": "star",
+      "location": "lake",
+      "rarity": "legendary",
+      "weight": 1.5,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        70,
+        140
+      ],
+      "difficulty": 95,
+      "basePrice": 320
+    },
+    {
+      "name": "鳑鲏",
+      "kind": "lake_bitterling",
+      "location": "lake",
+      "rarity": "common",
+      "weight": 12,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        5,
+        12
+      ],
+      "difficulty": 18,
+      "basePrice": 22,
+      "periods": [
+        "dawn",
+        "day"
+      ],
+      "description": "体侧泛着粉蓝光泽，喜欢在浅水的水草间穿梭。"
+    },
+    {
+      "name": "银鱼",
+      "kind": "lake_icefish",
+      "location": "lake",
+      "rarity": "uncommon",
+      "weight": 8,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        8,
+        20
+      ],
+      "difficulty": 38,
+      "basePrice": 45,
+      "periods": [
+        "dawn",
+        "dusk"
+      ],
+      "description": "半透明的小鱼成群游动，在斜照的天光下才容易看见。"
+    },
+    {
+      "name": "丁鱥",
+      "kind": "lake_tench",
+      "location": "lake",
+      "rarity": "uncommon",
+      "weight": 8,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        20,
+        55
+      ],
+      "difficulty": 43,
+      "basePrice": 52,
+      "weathers": [
+        "cloudy",
+        "rain"
+      ],
+      "description": "橄榄色的身体贴着湖底缓行，阴暗天气更愿意觅食。"
+    },
+    {
+      "name": "翘嘴鲌",
+      "kind": "lake_topmouth",
+      "location": "lake",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        35,
+        85
+      ],
+      "difficulty": 67,
+      "basePrice": 88,
+      "periods": [
+        "dawn",
+        "dusk"
+      ],
+      "description": "上翘的嘴适合追逐水面小鱼，出击时快得像一道银光。"
+    },
+    {
+      "name": "黄鳝",
+      "kind": "lake_swamp_eel",
+      "location": "lake",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        35,
+        90
+      ],
+      "difficulty": 57,
+      "basePrice": 78,
+      "periods": [
+        "night"
+      ],
+      "description": "夜色降临后离开泥洞，沿着水草边缘寻找猎物。"
+    },
+    {
+      "name": "鲟鱼",
+      "kind": "lake_sturgeon",
+      "location": "lake",
+      "rarity": "epic",
+      "weight": 2,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        80,
+        165
+      ],
+      "difficulty": 84,
+      "basePrice": 185,
+      "periods": [
+        "dawn",
+        "night"
+      ],
+      "weathers": [
+        "rain"
+      ],
+      "description": "古老的硬鳞鱼，雨水搅动湖底时才偶尔靠近岸边。"
+    },
+    {
+      "name": "马口鱼",
+      "kind": "teal",
+      "location": "river",
+      "rarity": "common",
+      "weight": 23,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        10,
+        28
+      ],
+      "difficulty": 28,
+      "basePrice": 26
+    },
+    {
+      "name": "宽鳍鱲",
+      "kind": "river_zacco",
+      "location": "river",
+      "rarity": "common",
+      "weight": 19,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        9,
+        22
+      ],
+      "difficulty": 35,
+      "basePrice": 30
+    },
+    {
+      "name": "泥鳅",
+      "kind": "river_loach",
+      "location": "river",
+      "rarity": "common",
+      "weight": 18,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        10,
+        24
+      ],
+      "difficulty": 20,
+      "basePrice": 24
+    },
+    {
+      "name": "棒花鱼",
+      "kind": "river_gudgeon",
+      "location": "river",
+      "rarity": "common",
+      "weight": 15,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        8,
+        18
+      ],
+      "difficulty": 24,
+      "basePrice": 25
+    },
+    {
+      "name": "香鱼",
+      "kind": "river_ayu",
+      "location": "river",
+      "rarity": "uncommon",
+      "weight": 12,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        16,
+        34
+      ],
+      "difficulty": 48,
+      "basePrice": 48
+    },
+    {
+      "name": "河鲈",
+      "kind": "river_perch",
+      "location": "river",
+      "rarity": "uncommon",
+      "weight": 11,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        18,
+        48
+      ],
+      "difficulty": 52,
+      "basePrice": 51
+    },
+    {
+      "name": "虹鳟",
+      "kind": "red",
+      "location": "river",
+      "rarity": "rare",
+      "weight": 8,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        26,
+        62
+      ],
+      "difficulty": 60,
+      "basePrice": 72
+    },
+    {
+      "name": "褐鳟",
+      "kind": "river_browntrout",
+      "location": "river",
+      "rarity": "rare",
+      "weight": 7,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        30,
+        76
+      ],
+      "difficulty": 68,
+      "basePrice": 84
+    },
+    {
+      "name": "狗鱼",
+      "kind": "river_pike",
+      "location": "river",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        45,
+        110
+      ],
+      "difficulty": 75,
+      "basePrice": 100
+    },
+    {
+      "name": "欧洲鳗",
+      "kind": "frost",
+      "location": "river",
+      "rarity": "epic",
+      "weight": 3,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        65,
+        130
+      ],
+      "difficulty": 75,
+      "basePrice": 128
+    },
+    {
+      "name": "大西洋鲑",
+      "kind": "river_salmon",
+      "location": "river",
+      "rarity": "epic",
+      "weight": 3,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        55,
+        125
+      ],
+      "difficulty": 82,
+      "basePrice": 155
+    },
+    {
+      "name": "鳡鱼",
+      "kind": "abyss",
+      "location": "river",
+      "rarity": "legendary",
+      "weight": 1.5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        110,
+        180
+      ],
+      "difficulty": 95,
+      "basePrice": 320
+    },
+    {
+      "name": "花鳅",
+      "kind": "river_spined_loach",
+      "location": "river",
+      "rarity": "common",
+      "weight": 11,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        8,
+        18
+      ],
+      "difficulty": 24,
+      "basePrice": 27,
+      "periods": [
+        "dusk",
+        "night"
+      ],
+      "description": "小巧的花纹鱼，贴着河床的石缝和砂砾穿行。"
+    },
+    {
+      "name": "茴鱼",
+      "kind": "river_grayling",
+      "location": "river",
+      "rarity": "uncommon",
+      "weight": 8,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        22,
+        48
+      ],
+      "difficulty": 49,
+      "basePrice": 58,
+      "periods": [
+        "dawn",
+        "day"
+      ],
+      "description": "高耸的背鳍像一面小旗，爱在清凉急流中逆水游动。"
+    },
+    {
+      "name": "赤眼鳟",
+      "kind": "river_red_eye",
+      "location": "river",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        20,
+        55
+      ],
+      "difficulty": 52,
+      "basePrice": 61,
+      "periods": [
+        "day",
+        "dusk"
+      ],
+      "description": "红色眼圈很醒目，常在河湾的缓流边寻找食物。"
+    },
+    {
+      "name": "山女鳟",
+      "kind": "river_yamame",
+      "location": "river",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        20,
+        45
+      ],
+      "difficulty": 64,
+      "basePrice": 86,
+      "periods": [
+        "dawn"
+      ],
+      "description": "带着椭圆斑纹的溪流鳟鱼，清晨在浅滩边迅速掠过。"
+    },
+    {
+      "name": "江鳕",
+      "kind": "river_burbot",
+      "location": "river",
+      "rarity": "rare",
+      "weight": 4,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        35,
+        85
+      ],
+      "difficulty": 65,
+      "basePrice": 92,
+      "periods": [
+        "night"
+      ],
+      "weathers": [
+        "cloudy",
+        "rain"
+      ],
+      "description": "有一根下颌须的河底猎手，偏爱昏暗寒冷的流水。"
+    },
+    {
+      "name": "鲥鱼",
+      "kind": "river_hilsa",
+      "location": "river",
+      "rarity": "epic",
+      "weight": 2,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        35,
+        70
+      ],
+      "difficulty": 78,
+      "basePrice": 165,
+      "periods": [
+        "dusk",
+        "night"
+      ],
+      "weathers": [
+        "rain"
+      ],
+      "description": "银鳞洄游鱼，雨后水流上涨时偶尔进入这段河道。"
+    },
+    {
+      "name": "沙丁鱼",
+      "kind": "coast_sardine",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 23,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        10,
+        25
+      ],
+      "difficulty": 16,
+      "basePrice": 23
+    },
+    {
+      "name": "鳀鱼",
+      "kind": "coast_anchovy",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 19,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        8,
+        20
+      ],
+      "difficulty": 32,
+      "basePrice": 27
+    },
+    {
+      "name": "鲱鱼",
+      "kind": "coast_herring",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 17,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        18,
+        36
+      ],
+      "difficulty": 30,
+      "basePrice": 29
+    },
+    {
+      "name": "竹荚鱼",
+      "kind": "coast_horsemackerel",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 15,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        16,
+        40
+      ],
+      "difficulty": 38,
+      "basePrice": 34
+    },
+    {
+      "name": "鲭鱼",
+      "kind": "coast_mackerel",
+      "location": "coast",
+      "rarity": "uncommon",
+      "weight": 12,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        22,
+        55
+      ],
+      "difficulty": 55,
+      "basePrice": 53
+    },
+    {
+      "name": "海鲈",
+      "kind": "coast_seabass",
+      "location": "coast",
+      "rarity": "uncommon",
+      "weight": 11,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        30,
+        80
+      ],
+      "difficulty": 52,
+      "basePrice": 58
+    },
+    {
+      "name": "鲽鱼",
+      "kind": "coast_flounder",
+      "location": "coast",
+      "rarity": "uncommon",
+      "weight": 10,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        25,
+        65
+      ],
+      "difficulty": 49,
+      "basePrice": 56
+    },
+    {
+      "name": "真鲷",
+      "kind": "coast_seabream",
+      "location": "coast",
+      "rarity": "rare",
+      "weight": 7,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        30,
+        75
+      ],
+      "difficulty": 64,
+      "basePrice": 82
+    },
+    {
+      "name": "石斑鱼",
+      "kind": "coast_grouper",
+      "location": "coast",
+      "rarity": "rare",
+      "weight": 6,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        35,
+        100
+      ],
+      "difficulty": 70,
+      "basePrice": 95
+    },
+    {
+      "name": "黄尾鰤",
+      "kind": "coast_yellowtail",
+      "location": "coast",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        50,
+        125
+      ],
+      "difficulty": 75,
+      "basePrice": 105
+    },
+    {
+      "name": "蓝鳍金枪鱼",
+      "kind": "coast_tuna",
+      "location": "coast",
+      "rarity": "epic",
+      "weight": 3,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        90,
+        180
+      ],
+      "difficulty": 86,
+      "basePrice": 170
+    },
+    {
+      "name": "剑鱼",
+      "kind": "coast_swordfish",
+      "location": "coast",
+      "rarity": "legendary",
+      "weight": 1.5,
+      "behavior": "mixed",
+      "style": "混合型",
+      "length": [
+        110,
+        200
+      ],
+      "difficulty": 98,
+      "basePrice": 350
+    },
+    {
+      "name": "银鲳",
+      "kind": "coast_pomfret",
+      "location": "coast",
+      "rarity": "common",
+      "weight": 11,
+      "behavior": "smooth",
+      "style": "平稳型",
+      "length": [
+        18,
+        40
+      ],
+      "difficulty": 26,
+      "basePrice": 33,
+      "periods": [
+        "day",
+        "dusk"
+      ],
+      "description": "银亮的扁平鱼，常随近岸潮流成群出现。"
+    },
+    {
+      "name": "飞鱼",
+      "kind": "coast_flyingfish",
+      "location": "coast",
+      "rarity": "uncommon",
+      "weight": 7,
+      "behavior": "floater",
+      "style": "上浮型",
+      "length": [
+        18,
+        36
+      ],
+      "difficulty": 53,
+      "basePrice": 65,
+      "periods": [
+        "dawn",
+        "day"
+      ],
+      "weathers": [
+        "sunny"
+      ],
+      "description": "宽大的胸鳍能托着它短暂滑翔，海面明亮时最容易发现。"
+    },
+    {
+      "name": "带鱼",
+      "kind": "coast_cutlassfish",
+      "location": "coast",
+      "rarity": "uncommon",
+      "weight": 8,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        50,
+        120
+      ],
+      "difficulty": 55,
+      "basePrice": 70,
+      "periods": [
+        "dusk",
+        "night"
+      ],
+      "description": "银白色的长带状身体，在昏暗海水里映出冷光。"
+    },
+    {
+      "name": "海鳗",
+      "kind": "coast_conger",
+      "location": "coast",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        60,
+        135
+      ],
+      "difficulty": 68,
+      "basePrice": 98,
+      "periods": [
+        "night"
+      ],
+      "weathers": [
+        "cloudy",
+        "rain"
+      ],
+      "description": "白天藏在礁石缝里，阴雨夜晚才沿海底出来觅食。"
+    },
+    {
+      "name": "鲣鱼",
+      "kind": "coast_skipjack",
+      "location": "coast",
+      "rarity": "rare",
+      "weight": 5,
+      "behavior": "dart",
+      "style": "乱窜型",
+      "length": [
+        45,
+        95
+      ],
+      "difficulty": 72,
+      "basePrice": 112,
+      "periods": [
+        "day"
+      ],
+      "weathers": [
+        "sunny",
+        "cloudy"
+      ],
+      "description": "游速极快的成群猎手，银腹上的深色条纹很有辨识度。"
+    },
+    {
+      "name": "鮟鱇",
+      "kind": "coast_anglerfish",
+      "location": "coast",
+      "rarity": "epic",
+      "weight": 2,
+      "behavior": "sinker",
+      "style": "下沉型",
+      "length": [
+        35,
+        90
+      ],
+      "difficulty": 82,
+      "basePrice": 190,
+      "periods": [
+        "night"
+      ],
+      "weathers": [
+        "rain"
+      ],
+      "description": "头顶的发光诱饵在黑暗里晃动，暴雨夜才接近海岸。"
+    }
+  ],
+  "PERIODS": {
+    "dawn": "清晨",
+    "day": "白天",
+    "dusk": "黄昏",
+    "night": "夜晚"
+  },
+  "WEATHERS": {
+    "sunny": "晴",
+    "cloudy": "阴",
+    "rain": "雨"
+  },
+  "WEATHER_CYCLE": [
+    "sunny",
+    "cloudy",
+    "rain",
+    "sunny",
+    "sunny",
+    "rain"
+  ],
+  "FISH_DESCRIPTIONS": {
+    "gold": "常见的湖鱼，游动温和，是许多钓手的第一条收获。",
+    "lake_carp": "身形厚实，受惊时会突然往水底深处钻去。",
+    "lake_yellowcat": "嘴边有长须，常贴着湖底寻找食物。",
+    "sky": "体形宽扁，喜欢在中上层水域慢慢巡游。",
+    "lake_grasscarp": "食量很大的草食鱼，拉力比看起来更沉。",
+    "mud": "夜色里的湖底猎手，嘴边的触须能感知动静。",
+    "silver": "伏在水草边等待猎物，突然发力时很难预判。",
+    "violet": "斑纹鲜明的伏击者，追逐小鱼时动作很急。",
+    "lake_snakehead": "能够在浅水中潜伏很久，一上钩就拼命往草里钻。",
+    "lake_silvercarp": "宽大的身体在水中缓缓上浮，甩头时力量惊人。",
+    "lake_bighead": "巨大的头部很好辨认，是湖中难得的大鱼。",
+    "star": "深水里的黑影，只有经验丰富的钓手才敢与它周旋。",
+    "teal": "溪流中的小型快鱼，常在明亮的浅滩结伴游动。",
+    "river_zacco": "鳍色醒目，在石缝间乱窜得非常灵活。",
+    "river_loach": "喜欢贴着河底钻进砂砾，身上有细小的斑纹。",
+    "river_gudgeon": "安静的小型底栖鱼，常躲在缓流的石块旁。",
+    "river_ayu": "银亮的身体顺着急流穿梭，动作轻快。",
+    "river_perch": "背鳍带刺，在河湾和水草边巡游。",
+    "red": "身侧有彩色光带，受惊时会迅速折返。",
+    "river_browntrout": "褐色斑点铺满身体，善于借水流突然加速。",
+    "river_pike": "细长的伏击者，突然冲刺时几乎不给人反应。",
+    "frost": "弯曲的长身藏在河底阴影里，夜间更显活跃。",
+    "river_salmon": "强壮的洄游鱼，逆流而上时也能保持速度。",
+    "abyss": "河道深处的庞大掠食者，冲刺如同一道暗影。",
+    "coast_sardine": "成群聚集的银色小鱼，海面上常见闪亮鱼群。",
+    "coast_anchovy": "小而敏捷，鱼群转向时会一同闪光。",
+    "coast_herring": "喜欢集群行动，常在海岸附近的中层水域游动。",
+    "coast_horsemackerel": "尾部有力，能沿着海流稳定前进。",
+    "coast_mackerel": "背上有波浪纹，冲刺时几乎像一支箭。",
+    "coast_seabass": "游走于礁石边缘，拉扯节奏忽快忽慢。",
+    "coast_flounder": "扁平的身体伏在海底，颜色与沙地很接近。",
+    "coast_seabream": "鳞片带着暖色光泽，常在礁石附近觅食。",
+    "coast_grouper": "体型厚实的礁区鱼，惯于往岩缝里钻。",
+    "coast_yellowtail": "黄色尾鳍一闪而过，游速很快。",
+    "coast_tuna": "远游的大型鱼，力量和速度都让人吃惊。",
+    "coast_swordfish": "细长的剑状吻部是它的标志，海上罕见的强敌。"
+  },
+  "SKILLS": {
+    "steady": {
+      "name": "稳竿手",
+      "description": "捕捉条额外增加 8 像素。"
+    },
+    "tracker": {
+      "name": "寻鱼人",
+      "description": "稀有及以上鱼出现权重 +20%，钓获经验 +8%。"
+    },
+    "calm": {
+      "name": "沉着收线",
+      "description": "鱼脱离捕捉条时，进度流失降低 10%。"
+    },
+    "control": {
+      "name": "控竿专家",
+      "description": "捕捉条的上浮和下落加速度提高 8%。"
+    },
+    "legendHunter": {
+      "name": "传奇猎手",
+      "description": "史诗与传说鱼出现权重 +25%。"
+    },
+    "brawler": {
+      "name": "搏鱼专家",
+      "description": "追踪稀有及以上鱼时，命中进度增加 8%。"
+    },
+    "patience": {
+      "name": "耐心收线",
+      "description": "鱼脱离捕捉条时，进度流失再降低 6%。"
+    },
+    "reader": {
+      "name": "识流者",
+      "description": "鱼改变移动目标的节奏放慢 8%。"
+    },
+    "master": {
+      "name": "老练竿法",
+      "description": "捕捉条额外增加 8 像素。"
+    },
+    "deepSeeker": {
+      "name": "深水行者",
+      "description": "史诗与传说鱼出现权重 +20%，稀有及以上鱼的命中进度 +5%。"
+    }
+  },
+  "GEAR": {
+    "trainingRod": {
+      "name": "训练竿",
+      "slot": "rod",
+      "cost": 25,
+      "tackleSlots": 0,
+      "baitAllowed": false,
+      "description": "不足 136 像素时提升捕捉条；脱离流失降为 2/3。只能钓难度低于 50 的普通品质鱼。"
+    },
+    "bambooPole": {
+      "name": "竹竿",
+      "slot": "rod",
+      "cost": 500,
+      "tackleSlots": 0,
+      "baitAllowed": false,
+      "description": "基础鱼竿，不使用鱼饵或渔具。"
+    },
+    "fiberglassRod": {
+      "name": "玻璃纤维竿",
+      "slot": "rod",
+      "cost": 1800,
+      "tackleSlots": 0,
+      "baitAllowed": true,
+      "description": "可以使用鱼饵。"
+    },
+    "iridiumRod": {
+      "name": "铱金鱼竿",
+      "slot": "rod",
+      "cost": 7500,
+      "tackleSlots": 1,
+      "baitAllowed": true,
+      "description": "可以使用鱼饵和 1 件渔具。"
+    },
+    "advancedRod": {
+      "name": "进阶铱金鱼竿",
+      "slot": "rod",
+      "cost": 25000,
+      "tackleSlots": 2,
+      "baitAllowed": true,
+      "description": "可以使用鱼饵和 2 件渔具，允许相同渔具叠加。"
+    },
+    "corkBobber": {
+      "name": "软木浮漂",
+      "slot": "tackle",
+      "cost": 750,
+      "description": "捕捉条高度 +24 像素。",
+      "effects": {
+        "barHeight": 0.04225352112676056
+      }
+    },
+    "leadBobber": {
+      "name": "铅制浮漂",
+      "slot": "tackle",
+      "cost": 200,
+      "description": "触底反弹速度变为原来的 1/10。",
+      "effects": {
+        "bottomBounce": 0.1
+      }
+    },
+    "trapBobber": {
+      "name": "陷阱浮漂",
+      "slot": "tackle",
+      "cost": 500,
+      "description": "脱离捕捉条时，进度流失从每帧 0.003 降至 0.002；两件叠加降至 0.0015。"
+    },
+    "barbedHook": {
+      "name": "倒刺鱼钩",
+      "slot": "tackle",
+      "cost": 1000,
+      "description": "鱼在捕捉条内时，捕捉条会轻微追随鱼；乱窜鱼仍需手动控制。"
+    },
+    "qualityBobber": {
+      "name": "品质浮漂",
+      "slot": "tackle",
+      "cost": 0,
+      "unlock": "perfect",
+      "description": "鱼的品质提升一级；累计 3 次完美捕获可领第一件，10 次可领第二件。"
+    },
+    "curiosityLure": {
+      "name": "好奇心鱼钩",
+      "slot": "tackle",
+      "cost": 0,
+      "unlock": "legendary",
+      "description": "传说鱼的出现权重 ×2；钓获首条传说鱼后可领取。"
+    },
+    "spinner": {
+      "name": "旋转式亮片",
+      "slot": "tackle",
+      "cost": 500,
+      "description": "上钩等待时间的上限减少 3.75 游戏秒。"
+    },
+    "dressedSpinner": {
+      "name": "精装旋转亮片",
+      "slot": "tackle",
+      "cost": 1000,
+      "description": "上钩等待时间的上限减少 7.5 游戏秒。"
+    },
+    "sonarBobber": {
+      "name": "声呐浮漂",
+      "slot": "tackle",
+      "cost": 500,
+      "description": "上钩后显示鱼的种类。"
+    }
+  },
+  "BAITS": {
+    "basic": {
+      "name": "普通鱼饵",
+      "cost": 5,
+      "description": "下一竿等待上钩时间减半。",
+      "effects": {
+        "biteDelay": 0.5
+      }
+    },
+    "glimmer": {
+      "name": "闪鳞鱼饵",
+      "cost": 45,
+      "description": "下一竿稀有及以上鱼出现权重 +45%，等待时间减半。",
+      "effects": {
+        "rareWeight": 1.45,
+        "biteDelay": 0.5
+      }
+    },
+    "abyss": {
+      "name": "深水鱼饵",
+      "cost": 95,
+      "description": "下一竿史诗与传说鱼出现权重 ×2，等待时间减半；鱼速度 +4%、脱钩流失 +8%。",
+      "effects": {
+        "epicWeight": 2,
+        "fishSpeed": 1.04,
+        "progressLoss": 1.08,
+        "biteDelay": 0.5
+      }
+    },
+    "deluxe": {
+      "name": "豪华鱼饵",
+      "cost": 100,
+      "description": "等待上钩时间减少 67%，捕捉条 +12 像素。",
+      "effects": {
+        "biteDelay": 0.33,
+        "barHeight": 0.02112676056338028
+      }
+    }
+  },
+  "DEBRIS": {
+    "driftwood": {
+      "name": "漂流木",
+      "icon": "🪵",
+      "value": 2
+    },
+    "bottle": {
+      "name": "碎玻璃瓶",
+      "icon": "🍾",
+      "value": 1
+    },
+    "boot": {
+      "name": "旧靴子",
+      "icon": "🥾",
+      "value": 1
+    },
+    "line": {
+      "name": "缠绕的废鱼线",
+      "icon": "🧵",
+      "value": 3
+    }
+  },
+  "CONTRACT_SLOTS": {
+    "delivery1": {
+      "type": "delivery",
+      "target": 3
+    },
+    "delivery2": {
+      "type": "delivery",
+      "target": 2
+    },
+    "catch": {
+      "type": "catch",
+      "target": 4
+    },
+    "perfect": {
+      "type": "perfect",
+      "target": 2
+    },
+    "cleanup": {
+      "type": "cleanup",
+      "target": 4
+    }
+  },
+  "QUALITY_ORDER": {
+    "普通": 0,
+    "银星": 1,
+    "金星": 2,
+    "铱星": 3
+  },
+  "QUALITY_NAMES": [
+    "普通",
+    "银星",
+    "金星",
+    "铱星"
+  ]
+}
