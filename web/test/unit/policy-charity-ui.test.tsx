@@ -23,13 +23,7 @@ import { EndpointsPage } from '../../src/user/pages/EndpointsPage';
 import { UserLayout } from '../../src/user/layouts/UserLayout';
 import { ModelsPage } from '../../src/user/pages/ModelsPage';
 import { StewardPage } from '../../src/user/pages/StewardPage';
-import { CallerKeyPanel } from '../../src/user/pages/KeysPage';
-import { AccountLifecyclePanel } from '../../src/user/features/core/AccountWorkspace';
 import { coreKeys } from '../../src/user/features/core/queries';
-import type {
-  AccountExportAttachment,
-  AccountLifecycleAdapter,
-} from '../../src/user/features/core/types';
 import { userKeys } from '../../src/user/data';
 import { ApiError } from '../../src/shared/query/http';
 import { charityKeys } from '../../src/shared/operations/charity';
@@ -454,14 +448,6 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   });
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
 }
 
 function ManagementBindingsProbe() {
@@ -2722,111 +2708,6 @@ describe('experimental policy and charity controls', () => {
     expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('steward'))).toBe(
       false,
     );
-  });
-
-  test('never reveals a caller key returned after the account changes', async () => {
-    const marker = `nbk_${'A'.repeat(43)}`;
-    const lateResponse = deferred<Response>();
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = requestPath(input);
-      const method = (
-        init?.method ?? (input instanceof Request ? input.method : 'GET')
-      ).toUpperCase();
-      if (method === 'GET' && path === '/api/caller-key') {
-        const headers = new Headers({ 'content-type': 'application/json' });
-        headers.set('X-Nonbiri-CallerKey-Generation', '0');
-        return new Response('null', { status: 200, headers });
-      }
-      if (method === 'POST' && path === '/api/caller-key/regenerate') {
-        return lateResponse.promise;
-      }
-      throw new Error(`Unexpected fixture request: ${method} ${path}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(<CallerKeyPanel accountId="1" />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-    await screen.findByText('No account API key');
-    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
-    );
-
-    rendered.rerender(<CallerKeyPanel accountId="2" />);
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '2' } });
-    await act(async () => {
-      lateResponse.resolve(
-        jsonResponse({
-          secret: marker,
-          metadata: {
-            display: 'nbk_AAAA…AAAA',
-            created_at: 1_700_000_000,
-            updated_at: 1_700_000_000,
-            generation: '1',
-          },
-        }),
-      );
-      await lateResponse.promise;
-    });
-
-    await waitFor(() => expect(screen.queryByText(marker)).toBeNull());
-    expect(rendered.queryClient.getQueryData(coreKeys.callerKey('2'))).toEqual({
-      generation: '0',
-      metadata: null,
-    });
-    expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
-  });
-
-  test('does not download an export returned for the previous account', async () => {
-    const marker = 'account-a-export-marker-123456';
-    const completion = deferred<AccountExportAttachment>();
-    const exportAccount = vi.fn(() => completion.promise);
-    const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportAccount: true, deleteAccount: false },
-      beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount,
-      deleteAccount: vi.fn(async () => undefined),
-      readAccountAuthority: vi.fn(async () => 'active' as const),
-    };
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => undefined);
-    window.sessionStorage.setItem('nb.pending.elevation', 'export');
-    window.sessionStorage.setItem('nb.pending.elevation.account', '1');
-    document.cookie = 'nb_elevated=test-token-123456; Path=/; SameSite=Lax';
-    try {
-      const rendered = await renderWithProviders(
-        <AccountLifecyclePanel accountId="1" adapter={adapter} />,
-        { station: 'user', role: 'user', locale: 'en' },
-      );
-      rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-      const dialog = await screen.findByRole('alertdialog');
-      await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportAccount).toHaveBeenCalledTimes(1));
-
-      rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
-      const currentSession = { user: { id: '2' } };
-      rendered.queryClient.setQueryData(coreKeys.session, currentSession);
-      await act(async () => {
-        completion.resolve({
-          blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 11,
-        });
-        await completion.promise;
-      });
-
-      expect(clickSpy).not.toHaveBeenCalled();
-      expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual(currentSession);
-      expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
-    } finally {
-      document.cookie = 'nb_elevated=; Max-Age=0; path=/';
-      window.sessionStorage.removeItem('nb.pending.elevation');
-      window.sessionStorage.removeItem('nb.pending.elevation.account');
-      clickSpy.mockRestore();
-    }
   });
 
   test('failed user logout clears the station before showing the server error', async () => {

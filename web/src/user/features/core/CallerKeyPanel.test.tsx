@@ -221,6 +221,7 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
     expect(
       rendered.queryClient.getQueryData(['user', 'core', 'account', '2', 'caller-key']),
     ).toEqual({ generation: '0', metadata: null });
+    expect(assertNoSensitiveQueryCache(rendered.queryClient, [secret]).hitSurfaces).toEqual([]);
   });
 
   it('keeps plaintext visible when only the follow-up metadata refresh fails', async () => {
