@@ -60,7 +60,11 @@
       "limited": "限时活动",
       "inactivity": "低活跃政策"
     },
-    "audit": { "source": "请求来源", "risk": "防滥用审计", "economy": "积分审计" },
+    "audit": {
+      "source": "请求来源",
+      "risk": "防滥用审计",
+      "economy": "积分审计"
+    },
     "donationDiscovery": {
       "title": "捐赠密钥模型拉取",
       "one": "拉取模型列表",
@@ -623,6 +627,15 @@
         "model_disabled": "模型已停用",
         "disabled": "资源已停用",
         "suspended": "安全或失败暂停"
+      }
+    },
+    "picturebook": {
+      "dimensions": {
+        "exact": "精确尺寸",
+        "select": "请选择尺寸",
+        "empty": "此模型暂无可选尺寸，请选择其他模型或联系管理员补充尺寸价格。",
+        "reselect": "请重新选择可用尺寸；提示词和其他输入已保留。",
+        "pairHelp": "每个选项是一组可用的宽度和高度。"
       }
     }
   },
