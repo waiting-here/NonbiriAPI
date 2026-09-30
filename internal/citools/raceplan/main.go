@@ -95,6 +95,7 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	timeout := flags.String("timeout", "30m", "per-command go test timeout")
 	hintsPath := flags.String("hints", "scripts/race-timings.json", "timing hints JSON")
 	planOnly := flags.Bool("plan-only", false, "print the complete deterministic plan without running tests")
+	packageSelection := flags.String("packages", "", "space- or comma-separated exact live package paths; omitted selects all")
 	workers := flags.Int("workers", 1, "maximum concurrent test commands")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -133,10 +134,23 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	if err != nil {
 		return err
 	}
+	selectionSpecified := false
+	flags.Visit(func(value *flag.Flag) {
+		if value.Name == "packages" {
+			selectionSpecified = true
+		}
+	})
+	listed, err = selectPackages(listed, *packageSelection, selectionSpecified)
+	if err != nil {
+		return err
+	}
+	hints = catalogHints(listed, hints, stderr, !selectionSpecified)
 	catalog, err := buildCatalog(*goTool, listed, hints)
 	if err != nil {
 		return err
 	}
+	warnTestDrift(catalog, hints, stderr)
+	fillLiveTestCounts(catalog, hints)
 	plans, err := buildPlans(catalog, hints, total)
 	if err != nil {
 		return err
@@ -154,6 +168,10 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	groups := executionGroups(selected, *timeout, *workers)
 	fmt.Fprintf(stdout, "raceplan: shard %d/%d plan=%s estimated=%.1fs whole_packages=%d split_tests=%d workers=%d groups=%d\n",
 		index, total, digest, selected.EstimatedSeconds, len(selected.WholePackages), testCount, *workers, len(groups))
+	if len(groups) == 0 {
+		fmt.Fprintln(stdout, "raceplan: this shard has no applicable tests")
+		return nil
+	}
 	fixture, err := prepareRunnerFixture(*goTool, digest)
 	if err != nil {
 		return err
@@ -211,10 +229,10 @@ func loadTimingHints(path string) (timingHints, error) {
 			return timingHints{}, fmt.Errorf("timing hints repeat split package %s", packagePath)
 		}
 		seenSplit[packagePath] = struct{}{}
-		if hints.SplitTestCounts[packagePath] <= 0 {
+		if count, exists := hints.SplitTestCounts[packagePath]; exists && count <= 0 {
 			return timingHints{}, fmt.Errorf("timing hints lack a positive test count for split package %s", packagePath)
 		}
-		if hints.PackageSeconds[packagePath] <= 0 {
+		if seconds, exists := hints.PackageSeconds[packagePath]; exists && seconds <= 0 {
 			return timingHints{}, fmt.Errorf("timing hints lack a positive weight for split package %s", packagePath)
 		}
 	}
@@ -726,4 +744,120 @@ func executeGroups(groups []commandGroup, workers int, runner func(commandGroup,
 		return fmt.Errorf("%d race command(s) failed: %s", len(failures), strings.Join(failures, "; "))
 	}
 	return nil
+}
+
+func selectPackages(listed []listedPackage, selection string, specified bool) ([]listedPackage, error) {
+	if !specified {
+		return listed, nil
+	}
+	names := strings.FieldsFunc(selection, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	if len(names) == 0 {
+		return nil, errors.New("explicit package selection is empty")
+	}
+	wanted := map[string]bool{}
+	for _, name := range names {
+		wanted[name] = true
+	}
+	result := make([]listedPackage, 0, len(wanted))
+	for _, item := range listed {
+		if wanted[item.ImportPath] {
+			result = append(result, item)
+			delete(wanted, item.ImportPath)
+		}
+	}
+	if len(wanted) > 0 {
+		missing := make([]string, 0, len(wanted))
+		for name := range wanted {
+			missing = append(missing, name)
+		}
+		sort.Strings(missing)
+		return nil, fmt.Errorf("selected packages are absent from the live catalog: %s", strings.Join(missing, ", "))
+	}
+	return result, nil
+}
+
+// Timing records cannot add or remove live coverage. Drop obsolete split hints
+// before constructing the plan; retain structural validation of the hint file.
+func catalogHints(listed []listedPackage, hints timingHints, output io.Writer, reportPackages bool) timingHints {
+	live := map[string]bool{}
+	for _, item := range listed {
+		live[item.ImportPath] = true
+	}
+	result := hints
+	result.SplitPackages = nil
+	result.SplitTestCounts = map[string]int{}
+	result.SplitGroupCaps = map[string]int{}
+	result.TestSeconds = map[string]map[string]float64{}
+	for _, name := range hints.SplitPackages {
+		if !live[name] {
+			continue
+		}
+		result.SplitPackages = append(result.SplitPackages, name)
+		result.SplitTestCounts[name] = hints.SplitTestCounts[name]
+		if cap, exists := hints.SplitGroupCaps[name]; exists {
+			result.SplitGroupCaps[name] = cap
+		}
+		result.TestSeconds[name] = hints.TestSeconds[name]
+	}
+	if reportPackages {
+		warnings := []string{}
+		for name := range live {
+			if _, exists := hints.PackageSeconds[name]; !exists {
+				warnings = append(warnings, "unmeasured package "+name)
+			}
+		}
+		for name := range hints.PackageSeconds {
+			if !live[name] {
+				warnings = append(warnings, "obsolete package timing "+name)
+			}
+		}
+		sort.Strings(warnings)
+		for _, warning := range warnings {
+			fmt.Fprintln(output, "raceplan: warning:", warning)
+		}
+	}
+	return result
+}
+
+func warnTestDrift(catalog []catalogPackage, hints timingHints, output io.Writer) {
+	for _, item := range catalog {
+		count, split := hints.SplitTestCounts[item.ImportPath]
+		if !split {
+			continue
+		}
+		if len(item.Tests) != count {
+			fmt.Fprintf(output, "raceplan: warning: %s live tests=%d timing baseline=%d\n", item.ImportPath, len(item.Tests), count)
+		}
+		measured := hints.TestSeconds[item.ImportPath]
+		if len(measured) == 0 {
+			continue
+		}
+		live := map[string]bool{}
+		for _, name := range item.Tests {
+			live[name] = true
+		}
+		warnings := []string{}
+		for name := range live {
+			if _, exists := measured[name]; !exists {
+				warnings = append(warnings, "unmeasured test "+item.ImportPath+"/"+name)
+			}
+		}
+		for name := range measured {
+			if !live[name] {
+				warnings = append(warnings, "obsolete test timing "+item.ImportPath+"/"+name)
+			}
+		}
+		sort.Strings(warnings)
+		for _, warning := range warnings {
+			fmt.Fprintln(output, "raceplan: warning:", warning)
+		}
+	}
+}
+
+func fillLiveTestCounts(catalog []catalogPackage, hints timingHints) {
+	for _, item := range catalog {
+		if _, split := hints.SplitTestCounts[item.ImportPath]; split && hints.SplitTestCounts[item.ImportPath] == 0 {
+			hints.SplitTestCounts[item.ImportPath] = len(item.Tests)
+		}
+	}
 }
