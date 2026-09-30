@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -12,10 +13,8 @@ func decodeBody(raw []byte) (map[string]any, error) {
 	if len(raw) == 0 || strictjson.ValidateObjectWithFieldLimit(raw, 16384) != nil {
 		return nil, ErrInvalid
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
 	var value map[string]any
-	if decoder.Decode(&value) != nil || value == nil {
+	if httpapi.DecodeJSONWithNumbers(raw, &value) != nil || value == nil {
 		return nil, ErrInvalid
 	}
 	return value, nil

@@ -28,6 +28,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
@@ -35,11 +36,10 @@ import (
 )
 
 const (
-	charityModelPrefix = "[公益]"
-	maxPersonalRunes   = 129
-	maxCharityRunes    = 133
-	maxProviderRunes   = 64
-	maxUnixSecond      = int64(253402300799)
+	maxPersonalRunes = 129
+	maxCharityRunes  = 133
+	maxProviderRunes = 64
+	maxUnixSecond    = int64(253402300799)
 )
 
 // Service owns one complete Generation 2 logical request. Its read lock is
@@ -171,8 +171,10 @@ func (service *Service) Close() error {
 	return nil
 }
 
-func (*Service) String() string   { return "[forward service]" }
+func (*Service) String() string { return "[forward service]" }
+
 func (*Service) GoString() string { return "[forward service]" }
+
 func (*Service) LogValue() slog.Value {
 	return slog.StringValue("[forward service]")
 }
@@ -259,7 +261,7 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	}
 	bound, filtered, cleanup, policyErr := service.bindDirectPolicy(ctx, userID, request, body)
 	if policyErr != nil {
-		service.writePreAcceptanceFailure(ctx, writer, nil, nil, policyErr, strings.HasPrefix(request.Model, charityModelPrefix), language)
+		service.writePreAcceptanceFailure(ctx, writer, nil, nil, policyErr, modelname.IsCharity(request.Model), language)
 		return
 	}
 	if cleanup != nil {
@@ -406,14 +408,14 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 
 func (service *Service) preflight(ctx context.Context, userID int64, request *validatedRequest) (logicalAdmission, *validatedRequest, func(), error) {
 	kind := "self"
-	if strings.HasPrefix(request.Model, charityModelPrefix) {
+	if modelname.IsCharity(request.Model) {
 		kind = "charity"
 	}
 	requestattempt.Classify(ctx, kind)
 	if service.classify != nil {
 		service.classify(ctx, userID, kind)
 	}
-	if strings.HasPrefix(request.Model, charityModelPrefix) {
+	if modelname.IsCharity(request.Model) {
 		now := request.policyDecisionNow
 		var err error
 		if request.policyModelID == 0 {
@@ -1130,7 +1132,7 @@ func validAdmission(value logicalAdmission) bool {
 		(value.strategy == "ordered" || value.strategy == "random") &&
 		value.reservedMilli >= 0 && value.reservedMilli <= claim.MaxMoneyMilli &&
 		(!value.charity || value.decisionNow >= 0 && value.decisionNow <= maxUnixSecond) &&
-		(value.charity == strings.HasPrefix(value.fullName, charityModelPrefix))
+		(value.charity == modelname.IsCharity(value.fullName))
 }
 
 func samePersonalSnapshot(preflight logicalAdmission, snapshot PersonalSnapshot, userID int64) bool {
@@ -1239,7 +1241,7 @@ func validListedModel(value ListedModel, charity bool) bool {
 	return value.ModelID > 0 && value.CreatedAt >= 0 &&
 		validBoundedText(value.Provider, maxProviderRunes, 4096) &&
 		validBoundedText(value.FullName, maxRunes, 4096) &&
-		(charity == strings.HasPrefix(value.FullName, charityModelPrefix))
+		(charity == modelname.IsCharity(value.FullName))
 }
 
 func validBoundedText(value string, maxRunes, maxBytes int) bool {

@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"mime"
 	"net/http"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 )
 
 const (
@@ -16,39 +17,23 @@ const (
 	maxJSONFields = 256
 )
 
-func jsonMediaType(value string) bool {
-	mediaType, _, err := mime.ParseMediaType(value)
-	return err == nil && mediaType == "application/json"
-}
+func jsonMediaType(value string) bool { return httpapi.JSONContentType(value) }
 
 func readStrictJSON(writer http.ResponseWriter, request *http.Request, destination any, maxBytes int64) ([]byte, error) {
-	if writer == nil || request == nil || request.Body == nil || destination == nil ||
-		maxBytes < 1 || !jsonMediaType(request.Header.Get("Content-Type")) {
+	if writer == nil {
 		return nil, ErrInvalidRequest
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maxBytes)
-	body, err := io.ReadAll(request.Body)
-	if err != nil {
-		clear(body)
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			return nil, errPayloadTooLarge
+	validate := func(body []byte) error {
+		if !utf8.Valid(body) || validateJSONStringLiterals(body) != nil || scanStrictJSONObject(body) != nil {
+			return ErrInvalidRequest
 		}
-		return nil, ErrInvalidRequest
+		return nil
 	}
-	if len(body) == 0 || !utf8.Valid(body) || validateJSONStringLiterals(body) != nil || scanStrictJSONObject(body) != nil {
-		clear(body)
-		return nil, ErrInvalidRequest
+	body, err := httpapi.ReadJSON(writer, request, destination, httpapi.BodyOptions{MaxBytes: maxBytes, Validate: validate, ContentType: jsonMediaType})
+	if errors.Is(err, httpapi.ErrTooLarge) {
+		return nil, errPayloadTooLarge
 	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		clear(body)
-		return nil, ErrInvalidRequest
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		clear(body)
+	if err != nil {
 		return nil, ErrInvalidRequest
 	}
 	return body, nil

@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -152,7 +153,7 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if decision.Kind == idempotency.Replay {
 		return replayModel(decision)
 	}
-	fullName := "[公益]" + input.Provider + "/" + input.Model
+	fullName := modelname.CharityPrefix + input.Provider + "/" + input.Model
 	result, err := tx.ExecContext(ctx, `INSERT INTO charity_models(
 provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,
 uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
@@ -346,7 +347,7 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
-	fullName := "[公益]" + updated.provider + "/" + updated.model
+	fullName := modelname.CharityPrefix + updated.provider + "/" + updated.model
 	result, err := tx.ExecContext(ctx, `UPDATE charity_models SET
 provider=?,model=?,full_name=?,enabled=?,pricing_mode=?,request_user_price=?,request_donor_reward=?,
 uncached_user_price=?,cache_write_user_price=?,cache_read_user_price=?,output_user_price=?,

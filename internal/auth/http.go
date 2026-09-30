@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 )
@@ -103,46 +103,30 @@ func validateIntent(value string) bool {
 }
 
 func validateOAuthStateText(v string) bool { return validateBoundedText(v, maxOAuthStateBytes, false) }
-func validateOAuthCode(v string) bool      { return validateBoundedText(v, maxOAuthCodeBytes, false) }
+
+func validateOAuthCode(v string) bool { return validateBoundedText(v, maxOAuthCodeBytes, false) }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, strict bool) bool {
-	if r == nil || r.Body == nil || !jsonContentType(r.Header.Get("Content-Type")) {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return false
+	validate := func(body []byte) error {
+		if !utf8.Valid(body) || (strict && scanStrictJSON(bytes.NewReader(body)) != nil) {
+			return httpapi.ErrInvalid
+		}
+		return nil
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
-	body, err := io.ReadAll(r.Body)
+	body, err := httpapi.ReadJSON(w, r, dst, httpapi.BodyOptions{MaxBytes: maxJSONBodyBytes, Validate: validate, ContentType: httpapi.JSONContentType})
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			writeStableError(w, httperr.CodePayloadTooLarge, "request body too large")
 		} else {
 			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		}
 		return false
 	}
-	if len(body) == 0 || !utf8.Valid(body) || (strict && scanStrictJSON(bytes.NewReader(body)) != nil) {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return false
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return false
-	}
+	clear(body)
 	return true
 }
 
-func jsonContentType(value string) bool {
-	mediaType, _, err := mime.ParseMediaType(value)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
+func jsonContentType(value string) bool { return httpapi.JSONContentType(value) }
 
 type strictJSONScanState struct{ fields int }
 

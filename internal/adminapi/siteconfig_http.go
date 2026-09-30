@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
@@ -211,30 +212,17 @@ func requireSiteConfigIdempotencyKey(writer http.ResponseWriter, request *http.R
 }
 
 func decodeSiteConfigObject(writer http.ResponseWriter, request *http.Request) (map[string]json.RawMessage, bool) {
-	if request == nil || request.Body == nil {
-		writeSiteConfigError(writer, ErrSiteConfigInvalid)
-		return nil, false
-	}
-	reader := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(reader)
+	var object map[string]json.RawMessage
+	body, err := httpapi.ReadJSON(writer, request, &object, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: strictjson.ValidateObject})
 	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeSiteConfigError(writer, ErrSiteConfigInvalid)
 		}
 		return nil, false
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		writeSiteConfigError(writer, ErrSiteConfigInvalid)
-		return nil, false
-	}
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(body, &object); err != nil {
-		writeSiteConfigError(writer, ErrSiteConfigInvalid)
-		return nil, false
-	}
+	clear(body)
 	return object, true
 }
 

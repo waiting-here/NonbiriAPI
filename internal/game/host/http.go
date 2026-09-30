@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -77,6 +78,7 @@ func (api *httpAPI) games(w http.ResponseWriter, r *http.Request, principal reso
 	}
 	writeJSON(w, http.StatusOK, snapshot)
 }
+
 func (api *httpAPI) activeCounts(w http.ResponseWriter, r *http.Request) {
 	if !noBody(w, r) || !requireExactQuery(w, r) {
 		return
@@ -88,6 +90,7 @@ func (api *httpAPI) activeCounts(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, result)
 }
+
 func (api *httpAPI) getConfig(w http.ResponseWriter, r *http.Request) {
 	if !noBody(w, r) || !requireExactQuery(w, r) {
 		return
@@ -99,6 +102,7 @@ func (api *httpAPI) getConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, result)
 }
+
 func (api *httpAPI) patchConfig(w http.ResponseWriter, r *http.Request) {
 	if !requireExactQuery(w, r) {
 		return
@@ -119,28 +123,19 @@ func (api *httpAPI) patchConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	if r == nil || r.Body == nil {
-		returnInvalid(w)
-		return nil, false
-	}
-	limited := http.MaxBytesReader(w, r.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
+func readBody(w http.ResponseWriter, request *http.Request) ([]byte, bool) {
+	body, err := httpapi.ReadBody(w, request, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes})
+	if err != nil || len(body) == 0 {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			returnInvalid(w)
 		}
 		return nil, false
 	}
-	if len(body) == 0 {
-		returnInvalid(w)
-		return nil, false
-	}
 	return body, true
 }
+
 func noBody(w http.ResponseWriter, r *http.Request) bool {
 	if r == nil || r.Body == nil {
 		return true
@@ -195,9 +190,11 @@ func requireExactQuery(w http.ResponseWriter, request *http.Request, allowed ...
 	returnInvalid(w)
 	return false
 }
+
 func returnInvalid(w http.ResponseWriter) {
 	httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 }
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	body, err := json.Marshal(value)
 	if err != nil {

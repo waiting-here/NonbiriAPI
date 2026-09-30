@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -417,17 +418,7 @@ func readStrictBody(request *http.Request, limit int64) ([]byte, error) {
 	return data, nil
 }
 
-func decodeExact(data []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		return errors.New("trailing JSON value")
-	}
-	return nil
-}
+func decodeExact(data []byte, target any) error { return httpapi.DecodeJSON(data, target) }
 
 func requireObjectFields(data []byte, names ...string) error {
 	var fields map[string]json.RawMessage

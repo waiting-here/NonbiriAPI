@@ -2,7 +2,6 @@ package adminalerts
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
@@ -249,33 +249,21 @@ func parseResolveRequest(writer http.ResponseWriter, request *http.Request) (boo
 	if request == nil || request.Body == nil {
 		return true, true
 	}
-	limited := http.MaxBytesReader(writer, request.Body, maxResolveBodyBytes)
-	body, err := io.ReadAll(limited)
+	body, err := httpapi.ReadBody(writer, request, httpapi.BodyOptions{MaxBytes: maxResolveBodyBytes})
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeError(writer, ErrInvalidRequest)
 		}
 		return false, false
 	}
+	defer clear(body)
 	if len(bytes.TrimSpace(body)) == 0 {
 		return true, true
 	}
-	if strictjson.ValidateObject(body) != nil {
-		writeError(writer, ErrInvalidRequest)
-		return false, false
-	}
 	var wire resolveWire
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&wire); err != nil {
-		writeError(writer, ErrInvalidRequest)
-		return false, false
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+	if strictjson.ValidateObject(body) != nil || httpapi.DecodeJSON(body, &wire) != nil {
 		writeError(writer, ErrInvalidRequest)
 		return false, false
 	}

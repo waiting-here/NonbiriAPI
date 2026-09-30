@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -195,23 +196,13 @@ func writeResult(w http.ResponseWriter, result Result, err error) {
 }
 
 func readBody(w http.ResponseWriter, request *http.Request) ([]byte, bool) {
-	if request == nil || request.Body == nil {
-		returnInvalid(w)
-		return nil, false
-	}
-	limited := http.MaxBytesReader(w, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
+	body, err := httpapi.ReadBody(w, request, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: validateStrictJSON})
+	if err != nil || len(body) == 0 {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			returnInvalid(w)
 		}
-		return nil, false
-	}
-	if len(body) == 0 || validateStrictJSON(body) != nil {
-		returnInvalid(w)
 		return nil, false
 	}
 	return body, true
@@ -222,16 +213,11 @@ func decodeStrict[T any](w http.ResponseWriter, request *http.Request, destinati
 	if !ok {
 		return false
 	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
+	if httpapi.DecodeJSON(body, destination) != nil {
 		returnInvalid(w)
 		return false
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		returnInvalid(w)
-		return false
-	}
+	clear(body)
 	return true
 }
 
