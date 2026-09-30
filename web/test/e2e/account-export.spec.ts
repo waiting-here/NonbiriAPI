@@ -10,7 +10,7 @@ import {
 } from './support';
 
 for (const locale of ['en', 'zh'] as const) {
-  test(`account export downloads v11 after the one-shot confirmation in ${locale}`, async ({
+  test(`account export downloads v12 on verified return in ${locale}`, async ({
     page,
   }) => {
     const guard = collectConsoleViolations(page);
@@ -30,43 +30,9 @@ for (const locale of ['en', 'zh'] as const) {
       document.cookie = 'nb_elevated=synthetic_export_capability; Path=/; SameSite=Lax';
     }, locale);
     const exportedDocument = {
-      schema_version: 11,
+      schema_version: 12,
       generated_at: 1_700_000_000,
       user: { id: '1' },
-      endpoints: [],
-      catalog_pairs: [],
-      models: [],
-      caller_key: null,
-      usage: {},
-      log_summary: {},
-      issues: [],
-      credit_ledger: [],
-      checkins: [],
-      game_onboarding: [],
-      game_onboarding_holds: [],
-      loans: [],
-      game_rankings: { statistics_start: 1_700_000_000, totals: [], events: [] },
-      penalties: [],
-      welfare_claims: [],
-      thursday: [],
-      donations: [],
-      charity: {},
-      fishing: {},
-      linklink: {},
-      rps: {},
-      bidding: {},
-      likes: {},
-      blackjack: {},
-      randomness: [],
-      limited_activities: {
-        wallet: { general: '0', sketch_paper: '0', sketch_brush: '0' },
-        exchanges: [],
-      },
-      image_tasks: [],
-      inactivity: { activity: null, runs: [] },
-      request_adaptations: [],
-      continuity: [],
-      fat_fish: { summaries: [], progress: [] },
     };
     let requests = 0;
     await page.route(`${USER_ORIGIN}/api/account/export`, async (route) => {
@@ -76,24 +42,19 @@ for (const locale of ['en', 'zh'] as const) {
       await route.fulfill({
         headers: {
           'content-type': 'application/json',
-          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v11.json"',
+          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v12.json"',
           'cache-control': 'no-store',
         },
         body: JSON.stringify(exportedDocument),
       });
     });
-    await page.goto(`${USER_ORIGIN}/account`);
-    const dialog = page.getByRole('alertdialog');
-    await expect(dialog).toBeVisible();
-    expect(requests).toBe(0);
     const pending = page.waitForEvent('download');
-    await dialog
-      .getByRole('button', { name: locale === 'zh' ? '创建导出' : 'Create export', exact: true })
-      .click();
+    await page.goto(`${USER_ORIGIN}/account`);
     const download = await pending;
-    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v11.json');
+    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v12.json');
     expect(JSON.parse(await readFile((await download.path())!, 'utf8'))).toEqual(exportedDocument);
     expect(requests).toBe(1);
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     expect(await page.evaluate(() => document.cookie)).not.toContain('nb_elevated');
     expect(await page.evaluate(() => sessionStorage.getItem('nb.pending.elevation'))).toBeNull();
     guard.assertNone();
