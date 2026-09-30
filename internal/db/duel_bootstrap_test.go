@@ -50,6 +50,10 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 	if err != nil || generationManifestDigest(before) != preRCOneManifestHash {
 		t.Fatal("prior manifest", err)
 	}
+	if _, err := prior.Exec("PRAGMA foreign_keys=OFF"); err != nil {
+		t.Fatal(err)
+	}
+	defer prior.Exec("PRAGMA foreign_keys=ON")
 	tx, err = prior.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +100,9 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := applyActivityRefinementExtension(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyStorageContractsExtension(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
 	got, err := readGenerationManifest(ctx, tx)
