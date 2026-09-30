@@ -15,6 +15,7 @@ type GovernanceExport struct {
 	LimitedActivities LimitedActivityExport `json:"limited_activities"`
 	ImageTasks        []ImageTaskExport     `json:"image_tasks"`
 	Inactivity        InactivityExport      `json:"inactivity"`
+	LakeNotes         LakeNotesExport       `json:"lake_notes"`
 }
 type ActivityWalletExport struct {
 	General string `json:"general"`

@@ -509,6 +509,15 @@ func normalizeExportDocument(document *ExportDocument) {
 	if document.LimitedActivities.Exchanges == nil {
 		document.LimitedActivities.Exchanges = []ActivityExchangeExport{}
 	}
+	if document.LakeNotes.Casts == nil {
+		document.LakeNotes.Casts = []LakeCastExport{}
+	}
+	if document.LakeNotes.Entries == nil {
+		document.LakeNotes.Entries = []LakeEntryExport{}
+	}
+	if document.LakeNotes.Exchanges == nil {
+		document.LakeNotes.Exchanges = []LakeExchangeExport{}
+	}
 	if document.ImageTasks == nil {
 		document.ImageTasks = []ImageTaskExport{}
 	}
@@ -631,6 +640,9 @@ func normalizeExportDocument(document *ExportDocument) {
 }
 
 func validateExportCollectionBounds(document ExportDocument) error {
+	if len(document.LakeNotes.Casts) > CollectionLimit || len(document.LakeNotes.Entries) > CollectionLimit || len(document.LakeNotes.Exchanges) > CollectionLimit {
+		return ErrTooLarge
+	}
 	if len(document.FatFish.Summaries) > CollectionLimit || len(document.FatFish.Progress) > CollectionLimit-len(document.FatFish.Summaries) {
 		return ErrTooLarge
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -357,7 +358,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	auth := &testFinalAuth{}
-	exports := &testExportAdapter{}
+	exports := &testExportAdapter{governance: GovernanceExport{LakeNotes: testLakeNotesExport()}}
 	deleteCalls := []string{}
 	noopDelete := func(name string) DeleteAdapter { return testDeleteAdapter{name: name, calls: &deleteCalls} }
 	noopRecovery := func(name string) RecoveryAdapter { return testRecoveryAdapter{name: name} }
@@ -425,4 +426,8 @@ func mustNewLifecycleCoordinator(t *testing.T, config Config) *Coordinator {
 		t.Fatalf("New: %v", err)
 	}
 	return coordinator
+}
+
+func testLakeNotesExport() LakeNotesExport {
+	return LakeNotesExport{RulesID: rules.RulesID, ProfileRevision: "0", Profile: rules.InitialProfile()}
 }

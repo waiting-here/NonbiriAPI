@@ -82,7 +82,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err := json.Unmarshal(body, &document); err != nil {
 		t.Fatalf("decode export: %v", err)
 	}
-	if document.SchemaVersion != 11 || document.GeneratedAt != 100 {
+	if document.SchemaVersion != SchemaVersion || document.GeneratedAt != 100 {
 		t.Fatalf("export header = version %d at %d", document.SchemaVersion, document.GeneratedAt)
 	}
 	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.Issues == nil ||
@@ -96,7 +96,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 			t.Fatalf("export finalizer %d commits=%d aborts=%d", index, finalizer.commits, finalizer.aborts)
 		}
 	}
-	if document.ImageTasks == nil || document.LimitedActivities.Exchanges == nil || document.Inactivity.Runs == nil {
+	if document.ImageTasks == nil || document.LimitedActivities.Exchanges == nil || document.Inactivity.Runs == nil || document.LakeNotes.Casts == nil || document.LakeNotes.Entries == nil || document.LakeNotes.Exchanges == nil {
 		t.Fatal("governance export arrays encoded as null")
 	}
 	if document.RequestAdaptations == nil || document.Continuity == nil || document.FatFish.Summaries == nil || document.FatFish.Progress == nil {
@@ -190,6 +190,9 @@ func TestPersonalExportCollectionsFailRatherThanTruncate(t *testing.T) {
 		{"ranking totals", func(a *testExportAdapter, n int) { a.rankings.Totals = make([]RankingTotalExport, n) }},
 		{"ranking events", func(a *testExportAdapter, n int) { a.rankings.Events = make([]RankingEventExport, n) }},
 		{"penalties", func(a *testExportAdapter, n int) { a.penalties = make([]PenaltyExport, n) }},
+		{"lake casts", func(a *testExportAdapter, n int) { a.governance.LakeNotes.Casts = make([]LakeCastExport, n) }},
+		{"lake entries", func(a *testExportAdapter, n int) { a.governance.LakeNotes.Entries = make([]LakeEntryExport, n) }},
+		{"lake exchanges", func(a *testExportAdapter, n int) { a.governance.LakeNotes.Exchanges = make([]LakeExchangeExport, n) }},
 		{"image tasks", func(a *testExportAdapter, n int) { a.governance.ImageTasks = make([]ImageTaskExport, n) }},
 		{"activity exchanges", func(a *testExportAdapter, n int) {
 			a.governance.LimitedActivities.Exchanges = make([]ActivityExchangeExport, n)
