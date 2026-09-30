@@ -111,8 +111,7 @@ export function retainModelValues(model: ImageModel, previous: ParameterValues):
   for (const rule of model.parameters) {
     const raw = previous[rule.key];
     if (!rule.supported || raw === undefined) continue;
-    const value = scalarValue(rule, raw);
-    if (value !== null && validScalar(rule, value)) next[rule.key] = raw;
+    next[rule.key] = raw;
   }
   if (exactModelSizes(model) !== null) {
     next.size = previous.size ?? '';

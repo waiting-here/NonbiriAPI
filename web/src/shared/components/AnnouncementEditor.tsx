@@ -123,9 +123,10 @@ export function AnnouncementEditor({
         key,
         role,
       ),
-    async (_input, error) => {
-      if (error) setConflict(true);
+    async (_input, error, context) => {
+      if (error) context.commit(() => setConflict(true));
       await client.invalidateQueries({ queryKey: managedAnnouncementKeys.pages(role) });
+      context.assertCurrent();
       await authority.refetch();
     },
     root,
@@ -141,24 +142,23 @@ export function AnnouncementEditor({
         return withdrawAnnouncement(announcementId, input.revision, input.reason, key, role);
       return deleteAnnouncement(announcementId, input.revision, input.reason, key, role);
     },
-    async (input, error) => {
-      await client.invalidateQueries({ queryKey: managedAnnouncementKeys.pages(role) });
-      if (!error && input.action === 'delete') {
-        client.removeQueries({
-          queryKey: managedAnnouncementKeys.detail(role, account, announcementId),
-          exact: true,
+    async (input, error, context) => {
+      const leaveDeletedAnnouncement = () =>
+        context.commit(() => {
+          client.removeQueries({
+            queryKey: managedAnnouncementKeys.detail(role, account, announcementId),
+            exact: true,
+          });
+          navigate(backTo, { replace: true });
         });
-        navigate(backTo, { replace: true });
+      await client.invalidateQueries({ queryKey: managedAnnouncementKeys.pages(role) });
+      context.assertCurrent();
+      if (!error && input.action === 'delete') {
+        leaveDeletedAnnouncement();
         return;
       }
       const refreshed = await authority.refetch();
-      if (input.action === 'delete' && isNotFoundError(refreshed.error)) {
-        client.removeQueries({
-          queryKey: managedAnnouncementKeys.detail(role, account, announcementId),
-          exact: true,
-        });
-        navigate(backTo, { replace: true });
-      }
+      if (input.action === 'delete' && isNotFoundError(refreshed.error)) leaveDeletedAnnouncement();
     },
     root,
   );

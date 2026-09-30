@@ -1,11 +1,5 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import {
-  captureStationSession,
-  stationSessionMatches,
-  stationSessionWrite,
-  StationSessionChangedError,
-} from '@shared/charityManagement';
 import { ApiError } from '@shared/query/http';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
@@ -476,23 +470,26 @@ export function SettingsPage() {
     setDrafts((current) => ({ ...current, [key]: draft }));
   };
   const save = useRetainedOperation(
-    async (input: { expected_revision: string; values: Record<string, CatalogValue> }, key) => {
-      const station = captureStationSession(client, 'admin');
-      const result = await stationSessionWrite(client, 'admin', () =>
-        patchSiteSettings(input, key),
-      );
+    async (
+      input: { expected_revision: string; values: Record<string, CatalogValue> },
+      key,
+      context,
+    ) => {
+      const result = await patchSiteSettings(input, key);
+      context.assertCurrent();
       await client.cancelQueries({ queryKey: adminCoreKeys.settings });
-      if (!stationSessionMatches(client, 'admin', station)) throw new StationSessionChangedError();
-      client.setQueryData<SiteConfigBundle>(adminCoreKeys.settings, (current) =>
-        current
-          ? {
-              ...current,
-              revision: result.revision,
-              values: { ...current.values, ...input.values },
-            }
-          : current,
-      );
-      setDrafts({});
+      context.commit(() => {
+        client.setQueryData<SiteConfigBundle>(adminCoreKeys.settings, (current) =>
+          current
+            ? {
+                ...current,
+                revision: result.revision,
+                values: { ...current.values, ...input.values },
+              }
+            : current,
+        );
+        setDrafts({});
+      });
       return result;
     },
     () => authority.refetch(),
