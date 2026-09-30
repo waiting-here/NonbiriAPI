@@ -90,7 +90,16 @@ type QuoteResult struct {
 
 func selectedPrice(model modelSnapshot, params map[ParameterKey]any, n int) (ResolvedSize, PriceQuote, error) {
 	selection := ResolvedSize{Values: map[ParameterKey]any{}}
-	if model.size != nil {
+	capability := model.size
+	if capability == nil && model.pricing.Fallback == "unavailable" {
+		for _, rule := range model.input.Parameters {
+			if rule.Key == Size && rule.Supported && rule.Dimensions != nil && len(rule.Enum) == 0 {
+				capability = &SizeCapability{Mode: WidthHeight, Width: &rule.Dimensions.Width, Height: &rule.Dimensions.Height}
+				break
+			}
+		}
+	}
+	if capability != nil {
 		var input SizeInput
 		for _, item := range []struct {
 			key ParameterKey
@@ -111,7 +120,7 @@ func selectedPrice(model modelSnapshot, params map[ParameterKey]any, n int) (Res
 		if input.Size == "auto" {
 			input.Size, input.Auto = "", true
 		}
-		resolved, err := model.size.ResolveSize(input)
+		resolved, err := capability.ResolveSize(input)
 		if err != nil {
 			return selection, PriceQuote{}, err
 		}
@@ -127,7 +136,13 @@ func selectedPrice(model modelSnapshot, params map[ParameterKey]any, n int) (Res
 		}
 		selection = resolved
 	}
-	price, err := QuotePricing(model.pricing, selection.Selection, n)
+	priced := selection.Selection
+	// Free dimensions require an exact row when no fallback is available.
+	// A declared tier cannot make an unpriced dimension pair available.
+	if capability != nil && capability.Mode == WidthHeight && model.pricing.Fallback == "unavailable" && !priced.Auto {
+		priced.Tier = ""
+	}
+	price, err := QuotePricing(model.pricing, priced, n)
 	return selection, price, err
 }
 

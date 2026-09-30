@@ -1,6 +1,11 @@
 import { useId } from 'react';
 import { parameterLabel, usePictureBookText } from './copy';
-import { normalizeLines, type ParameterValues } from './parameters';
+import {
+  effectiveSizeCapability,
+  exactModelSizes,
+  normalizeLines,
+  type ParameterValues,
+} from './parameters';
 import { SizeSelector } from './SizeSelector';
 import type { ImageModel, ParameterRule } from './publicTypes';
 
@@ -134,11 +139,13 @@ export function ModelParameterFields({
   values,
   onChange,
 }: {
-  readonly model: Pick<ImageModel, 'parameters' | 'size_capability'>;
+  readonly model: Pick<ImageModel, 'parameters' | 'size_capability' | 'pricing' | 'combinations'>;
   readonly values: ParameterValues;
   readonly onChange: (patch: ParameterValues) => void;
 }) {
   const t = usePictureBookText();
+  const capability = effectiveSizeCapability(model);
+  const exactSizes = exactModelSizes(model);
   const common = model.parameters.filter(
     (rule) => rule.supported && ['prompt', 'n'].includes(rule.key),
   );
@@ -159,8 +166,13 @@ export function ModelParameterFields({
           onChange={(value) => onChange({ [rule.key]: value })}
         />
       ))}
-      {model.size_capability ? (
-        <SizeSelector capability={model.size_capability} values={values} onChange={onChange} />
+      {capability ? (
+        <SizeSelector
+          capability={capability}
+          exactSizes={exactSizes}
+          values={values}
+          onChange={onChange}
+        />
       ) : (
         size.map((rule) => (
           <ParameterField

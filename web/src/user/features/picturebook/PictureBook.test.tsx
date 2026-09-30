@@ -258,3 +258,63 @@ describe('picture book page state', () => {
     expect(screen.getByText(/10分钟可领取/)).toBeVisible();
   });
 });
+
+it('keeps prompt and other legal inputs when switching to exact sizes and reloading a price-only revision', async () => {
+  const first = { ...modelFixture(), display_name: 'First model' };
+  const second = {
+    ...modelFixture(),
+    id: 'imdl_BBBBBBBBBBBBBBBBBBBBBB',
+    display_name: 'Second model',
+    parameters: [
+      ...modelFixture().parameters,
+      { key: 'size' as const, supported: true, required: true, type: 'string' as const },
+    ],
+    size_capability: {
+      mode: 'width_height' as const,
+      width: { minimum: 256, maximum: 1024, step: 256 },
+      height: { minimum: 256, maximum: 1024, step: 256 },
+    },
+    pricing: {
+      default: { paper: '1', brush: '0' },
+      fallback: 'unavailable' as const,
+      tiers: [],
+      sizes: [{ width: 512, height: 768, paper: '3', brush: '0' }],
+    },
+  };
+  const view = await renderWithProviders(
+    <ModelForm
+      account="1"
+      models={[first, second]}
+      available
+      wallet={wallet}
+      onAccepted={() => undefined}
+    />,
+    { station: 'user' },
+  );
+  await view.user.type(screen.getByLabelText(/Prompt/), 'retained prompt');
+  await view.user.clear(screen.getByLabelText('Image count'));
+  await view.user.type(screen.getByLabelText('Image count'), '2');
+  await view.user.selectOptions(screen.getByLabelText('Image model'), second.id);
+  expect(screen.getByLabelText(/Prompt/)).toHaveValue('retained prompt');
+  expect(screen.getByLabelText('Image count')).toHaveValue(2);
+  expect(screen.getByRole('combobox', { name: 'Exact size' })).toHaveValue('');
+  expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
+  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Exact size' }), '512x768');
+  expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeEnabled();
+  const next = { ...second, pricing_revision: '3', pricing: { ...second.pricing, sizes: [] } };
+  view.rerender(
+    <ModelForm
+      account="1"
+      models={[first, next]}
+      available
+      wallet={wallet}
+      onAccepted={() => undefined}
+    />,
+  );
+  await view.user.click(screen.getByRole('button', { name: 'Load latest configuration' }));
+  expect(screen.getByLabelText(/Prompt/)).toHaveValue('retained prompt');
+  expect(screen.getByLabelText('Image count')).toHaveValue(2);
+  expect(screen.getByRole('combobox', { name: 'Exact size' })).toHaveValue('');
+  expect(screen.getByText(/No sizes are available/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
+});

@@ -276,6 +276,7 @@ export function quotePricing(
   policy: PricingPolicy,
   selection: PriceSelection,
   count: number,
+  capability?: SizeCapability,
 ): PriceQuote | null {
   if (!validPricingPolicy(policy)) return null;
   if (selection.auto) {
@@ -293,7 +294,11 @@ export function quotePricing(
     (selection.tier !== undefined && !label(selection.tier))
   )
     return null;
-  const tier = selection.auto ? 'auto' : selection.tier;
+  const tier = selection.auto
+    ? 'auto'
+    : capability?.mode === 'width_height' && policy.fallback === 'unavailable'
+      ? undefined
+      : selection.tier;
   const size =
     !selection.auto && selection.width && selection.height
       ? policy.sizes.find((row) => row.width === selection.width && row.height === selection.height)
@@ -313,4 +318,31 @@ export function quotePricing(
         ? `${size.width}x${size.height}`
         : (tierPrice?.tier ?? ''),
   };
+}
+
+/** Whole, priced pairs only; dimensions never imply a tier or a Cartesian grid. */
+export function exactSizeCandidates(
+  capability: SizeCapability,
+  policy: PricingPolicy,
+): SizePrice[] {
+  if (capability.mode !== 'width_height' || !validSizeCapability(capability)) return [];
+  const allowed = capability.combinations?.length
+    ? new Set(capability.combinations.map((row) => `${row.width}x${row.height}`))
+    : null;
+  const pairs = new Map<string, SizePrice>();
+  for (const row of policy.sizes) {
+    const key = `${row.width}x${row.height}`;
+    if (
+      Number.isSafeInteger(row.width) &&
+      Number.isSafeInteger(row.height) &&
+      containsDimensions(capability, row.width, row.height) &&
+      (!allowed || allowed.has(key)) &&
+      validUnit(row) &&
+      !pairs.has(key)
+    )
+      pairs.set(key, row);
+  }
+  return [...pairs.values()].sort(
+    (left, right) => left.width - right.width || left.height - right.height,
+  );
 }
