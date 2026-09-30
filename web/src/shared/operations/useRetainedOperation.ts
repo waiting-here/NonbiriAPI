@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient, type MutateOptions } from '@tanstack/react-query';
 import {
   captureStationSession,
@@ -35,19 +35,8 @@ interface PreparedOperation<T> {
   operationKey?: string;
   dispatched?: boolean;
 }
-function immutableSnapshot<T>(value: T): T {
-  const copy = structuredClone(value);
-  const seen = new WeakSet<object>();
-  const freeze = (entry: unknown): void => {
-    if (entry && typeof entry === 'object') {
-      if (seen.has(entry)) return;
-      seen.add(entry);
-      Object.values(entry).forEach(freeze);
-      Object.freeze(entry);
-    }
-  };
-  freeze(copy);
-  return copy;
+function inputSnapshot<T>(value: T): T {
+  return structuredClone(value);
 }
 function isFinalAuthorityLoss(error: unknown): boolean {
   return (
@@ -122,7 +111,7 @@ export function useRetainedOperation<TVariables, TResult>(
       controller: new AbortController(),
     };
     try {
-      input.variables = immutableSnapshot(variables);
+      input.variables = inputSnapshot(variables);
       input.snapshot = frame ? captureStationSession(client, frame) : undefined;
     } catch (error) {
       input.preparationError = error;
@@ -312,6 +301,13 @@ export function useRetainedOperation<TVariables, TResult>(
       .catch(() => undefined);
     return promise;
   };
+  const resetMutation = mutation.reset;
+  const reset = useCallback(() => {
+    if (inFlight.current) return;
+    resetMutation();
+    setOutcome('idle');
+    setRefreshError(null);
+  }, [resetMutation]);
   return {
     ...mutation,
     outcome,
@@ -327,6 +323,7 @@ export function useRetainedOperation<TVariables, TResult>(
         : mutation.error),
     variables: outcome === 'idle' ? undefined : mutation.variables?.variables,
     mutateAsync,
+    reset,
     mutate: (variables: TVariables, options?: MutateOptions<TResult, Error, TVariables>) => {
       void mutateAsync(variables, options).catch(() => undefined);
     },

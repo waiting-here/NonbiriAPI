@@ -29,6 +29,54 @@ function setup(loggedIn = true) {
 }
 
 describe('retained operation station authority', () => {
+  it.each(['success', 'error'] as const)(
+    'clears %s feedback when the next edit resets it',
+    async (result) => {
+      const { client, wrapper } = setup();
+      const execute = vi.fn(async () => {
+        if (result === 'error') throw new ApiError('invalid_input', 'Fix this input.', 400);
+        return 'saved';
+      });
+      const hook = renderHook(() => useRetainedOperation(execute, vi.fn()), { wrapper });
+      await act(async () => {
+        await hook.result.current.mutateAsync({ note: 'first edit' }).catch(() => undefined);
+      });
+      expect(hook.result.current.isSuccess).toBe(result === 'success');
+      expect(hook.result.current.isError).toBe(result === 'error');
+      act(() => hook.result.current.reset());
+      expect(hook.result.current.outcome).toBe('idle');
+      expect(hook.result.current.isSuccess).toBe(false);
+      expect(hook.result.current.isError).toBe(false);
+      expect(hook.result.current.error).toBeNull();
+      expect(hook.result.current.data).toBeUndefined();
+      hook.unmount();
+      client.clear();
+    },
+  );
+
+  it('keeps an unknown retry identity after clearing feedback for an edit', async () => {
+    const { client, wrapper } = setup();
+    const execute = vi.fn<(input: { note: string }, key: string) => Promise<never>>(async () => {
+      throw new ApiError('network_error', 'Unknown', 0);
+    });
+    const hook = renderHook(() => useRetainedOperation(execute, vi.fn()), { wrapper });
+    await act(async () => {
+      await hook.result.current.mutateAsync({ note: 'original' }).catch(() => undefined);
+    });
+    expect(hook.result.current.outcome).toBe('unknown');
+    act(() => hook.result.current.reset());
+    expect(hook.result.current.isError).toBe(false);
+    for (const note of ['edited', 'original']) {
+      await act(async () => {
+        await hook.result.current.mutateAsync({ note }).catch(() => undefined);
+      });
+    }
+    expect(execute.mock.calls[0]?.[1]).toBe(execute.mock.calls[2]?.[1]);
+    expect(execute.mock.calls[0]?.[1]).not.toBe(execute.mock.calls[1]?.[1]);
+    hook.unmount();
+    client.clear();
+  });
+
   it('cancels a queued action without treating it as a dispatched transaction', async () => {
     const { client, wrapper } = setup();
     const execute = vi.fn(async () => 'saved');
@@ -79,8 +127,9 @@ describe('retained operation station authority', () => {
   it('captures an immutable click snapshot and coalesces duplicate clicks', async () => {
     const { client, wrapper } = setup();
     let finish!: (value: string) => void;
-    const execute = vi.fn(async (input: { note: string; config: { enabled: boolean } }) => {
-      expect(Object.isFrozen(input.config)).toBe(true);
+    const execute = vi.fn<
+      (input: { note: string; config: { enabled: boolean } }) => Promise<string>
+    >(async () => {
       return new Promise<string>((resolve) => {
         finish = resolve;
       });
