@@ -1,109 +1,40 @@
 package donation
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
-type requiredField[T any] struct {
-	Value T
-	Set   bool
-}
+type requiredField[T any] = httpapi.RequestField[T]
 
-func (field *requiredField[T]) UnmarshalJSON(data []byte) error {
-	if field == nil || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return errors.New("null is not allowed")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&field.Value); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	field.Set = true
-	return nil
-}
-
-type nullableField[T any] struct {
-	Value *T
-	Set   bool
-}
-
-func (field *nullableField[T]) UnmarshalJSON(data []byte) error {
-	if field == nil {
-		return errors.New("invalid nullable field")
-	}
-	field.Set = true
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		field.Value = nil
-		return nil
-	}
-	var value T
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	field.Value = &value
-	return nil
-}
+type nullableField[T any] = httpapi.NullableField[T]
 
 func decodeStrictObject[T any](writer http.ResponseWriter, request *http.Request, destination *T) bool {
-	if request == nil || request.Body == nil || destination == nil {
-		writeDonationError(writer, ErrInvalidRequest)
-		return false
-	}
-	limited := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
+	body, err := httpapi.ReadJSON(writer, request, destination, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: strictjson.ValidateObject})
 	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeDonationError(writer, ErrInvalidRequest)
 		}
 		return false
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		writeDonationError(writer, ErrInvalidRequest)
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		writeDonationError(writer, ErrInvalidRequest)
-		return false
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		writeDonationError(writer, ErrInvalidRequest)
-		return false
-	}
+	clear(body)
 	return true
 }
 
 func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
-	if request == nil || request.Body == nil {
-		return true
-	}
-	body, err := io.ReadAll(io.LimitReader(request.Body, 1))
-	if err != nil || len(body) != 0 {
+	if !httpapi.NoBody(request) {
 		writeDonationError(writer, ErrInvalidRequest)
 		return false
 	}
@@ -111,11 +42,7 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 }
 
 func requestQuery(writer http.ResponseWriter, request *http.Request) (url.Values, bool) {
-	if request == nil || request.URL == nil {
-		writeDonationError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	values, err := url.ParseQuery(request.URL.RawQuery)
+	values, err := httpapi.ParseQuery(request, false)
 	if err != nil {
 		writeDonationError(writer, ErrInvalidRequest)
 		return nil, false
@@ -124,16 +51,7 @@ func requestQuery(writer http.ResponseWriter, request *http.Request) (url.Values
 }
 
 func exactQuery(values url.Values, allowed ...string) bool {
-	known := make(map[string]struct{}, len(allowed))
-	for _, key := range allowed {
-		known[key] = struct{}{}
-	}
-	for key, entries := range values {
-		if _, exists := known[key]; !exists || len(entries) != 1 {
-			return false
-		}
-	}
-	return true
+	return httpapi.ExactQuery(values, allowed...)
 }
 
 func requireEmptyQuery(writer http.ResponseWriter, request *http.Request) bool {
@@ -242,28 +160,17 @@ func writeJSON(writer http.ResponseWriter, value any) {
 }
 
 func writeDonationError(writer http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrInvalidRequest):
-		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
-	case errors.Is(err, ErrUnauthorized):
-		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
-	case errors.Is(err, ErrForbidden):
-		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "access denied"))
-	case errors.Is(err, ErrFeatureDisabled):
-		httperr.WriteError(writer, httperr.New(httperr.CodeFeatureDisabled, "feature disabled"))
-	case errors.Is(err, ErrNotFound):
-		httperr.WriteError(writer, httperr.New(httperr.CodeNotFound, "not found"))
-	case errors.Is(err, ErrConflict):
-		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "request conflicts with current state"))
-	case errors.Is(err, ErrResourceLocked):
-		httperr.WriteError(writer, httperr.New(httperr.CodeResourceLocked, "resource is locked"))
-	case errors.Is(err, ErrResourceLimit):
-		httperr.WriteError(writer, httperr.New(httperr.CodeResourceLimitExceeded, "resource limit exceeded"))
-	case errors.Is(err, ErrUnavailable):
-		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
-	default:
-		httperr.WriteError(writer, httperr.New(httperr.CodeInternal, "internal error"))
-	}
+	httperr.WriteMapped(writer, err,
+		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
+		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
+		httperr.Mapping{Err: ErrForbidden, Code: httperr.CodeForbidden, Message: "access denied"},
+		httperr.Mapping{Err: ErrFeatureDisabled, Code: httperr.CodeFeatureDisabled, Message: "feature disabled"},
+		httperr.Mapping{Err: ErrNotFound, Code: httperr.CodeNotFound, Message: "not found"},
+		httperr.Mapping{Err: ErrConflict, Code: httperr.CodeConflict, Message: "request conflicts with current state"},
+		httperr.Mapping{Err: ErrResourceLocked, Code: httperr.CodeResourceLocked, Message: "resource is locked"},
+		httperr.Mapping{Err: ErrResourceLimit, Code: httperr.CodeResourceLimitExceeded, Message: "resource limit exceeded"},
+		httperr.Mapping{Err: ErrUnavailable, Code: httperr.CodeServiceUnavailable, Message: "service unavailable"},
+	)
 }
 
 func registerError(domain, method, pattern string, err error) error {

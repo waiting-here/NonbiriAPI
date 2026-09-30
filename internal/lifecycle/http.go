@@ -1,18 +1,15 @@
 package lifecycle
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -248,41 +245,20 @@ func (api *lifecycleHTTP) decisionNow() int64 {
 }
 
 func decodeLifecycleObject(writer http.ResponseWriter, request *http.Request, destination any) bool {
-	if request == nil || request.Body == nil || destination == nil || !lifecycleJSONContentType(request.Header.Get("Content-Type")) {
-		writeLifecycleError(writer, ErrInvalid)
-		return false
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes))
+	body, err := httpapi.ReadJSON(writer, request, destination, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: strictjson.ValidateObject, ContentType: httpapi.JSONContentType})
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			writeLifecycleError(writer, ErrTooLarge)
 		} else {
 			writeLifecycleError(writer, ErrInvalid)
 		}
 		return false
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		writeLifecycleError(writer, ErrInvalid)
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		writeLifecycleError(writer, ErrInvalid)
-		return false
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		writeLifecycleError(writer, ErrInvalid)
-		return false
-	}
+	clear(body)
 	return true
 }
 
-func lifecycleJSONContentType(value string) bool {
-	mediaType, _, err := mime.ParseMediaType(value)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
+func lifecycleJSONContentType(value string) bool { return httpapi.JSONContentType(value) }
 
 func requireLifecycleNoBody(writer http.ResponseWriter, request *http.Request) bool {
 	if request == nil || request.Body == nil {

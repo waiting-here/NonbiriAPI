@@ -6,15 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/waiting-here/NonbiriAPI/internal/auth"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -60,6 +60,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, repository *Repository) 
 	}
 	return nil
 }
+
 func RegisterStewardRoutes(registrar resources.UserRouteRegistrar, repository *Repository) error {
 	if registrar == nil || repository == nil {
 		return ErrInvalid
@@ -82,6 +83,7 @@ func RegisterStewardRoutes(registrar resources.UserRouteRegistrar, repository *R
 	}
 	return nil
 }
+
 func auditError(w http.ResponseWriter, err error) {
 	code, message := httperr.CodeServiceUnavailable, "audit unavailable"
 	switch {
@@ -100,6 +102,7 @@ func auditError(w http.ResponseWriter, err error) {
 	}
 	httperr.WriteError(w, httperr.New(code, message))
 }
+
 func auditJSON(w http.ResponseWriter, status int, value any) {
 	body, err := json.Marshal(value)
 	if err != nil || len(body) > 8<<20 {
@@ -110,6 +113,7 @@ func auditJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_, _ = w.Write(append(body, '\n'))
 }
+
 func intQuery(q url.Values, key string, fallback int64) (int64, error) {
 	values, ok := q[key]
 	if !ok {
@@ -124,6 +128,7 @@ func intQuery(q url.Values, key string, fallback int64) (int64, error) {
 	}
 	return n, nil
 }
+
 func parseWindow(q url.Values, now int64, parseAfter bool) (Window, error) {
 	var w Window
 	var err error
@@ -157,15 +162,11 @@ func parseWindow(q url.Values, now int64, parseAfter bool) (Window, error) {
 	w.Model = q.Get("model")
 	return w.validate(now)
 }
+
 func decodeBody(w http.ResponseWriter, r *http.Request, value any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 32768)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(value) != nil {
-		return ErrInvalid
-	}
-	var extra any
-	if decoder.Decode(&extra) != io.EOF {
+	body, err := httpapi.ReadBody(w, r, httpapi.BodyOptions{MaxBytes: 32768})
+	defer clear(body)
+	if err != nil || httpapi.DecodeJSON(body, value) != nil {
 		return ErrInvalid
 	}
 	return nil

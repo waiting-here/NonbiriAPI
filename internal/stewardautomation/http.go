@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
@@ -60,23 +60,17 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.failurePolicyHTTP(w, r.WithContext(ctx), identity.UserID)
 		return
 	}
-	if r.Body == nil {
-		writeError(w, errInvalid)
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, idempotency.MaxControlBodyBytes))
+	body, err := httpapi.ReadBody(w, r, httpapi.BodyOptions{
+		MaxBytes: idempotency.MaxControlBodyBytes,
+		Validate: func(body []byte) error { return strictjson.ValidateObjectWithFieldLimit(body, 16384) },
+	})
 	defer clear(body)
 	if err != nil {
-		var large *http.MaxBytesError
-		if errors.As(err, &large) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeError(w, errInvalid)
 		}
-		return
-	}
-	if strictjson.ValidateObjectWithFieldLimit(body, 16384) != nil {
-		writeError(w, errInvalid)
 		return
 	}
 	if r.URL.Path == DonationsPath {
@@ -133,15 +127,13 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func decode(body []byte, input any) error {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(input); err != nil {
+	if err := httpapi.DecodeJSON(body, input); err != nil {
 		return err
 	}
+	// Destination pointers cannot distinguish omitted and forbidden null values;
+	// retain the independent domain null policy after the shared decode boundary.
 	var values any
-	decoder = json.NewDecoder(bytes.NewReader(body))
-	decoder.UseNumber()
-	if err := decoder.Decode(&values); err != nil {
+	if err := httpapi.DecodeJSONWithNumbers(body, &values); err != nil {
 		return err
 	}
 	return validateNulls(values)

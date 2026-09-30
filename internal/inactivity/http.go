@@ -1,17 +1,16 @@
 package inactivity
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"github.com/waiting-here/NonbiriAPI/internal/httperr"
-	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
-	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 type AdminRouteRegistrar interface {
@@ -36,6 +35,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, s *Service) error {
 	}
 	return nil
 }
+
 func query(r *http.Request, allowed ...string) (url.Values, error) {
 	if r == nil || r.URL == nil || len(r.URL.RawQuery) > 512 {
 		return nil, ErrInvalid
@@ -58,6 +58,7 @@ func query(r *http.Request, allowed ...string) (url.Values, error) {
 	}
 	return values, nil
 }
+
 func noBody(r *http.Request) error {
 	if r.Body == nil {
 		return nil
@@ -68,25 +69,19 @@ func noBody(r *http.Request) error {
 	}
 	return nil
 }
+
 func body(w http.ResponseWriter, r *http.Request, out any) error {
 	if _, err := query(r); err != nil {
 		return err
 	}
-	content, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || content != "application/json" {
-		return ErrInvalid
-	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8192))
-	if err != nil || strictjson.ValidateObject(raw) != nil {
-		return ErrInvalid
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(out) != nil || decoder.Decode(new(any)) != io.EOF {
+	raw, err := httpapi.ReadJSON(w, r, out, httpapi.BodyOptions{MaxBytes: 8192, Validate: strictjson.ValidateObject, ContentType: httpapi.JSONContentType})
+	clear(raw)
+	if err != nil {
 		return ErrInvalid
 	}
 	return nil
 }
+
 func reply(w http.ResponseWriter, result any, err error) {
 	w.Header().Set("Cache-Control", "no-store")
 	if err == nil {
@@ -104,6 +99,7 @@ func reply(w http.ResponseWriter, result any, err error) {
 	}
 	httperr.WriteError(w, httperr.New(code, message))
 }
+
 func (s *Service) getHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, err := query(r); err != nil {
 		reply(w, nil, err)
@@ -116,6 +112,7 @@ func (s *Service) getHTTP(w http.ResponseWriter, r *http.Request) {
 	out, err := s.Get(r.Context())
 	reply(w, out, err)
 }
+
 func (s *Service) putHTTP(w http.ResponseWriter, r *http.Request) {
 	var input Update
 	if err := body(w, r, &input); err != nil {
@@ -130,6 +127,7 @@ func (s *Service) putHTTP(w http.ResponseWriter, r *http.Request) {
 	out, err := s.Put(r.Context(), input, keys[0])
 	reply(w, out, err)
 }
+
 func (s *Service) previewHTTP(w http.ResponseWriter, r *http.Request) {
 	var input PreviewInput
 	if err := body(w, r, &input); err != nil {
@@ -139,12 +137,15 @@ func (s *Service) previewHTTP(w http.ResponseWriter, r *http.Request) {
 	out, err := s.Preview(r.Context(), input)
 	reply(w, out, err)
 }
+
 func (s *Service) runsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.historyHTTP(w, r, false)
 }
+
 func (s *Service) auditsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.historyHTTP(w, r, true)
 }
+
 func (s *Service) historyHTTP(w http.ResponseWriter, r *http.Request, audits bool) {
 	values, err := query(r, "cursor", "page_size")
 	if err != nil {

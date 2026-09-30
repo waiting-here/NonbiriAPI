@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 
 	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
-
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -293,23 +293,13 @@ func (api *httpAPI) leaderboard(w http.ResponseWriter, request *http.Request, pr
 }
 
 func rpsReadBody(w http.ResponseWriter, request *http.Request) ([]byte, bool) {
-	if request == nil || request.Body == nil {
-		rpsInvalid(w)
-		return nil, false
-	}
-	limited := http.MaxBytesReader(w, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
+	body, err := httpapi.ReadBody(w, request, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: rpsValidateStrictJSON})
+	if err != nil || len(body) == 0 {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			rpsInvalid(w)
 		}
-		return nil, false
-	}
-	if len(body) == 0 || rpsValidateStrictJSON(body) != nil {
-		rpsInvalid(w)
 		return nil, false
 	}
 	return body, true
@@ -320,7 +310,8 @@ func rpsDecodeStrict[T any](w http.ResponseWriter, request *http.Request, destin
 	if !ok {
 		return false
 	}
-	if !rpsDecodeStrictBytes(body, destination) {
+	defer clear(body)
+	if httpapi.DecodeJSON(body, destination) != nil {
 		rpsInvalid(w)
 		return false
 	}

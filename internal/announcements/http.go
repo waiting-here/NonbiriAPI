@@ -1,17 +1,13 @@
 package announcements
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -93,52 +89,9 @@ func (api *httpAPI) getAdmin(writer http.ResponseWriter, request *http.Request, 
 	writeJSON(writer, http.StatusOK, response)
 }
 
-type requestField[T any] struct {
-	Value T
-	Set   bool
-}
+type requestField[T any] = httpapi.RequestField[T]
 
-func (field *requestField[T]) UnmarshalJSON(data []byte) error {
-	if field == nil || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return errors.New("null is not allowed")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&field.Value); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	field.Set = true
-	return nil
-}
-
-type nullableTimeField struct {
-	Value *int64
-	Set   bool
-}
-
-func (field *nullableTimeField) UnmarshalJSON(data []byte) error {
-	if field == nil {
-		return errors.New("nil field")
-	}
-	field.Set = true
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		field.Value = nil
-		return nil
-	}
-	var value int64
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	field.Value = &value
-	return nil
-}
+type nullableTimeField = httpapi.NullableField[int64]
 
 type draftRequest struct {
 	TitleZH     requestField[string] `json:"title_zh"`
@@ -506,42 +459,20 @@ func allCreateDraftFields(body draftRequest) bool {
 }
 
 func decodeStrictBody(writer http.ResponseWriter, request *http.Request, destination any) bool {
-	if request == nil || request.Body == nil || !jsonContentType(request.Header.Get("Content-Type")) {
-		writeError(writer, ErrInvalidRequest)
-		return false
-	}
-	limited := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
+	body, err := httpapi.ReadJSON(writer, request, destination, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: strictjson.ValidateObject, ContentType: httpapi.JSONContentType})
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeError(writer, ErrInvalidRequest)
 		}
 		return false
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		writeError(writer, ErrInvalidRequest)
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		writeError(writer, ErrInvalidRequest)
-		return false
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		writeError(writer, ErrInvalidRequest)
-		return false
-	}
+	clear(body)
 	return true
 }
 
-func jsonContentType(value string) bool {
-	mediaType, _, err := mime.ParseMediaType(value)
-	return err == nil && strings.EqualFold(mediaType, "application/json")
-}
+func jsonContentType(value string) bool { return httpapi.JSONContentType(value) }
 
 func requestMutation(writer http.ResponseWriter, request *http.Request, route string, pathIDs []string, canonical any) (ControlMutation, bool) {
 	keys := request.Header.Values("Idempotency-Key")
@@ -584,24 +515,10 @@ func parseRevision(writer http.ResponseWriter, value string) (int64, bool) {
 }
 
 func strictQuery(writer http.ResponseWriter, request *http.Request, allowed ...string) (url.Values, bool) {
-	if request == nil || request.URL == nil || request.URL.ForceQuery {
+	values, err := httpapi.ParseQuery(request, true)
+	if err != nil || !httpapi.ExactQuery(values, allowed...) {
 		writeError(writer, ErrInvalidRequest)
 		return nil, false
-	}
-	values, err := url.ParseQuery(request.URL.RawQuery)
-	if err != nil {
-		writeError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	allow := make(map[string]struct{}, len(allowed))
-	for _, key := range allowed {
-		allow[key] = struct{}{}
-	}
-	for key, entries := range values {
-		if _, ok := allow[key]; !ok || len(entries) != 1 {
-			writeError(writer, ErrInvalidRequest)
-			return nil, false
-		}
 	}
 	return values, true
 }
@@ -636,11 +553,7 @@ func pageQuery(writer http.ResponseWriter, values url.Values) (PageQuery, bool) 
 }
 
 func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
-	if request == nil || request.Body == nil {
-		return true
-	}
-	body, err := io.ReadAll(io.LimitReader(request.Body, 1))
-	if err != nil || len(body) != 0 {
+	if !httpapi.NoBody(request) {
 		writeError(writer, ErrInvalidRequest)
 		return false
 	}
@@ -672,24 +585,14 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 }
 
 func writeError(writer http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrInvalidRequest):
-		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
-	case errors.Is(err, ErrUnauthorized):
-		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
-	case errors.Is(err, ErrForbidden):
-		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "access forbidden"))
-	case errors.Is(err, ErrNotFound):
-		httperr.WriteError(writer, httperr.New(httperr.CodeNotFound, "resource not found"))
-	case errors.Is(err, ErrConflict):
-		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "resource state conflict"))
-	case errors.Is(err, ErrPayloadTooLarge):
-		httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
-	case errors.Is(err, ErrResourceLimit):
-		httperr.WriteError(writer, httperr.New(httperr.CodeResourceLimitExceeded, "resource limit exceeded"))
-	case errors.Is(err, ErrUnavailable):
-		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
-	default:
-		httperr.WriteError(writer, httperr.New(httperr.CodeInternal, "internal error"))
-	}
+	httperr.WriteMapped(writer, err,
+		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
+		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
+		httperr.Mapping{Err: ErrForbidden, Code: httperr.CodeForbidden, Message: "access forbidden"},
+		httperr.Mapping{Err: ErrNotFound, Code: httperr.CodeNotFound, Message: "resource not found"},
+		httperr.Mapping{Err: ErrConflict, Code: httperr.CodeConflict, Message: "resource state conflict"},
+		httperr.Mapping{Err: ErrPayloadTooLarge, Code: httperr.CodePayloadTooLarge, Message: "request body is too large"},
+		httperr.Mapping{Err: ErrResourceLimit, Code: httperr.CodeResourceLimitExceeded, Message: "resource limit exceeded"},
+		httperr.Mapping{Err: ErrUnavailable, Code: httperr.CodeServiceUnavailable, Message: "service unavailable"},
+	)
 }

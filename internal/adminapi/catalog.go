@@ -8,12 +8,10 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	"github.com/waiting-here/NonbiriAPI/internal/language"
 )
 
-type localizedCatalogText struct {
-	Zh string `json:"zh"`
-	En string `json:"en"`
-}
+type localizedCatalogText = language.Bilingual
 
 type siteConfigCatalogEntry struct {
 	Key               string                `json:"key"`

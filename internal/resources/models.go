@@ -14,6 +14,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 )
 
 const (
@@ -143,10 +144,8 @@ func getModelTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) (Model, 
 	return model, nil
 }
 
-const reservedCharityProviderPrefix = "[公益]"
-
 func validPersonalModelProvider(provider string) bool {
-	return validateExactText(provider, 1, maxModelNameRunes) && !strings.HasPrefix(provider, reservedCharityProviderPrefix)
+	return validateExactText(provider, 1, maxModelNameRunes) && !modelname.IsCharity(provider)
 }
 
 func validModelIdentity(provider, model string) bool {

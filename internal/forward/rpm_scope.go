@@ -3,10 +3,10 @@ package forward
 import (
 	"context"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
@@ -93,7 +93,7 @@ func CharityRPMDenial(ctx context.Context, userID int64) bool {
 		defer request.Clear()
 		if ctx.Err() == nil {
 			requestattempt.Model(ctx, request.Model)
-			scope.charity = strings.HasPrefix(request.Model, charityModelPrefix)
+			scope.charity = modelname.IsCharity(request.Model)
 		}
 	})
 	return scope.charity && ctx.Err() == nil

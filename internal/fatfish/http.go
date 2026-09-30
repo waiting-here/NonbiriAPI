@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -404,30 +405,20 @@ func stateHandler(s *Service, action string, mutation func(int, func(*http.Reque
 }
 
 func readBody(r *http.Request, max int) ([]byte, error) {
-	if r == nil || r.Body == nil || max < 1 {
-		return nil, ErrInvalid
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, int64(max+1)))
-	if err != nil || len(raw) == 0 || len(raw) > max {
+	raw, err := httpapi.ReadBody(nil, r, httpapi.BodyOptions{MaxBytes: int64(max)})
+	if err != nil || len(raw) == 0 {
 		return nil, ErrInvalid
 	}
 	return raw, nil
 }
+
 func decodeJSON(raw []byte, out any) error {
-	if strictjson.ValidateObjectWithFieldLimit(raw, 16384) != nil {
-		return ErrInvalid
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	dec.UseNumber()
-	if err := dec.Decode(out); err != nil {
-		return ErrInvalid
-	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+	if strictjson.ValidateObjectWithFieldLimit(raw, 16384) != nil || httpapi.DecodeJSONWithNumbers(raw, out) != nil {
 		return ErrInvalid
 	}
 	return nil
 }
+
 func decodeSubmit(raw []byte) (SubmitInput, error) {
 	var in SubmitInput
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -476,6 +467,7 @@ func decodeSubmit(raw []byte) (SubmitInput, error) {
 	}
 	return in, nil
 }
+
 func idempotencyKey(r *http.Request) (string, error) {
 	values := r.Header.Values("Idempotency-Key")
 	if len(values) != 1 {
@@ -486,12 +478,14 @@ func idempotencyKey(r *http.Request) (string, error) {
 	}
 	return values[0], nil
 }
+
 func submitHTTPStatus(value any) int {
 	if challenge, ok := value.(ChallengeView); ok && challenge.State == "verifying" {
 		return http.StatusAccepted
 	}
 	return http.StatusOK
 }
+
 func singleQueryValues(r *http.Request, allowed ...string) (url.Values, error) {
 	if r == nil || r.URL == nil {
 		return nil, ErrInvalid
@@ -514,6 +508,7 @@ func singleQueryValues(r *http.Request, allowed ...string) (url.Values, error) {
 	}
 	return values, nil
 }
+
 func emptyBodyOnly(r *http.Request) bool {
 	if r == nil || r.Body == nil {
 		return true
@@ -521,9 +516,11 @@ func emptyBodyOnly(r *http.Request) bool {
 	b, err := io.ReadAll(io.LimitReader(r.Body, 1))
 	return err == nil && len(b) == 0
 }
+
 func emptyBody(r *http.Request) bool {
 	return r != nil && r.URL != nil && r.URL.RawQuery == "" && emptyBodyOnly(r)
 }
+
 func queryInt(r *http.Request, key string, defaultValue int) (int, error) {
 	v := r.URL.Query()[key]
 	if len(v) == 0 {
@@ -552,6 +549,7 @@ func collectionPage(r *http.Request) (int, error) {
 	}
 	return page, nil
 }
+
 func writeHTTPResult(w http.ResponseWriter, status int, value any, err error) {
 	if err != nil {
 		writeHTTPError(w, err)
@@ -567,6 +565,7 @@ func writeHTTPResult(w http.ResponseWriter, status int, value any, err error) {
 	w.WriteHeader(status)
 	_, _ = w.Write(append(encoded, '\n'))
 }
+
 func writeHTTPError(w http.ResponseWriter, err error) {
 	code, message := httperr.CodeServiceUnavailable, "The game is temporarily unavailable."
 	switch {

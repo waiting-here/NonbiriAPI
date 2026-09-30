@@ -10,7 +10,7 @@ import (
 	"net/url"
 
 	randomhttp "github.com/waiting-here/NonbiriAPI/internal/game/randomness/httpapi"
-
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -55,6 +55,7 @@ func (api *httpAPI) start(w http.ResponseWriter, r *http.Request, principal reso
 	result, pending, err := api.service.StartFishing(r.Context(), StartInput{UserID: principal.UserID, Bait: body.Bait, Count: body.Count, IdempotencyKey: key})
 	writeFishingUnion(w, result, pending, err)
 }
+
 func (api *httpAPI) state(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
 	if !noBody(w, r) || !requireExactQuery(w, r) {
 		return
@@ -66,6 +67,7 @@ func (api *httpAPI) state(w http.ResponseWriter, r *http.Request, principal reso
 	}
 	writeJSON(w, http.StatusOK, state)
 }
+
 func (api *httpAPI) ack(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
 	if !noBody(w, r) || !requireExactQuery(w, r) {
 		return
@@ -77,6 +79,7 @@ func (api *httpAPI) ack(w http.ResponseWriter, r *http.Request, principal resour
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }
+
 func (api *httpAPI) recover(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
 	if !noBody(w, r) || !requireExactQuery(w, r) {
 		return
@@ -88,6 +91,7 @@ func (api *httpAPI) recover(w http.ResponseWriter, r *http.Request, principal re
 	result, pending, err := api.service.RecoverFishing(r.Context(), RecoverInput{UserID: principal.UserID, BatchID: r.PathValue("id"), IdempotencyKey: key})
 	writeFishingUnion(w, result, pending, err)
 }
+
 func (api *httpAPI) leaderboard(w http.ResponseWriter, r *http.Request, principal resources.UserPrincipal) {
 	if !noBody(w, r) || !requireExactQuery(w, r, "board") {
 		return
@@ -103,6 +107,7 @@ func (api *httpAPI) leaderboard(w http.ResponseWriter, r *http.Request, principa
 	}
 	writeJSON(w, http.StatusOK, result)
 }
+
 func writeFishingUnion(w http.ResponseWriter, result *FishingBatchResult, pending *FishingSettlementPending, err error) {
 	if err != nil {
 		writeError(w, err)
@@ -119,28 +124,19 @@ func writeFishingUnion(w http.ResponseWriter, result *FishingBatchResult, pendin
 	}
 }
 
-func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	if r == nil || r.Body == nil {
-		returnInvalid(w)
-		return nil, false
-	}
-	limited := http.MaxBytesReader(w, r.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
+func readBody(w http.ResponseWriter, request *http.Request) ([]byte, bool) {
+	body, err := httpapi.ReadBody(w, request, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes})
+	if err != nil || len(body) == 0 {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(w, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			returnInvalid(w)
 		}
 		return nil, false
 	}
-	if len(body) == 0 {
-		returnInvalid(w)
-		return nil, false
-	}
 	return body, true
 }
+
 func decodeStrict[T any](w http.ResponseWriter, r *http.Request, destination *T) bool {
 	body, ok := readBody(w, r)
 	if !ok {
@@ -150,16 +146,11 @@ func decodeStrict[T any](w http.ResponseWriter, r *http.Request, destination *T)
 		returnInvalid(w)
 		return false
 	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
+	if httpapi.DecodeJSON(body, destination) != nil {
 		returnInvalid(w)
 		return false
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		returnInvalid(w)
-		return false
-	}
+	clear(body)
 	return true
 }
 
@@ -168,6 +159,7 @@ func validateStrictJSON(body []byte) error {
 	decoder.UseNumber()
 	return walkHTTPJSON(decoder, true)
 }
+
 func walkHTTPJSON(decoder *json.Decoder, root bool) error {
 	token, err := decoder.Token()
 	if err != nil {
@@ -268,9 +260,11 @@ func requireExactQuery(w http.ResponseWriter, request *http.Request, allowed ...
 	returnInvalid(w)
 	return false
 }
+
 func returnInvalid(w http.ResponseWriter) {
 	httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 }
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	body, err := json.Marshal(value)
 	if err != nil {

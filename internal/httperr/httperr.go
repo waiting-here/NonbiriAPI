@@ -16,6 +16,7 @@ package httperr
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -463,4 +464,24 @@ func stripC1Controls(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// Mapping binds a domain error identity to an existing public code/message.
+// Entries are checked in order, preserving errors.Is handling of wrapped errors.
+type Mapping struct {
+	Err     error
+	Code    string
+	Message string
+}
+
+// WriteMapped keeps domain classification separate from the authoritative
+// wire sink. Unrecognized errors fail closed to the established internal error.
+func WriteMapped(writer http.ResponseWriter, err error, mappings ...Mapping) {
+	for _, mapping := range mappings {
+		if mapping.Err != nil && errors.Is(err, mapping.Err) {
+			WriteError(writer, New(mapping.Code, mapping.Message))
+			return
+		}
+	}
+	WriteError(writer, New(CodeInternal, "internal error"))
 }

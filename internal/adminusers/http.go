@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -580,28 +581,17 @@ func decodeStrictObject(writer http.ResponseWriter, request *http.Request) (map[
 	if !requireEmptyQuery(writer, request) || request == nil || request.Body == nil {
 		return nil, false
 	}
-	limited := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
+	var object map[string]json.RawMessage
+	body, err := httpapi.ReadJSON(writer, request, &object, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: strictjson.ValidateObject})
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			writeError(writer, ErrPayloadTooLarge)
 		} else {
 			writeError(writer, ErrInvalidRequest)
 		}
 		return nil, false
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		writeError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	var object map[string]json.RawMessage
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&object) != nil {
-		writeError(writer, ErrInvalidRequest)
-		return nil, false
-	}
+	clear(body)
 	return object, true
 }
 

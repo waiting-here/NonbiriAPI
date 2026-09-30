@@ -3,11 +3,11 @@ package forward
 import (
 	"bytes"
 	"context"
-	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
@@ -41,7 +41,7 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 		return nil, nil, false, err
 	}
 	defer envelope.Clear()
-	charity := strings.HasPrefix(envelope.Model, charityModelPrefix)
+	charity := modelname.IsCharity(envelope.Model)
 	filtered := body
 	var policy CharityRequestPolicy
 	var now int64
@@ -76,7 +76,7 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 // bind policy once; callers that need exclusions applied before decoding use
 // the HTTP ingress boundary above.
 func (s *Service) bindDirectPolicy(ctx context.Context, user int64, request *validatedRequest, body []byte) (*validatedRequest, []byte, func(), error) {
-	if !strings.HasPrefix(request.Model, charityModelPrefix) || request.policyModelID != 0 {
+	if !modelname.IsCharity(request.Model) || request.policyModelID != 0 {
 		return request, body, nil, nil
 	}
 	policy, now, err := s.ingressPolicy(ctx, user, request.Model)

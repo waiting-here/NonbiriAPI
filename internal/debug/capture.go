@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/language"
 )
 
 const maxSnapshotTraceBytes = MaxEventBytes - 8*1024
@@ -564,39 +565,22 @@ func fixedCallerResult(code string, status int, language string, completedAt int
 	}
 }
 
-func normalizeLanguage(language string) string {
-	if strings.EqualFold(language, "zh") || strings.HasPrefix(strings.ToLower(language), "zh-") {
-		return "zh"
-	}
-	return "en"
+func normalizeLanguage(value string) string { return language.NormalizeLanguage(value) }
+
+func dryMessage(value string) string {
+	return language.Select(value, "调试 Dry run 已拦截本次请求；请求已在调试页面捕获，未发送到上游。", "Debug dry run intercepted this request. It was captured on the Debug page and was not sent upstream.")
 }
 
-func dryMessage(language string) string {
-	if normalizeLanguage(language) == "zh" {
-		return "调试 Dry run 已拦截本次请求；请求已在调试页面捕获，未发送到上游。"
-	}
-	return "Debug dry run intercepted this request. It was captured on the Debug page and was not sent upstream."
+func liveCapturedMessage(value string) string {
+	return language.Select(value, "上游响应已被调试页捕获。", "The upstream response was captured by the Debug page.")
 }
 
-func liveCapturedMessage(language string) string {
-	if normalizeLanguage(language) == "zh" {
-		return "上游响应已被调试页捕获。"
-	}
-	return "The upstream response was captured by the Debug page."
+func liveCancelledMessage(value string) string {
+	return language.Select(value, "调试 Live 请求已取消。", "The Debug live request was cancelled.")
 }
 
-func liveCancelledMessage(language string) string {
-	if normalizeLanguage(language) == "zh" {
-		return "调试 Live 请求已取消。"
-	}
-	return "The Debug live request was cancelled."
-}
-
-func cancelledMessage(language string) string {
-	if normalizeLanguage(language) == "zh" {
-		return "调用方已取消请求。"
-	}
-	return "The caller cancelled the request."
+func cancelledMessage(value string) string {
+	return language.Select(value, "调用方已取消请求。", "The caller cancelled the request.")
 }
 
 func wirePlatformMessage(message string) string {
