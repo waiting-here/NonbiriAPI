@@ -23,6 +23,19 @@ func TestInteractionUpgradeFromReleasedBinary(t *testing.T) {
 	if source == "" {
 		t.Skip("released-source gate supplies a consistent fixture")
 	}
+	verifyReleasedStorageUpgrade(t, source, preInteractionManifestHash)
+}
+
+func TestStorageContractsUpgradeFromReleasedBinary(t *testing.T) {
+	source := os.Getenv("NONBIRI_STORAGE_FIXTURE")
+	if source == "" {
+		t.Skip("released-source gate supplies a consistent fixture")
+	}
+	verifyReleasedStorageUpgrade(t, source, "3f773b6dca01058f2296f437c3666afde92a74e8eeb861fa8637756dcd859481")
+}
+
+func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest string) {
+	t.Helper()
 	key := bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes)
 	if file := os.Getenv("NONBIRI_INTERACTION_MASTER_KEY_FILE"); file != "" {
 		encoded, err := os.ReadFile(file)
@@ -67,7 +80,7 @@ func TestInteractionUpgradeFromReleasedBinary(t *testing.T) {
 		prior.Close()
 		t.Fatal(err)
 	}
-	assertRetainedManifest(t, prior, preInteractionManifestHash)
+	assertRetainedManifest(t, prior, expectedSourceManifest)
 	before := interactionTableDigests(t, prior, sourceManifest)
 	if err := prior.Close(); err != nil {
 		t.Fatal(err)

@@ -40,6 +40,50 @@ const preHourlyQuotaManifestHash = "8c0c7dc160170bae72e388c3f7b9c8cb15a756f867af
 // The released schema before embedding request routes.
 const preEmbeddingManifestHash = "956e85c750aec4ef451f5fda73a816af6474031b4795b76495d85d6715ddcc59"
 
+// GenerationTwoCompatibility describes the exact structural identities accepted
+// before startup recovery. It does not replace data, credential or ledger checks.
+type GenerationTwoCompatibility struct {
+	SchemaHash           string   `json:"schema_hash"`
+	ManifestHash         string   `json:"manifest_hash"`
+	SourceManifestHashes []string `json:"source_manifest_hashes"`
+}
+
+var generationTwoSourceManifestHashes = [...]string{
+	preStorageContractsManifestHash,
+	preRoutingManifestHash,
+	preKeyLimitsManifestHash,
+	preResponseStartsManifestHash,
+	preBetaTwoManifestHash,
+	preBrowseManifestHash,
+	preQuotaCleanupManifestHash,
+	preStewardHoldReadManifestHash,
+	preModelTokenReserveManifestHash,
+	preHourlyQuotaManifestHash,
+	preEmbeddingManifestHash,
+	preBetaFourManifestHash,
+	preRCOneManifestHash,
+	preBlackjackManifestHash,
+	preRandomnessManifestHash,
+	preGatewayPolicyManifestHash,
+	preProgressionManifestHash,
+	preGovernanceManifestHash,
+	preAccountProtectionManifestHash,
+	preAuditScanManifestHash,
+	preInteractionManifestHash,
+	preLevelDeletionManifestHash,
+	preActivityRefinementManifestHash,
+}
+
+// GenerationTwoCompatibilityDescriptor returns a detached read-only snapshot
+// of the same migration registry used by startup validation.
+func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
+	return GenerationTwoCompatibility{
+		SchemaHash:           PinnedGenerationTwoSchemaHash,
+		ManifestHash:         PinnedGenerationTwoManifestHash,
+		SourceManifestHashes: append([]string(nil), generationTwoSourceManifestHashes[:]...),
+	}
+}
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -52,35 +96,84 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	switch generationManifestDigest(actual) {
-	case expected:
+	digest := generationManifestDigest(actual)
+	if digest == expected {
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash, preEmbeddingManifestHash, preBetaFourManifestHash, preRCOneManifestHash, preBlackjackManifestHash, preRandomnessManifestHash, preGatewayPolicyManifestHash, preProgressionManifestHash, preGovernanceManifestHash, preAccountProtectionManifestHash, preAuditScanManifestHash, preInteractionManifestHash, preLevelDeletionManifestHash, preActivityRefinementManifestHash:
-		return true, nil
-	default:
-		return false, errors.New("generation-two schema manifest mismatch")
 	}
+	for _, source := range generationTwoSourceManifestHashes {
+		if digest == source {
+			return true, nil
+		}
+	}
+	return false, errors.New("generation-two schema manifest mismatch")
 }
 
-func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (result error) {
+func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error {
+	return runGenerationTwoExtension(ctx, database, extendGenerationTwoTransaction)
+}
+
+// Startup owns transaction completion. Cancelling an operation must finish
+// rollback synchronously before connection-local enforcement is restored.
+func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend func(context.Context, *sql.Tx) error) (result error) {
 	conn, err := database.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	// Schema editing is connection-local. Clear it even if cancellation rolls
-	// back the transaction before the interval extension can reset it itself.
+	// Schema editing is connection-local. Clear it after the transaction ends,
+	// including when an interval extension fails before resetting it.
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, err := conn.ExecContext(cleanup, `PRAGMA writable_schema=RESET`)
 		result = errors.Join(result, err)
 	}()
-	tx, err := conn.BeginTx(ctx, nil)
+	// Register restoration before disabling enforcement: cancellation may
+	// arrive after SQLite changes the pragma but before Exec returns success.
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := conn.ExecContext(cleanup, "PRAGMA foreign_keys=ON")
+		result = errors.Join(result, err)
+		if err != nil {
+			return
+		}
+		var enabled int
+		err = conn.QueryRowContext(cleanup, "PRAGMA foreign_keys").Scan(&enabled)
+		result = errors.Join(result, err)
+		if err == nil && enabled != 1 {
+			result = errors.Join(result, errors.New("schema extension did not restore foreign keys"))
+		}
+	}()
+	// Parent tables are rebuilt atomically before any listener is opened.
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// All migration statements retain ctx. Only the transaction lifetime is
+	// detached so database/sql cannot race restoration with an async rollback.
+	tx, err := conn.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			result = errors.Join(result, err)
+		}
+	}()
+	if err := extend(ctx, tx); err != nil {
+		return err
+	}
+	// BeginTx's detached context cannot provide Commit's original cancel gate.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 	needed, err := generationTwoExtensionNeeded(ctx, tx)
 	if err != nil {
 		return err
@@ -93,7 +186,9 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest == preActivityRefinementManifestHash {
+	if digest == preStorageContractsManifestHash {
+		// The deployed predecessor already includes every historical extension.
+	} else if digest == preActivityRefinementManifestHash {
 		// The immediate predecessor already includes all earlier extensions.
 	} else if digest == preLevelDeletionManifestHash {
 		if _, err := tx.ExecContext(ctx, fatFishLevelDeletionSchema); err != nil {
@@ -215,7 +310,12 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 			return err
 		}
 	}
-	if err := applyActivityRefinementExtension(ctx, tx); err != nil {
+	if digest != preStorageContractsManifestHash {
+		if err := applyActivityRefinementExtension(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if err := applyStorageContractsExtension(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
@@ -233,7 +333,7 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 	if err := validateAssetCapacity(ctx, tx); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 // migrateBetaTwoDefaults seeds the beta.2 sidecar rows required for every
