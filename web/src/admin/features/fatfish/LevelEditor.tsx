@@ -4,7 +4,7 @@ import { ErrorState, LoadingState } from '@shared/components/States';
 import { useActivityText } from '@shared/limitedactivities/copy';
 import { operationKey, responseOutcomeUnknown } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
-import { LEGACY_ENGINE_VERSION, FISH_RADIUS, type Level, type Point, type Polygon } from '@shared/fatfish/engine/types';
+import { ENGINE_VERSION, FISH_RADIUS, type Level, type Point, type Polygon } from '@shared/fatfish/engine/types';
 import { formatScoreUnits } from '@shared/fatfish/api';
 import { toolIcon, toolNames } from '@shared/fatfish/art';
 import { laidOutLevel } from '@shared/fatfish/workspace';
@@ -188,8 +188,8 @@ function LevelDraftEditor({ initial, onSaved, onDirty, onDeleted }: { initial: L
   return <div className="fatfish-editor">
     <section className="fatfish-toolbar">
       <h2>{initial ? t('编辑关卡草稿', 'Edit level draft') : t('新建关卡草稿', 'New level draft')}</h2>
-      <p>{t('草稿规则版本', 'Draft rules version')}: {level.engine_version} · {level.engine_version === LEGACY_ENGINE_VERSION ? t('旧版', 'Legacy') : t('新版', 'Current')}</p>
-      {level.engine_version === LEGACY_ENGINE_VERSION ? <div>
+      <p>{t('草稿规则版本', 'Draft rules version')}: {level.engine_version} · {level.engine_version !== ENGINE_VERSION ? t('旧版', 'Legacy') : t('新版', 'Current')}</p>
+      {level.engine_version !== ENGINE_VERSION ? <div>
         <button type="button" disabled={editingLocked} onClick={() => commit(convertToCurrentDraft(level))}>{t('转换为新版草稿', 'Convert to new draft')}</button>
         <p>{t('转换保留布局、速度和其他设置。', 'Conversion keeps the layout, speed and other settings.')}</p>
       </div> : null}

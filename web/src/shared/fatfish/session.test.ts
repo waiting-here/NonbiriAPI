@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import golden from './engine/golden.json';
 import motionV2Golden from './engine/motion_v2_golden.json';
+import motionV3Golden from './engine/motion_v3_golden.json';
 import { seedCommit, seedCommitForVersion } from './engine/canonical';
 import { decodeHex } from './engine/sha256';
 import type { Level } from './engine/types';
@@ -73,6 +74,15 @@ const v2Base: FatFishChallenge = {
 };
 const v2Active: FatFishChallenge = {
   ...active, ...v2Base, state: 'active', seed: v2Case.seed, level: v2Case.level as unknown as Level,
+  start_at_ms: 1000, end_at_ms: 11000, submit_until_ms: 1811000,
+};
+const v3Case = motionV3Golden.find((fixture) => fixture.name === 'minimum-and-capacity-v3')!;
+const v3Base: FatFishChallenge = {
+  ...base, engine_version: 3, content_hash: v3Case.result.content_hash,
+  seed_commit: seedCommitForVersion(id, 'ffp_test', 'ffn_test', v3Case.result.content_hash, 3, 1, decodeHex(v3Case.seed)),
+};
+const v3Active: FatFishChallenge = {
+  ...active, ...v3Base, state: 'active', seed: v3Case.seed, level: v3Case.level as unknown as Level,
   start_at_ms: 1000, end_at_ms: 11000, submit_until_ms: 1811000,
 };
 const locks = new Set<string>();
@@ -234,7 +244,7 @@ describe('fat fish tab session', () => {
     expect(disposedAtBatch).toBe(true);
   });
   it.each([
-    [1, base, active, case0], [2, v2Base, v2Active, v2Case],
+    [1, base, active, case0], [2, v2Base, v2Active, v2Case], [3, v3Base, v3Active, v3Case],
   ] as const)('recovers v%i and retains one submit key and payload after a lost response', async (version, prepared, playing, fixture) => {
     const attempts: { key: string; payload: unknown }[] = [];
     let read = playing;
@@ -275,7 +285,7 @@ describe('fat fish tab session', () => {
     expect(capabilities.has(id)).toBe(false);
     restored.dispose();
   });
-  it.each([[3, 1], [1, 2]])('rejects an unsupported prepared engine/scoring version %i/%i before storing a challenge', async (engineVersion, scoringVersion) => {
+  it.each([[4, 1], [1, 2]])('rejects an unsupported prepared engine/scoring version %i/%i before storing a challenge', async (engineVersion, scoringVersion) => {
     const transport: FatFishChallengeTransport = {
       prepareScope: 'user:ffp_test:ffn_test:1',
       prepare: async () => ({ ...base, engine_version: engineVersion, scoring_version: scoringVersion }),
@@ -296,7 +306,7 @@ describe('fat fish tab session', () => {
         invalid: { ...active, engine_version: 2, level: v2Active.level } },
       { name: 'scoring metadata with a mismatched level', prepared: base, playing: active,
         invalid: { ...active, level: { ...active.level!, scoring_version: 2 } as unknown as Level } },
-      { name: 'unknown engine version', prepared: base, playing: active, invalid: { ...active, engine_version: 3 } },
+      { name: 'unknown engine version', prepared: base, playing: active, invalid: { ...active, engine_version: 4 } },
       { name: 'unknown scoring version', prepared: base, playing: active, invalid: { ...active, scoring_version: 2 } },
       { name: 'v2 using a v1 seed commitment', prepared: v2Base, playing: v2Active,
         invalid: { ...v2Active, seed_commit: seedCommit(id, 'ffp_test', 'ffn_test', v2Base.content_hash, decodeHex(v2Case.seed)) } },

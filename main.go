@@ -4,8 +4,18 @@
 // are complete.
 package main
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 func main() {
+	if len(os.Args) > 1 {
+		if err := runMaintenance(os.Args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	os.Exit(run())
 }

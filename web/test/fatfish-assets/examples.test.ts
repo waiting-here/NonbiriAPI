@@ -67,7 +67,7 @@ describe('importable example levels', () => {
       expect(data.length).toBe(entry!.bytes);
       expect(createHash('sha256').update(data).digest('hex')).toBe(entry!.raw_sha256);
       const level = parseLevel(data.toString('utf8'));
-      expect(level.engine_version).toBe(2);
+      expect(level.engine_version).toBe(3);
       expect(contentHash(level)).toBe(entry!.content_hash);
       if (id === '01-first-rice') {
         expect(level.tools.filter((item) => item.placed).map((item) => item.id)).toEqual([100]);
@@ -98,7 +98,7 @@ describe('importable example levels', () => {
       const replaySeed = Uint8Array.from(seed);
       if (id === '02-buffer-pool') replaySeed[0] = 3;
       const result = replay(level, replaySeed, inputs, { onTick: observe });
-      expect(result.engine_version).toBe(2);
+      expect(result.engine_version).toBe(3);
       expect(result.scoring_version).toBe(1);
       expect(result.content_hash).toBe(entry!.content_hash);
       expect(result.passed).toBe(true);

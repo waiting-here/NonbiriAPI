@@ -34,7 +34,7 @@ func versionedFishFixture(t *testing.T, version int) *fishFixture {
 }
 
 func TestBoundEngineVersionsSurviveRecoveryAndSettleOnce(t *testing.T) {
-	for _, version := range []int{1, 2} {
+	for _, version := range []int{1, 2, 3} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			f := versionedFishFixture(t, version)
 			period, node := f.publishOne(t)
@@ -125,13 +125,13 @@ func TestConvertingDraftRequiresNewPlaytestAndKeepsActiveVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	draft.EngineVersion = 2
+	draft.EngineVersion = 3
 	raw, err := engine.NormalizedLevel(draft)
 	if err != nil {
 		t.Fatal(err)
 	}
 	validated, err := f.s.ValidateLevel(ctx, f.admin, raw)
-	if err != nil || validated.EngineVersion != 2 {
+	if err != nil || validated.EngineVersion != 3 {
 		t.Fatal("validation misreported rules", validated, err)
 	}
 	saved, err := f.s.SaveLevel(ctx, f.admin, level.ID, LevelInput{Title: level.Title, Description: level.Description, Draft: raw, ExpectedRevision: level.Revision}, fishKey(6103))
@@ -139,7 +139,7 @@ func TestConvertingDraftRequiresNewPlaytestAndKeepsActiveVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, err := f.s.PublishVersion(ctx, f.admin, level.ID, saved.Revision, fishKey(6104))
-	if err != nil || current.EngineVersion != 2 || current.ID == oldVersion.ID || current.ContentHash == oldVersion.ContentHash {
+	if err != nil || current.EngineVersion != 3 || current.ID == oldVersion.ID || current.ContentHash == oldVersion.ContentHash {
 		t.Fatal("conversion reused old immutable version", current, err)
 	}
 	patch := NodeInput{Title: oldNode.Title, Description: oldNode.Description, VersionID: current.ID, Condition: json.RawMessage(`{}`), Amounts: *oldNode.Amounts, ExpectedRevision: oldNode.Revision, ExpectedPeriodRevision: p.Revision}
@@ -148,7 +148,7 @@ func TestConvertingDraftRequiresNewPlaytestAndKeepsActiveVersion(t *testing.T) {
 	}
 	playCap, playHash := fishCap(4)
 	play, err := f.s.PreparePlaytest(ctx, f.admin, PlaytestInput{VersionID: current.ID, TabCapabilityHash: playHash}, fishKey(6106))
-	if err != nil || play.EngineVersion != 2 {
+	if err != nil || play.EngineVersion != 3 {
 		t.Fatal(play, err)
 	}
 	if _, err := f.s.StartPlaytest(ctx, f.admin, play.ID, StartInput{TabCapability: playCap}, fishKey(6107)); err != nil {
@@ -166,7 +166,7 @@ func TestConvertingDraftRequiresNewPlaytestAndKeepsActiveVersion(t *testing.T) {
 			t.Fatal(err)
 		}
 		if view.State == "settled_pass" {
-			passed = view.Result != nil && view.Result.EngineVersion == 2
+			passed = view.Result != nil && view.Result.EngineVersion == 3
 			break
 		}
 		time.Sleep(5 * time.Millisecond)

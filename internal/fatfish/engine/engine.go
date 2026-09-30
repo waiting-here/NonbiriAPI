@@ -44,7 +44,7 @@ func NewEngine(level Level, seed [32]byte) (*Engine, error) {
 	engine.state.Fish = make([]FishState, len(level.Fish))
 	for index, fish := range level.Fish {
 		engine.state.Fish[index] = FishState{ID: fish.ID, X: fish.X, Y: fish.Y, Heading: fish.Heading, Status: "walking", RNG: InitialFishRNG(seed, fish.ID)}
-		if level.EngineVersion == EngineVersion {
+		if level.EngineVersion != LegacyEngineVersion {
 			engine.state.Fish[index].Motion = &MotionState{}
 		}
 	}
@@ -111,7 +111,9 @@ func (engine *Engine) State() EngineState {
 	return state
 }
 
-func (engine *Engine) StateHash() (string, error) { return StateDigest(engine.state) }
+func (engine *Engine) StateHash() (string, error) {
+	return StateDigestForVersion(engine.level.EngineVersion, engine.state)
+}
 
 func (engine *Engine) refreshSolids() {
 	solids := make([]Polygon, 0, len(engine.level.Solids)+len(engine.level.Tools)+len(engine.level.Gates))
@@ -309,7 +311,7 @@ func (engine *Engine) moveSubstep(fish *FishState) {
 		}
 		return
 	}
-	if engine.level.EngineVersion == EngineVersion {
+	if engine.level.EngineVersion != LegacyEngineVersion {
 		engine.moveSubstepV2(fish, start, distance)
 		return
 	}
