@@ -23,3 +23,21 @@ run_case fail routine success false success false skipped
 run_case fail routine success unknown skipped false skipped
 run_case fail invalid success true success true success
 printf 'Required summary failure propagation: passed\n'
+
+check_third_child() {
+  local mode=$1 applicable=$2 result=$3
+  MODE=$mode PLAN_RESULT=success FIRST_APPLICABLE=true FIRST_RESULT=success \
+    SECOND_APPLICABLE=true SECOND_RESULT=success \
+    THIRD_APPLICABLE=$applicable THIRD_RESULT=$result \
+    bash scripts/check-ci-results.sh > /dev/null 2>&1
+}
+for result in failure cancelled skipped missing; do
+  if check_third_child full true "$result"; then
+    printf 'Unexpected third-child success: %s\n' "$result" >&2
+    exit 1
+  fi
+done
+if check_third_child full true ""; then exit 1; fi
+check_third_child full true success
+check_third_child routine false skipped
+printf 'Third-child failure propagation: passed\n'

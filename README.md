@@ -133,7 +133,7 @@ The project is source-first and supports Linux/amd64 as its production target. O
 
 ## GitHub automation
 
-The repository includes a read-only CI workflow. GitHub Actions runs the complete Go and frontend checks for pull requests, with manual runs available when needed. Protected `master` changes go through those checks; after merging, run the workflow manually on `master` and verify the run against the final merge commit. CodeQL retains its own triggers. CI does not deploy the application. Release artifact automation is intentionally separate and will be added only after the supported targets and signing policy are decided.
+The repository includes a read-only CI workflow. Pull requests use a conservative routine verification scope; unknown inputs fall back to full checks. Manual runs default to full ordinary Go and frontend coverage plus the complete concurrency-risk race catalog. Protected `master` changes go through those checks. Final candidates require full evidence; after merging, reuse passing evidence when the resulting tree and relevant inputs match, and verify changed inputs when they do not. CodeQL retains its own triggers. CI does not deploy the application. Release artifact automation is intentionally separate and will be added only after the supported targets and signing policy are decided.
 
 ## API
 

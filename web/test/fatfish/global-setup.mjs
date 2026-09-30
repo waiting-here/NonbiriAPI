@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { browserFixtureBinary } from '../browser-fixture.mjs';
 import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { once } from 'node:events';
@@ -15,27 +16,7 @@ export default async function setup() {
   await unlink(statePath).catch((error) => {
     if (error.code !== 'ENOENT') throw error;
   });
-  const binary = resolve(
-    dirname(statePath),
-    process.platform === 'win32' ? 'fixture.exe' : 'fixture',
-  );
-  const go = process.env.GO_BINARY || 'go';
-  const build = spawn(go, ['test', '-c', '-tags', 'dist', '-o', binary, '.'], {
-    cwd: root,
-    env: { ...process.env, CGO_ENABLED: '0' },
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let buildOutput = '';
-  const collectBuild = (chunk) => {
-    buildOutput = (buildOutput + chunk).slice(-32768);
-  };
-  build.stdout.on('data', collectBuild);
-  build.stderr.on('data', collectBuild);
-  const buildTimeout = setTimeout(() => build.kill(), 180_000);
-  const [buildCode] = await once(build, 'exit').finally(() => clearTimeout(buildTimeout));
-  if (buildCode !== 0)
-    throw new Error('Go fixture build failed: ' + buildCode + '\n' + buildOutput);
+  const binary = await browserFixtureBinary(root, dirname(statePath));
   const child = spawn(
     binary,
     ['-test.run=^TestFatFishBrowserFixture$', '-test.v', '-test.timeout=13m'],

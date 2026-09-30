@@ -48,12 +48,12 @@ func prepareRunnerFixture(goTool, planDigest string) (result runnerFixture, resu
 		return runnerFixture{}, err
 	}
 	buildPath := filepath.Join(dir, "template.sqlite")
-	command := exec.Command(goTool, "run", "-race", "./internal/citools/racefixture", "-output", buildPath)
+	command := exec.Command(goTool, "run", "./internal/citools/racefixture", "-output", buildPath)
 	command.Dir = root
 	command.Env = withoutRaceTemplateEnvironment(os.Environ())
 	output, err := command.CombinedOutput()
 	if err != nil {
-		return runnerFixture{}, fmt.Errorf("build race-instrumented template: %w: %s", err, strings.TrimSpace(string(output)))
+		return runnerFixture{}, fmt.Errorf("build template: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	info, err := os.Lstat(buildPath)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 ||

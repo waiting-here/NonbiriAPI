@@ -1,5 +1,5 @@
 // Command raceplan builds and executes one deterministic shard of the complete
-// Go race-test catalog. Timing hints affect balance only; live go list and
+// Go concurrency-test catalog. Timing hints affect balance only; live go list and
 // go test -list output remain the coverage authority.
 package main
 
@@ -30,7 +30,18 @@ import (
 
 const testListPattern = `^(Test|Fuzz|Example)`
 
+type timingSource struct {
+	RunURL           string `json:"run_url"`
+	Commit           string `json:"commit"`
+	Attempt          int    `json:"attempt"`
+	MeasuredPackages int    `json:"measured_packages"`
+	MeasuredTests    int    `json:"measured_tests"`
+	Note             string `json:"note"`
+}
+
 type timingHints struct {
+	Source timingSource `json:"source,omitempty"`
+
 	Version               int                           `json:"version"`
 	Shards                int                           `json:"shards"`
 	DefaultPackageSeconds float64                       `json:"default_package_seconds"`
@@ -97,13 +108,25 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	planOnly := flags.Bool("plan-only", false, "print the complete deterministic plan without running tests")
 	packageSelection := flags.String("packages", "", "space- or comma-separated exact live package paths; omitted selects all")
 	workers := flags.Int("workers", 1, "maximum concurrent test commands")
+	prepare := flags.String("prepare", "", "write reusable catalog, plans and template to this directory")
+	prepared := flags.String("prepared", "", "execute from a previously prepared directory")
+	template := flags.String("template", "", "reuse shared current-schema template")
+	prepareTemplate := flags.String("prepare-template", "", "build the shared ordinary/race template")
+	exportTemplate := flags.String("export-template", "", "print verified template environment")
+	githubOutput := flags.String("github-output", "", "append dynamic shard outputs")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
 	}
-	if !*planOnly && *shardSpec == "" {
+	if *prepareTemplate != "" {
+		return prepareSharedTemplate(*goTool, *prepareTemplate, stdout)
+	}
+	if *exportTemplate != "" {
+		return exportTemplateEnvironment(*goTool, *exportTemplate, stdout)
+	}
+	if !*planOnly && *prepare == "" && *shardSpec == "" {
 		return errors.New("shard is required unless -plan-only is set")
 	}
 	if *workers < 1 {
@@ -121,14 +144,18 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 	if err != nil || duration <= 0 {
 		return fmt.Errorf("invalid timeout %q", *timeout)
 	}
+	if *prepared != "" {
+		if *prepare != "" || *planOnly || *packageSelection != "" {
+			return errors.New("prepared execution cannot change the catalog")
+		}
+		return executePrepared(*goTool, *prepared, *shardSpec, *timeout, *workers, stdout)
+	}
 	hints, err := loadTimingHints(*hintsPath)
 	if err != nil {
 		return err
 	}
 	if total == 0 {
 		total = hints.Shards
-	} else if hints.Shards != total {
-		return fmt.Errorf("shard total %d does not match timing hints total %d", total, hints.Shards)
 	}
 	listed, err := listPackages(*goTool)
 	if err != nil {
@@ -150,15 +177,29 @@ func runCLI(args []string, stdout, stderr io.Writer) (resultErr error) {
 		return err
 	}
 	warnTestDrift(catalog, hints, stderr)
+	catalog, hints, excluded, err := selectRiskTests(catalog, hints, !selectionSpecified)
+	if err != nil {
+		return err
+	}
 	fillLiveTestCounts(catalog, hints)
-	plans, err := buildPlans(catalog, hints, total)
+	total = nonemptyShardCount(catalog, hints, total)
+	var plans []shardPlan
+	if total > 0 {
+		plans, err = buildPlans(catalog, hints, total)
+	}
 	if err != nil {
 		return err
 	}
 	digest := planDigest(plans, *timeout, *workers)
+	if *prepare != "" {
+		return prepareRun(*goTool, *prepare, catalog, hints, plans, excluded, *timeout, *workers, *githubOutput, *template, stdout)
+	}
 	if *planOnly {
 		printPlans(stdout, plans, digest, *timeout, *workers)
 		return nil
+	}
+	if index < 1 || index > len(plans) {
+		return errors.New("requested shard is absent from the nonempty plan")
 	}
 	selected := plans[index-1]
 	testCount := 0
@@ -310,25 +351,35 @@ func listPackages(goTool string) ([]listedPackage, error) {
 }
 
 func buildCatalog(goTool string, listed []listedPackage, hints timingHints) ([]catalogPackage, error) {
-	split := make(map[string]struct{}, len(hints.SplitPackages))
-	for _, packagePath := range hints.SplitPackages {
-		split[packagePath] = struct{}{}
+	split := map[string]bool{}
+	for _, pkg := range hints.SplitPackages {
+		split[pkg] = true
+	}
+	var exclusions []exclusionGroup
+	if err := json.Unmarshal(exclusionJSON, &exclusions); err != nil {
+		return nil, err
+	}
+	for _, group := range exclusions {
+		split[group.Package] = true
 	}
 	catalog := make([]catalogPackage, 0, len(listed))
-	seen := make(map[string]struct{}, len(listed))
+	seen := map[string]bool{}
 	for _, item := range listed {
-		if _, duplicate := seen[item.ImportPath]; duplicate {
+		if seen[item.ImportPath] {
 			return nil, fmt.Errorf("go list repeated package %s", item.ImportPath)
 		}
-		seen[item.ImportPath] = struct{}{}
+		seen[item.ImportPath] = true
+		if len(item.TestGoFiles)+len(item.XTestGoFiles) == 0 {
+			continue
+		}
 		entry := catalogPackage{ImportPath: item.ImportPath}
-		if _, shouldSplit := split[item.ImportPath]; shouldSplit {
+		if split[item.ImportPath] {
 			hasMain, err := packageHasTestMain(item)
 			if err != nil {
 				return nil, err
 			}
 			if hasMain {
-				return nil, fmt.Errorf("split package %s declares TestMain", item.ImportPath)
+				return nil, fmt.Errorf("split/excluded package %s declares TestMain", item.ImportPath)
 			}
 			entry.Tests, err = listTopLevelTests(goTool, item.ImportPath)
 			if err != nil {
@@ -336,11 +387,6 @@ func buildCatalog(goTool string, listed []listedPackage, hints timingHints) ([]c
 			}
 		}
 		catalog = append(catalog, entry)
-	}
-	for packagePath := range split {
-		if _, exists := seen[packagePath]; !exists {
-			return nil, fmt.Errorf("configured split package %s is absent from go list", packagePath)
-		}
 	}
 	return catalog, nil
 }
