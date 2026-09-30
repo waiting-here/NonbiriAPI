@@ -14,6 +14,47 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "capability": {
+      "body": "This browser could not provide everything needed to safely start and resume this activity.",
+      "next": "Check this site's storage permissions or try another supported browser, then check again before starting.",
+      "secureRandom": "Secure random values are unavailable.",
+      "sessionStorage": "This tab could not save and read its temporary data.",
+      "indexedDB": "The browser could not save and read the activity's progress.",
+      "locks": "The browser could not reserve activity control for one tab.",
+      "broadcastChannel": "Communication between this site's tabs is unavailable."
+    },
+    "leave": {
+      "title": "Leave this page?",
+      "body": "Your unsaved changes will be discarded. An action already sent may still complete; check its status when you return.",
+      "confirm": "Leave page",
+      "stay": "Stay here"
+    },
+    "operation": {
+      "pending": "Processing this action…",
+      "confirmed": "Completed.",
+      "unknown": "The result could not be confirmed. Check the latest status before trying again.",
+      "conflict": "This item changed. Read its latest state and review your changes.",
+      "failed": "This action could not be completed. Review the details and try again.",
+      "refreshFailed": "Completed successfully. The latest data could not be read yet; refresh it without repeating the action.",
+      "details": "Details",
+      "check": "Check latest status"
+    },
+    "help": {
+      "service": "A service is the source you connect to. Enter its API address, such as https://api.example.com/v1, using the provider's instructions.",
+      "serviceKey": "A service key is issued by your provider and lets this site connect to that service. Use a key you own and are allowed to use.",
+      "callerKey": "A site API key lets your app call this site. It is separate from a service key issued by your provider.",
+      "upstreamModel": "Use the model name supplied by the service. Checking the service can help you find available names.",
+      "callName": "This is the name your app uses when calling your own model through this site. It can differ from the service's model name.",
+      "storeFalse": "Requests ask the provider not to store them with store=false. Whether the provider follows this request depends on its policy.",
+      "harness": "The running tool gives the model a way to carry out its tasks. Choose it together with the model and skills."
+    },
+    "messages": {
+      "title": "Messages in request order",
+      "empty": "There are no messages in this request.",
+      "number": "Message {{number}}",
+      "expand": "Read the full field",
+      "original": "Read the original message"
+    },
     "activities": {
       "permanent": "Permanent activities",
       "limited": "Limited-time activities",

@@ -20,7 +20,7 @@
     "preview:admin": "vite preview --mode admin",
     "preview:user": "vite preview --mode user",
     "test": "npm run check:copy && npm run test:node && npm run test:unit && npm run test:assets",
-    "test:node": "node --test src/shared/utils/formatNumber.test.js src/admin/utils/economyInput.test.js scripts/gen-manifest.test.mjs scripts/catalogPairPlugin.test.mjs scripts/randomness.test.mjs",
+    "test:node": "node --test src/shared/utils/formatNumber.test.js src/admin/utils/economyInput.test.js scripts/gen-manifest.test.mjs scripts/catalogPairPlugin.test.mjs scripts/randomness.test.mjs scripts/check-copy.test.mjs",
     "test:unit": "vitest run",
     "test:assets": "vitest run --config test/fatfish-assets/vitest.config.ts",
     "test:e2e": "cross-env PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_NO_COPY_PROMPT=1 playwright test",
