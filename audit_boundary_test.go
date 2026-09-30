@@ -231,15 +231,15 @@ func TestGenerationTwoFreshAndCurrentApplicationBoot(t *testing.T) {
 		}
 		assertFreshSafeApplication(t, app)
 
-		closed := make(chan error, 1)
-		go func() { closed <- app.Close() }()
-		select {
-		case closeErr := <-closed:
-			if closeErr != nil {
-				t.Fatalf("pass %d app.Close: %v", pass, closeErr)
+		closeContext, cancelClose := context.WithTimeout(context.Background(), db.DefaultShutdownTimeout)
+		closeErr := app.CloseContext(closeContext)
+		cancelClose()
+		if closeErr != nil {
+			var cleanup *applicationCleanupError
+			if errors.As(closeErr, &cleanup) {
+				t.Fatalf("pass %d app.CloseContext phase=%s: %v", pass, cleanup.phase, closeErr)
 			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("pass %d app.Close blocked while stopping the idle discovery worker", pass)
+			t.Fatalf("pass %d app.CloseContext: %v", pass, closeErr)
 		}
 		if err := store.Close(); err != nil {
 			t.Fatalf("pass %d store.Close: %v", pass, err)
