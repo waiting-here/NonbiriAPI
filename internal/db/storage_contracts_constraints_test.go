@@ -140,3 +140,19 @@ func TestStorageContractsEngineExpansionKeepsContentImmutable(t *testing.T) {
 	}
 	hostileMustFail(t, database, "INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),4,1,'{}',10,3,0)", hostileOID("ffv_"), level)
 }
+
+func TestStorageContractsCredentialReviewIdentityAllowsOnlyInitialBackfill(t *testing.T) {
+	database := openGenerationTwoConstraintFixture(t)
+	id := hostileInsertSecret(t, database, "https://review.example/v1", 0)
+	var material []byte
+	if err := database.QueryRow("SELECT key_body_review_hmac FROM endpoint_key_secrets WHERE id=?", id).Scan(&material); err != nil || material != nil {
+		t.Fatal("legacy credential must start without review material", err)
+	}
+	hostileMustFail(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=zeroblob(31) WHERE id=?", id)
+	hostileMustFail(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=? WHERE id=?", strings.Repeat("x", 32), id)
+	hostileMustExec(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=zeroblob(32) WHERE id=?", id)
+	hostileMustExec(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=zeroblob(32) WHERE id=?", id)
+	hostileMustFail(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=randomblob(32) WHERE id=?", id)
+	hostileMustFail(t, database, "UPDATE endpoint_key_secrets SET key_body_review_hmac=NULL WHERE id=?", id)
+	hostileMustExec(t, database, "UPDATE endpoint_key_secrets SET orphaned_at=1 WHERE id=?", id)
+}
