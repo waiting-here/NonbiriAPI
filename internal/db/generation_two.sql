@@ -479,7 +479,7 @@ BEGIN SELECT RAISE(ABORT,'donation key report fingerprint mutation is not allowe
 
 CREATE TABLE charity_model_bindings (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), charity_model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE, endpoint_key_id INTEGER NOT NULL, upstream_model_id TEXT NOT NULL, ord INTEGER NOT NULL DEFAULT 0 CHECK(ord BETWEEN 0 AND 511), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
- UNIQUE(charity_model_id,donation_key_id,upstream_model_id), UNIQUE(charity_model_id,ord), FOREIGN KEY(endpoint_key_id,upstream_model_id) REFERENCES model_pair_catalog(endpoint_key_id,normalized_model_id) ON DELETE CASCADE
+ UNIQUE(charity_model_id,donation_key_id,upstream_model_id), UNIQUE(charity_model_id,ord), FOREIGN KEY(endpoint_key_id) REFERENCES endpoint_keys(id) ON DELETE CASCADE
 );
 CREATE INDEX idx_charity_bindings_model ON charity_model_bindings(charity_model_id,ord,id);
 CREATE TABLE charity_model_stats (model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE, next_slot INTEGER NOT NULL DEFAULT 0 CHECK(next_slot BETWEEN 0 AND 99), sample_count INTEGER NOT NULL DEFAULT 0 CHECK(sample_count BETWEEN 0 AND 100), success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count BETWEEN 0 AND 100)) STRICT;

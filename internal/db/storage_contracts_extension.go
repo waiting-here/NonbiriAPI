@@ -17,6 +17,7 @@ var storageContractTableChanges = []struct {
 	{"idempotency_records", "'game_blackjack','activity_loan','donation'", "'game_blackjack','activity_loan','donation','lake_notes','personal_automation'", 1},
 	{"risk_client_scans", "kind IN ('client_hits','users','shared_ips')", "kind IN ('client_hits','users','shared_ips','user_ips')", 1},
 	{"fatfish_level_versions", "CHECK(engine_version IN (1,2))", "CHECK(engine_version IN (1,2,3))", 1},
+	{"charity_model_bindings", "FOREIGN KEY(endpoint_key_id,upstream_model_id) REFERENCES model_pair_catalog(endpoint_key_id,normalized_model_id) ON DELETE CASCADE", "FOREIGN KEY(endpoint_key_id) REFERENCES endpoint_keys(id) ON DELETE CASCADE", 1},
 	{"donation_reviews", "'failure_streak_reset','failure_policy_update'", "'failure_streak_reset','failure_policy_update','force_reject'", 1},
 	{"credit_operations", "'fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund'", "'fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange'", 2},
 }
