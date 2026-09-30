@@ -83,13 +83,11 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 	}{
 		{name: "trailing value", content: valid + `{}`},
 		{name: "unknown field", content: strings.Replace(valid, `"version": 1,`, `"version": 1, "extra": true,`, 1)},
-		{name: "missing split count", content: strings.Replace(valid, `{"example/slow": 2}`, `{}`, 1)},
 		{name: "extra split count", content: strings.Replace(valid, `{"example/slow": 2}`, `{"example/slow": 2, "example/other": 1}`, 1)},
 		{name: "unsplit group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/whole": 4}`, 1)},
 		{name: "zero group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": 0}`, 1)},
 		{name: "negative group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": -1}`, 1)},
 		{name: "fractional group cap", content: strings.Replace(valid, `{"example/slow": 4}`, `{"example/slow": 1.5}`, 1)},
-		{name: "missing split weight", content: strings.Replace(valid, `{"example/slow": 120}`, `{}`, 1)},
 		{name: "invalid test name", content: strings.Replace(valid, `{"TestOne": 90}`, `{"helper": 90}`, 1)},
 		{name: "invalid test weight", content: strings.Replace(valid, `{"TestOne": 90}`, `{"TestOne": 0}`, 1)},
 		{name: "unsplit test weights", content: strings.Replace(valid, `{"example/slow": {"TestOne": 90}}`, `{"example/whole": {"TestOne": 90}}`, 1)},

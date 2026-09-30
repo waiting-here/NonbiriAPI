@@ -5,7 +5,7 @@ cd "$root"
 go_command=${GO:-go}
 python_command=${PYTHON:-python3}
 released_commit=db959c64674afc531046a63066de0464725d439c
-test "$(git rev-parse "$released_commit^{commit}")" = "$released_commit"
+bash "$root/scripts/ensure-upgrade-source.sh" "$released_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
 cleanup() {

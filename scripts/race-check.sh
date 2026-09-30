@@ -33,25 +33,32 @@ if [ -z "${CC:-}" ]; then
 fi
 
 if [ "${1:-}" = "--shard" ]; then
-  if [ "$#" -ne 2 ] && [ "$#" -ne 4 ]; then
-    echo "usage: scripts/race-check.sh --shard N/TOTAL [--workers N]" >&2
-    exit 2
-  fi
-  if [ "$#" -eq 4 ]; then
-    if [ "$3" != "--workers" ]; then
-      echo "usage: scripts/race-check.sh --shard N/TOTAL [--workers N]" >&2
-      exit 2
-    fi
-    RACE_WORKERS="$4"
-  fi
+  test "$#" -ge 2
+  shard=$2
+  shift 2
+  selected_args=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --workers)
+        test "$#" -ge 2
+        RACE_WORKERS=$2
+        shift 2 ;;
+      --packages)
+        test "$#" -ge 2
+        selected_args=(-packages "$2")
+        shift 2 ;;
+      *) echo "usage: scripts/race-check.sh --shard N/TOTAL [--workers N] [--packages 'exact paths']" >&2; exit 2 ;;
+    esac
+  done
   "$GO" run ./internal/citools/raceplan \
     -go "$GO" \
-    -shard "$2" \
+    -shard "$shard" \
     -timeout "$RACE_TIMEOUT" \
-    -workers "$RACE_WORKERS"
+    -workers "$RACE_WORKERS" "${selected_args[@]}"
 elif [ $# -gt 0 ]; then
   "$GO" test -v -race -shuffle=on -count=1 -timeout="$RACE_TIMEOUT" "$@"
 else
-  pkgs="$("$GO" list ./... | grep -v '/node_modules/')"
+  pkgs="$("$GO" list ./...)"
+  pkgs="$(printf '%s\n' "$pkgs" | grep -v '/node_modules/')"
   "$GO" test -v -race -shuffle=on -count=1 -timeout="$RACE_TIMEOUT" $pkgs
 fi
