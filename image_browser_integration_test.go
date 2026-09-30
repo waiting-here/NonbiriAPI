@@ -178,7 +178,8 @@ func TestImageBrowserFixture(t *testing.T) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		var input struct {
-			Seconds int64 `json:"seconds"`
+			Seconds int64  `json:"seconds"`
+			Mode    string `json:"mode"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&input); err != nil {
 			http.Error(w, "invalid control body", 400)
@@ -191,6 +192,14 @@ func TestImageBrowserFixture(t *testing.T) {
 				return
 			}
 			f.offset.Add(input.Seconds)
+		case "/discovery":
+			if input.Mode != "success" && input.Mode != "empty" && input.Mode != "failed" {
+				http.Error(w, "invalid discovery mode", http.StatusBadRequest)
+				return
+			}
+			f.upstreamState.mu.Lock()
+			f.upstreamState.discoveryMode = input.Mode
+			f.upstreamState.mu.Unlock()
 		case "/release":
 			f.upstreamState.release()
 		case "/restart":
@@ -222,6 +231,7 @@ func TestImageBrowserFixture(t *testing.T) {
 		"control_token": controlToken, "users": f.users, "admin_cookie": f.adminCookie,
 		"private_markers": []string{imageFixtureSecret, imageFixtureModel, "synthetic-private-metadata", "synthetic-job-"},
 		"model_id":        f.modelID,
+		"upstream_url":    f.upstream.URL,
 	}
 	raw, err := json.Marshal(state)
 	if err != nil {
@@ -495,11 +505,12 @@ type imageFixtureJob struct {
 	released bool
 }
 type imageFixtureUpstream struct {
-	mu          sync.Mutex
-	jobs        map[string]*imageFixtureJob
-	png         string
-	submissions int
-	polls       int
+	mu            sync.Mutex
+	jobs          map[string]*imageFixtureJob
+	png           string
+	submissions   int
+	discoveryMode string
+	polls         int
 }
 
 func newImageFixtureUpstream(t *testing.T) *imageFixtureUpstream {
@@ -538,7 +549,14 @@ func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	defer u.mu.Unlock()
 	switch {
 	case r.URL.Path == "/v1/models" && r.Method == http.MethodGet:
-		writeImageFixtureJSON(w, map[string]any{"data": imageFixtureCatalog()})
+		switch u.discoveryMode {
+		case "empty":
+			writeImageFixtureJSON(w, map[string]any{"data": []any{}})
+		case "failed":
+			http.Error(w, "synthetic discovery failure", http.StatusBadGateway)
+		default:
+			writeImageFixtureJSON(w, map[string]any{"data": imageFixtureCatalog()})
+		}
 	case r.URL.Path == "/v1/images/generations" && r.Method == http.MethodPost:
 		var input struct {
 			Model          string  `json:"model"`
