@@ -6448,6 +6448,10 @@ CREATE INDEX idx_request_logs_origin_user ON request_logs(origin_user_id,started
 CREATE INDEX idx_request_logs_origin_discord ON request_logs(origin_discord_id,started_at,id);
 ALTER TABLE risk_audit_config ADD COLUMN user_ip_window_hours INTEGER NOT NULL DEFAULT 24 CHECK(user_ip_window_hours BETWEEN 1 AND 720);
 ALTER TABLE risk_audit_config ADD COLUMN user_ip_min_ips INTEGER NOT NULL DEFAULT 3 CHECK(user_ip_min_ips BETWEEN 2 AND 1000);
+ALTER TABLE endpoint_key_secrets ADD COLUMN key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32));
+CREATE TRIGGER endpoint_key_review_identity BEFORE UPDATE OF key_body_review_hmac ON endpoint_key_secrets
+WHEN OLD.key_body_review_hmac IS NOT NULL AND NEW.key_body_review_hmac IS NOT OLD.key_body_review_hmac
+BEGIN SELECT RAISE(ABORT,'credential review identity is immutable'); END;
 ALTER TABLE donations ADD COLUMN first_approval_origin TEXT NOT NULL DEFAULT 'unknown' CHECK(first_approval_origin IN ('auto','manual','unknown'));
 ALTER TABLE donation_keys ADD COLUMN key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32));
 ALTER TABLE donation_keys ADD COLUMN review_revision INTEGER CHECK(review_revision IS NULL OR (typeof(review_revision)='integer' AND review_revision>=1));
