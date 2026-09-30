@@ -1,5 +1,5 @@
 // Command racefixture creates one closed, current-schema SQLite template for
-// raceplan's private runner directory. It must itself be run with -race.
+// raceplan's private runner directory. The builder needs no race instrumentation.
 package main
 
 import (

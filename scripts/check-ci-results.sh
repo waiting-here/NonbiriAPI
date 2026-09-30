@@ -15,3 +15,6 @@ check_child() {
 }
 check_child first "${FIRST_APPLICABLE:-}" "${FIRST_RESULT:-}"
 check_child second "${SECOND_APPLICABLE:-}" "${SECOND_RESULT:-}"
+if [ "${THIRD_APPLICABLE+x}" = x ]; then
+  check_child third "$THIRD_APPLICABLE" "${THIRD_RESULT:-}"
+fi

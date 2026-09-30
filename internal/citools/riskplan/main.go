@@ -27,6 +27,7 @@ type packageInfo struct {
 	Imports      []string
 	TestImports  []string
 	XTestImports []string
+	EmbedFiles   []string
 }
 
 type verificationPlan struct {
@@ -75,6 +76,10 @@ func run(args []string, output io.Writer) error {
 }
 
 func commandOutput(name string, args ...string) ([]byte, error) {
+	// Read scope from Git directly, independently of a host fsmonitor daemon.
+	if name == "git" {
+		args = append([]string{"-c", "core.fsmonitor=false"}, args...)
+	}
 	command := exec.Command(name, args...)
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -157,6 +162,7 @@ func listPackages(goTool string) ([]packageInfo, error) {
 				continue
 			}
 			prior := merged[item.ImportPath]
+			item.EmbedFiles = append(item.EmbedFiles, prior.EmbedFiles...)
 			item.Imports = append(append(append(item.Imports, item.TestImports...), item.XTestImports...), prior.Imports...)
 			merged[item.ImportPath] = item
 		}
@@ -207,6 +213,7 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 	plan := verificationPlan{Mode: mode, Changed: changed, Reasons: []string{}, GoPackages: []string{}, RacePackages: []string{}}
 	all := map[string]bool{}
 	dirs := map[string]string{}
+	productionInputs := map[string]bool{}
 	reverse := map[string][]string{}
 	root, rootErr := os.Getwd()
 	for _, item := range packages {
@@ -214,6 +221,9 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 		dir, err := filepath.Rel(root, item.Dir)
 		if err == nil {
 			dirs[filepath.ToSlash(dir)] = item.ImportPath
+			for _, input := range item.EmbedFiles {
+				productionInputs[filepath.ToSlash(filepath.Join(dir, input))] = true
+			}
 		}
 		for _, imported := range item.Imports {
 			reverse[imported] = append(reverse[imported], item.ImportPath)
@@ -238,8 +248,11 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 	}
 	affected := map[string]bool{}
 	race := false
+	productionAffected := false
 	for _, file := range changed {
-		if file == "go.mod" || file == "go.sum" || (filepath.Dir(file) == "." && strings.HasSuffix(file, ".go")) || file == "web/package-lock.json" || file == "web/package.json" || strings.HasPrefix(file, "scripts/") || strings.HasPrefix(file, ".github/") || strings.HasPrefix(file, "internal/db/") || strings.HasPrefix(file, "internal/lifecycle/") {
+		testSource := strings.HasSuffix(file, "_test.go")
+		testInput := testSource || (strings.Contains(file, "/testdata/") && !productionInputs[file])
+		if file == "go.mod" || file == "go.sum" || (filepath.Dir(file) == "." && strings.HasSuffix(file, ".go") && !testSource) || file == "web/package-lock.json" || file == "web/package.json" || strings.HasPrefix(file, "scripts/") || strings.HasPrefix(file, ".github/") || (!testInput && (strings.HasPrefix(file, "internal/db/") || strings.HasPrefix(file, "internal/lifecycle/"))) {
 			return full("shared schema, lifecycle, root, dependency or gate input changed")
 		}
 		if strings.HasPrefix(file, "web/") {
@@ -267,7 +280,10 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 			return full("changed input has no known verification owner")
 		}
 		affected[packagePath] = true
-		if concurrentPackage(packagePath) {
+		if !testInput && !pureAlgorithmPackage(packagePath) {
+			productionAffected = true
+		}
+		if !testInput && concurrentPackage(packagePath) {
 			race = true
 		}
 		if strings.HasSuffix(file, ".go") {
@@ -292,9 +308,11 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 		}
 	}
 	plan.GoPackages = sortedKeys(affected)
-	for _, packagePath := range plan.GoPackages {
-		if concurrentPackage(packagePath) {
-			race = true
+	if productionAffected {
+		for _, pkg := range plan.GoPackages {
+			if concurrentPackage(pkg) {
+				race = true
+			}
 		}
 	}
 	if race {
@@ -307,10 +325,26 @@ func selectPlan(packages []packageInfo, changed []string, mode string, diffErr e
 	return plan
 }
 
+func pureAlgorithmPackage(path string) bool {
+	for _, name := range []string{"lakenotes/rules", "fatfish/engine", "game/bidding/engine", "game/blackjack/engine", "game/likes/engine"} {
+		if strings.HasSuffix(path, "/internal/"+name) {
+			return true
+		}
+	}
+	return false
+}
+
 func concurrentPackage(packagePath string) bool {
-	for _, name := range []string{"auth", "authz", "secret", "egress", "claim", "charity", "charityrouting", "donation", "forward", "ledger", "idempotency", "lifecycle", "resources", "fatfish", "lakenotes", "limitedactivities", "duel", "blackjack", "riskaudit", "clientguard", "observability"} {
+	if pureAlgorithmPackage(packagePath) {
+		return false
+	}
+	if strings.Contains(packagePath, "/internal/game/") && !strings.HasSuffix(packagePath, "/engine") && !strings.HasSuffix(packagePath, "/randomness") {
+		return true
+	}
+
+	for _, name := range []string{"auth", "authz", "secret", "egress", "claim", "charity", "charityrouting", "donation", "forward", "ledger", "idempotency", "lifecycle", "resources", "fatfish", "lakenotes", "limitedactivities", "riskaudit", "clientguard", "observability"} {
 		prefix := "/internal/" + name
-		if strings.HasSuffix(packagePath, prefix) || strings.Contains(packagePath, prefix+"/") {
+		if strings.HasSuffix(packagePath, prefix) || strings.Contains(packagePath, prefix+"/") && !strings.HasSuffix(packagePath, "/engine") && !strings.HasSuffix(packagePath, "/rules") {
 			return true
 		}
 	}
@@ -323,7 +357,7 @@ func concurrentSource(source []byte) bool {
 		return true
 	}
 	for _, imported := range parsed.Imports {
-		if imported.Path.Value == "\"sync\"" || imported.Path.Value == "\"sync/atomic\"" || imported.Path.Value == "\"context\"" {
+		if imported.Path.Value == "\"sync\"" || imported.Path.Value == "\"sync/atomic\"" {
 			return true
 		}
 	}
@@ -333,6 +367,12 @@ func concurrentSource(source []byte) bool {
 		case *ast.GoStmt, *ast.ChanType:
 			concurrent = true
 		case *ast.CallExpr:
+			if selector, ok := value.Fun.(*ast.SelectorExpr); ok {
+				switch selector.Sel.Name {
+				case "WithCancel", "WithCancelCause", "WithDeadline", "WithDeadlineCause", "WithTimeout", "WithTimeoutCause", "AfterFunc":
+					concurrent = true
+				}
+			}
 			if name, ok := value.Fun.(*ast.Ident); ok && name.Name == "close" {
 				concurrent = true
 			}

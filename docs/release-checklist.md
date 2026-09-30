@@ -103,10 +103,14 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags dist -trimpath -o nonbiriap
 ```
 
 Run each command where its evidence is needed. One web build generates both
-stations, notices and hashes. Preserve the full CI matrix: all sixteen race
-shards, Go build/vet/tests and populated upgrades, frontend unit/type/lint/build,
-both browser suites, and aggregate Go/Web/CodeQL checks. Timing weights may
-change placement only; the live test catalog remains the coverage authority.
+stations, notices and hashes. Preserve full ordinary Go tests and populated
+upgrades, the complete risk-based
+race catalog on every nonempty dynamic shard, frontend unit/type/lint/build,
+both browser suites, and aggregate Go/Web/CodeQL checks. Exact reviewed serial
+and pure-rule race exclusions remain in ordinary coverage; new names cannot be
+silently excluded. Timing weights affect placement only. Share this run's empty
+database template and immutable station-build artifacts; each test database and
+browser fixture process remains isolated.
 Verify current dependency integrity,
 license notices and available vulnerability scans; record actual findings and
 unavailable scans. Never classify unavailable evidence as a pass.

@@ -29,6 +29,7 @@ jobs:
       upgrade: ${{ steps.scope.outputs.upgrade }}
       go_packages: ${{ steps.scope.outputs.go_packages }}
       race_packages: ${{ steps.scope.outputs.race_packages }}
+      template_artifact_id: ${{ steps.template_artifact.outputs.artifact-id }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,6 +56,22 @@ jobs:
           printf '\nVerification plan:\n' >> "$GITHUB_STEP_SUMMARY"
           cat verification-plan.json >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Build the reusable empty database once
+        if: steps.scope.outputs.go == 'true'
+        env:
+          CGO_ENABLED: "0"
+        run: go run ./internal/citools/raceplan -prepare-template .ci-template
+      - name: Share immutable empty database
+        id: template_artifact
+        if: steps.scope.outputs.go == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: database-template-${{ github.sha }}-${{ github.run_attempt }}
+          path: .ci-template
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
   go_build:
     needs: plan
     if: needs.plan.outputs.go == 'true'
@@ -70,6 +87,19 @@ jobs:
         with:
           go-version: 1.26.6
           cache: true
+      - name: Require this run's empty database artifact
+        env:
+          ARTIFACT_ID: ${{ needs.plan.outputs.template_artifact_id }}
+        run: test -n "$ARTIFACT_ID"
+      - name: Download the shared empty database
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.plan.outputs.template_artifact_id }}
+          path: .ci-template
+      - name: Verify template identity and share isolated-copy environment
+        env:
+          CGO_ENABLED: "0"
+        run: go run ./internal/citools/raceplan -export-template .ci-template >> "$GITHUB_ENV"
       - name: Verify required result semantics
         run: bash scripts/check-ci-results.test.sh
       - name: Build, vet, and test
@@ -91,16 +121,16 @@ jobs:
         if: needs.plan.outputs.upgrade == 'true'
         run: bash scripts/check-upgrade.sh
 
-  race:
+  race_prepare:
     needs: plan
     if: needs.plan.outputs.race == 'true'
-    name: Race tests (${{ matrix.shard }})
+    name: Race catalog and template
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 16
-      matrix:
-        shard: ["1/16", "2/16", "3/16", "4/16", "5/16", "6/16", "7/16", "8/16", "9/16", "10/16", "11/16", "12/16", "13/16", "14/16", "15/16", "16/16"]
+    outputs:
+      matrix: ${{ steps.catalog.outputs.matrix }}
+      count: ${{ steps.catalog.outputs.count }}
+      applicable: ${{ steps.catalog.outputs.applicable }}
+      artifact_id: ${{ steps.prepared.outputs.artifact-id }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,23 +139,72 @@ jobs:
         with:
           go-version: 1.26.6
           cache: true
-      - name: Run complete race shard
+      - name: Require this run's empty database artifact
+        env:
+          ARTIFACT_ID: ${{ needs.plan.outputs.template_artifact_id }}
+        run: test -n "$ARTIFACT_ID"
+      - name: Download the shared empty database
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.plan.outputs.template_artifact_id }}
+          path: .ci-template
+      - name: Prepare live catalog and closed empty template once
+        id: catalog
         env:
           MODE: ${{ needs.plan.outputs.mode }}
           RACE_PACKAGES: ${{ needs.plan.outputs.race_packages }}
-          SHARD: ${{ matrix.shard }}
+          RACE_WORKERS: "4"
         run: |
           set -euo pipefail
-          if [ "$MODE" = full ]; then
-            bash scripts/race-check.sh --shard "$SHARD" --workers 4
-          else
-            bash scripts/race-check.sh --shard "$SHARD" --workers 4 --packages "$RACE_PACKAGES"
-          fi
+          selected=()
+          if [ "$MODE" != full ]; then selected=(-packages "$RACE_PACKAGES"); fi
+          bash scripts/race-check.sh --prepare .ci-race -template .ci-template -github-output "$GITHUB_OUTPUT" "${selected[@]}"
+      - name: Share immutable race preparation
+        id: prepared
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: race-preparation-${{ github.sha }}-${{ github.run_attempt }}
+          path: .ci-race
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
+  race:
+    needs: [plan, race_prepare]
+    if: needs.race_prepare.outputs.applicable == 'true'
+    name: Race tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        shard: ${{ fromJSON(needs.race_prepare.outputs.matrix || '[]') }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.6
+          cache: true
+      - name: Require prepared race artifact
+        env:
+          ARTIFACT_ID: ${{ needs.race_prepare.outputs.artifact_id }}
+        run: test -n "$ARTIFACT_ID"
+      - name: Download this run's race catalog and template
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.race_prepare.outputs.artifact_id }}
+          path: .ci-race
+      - name: Run complete risk race shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: bash scripts/race-check.sh --shard "$SHARD" --workers 4 --prepared .ci-race
 
   go:
     name: Go checks
     if: ${{ always() }}
-    needs: [plan, go_build, race]
+    needs: [plan, go_build, race_prepare, race]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -135,9 +214,11 @@ jobs:
           PLAN_RESULT: ${{ needs.plan.result }}
           MODE: ${{ needs.plan.outputs.mode }}
           FIRST_APPLICABLE: ${{ needs.plan.outputs.go }}
-          SECOND_APPLICABLE: ${{ needs.plan.outputs.race }}
+          SECOND_APPLICABLE: ${{ needs.race_prepare.outputs.applicable || 'false' }}
           FIRST_RESULT: ${{ needs.go_build.result }}
           SECOND_RESULT: ${{ needs.race.result }}
+          THIRD_APPLICABLE: ${{ needs.plan.outputs.race }}
+          THIRD_RESULT: ${{ needs.race_prepare.result }}
         run: |
           set -euo pipefail
           bash scripts/check-ci-results.sh | tee -a "$GITHUB_STEP_SUMMARY"
@@ -148,14 +229,12 @@ jobs:
           UPGRADE_APPLICABLE: ${{ needs.plan.outputs.upgrade }}
         run: |
           test "$UPGRADE_APPLICABLE" = true
-          printf 'Complete Go, race, and populated upgrade coverage passed.\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Complete ordinary Go, risk-based race, and populated upgrade coverage passed.\n' >> "$GITHUB_STEP_SUMMARY"
 
   web_unit:
-    outputs:
-      artifact_id: ${{ steps.station_build.outputs.artifact-id }}
     needs: plan
     if: needs.plan.outputs.web == 'true'
-    name: Web unit, types, lint, and build
+    name: Web unit, types, and lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -181,6 +260,32 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+
+  web_build:
+    outputs:
+      artifact_id: ${{ steps.station_build.outputs.artifact-id }}
+    needs: plan
+    if: needs.plan.outputs.web == 'true'
+    name: Web station build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Pin npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(npm --version)" = "12.0.1"
+      - name: Install dependencies
+        run: npm ci
       - name: Build both stations
         run: npm run build
       - name: Verify generated notices
@@ -196,7 +301,7 @@ jobs:
           retention-days: 3
 
   web_browser:
-    needs: [plan, web_unit]
+    needs: [plan, web_build]
     if: needs.plan.outputs.web == 'true'
     name: Web browser (${{ matrix.suite }})
     runs-on: ubuntu-latest
@@ -230,12 +335,12 @@ jobs:
         run: npm ci
       - name: Require the verified station artifact
         env:
-          ARTIFACT_ID: ${{ needs.web_unit.outputs.artifact_id }}
+          ARTIFACT_ID: ${{ needs.web_build.outputs.artifact_id }}
         run: test -n "$ARTIFACT_ID"
       - name: Download verified station build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          artifact-ids: ${{ needs.web_unit.outputs.artifact_id }}
+          artifact-ids: ${{ needs.web_build.outputs.artifact_id }}
           path: web/dist
       - name: Install Chromium
         run: npm exec -- playwright install --with-deps chromium
@@ -247,6 +352,14 @@ jobs:
         env:
           PLAYWRIGHT_HTML_OPEN: never
         run: npm run test:e2e
+      - name: Compile the isolated browser fixtures once
+        if: matrix.suite == 'integration'
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          go test -c -tags dist -o "$RUNNER_TEMP/browser-fixture" ..
+          printf 'NONBIRI_BROWSER_FIXTURE_BINARY=%s\n' "$RUNNER_TEMP/browser-fixture" >> "$GITHUB_ENV"
       - name: Image activity browser integration
         if: matrix.suite == 'integration'
         env:
@@ -269,7 +382,7 @@ jobs:
   web:
     name: Web checks
     if: ${{ always() }}
-    needs: [plan, web_unit, web_browser]
+    needs: [plan, web_unit, web_build, web_browser]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -282,6 +395,8 @@ jobs:
           SECOND_APPLICABLE: ${{ needs.plan.outputs.web }}
           FIRST_RESULT: ${{ needs.web_unit.result }}
           SECOND_RESULT: ${{ needs.web_browser.result }}
+          THIRD_APPLICABLE: ${{ needs.plan.outputs.web }}
+          THIRD_RESULT: ${{ needs.web_build.result }}
         run: |
           set -euo pipefail
           bash scripts/check-ci-results.sh | tee -a "$GITHUB_STEP_SUMMARY"

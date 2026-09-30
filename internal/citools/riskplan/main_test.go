@@ -79,6 +79,8 @@ func TestConcurrencySyntax(t *testing.T) {
 		{"package p\nfunc f(){go f()}\n", true},
 		{"package p\nvar c chan int\n", true},
 		{"package p\nfunc f(){close(c)}\n", true},
+		{"package p\nimport \"context\"\nfunc f(ctx context.Context){}\n", false},
+		{"package p\nfunc f(){ctx,cancel:=context.WithCancel(nil); _=ctx;cancel()}\n", true},
 		{"not Go", true},
 	} {
 		if got := concurrentSource([]byte(test.source)); got != test.want {
@@ -176,6 +178,73 @@ func TestTrustedGitDiffIncludesWorkingInputsAndRejectsMissingBaseline(t *testing
 	for _, bad := range []string{"", "--help", strings.Repeat("0", 40)} {
 		if _, err := changedFiles(bad, "HEAD"); err == nil {
 			t.Fatalf("accepted baseline %q", bad)
+		}
+	}
+}
+
+func TestSourceRolesAndSharedHelperConcurrencyClosure(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	bodies := map[string]string{
+		"internal/db/serial_test.go": `package db
+func testHelper() {}
+`,
+		"internal/helper/testdata/case.json": "{}",
+		"internal/db/testdata/case.json":     "{}",
+		"root_test.go": `package main
+func testHelper() {}
+`,
+		"internal/helper/value.go": `package helper
+func Value() int {return 1}
+`,
+		"internal/lakenotes/rules/value.go": `package rules
+import "context"
+func Value(ctx context.Context) int {return 1}
+`,
+		"internal/game/likes/value.go": `package likes
+func Value() int {return 1}
+`,
+	}
+	for name, body := range bodies {
+		if err := os.MkdirAll(filepath.Dir(name), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pkgs := []packageInfo{
+		{ImportPath: "example", Dir: root},
+		{ImportPath: "example/internal/db", Dir: filepath.Join(root, "internal/db")},
+		{ImportPath: "example/internal/helper", Dir: filepath.Join(root, "internal/helper")},
+		{ImportPath: "example/internal/lakenotes/rules", Dir: filepath.Join(root, "internal/lakenotes/rules")},
+		{ImportPath: "example/internal/game/likes", Dir: filepath.Join(root, "internal/game/likes"), Imports: []string{"example/internal/helper", "example/internal/lakenotes/rules"}},
+	}
+	for _, test := range []struct {
+		file string
+		race bool
+	}{
+		{"internal/db/serial_test.go", false},
+		{"root_test.go", false},
+		{"internal/helper/testdata/case.json", false},
+		{"internal/db/testdata/case.json", false},
+		{"internal/helper/value.go", true},
+		{"internal/lakenotes/rules/value.go", false},
+		{"internal/game/likes/value.go", true},
+	} {
+		plan := selectPlan(pkgs, []string{test.file}, "routine", nil)
+		if plan.Mode != "routine" || (len(plan.RacePackages) > 0) != test.race {
+			t.Fatalf("%s: %+v", test.file, plan)
+		}
+	}
+	pkgs[2].EmbedFiles = []string{"testdata/case.json"}
+	embedded := selectPlan(pkgs, []string{"internal/helper/testdata/case.json"}, "routine", nil)
+	if len(embedded.RacePackages) == 0 {
+		t.Fatal("production embed lost shared consumer risk")
+	}
+	for _, name := range []string{"WithCancel", "WithTimeout", "WithTimeoutCause"} {
+		if !concurrentSource([]byte("package p;func f(){context." + name + "(nil)}")) {
+			t.Fatalf("missing cancellation %s", name)
 		}
 	}
 }
