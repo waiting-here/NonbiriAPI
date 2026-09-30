@@ -19,6 +19,7 @@ var storageContractTableChanges = []struct {
 	{"fatfish_level_versions", "CHECK(engine_version IN (1,2))", "CHECK(engine_version IN (1,2,3))", 1},
 	{"charity_model_bindings", "FOREIGN KEY(endpoint_key_id,upstream_model_id) REFERENCES model_pair_catalog(endpoint_key_id,normalized_model_id) ON DELETE CASCADE", "FOREIGN KEY(endpoint_key_id) REFERENCES endpoint_keys(id) ON DELETE CASCADE", 1},
 	{"donation_reviews", "'failure_streak_reset','failure_policy_update'", "'failure_streak_reset','failure_policy_update','force_reject'", 1},
+	{"policy_audits", "policy TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls')),\n old_value INTEGER NOT NULL CHECK(old_value IN (0,1)),\n new_value INTEGER NOT NULL CHECK(new_value IN (0,1))", "policy TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls','role_policy')),\n old_value INTEGER CHECK(old_value IN (0,1)),\n new_value INTEGER CHECK(new_value IN (0,1))", 1},
 	{"credit_operations", "'fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund'", "'fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange'", 2},
 }
 

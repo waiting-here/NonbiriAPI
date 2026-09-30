@@ -71,9 +71,9 @@ CREATE TABLE policy_audits (
  actor_role TEXT NOT NULL CHECK(actor_role IN ('owner','admin','level5','level6','trainee5')),
  resource_type TEXT NOT NULL CHECK(resource_type IN ('endpoint_key','model','charity_model')),
  resource_id INTEGER NOT NULL CHECK(resource_id>0),
- policy TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls')),
- old_value INTEGER NOT NULL CHECK(old_value IN (0,1)),
- new_value INTEGER NOT NULL CHECK(new_value IN (0,1)),
+ policy TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls','role_policy')),
+ old_value INTEGER CHECK(old_value IN (0,1)),
+ new_value INTEGER CHECK(new_value IN (0,1)),
  created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_policy_audits_resource ON policy_audits(resource_type,resource_id,id);
@@ -6743,3 +6743,72 @@ WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) GROUP BY key HAVING count(*)>1)
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy,'$.rules') GROUP BY key HAVING count(*)>1)
 BEGIN SELECT RAISE(ABORT,'invalid model role policy'); END;
+
+ALTER TABLE policy_audits ADD COLUMN from_revision INTEGER CHECK(from_revision IS NULL OR (typeof(from_revision)='integer' AND from_revision>=0));
+ALTER TABLE policy_audits ADD COLUMN to_revision INTEGER CHECK(to_revision IS NULL OR (typeof(to_revision)='integer' AND to_revision>=1));
+DROP TRIGGER policy_audits_no_update;
+CREATE TRIGGER policy_audits_no_update BEFORE UPDATE ON policy_audits
+WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
+ AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.actor_user_id)
+ AND OLD.id=NEW.id AND OLD.actor_role=NEW.actor_role AND OLD.resource_type=NEW.resource_type
+ AND OLD.resource_id=NEW.resource_id AND OLD.policy=NEW.policy
+ AND OLD.old_value IS NEW.old_value AND OLD.new_value IS NEW.new_value
+ AND OLD.from_revision IS NEW.from_revision AND OLD.to_revision IS NEW.to_revision
+ AND OLD.created_at=NEW.created_at)
+BEGIN SELECT RAISE(ABORT,'policy_audits is append-only'); END;
+CREATE TRIGGER policy_audits_value_insert_guard BEFORE INSERT ON policy_audits
+WHEN NOT COALESCE((NEW.policy='role_policy' AND NEW.resource_type IN ('model','charity_model')
+ AND NEW.old_value IS NULL AND NEW.new_value IS NULL
+ AND NEW.from_revision IS NOT NULL AND NEW.to_revision IS NOT NULL
+ AND NEW.from_revision<9223372036854775807 AND NEW.to_revision=NEW.from_revision+1)
+ OR (NEW.policy<>'role_policy' AND NEW.old_value IS NOT NULL AND NEW.new_value IS NOT NULL
+ AND NEW.from_revision IS NULL AND NEW.to_revision IS NULL),0)
+BEGIN SELECT RAISE(ABORT,'invalid policy audit values'); END;
+
+ALTER TABLE fatfish_level_versions ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1 CHECK(version_number>=1);
+DROP TRIGGER fatfish_content_immutable;
+WITH numbered AS (
+ SELECT id,row_number() OVER (PARTITION BY level_id ORDER BY created_at,id) AS version_number
+ FROM fatfish_level_versions
+)
+UPDATE fatfish_level_versions SET version_number=(SELECT version_number FROM numbered WHERE numbered.id=fatfish_level_versions.id);
+CREATE UNIQUE INDEX idx_fatfish_version_number ON fatfish_level_versions(level_id,version_number);
+CREATE TRIGGER fatfish_content_immutable BEFORE UPDATE ON fatfish_level_versions
+BEGIN SELECT RAISE(ABORT,'published game content is immutable'); END;
+
+UPDATE donation_usage_reservations
+SET streak_disposition=CASE WHEN state='committed' AND protocol_success=1 THEN 'success' ELSE 'neutral' END,
+ failure_origin=CASE WHEN state='committed' AND protocol_success=1 THEN 'none' ELSE 'legacy_unknown' END
+WHERE state IN ('committed','released');
+UPDATE dispatch_claims
+SET streak_disposition=CASE WHEN EXISTS(SELECT 1 FROM donation_usage_reservations u WHERE u.claim_id=dispatch_claims.id AND u.state='committed' AND u.protocol_success=1) THEN 'success' ELSE 'neutral' END,
+ failure_origin=CASE WHEN EXISTS(SELECT 1 FROM donation_usage_reservations u WHERE u.claim_id=dispatch_claims.id AND u.state='committed' AND u.protocol_success=1) THEN 'none' ELSE 'legacy_unknown' END
+WHERE state IN ('committed','released');
+CREATE TRIGGER donation_usage_reservations_outcome_insert_guard BEFORE INSERT ON donation_usage_reservations
+WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none' AND NEW.protocol_success=1)
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+CREATE TRIGGER donation_usage_reservations_outcome_update_guard BEFORE UPDATE ON donation_usage_reservations
+WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none' AND NEW.protocol_success=1)
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+CREATE TRIGGER dispatch_claims_outcome_insert_guard BEFORE INSERT ON dispatch_claims
+WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none')
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+CREATE TRIGGER dispatch_claims_outcome_update_guard BEFORE UPDATE ON dispatch_claims
+WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none')
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
