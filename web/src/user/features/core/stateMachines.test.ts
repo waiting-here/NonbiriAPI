@@ -6,9 +6,7 @@ import {
   initialBindingDraftState,
   initialCallerKeyMachineState,
   initialEndpointSecretDraftState,
-  initialLifecycleMachineState,
   initialResourceMutationState,
-  lifecycleMachineReducer,
   resourceMutationReducer,
 } from './stateMachines';
 import type { BindingCandidate, CallerKeyAuthority } from './types';
@@ -289,7 +287,7 @@ describe('core state machines', () => {
     ).toEqual([]);
   });
 
-  it('rejects stale resource and lifecycle completions after an account/action boundary', () => {
+  it('rejects stale resource completions after an account/action boundary', () => {
     let mutation = initialResourceMutationState('account-a');
     mutation = resourceMutationReducer(mutation, {
       type: 'start',
@@ -306,89 +304,5 @@ describe('core state machines', () => {
     expect(
       resourceMutationReducer(mutation, { type: 'account', accountId: 'account-b' }).outcome,
     ).toBe('idle');
-
-    let lifecycle = initialLifecycleMachineState('account-a');
-    lifecycle = lifecycleMachineReducer(lifecycle, {
-      type: 'confirm',
-      accountId: 'account-a',
-      intent: 'delete',
-    });
-    lifecycle = lifecycleMachineReducer(lifecycle, {
-      type: 'start',
-      accountId: 'account-a',
-      intent: 'delete',
-      actionId: 'action-a',
-    });
-    const stale = lifecycleMachineReducer(lifecycle, {
-      type: 'complete',
-      accountId: 'account-a',
-      intent: 'delete',
-      actionId: 'action-b',
-    });
-    expect(stale).toBe(lifecycle);
-    expect(
-      lifecycleMachineReducer(lifecycle, { type: 'boundary', accountId: 'account-b' }),
-    ).toEqual(initialLifecycleMachineState('account-b'));
-  });
-
-  it('keeps unknown lifecycle outcomes non-replayable and only checks deletion authority', () => {
-    let deletion = lifecycleMachineReducer(initialLifecycleMachineState('account-a'), {
-      type: 'confirm',
-      accountId: 'account-a',
-      intent: 'delete',
-    });
-    deletion = lifecycleMachineReducer(deletion, {
-      type: 'start',
-      accountId: 'account-a',
-      intent: 'delete',
-      actionId: 'local-action',
-    });
-    deletion = lifecycleMachineReducer(deletion, {
-      type: 'uncertain',
-      accountId: 'account-a',
-      intent: 'delete',
-      actionId: 'local-action',
-      message: 'check authority',
-    });
-    expect(deletion).toMatchObject({
-      status: 'unknown',
-      actionId: null,
-      message: 'check authority',
-    });
-
-    const checking = lifecycleMachineReducer(deletion, {
-      type: 'check-start',
-      accountId: 'account-a',
-    });
-    expect(checking.status).toBe('checking');
-    expect(
-      lifecycleMachineReducer(checking, {
-        type: 'authority-active',
-        accountId: 'account-a',
-        message: 'still active',
-      }),
-    ).toMatchObject({ status: 'active', message: 'still active' });
-
-    let exportState = lifecycleMachineReducer(initialLifecycleMachineState('account-a'), {
-      type: 'confirm',
-      accountId: 'account-a',
-      intent: 'export',
-    });
-    exportState = lifecycleMachineReducer(exportState, {
-      type: 'start',
-      accountId: 'account-a',
-      intent: 'export',
-      actionId: 'local-export',
-    });
-    exportState = lifecycleMachineReducer(exportState, {
-      type: 'uncertain',
-      accountId: 'account-a',
-      intent: 'export',
-      actionId: 'local-export',
-      message: 'authorize again',
-    });
-    expect(
-      lifecycleMachineReducer(exportState, { type: 'check-start', accountId: 'account-a' }),
-    ).toBe(exportState);
   });
 });

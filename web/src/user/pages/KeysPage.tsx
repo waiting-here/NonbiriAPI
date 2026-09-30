@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
+import { useOperation } from '@shared/operations/useOperation';
 import { regenerateCallerKey } from '../features/core/api';
 import { CoreErrorPanel, CoreLoading, CoreTime, CoreUserGate } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
@@ -41,8 +42,6 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
   const queryClient = useQueryClient();
   const authority = useCallerKey(accountId);
   const [pageInstanceId] = useState(pageInstanceIdentity);
-  const abortRef = useRef<AbortController | null>(null);
-  const busyRef = useRef(false);
   const [state, dispatch] = useReducer(callerKeyMachineReducer, undefined, () =>
     initialCallerKeyMachineState(accountId, pageInstanceId),
   );
@@ -58,9 +57,6 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
   };
 
   const discardStaleMutation = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    busyRef.current = false;
     dispatch({ type: 'boundary', accountId, pageInstanceId });
     setConfirmOpen(false);
     clearCopyFeedback();
@@ -68,9 +64,6 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
 
   useEffect(() => {
     dispatch({ type: 'boundary', accountId, pageInstanceId });
-    busyRef.current = false;
-    abortRef.current?.abort();
-    abortRef.current = null;
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
@@ -106,114 +99,108 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
 
   useEffect(
     () => () => {
-      abortRef.current?.abort();
-      busyRef.current = false;
       revealActionRef.current = null;
       copyAttemptRef.current += 1;
     },
     [],
   );
 
-  const executeRegeneration = async () => {
-    const current = state.authority;
-    if (!current || state.reveal || busyRef.current) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const actionId = createOperationIdentity().actionId;
-    const expectedGeneration = current.generation;
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    busyRef.current = true;
-    dispatch({
-      type: 'regenerate-start',
-      accountId,
-      pageInstanceId,
-      actionId,
-      expectedGeneration,
-    });
-    try {
-      const result = await regenerateCallerKey(expectedGeneration, controller.signal);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      let cacheWasStale = false;
-      queryClient.setQueryData<CallerKeyAuthority | undefined>(
-        coreKeys.callerKey(accountId),
-        (cached) => {
-          if (
-            cached &&
-            cached.generation !== expectedGeneration &&
-            cached.generation !== result.metadata.generation
-          ) {
-            cacheWasStale = true;
-            return cached;
-          }
-          return {
-            generation: result.metadata.generation,
-            metadata: result.metadata,
-          };
-        },
-      );
-      if (cacheWasStale) {
+  const regeneration = useOperation<{ expectedGeneration: string; actionId: string }>({
+    authorityRoot: ['user', 'core'],
+    clearSecrets: discardStaleMutation,
+    execute: async ({ expectedGeneration, actionId }, _secret, _key, context) => {
+      dispatch({
+        type: 'regenerate-start',
+        accountId,
+        pageInstanceId,
+        actionId,
+        expectedGeneration,
+      });
+      try {
+        const result = await regenerateCallerKey(expectedGeneration, context.signal);
+        context.assertCurrent();
+        let cacheWasStale = false;
+        queryClient.setQueryData<CallerKeyAuthority | undefined>(
+          coreKeys.callerKey(accountId),
+          (cached) => {
+            if (
+              cached &&
+              cached.generation !== expectedGeneration &&
+              cached.generation !== result.metadata.generation
+            ) {
+              cacheWasStale = true;
+              return cached;
+            }
+            return {
+              generation: result.metadata.generation,
+              metadata: result.metadata,
+            };
+          },
+        );
+        if (cacheWasStale) {
+          dispatch({
+            type: 'regenerate-failure',
+            accountId,
+            pageInstanceId,
+            actionId,
+            expectedGeneration,
+            outcome: 'conflict',
+          });
+          dispatch({ type: 'read-start', accountId, pageInstanceId });
+          if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
+          return;
+        }
+        dispatch({
+          type: 'regenerate-success',
+          accountId,
+          pageInstanceId,
+          actionId,
+          expectedGeneration,
+          secret: result.secret,
+          metadata: result.metadata,
+        });
+        setCopyResult(null);
+        setConfirmOpen(false);
+        if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
+      } catch (error) {
+        context.assertCurrent();
+        const outcome = isConflict(error)
+          ? 'conflict'
+          : isOutcomeUnknown(error)
+            ? 'unknown'
+            : 'error';
         dispatch({
           type: 'regenerate-failure',
           accountId,
           pageInstanceId,
           actionId,
           expectedGeneration,
-          outcome: 'conflict',
+          outcome,
+          message: t('common.fixedFailure'),
         });
-        dispatch({ type: 'read-start', accountId, pageInstanceId });
-        if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
-        return;
+        if (outcome === 'conflict' || outcome === 'unknown') {
+          dispatch({ type: 'read-start', accountId, pageInstanceId });
+          if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
+        }
+        throw error;
       }
-      dispatch({
-        type: 'regenerate-success',
-        accountId,
-        pageInstanceId,
-        actionId,
-        expectedGeneration,
-        secret: result.secret,
-        metadata: result.metadata,
-      });
-      setCopyResult(null);
-      setConfirmOpen(false);
-      if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
-    } catch (error) {
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const outcome = isConflict(error)
-        ? 'conflict'
-        : isOutcomeUnknown(error)
-          ? 'unknown'
-          : 'error';
-      dispatch({
-        type: 'regenerate-failure',
-        accountId,
-        pageInstanceId,
-        actionId,
-        expectedGeneration,
-        outcome,
-        message: t('common.fixedFailure'),
-      });
-      if (outcome === 'conflict' || outcome === 'unknown') {
-        dispatch({ type: 'read-start', accountId, pageInstanceId });
-        if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
-      }
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        busyRef.current = false;
-      }
+    },
+    reconcile: () => undefined,
+  });
+
+  const executeRegeneration = () => {
+    const current = state.authority;
+    if (!current || state.reveal || regeneration.isPending) return;
+    if (!coreSessionMatchesAccount(queryClient, accountId)) {
+      discardStaleMutation();
+      return;
     }
+    void regeneration
+      .run({
+        expectedGeneration: current.generation,
+        actionId: createOperationIdentity().actionId,
+      })
+      .catch(() => undefined);
   };
 
   const trigger = () => {
@@ -222,25 +209,42 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
     else void executeRegeneration();
   };
 
+  const copying = useOperation<{ actionId: string; generation: string; attempt: number }, string>({
+    authorityRoot: ['user', 'core'],
+    execute: async (intent, secret, _key, context) => {
+      const ok = await copyCallerKeySecret(secret ?? '');
+      context.commit(() => {
+        const current = queryClient.getQueryData<CallerKeyAuthority>(coreKeys.callerKey(accountId));
+        if (
+          revealActionRef.current !== intent.actionId ||
+          copyAttemptRef.current !== intent.attempt ||
+          current?.generation !== intent.generation
+        )
+          return;
+        setCopyResult({ actionId: intent.actionId, status: ok ? 'copied' : 'failed' });
+      });
+    },
+    reconcile: () => undefined,
+  });
   const closeReveal = () => {
+    copying.cancel();
     dispatch({ type: 'close-reveal', accountId, pageInstanceId });
     clearCopyFeedback();
   };
-
   const copyReveal = (reveal: CallerKeyReveal) => {
     const current = queryClient.getQueryData<CallerKeyAuthority>(coreKeys.callerKey(accountId));
     if (
       !coreSessionMatchesAccount(queryClient, accountId) ||
-      current?.generation !== reveal.generation
+      current?.generation !== reveal.generation ||
+      copying.isPending
     )
       return;
     const attempt = copyAttemptRef.current + 1;
     copyAttemptRef.current = attempt;
     setCopyResult(null);
-    void copyCallerKeySecret(reveal.secret).then((ok) => {
-      if (revealActionRef.current !== reveal.actionId || copyAttemptRef.current !== attempt) return;
-      setCopyResult({ actionId: reveal.actionId, status: ok ? 'copied' : 'failed' });
-    });
+    void copying
+      .run({ actionId: reveal.actionId, generation: reveal.generation, attempt }, reveal.secret)
+      .catch(() => undefined);
   };
 
   const metadata = state.authority?.metadata ?? null;

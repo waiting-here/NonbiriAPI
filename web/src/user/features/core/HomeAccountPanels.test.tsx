@@ -1,3 +1,5 @@
+import { useLayoutEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, screen, waitFor, within } from '@testing-library/react';
@@ -171,7 +173,10 @@ describe('home independent capability states', () => {
 
   it('shows the choice rule even when one check-in endpoint is disabled', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     await renderHomeDashboard(envelope.user, {
       checkin: {
         state: 'available',
@@ -195,7 +200,10 @@ describe('home independent capability states', () => {
     const envelope = canonicalEnvelope();
     envelope.user.balance = '0';
     envelope.user.game_balance = '0';
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     let chosen: 'general' | 'game' | null = null;
     const makeCheckin = (asset: 'general' | 'game') => ({
       state: 'available' as const,
@@ -242,8 +250,9 @@ describe('home independent capability states', () => {
     expect(game.load).toHaveBeenCalledTimes(2);
     expect(game.submit).not.toHaveBeenCalled();
     await waitFor(() =>
-      expect(view.queryClient.getQueryData<UserEnvelope>(coreKeys.me(envelope.user.id))?.user)
-        .toMatchObject({ balance: '1', game_balance: '0' }),
+      expect(
+        view.queryClient.getQueryData<UserEnvelope>(coreKeys.me(envelope.user.id))?.user,
+      ).toMatchObject({ balance: '1', game_balance: '0' }),
     );
   });
 
@@ -287,7 +296,9 @@ describe('home independent capability states', () => {
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     });
-    const gameCard = screen.getByRole('heading', { name: 'Game-credit check-in' }).closest('section')!;
+    const gameCard = screen
+      .getByRole('heading', { name: 'Game-credit check-in' })
+      .closest('section')!;
     await view.user.click(await within(gameCard).findByRole('button', { name: 'Check in' }));
 
     await waitFor(() => {
@@ -769,6 +780,8 @@ describe('account language commit boundary', () => {
     );
     expect(document.documentElement.lang).toBe('zh-CN');
     expect(window.localStorage.getItem('nb.lang')).toBe('zh');
+    await rendered.user.selectOptions(screen.getByLabelText('语言'), 'en');
+    expect(screen.queryByText('语言已保存。')).not.toBeInTheDocument();
     expect(rendered.queryClient.getQueryData(coreKeys.me(envelope.user.id))).toEqual(updated);
     expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual({
       user: { ...session.user, lang: 'zh' },
@@ -926,8 +939,23 @@ describe('account language commit boundary', () => {
   });
 });
 
+function LifecycleFixture(props: { accountId: string; adapter: AccountLifecycleAdapter }) {
+  const client = useQueryClient();
+  useLayoutEffect(() => {
+    client.setQueryData(coreKeys.session, {
+      user: {
+        id: props.accountId,
+        username: 'account-' + props.accountId,
+        level: 2,
+        effective_level: 2,
+      },
+    });
+  }, [client, props.accountId]);
+  return <AccountLifecyclePanel {...props} />;
+}
+
 describe('account deletion confirmation', () => {
-  it('requires exact DELETE and forwards the one-shot elevation token only in the authorized request', async () => {
+  it('requires one explicit confirmation without handtyping and forwards the one-shot elevation token only in the authorized request', async () => {
     window.sessionStorage.setItem('nb.pending.elevation', 'delete');
     window.sessionStorage.setItem('nb.pending.elevation.account', '1');
     window.sessionStorage.setItem('nb.account.1.secret-draft', 'session-secret');
@@ -943,24 +971,19 @@ describe('account deletion confirmation', () => {
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
     const rendered = await renderWithProviders(
-      <AccountLifecyclePanel accountId="1" adapter={adapter} />,
+      <LifecycleFixture accountId="1" adapter={adapter} />,
       {
         station: 'user',
         role: 'user',
         locale: 'en',
       },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
     rendered.queryClient.setQueryData(['user', 'legacy-private'], { private: true });
 
     const dialog = await screen.findByRole('alertdialog');
-    await rendered.user.click(
-      within(dialog).getByRole('button', { name: 'Permanently delete account' }),
-    );
-    expect(within(dialog).getByText('Type DELETE exactly.')).toBeVisible();
-    expect(deleteAccount).not.toHaveBeenCalled();
-
-    await rendered.user.type(within(dialog).getByLabelText('Type DELETE to continue'), 'DELETE');
     await rendered.user.click(
       within(dialog).getByRole('button', { name: 'Permanently delete account' }),
     );
@@ -969,6 +992,7 @@ describe('account deletion confirmation', () => {
       accountId: '1',
       elevatedToken: 'elevated_token',
       confirmation: 'DELETE',
+      signal: expect.any(AbortSignal),
     });
     expect(document.cookie).not.toContain('elevated_token');
     expect(window.sessionStorage.getItem('nb.pending.elevation')).toBeNull();
@@ -993,24 +1017,27 @@ describe('account deletion confirmation', () => {
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
     const rendered = await renderWithProviders(
-      <AccountLifecyclePanel accountId="1" adapter={adapter} />,
+      <LifecycleFixture accountId="1" adapter={adapter} />,
       {
         station: 'user',
         role: 'user',
         locale: 'en',
       },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     const dialog = await screen.findByRole('alertdialog');
-    await rendered.user.type(within(dialog).getByLabelText('Type DELETE to continue'), 'DELETE');
     await rendered.user.click(
       within(dialog).getByRole('button', { name: 'Permanently delete account' }),
     );
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledTimes(1));
 
     rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
-    const currentSession = { user: { id: '2' } };
+    const currentSession = {
+      user: { id: '2', username: 'account-2', level: 2, effective_level: 2 },
+    };
     rendered.queryClient.setQueryData(coreKeys.session, currentSession);
     await act(async () => {
       completion.resolve(undefined);
@@ -1039,13 +1066,14 @@ describe('account deletion confirmation', () => {
       readAccountAuthority,
     };
     const rendered = await renderWithProviders(
-      <AccountLifecyclePanel accountId="1" adapter={adapter} />,
+      <LifecycleFixture accountId="1" adapter={adapter} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     const dialog = await screen.findByRole('alertdialog');
-    await rendered.user.type(within(dialog).getByLabelText('Type DELETE to continue'), 'DELETE');
     await rendered.user.click(
       within(dialog).getByRole('button', { name: 'Permanently delete account' }),
     );
@@ -1083,13 +1111,12 @@ describe('account deletion confirmation', () => {
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
     const rendered = await renderWithProviders(
-      <AccountLifecyclePanel accountId="1" adapter={adapter} />,
+      <LifecycleFixture accountId="1" adapter={adapter} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-
-    const dialog = await screen.findByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     expect(
       await screen.findByText(/verify your Discord identity again to create a new export/i),
@@ -1098,6 +1125,7 @@ describe('account deletion confirmation', () => {
     expect(exportAccount).toHaveBeenCalledWith({
       accountId: '1',
       elevatedToken: 'unknown_export_token',
+      signal: expect.any(AbortSignal),
     });
     expect(beginElevation).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Request export' })).toBeEnabled();

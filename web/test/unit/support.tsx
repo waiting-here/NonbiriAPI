@@ -204,6 +204,15 @@ export function scanQueryClientForTokens(
         for (const entry of nested) visit(entry);
         return;
       }
+      const operationController = nested instanceof AbortController;
+      const operationSignal = nested instanceof AbortSignal;
+      const abortException = nested instanceof DOMException;
+      if (operationController) visit(nested.signal);
+      if (operationSignal && nested.aborted) visit(nested.reason);
+      if (abortException) {
+        scanString(nested.name);
+        scanString(nested.message);
+      }
       let prototype: object | null;
       let keys: string[];
       try {
@@ -213,7 +222,13 @@ export function scanQueryClientForTokens(
         unsupportedValue = true;
         return;
       }
-      if (prototype !== Object.prototype && prototype !== null) {
+      if (
+        prototype !== Object.prototype &&
+        prototype !== null &&
+        !operationController &&
+        !operationSignal &&
+        !abortException
+      ) {
         unsupportedValue = true;
         return;
       }

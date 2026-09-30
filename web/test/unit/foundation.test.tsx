@@ -272,4 +272,30 @@ describe('React test foundation', () => {
     expect(result.mutationCount).toBe(1);
     expect(result.bytesRead).toBeGreaterThan(0);
   });
+  test('scans standard operation cancellation objects including reasons and own fields', async () => {
+    const marker = 'synthetic-controller-secret';
+    const rendered = await renderWithProviders(<FoundationProbe station="user" />, {
+      station: 'user',
+    });
+    const controller = new AbortController();
+    rendered.queryClient.setQueryData(['controller'], { controller, signal: controller.signal });
+    expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).unsupportedValue).toBe(
+      false,
+    );
+    controller.abort({ marker });
+    expect(scanQueryClientForTokens(rendered.queryClient, [marker]).hitSurfaces).toContain(
+      'query:data',
+    );
+    rendered.queryClient.clear();
+    const ownField = Object.assign(new AbortController(), { extra: marker });
+    rendered.queryClient.setQueryData(['controller-field'], ownField);
+    expect(scanQueryClientForTokens(rendered.queryClient, [marker]).hitSurfaces).toContain(
+      'query:data',
+    );
+    rendered.queryClient.clear();
+    rendered.queryClient.setQueryData(['unsupported'], new Map([['secret', marker]]));
+    expect(() => assertNoSensitiveQueryCache(rendered.queryClient, [marker])).toThrow(
+      'unsupported value',
+    );
+  });
 });

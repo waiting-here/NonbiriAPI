@@ -57,7 +57,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     expect(screen.getByText('Loading…')).toBeInTheDocument();
     await screen.findByText('No account API key');
@@ -97,7 +99,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       configurable: true,
       value: { writeText },
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
@@ -150,7 +154,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('Key identifier (cannot be used for calls)');
     await rendered.user.click(screen.getByRole('button', { name: 'Replace API key' }));
@@ -184,7 +190,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     await waitFor(() =>
@@ -192,7 +200,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
     );
 
     rendered.rerender(<CallerKeyPanel accountId="2" />);
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '2' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '2', username: 'account-2', level: 2, effective_level: 2 },
+    });
     await act(async () => {
       lateResponse.resolve(
         response({
@@ -244,7 +254,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
@@ -280,7 +292,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
@@ -313,14 +327,18 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
     );
 
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '2' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '2', username: 'account-2', level: 2, effective_level: 2 },
+    });
     await rendered.queryClient.cancelQueries({ queryKey: coreKeys.callerKey('1'), exact: true });
     rendered.queryClient.removeQueries({ queryKey: coreKeys.callerKey('1'), exact: true });
     const cacheWriteSpy = vi.spyOn(rendered.queryClient, 'setQueryData');
@@ -366,7 +384,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       value: { writeText },
     });
     expect(navigator.clipboard?.writeText).toBe(writeText);
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
@@ -419,7 +439,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
@@ -471,7 +493,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
@@ -538,7 +562,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       role: 'user',
       locale: 'en',
     });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(coreKeys.session, {
+      user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
+    });
 
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
