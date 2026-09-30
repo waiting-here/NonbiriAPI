@@ -628,6 +628,15 @@
         "disabled": "Resource disabled",
         "suspended": "Security or failure suspension"
       }
+    },
+    "picturebook": {
+      "dimensions": {
+        "exact": "Exact size",
+        "select": "Select a size",
+        "empty": "No sizes are available for this model. Choose another model or ask an administrator to add size prices.",
+        "reselect": "Choose an available size again; your prompt and other inputs have been kept.",
+        "pairHelp": "Each option is an available width and height pair."
+      }
     }
   },
   "logs": {

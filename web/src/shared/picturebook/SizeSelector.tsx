@@ -1,7 +1,16 @@
 import { useId } from 'react';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { usePictureBookText } from './copy';
 import type { ParameterValues } from './parameters';
 import type { SizeCapability, SizeCombination, SizePrice } from './capabilities';
+
+const dimensionCopy = {
+  exact: 'common.picturebook.dimensions.exact',
+  select: 'common.picturebook.dimensions.select',
+  empty: 'common.picturebook.dimensions.empty',
+  reselect: 'common.picturebook.dimensions.reselect',
+  pairHelp: 'common.picturebook.dimensions.pairHelp',
+} as const;
 
 function rowValues(row: SizeCombination): ParameterValues {
   return {
@@ -23,6 +32,7 @@ export function SizeSelector({
   readonly onChange: (next: ParameterValues) => void;
 }) {
   const t = usePictureBookText();
+  const { t: dimensions } = useRegisteredCopy(dimensionCopy);
   const id = useId();
   const rows = capability.combinations ?? [];
   const auto = values.size === 'auto';
@@ -72,7 +82,7 @@ export function SizeSelector({
       ) : null}
       {!auto && exactSizes !== null ? (
         <div className="picturebook-field">
-          <label htmlFor={id + 'pair'}>{t('精确尺寸', 'Exact size')}</label>
+          <label htmlFor={id + 'pair'}>{dimensions('exact')}</label>
           <select
             id={id + 'pair'}
             required
@@ -87,7 +97,7 @@ export function SizeSelector({
               onChange({ aspect_ratio: '', resolution: '', size: event.target.value })
             }
           >
-            <option value="">{t('请选择尺寸', 'Select a size')}</option>
+            <option value="">{dimensions('select')}</option>
             {exactSizes.map((row) => (
               <option key={`${row.width}x${row.height}`} value={`${row.width}x${row.height}`}>
                 {row.width} × {row.height} px
@@ -96,19 +106,10 @@ export function SizeSelector({
           </select>
           <p id={id + 'pair-help'} role="status">
             {exactSizes.length === 0
-              ? t(
-                  '此模型暂无可选尺寸，请选择其他模型或联系管理员补充尺寸价格。',
-                  'No sizes are available for this model. Choose another model or ask an administrator to add size prices.',
-                )
+              ? dimensions('empty')
               : !exactSizes.some((row) => `${row.width}x${row.height}` === values.size)
-                ? t(
-                    '请重新选择可用尺寸；提示词和其他输入已保留。',
-                    'Choose an available size again; your prompt and other inputs have been kept.',
-                  )
-                : t(
-                    '每个选项是一组可用的宽度和高度。',
-                    'Each option is an available width and height pair.',
-                  )}
+                ? dimensions('reselect')
+                : dimensions('pairHelp')}
           </p>
         </div>
       ) : null}
