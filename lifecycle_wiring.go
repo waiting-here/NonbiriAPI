@@ -72,17 +72,8 @@ func (authorizer *roleFinalTxAuthorizer) authorizeFresh(
 
 type lifecycleRouteRegistrar struct{ runtime *auth.Runtime }
 
-func (registrar lifecycleRouteRegistrar) RegisterUserRoute(
-	method, pattern string,
-	handler lifecycle.AuthorizedUserHandler,
-) error {
-	if registrar.runtime == nil || handler == nil {
-		return auth.ErrInvalidRoute
-	}
-	return registrar.runtime.RegisterUserRoute(method, pattern,
-		func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
-			handler(writer, request, lifecycle.UserPrincipal{UserID: principal.UserID})
-		})
+func (registrar lifecycleRouteRegistrar) RegisterUserRoute(method, pattern string, handler lifecycle.AuthorizedUserHandler) error {
+	return registerUserAdapter(registrar.runtime, method, pattern, handler, func(userID int64) lifecycle.UserPrincipal { return lifecycle.UserPrincipal{UserID: userID} })
 }
 
 type productionHeldReadAuthorizer struct {
