@@ -121,13 +121,34 @@ func (s *Service) detailTx(ctx context.Context, tx *sql.Tx, key string, now int6
 	if err != nil {
 		return Detail{}, err
 	}
-	module, err := d.configuration.PublicTx(ctx, tx, key, c.module)
+	var module json.RawMessage
+	if key == LakeNotes {
+		module, err = lakePublicTx(ctx, tx, now)
+	} else {
+		module, err = d.configuration.PublicTx(ctx, tx, key, c.module)
+	}
 	if err != nil {
 		return Detail{}, err
 	}
 	ready, err := d.ready(ctx, tx)
 	if err != nil {
 		return Detail{}, err
+	}
+	if key == LakeNotes {
+		var start, end int64
+		err := tx.QueryRowContext(ctx, "SELECT starts_at,ends_at FROM lake_notes_periods WHERE status='published' ORDER BY CASE WHEN ends_at>? THEN 0 ELSE 1 END,CASE WHEN ends_at>? THEN starts_at ELSE -ends_at END LIMIT 1", now, now).Scan(&start, &end)
+		if errors.Is(err, sql.ErrNoRows) {
+			c.start, c.end = nil, nil
+		} else if err != nil {
+			return Detail{}, err
+		} else {
+			if c.start == nil || *c.start < start {
+				c.start = &start
+			}
+			if c.end == nil || *c.end > end {
+				c.end = &end
+			}
+		}
 	}
 	status := "open"
 	switch {

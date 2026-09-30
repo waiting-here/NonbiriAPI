@@ -300,13 +300,21 @@ func (s *Service) UpdateConfig(ctx context.Context, admin int64, activity, key s
 		return result, ErrConflict
 	}
 	var finalizer Finalizer
-	if input.Paused && !old.paused && !nilInterface(d.runtime) {
+	if (input.Paused && !old.paused || activity == LakeNotes && (!input.Visible || input.EndsAt != nil && now >= *input.EndsAt || input.StartsAt != nil && now < *input.StartsAt)) && !nilInterface(d.runtime) {
 		finalizer, err = d.runtime.PreparePauseTx(ctx, tx, now)
 		if !nilInterface(finalizer) {
 			defer finalizer.Abort()
 		}
 		if err != nil {
 			return result, err
+		}
+	}
+
+	if activity == LakeNotes && input.EndsAt != nil && now < *input.EndsAt {
+		if runtime, ok := d.runtime.(LeaseDeadlineRuntime); ok {
+			if err = runtime.ClampLeaseDeadlineTx(ctx, tx, *input.EndsAt); err != nil {
+				return result, err
+			}
 		}
 	}
 	changed, err := tx.ExecContext(ctx, `UPDATE limited_activity_configs SET visible=?,starts_at=?,ends_at=?,paused=?,module_config=?,revision=revision+1,updated_at=? WHERE activity_key=? AND revision=?`, input.Visible, input.StartsAt, input.EndsAt, input.Paused, string(raw), now, activity, revision)
