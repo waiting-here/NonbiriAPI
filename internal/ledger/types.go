@@ -57,6 +57,8 @@ const (
 	KindBlackjackSettle      Kind = "blackjack_settle"
 	KindBlackjackRelease     Kind = "blackjack_release"
 	KindActivityExchange     Kind = "activity_exchange"
+	KindLakeEntry            Kind = "lake_entry"
+	KindLakeExchange         Kind = "lake_exchange"
 	KindImageReserve         Kind = "image_reserve"
 	KindImageSettle          Kind = "image_settle"
 	KindImageRefund          Kind = "image_refund"
