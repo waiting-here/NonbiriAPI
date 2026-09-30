@@ -151,7 +151,7 @@ func seedGovernanceState(ctx context.Context, tx *sql.Tx, at int64) error {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO observability_state(id,capture_started_at) VALUES(1,?);
- INSERT INTO risk_audit_config VALUES(1,80,5,24,3,1,?);
+ INSERT INTO risk_audit_config(id,threshold_percent,consecutive_minutes,shared_ip_hours,shared_ip_users,revision,updated_at) VALUES(1,80,5,24,3,1,?);
  INSERT INTO economy_audit_checkpoint(id,last_ledger_seq,opening_known,updated_at) VALUES(1,0,1,?)`, at, at, at); err != nil {
 		return err
 	}

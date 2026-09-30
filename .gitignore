@@ -198,6 +198,7 @@ nginx/*.local.conf
 # ===== Migration scripts (manual, version-specific, not for git) =====
 
 *.sql
+!internal/db/generation_two.sql
 
 # ===== Local deployment configs =====
 
