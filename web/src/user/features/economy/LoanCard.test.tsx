@@ -57,7 +57,9 @@ describe('loan confirmation', () => {
     expect(dialog.querySelector('.loan-nominal')).toHaveTextContent('10000 Nonbiri credits');
     expect(within(dialog).queryByText('9000')).toBeNull();
     const star = within(dialog).getByRole('button', { name: 'View loan breakdown' });
-    expect(star.closest('p')).toHaveTextContent('Please confirm the amount to borrow*.');
+    const description = document.getElementById(dialog.getAttribute('aria-describedby')!);
+    expect(description).toHaveTextContent('Please confirm the amount to borrow*.');
+    expect(description).toContainElement(star);
     const calls = random.mock.calls.length;
     await r.user.click(star);
     expect(within(dialog).getByText('9000')).toBeVisible();
