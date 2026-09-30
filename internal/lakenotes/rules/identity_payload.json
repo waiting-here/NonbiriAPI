@@ -1,0 +1,34 @@
+{
+  "source_sha256": "0111446f88d42e9dae1a215159fd230e3cc0e2a612512500e06bcfb92108eca2",
+  "catalog_sha256": "7669957327be3fb90be8cf493bfa23e4cd5f7f09cffc3f5d276804a0d79329cd",
+  "protocol": {
+    "version": 1,
+    "arithmetic": "IEEE754 binary64, JS statement and operator evaluation order, explicit intermediate rounding, no fused multiply-add",
+    "tick_seconds": "1/60",
+    "clock_game_minutes_per_second": 3,
+    "motion": "xorshift32 nonzero state, left13 unsigned-right17 left5 with uint32 truncation, state/2^32, branch draw order",
+    "private_samples": "independent uniform 53-bit CSPRNG samples, one persisted public encounter plan; private terminal treasure reward stored once",
+    "integer": "canonical decimal unsigned128; safe integer identifiers, day and tick; bounded integral per-action economic amounts",
+    "hash": "little-endian float64: clockMinutes,waitRemaining,barY,barVelocity,progress,elapsed,hitTime,effectiveTime,currentMissTime,longestMissTime,fish position,y,speed,target,drift,treasure y,progress; little-endian uint64: day,tick,motion state,draw_count,phase(1 waiting 2 playing 3 success 4 failed),flags(wasHit1 held2 paused4 fish8 treasure16 secured32 perfect64); missing fish/treasure floats zero",
+    "persistence": "all cast floating fields are f64: plus exact little-endian 8-byte lowercase hexadecimal; profile clock persisted as f64 bits"
+  },
+  "algorithms": {
+    "internal/lakenotes/rules/actions.go": "ca24638478a0c8a1e2a8696aca0806d231a44967de33f046671b251bca4af6ea",
+    "internal/lakenotes/rules/amount.go": "724bc88c77e02106fc3b2e2646e7af8d0fa31fa54052d20a9e1128cdd3f83d49",
+    "internal/lakenotes/rules/cast.go": "c670e0c898ef471bc2ef863c448e2e7240ebd78f1cea338bef915e214ddafa9f",
+    "internal/lakenotes/rules/catalog.go": "41da14005566581b74b20b0a18a251363fb6e1f7c665e5212884c8f0672310d6",
+    "internal/lakenotes/rules/doc.go": "a6025efd001d355971422efc45f8434517b8b712a1627a47a98baab9df1345ad",
+    "internal/lakenotes/rules/fish.go": "5f914034239ceb006d1abc2934d47679a2d35c2fd5a3cc4442fe9ca8d6ddbe2b",
+    "internal/lakenotes/rules/profile.go": "489284b3a4f91e987c14b8d950bfa2894de5ac9fb3ce02389f0df0c9cbbdf669",
+    "internal/lakenotes/rules/random.go": "0cbfbc9f01a39393f5aeac229661fcee3b93b0b697a857d2dcd8b5e17cd0173d",
+    "internal/lakenotes/rules/state.go": "ed30c84928df652e12721479fc6611f4ba6f95c425482f1f50f28b6ab1dfdfbf",
+    "internal/lakenotes/rules/validate.go": "a1826d04a9e75ed02c57c905d489fa0a9983c6c300525f448efff1ee52a3181d",
+    "web/src/user/activities/lake-notes/rules/actions.ts": "9f10632626f8f994fea5a53f353378fa31c39ad055ec287bad0e2f9ce2a1376c",
+    "web/src/user/activities/lake-notes/rules/cast.ts": "efd538e4af40a9832ea766fee47d6cfb55f9dd8f1e20c76adaec55f84ba94c7d",
+    "web/src/user/activities/lake-notes/rules/catalog.ts": "508d386f63ff4eb03cd86333f7d6b749577bed12d367eca28d49a7a8f8f288dd",
+    "web/src/user/activities/lake-notes/rules/index.ts": "f9bed903220db996e4e39970c7ac571ea8be391da9ccedf22ed76fb5b8d189da",
+    "web/src/user/activities/lake-notes/rules/profile.ts": "9aacf1a0c6c7f56442151e5b3a5e2c02b4b572c18093547fe465cb6ca44fd177",
+    "web/src/user/activities/lake-notes/rules/state.ts": "e6e4c02a87b867b3272339809733561e85e4e5905b131ca643327c49cc90812d",
+    "web/src/user/activities/lake-notes/rules/types.ts": "1e312208108a4eeb8759eb3fb0c1f78675767ba257d4188f5ebd0617940e2f09"
+  }
+}

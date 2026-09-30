@@ -1,0 +1,644 @@
+{
+  "cases": [
+    {
+      "behavior": "smooth",
+      "difficulty": 5,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 32957,
+      "hash": "a000f18498b66e50921eb331b26461d76b1d7c989516271642a81436c9844f27"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 5,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 33601,
+      "hash": "252124253d678c1b58f13391785be7fec2b309159ce8bf70ad6978abc4a6b32c"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 5,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 33580,
+      "hash": "3cf8a6bfc245dc661b68e16a8a8aa22fadb92d5e4a4e38da3d0c35341e2133b7"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 5,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 33639,
+      "hash": "b114ffe87948e3420ca66a13533613069e80622fee07fa942e06911f00e6867a"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 20,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 35414,
+      "hash": "ee57bf2235369a9e430c8ef68548b023a03028710792d02dced517a97099f7c8"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 20,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 35603,
+      "hash": "0ad7222a2c8fa6a4772e7aab70bc33a4f4ccbdf4a371f39deb444b1fe9b862cf"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 20,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 35316,
+      "hash": "f2b7b08c64322254c26d9e7b9d988f500fff1e78f8551350f774b790ed4f2a04"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 20,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 35468,
+      "hash": "87fb9d4de8a74038ef760d677903017529d5ee0639441d59fe842b1e5983ebd2"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 60,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 35811,
+      "hash": "be66501efa41ecca0feae80dde978a042bae1549bff0c03acd7d4c3e654b4b27"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 60,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 35877,
+      "hash": "4283f54f56d07efa05dce2aee956a18b4aa7422865560b8917d7ac1415608a67"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 60,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 35866,
+      "hash": "2273df2c4cf397ecafcb54eecde47658e4b0bda738a67d4740d12495fe4645d6"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 60,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 35856,
+      "hash": "f8a50a854d644d416d952a457046f782df36d81969e12111ee8297aee31fd81e"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 110,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36001,
+      "hash": "20c51c8ce4df3c829df1c794afc42f2b1f1225e4617abb8437074ef02f1470e8"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 110,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 35993,
+      "hash": "166065995f681a464846d7b31f3fa6e96f9bcfd45df8c39ce95b2fc574d5118c"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 110,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36001,
+      "hash": "aa8eafee12bb043f3e456986416cadc4b7747a7a46d48a2e068f890b0fccb6e8"
+    },
+    {
+      "behavior": "smooth",
+      "difficulty": 110,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36004,
+      "hash": "85cba212896357e5ecd478f53b12015fa16a51a4c1e528d84a93058fb2b45c65"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 5,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36064,
+      "hash": "d814310846e12f316df90d4b045f88a781237460298b16d63cf59c777a41c687"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 5,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36066,
+      "hash": "c89769c33c39739c8d1b01a85854328d66920752d5140686933b997f48a87e6a"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 5,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36074,
+      "hash": "d344dd2534abf727d0b5a7d57a5833ef6c45d411637c31fca2e89ba576e96302"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 5,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36076,
+      "hash": "545a9a06918a4c63da8faf9a1110d6c02d7936ede4bd313fa3ccf3d19e3fa8db"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 20,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36186,
+      "hash": "3fbae34d7beffa6791618c37c8aefda5c827f0dd48256cc83133c872574c573d"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 20,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36182,
+      "hash": "49a0898f18754221169488de3cba2a8004f4bb671f7aa2280cca160db4bd8f18"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 20,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36204,
+      "hash": "f41e8a38ce29c3ee70eb5ec1f89b460f181a4aabee28a0721ed1fe2ed6d4389a"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 20,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36214,
+      "hash": "9a325aaf75177a1a3bcb04afe5ff091728af54e2fca64b70753c22a50dbc5623"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 60,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36540,
+      "hash": "3bf934a003a1b1b53ea4572c85904e1bb7218caebd6b987897b9162fa4ee9237"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 60,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36526,
+      "hash": "43f06674f81889910ec73ec81fece26ac9b30bb5e20557ad5a7818e60e2ecc50"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 60,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36560,
+      "hash": "f0c85b3c4a5552888cf74df68dbef40f088a71b9a449e378c1d73233cd75ead4"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 60,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36538,
+      "hash": "216b43bc9fd0607f0660c957c814c050256b4b8e9770123b0fc62decc466f90d"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 110,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 37142,
+      "hash": "c552beea4bbe408db170f2c4dbc376d0c154a5ff41cddea2384062f600ac4764"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 110,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 37174,
+      "hash": "bad4c7e445a9fe0fcabc00d3f7f390be18705038dcaa1997b58beca7d4ff5e72"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 110,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 37188,
+      "hash": "8b1b0850fb49b5be792a85282a87e0832a6e1dcf31c6d72bb453d1f345b308c8"
+    },
+    {
+      "behavior": "mixed",
+      "difficulty": 110,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 37156,
+      "hash": "44b30ed7f9dbbd66430318c49b1b54140f0d23e57661c9d1a22679f065743bcf"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 5,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36030,
+      "hash": "5e57539c8e6137c9716192b62f101849d8f8358569478f160d1afaf0ada405fb"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 5,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36036,
+      "hash": "28b1972bf6de537ba3ba83f5c5b33214ab2fbb248792a841ac2ff7192f96250a"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 5,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36034,
+      "hash": "0bfa9940a68bc64743d222353057e869481cc8bdbf7f2a39b73ac1b200df7a0a"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 5,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36042,
+      "hash": "0c443d2034cb5a3cefc5a6688ce9522bd128af1d914e7d8e621126a750c29e23"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 20,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36164,
+      "hash": "28f0fb33ad454845b8add699f7c06363773d1faa21f7b23c38e049c11acc373c"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 20,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36154,
+      "hash": "dff01934e04d10840fa62b3b26570c11ea62872a9b2f7845f801a6aa725ab818"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 20,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36178,
+      "hash": "88800a92f4597684bf84fb84833133f1c2ebbf17a728f9ed8c50ce944d4b1219"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 20,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36178,
+      "hash": "8c831ffdd70a604b3adcaba4c3c0b2588ffbe27c39848ad6c76ae74e77e96a14"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 60,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36558,
+      "hash": "878df440c4c929d2d9580d0db5c34d7c35333dd60fca629150414de3f0b06dc3"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 60,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36544,
+      "hash": "f52109e9a7d0534b28f8154e8583f8cde98171e7164d06b6008d9a47e894ae6b"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 60,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36580,
+      "hash": "34b583d9fdcd1610d39eb6f8a144bb1ddc6dfba66209951f1fa366c12971d28f"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 60,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36564,
+      "hash": "b95b310828b3ce7d23e9e1bc28b6170483f3d32d8bd4f7084c73e2d5ca1f7a93"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 110,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 37054,
+      "hash": "d1a769be7ace8c6e78a4812d12da52952492b5e63fa5fd644a946098f52062c6"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 110,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 37114,
+      "hash": "4258c7d6ccf26a95047f6ca12e14aae964b9c555b5ab74f2215d7a00269fd26d"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 110,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 37104,
+      "hash": "d0d08c85daf9b03afaceeebcc1cb8f69bbf6458c212057048294dabc85aca4a5"
+    },
+    {
+      "behavior": "sinker",
+      "difficulty": 110,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 37094,
+      "hash": "52f2a0a460cc6ec580e505b407e26219f7c6daf2530c0156276c2d72635a758d"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 5,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36032,
+      "hash": "a807ed51e04f8481a1fce81794c7c659ff44b9556f7d910f78474242a3ddd02c"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 5,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36038,
+      "hash": "e881fd98d6f00ffd30b8c5cfdf44e07fee0255ef328f3f2968ef7550918f2269"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 5,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36036,
+      "hash": "553cdfec7e4586f0c13afa1df1ba30a9d9ba76407518d25963d04b717258051e"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 5,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36044,
+      "hash": "97e9fb2f3a16e9e654e978e37b18df04f01e9e6e71f24cd7a59d31d62cc14bc2"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 20,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36162,
+      "hash": "cfb845d460d8e2bd222aff0e8312bfe2a7573290461ac4d3b3e506f49681b0c0"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 20,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36160,
+      "hash": "c427679a0e19f633f8932eb8ff7c580e2413a146c49b5b04988ee6358528b59d"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 20,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36180,
+      "hash": "0a585542d918d9d286a6e46f1e612d611f8e2a179d9c543566bfac1a72e0d1a4"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 20,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36184,
+      "hash": "4a27bbda69227ed0f16920e7654f0ab9e9c03fdc11abc650d6ad46117e261237"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 60,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 36598,
+      "hash": "d6ea15cf4ebf5539299f118e90290065198f255dff27ff6105c1b42c347b97ce"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 60,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 36558,
+      "hash": "3892fcf8f72294ba98fac129121dacf625e46ca6f9a1c7ed9202728f7fdcc364"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 60,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 36616,
+      "hash": "246fbc5c91dce8c966747b963805e83bd1be8b851623e7e3792899f502142dd5"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 60,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 36580,
+      "hash": "dc8a73a83293994cb9c030f55d2af3b99d3aa09d67b1d2c8fb194730b3c46f76"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 110,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 37114,
+      "hash": "cdc171e3a19560eb2c029853c6342c7c07ccdf11ab2dcbda6fb48771869118b3"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 110,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 37076,
+      "hash": "e5b7ee293877d450070f2375c34c8dd4b7259f2982de8ffe1a759f643b579fcb"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 110,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 37134,
+      "hash": "6cd39a4d0c7dcceb91ba378c176b0161628e85e67d341d8fc7666a41d9827fe4"
+    },
+    {
+      "behavior": "floater",
+      "difficulty": 110,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 37108,
+      "hash": "ed83c8b905e5f8e6f8af4b82c7427111ba2edcb9888c6e623b04b7afc696f890"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 5,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 54208,
+      "hash": "c6a40e51cdc1dfbeddd7609fec23a78e8bd0c749cc831cba4ba32181199ce4e6"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 5,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 54218,
+      "hash": "9dc7df3170d7b91223672ba4f97d6dd6ab14d3a439af8d7d5d25d18a56525011"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 5,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 54218,
+      "hash": "830c75e4ae1edf5b3df75b079b859a46bf4c853d5dd4a963243cf43b870b51a5"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 5,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 54222,
+      "hash": "48fc242d1c3b33b4bb538729fea9b8283fcc7d97acc5caf975e3f5140be6f6ca"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 20,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 54800,
+      "hash": "0b42a412770be1904d959a4d15e22111d6cdf5448bb3f5331f3448f39e77cc63"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 20,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 54850,
+      "hash": "a7aad8d9203b85552e6813e1154338419772573fc995a077ce2c3444703cb4a5"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 20,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 54806,
+      "hash": "cb6e13799d74b6cf7a443595cb20668b2b3b854ef240bba5d07b0cbf6ddcfa06"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 20,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 54876,
+      "hash": "8cee01a14a447c895d5dc7dfa790eb7bc7a0572c303452b5afb0b58825af78f9"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 60,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 56470,
+      "hash": "81ae2d0dc84a659b1213c7f1188c6d9fd595bf1513776f27f98d9e8827e1b71a"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 60,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 56402,
+      "hash": "1e5107d16edc5a4b4fdc53ce34b0ef6b17e53820cc3fbe0c638751f2750cd097"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 60,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 56426,
+      "hash": "0ebd91ec6c6f523b2e2ebb448d84e6e6ece6b9d631dd5ffd07b1cd4dafe65636"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 60,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 56528,
+      "hash": "841091838e529067b4c5a3a8f5bdcffba98056efa616090af82b2bab0664be29"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 110,
+      "seed": 1,
+      "steps": 18000,
+      "draws": 58574,
+      "hash": "47074ddfaeb009db0f024506c038b49aadad979eb4a319bd3c9fa92b5f90e635"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 110,
+      "seed": 123456789,
+      "steps": 18000,
+      "draws": 58430,
+      "hash": "8a888c979c207db6a9a08a7012538d379b925ec1c2562a99c8289fe52747e9f0"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 110,
+      "seed": 2147483648,
+      "steps": 18000,
+      "draws": 58522,
+      "hash": "c3515d8d9b845e702bae278f77bfb6f1a6d240dd1ed6767c07178d605f5695a2"
+    },
+    {
+      "behavior": "dart",
+      "difficulty": 110,
+      "seed": 4294967295,
+      "steps": 18000,
+      "draws": 58478,
+      "hash": "155f06b0d436343cf275d4b0c22f2c0f68b17db9318c3e9b1f2ecd8f0dee8458"
+    }
+  ]
+}
