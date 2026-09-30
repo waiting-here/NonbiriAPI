@@ -42,6 +42,8 @@ const (
 	ScopeGameLikes              Scope = "game_likes"
 	ScopeGameBlackjack          Scope = "game_blackjack"
 	ScopeDonation               Scope = "donation"
+	ScopeLakeNotes              Scope = "lake_notes"
+	ScopePersonalAutomation     Scope = "personal_automation"
 )
 
 var (
@@ -67,6 +69,8 @@ var validScopes = map[Scope]struct{}{
 	ScopeGameLikes:              {},
 	ScopeGameBlackjack:          {},
 	ScopeDonation:               {},
+	ScopeLakeNotes:              {},
+	ScopePersonalAutomation:     {},
 }
 
 // DigestInput contains canonical, already-authorized request facts. Body must
