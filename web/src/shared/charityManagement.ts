@@ -242,7 +242,10 @@ export function stationSessionMatches(
   snapshot: StationSessionSnapshot,
 ): boolean {
   const authority = sessionAuthority(client, frame);
-  return authority.generation === snapshot.generation && authority.subject === snapshot.subject;
+  const sessionKey = frame === 'admin' ? ['admin', 'session'] : ['user', 'session'];
+  const cachedIdentity = managementSessionIdentity(frame, client.getQueryData(sessionKey));
+  return authority.generation === snapshot.generation && authority.subject === snapshot.subject &&
+    cachedIdentity?.subject === snapshot.subject;
 }
 
 /** Bind one account-scoped request to the exact station subject and generation. */

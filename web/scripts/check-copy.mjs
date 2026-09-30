@@ -37,9 +37,79 @@ function flatten(value, prefix = '', result = new Map()) {
 }
 
 function placeholders(value) {
-  return [...value.matchAll(/{{\s*([A-Za-z][A-Za-z0-9_]*)\s*}}/g)]
-    .map((match) => match[1])
-    .sort();
+  return [...value.matchAll(/{{\s*([A-Za-z][A-Za-z0-9_]*)\s*}}/g)].map((match) => match[1]).sort();
+}
+
+export function validateJSONSource(path, source) {
+  if (source.includes('\r')) throw new Error(`${path} must use LF line endings.`);
+  const tree = ts.parseJsonText(path, source);
+  function visit(node) {
+    if (ts.isObjectLiteralExpression(node)) {
+      const seen = new Set();
+      for (const property of node.properties) {
+        if (!ts.isPropertyAssignment(property)) continue;
+        const key = property.name.text;
+        if (seen.has(key)) throw new Error(`${path} contains duplicate JSON key ${key}.`);
+        seen.add(key);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+}
+
+export function registeredCopyReferences(path, source, availableKeys, knownAliases = new Set()) {
+  const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const variables = new Map();
+  const references = [];
+  const unwrap = (node) => {
+    while (
+      node &&
+      (ts.isAsExpression(node) ||
+        ts.isSatisfiesExpression(node) ||
+        ts.isParenthesizedExpression(node))
+    )
+      node = node.expression;
+    return node;
+  };
+  function collect(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name))
+      variables.set(node.name.text, node.initializer);
+    ts.forEachChild(node, collect);
+  }
+  collect(tree);
+  function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'useRegisteredCopy'
+    ) {
+      let registry = unwrap(node.arguments[0]);
+      if (registry && ts.isIdentifier(registry)) registry = unwrap(variables.get(registry.text));
+      if (!registry || !ts.isObjectLiteralExpression(registry))
+        throw new Error(`${path}: registered copy must use a closed literal alias map.`);
+      const aliases = new Set();
+      for (const property of registry.properties) {
+        if (
+          !ts.isPropertyAssignment(property) ||
+          !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ||
+          !ts.isStringLiteral(property.initializer)
+        )
+          throw new Error(`${path}: copy aliases must point directly to root JSON keys.`);
+        const alias = property.name.text;
+        if (aliases.has(alias)) throw new Error(`${path}: duplicate copy alias ${alias}.`);
+        aliases.add(alias);
+        knownAliases.add(alias);
+        const key = property.initializer.text;
+        if (!availableKeys.has(key))
+          throw new Error(`${path}: copy alias references missing root key ${key}.`);
+        references.push(key);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  return references;
 }
 
 function sameValues(left, right) {
@@ -73,8 +143,9 @@ async function sourceFiles(directory) {
   const result = [];
   for (const entry of entries) {
     const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) result.push(...await sourceFiles(path));
-    else if (/\.(?:ts|tsx)$/.test(entry.name) && !/\.(?:test|spec)\.(?:ts|tsx)$/.test(entry.name)) result.push(path);
+    if (entry.isDirectory()) result.push(...(await sourceFiles(path)));
+    else if (/\.(?:ts|tsx)$/.test(entry.name) && !/\.(?:test|spec)\.(?:ts|tsx)$/.test(entry.name))
+      result.push(path);
   }
   return result;
 }
@@ -141,7 +212,8 @@ function stringLiteralValues(source) {
     ts.ScriptKind.TSX,
   );
   function visit(node) {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) values.push(node.text);
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+      values.push(node.text);
     ts.forEachChild(node, visit);
   }
   visit(sourceFile);
@@ -149,7 +221,8 @@ function stringLiteralValues(source) {
 }
 
 const exactCatalogKeyPattern = /^[A-Za-z0-9_.-]+$/;
-const dynamicEvidencePattern = /\$\{|\[[A-Za-z_$][\w$]*\]|\b(?:charityCopyKey|charityStatusKey|charityStateKey|reviewerRoleKey|sourceTypeKey|tokenPriceCopyKey)\s*\(/;
+const dynamicEvidencePattern =
+  /\$\{|\[[A-Za-z_$][\w$]*\]|\b(?:charityCopyKey|charityStatusKey|charityStateKey|reviewerRoleKey|sourceTypeKey|tokenPriceCopyKey)\s*\(/;
 const tokenPriceLeaves = new Set([
   'uncached_user_price_milli',
   'cache_write_user_price_milli',
@@ -181,11 +254,19 @@ function dynamicAnchorKeyError(catalog, key, anchor) {
     }
   }
 
-  const helper = anchor.match(/\b(charityCopyKey|charityStatusKey|charityStateKey|reviewerRoleKey|sourceTypeKey|tokenPriceCopyKey)\b/u)?.[1];
+  const helper = anchor.match(
+    /\b(charityCopyKey|charityStatusKey|charityStateKey|reviewerRoleKey|sourceTypeKey|tokenPriceCopyKey)\b/u,
+  )?.[1];
   if (!helper) return null;
-  if (helper === 'charityCopyKey' || helper === 'charityStatusKey' || helper === 'tokenPriceCopyKey') {
-    const rolePrefix = catalog === 'admin' ? 'admin.charity.' : catalog === 'user' ? 'user.steward.' : null;
-    if (!rolePrefix || !key.startsWith(rolePrefix)) return `dynamic copy manifest role helper does not match catalog ${catalog}: ${key}`;
+  if (
+    helper === 'charityCopyKey' ||
+    helper === 'charityStatusKey' ||
+    helper === 'tokenPriceCopyKey'
+  ) {
+    const rolePrefix =
+      catalog === 'admin' ? 'admin.charity.' : catalog === 'user' ? 'user.steward.' : null;
+    if (!rolePrefix || !key.startsWith(rolePrefix))
+      return `dynamic copy manifest role helper does not match catalog ${catalog}: ${key}`;
     if (helper === 'charityStatusKey') {
       const suffix = key.slice(`${rolePrefix}status.`.length);
       if (!key.startsWith(`${rolePrefix}status.`) || !donationStatuses.has(suffix)) {
@@ -212,7 +293,11 @@ function dynamicAnchorKeyError(catalog, key, anchor) {
       }
     }
   } else if (helper === 'charityStateKey') {
-    if (!/^common\.operations\.charity\.charityState\.(pending|available|disabled|suspended|exhausted|expired|ended)$/u.test(key)) {
+    if (
+      !/^common\.operations\.charity\.charityState\.(pending|available|disabled|suspended|exhausted|expired|ended)$/u.test(
+        key,
+      )
+    ) {
       return `dynamic copy manifest charity-state helper has an invalid leaf: ${key}`;
     }
   } else if (helper === 'reviewerRoleKey') {
@@ -247,6 +332,8 @@ for (const [name, enPath, zhPath] of catalogPairs) {
       readFile(resolve(webRoot, enPath), 'utf8'),
       readFile(resolve(webRoot, zhPath), 'utf8'),
     ]);
+    validateJSONSource(enPath, enSource);
+    validateJSONSource(zhPath, zhSource);
     en = flatten(JSON.parse(enSource));
     zh = flatten(JSON.parse(zhSource));
   } catch (error) {
@@ -277,7 +364,8 @@ for (const [name, enPath, zhPath] of catalogPairs) {
     }
   }
   for (const key of requiredNavigationKeys.get(name) ?? []) {
-    if (!en.has(key) || !zh.has(key)) rememberFailure(failures, `${name} catalog is missing required navigation key ${key}.`);
+    if (!en.has(key) || !zh.has(key))
+      rememberFailure(failures, `${name} catalog is missing required navigation key ${key}.`);
   }
   // This deliberately scans visible catalog values only. Wire/schema property
   // names are validated by their own strict DTO tests and are not UI copy.
@@ -298,7 +386,10 @@ const keyPatterns = [
 const files = await sourceFiles(resolve(webRoot, 'src'));
 const sourceTextByRelativePath = new Map();
 for (const file of files) {
-  sourceTextByRelativePath.set(normalizedSourcePath(file.slice(webRoot.length + 1)), await readFile(file, 'utf8'));
+  sourceTextByRelativePath.set(
+    normalizedSourcePath(file.slice(webRoot.length + 1)),
+    await readFile(file, 'utf8'),
+  );
 }
 
 for (const [relativePath, source] of sourceTextByRelativePath) {
@@ -321,6 +412,18 @@ function markCatalogKey(key) {
 
 const missingReferences = [];
 for (const [relativePath, source] of sourceTextByRelativePath) {
+  const registeredAliases = new Set();
+  try {
+    for (const key of registeredCopyReferences(
+      relativePath,
+      source,
+      availableKeys,
+      registeredAliases,
+    ))
+      markCatalogKey(key);
+  } catch (error) {
+    rememberFailure(failures, error);
+  }
   // Core/game workspaces intentionally use closed copy registries. Preserve
   // the existing source->catalog boundary and do not count their local keys
   // as consumers of the global catalogs.
@@ -335,12 +438,16 @@ for (const [relativePath, source] of sourceTextByRelativePath) {
   for (const pattern of keyPatterns) {
     for (const match of source.matchAll(pattern)) {
       const key = match[2];
-      if (!availableKeys.has(key)) missingReferences.push(`${relativePath}:${key}`);
+      if (!availableKeys.has(key) && !registeredAliases.has(key))
+        missingReferences.push(`${relativePath}:${key}`);
     }
   }
 }
 if (missingReferences.length > 0) {
-  rememberFailure(failures, `Source references missing catalog keys:\n${missingReferences.sort().join('\n')}`);
+  rememberFailure(
+    failures,
+    `Source references missing catalog keys:\n${missingReferences.sort().join('\n')}`,
+  );
 } else {
   process.stdout.write('source: all static translation and route-label keys resolve\n');
 }
@@ -360,7 +467,10 @@ if (!Array.isArray(dynamicCopyKeys)) {
       continue;
     }
     if (typeof key !== 'string' || !exactCatalogKeyPattern.test(key)) {
-      rememberFailure(failures, `dynamic copy manifest key must be one exact leaf without wildcards: ${String(key)}`);
+      rememberFailure(
+        failures,
+        `dynamic copy manifest key must be one exact leaf without wildcards: ${String(key)}`,
+      );
       continue;
     }
     const manifestIdentity = `${catalog}:${key}`;
@@ -374,13 +484,19 @@ if (!Array.isArray(dynamicCopyKeys)) {
       continue;
     }
     if (typeof source !== 'string' || source.startsWith('/') || source.includes('..')) {
-      rememberFailure(failures, `dynamic copy manifest source must be a relative path: ${String(source)}`);
+      rememberFailure(
+        failures,
+        `dynamic copy manifest source must be a relative path: ${String(source)}`,
+      );
       continue;
     }
     const relativeSource = normalizedSourcePath(source);
     const sourceText = sourceTextByRelativePath.get(relativeSource);
     if (!sourceText) {
-      rememberFailure(failures, `dynamic copy manifest source is not a production source file: ${source}`);
+      rememberFailure(
+        failures,
+        `dynamic copy manifest source is not a production source file: ${source}`,
+      );
       continue;
     }
     if (typeof anchor !== 'string' || !anchor.trim()) {
@@ -388,11 +504,17 @@ if (!Array.isArray(dynamicCopyKeys)) {
       continue;
     }
     if (!stripComments(sourceText).includes(anchor)) {
-      rememberFailure(failures, `dynamic copy manifest anchor is not live code in ${source}: ${anchor}`);
+      rememberFailure(
+        failures,
+        `dynamic copy manifest anchor is not live code in ${source}: ${anchor}`,
+      );
       continue;
     }
     if (!dynamicEvidencePattern.test(anchor)) {
-      rememberFailure(failures, `dynamic copy manifest anchor lacks restricted dynamic evidence: ${manifestIdentity}`);
+      rememberFailure(
+        failures,
+        `dynamic copy manifest anchor lacks restricted dynamic evidence: ${manifestIdentity}`,
+      );
       continue;
     }
     const anchorKeyError = dynamicAnchorKeyError(catalog, key, anchor);
@@ -416,9 +538,14 @@ for (const [name, values] of catalogsByName) {
   }
 }
 if (orphaned.length) {
-  rememberFailure(failures, `Catalog keys defined but not used by production sources (orphan):\n${orphaned.join('\n')}`);
+  rememberFailure(
+    failures,
+    `Catalog keys defined but not used by production sources (orphan):\n${orphaned.join('\n')}`,
+  );
 } else {
-  process.stdout.write('reverse: every catalog key is used by a production source or an audited dynamic manifest entry\n');
+  process.stdout.write(
+    'reverse: every catalog key is used by a production source or an audited dynamic manifest entry\n',
+  );
 }
 
 if (failures.length) throw new Error(failures.join('\n'));
