@@ -224,6 +224,9 @@ SELECT ?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_
 	if err != nil {
 		return MutationResult[Model]{}, err
 	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "model", ResourceOperationResult{ModelID: model.ID}); err != nil {
+		return MutationResult[Model]{}, err
+	}
 	if err := commitTx(tx, &committed); err != nil {
 		return MutationResult[Model]{}, err
 	}
@@ -507,6 +510,9 @@ VALUES(?,?,?,?,?,?)`, modelID, selection.EndpointKeyID, selection.UpstreamModelI
 	response := BindingsResponse{Bindings: bindings, BindingRevision: strconv.FormatInt(expectedBindingRevision+1, 10)}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusCreated, response)
 	if err != nil {
+		return MutationResult[BindingsResponse]{}, err
+	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "binding_batch", ResourceOperationResult{ModelID: model.ID, BindingIDs: bindingOperationIDs(bindings[int(currentCount):])}); err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
 	if err := commitTx(tx, &committed); err != nil {
