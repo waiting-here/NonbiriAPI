@@ -11,6 +11,7 @@ export interface GuideEntry {
   meme: string;
   refs: string[];
 }
+const currentBalance = (c: ModeCatalog) => c.designVersion === '0.19.0';
 const link = (id: string) => `[[${id}]]`;
 const references = (text: string) =>
   [...text.matchAll(/\[\[([^\]]+)\]\]/g)].map((match) => match[1]);
@@ -159,6 +160,14 @@ function buffText(c: ModeCatalog, b: Buff, t: Translate): string[] {
       ];
     case 'OVERLOAD':
       return [
+        ...(currentBalance(c)
+          ? [
+              t(
+                '图像额度不足导致出招失败也会过载；该动作不扣费、不获得赞或效果，后续动作取消。',
+                'Insufficient image quota also causes overload. The failed action pays nothing and grants no likes or effects; later actions are cancelled.',
+              ),
+            ]
+          : []),
         t(
           `电能或 Token 不足导致出招失败时触发，下一轮起自动跳过 ${n} 轮的全部购物与技能；在 ${link('B34:状态')} 中触发则跳过 ${c.buffs.find((v) => v.kind === 'SPEED_MODE')?.n ?? 2} 轮。`,
           `Failed casting from insufficient energy or tokens causes overload. From next round it automatically skips all shopping and casting for ${n} round, or ${c.buffs.find((v) => v.kind === 'SPEED_MODE')?.n ?? 2} rounds when triggered in ${link('B34:状态')}.`,
@@ -170,10 +179,15 @@ function buffText(c: ModeCatalog, b: Buff, t: Translate): string[] {
       ];
     case 'SPEED_MODE':
       return [
-        t(
-          `基础 Token 与电能费用乘 ${p}，再计算缓存、加价、折扣和费用下限；技能得赞经过全部加减后乘 ${q}。金币和图像费用不变。`,
-          `Base token and energy costs are multiplied by ${p} before cache, surcharges, discounts and minimum costs. Likes are multiplied by ${q} after additions and deductions. Gold and image costs are unchanged.`,
-        ),
+        currentBalance(c)
+          ? t(
+              '基础 Token 与电能费用乘以 5/2 后向上取整，再计算缓存、加价、折扣和下限；得赞最终乘以 2。金币和图像费用不变。',
+              'Base token and energy costs are multiplied by 5/2 and rounded up before cache, surcharges, discounts and minimums. Likes are finally doubled. Gold and image costs stay unchanged.',
+            )
+          : t(
+              `基础 Token 与电能费用乘 ${p}，再计算缓存、加价、折扣和费用下限；技能得赞经过全部加减后乘 ${q}。金币和图像费用不变。`,
+              `Base token and energy costs are multiplied by ${p} before cache, surcharges, discounts and minimum costs. Likes are multiplied by ${q} after additions and deductions. Gold and image costs are unchanged.`,
+            ),
         t(
           `影响主技能、蒸馏、额外技能及触发的 Flash。${link('GPT44')} 在轮末切换，下一轮生效；不能净化或驱散，过载不会关闭。此时触发过载须恢复 ${n} 轮。`,
           `Applies to main skills, distillation, extra skills and triggered Flash. ${link('GPT44')} toggles it at round end for the following round. It cannot be cleansed or dispelled and survives overload, which takes ${n} recovery rounds in this mode.`,
@@ -228,7 +242,7 @@ function buffText(c: ModeCatalog, b: Buff, t: Translate): string[] {
   }
 }
 
-function passiveText(p: Passive, t: Translate): string[] {
+function passiveText(c: ModeCatalog, p: Passive, t: Translate): string[] {
   switch (p.kind) {
     case 'LIKE_STRENGTH':
       return [
@@ -243,6 +257,14 @@ function passiveText(p: Passive, t: Translate): string[] {
       ];
     case 'SOTA_ONLY':
       return [
+        ...(currentBalance(c)
+          ? [
+              t(
+                '每种成功施加到对手的负面效果另得 1 赞；同一效果多层只算一次。此赞不受技能加减赞或倍速影响；追加狂热被抵抗仍获得，全部原效果被抵抗则没有。',
+                'Each distinct debuff successfully applied to the opponent also grants 1 like. Multiple layers count once. This like ignores skill modifiers and speed; resisting derived fanaticism does not remove it, while resisting every original layer grants none.',
+              ),
+            ]
+          : []),
         t(
           `成功技能每向对手施加一种负面效果，就额外对其施加 ${p.p} 层 ${link(p.buffId!)}，下一轮生效。`,
           `Each distinct negative effect a successful skill applies to the opponent also adds ${p.p} layer of ${link(p.buffId!)}, effective next round.`,
@@ -485,6 +507,14 @@ function effectText(c: ModeCatalog, s: Skill, level: GuideLevel, t: Translate): 
         ),
       );
       break;
+    case 'SELF_OVERLOAD':
+      out.push(
+        t(
+          '自己从下一轮起过载 1 轮，倍速模式下为 2 轮；再次施加保留更晚的恢复时间。',
+          'Overload yourself for 1 round starting next round, or 2 in speed mode. Reapplication preserves the later recovery time.',
+        ),
+      );
+      break;
     case 'SELF_STUN':
       out.push(
         t(
@@ -615,7 +645,7 @@ export function knowledge(c: ModeCatalog, id: string, level: GuideLevel, t: Tran
       );
     meme = buff.meme ?? '';
   } else if (passive) {
-    paragraphs = passiveText(passive, t);
+    paragraphs = passiveText(c, passive, t);
     if (passive.kind === 'SOTA_ONLY' && c.roles.some((r) => r.passive))
       paragraphs.push(
         t(
@@ -634,6 +664,7 @@ export function knowledge(c: ModeCatalog, id: string, level: GuideLevel, t: Tran
         (pid) =>
           `${link(pid)}：${
             passiveText(
+              c,
               c.passives.find((p) => p.id === pid)!,
               t,
             )[0]
@@ -648,15 +679,16 @@ export function knowledge(c: ModeCatalog, id: string, level: GuideLevel, t: Tran
       ? harness.passives
           .map((pid) =>
             passiveBrief(
+              c,
               c.passives.find((p) => p.id === pid)!,
               t,
             ),
           )
           .join(' ') || paragraphs[0]
       : passive
-        ? passiveBrief(passive, t)
+        ? passiveBrief(c, passive, t)
         : buff
-          ? buffBrief(buff, t) || paragraphs[0]
+          ? buffBrief(c, buff, t) || paragraphs[0]
           : (paragraphs[0] ?? '');
   return {
     id,
@@ -668,16 +700,21 @@ export function knowledge(c: ModeCatalog, id: string, level: GuideLevel, t: Tran
   };
 }
 
-function passiveBrief(p: Passive, t: Translate): string {
+function passiveBrief(c: ModeCatalog, p: Passive, t: Translate): string {
   const briefs: Record<string, string> = {
     LIKE_STRENGTH: t(
       `正耗电、正 Token、正基础得赞的技能：基础 +${p.p} 赞；原版消耗图像再 +${p.q}。`,
       `Skills costing energy and tokens with positive base likes: +${p.p} base likes; original image skills add ${p.q} more.`,
     ),
-    SOTA_ONLY: t(
-      `每施加一种负面效果，额外施加 ${p.p} 层狂热。`,
-      `Each applied debuff adds ${p.p} fanaticism layers.`,
-    ),
+    SOTA_ONLY: currentBalance(c)
+      ? t(
+          '每种成功施加的敌方负面效果另得 1 赞，并追加狂热。',
+          'Each successful distinct hostile debuff grants 1 like and adds fanaticism.',
+        )
+      : t(
+          `每施加一种负面效果，额外施加 ${p.p} 层狂热。`,
+          `Each applied debuff adds ${p.p} fanaticism layers.`,
+        ),
     PRO_EXPERIENCE: t(
       `普攻成功额外 +${p.p} 赞，Flash 连答也有效。`,
       `Successful basics gain +${p.p} likes, including Flash follow-ups.`,
@@ -700,10 +737,10 @@ function passiveBrief(p: Passive, t: Translate): string {
       `Base skill tokens −${p.p} K, minimum 0.`,
     ),
   };
-  return briefs[p.kind] ?? passiveText(p, t)[0];
+  return briefs[p.kind] ?? passiveText(c, p, t)[0];
 }
 
-function buffBrief(b: Buff, t: Translate): string {
+function buffBrief(c: ModeCatalog, b: Buff, t: Translate): string {
   if (b.kind === 'CACHE')
     return t(
       `对应普攻每层省 ${b.p} K Token，最多 ${b.cap} 层。`,
@@ -715,10 +752,15 @@ function buffBrief(b: Buff, t: Translate): string {
       'Automatically skip shopping and casting while recovering.',
     );
   if (b.kind === 'SPEED_MODE')
-    return t(
-      `基础耗电和 Token ×${b.p}，得赞 ×${b.q}。`,
-      `Base energy and tokens ×${b.p}; likes ×${b.q}.`,
-    );
+    return currentBalance(c)
+      ? t(
+          '基础耗电和 Token ×2.5，向上取整；得赞 ×2。',
+          'Base energy and tokens ×2.5, rounded up; likes ×2.',
+        )
+      : t(
+          `基础耗电和 Token ×${b.p}，得赞 ×${b.q}。`,
+          `Base energy and tokens ×${b.p}; likes ×${b.q}.`,
+        );
   if (b.kind === 'API_DISCOUNT')
     return t(
       `符合条件的 API 施法省 ${b.p} K Token。`,
@@ -799,6 +841,10 @@ function skillBrief(c: ModeCatalog, s: Skill, level: GuideLevel, t: Translate): 
       `Gain ${f.q} more when pre-payment energy is ≤${f.p}.`,
     ),
     BURST_DRAIN: t(`削减对手瞬发 ${f.p} K。`, `Drain ${f.p} K opponent burst.`),
+    SELF_OVERLOAD: t(
+      '下一轮自己过载 1 轮，倍速下 2 轮。',
+      'Overload yourself next round for 1 round, or 2 in speed mode.',
+    ),
     SELF_STUN: t(
       `下一轮自己眩晕 ${f.n} 轮。`,
       `Stun yourself for ${f.n} round starting next round.`,

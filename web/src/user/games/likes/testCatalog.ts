@@ -18,7 +18,7 @@ export function catalogWire(hashes = { quick: 'a'.repeat(64), standard: 'b'.repe
         mode,
         {
           rules_version: 1,
-          design_version: '0.18.1',
+          design_version: '0.19.0',
           schema_version: 16,
           content_hash: hashes[mode as keyof typeof hashes],
           config,
@@ -28,7 +28,7 @@ export function catalogWire(hashes = { quick: 'a'.repeat(64), standard: 'b'.repe
   );
   return {
     rules_version: 1,
-    design_version: '0.18.1',
+    design_version: '0.19.0',
     schema_version: 16,
     content_hash: 'a'.repeat(64),
     modes,

@@ -12,12 +12,12 @@ import (
 	"slices"
 )
 
-const DesignVersion = "0.18.1"
+const DesignVersion = "0.19.0"
 const SchemaVersion = 16
 const RulesVersion = 1
-const BehaviorVersion = 2
+const BehaviorVersion = 3
 
-//go:embed quick.json standard.json previous/quick.json previous/standard.json legacy/quick.json legacy/standard.json
+//go:embed quick.json standard.json previous/quick.json previous/standard.json legacy/quick.json legacy/standard.json prior-balance/quick.json prior-balance/standard.json
 var presets embed.FS
 
 var ErrCatalog = errors.New("likes: invalid catalog")
@@ -189,6 +189,9 @@ func LoadHistorical(mode string) (Config, string, error) {
 	return load(mode, "previous")
 }
 
+// LoadPriorBalance preserves the exact catalog preceding the current balance.
+func LoadPriorBalance(mode string) (Config, string, error) { return load(mode, "prior-balance") }
+
 // LoadLegacy loads the exact supported catalog before character passives.
 // Saved JSON is compared with these trusted bytes, never executed as rules.
 func LoadLegacy(mode string) (Config, string, error) {
@@ -217,7 +220,7 @@ func load(mode, version string) (Config, string, error) {
 		return Config{}, "", ErrCatalog
 	}
 	seconds := int64(30)
-	if version != "" {
+	if version == "previous" || version == "legacy" {
 		seconds = 20
 	}
 	if err := config.Validate(); err != nil || config.Parameters["TURN_SECONDS"] != seconds {
@@ -228,6 +231,9 @@ func load(mode, version string) (Config, string, error) {
 	prefix := "likes@1;positive-energy-overload;separate-round-start;manual-main-unless-stunned;overload-state\n"
 	if version != "legacy" {
 		prefix = "likes@2;step-likes;role-passives;layer-resistance;stable-sota\n"
+	}
+	if version == "" {
+		prefix = "likes@3;ceil-speed-cost;image-shortage;hostile-harness-likes;self-overload\n"
 	}
 	hash.Write([]byte(prefix))
 	hash.Write(body)
@@ -242,7 +248,7 @@ func (c Config) Validate() error {
 	if (c.SchemaVersion != SchemaVersion && c.SchemaVersion != 15) || len(c.Roles) != 5 || len(c.Skills) != 48 || len(c.Buffs) != 46 || len(c.Resources) != 1 || len(c.Harnesses) != 8 || len(c.Passives) != 8 {
 		return ErrCatalog
 	}
-	if c.Mode != "quick" && c.Mode != "standard" || c.Rules != (Rules{CacheWindow: "round", UniqueSamples: true, StrictSamples: true, ImageShortage: "illegal"}) {
+	if c.Mode != "quick" && c.Mode != "standard" || c.Rules != (Rules{CacheWindow: "round", UniqueSamples: true, StrictSamples: true, ImageShortage: c.Rules.ImageShortage}) || (c.Rules.ImageShortage != "illegal" && c.Rules.ImageShortage != "shortage") {
 		return ErrCatalog
 	}
 	for _, value := range c.Parameters {

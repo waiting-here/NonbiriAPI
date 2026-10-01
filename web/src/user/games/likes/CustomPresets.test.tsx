@@ -11,6 +11,7 @@ vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: str
 const selection = initialSelection(testCatalog.modes.quick);
 const stored = (slot: number, revision = '1', mode: 'quick' | 'standard' = 'quick') => ({
   slot,
+  name: '',
   revision,
   mode,
   loadout: initialSelection(testCatalog.modes[mode]),

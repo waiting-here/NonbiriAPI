@@ -139,6 +139,9 @@ func (r *roundRun) actionEffect(seat int, a Action) ([]Application, error) {
 			grant(Grant{BuffID: effect.BuffID, Owner: other(seat), Amount: ptr(n)})
 		}
 	}
+	if effect.Kind == "SELF_OVERLOAD" && effect.BuffID != "" {
+		grant(Grant{BuffID: effect.BuffID, Owner: seat, Duration: ptr(e.overloadDuration(s, seat))})
+	}
 	if effect.Kind == "SELF_STUN" && effect.BuffID != "" {
 		grant(Grant{BuffID: effect.BuffID, Owner: seat, Duration: ptr(effect.N)})
 	}

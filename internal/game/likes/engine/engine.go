@@ -29,6 +29,8 @@ func New(mode string) (*Engine, error) {
 	return newEngine(mode, catalog.Load)
 }
 
+func NewPriorBalance(mode string) (*Engine, error) { return newEngine(mode, catalog.LoadPriorBalance) }
+
 func NewHistorical(mode string) (*Engine, error) {
 	return newEngine(mode, catalog.LoadHistorical)
 }
@@ -324,4 +326,21 @@ func frame(s *State, stage string, end int) Frame {
 		f.Players[seat] = ResourceView{Gold: p.Gold, Likes: p.Likes, Burst: p.Burst, BurstCap: p.BurstCap, Sub: p.Sub, SubCap: p.Subscription.TotalCap, API: p.API, Trial: optional(p.Trial, int64(0)), Resources: maps.Clone(p.Resources), ResourceCaps: maps.Clone(p.ResourceCaps), Subscription: clone(p.Subscription), Effects: clone(p.Effects)}
 	}
 	return f
+}
+
+func (e *Engine) currentBalance() bool { return e.c.Rules.ImageShortage == "shortage" }
+func (e *Engine) behaviorVersion() int {
+	if e.currentBalance() {
+		return catalog.BehaviorVersion
+	}
+	return 2
+}
+func (e *Engine) speedCost(n int64, speed *Status) int64 {
+	if e.currentBalance() {
+		return (n/2)*5 + (n%2*5+1)/2
+	}
+	return n * speed.P
+}
+func failedPayment(v Preview) bool {
+	return slices.Contains(v.Shortages, "token") || slices.Contains(v.Shortages, "image")
 }

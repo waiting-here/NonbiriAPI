@@ -4,27 +4,27 @@ import type { LikesEvent } from './types';
 import type { Seat } from '../common/duel/types';
 
 export interface ResourceShortage {
-  resource: 'energy' | 'burst' | 'sub' | 'api';
+  resource: 'energy' | 'burst' | 'sub' | 'api' | 'R_IMAGE';
   required: number;
   available: number;
 }
 export interface Shortage {
-  payment: 'energy' | 'mix' | 'api' | 'sub';
+  payment: 'energy' | 'mix' | 'api' | 'sub' | 'image';
   resources: ResourceShortage[];
 }
 export function shortageValue(value: unknown): Shortage {
   const r = exactRecord(value, ['payment', 'resources']);
   return {
-    payment: enumValue(r.payment, ['energy', 'mix', 'api', 'sub'], 'shortage payment'),
+    payment: enumValue(r.payment, ['energy', 'mix', 'api', 'sub', 'image'], 'shortage payment'),
     resources: unique(
       r.resources,
-      3,
+      4,
       (value) => {
         const item = exactRecord(value, ['resource', 'required', 'available']);
         return {
           resource: enumValue(
             item.resource,
-            ['energy', 'burst', 'sub', 'api'],
+            ['energy', 'burst', 'sub', 'api', 'R_IMAGE'],
             'shortage resource',
           ),
           required: amount(item.required),

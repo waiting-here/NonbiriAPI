@@ -72,8 +72,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
       'GPT44',
       '加速猛蹬',
       'Pedal faster',
-      '下轮开启倍速，得赞翻倍，但基础 Token 和耗电也增至三倍。',
-      'Enable speed next round: twice the likes, but triple base tokens and energy.',
+      '下轮开启倍速，得赞翻倍；基础 Token 和耗电乘以 2.5 后向上取整。',
+      'Enable speed next round: twice the likes; base tokens and energy are multiplied by 2.5 and rounded up.',
     ],
     [
       'GPT61',
@@ -143,8 +143,8 @@ export function tutorialSteps(t: Translate): TutorialStep[] {
     [
       '暂时落后，换取爆发',
       'Fall behind now to accelerate',
-      '开启倍速这轮不拿赞，对手会再次领先。模式从下轮生效：得赞 ×2，基础 Token 和电能 ×3。确认前先看之后是否付得起。',
-      'Toggling speed scores no likes this round, so the opponent will lead again. From next round likes are doubled, while base tokens and energy triple. Check that you can afford the next casts.',
+      '开启倍速这轮不拿赞，对手会再次领先。模式从下轮生效：得赞 ×2，基础 Token 和电能 ×2.5 后向上取整。确认前先看之后是否付得起。',
+      'Toggling speed scores no likes this round, so the opponent will lead again. From next round likes are doubled, while base tokens and energy are multiplied by 2.5 and rounded up. Check that you can afford the next casts.',
     ],
     [
       '倍速后的第一次普攻',

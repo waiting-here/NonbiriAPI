@@ -201,7 +201,7 @@ func (r *roundRun) settle(plans [2]Plan) error {
 				r.log("skill-cancelled", ptr(seat), map[string]any{"skillId": a.Choice.SkillID, "success": false, "reason": "previous-failure"})
 				continue
 			}
-			ok := !slices.Contains(a.Preview.Shortages, "token")
+			ok := !failedPayment(a.Preview)
 			s.CastSeq++
 			sample := &Sample{ID: s.CastSeq, SkillID: a.Choice.SkillID, Success: ok, Kind: e.skills[a.Choice.SkillID].Kind, Derived: a.Derived}
 			records[seat].Last = sample
@@ -211,7 +211,7 @@ func (r *roundRun) settle(plans [2]Plan) error {
 			if !ok {
 				newOverload[seat] = true
 				records[seat].Stunned = true
-				r.log("overload", ptr(seat), map[string]any{"skillId": a.Choice.SkillID, "reason": "personal-resources", "success": false, "shortage": e.tokenShortage(s.Players[seat], a)})
+				r.log("overload", ptr(seat), map[string]any{"skillId": a.Choice.SkillID, "reason": "personal-resources", "success": false, "shortage": e.paymentShortage(s.Players[seat], a)})
 				for _, cancelled := range quotes[seat].Actions {
 					if cancelled.Cancelled {
 						r.log("skill-cancelled", ptr(seat), map[string]any{"skillId": cancelled.Choice.SkillID, "success": false, "reason": "previous-failure"})

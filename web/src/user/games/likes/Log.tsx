@@ -28,7 +28,9 @@ function EventData({
   const t = useDuelText();
   const passiveName = (id: string) => {
     const role = catalog.roles.find((r) => r.passive?.id === id);
-    return role ? (characterPassive(role, t)?.name ?? id) : id;
+    return role
+      ? (characterPassive(role, t)?.name ?? id)
+      : (catalog.passives.find((p) => p.id === id)?.name ?? id);
   };
   const labels: Record<string, string> = {
     skillId: t('技能', 'Skill'),
@@ -80,6 +82,7 @@ function EventData({
     shortage: t('过载原因', 'Overload cause'),
     payment: t('支付方式', 'Payment'),
     resources: t('相关资源', 'Affected resources'),
+    passive_id: t('Harness 被动', 'Harness passive'),
     characterPassive: t('角色被动', 'Character passive'),
     applications: t('施加结果', 'Applications'),
     step: t('结算步', 'Resolution step'),
@@ -101,7 +104,7 @@ function EventData({
     if (typeof value === 'boolean') return value ? t('是', 'Yes') : t('否', 'No');
     if (typeof value === 'number') return String(value);
     if (typeof value === 'string')
-      return key === 'characterPassive'
+      return key === 'characterPassive' || key === 'passive_id'
         ? passiveName(value)
         : key === 'kind' && ['main', 'extra', 'flash'].includes(value)
           ? ({
@@ -136,6 +139,7 @@ function EventData({
                           api: t('API 余量不足', 'API reserve shortage'),
                           sub: t('订阅额度不足', 'Subscription shortage'),
                           mix: t('Token 不足', 'Token shortage'),
+                          image: t('图像额度不足', 'Image quota shortage'),
                         }[value] ?? value)
                       : value;
     if (Array.isArray(value)) return value.map((v) => render(v, key)).join(' / ');
@@ -177,6 +181,7 @@ function EventLine({
     );
   const names: Record<string, string> = {
     cast: t('成功施放', 'Successful cast'),
+    'harness-like': t('Harness 额外得赞', 'Harness bonus like'),
     'skill-cancelled': t('施放取消', 'Cast cancelled'),
     overload: t('过载', 'Overload'),
     shop: t('购物', 'Purchase'),

@@ -70,7 +70,7 @@ func present(r engine.RoundRecord) presentation {
 		// Per-status repeats remain available in the full round log. The paired
 		// frames still show every status; these cues drive casts, fees and scores.
 		switch event.Kind {
-		case "cast", "skill-cancelled", "overload", "shop", "charge", "end", "cleanse", "counter", "resource-gain", "trial", "resource", "usage-reset", "learn", "power", "conversion", "combo-skip":
+		case "cast", "harness-like", "skill-cancelled", "overload", "shop", "charge", "end", "cleanse", "counter", "resource-gain", "trial", "resource", "usage-reset", "learn", "power", "conversion", "combo-skip":
 			p.Events = append(p.Events, event)
 		}
 	}
