@@ -40,6 +40,7 @@ function summary(index: number) {
 }
 function key(index: number) {
   return {
+    review: { required: false, revision: null, material_available: false },
     id: String(index),
     key_id: String(index),
     donation_id: '21',

@@ -213,7 +213,11 @@ function normalizeReviewResult(value: unknown, label: string): DonationReviewRes
   rejectLoneSurrogates(value, label);
   const root = record(value, ['decision', 'reason', 'reviewed_at'], label);
   return {
-    decision: oneOf(root.decision, ['approve', 'reject'] as const, `${label} decision`),
+    decision: oneOf(
+      root.decision === 'force_reject' ? 'reject' : root.decision,
+      ['approve', 'reject'] as const,
+      `${label} decision`,
+    ),
     reason: string(root.reason, `${label} reason`, { max: 1_024, bytes: 4_096 }),
     reviewedAt: unixSecond(root.reviewed_at, `${label} time`),
   };
@@ -366,7 +370,13 @@ function normalizeOwnerKey(
   rejectLoneSurrogates(value, label);
   const root = record(
     value,
-    [...OWNER_KEY_FIELDS, 'input_token_reserve', 'output_token_reserve', 'breakdown_started_at'],
+    [
+      ...OWNER_KEY_FIELDS,
+      'review',
+      'input_token_reserve',
+      'output_token_reserve',
+      'breakdown_started_at',
+    ],
     label,
     OWNER_KEY_FIELDS,
   );

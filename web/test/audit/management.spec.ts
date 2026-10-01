@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 
+import en from '../../src/user/i18n/en.json' with { type: 'json' };
+
 type Cookie = { Name: string; Value: string };
 interface Fixture {
   admin_url: string;
@@ -26,7 +28,7 @@ test.skip(
   'Requires the optional management fixture.',
 );
 
-async function session(browser: Browser, role: 'admin' | 5 | 6, narrow = false) {
+async function session(browser: Browser, role: 'admin' | 1 | 5 | 6, narrow = false) {
   const state = fixture();
   const origin = role === 'admin' ? state.admin_url : state.user_url;
   const cookie =
@@ -55,6 +57,35 @@ async function read(context: BrowserContext, origin: string, path: string) {
   expect(response.ok()).toBe(true);
   return response.json();
 }
+
+test('owner reads donation keys and details from current API responses', async ({ browser }) => {
+  const state = fixture(),
+    context = await session(browser, 1);
+  try {
+    const page = await context.newPage();
+    const copy = en.user.charity;
+    await page.goto(state.user_url + '/charity?tab=donations');
+    const panel = page.locator('.economy-owner-pages');
+    const donations = await read(context, state.user_url, '/api/donations?page=1&page_size=20');
+    expect(donations.data).toHaveLength(3);
+    for (const { id } of donations.data as { id: string }[]) {
+      const detail = page.locator('a[href="/charity/donations/' + id + '"]');
+      const card = panel.locator('.economy-donation-card').filter({ has: detail });
+      await card.getByRole('button', { name: copy.ownerPages.keys, exact: true }).click();
+      const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
+      const response = await read(context, state.user_url, '/api/donations/' + id);
+      const key = response.keys[0];
+      expect(key.review).toHaveProperty('required');
+      const masked = key.display_head + '…' + key.display_tail;
+      await expect(keys.getByText(masked, { exact: true })).toBeVisible();
+      await card.getByRole('link', { name: copy.openDonationDetail, exact: true }).click();
+      await expect(page.getByText(masked, { exact: true })).toBeVisible();
+      await page.getByRole('link', { name: copy.backToDonations, exact: true }).click();
+    }
+  } finally {
+    await context.close();
+  }
+});
 
 test('administrator follows retained request identity through deletion history and a Discord IP window', async ({
   browser,

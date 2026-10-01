@@ -386,6 +386,7 @@ function LakeContent({ account }: { account: string }) {
           <LakeScene
             controller={controller}
             profile={p}
+            keyboardEnabled={menu === null}
             controls={
               <>
                 <div className="lake-save" role="status">

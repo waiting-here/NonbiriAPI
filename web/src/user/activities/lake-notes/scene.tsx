@@ -7,10 +7,12 @@ export function LakeScene({
   controller,
   profile,
   controls,
+  keyboardEnabled,
 }: {
   controller: LakeController;
   profile: Profile;
   controls: ReactNode;
+  keyboardEnabled: boolean;
 }) {
   const { t: text } = useLakeCopy();
   const root = useRef<HTMLDivElement>(null),
@@ -66,17 +68,32 @@ export function LakeScene({
       held();
     };
     const keydown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat) return;
+      if (
+        !keyboardEnabled ||
+        event.code !== 'Space' ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
+      const status = controller.snapshot().status;
+      if (status !== 'running' && status !== 'saving') return;
       const target = document.activeElement;
       if (
-        !(target instanceof HTMLElement) ||
-        !stage.contains(target) ||
-        (target !== hold && target !== track)
+        target instanceof HTMLElement &&
+        target !== hold &&
+        target !== track &&
+        target.closest(
+          'input, textarea, select, button, a[href], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="textbox"]',
+        )
       )
         return;
       event.preventDefault();
-      space = true;
-      held();
+      if (!space) {
+        space = true;
+        held();
+      }
     };
     const keyup = (event: KeyboardEvent) => {
       if (event.code === 'Space') {
@@ -234,7 +251,7 @@ export function LakeScene({
       window.removeEventListener('online', online);
       document.removeEventListener('visibilitychange', hidden);
     };
-  }, [controller]);
+  }, [controller, keyboardEnabled]);
   return (
     <div className="game-grid" ref={root}>
       <section
