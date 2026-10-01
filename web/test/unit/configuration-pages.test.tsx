@@ -1410,9 +1410,11 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true }))
         .flatten_tool_calls,
     ).toBe(true);
-    const modelFixture = charityModelFixture(3, { flatten_tool_calls: true });
+    const role_policy = { default_action: 'passthrough', rules: { developer: 'system' } };
+    const modelFixture = charityModelFixture(3, { flatten_tool_calls: true, role_policy });
     expect(normalizeCharityModel(modelFixture).flatten_tool_calls).toBe(true);
     expect(normalizeManagementCharityModel(modelFixture).flatten_tool_calls).toBe(true);
+    expect(normalizeManagementCharityModel(modelFixture).role_policy).toEqual(role_policy);
     const keyFixture = {
       id: 4,
       max_concurrency: 100_000,

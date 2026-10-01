@@ -1,27 +1,28 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { useOperation } from '@shared/operations/useOperation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { KeyLimitFields } from '@shared/components/KeyRoutingLimits';
 import {
-  createEndpoint,
-  createEndpointKey,
-  getCatalog,
-  listEndpointKeys,
-  listEndpoints,
-  refreshDiscovery,
-} from './api';
+  executeResource,
+  readResourceResult,
+  resourceStatus,
+  type ResourceIntent,
+  type ResourceResult,
+  type ResourceStatus,
+} from './resourceOperation';
+import { useQuickstartCopy } from './quickstartCopy';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading, DiscoveryStatus } from './components';
 import { useCoreCopy } from './copy';
 import { CORE_ROUTE_PATHS } from './descriptors';
 import { canonicalBaseURLPreview, validateEndpointSecret } from './normalizers';
 import {
   coreKeys,
-  coreSessionMatchesAccount,
   invalidateResourceDependents,
   useCatalog,
   useEndpointCreateOptions,
 } from './queries';
-import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
+import { createOperationIdentity, isOutcomeUnknown } from './request';
 import { endpointSecretDraftReducer, initialEndpointSecretDraftState } from './stateMachines';
 import {
   type CatalogView,
@@ -30,9 +31,7 @@ import {
   type Endpoint,
   type EndpointCreateInput,
   type EndpointKey,
-  type EndpointKeyCreateInput,
   type EndpointSource,
-  type OperationIdentity,
 } from './types';
 
 type Step = 0 | 1 | 2 | 3 | 4;
@@ -54,24 +53,6 @@ export function EndpointWizard({
   const queryClient = useQueryClient();
   const endpointOptionsQuery = useEndpointCreateOptions(accountId);
   const [pageInstanceId] = useState(instanceId);
-  const abortRef = useRef<AbortController | null>(null);
-  const endpointAttemptRef = useRef<{
-    input: EndpointCreateInput;
-    operation: OperationIdentity;
-  } | null>(null);
-  const keyAttemptRef = useRef<{
-    endpointId: string;
-    input: EndpointKeyCreateInput;
-    operation: OperationIdentity;
-  } | null>(null);
-  const discoveryAttemptRef = useRef<{
-    endpointId: string;
-    keyId: string;
-    operation: OperationIdentity;
-  } | null>(null);
-  const [hasEndpointAttempt, setHasEndpointAttempt] = useState(false);
-  const [hasKeyAttempt, setHasKeyAttempt] = useState(false);
-  const [hasDiscoveryAttempt, setHasDiscoveryAttempt] = useState(false);
   const [step, setStep] = useState<Step>(0);
   const [source, setSource] = useState<EndpointSource | null>(null);
   const [channelId, setChannelId] = useState('');
@@ -88,80 +69,95 @@ export function EndpointWizard({
   const [catalog, setCatalog] = useState<CatalogView | null>(null);
   const liveCatalog = useCatalog(accountId, endpoint?.id, endpointKey?.id, undefined, step === 4);
   const [addedKeys, setAddedKeys] = useState<EndpointKey[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [outcome, setOutcome] = useState<'conflict' | 'unknown' | null>(null);
+  const [localError, setLocalError] = useState<unknown>(null);
+  const copy = useQuickstartCopy();
+  const receipt = useRef<ResourceStatus | null>(null);
+  const saved = useRef<ResourceResult | null>(null);
   const [secret, dispatchSecret] = useReducer(endpointSecretDraftReducer, undefined, () =>
     initialEndpointSecretDraftState(accountId, pageInstanceId),
   );
 
-  const discardStaleMutation = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    endpointAttemptRef.current = null;
-    keyAttemptRef.current = null;
-    discoveryAttemptRef.current = null;
-    setHasEndpointAttempt(false);
-    setHasKeyAttempt(false);
-    setHasDiscoveryAttempt(false);
-    dispatchSecret({ type: 'cancel', accountId, pageInstanceId });
-    setEndpoint(null);
-    setEndpointKey(null);
-    setAddedKeys([]);
-    setAccepted(null);
-    setCatalog(null);
-    setBusy(false);
+  const apply = (result: ResourceResult) => {
+    if (result.kind === 'endpoint') {
+      setEndpoint(result.endpoint);
+      queryClient.setQueryData(coreKeys.endpoint(accountId, result.endpoint.id), result.endpoint);
+      onCreated(result.endpoint);
+      setStep(2);
+    } else if (result.kind === 'key') {
+      dispatchSecret({ type: 'clear-secret', accountId, pageInstanceId });
+      setEndpointKey(result.key);
+      setAddedKeys((current) => [...current.filter((key) => key.id !== result.key.id), result.key]);
+      setStep(3);
+    } else if (result.kind === 'refresh') {
+      setAccepted(result.accepted ?? null);
+      setCatalog(result.catalog);
+      setStep(4);
+    }
   };
-
+  const operation = useOperation<ResourceIntent, string, ResourceResult>({
+    authorityRoot: ['user', 'core'],
+    clearSecrets: () => dispatchSecret({ type: 'cancel', accountId, pageInstanceId }),
+    execute: async (intent, keySecret, key, context) => {
+      context.commit(() => {
+        saved.current = null;
+        receipt.current = null;
+        if (intent.kind === 'key')
+          dispatchSecret({ type: 'clear-secret', accountId, pageInstanceId });
+      });
+      const result = await executeResource(intent, keySecret, key, context.signal);
+      context.commit(() => {
+        saved.current = result;
+      });
+      return result;
+    },
+    reconcile: async (intent, error, context) => {
+      let result = saved.current;
+      if (error && isOutcomeUnknown(error) && context.operationKey) {
+        const status = await resourceStatus(context.operationKey, context.signal);
+        context.commit(() => {
+          receipt.current = status;
+        });
+        result = await readResourceResult(intent, status, context.signal);
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
+        intent.kind === 'key' || intent.kind === 'refresh'
+          ? queryClient.invalidateQueries({
+              queryKey: coreKeys.endpointKeysRoot(accountId, intent.endpointId),
+            })
+          : Promise.resolve(),
+        intent.kind === 'refresh'
+          ? queryClient.invalidateQueries({
+              queryKey: coreKeys.catalogRoot(accountId, intent.endpointId, intent.keyId),
+            })
+          : Promise.resolve(),
+        invalidateResourceDependents(queryClient, accountId),
+      ]);
+      context.assertCurrent();
+      if (result) {
+        context.commit(() => apply(result));
+        if (error) return { operationConfirmed: true };
+      }
+    },
+  });
+  const busy = operation.isPending;
+  const hasAttempt = busy || operation.outcome === 'unknown';
+  const hasEndpointAttempt = hasAttempt && operation.variables?.kind === 'endpoint';
+  const hasKeyAttempt = hasAttempt && operation.variables?.kind === 'key';
+  const hasDiscoveryAttempt = hasAttempt && operation.variables?.kind === 'refresh';
+  const outcome = operation.outcome;
+  const error = localError ?? operation.error ?? operation.refreshError;
   useEffect(() => {
     dispatchSecret({ type: 'boundary', accountId, pageInstanceId });
-    abortRef.current?.abort();
-    abortRef.current = null;
-    endpointAttemptRef.current = null;
-    keyAttemptRef.current = null;
-    discoveryAttemptRef.current = null;
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      setHasEndpointAttempt(false);
-      setHasKeyAttempt(false);
-      setHasDiscoveryAttempt(false);
-      setStep(0);
-      setSource(null);
-      setChannelId('');
-      setConnector('openai-compatible');
-      setBaseURL('');
-      setEndpointNote('');
-      setKeyNote('');
-      setForceStoreFalse(false);
-      setMaxConcurrency('0');
-      setMaxRPM('0');
-      setEndpoint(null);
-      setEndpointKey(null);
-      setAddedKeys([]);
-      setAccepted(null);
-      setCatalog(null);
-      setBusy(false);
-      setError(null);
-      setOutcome(null);
-    });
-    return () => {
-      active = false;
-    };
   }, [accountId, pageInstanceId]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
-
   const close = () => {
-    abortRef.current?.abort();
-    endpointAttemptRef.current = null;
-    keyAttemptRef.current = null;
-    discoveryAttemptRef.current = null;
-    setHasEndpointAttempt(false);
-    setHasKeyAttempt(false);
-    setHasDiscoveryAttempt(false);
-    dispatchSecret({ type: 'cancel', accountId, pageInstanceId });
+    operation.cancel();
     onClose();
+  };
+  const recover = async (): Promise<boolean> => {
+    if (operation.outcome !== 'unknown') return false;
+    await operation.check();
+    return receipt.current?.status !== 'not_recorded';
   };
 
   const availableConnectors = endpointOptionsQuery.data?.base_connector_types ?? [];
@@ -186,139 +182,55 @@ export function EndpointWizard({
   }
 
   const createEndpointStep = async () => {
-    setError(null);
-    setOutcome(null);
+    setLocalError(null);
+    if (operation.isSuccess && operation.outcome === 'refresh-failed') {
+      await operation.refresh();
+      return;
+    }
+    if (await recover()) return;
     if (
       !preview ||
       previewError ||
       (selectedSource === 'mainstream' && !selectedChannel) ||
       (selectedSource === 'custom' && !availableConnectors.includes(selectedConnector))
     ) {
-      setError(new Error(t('common.errorBody')));
+      setLocalError(new Error(t('common.errorBody')));
       return;
     }
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt = endpointAttemptRef.current ?? {
-      input:
-        selectedSource === 'mainstream'
-          ? {
-              source: 'mainstream',
-              channel_id: selectedChannel!.id,
-              note: endpointNote,
-              enabled: true,
-            }
-          : {
-              source: 'custom',
-              connector_type: selectedConnector,
-              base_url: preview,
-              note: endpointNote,
-              enabled: true,
-            },
-      operation: createOperationIdentity(),
-    };
-    endpointAttemptRef.current = attempt;
-    setHasEndpointAttempt(true);
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    setBusy(true);
-    try {
-      const created = await createEndpoint(attempt.input, attempt.operation, controller.signal);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      endpointAttemptRef.current = null;
-      setHasEndpointAttempt(false);
-      setEndpoint(created);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      queryClient.setQueryData(coreKeys.endpoint(accountId, created.id), created);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId, { endpointId: created.id }),
-      ]);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      onCreated(created);
-      setStep(2);
-    } catch (caught) {
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (!isOutcomeUnknown(caught)) {
-        endpointAttemptRef.current = null;
-        setHasEndpointAttempt(false);
-      }
-      setOutcome(isConflict(caught) ? 'conflict' : isOutcomeUnknown(caught) ? 'unknown' : null);
-      setError(caught);
-      if (isConflict(caught)) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-          invalidateResourceDependents(queryClient, accountId),
-        ]);
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      } else if (isOutcomeUnknown(caught)) {
-        try {
-          const authority = await listEndpoints(undefined, controller.signal);
-          if (
-            !controller.signal.aborted &&
-            abortRef.current === controller &&
-            coreSessionMatchesAccount(queryClient, accountId)
-          ) {
-            queryClient.setQueryData(coreKeys.endpoints(accountId), authority);
-            if (!(await invalidateResourceDependents(queryClient, accountId))) {
-              discardStaleMutation();
-              return;
-            }
-          } else if (!controller.signal.aborted && abortRef.current === controller) {
-            discardStaleMutation();
+    const input: EndpointCreateInput =
+      selectedSource === 'mainstream'
+        ? {
+            source: 'mainstream',
+            channel_id: selectedChannel!.id,
+            note: endpointNote,
+            enabled: true,
           }
-        } catch {
-          if (
-            !controller.signal.aborted &&
-            abortRef.current === controller &&
-            !coreSessionMatchesAccount(queryClient, accountId)
-          ) {
-            discardStaleMutation();
-          }
-          // The retained request identity remains available after a failed authority read.
-        }
-      }
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        setBusy(false);
-      }
-    }
+        : {
+            source: 'custom',
+            connector_type: selectedConnector,
+            base_url: preview,
+            note: endpointNote,
+            enabled: true,
+          };
+    await operation
+      .run(
+        operation.outcome === 'unknown' && operation.variables
+          ? operation.variables
+          : { kind: 'endpoint', input },
+      )
+      .catch(() => undefined);
   };
-
   const createKeyStep = async () => {
     if (!endpoint || busy) return;
-    setError(null);
-    setOutcome(null);
+    setLocalError(null);
+    if (operation.isSuccess && operation.outcome === 'refresh-failed') {
+      await operation.refresh();
+      return;
+    }
+    if (await recover()) return;
     try {
       validateEndpointSecret(secret.secret);
-      if (!secret.ownershipConfirmed) throw new Error(t('endpoints.secretRequired'));
+      if (!secret.ownershipConfirmed) throw new Error('ownership');
     } catch {
       dispatchSecret({
         type: 'local-error',
@@ -328,273 +240,40 @@ export function EndpointWizard({
       });
       return;
     }
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt = keyAttemptRef.current ?? {
+    const intent: ResourceIntent = {
+      kind: 'key',
       endpointId: endpoint.id,
       input: {
-        secret: secret.secret,
         note: keyNote,
         enabled: true,
-        force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
         ownership_confirmed: true,
+        force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
         max_concurrency: Number(maxConcurrency),
         max_rpm: Number(maxRPM),
       },
-      operation: createOperationIdentity(),
     };
-    keyAttemptRef.current = attempt;
-    setHasKeyAttempt(true);
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    setBusy(true);
-    dispatchSecret({ type: 'submit', accountId, pageInstanceId });
-    try {
-      const created = await createEndpointKey(
-        attempt.endpointId,
-        attempt.input,
-        attempt.operation,
-        controller.signal,
-      );
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      keyAttemptRef.current = null;
-      setHasKeyAttempt(false);
-      dispatchSecret({ type: 'success', accountId, pageInstanceId });
-      setEndpointKey(created);
-      setAddedKeys((current) => [...current.filter((key) => key.id !== created.id), created]);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-        }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id }),
-      ]);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setStep(3);
-    } catch (caught) {
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (!isOutcomeUnknown(caught)) {
-        keyAttemptRef.current = null;
-        setHasKeyAttempt(false);
-      }
-      const message = isOutcomeUnknown(caught) ? t('common.outcomeUnknown') : t('common.errorBody');
-      dispatchSecret({ type: 'request-error', accountId, pageInstanceId, message });
-      setOutcome(isConflict(caught) ? 'conflict' : isOutcomeUnknown(caught) ? 'unknown' : null);
-      setError(caught);
-      if (isConflict(caught)) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-          }),
-          queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-          invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id }),
-        ]);
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      } else if (isOutcomeUnknown(caught)) {
-        try {
-          const authority = await listEndpointKeys(endpoint.id, undefined, controller.signal);
-          if (
-            !controller.signal.aborted &&
-            abortRef.current === controller &&
-            coreSessionMatchesAccount(queryClient, accountId)
-          ) {
-            queryClient.setQueryData(coreKeys.endpointKeys(accountId, endpoint.id), authority);
-            if (
-              !(await invalidateResourceDependents(queryClient, accountId, {
-                endpointId: endpoint.id,
-              }))
-            ) {
-              discardStaleMutation();
-              return;
-            }
-          } else if (!controller.signal.aborted && abortRef.current === controller) {
-            discardStaleMutation();
-          }
-        } catch {
-          if (
-            !controller.signal.aborted &&
-            abortRef.current === controller &&
-            !coreSessionMatchesAccount(queryClient, accountId)
-          ) {
-            discardStaleMutation();
-          }
-          // The secret-bearing request remains retained for an explicit exact replay.
-        }
-      }
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        setBusy(false);
-      }
-    }
+    await operation
+      .run(
+        operation.outcome === 'unknown' && operation.variables ? operation.variables : intent,
+        secret.secret,
+      )
+      .catch(() => undefined);
   };
-
   const checkModels = async () => {
     if (!endpoint || !endpointKey || busy) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
+    setLocalError(null);
+    if (operation.isSuccess && operation.outcome === 'refresh-failed') {
+      await operation.refresh();
       return;
     }
-    setError(null);
-    setOutcome(null);
-    const attempt = discoveryAttemptRef.current ?? {
-      endpointId: endpoint.id,
-      keyId: endpointKey.id,
-      operation: createOperationIdentity(),
-    };
-    discoveryAttemptRef.current = attempt;
-    setHasDiscoveryAttempt(true);
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    setBusy(true);
-    try {
-      const result = await refreshDiscovery(
-        attempt.endpointId,
-        attempt.keyId,
-        attempt.operation,
-        controller.signal,
-      );
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      discoveryAttemptRef.current = null;
-      setHasDiscoveryAttempt(false);
-      setAccepted(result);
-      setCatalog(null);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await queryClient.invalidateQueries({
-        queryKey: coreKeys.catalogRoot(accountId, endpoint.id, endpointKey.id),
-      });
-      await invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id });
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      try {
-        const authoritative = await getCatalog(
-          endpoint.id,
-          endpointKey.id,
-          undefined,
-          controller.signal,
-        );
-        if (
-          !controller.signal.aborted &&
-          abortRef.current === controller &&
-          coreSessionMatchesAccount(queryClient, accountId) &&
-          BigInt(authoritative.evidence.revision) >= BigInt(result.evidence.revision)
-        ) {
-          setCatalog(authoritative);
-        }
-      } catch {
-        // The accepted checking evidence remains authoritative even if the
-        // immediate follow-up read fails.
-      }
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setStep(4);
-    } catch (caught) {
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (!isOutcomeUnknown(caught)) {
-        discoveryAttemptRef.current = null;
-        setHasDiscoveryAttempt(false);
-      }
-      setOutcome(isConflict(caught) ? 'conflict' : isOutcomeUnknown(caught) ? 'unknown' : null);
-      setError(caught);
-      if (isConflict(caught)) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await queryClient.invalidateQueries({
-          queryKey: coreKeys.catalogRoot(accountId, endpoint.id, endpointKey.id),
-        });
-        await invalidateResourceDependents(queryClient, accountId, {
-          endpointId: endpoint.id,
-        });
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      } else if (isOutcomeUnknown(caught)) {
-        try {
-          const authoritative = await getCatalog(
-            endpoint.id,
-            endpointKey.id,
-            undefined,
-            controller.signal,
-          );
-          if (controller.signal.aborted || abortRef.current !== controller) return;
-          if (!coreSessionMatchesAccount(queryClient, accountId)) {
-            discardStaleMutation();
-            return;
-          }
-          setCatalog(authoritative);
-          if (
-            !(await invalidateResourceDependents(queryClient, accountId, {
-              endpointId: endpoint.id,
-            }))
-          ) {
-            discardStaleMutation();
-            return;
-          }
-          if (authoritative.evidence.state !== 'unknown') {
-            discoveryAttemptRef.current = null;
-            setHasDiscoveryAttempt(false);
-            setOutcome(null);
-            setError(null);
-            setStep(4);
-          }
-        } catch {
-          if (
-            !controller.signal.aborted &&
-            abortRef.current === controller &&
-            !coreSessionMatchesAccount(queryClient, accountId)
-          ) {
-            discardStaleMutation();
-          }
-          // Keep the exact replay identity until a later authoritative read succeeds.
-        }
-      }
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        setBusy(false);
-      }
-    }
+    if (await recover()) return;
+    await operation
+      .run(
+        operation.outcome === 'unknown' && operation.variables
+          ? operation.variables
+          : { kind: 'refresh', endpointId: endpoint.id, keyId: endpointKey.id },
+      )
+      .catch(() => undefined);
   };
 
   const stepLabels = [
@@ -808,7 +487,7 @@ export function EndpointWizard({
               {busy
                 ? t('common.working')
                 : hasEndpointAttempt
-                  ? t('common.retrySame')
+                  ? copy.t('checkResult')
                   : t('endpoints.createEndpointStep')}
             </button>
           </div>
@@ -837,15 +516,17 @@ export function EndpointWizard({
                 className="btn btn-secondary"
                 disabled={busy || hasDiscoveryAttempt}
                 onClick={() => {
-                  dispatchSecret({ type: 'boundary', accountId, pageInstanceId });
+                  dispatchSecret({ type: 'clear-secret', accountId, pageInstanceId });
+                  operation.reset();
+                  setForceStoreFalse(false);
                   setKeyNote('');
                   setMaxConcurrency('0');
                   setMaxRPM('0');
                   setEndpointKey(null);
                   setCatalog(null);
                   setAccepted(null);
-                  setError(null);
-                  setOutcome(null);
+                  setLocalError(null);
+
                   setStep(2);
                 }}
               >
@@ -886,7 +567,7 @@ export function EndpointWizard({
                 autoComplete="new-password"
                 value={secret.secret}
                 maxLength={65536}
-                disabled={hasKeyAttempt}
+                disabled={busy}
                 onChange={(event) =>
                   dispatchSecret({
                     type: 'change',
@@ -895,7 +576,7 @@ export function EndpointWizard({
                     secret: event.target.value,
                   })
                 }
-                required
+                required={outcome !== 'unknown'}
               />
             </label>
             <label>
@@ -955,7 +636,7 @@ export function EndpointWizard({
               {busy
                 ? t('common.working')
                 : hasKeyAttempt
-                  ? t('common.retrySame')
+                  ? copy.t('checkResult')
                   : t('endpoints.addKeyStep')}
             </button>
           </div>
@@ -977,7 +658,7 @@ export function EndpointWizard({
               {busy
                 ? t('common.working')
                 : hasDiscoveryAttempt
-                  ? t('common.retrySame')
+                  ? copy.t('checkResult')
                   : t('endpoints.refreshDiscovery')}
             </button>
           </div>

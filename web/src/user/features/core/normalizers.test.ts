@@ -17,6 +17,7 @@ import {
   normalizeHomeCheckinStatus,
   normalizeHomeGameSummary,
   normalizeManualUpdateResponse,
+  normalizeModel,
   normalizeUserEnvelope,
   validateEndpointSecret,
   validateLogicalName,
@@ -30,6 +31,22 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it('preserves the optional server role policy in models and affected-model projections', () => {
+    const raw = jsonFixture('internal/resources/testdata/manual_update.json') as {
+      affected_models: { model: Record<string, unknown> }[];
+    };
+    const role_policy = {
+      default_action: 'native',
+      rules: { developer: 'system', custom: 'reject' },
+    };
+    const model = { ...raw.affected_models[0].model, role_policy };
+    expect(normalizeModel(model).role_policy).toEqual(role_policy);
+    raw.affected_models[0].model = model;
+    expect(normalizeManualUpdateResponse(raw).affected_models[0].model.role_policy).toEqual(
+      role_policy,
+    );
+  });
+
   it('keeps charity visibility independent and rejects private restriction details', () => {
     const raw = jsonFixture('internal/auth/testdata/user_envelope.json') as { user: Record<string, unknown> };
     const restriction = { kind: 'ban', reason_code: 'charity_rpm', reason: 'Rate limit exceeded.', started_at: 1_700_000_000, ends_at: null };

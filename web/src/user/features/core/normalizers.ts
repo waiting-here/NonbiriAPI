@@ -1287,7 +1287,7 @@ export function normalizeModel(value: unknown): Model {
       'created_at',
       'updated_at',
     ],
-    ['browse'],
+    ['browse', 'role_policy'],
     'logical model',
   );
   const provider = logicalName(record.provider, 'logical model provider');
@@ -1319,6 +1319,7 @@ export function normalizeModel(value: unknown): Model {
     created_at: createdAt,
     updated_at: updatedAt,
     ...(browse ? { browse } : {}),
+    ...(record.role_policy ? { role_policy: record.role_policy as Model['role_policy'] } : {}),
   };
 }
 

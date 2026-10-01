@@ -1,0 +1,100 @@
+.quickstart {
+  scroll-margin-top: 1rem;
+}
+.quickstart label:not(.core-check) {
+  display: grid;
+  gap: 0.4rem;
+}
+.quickstart small {
+  color: var(--nb-color-text-muted);
+  font-size: 0.9rem;
+}
+.quickstart-steps {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  padding: 1rem 1rem 1rem 2rem;
+  border-bottom: 1px solid var(--nb-border);
+}
+.quickstart-steps li[aria-current] {
+  font-weight: 700;
+  color: var(--nb-accent);
+}
+.quickstart-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 48rem;
+}
+.quickstart-form button {
+  justify-self: start;
+}
+.quickstart-choice-list,
+.quickstart-catalog {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+.quickstart-choice-list li {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-md);
+  overflow-wrap: anywhere;
+}
+.quickstart-choice-list button {
+  justify-self: start;
+}
+.quickstart-catalog {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.quickstart-catalog li {
+  padding: 0.7rem;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-md);
+  overflow-wrap: anywhere;
+}
+.quickstart-notice {
+  padding: 1rem;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-raised);
+}
+.quickstart-models {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
+  gap: 1rem;
+}
+.quickstart-model {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-md);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.quickstart-model h4 {
+  margin: 0;
+}
+.quickstart-model fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+.quickstart-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--nb-border);
+}
+.quickstart-complete {
+  display: grid;
+  gap: 1rem;
+}
+.quickstart-fact {
+  overflow-wrap: anywhere;
+}

@@ -1,6 +1,9 @@
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import { useOperation } from '@shared/operations/useOperation';
+import { readEndpointKey, readResourceResult, resourceStatus } from './resourceOperation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -13,6 +16,8 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
+  getEndpoint,
+  getCatalog,
   createEndpointKey,
   createManualEntries,
   deleteEndpoint,
@@ -34,17 +39,17 @@ import {
   StatusPill,
 } from './components';
 import { useCoreCopy } from './copy';
+import { useQuickstartCopy } from './quickstartCopy';
 import {
   applyManualUpdateToCache,
   coreKeys,
-  coreSessionMatchesAccount,
   invalidateResourceDependents,
   useEndpoint,
 } from './queries';
 import { useNumberedCatalog, useNumberedEndpointKeys } from './numberedQueries';
 import { useManualImpacts } from './manualImpacts';
 import { KeyBrowseSummary } from './ResourceBrowse';
-import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
+import { createOperationIdentity, isOutcomeUnknown } from './request';
 import { endpointSecretDraftReducer, initialEndpointSecretDraftState } from './stateMachines';
 import { validateEndpointSecret, validateManualValue, validateResourceId } from './normalizers';
 import type {
@@ -55,7 +60,6 @@ import type {
   EndpointKey,
   EndpointKeyCreateInput,
   EndpointKeyPatchInput,
-  OperationIdentity,
 } from './types';
 
 type ActionOutcome = 'conflict' | 'unknown' | 'error' | null;
@@ -69,12 +73,6 @@ function manualCatalogPagerParams(keyId: string): {
     pageParam: `manual_${safeKeyId}_page`,
     pageSizeParam: `manual_${safeKeyId}_page_size`,
   };
-}
-
-function actionOutcome(error: unknown): ActionOutcome {
-  if (isConflict(error)) return 'conflict';
-  if (isOutcomeUnknown(error)) return 'unknown';
-  return 'error';
 }
 
 function OutcomeNotice({ outcome }: { outcome: ActionOutcome }) {
@@ -103,11 +101,6 @@ function AddEndpointKeyForm({
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const [instance] = useState(() => createOperationIdentity().actionId);
-  const abortRef = useRef<AbortController | null>(null);
-  const attemptRef = useRef<{ input: EndpointKeyCreateInput; operation: OperationIdentity } | null>(
-    null,
-  );
-  const [hasAttempt, setHasAttempt] = useState(false);
   const [draft, dispatch] = useReducer(endpointSecretDraftReducer, undefined, () =>
     initialEndpointSecretDraftState(accountId, instance),
   );
@@ -115,30 +108,78 @@ function AddEndpointKeyForm({
   const [forceStoreFalse, setForceStoreFalse] = useState(false);
   const [maxConcurrency, setMaxConcurrency] = useState('0');
   const [maxRPM, setMaxRPM] = useState('0');
-  const [outcome, setOutcome] = useState<ActionOutcome>(null);
-
-  const discardStaleMutation = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    attemptRef.current = null;
-    setHasAttempt(false);
-    setOutcome(null);
-    dispatch({ type: 'cancel', accountId, pageInstanceId: instance });
-  };
-
-  useEffect(() => () => abortRef.current?.abort(), []);
-
+  const retryAllowed = useRef(false);
+  const [needsSecret, setNeedsSecret] = useState(false);
+  const { t: text } = useQuickstartCopy();
+  const operation = useOperation<Omit<EndpointKeyCreateInput, 'secret'>, string, EndpointKey>({
+    authorityRoot: ['user', 'core'],
+    clearSecrets: () => dispatch({ type: 'cancel', accountId, pageInstanceId: instance }),
+    execute: async (input, secretValue, key, context) => {
+      if (!secretValue) throw new Error(t('endpoints.secretRequired'));
+      context.commit(() => dispatch({ type: 'clear-secret', accountId, pageInstanceId: instance }));
+      context.commit(() => setNeedsSecret(false));
+      const saved = await createEndpointKey(
+        endpoint.id,
+        { ...input, secret: secretValue },
+        { idempotencyKey: key, actionId: key },
+        context.signal,
+      );
+      context.commit(() => dispatch({ type: 'success', accountId, pageInstanceId: instance }));
+      return saved;
+    },
+    reconcile: async (input, error, context) => {
+      let confirmed = false;
+      retryAllowed.current = false;
+      if (error && context.operationKey && isOutcomeUnknown(error)) {
+        const status = await resourceStatus(context.operationKey, context.signal);
+        context.assertCurrent();
+        retryAllowed.current = status.status === 'not_recorded';
+        context.commit(() => setNeedsSecret(status.status === 'not_recorded'));
+        const result = await readResourceResult(
+          { kind: 'key', endpointId: endpoint.id, input },
+          status,
+          context.signal,
+        );
+        if (result?.kind === 'key') {
+          context.commit(() => dispatch({ type: 'success', accountId, pageInstanceId: instance }));
+          confirmed = true;
+        }
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
+        }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
+        invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id }),
+      ]);
+      context.assertCurrent();
+      if (!error || confirmed) context.commit(onClose);
+      if (confirmed) return { operationConfirmed: true };
+    },
+  });
+  const busy = operation.isPending,
+    hasAttempt = busy || operation.outcome === 'unknown';
+  const outcome: ActionOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
   const close = () => {
-    abortRef.current?.abort();
-    attemptRef.current = null;
-    setHasAttempt(false);
-    dispatch({ type: 'cancel', accountId, pageInstanceId: instance });
+    operation.cancel();
     onClose();
   };
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setOutcome(null);
+    if (operation.isSuccess) {
+      await operation.refresh();
+      return;
+    }
+    if (operation.outcome === 'unknown') {
+      await operation.check();
+      if (!retryAllowed.current) return;
+    }
     try {
       validateEndpointSecret(draft.secret);
       if (!draft.ownershipConfirmed) throw new Error('ownership');
@@ -151,102 +192,18 @@ function AddEndpointKeyForm({
       });
       return;
     }
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt = attemptRef.current ?? {
-      input: {
-        secret: draft.secret,
-        note,
-        enabled: true,
-        force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
-        ownership_confirmed: true,
-        max_concurrency: Number(maxConcurrency),
-        max_rpm: Number(maxRPM),
-      },
-      operation: createOperationIdentity(),
-    };
-    attemptRef.current = attempt;
-    setHasAttempt(true);
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    dispatch({ type: 'submit', accountId, pageInstanceId: instance });
-    try {
-      await createEndpointKey(endpoint.id, attempt.input, attempt.operation, controller.signal);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      attemptRef.current = null;
-      setHasAttempt(false);
-      dispatch({ type: 'success', accountId, pageInstanceId: instance });
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-        }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id }),
-      ]);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      close();
-    } catch (error) {
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = actionOutcome(error);
-      if (nextOutcome !== 'unknown') {
-        attemptRef.current = null;
-        setHasAttempt(false);
-      }
-      setOutcome(nextOutcome);
-      dispatch({
-        type: 'request-error',
-        accountId,
-        pageInstanceId: instance,
-        message: nextOutcome === 'unknown' ? t('common.outcomeUnknown') : t('common.errorBody'),
-      });
-      if (nextOutcome === 'conflict') {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await queryClient.invalidateQueries({
-          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-        });
-        await invalidateResourceDependents(queryClient, accountId, {
-          endpointId: endpoint.id,
-        });
-      } else if (nextOutcome === 'unknown') {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-          }),
-          queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-          invalidateResourceDependents(queryClient, accountId, { endpointId: endpoint.id }),
-        ]);
-      }
-      if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-    } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-    }
+    const input =
+      operation.outcome === 'unknown' && operation.variables
+        ? operation.variables
+        : {
+            note,
+            enabled: true,
+            force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
+            ownership_confirmed: true as const,
+            max_concurrency: Number(maxConcurrency),
+            max_rpm: Number(maxRPM),
+          };
+    await operation.run(input, draft.secret).catch(() => undefined);
   };
 
   return (
@@ -264,7 +221,7 @@ function AddEndpointKeyForm({
             type="password"
             autoComplete="new-password"
             maxLength={65536}
-            disabled={hasAttempt}
+            disabled={busy}
             value={draft.secret}
             onChange={(event) =>
               dispatch({
@@ -321,15 +278,16 @@ function AddEndpointKeyForm({
         </label>
       ) : null}
       <p className="core-inline-warning">{t('endpoints.costWarning')}</p>
-      {draft.message ? <p className="core-inline-error">{draft.message}</p> : null}
+      {outcome === 'unknown' && needsSecret ? <p>{text('secretAgain')}</p> : null}
+      {draft.message && !outcome ? <p className="core-inline-error">{draft.message}</p> : null}
       <OutcomeNotice outcome={outcome} />
       <div className="core-form-actions">
         <span />
-        <button type="submit" className="btn btn-primary" disabled={draft.status === 'submitting'}>
-          {draft.status === 'submitting'
+        <button type="submit" className="btn btn-primary" disabled={busy}>
+          {busy
             ? t('common.working')
             : hasAttempt
-              ? t('common.retrySame')
+              ? text('checkResult')
               : t('endpoints.addKeyStep')}
         </button>
       </div>
@@ -380,33 +338,6 @@ function ManualEntryRow({
   const [model, setModel] = useState(entry.upstream_model_id);
   const [provider, setProvider] = useState(entry.provider);
   const [replacements, setReplacements] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<ActionOutcome>(null);
-  const updateAttemptRef = useRef<{
-    input: {
-      upstream_model_id: string;
-      provider: string;
-      expected_pair_revision: string;
-      replacements: BindingReplacement[];
-    };
-    operation: OperationIdentity;
-  } | null>(null);
-  const deleteAttemptRef = useRef<{
-    expectedPairRevision: string;
-    replacements: BindingReplacement[];
-    operation: OperationIdentity;
-  } | null>(null);
-  const [attemptKind, setAttemptKind] = useState<'update' | 'delete' | null>(null);
-
-  const discardStaleMutation = () => {
-    updateAttemptRef.current = null;
-    deleteAttemptRef.current = null;
-    setAttemptKind(null);
-    setBusy(false);
-    setOutcome(null);
-    setEditing(false);
-  };
-
   const replacementPayload = (): BindingReplacement[] =>
     impacts.map((impact) => ({
       binding_id: impact.bindingId,
@@ -422,204 +353,147 @@ function ManualEntryRow({
   const updateNeedsReplacements = impacts.length > 0 && model !== entry.upstream_model_id;
   const updateImpactUnknown = !impactsKnown && model !== entry.upstream_model_id;
 
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      const attempt = updateAttemptRef.current;
-      if (
-        attempt &&
-        BigInt(entry.pair_revision) > BigInt(attempt.input.expected_pair_revision) &&
-        entry.upstream_model_id === attempt.input.upstream_model_id &&
-        entry.provider === attempt.input.provider
-      ) {
-        updateAttemptRef.current = null;
-        setAttemptKind(null);
-        setOutcome(null);
+  type Intent =
+    | {
+        kind: 'update';
+        input: {
+          upstream_model_id: string;
+          provider: string;
+          expected_pair_revision: string;
+          replacements: BindingReplacement[];
+        };
       }
-      setModel(entry.upstream_model_id);
-      setProvider(entry.provider);
-    });
-    return () => {
-      active = false;
-    };
-  }, [entry.pair_revision, entry.provider, entry.upstream_model_id]);
-
-  const update = async () => {
-    if (busy || deleteAttemptRef.current) return;
-    if (
-      !updateAttemptRef.current &&
-      (updateImpactUnknown || (updateNeedsReplacements && !replacementsReady))
-    )
-      return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
+    | { kind: 'delete'; expectedPairRevision: string; replacements: BindingReplacement[] };
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<Intent, void>(
+    async (intent, key, context) => {
+      const identity = { idempotencyKey: key, actionId: key };
+      if (intent.kind === 'update') {
+        const response = await updateManualEntry(
+          endpointId,
+          keyId,
+          entry.id,
+          intent.input,
+          identity,
+          context.signal,
+        );
+        context.commit(() => applyManualUpdateToCache(queryClient, accountId, response));
+      } else
+        await deleteManualEntry(
+          endpointId,
+          keyId,
+          entry.id,
+          intent.expectedPairRevision,
+          intent.replacements,
+          identity,
+          context.signal,
+        );
+      context.commit(() => setEditing(false));
+    },
+    async (intent, error, context) => {
+      let confirmed = false;
+      retryAllowed.current = false;
+      if (error && isOutcomeUnknown(error)) {
+        let cursor: string | undefined, current: CatalogEntry | undefined;
+        do {
+          const page = await getCatalog(endpointId, keyId, cursor, context.signal);
+          current = page.manual_entries.find((item) => item.id === entry.id);
+          cursor = page.next_cursor ?? undefined;
+          if (current) break;
+        } while (cursor);
+        context.assertCurrent();
+        if (intent.kind === 'delete') {
+          confirmed = !current;
+          retryAllowed.current = current?.pair_revision === intent.expectedPairRevision;
+        } else if (current) {
+          confirmed =
+            BigInt(current.pair_revision) > BigInt(intent.input.expected_pair_revision) &&
+            current.upstream_model_id === intent.input.upstream_model_id &&
+            current.provider === intent.input.provider;
+          retryAllowed.current = current.pair_revision === intent.input.expected_pair_revision;
+        }
+      }
+      await invalidateResourceDependents(queryClient, accountId, { endpointId, modelIds: 'all' });
+      context.assertCurrent();
+      if (!(await onChanged())) throw new Error(t('common.errorBody'));
+      context.assertCurrent();
+      if (confirmed) {
+        context.commit(() => setEditing(false));
+        return { operationConfirmed: true };
+      }
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setEditing(false);
+        setReplacements({});
+      },
+    },
+  );
+  const busy = operation.isPending;
+  const outcome: ActionOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const retained = operation.outcome === 'unknown' ? operation.variables : undefined;
+  const attemptKind = retained?.kind ?? null;
+  const run = async (intent: Intent) => {
+    if (operation.outcome === 'refresh-failed') {
+      await operation.refresh();
       return;
     }
-    const attempt = updateAttemptRef.current ?? {
+    if (retained) {
+      await operation.check();
+      if (retryAllowed.current) await operation.mutateAsync(retained).catch(() => undefined);
+      return;
+    }
+    await operation.mutateAsync(intent).catch(() => undefined);
+  };
+  const update = async () => {
+    if (
+      busy ||
+      attemptKind === 'delete' ||
+      (!retained && (updateImpactUnknown || (updateNeedsReplacements && !replacementsReady)))
+    )
+      return;
+    await run({
+      kind: 'update',
       input: {
         upstream_model_id: model,
         provider,
         expected_pair_revision: entry.pair_revision,
         replacements: updateNeedsReplacements ? replacementPayload() : [],
       },
-      operation: createOperationIdentity(),
-    };
-    updateAttemptRef.current = attempt;
-    setAttemptKind('update');
-    setBusy(true);
-    setOutcome(null);
-    try {
-      const response = await updateManualEntry(
-        endpointId,
-        keyId,
-        entry.id,
-        attempt.input,
-        attempt.operation,
-      );
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      updateAttemptRef.current = null;
-      setAttemptKind(null);
-      if (!applyManualUpdateToCache(queryClient, accountId, response)) {
-        discardStaleMutation();
-        return;
-      }
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (!(await onChanged())) {
-        discardStaleMutation();
-        return;
-      }
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setEditing(false);
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = actionOutcome(error);
-      if (nextOutcome !== 'unknown') {
-        updateAttemptRef.current = null;
-        setAttemptKind(null);
-      }
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error)) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        if (
-          !(await invalidateResourceDependents(queryClient, accountId, {
-            endpointId,
-            modelIds: 'all',
-          }))
-        ) {
-          discardStaleMutation();
-          return;
-        }
-        if (!(await onChanged())) {
-          discardStaleMutation();
-          return;
-        }
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      }
-    } finally {
-      setBusy(false);
-    }
+    });
   };
-
   const remove = async () => {
-    if (busy || updateAttemptRef.current) return;
-    if (!impactsKnown || (!deleteAttemptRef.current && impacts.length > 0 && !replacementsReady))
+    if (
+      busy ||
+      attemptKind === 'update' ||
+      !impactsKnown ||
+      (!retained && impacts.length > 0 && !replacementsReady)
+    )
       return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt = deleteAttemptRef.current ?? {
+    await run({
+      kind: 'delete',
       expectedPairRevision: entry.pair_revision,
       replacements: replacementPayload(),
-      operation: createOperationIdentity(),
-    };
-    deleteAttemptRef.current = attempt;
-    setAttemptKind('delete');
-    setBusy(true);
-    setOutcome(null);
-    try {
-      await deleteManualEntry(
-        endpointId,
-        keyId,
-        entry.id,
-        attempt.expectedPairRevision,
-        attempt.replacements,
-        attempt.operation,
-      );
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      deleteAttemptRef.current = null;
-      setAttemptKind(null);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (
-        !(await invalidateResourceDependents(queryClient, accountId, {
-          endpointId,
-          modelIds: impacts.map((impact) => impact.modelId),
-        }))
-      ) {
-        discardStaleMutation();
-        return;
-      }
-      if (!(await onChanged())) {
-        discardStaleMutation();
-        return;
-      }
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = actionOutcome(error);
-      if (nextOutcome !== 'unknown') {
-        deleteAttemptRef.current = null;
-        setAttemptKind(null);
-      }
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error)) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        if (
-          !(await invalidateResourceDependents(queryClient, accountId, {
-            endpointId,
-            modelIds: 'all',
-          }))
-        ) {
-          discardStaleMutation();
-          return;
-        }
-        if (!(await onChanged())) {
-          discardStaleMutation();
-          return;
-        }
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      }
-    } finally {
-      setBusy(false);
-    }
+    });
   };
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        setModel(entry.upstream_model_id);
+        setProvider(entry.provider);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [entry.pair_revision, entry.provider, entry.upstream_model_id]);
 
   if (isForbidden(impactQuery.error) || isUnauthorized(impactQuery.error))
     return (
@@ -742,7 +616,7 @@ function ManualEntryRow({
               }
               onClick={() => void remove()}
             >
-              {attemptKind === 'delete' ? t('common.retrySame') : t('endpoints.deleteManual')}
+              {attemptKind === 'delete' ? t('common.reconcile') : t('endpoints.deleteManual')}
             </button>
             <button
               type="button"
@@ -758,7 +632,7 @@ function ManualEntryRow({
               {busy
                 ? t('common.working')
                 : attemptKind === 'update'
-                  ? t('common.retrySame')
+                  ? t('common.reconcile')
                   : t('endpoints.updateManual')}
             </button>
           </div>
@@ -802,110 +676,105 @@ function ManualCatalog({
   );
   const [upstreamModel, setUpstreamModel] = useState('');
   const [provider, setProvider] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<ActionOutcome>(null);
-  const attemptRef = useRef<{
-    input: { upstream_model_id: string; provider: string };
-    operation: OperationIdentity;
-  } | null>(null);
-  const [hasAttempt, setHasAttempt] = useState(false);
-
-  const discardStaleMutation = () => {
-    attemptRef.current = null;
-    setHasAttempt(false);
-    setUpstreamModel('');
-    setProvider('');
-    setBusy(false);
-    setOutcome(null);
-  };
-
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      const attempt = attemptRef.current;
-      if (!attempt || !catalog.data) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (
-        catalog.data.manual_entries.some(
-          (entry) =>
-            entry.upstream_model_id === attempt.input.upstream_model_id &&
-            entry.provider === attempt.input.provider,
-        )
-      ) {
-        attemptRef.current = null;
-        setHasAttempt(false);
+  type Intent = { upstream_model_id: string; provider: string };
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<Intent, void>(
+    async (input, key, context) => {
+      await createManualEntries(
+        endpointId,
+        keyId,
+        [input],
+        { idempotencyKey: key, actionId: key },
+        context.signal,
+      );
+      context.commit(() => {
         setUpstreamModel('');
         setProvider('');
-        setOutcome(null);
+      });
+    },
+    async (input, error, context) => {
+      let confirmed = false;
+      retryAllowed.current = false;
+      if (error && isOutcomeUnknown(error) && context.operationKey) {
+        const status = await resourceStatus(context.operationKey, context.signal);
+        context.assertCurrent();
+        retryAllowed.current = status.status === 'not_recorded';
+        confirmed = Boolean(
+          await readResourceResult(
+            { kind: 'manual', endpointId, keyId, entries: [input] },
+            status,
+            context.signal,
+          ),
+        );
       }
-    });
-    return () => {
-      active = false;
-    };
-  }, [accountId, catalog.data, queryClient]);
-
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: coreKeys.endpointRoutingRoot(accountId, endpointId),
+        }),
+        invalidateResourceDependents(queryClient, accountId, { endpointId }),
+      ]);
+      context.assertCurrent();
+      const failed = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId) })
+        .find((query) => query.state.status === 'error');
+      if (failed) throw failed.state.error;
+      if (confirmed) {
+        context.commit(() => {
+          setUpstreamModel('');
+          setProvider('');
+        });
+        return { operationConfirmed: true };
+      }
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setUpstreamModel('');
+        setProvider('');
+      },
+    },
+  );
+  const busy = operation.isPending;
+  const outcome: ActionOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const hasAttempt = busy || operation.outcome === 'unknown';
   const refresh = async (): Promise<boolean> => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) return false;
     await Promise.all([
       queryClient.invalidateQueries({
         queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId),
       }),
-      queryClient.invalidateQueries({
-        queryKey: coreKeys.endpointRoutingRoot(accountId, endpointId),
-        exact: false,
-      }),
       invalidateResourceDependents(queryClient, accountId, { endpointId }),
     ]);
-    return coreSessionMatchesAccount(queryClient, accountId);
+    return (
+      !queryClient
+        .getQueryCache()
+        .findAll({ queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId) })
+        .some((query) => query.state.status === 'error')
+    );
   };
-
   const create = async (event: FormEvent) => {
     event.preventDefault();
-    if (busy) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
+    if (operation.outcome === 'refresh-failed') {
+      await operation.refresh();
       return;
     }
-    const attempt = attemptRef.current ?? {
-      input: { upstream_model_id: upstreamModel, provider },
-      operation: createOperationIdentity(),
-    };
-    attemptRef.current = attempt;
-    setHasAttempt(true);
-    setBusy(true);
-    setOutcome(null);
-    try {
-      await createManualEntries(endpointId, keyId, [attempt.input], attempt.operation);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      attemptRef.current = null;
-      setHasAttempt(false);
-      setUpstreamModel('');
-      setProvider('');
-      if (!(await refresh())) discardStaleMutation();
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = actionOutcome(error);
-      if (nextOutcome !== 'unknown') {
-        attemptRef.current = null;
-        setHasAttempt(false);
-      }
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error)) {
-        if (!(await refresh())) discardStaleMutation();
-      }
-    } finally {
-      setBusy(false);
+    if (operation.outcome === 'unknown' && operation.variables) {
+      await operation.check();
+      if (retryAllowed.current)
+        await operation.mutateAsync(operation.variables).catch(() => undefined);
+      return;
     }
+    await operation
+      .mutateAsync({ upstream_model_id: upstreamModel, provider })
+      .catch(() => undefined);
   };
 
   if (isForbidden(catalog.error) || isUnauthorized(catalog.error) || isNotFoundError(catalog.error))
@@ -952,7 +821,7 @@ function ManualCatalog({
             {busy
               ? t('common.working')
               : hasAttempt
-                ? t('common.retrySame')
+                ? t('common.reconcile')
                 : t('endpoints.manualAdd')}
           </button>
         </div>
@@ -1013,171 +882,134 @@ function EndpointKeyCard({
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const evidence = keyData.browse?.discovery;
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<ActionOutcome>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(keyData.note);
   const [editRevision, setEditRevision] = useState(keyData.revision);
   const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
   const [maxRPM, setMaxRPM] = useState(String(keyData.max_rpm));
-  const [reconciliationRequired, setReconciliationRequired] = useState(false);
   const [manualCatalogOpen, setManualCatalogOpen] = useState(false);
-  const [replayAttempt, setReplayAttempt] = useState<
-    | { kind: 'refresh'; evidenceRevision: string; operation: OperationIdentity }
-    | { kind: 'patch'; input: EndpointKeyPatchInput; operation: OperationIdentity }
-    | { kind: 'delete'; expectedRevision: string; operation: OperationIdentity }
-    | null
-  >(null);
-
-  const discardStaleMutation = () => {
-    setReplayAttempt(null);
-    setBusy(false);
-    setOutcome(null);
-    setReconciliationRequired(false);
-    setDeleteOpen(false);
-    setEditing(false);
-  };
-
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => {
-      if (active) setNote(keyData.note);
-    });
-    return () => {
-      active = false;
-    };
-  }, [keyData.note, keyData.revision]);
-
-  useEffect(() => {
-    if (!replayAttempt) return;
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const confirmed =
-        replayAttempt.kind === 'refresh'
-          ? Boolean(evidence && BigInt(evidence.revision) > BigInt(replayAttempt.evidenceRevision))
-          : replayAttempt.kind === 'patch'
-            ? BigInt(keyData.revision) > BigInt(replayAttempt.input.expected_revision) &&
-              (replayAttempt.input.note === undefined ||
-                keyData.note === replayAttempt.input.note) &&
-              (replayAttempt.input.enabled === undefined ||
-                keyData.enabled === replayAttempt.input.enabled) &&
-              (replayAttempt.input.force_store_false === undefined ||
-                keyData.force_store_false === replayAttempt.input.force_store_false) &&
-              (replayAttempt.input.max_concurrency === undefined ||
-                keyData.max_concurrency === replayAttempt.input.max_concurrency) &&
-              (replayAttempt.input.max_rpm === undefined ||
-                keyData.max_rpm === replayAttempt.input.max_rpm)
-            : false;
-      if (!confirmed) return;
-      setReplayAttempt(null);
-      setOutcome(null);
-      if (replayAttempt.kind === 'patch' && replayAttempt.input.note !== undefined)
-        setEditing(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [
-    evidence,
-    keyData.enabled,
-    keyData.force_store_false,
-    keyData.max_concurrency,
-    keyData.max_rpm,
-    keyData.note,
-    keyData.revision,
-    accountId,
-    queryClient,
-    replayAttempt,
-  ]);
-
-  const reconcile = async (deleted = replayAttempt?.kind === 'delete') => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
-    }
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
-      }),
-      queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
-      ...(deleted
-        ? [queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) })]
-        : []),
-      queryClient.invalidateQueries({
-        queryKey: coreKeys.catalogRoot(accountId, endpoint.id, keyData.id),
-      }),
-      queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-      invalidateResourceDependents(queryClient, accountId, {
-        endpointId: endpoint.id,
-        ...(deleted ? { modelIds: 'all' as const, charity: true } : {}),
-      }),
-    ]);
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
-    }
-    const roots = [
-      coreKeys.endpointKeysRoot(accountId, endpoint.id),
-      coreKeys.endpoint(accountId, endpoint.id),
-      coreKeys.catalogRoot(accountId, endpoint.id, keyData.id),
-    ];
-    const ready = roots.every((root) =>
-      queryClient
-        .getQueryCache()
-        .findAll({ queryKey: root, exact: false })
-        .every((query) => query.state.status !== 'error'),
-    );
-    setReconciliationRequired(!ready);
-    return ready;
-  };
-
-  const run = async (attempt: NonNullable<typeof replayAttempt>) => {
-    if (reconciliationRequired) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    setBusy(true);
-    setOutcome(null);
-    try {
-      if (attempt.kind === 'refresh') {
-        await refreshDiscovery(endpoint.id, keyData.id, attempt.operation);
-      } else if (attempt.kind === 'patch') {
-        await patchEndpointKey(endpoint.id, keyData.id, attempt.input, attempt.operation);
-      } else {
+  type Intent =
+    | { kind: 'refresh'; evidenceRevision: string }
+    | { kind: 'patch'; input: EndpointKeyPatchInput }
+    | { kind: 'delete'; expectedRevision: string };
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<Intent, void>(
+    async (intent, key, context) => {
+      const identity = { idempotencyKey: key, actionId: key };
+      if (intent.kind === 'refresh')
+        await refreshDiscovery(endpoint.id, keyData.id, identity, context.signal);
+      else if (intent.kind === 'patch')
+        await patchEndpointKey(endpoint.id, keyData.id, intent.input, identity, context.signal);
+      else
         await deleteEndpointKey(
           endpoint.id,
           keyData.id,
-          attempt.expectedRevision,
-          attempt.operation,
+          intent.expectedRevision,
+          identity,
+          context.signal,
         );
+      context.commit(() => {
+        if (intent.kind === 'patch' && intent.input.note !== undefined) setEditing(false);
+        if (intent.kind === 'delete') setDeleteOpen(false);
+      });
+    },
+    async (intent, error, context) => {
+      let confirmed = false;
+      retryAllowed.current = false;
+      if (error && isOutcomeUnknown(error)) {
+        if (intent.kind === 'refresh' && context.operationKey) {
+          const status = await resourceStatus(context.operationKey, context.signal);
+          context.assertCurrent();
+          retryAllowed.current = status.status === 'not_recorded';
+          confirmed = Boolean(
+            await readResourceResult(
+              { kind: 'refresh', endpointId: endpoint.id, keyId: keyData.id },
+              status,
+              context.signal,
+            ),
+          );
+        } else {
+          try {
+            const current = await readEndpointKey(endpoint.id, keyData.id, context.signal);
+            context.assertCurrent();
+            retryAllowed.current =
+              current.revision ===
+              (intent.kind === 'patch'
+                ? intent.input.expected_revision
+                : intent.kind === 'delete'
+                  ? intent.expectedRevision
+                  : '');
+            if (intent.kind === 'patch')
+              confirmed =
+                BigInt(current.revision) > BigInt(intent.input.expected_revision) &&
+                Object.entries(intent.input).every(
+                  ([field, value]) =>
+                    field === 'expected_revision' || current[field as keyof EndpointKey] === value,
+                );
+          } catch (caught) {
+            if (intent.kind === 'delete' && isNotFoundError(caught)) confirmed = true;
+            else throw caught;
+          }
+        }
       }
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id),
+        }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.id) }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
+        queryClient.invalidateQueries({
+          queryKey: coreKeys.catalogRoot(accountId, endpoint.id, keyData.id),
+        }),
+        invalidateResourceDependents(queryClient, accountId, {
+          endpointId: endpoint.id,
+          ...(intent.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
+        }),
+      ]);
+      context.assertCurrent();
+      const failed = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: coreKeys.endpointKeysRoot(accountId, endpoint.id) })
+        .find((query) => query.state.status === 'error');
+      if (failed) throw failed.state.error;
+      if (confirmed) {
+        context.commit(() => {
+          if (intent.kind === 'patch') setEditing(false);
+          if (intent.kind === 'delete') setDeleteOpen(false);
+        });
+        return { operationConfirmed: true };
       }
-      setReplayAttempt(null);
-      if (attempt.kind === 'patch' && attempt.input.note !== undefined) setEditing(false);
-      if (attempt.kind === 'delete') setDeleteOpen(false);
-      await reconcile(attempt.kind === 'delete');
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = actionOutcome(error);
-      setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error)) await reconcile(attempt.kind === 'delete');
-    } finally {
-      setBusy(false);
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setDeleteOpen(false);
+        setEditing(false);
+      },
+    },
+  );
+  const busy = operation.isPending;
+  const outcome: ActionOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const reconciliationRequired = operation.outcome === 'refresh-failed';
+  const replayAttempt = operation.outcome === 'unknown' ? (operation.variables ?? null) : null;
+  const reconcile = () => operation.refresh();
+  const run = async (intent: Intent) => {
+    if (reconciliationRequired) {
+      await operation.refresh();
+      return;
     }
+    if (replayAttempt) {
+      await operation.check();
+      if (retryAllowed.current) await operation.mutateAsync(replayAttempt).catch(() => undefined);
+      return;
+    }
+    await operation.mutateAsync(intent).catch(() => undefined);
   };
 
   const physicalAvailable =
@@ -1253,7 +1085,6 @@ function EndpointKeyCard({
             void run({
               kind: 'refresh',
               evidenceRevision: evidence?.revision ?? '0',
-              operation: createOperationIdentity(),
             })
           }
         >
@@ -1295,7 +1126,7 @@ function EndpointKeyCard({
           disabled={busy || reconciliationRequired}
           onClick={() => void run(replayAttempt)}
         >
-          {t('common.retrySame')}
+          {t('common.reconcile')}
         </button>
       ) : null}
       {editing ? (
@@ -1311,7 +1142,6 @@ function EndpointKeyCard({
                 max_rpm: Number(maxRPM),
                 expected_revision: editRevision,
               },
-              operation: createOperationIdentity(),
             });
           }}
         >
@@ -1395,7 +1225,6 @@ function EndpointKeyCard({
             void run({
               kind: 'patch',
               input: { enabled: !keyData.enabled, expected_revision: keyData.revision },
-              operation: createOperationIdentity(),
             })
           }
         >
@@ -1418,7 +1247,6 @@ function EndpointKeyCard({
                   force_store_false: !keyData.force_store_false,
                   expected_revision: keyData.revision,
                 },
-                operation: createOperationIdentity(),
               })
             }
           >
@@ -1460,7 +1288,6 @@ function EndpointKeyCard({
               : {
                   kind: 'delete',
                   expectedRevision: keyData.revision,
-                  operation: createOperationIdentity(),
                 },
           )
         }
@@ -1505,30 +1332,98 @@ export function EndpointDetail({
   useResourceListScroll(accountId, Boolean(keys.data) && !keys.isFetching);
   const [addingKey, setAddingKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<ActionOutcome>(null);
   const [editing, setEditing] = useState(false);
   const [endpointNote, setEndpointNote] = useState('');
-  const [reconciliationRequired, setReconciliationRequired] = useState(false);
-  const [replayAttempt, setReplayAttempt] = useState<
-    | { kind: 'patch'; input: EndpointPatchInput; operation: OperationIdentity }
-    | { kind: 'delete'; expectedRevision: string; operation: OperationIdentity }
-    | null
-  >(null);
   const returnTo = listReturnPath(location.state, '/endpoints');
-
-  const discardStaleEndpointMutation = () => {
-    setReplayAttempt(null);
-    setBusy(false);
-    setOutcome(null);
-    setReconciliationRequired(false);
-    setDeleteOpen(false);
-    setEditing(false);
-    setAddingKey(false);
+  type Intent =
+    { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<Intent, void>(
+    async (intent, key, context) => {
+      const identity = { idempotencyKey: key, actionId: key };
+      if (intent.kind === 'patch')
+        await patchEndpoint(endpointId, intent.input, identity, context.signal);
+      else await deleteEndpoint(endpointId, intent.expectedRevision, identity, context.signal);
+      context.commit(() => {
+        if (intent.kind === 'patch') setEditing(false);
+        else setDeleteOpen(false);
+      });
+    },
+    async (intent, error, context) => {
+      let confirmed = false;
+      retryAllowed.current = false;
+      if (error && isOutcomeUnknown(error)) {
+        try {
+          const current = await getEndpoint(endpointId, context.signal);
+          context.assertCurrent();
+          retryAllowed.current =
+            current.revision ===
+            (intent.kind === 'patch' ? intent.input.expected_revision : intent.expectedRevision);
+          if (intent.kind === 'patch')
+            confirmed =
+              BigInt(current.revision) > BigInt(intent.input.expected_revision) &&
+              Object.entries(intent.input).every(
+                ([field, value]) =>
+                  field === 'expected_revision' || current[field as keyof Endpoint] === value,
+              );
+        } catch (caught) {
+          if (intent.kind === 'delete' && isNotFoundError(caught)) confirmed = true;
+          else throw caught;
+        }
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
+        invalidateResourceDependents(queryClient, accountId, {
+          endpointId,
+          ...(intent.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
+        }),
+      ]);
+      context.assertCurrent();
+      if (intent.kind === 'delete' && (!error || confirmed)) {
+        context.commit(() => {
+          queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpointId) });
+          navigate(returnTo);
+        });
+      } else {
+        const [current, currentKeys] = await Promise.all([endpoint.refetch(), keys.refetch()]);
+        context.assertCurrent();
+        if (current.error || currentKeys.error) throw current.error ?? currentKeys.error;
+        if (!error || confirmed) context.commit(() => setEditing(false));
+      }
+      if (confirmed) return { operationConfirmed: true };
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setDeleteOpen(false);
+        setEditing(false);
+        setAddingKey(false);
+      },
+    },
+  );
+  const busy = operation.isPending;
+  const outcome: ActionOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const reconciliationRequired = operation.outcome === 'refresh-failed';
+  const replayAttempt = operation.outcome === 'unknown' ? (operation.variables ?? null) : null;
+  const reconcile = () => operation.refresh();
+  const runEndpointAction = async (intent: Intent) => {
+    if (reconciliationRequired) {
+      await operation.refresh();
+      return;
+    }
+    if (replayAttempt) {
+      await operation.check();
+      if (retryAllowed.current) await operation.mutateAsync(replayAttempt).catch(() => undefined);
+      return;
+    }
+    await operation.mutateAsync(intent).catch(() => undefined);
   };
-
   useEffect(() => {
-    if (!endpoint.data) return;
     let active = true;
     queueMicrotask(() => {
       if (active) setEndpointNote(endpoint.data?.note ?? '');
@@ -1536,67 +1431,7 @@ export function EndpointDetail({
     return () => {
       active = false;
     };
-  }, [endpoint.data]);
-
-  const reconcile = async (attempt = replayAttempt) => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleEndpointMutation();
-      return false;
-    }
-    const [endpointResult, keysResult] = await Promise.all([
-      endpoint.refetch(),
-      keys.refetch(),
-      queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-      invalidateResourceDependents(queryClient, accountId, {
-        endpointId,
-        ...(attempt?.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
-      }),
-    ]);
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleEndpointMutation();
-      return false;
-    }
-    if (
-      attempt?.kind === 'delete' &&
-      endpointResult.error &&
-      isNotFoundError(endpointResult.error)
-    ) {
-      setReplayAttempt(null);
-      setOutcome(null);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleEndpointMutation();
-        return false;
-      }
-      queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpointId) });
-      navigate(returnTo);
-      return true;
-    }
-    const ready =
-      !endpointResult.error &&
-      !keysResult.error &&
-      [
-        ...queryClient
-          .getQueryCache()
-          .findAll({ queryKey: coreKeys.endpoint(accountId, endpointId), exact: false }),
-        ...queryClient
-          .getQueryCache()
-          .findAll({ queryKey: coreKeys.endpointKeysRoot(accountId, endpointId), exact: false }),
-      ].every((query) => query.state.status !== 'error');
-    setReconciliationRequired(!ready);
-    if (ready && attempt?.kind === 'patch' && endpointResult.data) {
-      const confirmed =
-        BigInt(endpointResult.data.revision) > BigInt(attempt.input.expected_revision) &&
-        (attempt.input.note === undefined || endpointResult.data.note === attempt.input.note) &&
-        (attempt.input.enabled === undefined ||
-          endpointResult.data.enabled === attempt.input.enabled);
-      if (confirmed) {
-        setReplayAttempt(null);
-        setOutcome(null);
-        if (attempt.input.note !== undefined) setEditing(false);
-      }
-    }
-    return ready;
-  };
+  }, [endpoint.data?.note]);
 
   if (endpoint.isPending && !endpoint.data)
     return (
@@ -1622,64 +1457,6 @@ export function EndpointDetail({
       </div>
     );
 
-  const runEndpointAction = async (attempt: NonNullable<typeof replayAttempt>) => {
-    if (reconciliationRequired) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleEndpointMutation();
-      return;
-    }
-    setBusy(true);
-    setOutcome(null);
-    try {
-      if (attempt.kind === 'patch') {
-        await patchEndpoint(endpoint.data.id, attempt.input, attempt.operation);
-      } else {
-        await deleteEndpoint(endpoint.data.id, attempt.expectedRevision, attempt.operation);
-      }
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleEndpointMutation();
-        return;
-      }
-      setReplayAttempt(null);
-      if (attempt.kind === 'delete') {
-        const [dependentsCurrent] = await Promise.all([
-          invalidateResourceDependents(queryClient, accountId, {
-            endpointId: endpoint.data.id,
-            modelIds: 'all',
-            charity: true,
-          }),
-          queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
-        ]);
-        if (!dependentsCurrent) {
-          discardStaleEndpointMutation();
-          return;
-        }
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleEndpointMutation();
-          return;
-        }
-        queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.data.id) });
-        navigate(returnTo);
-      } else {
-        if (attempt.input.note !== undefined) setEditing(false);
-        await reconcile();
-      }
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleEndpointMutation();
-        return;
-      }
-      const nextOutcome = actionOutcome(error);
-      setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error)) {
-        await reconcile(nextOutcome === 'unknown' ? attempt : null);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const removeEndpoint = async () => {
     if (busy || reconciliationRequired || replayAttempt?.kind === 'patch') return;
     await runEndpointAction(
@@ -1688,7 +1465,6 @@ export function EndpointDetail({
         : {
             kind: 'delete',
             expectedRevision: endpoint.data.revision,
-            operation: createOperationIdentity(),
           },
     );
   };
@@ -1750,7 +1526,6 @@ export function EndpointDetail({
                   enabled: !endpoint.data.enabled,
                   expected_revision: endpoint.data.revision,
                 },
-                operation: createOperationIdentity(),
               })
             }
           >
@@ -1775,7 +1550,7 @@ export function EndpointDetail({
             disabled={busy || reconciliationRequired}
             onClick={() => void runEndpointAction(replayAttempt)}
           >
-            {t('common.retrySame')}
+            {t('common.reconcile')}
           </button>
         ) : null}
         {editing ? (
@@ -1786,7 +1561,6 @@ export function EndpointDetail({
               void runEndpointAction({
                 kind: 'patch',
                 input: { note: endpointNote, expected_revision: endpoint.data.revision },
-                operation: createOperationIdentity(),
               });
             }}
           >

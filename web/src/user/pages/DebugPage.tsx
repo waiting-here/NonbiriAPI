@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MessagesView, MessageField } from '@shared/components/MessagesView';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { ApiError } from '@shared/query/http';
@@ -19,7 +20,7 @@ import { useDebugV2 } from '../features/debug/useDebugV2';
 import '../features/debug/debug-v2.css';
 import '@shared/operations/operations.css';
 
-const PARAMETER_ORDER = ['model', 'stream', 'messages', 'temperature', 'top_p', 'max_tokens', 'tools', 'tool_choice', 'response_format'] as const;
+const PARAMETER_ORDER = ['model', 'stream', 'temperature', 'top_p', 'max_tokens', 'tools', 'tool_choice', 'response_format'] as const;
 const EMBEDDING_PARAMETER_ORDER = ['model', 'input', 'encoding_format', 'dimensions', 'user'] as const;
 
 const ROUTE_LABEL_KEYS = {
@@ -86,27 +87,30 @@ const PRESENCE_LABEL_KEYS = {
   value: 'user.debug.state.presence.value',
 } as const satisfies Record<Presence, string>;
 
-function plainJSON(value: unknown, unavailable: string): string {
-  try {
-    return JSON.stringify(value, null, 2) ?? unavailable;
-  } catch {
-    return unavailable;
-  }
-}
-
 function RequestDetails({ trace }: { trace: DebugTrace }) {
   const { t } = useTranslation();
   const parsed = safeRequestJSON(trace);
-  const root = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-    ? parsed as Record<string, unknown>
-    : null;
+  const root =
+    parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
   const titleId = trace.trace_id + '-request';
   return (
     <section aria-labelledby={titleId}>
       <h3 id={titleId}>{t('user.debug.request.title')}</h3>
       <p>{t('user.debug.request.ownerOnly')}</p>
+      {Array.isArray(root?.messages) ? (
+        <MessagesView messages={root.messages} />
+      ) : root && Object.hasOwn(root, 'messages') ? (
+        <dl>
+          <MessageField name="messages" value={root.messages} />
+        </dl>
+      ) : null}
       <dl className="ops-debug-presence">
-        {(isEmbeddingRoute(trace.request.route_kind) ? EMBEDDING_PARAMETER_ORDER : PARAMETER_ORDER).map((name) => {
+        {(isEmbeddingRoute(trace.request.route_kind)
+          ? EMBEDDING_PARAMETER_ORDER
+          : PARAMETER_ORDER
+        ).map((name) => {
           const present = Boolean(root && Object.prototype.hasOwnProperty.call(root, name));
           const value = root?.[name];
           const presence = valuePresence(value, present);
@@ -115,15 +119,31 @@ function RequestDetails({ trace }: { trace: DebugTrace }) {
               <dt>{name}</dt>
               <dd>
                 <code>{t(PRESENCE_LABEL_KEYS[presence])}</code>
-                {present ? <> · {plainJSON(value, t('user.debug.value.unavailable'))}</> : null}
+                {present ? (
+                  <dl>
+                    <MessageField name={name} value={value} />
+                  </dl>
+                ) : null}
               </dd>
             </div>
           );
         })}
       </dl>
       <details>
-        <summary>{t(trace.request.body.truncated ? 'user.debug.request.rawBodyTruncated' : 'user.debug.request.rawBody', { bytes: trace.request.body.byte_count })}</summary>
-        <pre className="ops-debug-json">{trace.request.body.text ?? t('user.debug.request.base64Body', { characters: trace.request.body.base64?.length ?? 0 })}</pre>
+        <summary>
+          {t(
+            trace.request.body.truncated
+              ? 'user.debug.request.rawBodyTruncated'
+              : 'user.debug.request.rawBody',
+            { bytes: trace.request.body.byte_count },
+          )}
+        </summary>
+        <pre className="ops-debug-json">
+          {trace.request.body.text ??
+            t('user.debug.request.base64Body', {
+              characters: trace.request.body.base64?.length ?? 0,
+            })}
+        </pre>
       </details>
     </section>
   );

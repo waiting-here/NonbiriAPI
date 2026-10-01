@@ -205,6 +205,12 @@ export interface CatalogView {
   next_cursor: string | null;
 }
 
+export type RoleAction = 'native' | 'passthrough' | 'system' | 'user' | 'assistant' | 'reject';
+export interface RolePolicy {
+  default_action: RoleAction;
+  rules: Record<string, RoleAction>;
+}
+
 export interface Model {
   id: string;
   provider: string;
@@ -219,6 +225,7 @@ export interface Model {
   created_at: number;
   updated_at: number;
   browse?: ModelBrowse;
+  role_policy?: RolePolicy;
 }
 
 export interface BindingCandidate {
