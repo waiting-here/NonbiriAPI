@@ -268,7 +268,7 @@ func (f *imageBrowserFixture) request(method, path string, body any, cookie *htt
 func (f *imageBrowserFixture) call(method, path string, body any, cookie *http.Cookie, admin bool) map[string]any {
 	f.t.Helper()
 	out := f.request(method, path, body, cookie, admin)
-	if out.Code != http.StatusOK {
+	if out.Code != http.StatusOK && out.Code != http.StatusCreated {
 		f.t.Fatalf("%s %s: %d %s", method, path, out.Code, out.Body.String())
 	}
 	var result map[string]any
@@ -433,7 +433,7 @@ func (f *imageBrowserFixture) initialize() {
 	}
 }
 
-func (f *imageBrowserFixture) seedUser(index, level int, admin int64) imageBrowserUser {
+func (f *imageBrowserFixture) seedUser(index, level int, admin int64, discordIDs ...string) imageBrowserUser {
 	t := f.t
 	ctx := context.Background()
 	now := f.now().Unix()
@@ -442,8 +442,12 @@ func (f *imageBrowserFixture) seedUser(index, level int, admin int64) imageBrows
 	if err != nil {
 		t.Fatal(err)
 	}
+	discordID := fmt.Sprintf("image-fixture-%d", index)
+	if len(discordIDs) > 0 {
+		discordID = discordIDs[0]
+	}
 	result, err := f.store.DB().Exec(`INSERT INTO users(discord_id,username,level,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		fmt.Sprintf("image-fixture-%d", index), fmt.Sprintf("Canvas participant %d", index), level,
+		discordID, fmt.Sprintf("Canvas participant %d", index), level,
 		zero, zero, zero, zero, zero, zero, zero, db.EncodeU128(one), now, now)
 	if err != nil {
 		t.Fatal(err)

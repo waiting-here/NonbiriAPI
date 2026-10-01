@@ -125,6 +125,10 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		t.Fatal(err)
 	}
 	seedAuditBrowserGameBalances(t, f, now)
+	var management map[string]any
+	if os.Getenv("NONBIRI_MANAGEMENT_BROWSER") == "1" {
+		management = seedManagementBrowser(t, f, now)
+	}
 	// A real failed queued image task exercises its diagnostic root and refund.
 	models := f.call("GET", "/api/limited-activities/picture-book/models", nil, f.users[0].Cookie, false)["data"].([]any)
 	model := models[0].(map[string]any)
@@ -193,6 +197,9 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		"json_body": auditBrowserJSON, "text_body": auditBrowserText,
 		"private_markers": []string{auditBrowserIP, auditBrowserClient, "audit-original-only", "audit-text-only"},
 	}
+	if management != nil {
+		state["management"] = management
+	}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +217,7 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	}
 }
 
-func seedAuditBrowserRequest(t *testing.T, f *imageBrowserFixture, owner, route, kind string, at int64) string {
+func seedAuditBrowserRequest(t *testing.T, f *imageBrowserFixture, owner, route, kind string, at int64, sourceIPs ...string) string {
 	t.Helper()
 	id, err := db.GenerateOpaqueID("req_")
 	if err != nil {
@@ -225,7 +232,11 @@ func seedAuditBrowserRequest(t *testing.T, f *imageBrowserFixture, owner, route,
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec(`INSERT INTO logical_requests(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,caller_error_code,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at) VALUES(?,?,?,'synthetic/audit-model','terminal',1,'failed',503,'upstream','none','user',zeroblob(16),?,?)`, id, owner, route, at, at+1)
+	accounting := "released"
+	if route == "model_discovery" {
+		accounting = "none"
+	}
+	_, err = tx.Exec(`INSERT INTO logical_requests(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,caller_error_code,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at) VALUES(?,?,?,'synthetic/audit-model','terminal',1,'failed',503,'upstream',?,'user',zeroblob(16),?,?)`, id, owner, route, accounting, at, at+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +250,11 @@ func seedAuditBrowserRequest(t *testing.T, f *imageBrowserFixture, owner, route,
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest("POST", "http://"+f.cfg.UserHost+"/v1/chat/completions", nil)
-	request.RemoteAddr = auditBrowserIP + ":32000"
+	sourceIP := auditBrowserIP
+	if len(sourceIPs) > 0 {
+		sourceIP = sourceIPs[0]
+	}
+	request.RemoteAddr = sourceIP + ":32000"
 	request.Header.Set("User-Agent", auditBrowserClient)
 	request.Header.Set("Origin", "https://audit-source.invalid")
 	request.Header.Set("Referer", "https://audit-source.invalid/private-path?discard=this")
