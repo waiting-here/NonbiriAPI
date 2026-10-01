@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -290,6 +291,31 @@ func (s *Service) CheckCharityCall(parent context.Context, userID int64, model s
 	previous := ""
 	if priorActive {
 		previous = priorReason
+	}
+	metadata := observability.AutomaticReason{Kind: "client_rules", SchemaVersion: 1, Params: json.RawMessage(`{}`), ManualText: previous}
+	if previous != "" {
+		prior, e := observability.ReadAutomaticReasonTx(ctx, tx, "user_ban", strconv.FormatInt(userID, 10))
+		if e != nil {
+			return Decision{}, e
+		}
+		if prior != nil && prior.Kind == "client_rules" {
+			metadata.ManualText = prior.ManualText
+		}
+	}
+	for _, ref := range refs {
+		found := false
+		for _, label := range metadata.Rules {
+			if label.RuleID == ref.ID && label.Revision == ref.Revision {
+				found = true
+				break
+			}
+		}
+		if !found && len(metadata.Rules) < 100 {
+			metadata.Rules = append(metadata.Rules, observability.ReasonRuleLabel{RuleID: ref.ID, Revision: ref.Revision, Name: ref.Name})
+		}
+	}
+	if err = observability.PutAutomaticReasonTx(ctx, tx, "user_ban", strconv.FormatInt(userID, 10), metadata); err != nil {
+		return Decision{}, err
 	}
 	reason, err := boundedReason(refs, previous)
 	if err != nil {

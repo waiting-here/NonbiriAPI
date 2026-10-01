@@ -136,7 +136,7 @@ func TestAggregatePendingContributorDeletionNeverPublishesStaleIP(t *testing.T) 
 	if err = f.store.DB().QueryRow(`SELECT request_log_id FROM risk_scan_result_sources WHERE scan_id=? LIMIT 1`, scan.ID).Scan(&sourceID); err != nil {
 		t.Fatal(err)
 	}
-	f.exec(`UPDATE request_source_facts SET user_id=NULL WHERE request_log_id=?`, sourceID)
+	f.exec(`DELETE FROM request_source_facts WHERE request_log_id=?`, sourceID)
 	if _, err = f.repository.ProcessScanBatch(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -199,6 +199,12 @@ func TestUnpublishedAggregateCursorIsClearedAfterSourceOrUserRetirement(t *testi
 			}
 			var state, reason string
 			var changed bool
+			if kind == "users" || kind == "shared_ips" {
+				if err := f.store.DB().QueryRow(`SELECT state,changed FROM risk_client_scans WHERE id=?`, scan.ID).Scan(&state, &changed); err != nil || state != "running" || changed {
+					t.Fatalf("active projection clear retired facts: %s %t %v", state, changed, err)
+				}
+				return
+			}
 			if err := f.store.DB().QueryRow(`SELECT state,reason,changed FROM risk_client_scans WHERE id=?`, scan.ID).Scan(&state, &reason, &changed); err != nil || state != "failed" || reason != "source_changed" || !changed {
 				t.Fatalf("retired unpublished group state=%s reason=%s changed=%t err=%v", state, reason, changed, err)
 			}

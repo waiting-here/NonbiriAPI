@@ -570,18 +570,34 @@ type targetRow struct {
 }
 
 func (s *Service) ensureRequestLogTx(ctx context.Context, tx *sql.Tx, requestID string) error {
-	if _, err := tx.ExecContext(ctx, `INSERT INTO request_logs(
+	result, err := tx.ExecContext(ctx, `INSERT INTO request_logs(
 logical_request_id,user_id,model,route_kind,started_at)
-SELECT id,user_id,model_snapshot,route_kind,created_at FROM logical_requests WHERE id=?
-ON CONFLICT(logical_request_id) DO NOTHING`, requestID); err != nil {
+SELECT r.id,r.user_id,r.model_snapshot,r.route_kind,r.created_at
+FROM logical_requests r JOIN users u ON u.id=r.user_id WHERE r.id=?
+ON CONFLICT(logical_request_id) DO NOTHING`, requestID)
+	if err != nil {
 		return fmt.Errorf("claim: ensure request log: %w", err)
+	}
+	created, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if created == 0 {
+		var exists int
+		err := tx.QueryRowContext(ctx, "SELECT 1 FROM request_logs WHERE logical_request_id=?", requestID).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
 	}
 	if s.observations != nil {
 		if _, present := observability.SourceFromContext(ctx); present {
 			var user sql.NullInt64
 			var route RouteKind
 			var at int64
-			if err := tx.QueryRowContext(ctx, `SELECT user_id,route_kind,started_at FROM request_logs WHERE logical_request_id=?`, requestID).Scan(&user, &route, &at); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT origin_user_id,route_kind,started_at FROM request_logs WHERE logical_request_id=?`, requestID).Scan(&user, &route, &at); err != nil {
 				return err
 			}
 			kind := "unclassified"

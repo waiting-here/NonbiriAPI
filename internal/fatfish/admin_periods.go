@@ -145,7 +145,7 @@ func readAdminPeriodTx(ctx context.Context, tx *sql.Tx, id string) (PeriodView, 
 	p.Nodes = []NodeView{}
 	rows, err := tx.QueryContext(ctx, `SELECT n.id,n.title,n.description,n.map_x,n.map_y,n.ord,n.current_revision,
 	 r.version_id,r.hidden_until_eligible,r.unlock_cost_mag,r.ticket_price_mag,
-	 r.first_clear_reward_mag,r.star1_reward_mag,r.star2_reward_mag,r.star3_reward_mag,v.content_hash
+	 r.first_clear_reward_mag,r.star1_reward_mag,r.star2_reward_mag,r.star3_reward_mag,v.content_hash,r.condition_json
  FROM fatfish_nodes n JOIN fatfish_node_revisions r ON r.node_id=n.id AND r.revision=n.current_revision
  JOIN fatfish_level_versions v ON v.id=r.version_id WHERE n.period_id=? ORDER BY n.ord,n.id`, id)
 	if err != nil {
@@ -158,10 +158,12 @@ func readAdminPeriodTx(ctx context.Context, tx *sql.Tx, id string) (PeriodView, 
 		var hidden int
 		var mags [6][]byte
 		var hash []byte
+		var condition string
 		if err = rows.Scan(&n.ID, &n.Title, &n.Description, &n.MapX, &n.MapY, &n.Order, &rev, &n.VersionID, &hidden,
-			&mags[0], &mags[1], &mags[2], &mags[3], &mags[4], &mags[5], &hash); err != nil {
+			&mags[0], &mags[1], &mags[2], &mags[3], &mags[4], &mags[5], &hash, &condition); err != nil {
 			return p, err
 		}
+		n.Condition = json.RawMessage(condition)
 		n.PeriodID = id
 		n.Revision = strconv.FormatInt(rev, 10)
 		n.Hidden = hidden == 1
@@ -189,7 +191,24 @@ func readAdminPeriodTx(ctx context.Context, tx *sql.Tx, id string) (PeriodView, 
 		}
 		p.Nodes = append(p.Nodes, n)
 	}
-	return p, rows.Err()
+	if err = rows.Err(); err != nil {
+		return p, err
+	}
+	rows.Close()
+	layout, err := readGraphLayoutTx(ctx, tx, id)
+	if err != nil {
+		return p, err
+	}
+	positions := map[string]GraphPosition{}
+	for _, position := range layout.Nodes {
+		positions[position.NodeID] = position
+	}
+	for i := range p.Nodes {
+		position := positions[p.Nodes[i].ID]
+		p.Nodes[i].MapX = position.MapX
+		p.Nodes[i].MapY = position.MapY
+	}
+	return p, nil
 }
 
 func (s *Service) AdminPeriod(ctx context.Context, actorID int64, id string) (PeriodView, error) {
@@ -272,11 +291,6 @@ func (s *Service) AdminNode(ctx context.Context, actorID int64, periodID, nodeID
 		if n.ID != nodeID {
 			continue
 		}
-		var raw string
-		if err = tx.QueryRowContext(ctx, `SELECT r.condition_json FROM fatfish_nodes x JOIN fatfish_node_revisions r ON r.node_id=x.id AND r.revision=x.current_revision WHERE x.period_id=? AND x.id=?`, periodID, nodeID).Scan(&raw); err != nil {
-			return NodeView{}, err
-		}
-		n.Condition = json.RawMessage(raw)
 		return n, tx.Commit()
 	}
 	return NodeView{}, ErrNotFound

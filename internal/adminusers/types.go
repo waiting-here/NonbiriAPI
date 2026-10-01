@@ -2,6 +2,7 @@ package adminusers
 
 import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -30,33 +31,34 @@ type AdminUserLevel struct {
 }
 
 type AdminUser struct {
-	ID                        string         `json:"id"`
-	DiscordID                 *string        `json:"discord_id"`
-	Username                  string         `json:"username"`
-	AvatarURL                 *string        `json:"avatar_url"`
-	GuildNick                 *string        `json:"guild_nick"`
-	GuildAvatarURL            *string        `json:"guild_avatar_url"`
-	IsAdmin                   bool           `json:"is_admin"`
-	IsBanned                  bool           `json:"is_banned"`
-	BannedReason              string         `json:"banned_reason"`
-	BannedUntil               *int64         `json:"banned_until"`
-	CharitySuspendedUntil     *int64         `json:"charity_suspended_until"`
-	EndpointLimit             *string        `json:"endpoint_limit"`
-	EffectiveEndpointLimit    string         `json:"effective_endpoint_limit"`
-	RPMLimit                  *string        `json:"rpm_limit"`
-	EffectiveRPMLimit         string         `json:"effective_rpm_limit"`
-	ConcurrencyLimit          *string        `json:"concurrency_limit"`
-	EffectiveConcurrencyLimit string         `json:"effective_concurrency_limit"`
-	Lang                      string         `json:"lang"`
-	GameBalance               string         `json:"game_balance"`
-	Balance                   string         `json:"balance"`
-	DonationCredit            string         `json:"donation_credit"`
-	Level                     AdminUserLevel `json:"level"`
-	GameProfilePublic         bool           `json:"game_profile_public"`
-	Revision                  string         `json:"revision"`
-	Usage                     UsageSummary   `json:"usage"`
-	CreatedAt                 int64          `json:"created_at"`
-	UpdatedAt                 int64          `json:"updated_at"`
+	ID                        string                         `json:"id"`
+	DiscordID                 *string                        `json:"discord_id"`
+	Username                  string                         `json:"username"`
+	AvatarURL                 *string                        `json:"avatar_url"`
+	GuildNick                 *string                        `json:"guild_nick"`
+	GuildAvatarURL            *string                        `json:"guild_avatar_url"`
+	IsAdmin                   bool                           `json:"is_admin"`
+	IsBanned                  bool                           `json:"is_banned"`
+	BannedReason              string                         `json:"banned_reason"`
+	AutomaticReason           *observability.AutomaticReason `json:"automatic_reason,omitempty"`
+	BannedUntil               *int64                         `json:"banned_until"`
+	CharitySuspendedUntil     *int64                         `json:"charity_suspended_until"`
+	EndpointLimit             *string                        `json:"endpoint_limit"`
+	EffectiveEndpointLimit    string                         `json:"effective_endpoint_limit"`
+	RPMLimit                  *string                        `json:"rpm_limit"`
+	EffectiveRPMLimit         string                         `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *string                        `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit string                         `json:"effective_concurrency_limit"`
+	Lang                      string                         `json:"lang"`
+	GameBalance               string                         `json:"game_balance"`
+	Balance                   string                         `json:"balance"`
+	DonationCredit            string                         `json:"donation_credit"`
+	Level                     AdminUserLevel                 `json:"level"`
+	GameProfilePublic         bool                           `json:"game_profile_public"`
+	Revision                  string                         `json:"revision"`
+	Usage                     UsageSummary                   `json:"usage"`
+	CreatedAt                 int64                          `json:"created_at"`
+	UpdatedAt                 int64                          `json:"updated_at"`
 }
 
 type AdminUserUsage struct {

@@ -195,6 +195,7 @@ describe('fat fish tab session', () => {
     };
     const session = createFatFishSessionController(transport);
     const preparing = session.prepare();
+    await Promise.resolve();
     session.dispose();
     releaseOpen();
     await expect(preparing).rejects.toThrow(/closed/i);
@@ -572,4 +573,47 @@ describe('fat fish tab session', () => {
     expect(writesWithoutLock).toBe(0);
     session.dispose();
   });
+});
+
+it('serializes overlapping prepare and start requests without allocating two sessions', async () => {
+  let releasePrepare: () => void = () => {};
+  const pending = new Promise<void>((resolve) => { releasePrepare = resolve; });
+  const prepare = vi.fn(async () => { await pending; return base; });
+  const start = vi.fn(async () => active);
+  const session = createFatFishSessionController({
+    prepareScope: 'playtest:version', prepare, start, read: async () => active,
+    submit: async () => ({ ...active, state: 'verifying' }),
+  });
+  try {
+    const first = session.prepare(), duplicate = session.prepare(), opening = session.start();
+    await Promise.resolve(); releasePrepare();
+    await Promise.all([first, duplicate, opening, session.start()]);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(saved.size).toBe(1);
+  } finally { session.dispose(); }
+});
+it('durably saves the automatic terminal submission before sending and retains its key on an uncertain reply', async () => {
+  const submitted = vi.fn(async (_id: string, _payload: unknown, key: string) => {
+    const record = saved.get(id) as { submit_key: string; terminal_tick: number };
+    expect(record.submit_key).toBe(key);
+    expect(record.terminal_tick).toBe(case0.result.terminal_tick);
+    throw new Error('reply lost');
+  });
+  const session = createFatFishSessionController({
+    prepareScope: 'playtest:version', autoSubmit: true, prepare: async () => ({ ...base, ticket_price: '0' }),
+    start: async () => ({ ...active, ticket_price: '0' }), read: async () => ({ ...active, ticket_price: '0' }),
+    submit: submitted,
+  });
+  try {
+    await session.prepare(); await session.start();
+    vi.spyOn(performance, 'now').mockReturnValue(3200);
+    session.advance(128);
+    await vi.waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
+    const originalKey = submitted.mock.calls[0][2];
+    session.advance(128);
+    expect(submitted).toHaveBeenCalledTimes(1);
+    await expect(session.submit()).rejects.toThrow('reply lost');
+    expect(submitted.mock.calls[1][2]).toBe(originalKey);
+  } finally { session.dispose(); }
 });

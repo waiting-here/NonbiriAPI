@@ -99,6 +99,9 @@ func (f *auditFixture) user(level int) int64 {
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	if admin == 0 {
+		f.exec(`UPDATE users SET discord_id=? WHERE id=?`, fmt.Sprintf("%d", 100000000000000000+id), id)
+	}
 	token := fmt.Sprintf("audit-session-%d", id)
 	generation := "g1"
 	f.exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`, token, id, f.now, f.now+600, f.now+1200, f.now, generation)
@@ -144,7 +147,13 @@ func (f *auditFixture) source(user int64, kind, ip, quality, ua, model, outcome 
 			dispatched = at
 			state = "committed"
 		}
-		f.exec(`INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at) VALUES(?,?,1,'self',?,?,?,?)`, claimID, id, at, state, dispatched, at+125)
+		disposition, origin := "neutral", "platform"
+		if outcome == "success" {
+			disposition, origin = "success", "none"
+		} else if outcome == "cancelled" {
+			origin = "client_cancel"
+		}
+		f.exec(`INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,streak_disposition,failure_origin) VALUES(?,?,1,'self',?,?,?,?,?,?)`, claimID, id, at, state, dispatched, at+125, disposition, origin)
 	}
 	return logID
 }

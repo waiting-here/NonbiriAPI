@@ -63,9 +63,14 @@ type ClientScan struct {
 	Changed         bool   `json:"changed"`
 	Coverage        string `json:"coverage"`
 	TruncatedReason string `json:"truncated_reason,omitempty"`
+	SourceWatermark string `json:"source_watermark"`
+	LastSourceAt    *int64 `json:"last_source_at,omitempty"`
+	LastSourceID    string `json:"last_source_id,omitempty"`
 	owner           int64
 	admin           bool
 	upper           int64
+	upperSource     int64
+	afterSource     int64
 	afterAt         int64
 	afterID         int64
 	rules           []Rule
@@ -74,24 +79,27 @@ type ClientScan struct {
 }
 
 type scanCheckpoint struct {
-	Signal      string    `json:"signal,omitempty"`
-	Config      Config    `json:"config"`
-	PendingUser int64     `json:"pending_user,omitempty"`
-	AfterUser   int64     `json:"after_user,omitempty"`
-	PendingIP   string    `json:"pending_ip,omitempty"`
-	AfterIP     string    `json:"after_ip,omitempty"`
-	SourceAt    int64     `json:"source_at,omitempty"`
-	SourceID    int64     `json:"source_id,omitempty"`
-	IPSummary   *SharedIP `json:"ip_summary,omitempty"`
+	PendingDiscord string    `json:"pending_discord,omitempty"`
+	AfterDiscord   string    `json:"after_discord,omitempty"`
+	UserIPSummary  *UserIPs  `json:"user_ip_summary,omitempty"`
+	Signal         string    `json:"signal,omitempty"`
+	Config         Config    `json:"config"`
+	PendingUser    int64     `json:"pending_user,omitempty"`
+	AfterUser      int64     `json:"after_user,omitempty"`
+	PendingIP      string    `json:"pending_ip,omitempty"`
+	AfterIP        string    `json:"after_ip,omitempty"`
+	SourceAt       int64     `json:"source_at,omitempty"`
+	SourceID       int64     `json:"source_id,omitempty"`
+	IPSummary      *SharedIP `json:"ip_summary,omitempty"`
 }
 
-const scanCommonColumns = `id,user_id,admin,state,reason,from_at,to_at,call_kind,model,upper_log_id,after_at,after_log_id,candidates,scanned,matched,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json,coverage_json,changed`
+const scanCommonColumns = `id,user_id,admin,state,reason,from_at,to_at,call_kind,model,upper_log_id,after_at,after_log_id,candidates,scanned,matched,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json,coverage_json,changed,upper_source_id,after_source_id`
 const scanColumns = scanCommonColumns + `,rules_json`
 const scanMetaColumns = scanCommonColumns + `,json_array_length(rules_json)`
 
 // Completed, cancelled, and failed scans never resume. Retain only the
 // non-identity configuration in their checkpoint during the 24-hour result TTL.
-const scanCheckpointWithoutIdentitySQL = `json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')`
+const scanCheckpointWithoutIdentitySQL = `json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary','$.pending_discord','$.after_discord','$.user_ip_summary')`
 
 func readScan(row scanner) (ClientScan, error) {
 	return readScanRow(row, true)
@@ -104,7 +112,7 @@ func readScanRow(row scanner, hydrate bool) (ClientScan, error) {
 		ruleValue = &out.RuleCount
 	}
 	var coverage string
-	err := row.Scan(&out.ID, &out.owner, &out.admin, &out.State, &out.Reason, &out.From, &out.To, &out.Kind, &out.Model, &out.upper, &out.afterAt, &out.afterID, &out.Candidates, &out.Scanned, &out.Matched, &out.CreatedAt, &out.UpdatedAt, &out.ExpiresAt, &out.ScanKind, &out.FilterRevision, &out.checkpoint, &coverage, &out.Changed, ruleValue)
+	err := row.Scan(&out.ID, &out.owner, &out.admin, &out.State, &out.Reason, &out.From, &out.To, &out.Kind, &out.Model, &out.upper, &out.afterAt, &out.afterID, &out.Candidates, &out.Scanned, &out.Matched, &out.CreatedAt, &out.UpdatedAt, &out.ExpiresAt, &out.ScanKind, &out.FilterRevision, &out.checkpoint, &coverage, &out.Changed, &out.upperSource, &out.afterSource, ruleValue)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
 	}
@@ -123,6 +131,23 @@ func readScanRow(row scanner, hydrate bool) (ClientScan, error) {
 	}
 	if len(coverage) > 4096 || len(out.checkpoint) > 16384 {
 		return out, ErrUnavailable
+	}
+	out.SourceWatermark = strconv.FormatInt(out.upperSource, 10)
+	var coverageFacts struct {
+		Partial      bool   `json:"partial"`
+		Reason       string `json:"reason"`
+		LastSourceAt *int64 `json:"last_source_at"`
+		LastSourceID *int64 `json:"last_source_id"`
+	}
+	if json.Unmarshal([]byte(coverage), &coverageFacts) == nil {
+		out.LastSourceAt = coverageFacts.LastSourceAt
+		if coverageFacts.LastSourceID != nil {
+			out.LastSourceID = strconv.FormatInt(*coverageFacts.LastSourceID, 10)
+		}
+		if coverageFacts.Partial && out.Coverage == "complete" {
+			out.Coverage = "partial"
+			out.TruncatedReason = coverageFacts.Reason
+		}
 	}
 	var frozen scanCheckpoint
 	if json.Unmarshal([]byte(out.checkpoint), &frozen) == nil {
@@ -150,7 +175,7 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	if input.ScanKind == "" {
 		input.ScanKind = "client_hits"
 	}
-	if input.ScanKind != "client_hits" && input.ScanKind != "users" && input.ScanKind != "shared_ips" ||
+	if input.ScanKind != "client_hits" && input.ScanKind != "users" && input.ScanKind != "shared_ips" && input.ScanKind != "user_ips" ||
 		(input.Signal != "" && input.Signal != "rpm" && input.Signal != "concurrency") ||
 		(input.ScanKind != "users" && input.Signal != "") ||
 		(input.ScanKind != "client_hits" && input.Model != "") {
@@ -219,22 +244,24 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	if err != nil || len(raw) > 16<<20 {
 		return ClientScan{}, ErrUnavailable
 	}
-	var upper, total int64
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(request_log_id),0) FROM request_source_facts`).Scan(&upper); err != nil {
+	var upper, upperSource, total int64
+	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(request_log_id),0),COALESCE(MAX(source_id),0) FROM request_source_facts`).Scan(&upper, &upperSource); err != nil {
 		return ClientScan{}, err
 	}
-	where, args := scanPredicate(w.From, w.To, upper)
+	where, args := scanPredicate(w.From, w.To, upperSource)
 	switch input.ScanKind {
 	case "client_hits":
-		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s WHERE `+where, args...).Scan(&total)
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE `+where, args...).Scan(&total)
 	case "users":
 		err = tx.QueryRowContext(ctx, `SELECT
- (SELECT count(*) FROM request_source_facts WHERE occurred_at>=? AND occurred_at<? AND request_log_id<=? AND user_id IS NOT NULL AND kind IN ('self','charity','unclassified'))
+ (SELECT count(*) FROM request_source_facts WHERE occurred_at>=? AND occurred_at<? AND source_id<=? AND user_id IS NOT NULL AND kind IN ('self','charity','unclassified'))
  +(SELECT count(*) FROM (SELECT DISTINCT user_id FROM risk_audit_minutes WHERE minute>=? AND minute<?) m WHERE NOT EXISTS (
- SELECT 1 FROM request_source_facts s WHERE s.user_id=m.user_id AND s.occurred_at>=? AND s.occurred_at<? AND s.request_log_id<=? AND s.kind IN ('self','charity','unclassified')))
-`, w.From, w.To, upper, w.From, w.To, w.From, w.To, upper).Scan(&total)
+ SELECT 1 FROM request_source_facts s WHERE s.user_id=m.user_id AND s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND s.kind IN ('self','charity','unclassified')))
+`, w.From, w.To, upperSource, w.From, w.To, w.From, w.To, upperSource).Scan(&total)
 	case "shared_ips":
-		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts WHERE occurred_at>=? AND occurred_at<? AND request_log_id<=? AND user_id IS NOT NULL AND kind IN ('self','charity','unclassified') AND (?='total' OR kind=?) AND ip_quality IN ('direct_peer','trusted_forwarded')`, w.From, w.To, upper, w.Kind, w.Kind).Scan(&total)
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_discord_id IS NOT NULL AND l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded')`, w.From, w.To, upperSource, w.Kind, w.Kind).Scan(&total)
+	case "user_ips":
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND l.origin_discord_id IS NOT NULL AND l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND s.ip_quality IN ('direct_peer','trusted_forwarded')`, max(int64(0), w.From-int64(config.UserIPWindowHours)*3600), w.To, upperSource, w.Kind, w.Kind).Scan(&total)
 	}
 	if err != nil {
 		return ClientScan{}, err
@@ -251,8 +278,29 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 	if err != nil {
 		return ClientScan{}, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, actor.UserID, actor.Admin, input.RequestToken, string(encoded), string(raw), state, w.From, w.To, w.Kind, w.Model, upper, w.From, total, now, now, now+int64(ScanLifetime/time.Second), input.ScanKind, config.Revision, string(checkpoint))
+	coverage := `{}`
+	if input.ScanKind == "user_ips" || input.ScanKind == "shared_ips" {
+		prefix := w.From
+		if input.ScanKind == "user_ips" {
+			prefix = max(int64(0), prefix-int64(config.UserIPWindowHours)*3600)
+		}
+		var excluded int64
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND (l.origin_discord_id IS NULL OR l.origin_user_id IS NULL OR s.ip_quality NOT IN ('direct_peer','trusted_forwarded'))`, prefix, w.To, upperSource, w.Kind, w.Kind).Scan(&excluded)
+		if err != nil {
+			return ClientScan{}, err
+		}
+		if excluded > 0 || prefix < now-int64(Retention/time.Second) {
+			coverage = `{"partial":true,"reason":"identity_or_ip_unavailable"}`
+			if prefix < now-int64(Retention/time.Second) {
+				coverage = `{"partial":true,"reason":"prefix_retention"}`
+			}
+		}
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at,kind,filter_revision,checkpoint_json,upper_source_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, actor.UserID, actor.Admin, input.RequestToken, string(encoded), string(raw), state, w.From, w.To, w.Kind, w.Model, upper, w.From, total, now, now, now+int64(ScanLifetime/time.Second), input.ScanKind, config.Revision, string(checkpoint), upperSource)
 	if err != nil {
+		return ClientScan{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET coverage_json=? WHERE id=?`, coverage, id); err != nil {
 		return ClientScan{}, err
 	}
 	out, err := readScan(tx.QueryRowContext(ctx, `SELECT `+scanColumns+` FROM risk_client_scans WHERE id=?`, id))
@@ -263,7 +311,7 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 }
 
 func scanPredicate(from, to, upper int64) (string, []any) {
-	where := `s.user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND s.occurred_at>=? AND s.occurred_at<? AND s.request_log_id<=?`
+	where := `l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=?`
 	args := []any{from, to, upper}
 	return where, args
 }
@@ -418,7 +466,7 @@ func sourcesByID(ctx context.Context, tx *sql.Tx, ids []int64) (map[int64]Source
 		args[i] = id
 		placeholders[i] = "?"
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT s.request_log_id,s.user_id,l.logical_request_id,s.kind,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,l.model,COALESCE(l.caller_result_class,'running'),EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),l.error_code,COALESCE(l.rejection_reason,''),l.duration_ms,l.completed_at FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.user_id IS NOT NULL AND s.request_log_id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	rows, err := tx.QueryContext(ctx, `SELECT s.request_log_id,l.origin_user_id,l.logical_request_id,s.kind,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,l.model,COALESCE(l.caller_result_class,'running'),EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),l.error_code,COALESCE(l.rejection_reason,''),l.duration_ms,l.completed_at FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE l.origin_user_id IS NOT NULL AND s.request_log_id IN (`+strings.Join(placeholders, ",")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -539,6 +587,9 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 		}
 		return true, tx.Commit()
 	}
+	if scan.ScanKind == "user_ips" {
+		return r.processUserIPsBatch(ctx, tx, scan, now)
+	}
 	if scan.ScanKind != "client_hits" {
 		return r.processAggregateScanBatch(ctx, tx, scan, now)
 	}
@@ -552,7 +603,7 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 			return false, ctx.Err()
 		}
 		scan.Scanned++
-		scan.afterAt, scan.afterID = item.at, item.id
+		scan.afterAt, scan.afterID, scan.afterSource = item.at, item.id, item.sourceID
 		if (scan.Kind == "total" || item.kind == scan.Kind) && (scan.Model == "" || item.model == scan.Model) && len(matchRules(item.source, scan.rules, false)) > 0 {
 			scan.Matched++
 			if _, err = tx.ExecContext(ctx, `INSERT INTO risk_scan_results(scan_id,row_no,user_id,request_log_id,result_json,published) VALUES(?,?,?,?,'{}',1)`, scan.ID, scan.Matched, item.userID, item.id); err != nil {
@@ -571,7 +622,7 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 	if scan.State == "running" && len(items) < clientScanBatchSize {
 		scan.State = "completed"
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state=?,reason=?,after_at=?,after_log_id=?,scanned=?,matched=?,updated_at=?,failures=0 WHERE id=?`, scan.State, scan.Reason, scan.afterAt, scan.afterID, scan.Scanned, scan.Matched, now, scan.ID)
+	_, err = tx.ExecContext(ctx, `UPDATE risk_client_scans SET state=?,reason=?,after_at=?,after_log_id=?,after_source_id=?,scanned=?,matched=?,updated_at=?,failures=0 WHERE id=?`, scan.State, scan.Reason, scan.afterAt, scan.afterID, scan.afterSource, scan.Scanned, scan.Matched, now, scan.ID)
 	if err != nil {
 		return false, err
 	}
@@ -579,14 +630,14 @@ func (r *Repository) ProcessScanBatch(ctx context.Context) (progress bool, resul
 }
 
 type scanCandidate struct {
-	id, at, userID int64
-	source         Source
-	kind, model    string
+	id, sourceID, at, userID int64
+	source                   Source
+	kind, model              string
 }
 
-const scanCandidateSelect = `SELECT s.request_log_id,s.occurred_at,s.user_id,s.source_json,s.effective_ip,s.ip_quality,s.kind,l.model FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified')`
-const scanSameSecond = scanCandidateSelect + ` AND s.occurred_at=? AND s.request_log_id>? AND s.request_log_id<=? ORDER BY s.request_log_id LIMIT ?`
-const scanLaterSeconds = scanCandidateSelect + ` AND s.occurred_at>? AND s.occurred_at<? AND s.request_log_id<=? ORDER BY s.occurred_at,s.request_log_id LIMIT ?`
+const scanCandidateSelect = `SELECT s.request_log_id,s.source_id,s.occurred_at,l.origin_user_id,s.source_json,s.effective_ip,s.ip_quality,s.kind,l.model FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE l.origin_user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified')`
+const scanSameSecond = scanCandidateSelect + ` AND s.occurred_at=? AND s.source_id>? AND s.source_id<=? ORDER BY s.source_id LIMIT ?`
+const scanLaterSeconds = scanCandidateSelect + ` AND s.occurred_at>? AND s.occurred_at<? AND s.source_id<=? ORDER BY s.occurred_at,s.source_id LIMIT ?`
 
 // Separate the current second from later seconds. SQLite can seek both index
 // columns for the former; a row-value comparison can rescan a long same-second
@@ -595,10 +646,10 @@ func readScanCandidates(ctx context.Context, tx *sql.Tx, scan ClientScan) ([]sca
 	items := make([]scanCandidate, 0, clientScanBatchSize)
 	for step := range 2 {
 		query := scanSameSecond
-		args := []any{scan.afterAt, scan.afterID, scan.upper, clientScanBatchSize - len(items)}
+		args := []any{scan.afterAt, scan.afterSource, scan.upperSource, clientScanBatchSize - len(items)}
 		if step == 1 {
 			query = scanLaterSeconds
-			args = []any{scan.afterAt, scan.To, scan.upper, clientScanBatchSize - len(items)}
+			args = []any{scan.afterAt, scan.To, scan.upperSource, clientScanBatchSize - len(items)}
 		}
 		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
@@ -607,7 +658,7 @@ func readScanCandidates(ctx context.Context, tx *sql.Tx, scan ClientScan) ([]sca
 		for rows.Next() {
 			var item scanCandidate
 			var raw, ip, quality string
-			if err = rows.Scan(&item.id, &item.at, &item.userID, &raw, &ip, &quality, &item.kind, &item.model); err != nil {
+			if err = rows.Scan(&item.id, &item.sourceID, &item.at, &item.userID, &raw, &ip, &quality, &item.kind, &item.model); err != nil {
 				rows.Close()
 				return nil, err
 			}

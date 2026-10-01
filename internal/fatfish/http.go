@@ -261,8 +261,14 @@ func RegisterAdminRoutes(routes limitedactivities.AdminRouteRegistrar, s *Servic
 		{http.MethodGet, adminPrefix + "/periods/{id}/nodes/{node}", get(func(r *http.Request, p limitedactivities.AdminPrincipal) (any, error) {
 			return s.AdminNode(r.Context(), p.UserID, r.PathValue("id"), r.PathValue("node"))
 		})},
+		{http.MethodGet, adminPrefix + "/periods/{id}/layout", get(func(r *http.Request, p limitedactivities.AdminPrincipal) (any, error) {
+			return s.GraphLayout(r.Context(), p.UserID, r.PathValue("id"))
+		})},
 		{http.MethodGet, adminPrefix + "/periods/{id}/validate", get(func(r *http.Request, p limitedactivities.AdminPrincipal) (any, error) {
 			return s.ValidatePeriod(r.Context(), p.UserID, r.PathValue("id"))
+		})},
+		{http.MethodGet, adminPrefix + "/playtests/current", get(func(r *http.Request, p limitedactivities.AdminPrincipal) (any, error) {
+			return s.CurrentPlaytest(r.Context(), p.UserID)
 		})},
 		{http.MethodGet, adminPrefix + "/playtests", func(w http.ResponseWriter, r *http.Request, p limitedactivities.AdminPrincipal) {
 			values, queryErr := singleQueryValues(r, "version_id")
@@ -338,6 +344,13 @@ func RegisterAdminRoutes(routes limitedactivities.AdminRouteRegistrar, s *Servic
 			}
 			return s.SavePeriod(r.Context(), p.UserID, r.PathValue("id"), in, key)
 		})},
+		{http.MethodPut, adminPrefix + "/periods/{id}/layout", mutation(32768, func(r *http.Request, p limitedactivities.AdminPrincipal, key string, raw []byte) (any, error) {
+			var input GraphLayoutInput
+			if err := decodeJSON(raw, &input); err != nil {
+				return nil, err
+			}
+			return s.SaveGraphLayout(r.Context(), p.UserID, r.PathValue("id"), input, key)
+		})},
 		{http.MethodPost, adminPrefix + "/periods/{id}/nodes", mutation(49152, func(r *http.Request, p limitedactivities.AdminPrincipal, key string, raw []byte) (any, error) {
 			var in NodeInput
 			if err := decodeJSON(raw, &in); err != nil {
@@ -361,6 +374,13 @@ func RegisterAdminRoutes(routes limitedactivities.AdminRouteRegistrar, s *Servic
 				return nil, err
 			}
 			return s.PreparePlaytest(r.Context(), p.UserID, in, key)
+		})},
+		{http.MethodPost, adminPrefix + "/playtests/{id}/abandon", mutation(4096, func(r *http.Request, p limitedactivities.AdminPrincipal, key string, raw []byte) (any, error) {
+			var in PlaytestAbandonInput
+			if err := decodeJSON(raw, &in); err != nil {
+				return nil, err
+			}
+			return s.AbandonPlaytest(r.Context(), p.UserID, r.PathValue("id"), in, key)
 		})},
 		{http.MethodPost, adminPrefix + "/playtests/{id}/start", mutation(4096, func(r *http.Request, p limitedactivities.AdminPrincipal, key string, raw []byte) (any, error) {
 			var in StartInput

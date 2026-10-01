@@ -70,7 +70,7 @@ func (c challengeRow) view(nowMS int64, capability string) (ChallengeView, error
 	if err != nil {
 		return ChallengeView{}, err
 	}
-	v := ChallengeView{ID: c.id, State: c.state, PeriodID: c.periodID, NodeID: c.nodeID,
+	v := ChallengeView{ID: c.id, State: c.state, Revision: strconv.FormatInt(c.revision, 10), PeriodID: c.periodID, NodeID: c.nodeID,
 		VersionID: c.versionID, NodeRevision: strconv.FormatInt(c.nodeRevision, 10),
 		ContentHash: hex.EncodeToString(c.contentHash), EngineVersion: c.engineVersion,
 		ScoringVersion: c.scoringVersion, SeedCommit: hex.EncodeToString(c.seedCommit),
