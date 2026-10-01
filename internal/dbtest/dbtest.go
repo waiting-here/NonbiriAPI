@@ -1,6 +1,8 @@
 // Package dbtest holds shared test helpers for packages that open a
-// NonbiriAPI SQLite database in tests. It is test infrastructure: production
-// code must not depend on it.
+// NonbiriAPI SQLite database in tests. Use dbfixture for ordinary business
+// tests that need seeded state; keep the real Open path when testing startup,
+// bootstrap, locks or failures. These helpers prepare directories without
+// replacing that behavior. Production code must not depend on this package.
 package dbtest
 
 import (
