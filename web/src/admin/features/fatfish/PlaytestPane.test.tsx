@@ -1,5 +1,6 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { ApiError } from '@shared/query/http';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { adminPlaytestTransport, PlaytestPane } from './PlaytestPane';
 
@@ -10,98 +11,144 @@ vi.mock('@shared/query/http', async (importOriginal) => ({
 }));
 vi.mock('@shared/fatfish/session', () => ({ createFatFishSessionController: sessions.create }));
 vi.mock('@shared/fatfish/storage', () => ({ localPlaySupportError: () => null }));
-vi.mock('@shared/fatfish/FatFishPlayer', () => ({ FatFishPlayer: ({ mode }: { mode: string }) => <div>Shared player: {mode}</div> }));
+vi.mock('@shared/fatfish/FatFishPlayer', () => ({ FatFishPlayer: () => <div>Shared playtest player</div> }));
+const hash = 'a'.repeat(64);
+const prepared = { id: 'ffc_one', revision: '1', version_id: 'ffv_one', content_hash: hash, ticket_price: '0', state: 'prepared' };
+const metadata = { id: 'ffc_old', revision: '2', version_id: 'ffv_old', version_number: '3', level_title: 'Old level', content_hash: hash, state: 'active' };
+function controller(initial = prepared) {
+  let snapshot = { phase: initial.state === 'prepared' ? 'prepared' : 'running', challenge: initial };
+  const listeners = new Set<() => void>();
+  return {
+    snapshot: () => snapshot,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+    prepare: vi.fn(async () => snapshot.challenge),
+    start: vi.fn(async () => {
+      snapshot = { phase: 'running', challenge: { ...snapshot.challenge, state: 'active' } };
+      listeners.forEach((listener) => listener()); return snapshot.challenge;
+    }),
+    recover: vi.fn(async () => snapshot.challenge), dispose: vi.fn(),
+  };
+}
+beforeEach(() => { http.apiFetch.mockReset().mockResolvedValue(null); sessions.create.mockReset(); sessionStorage.clear(); });
 
-beforeEach(() => {
-  http.apiFetch.mockReset().mockResolvedValue({ id: 'ffc_one' });
-  sessions.create.mockReset();
-  sessionStorage.clear();
-});
-
-it('uses the admin playtest routes and binds the prepare scope to one immutable version', async () => {
+it('uses the admin-only abandon revision and enables durable automatic submission', async () => {
   const transport = adminPlaytestTransport('ffv_one');
   expect(transport.prepareScope).toBe('playtest:ffv_one');
-  await transport.prepare('a'.repeat(64), 'prepare-key');
+  expect(transport.autoSubmit).toBe(true);
+  await transport.prepare('b'.repeat(64), 'prepare-key');
   await transport.start('ffc_one', 'tab-secret', 'start-key');
   await transport.read('ffc_one', 'tab-secret');
-  await transport.submit('ffc_one', { tab_capability: 'tab-secret', inputs: [], terminal_tick: 12 }, 'submit-key');
+  await transport.abandon!('ffc_one', 'tab-secret', 'abandon-key', '4');
   expect(http.apiFetch.mock.calls.map((call) => call[0])).toEqual([
     '/admin/api/limited-activities/fat-fish/playtests',
     '/admin/api/limited-activities/fat-fish/playtests/ffc_one/start',
     '/admin/api/limited-activities/fat-fish/playtests/ffc_one',
-    '/admin/api/limited-activities/fat-fish/playtests/ffc_one/submit',
+    '/admin/api/limited-activities/fat-fish/playtests/ffc_one/abandon',
   ]);
-  expect(http.apiFetch.mock.calls[0][1].json).toEqual({ version_id: 'ffv_one', tab_capability_hash: 'a'.repeat(64) });
-  expect((http.apiFetch.mock.calls[0][1].headers as Headers).get('Idempotency-Key')).toBe('prepare-key');
-  expect(http.apiFetch.mock.calls[1][1].json).toEqual({ tab_capability: 'tab-secret' });
-  expect((http.apiFetch.mock.calls[1][1].headers as Headers).get('Idempotency-Key')).toBe('start-key');
-  expect(http.apiFetch.mock.calls[2][1].headers).toEqual({ 'X-FatFish-Tab-Capability': 'tab-secret' });
-  expect(http.apiFetch.mock.calls[3][1].json).toEqual({ tab_capability: 'tab-secret', inputs: [], terminal_tick: 12 });
-  expect((http.apiFetch.mock.calls[3][1].headers as Headers).get('Idempotency-Key')).toBe('submit-key');
-  expect(transport.current).toBeUndefined();
-  expect(transport.abandon).toBeUndefined();
+  expect(http.apiFetch.mock.calls[3][1].json).toEqual({ expected_revision: '4' });
+  expect((http.apiFetch.mock.calls[3][1].headers as Headers).get('Idempotency-Key')).toBe('abandon-key');
 });
-
-it('never prepares automatically and starts only an explicitly prepared no-charge playtest', async () => {
-  const prepared = { id: 'ffc_one', version_id: 'ffv_one', content_hash: 'a'.repeat(64), ticket_price: '0', state: 'prepared' };
-  let snapshot = { phase: 'idle', challenge: null as typeof prepared | null };
-  const listeners = new Set<() => void>();
-  const publish = () => { for (const listener of listeners) listener(); };
-  const controller = {
-    snapshot: () => snapshot,
-    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
-    prepare: vi.fn(async () => { snapshot = { phase: 'prepared', challenge: prepared }; publish(); return prepared; }),
-    start: vi.fn(async () => { snapshot = { phase: 'running', challenge: { ...prepared, state: 'active' } }; publish(); return snapshot.challenge; }),
-    recover: vi.fn(), dispose: vi.fn(),
-  };
-  sessions.create.mockReturnValue(controller);
-  const view = await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={'a'.repeat(64)} />, { station: 'admin', role: 'admin' });
-  expect(controller.prepare).not.toHaveBeenCalled();
+it('prepares only on request and starts manually', async () => {
+  const candidate = controller(); sessions.create.mockReturnValue(candidate);
+  const view = await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={hash} />, { station: 'admin', role: 'admin' });
+  await act(async () => { view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }); });
+  expect(candidate.prepare).not.toHaveBeenCalled();
   await view.user.click(screen.getByRole('button', { name: 'Prepare playtest' }));
-  await waitFor(() => expect(controller.prepare).toHaveBeenCalledTimes(1));
-  expect(sessionStorage.getItem('nonbiri-fatfish-admin-playtest:ffv_one')).toBe('ffc_one');
-  expect(screen.getByText('Shared player: playtest')).toBeInTheDocument();
+  await waitFor(() => expect(candidate.prepare).toHaveBeenCalledTimes(1));
+  expect(candidate.start).not.toHaveBeenCalled();
   await view.user.click(await screen.findByRole('button', { name: 'Start playtest' }));
-  await waitFor(() => expect(controller.start).toHaveBeenCalledTimes(1));
-  expect(sessions.create.mock.calls[0][0].prepareScope).toBe('playtest:ffv_one');
+  await waitFor(() => expect(candidate.start).toHaveBeenCalledTimes(1));
 });
-
-it('recovers only the remembered challenge for this version and keeps its original capability in the shared controller', async () => {
-  sessionStorage.setItem('nonbiri-fatfish-admin-playtest:ffv_one', 'ffc_original');
-  const prepared = { id: 'ffc_original', version_id: 'ffv_one', content_hash: 'a'.repeat(64), ticket_price: '0', state: 'prepared' };
-  const controller = {
-    snapshot: () => ({ phase: 'prepared', challenge: prepared }),
-    subscribe: () => () => {}, recover: vi.fn(async () => prepared), prepare: vi.fn(), start: vi.fn(), dispose: vi.fn(),
-  };
-  sessions.create.mockReturnValue(controller);
-  await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={'a'.repeat(64)} />, { station: 'admin', role: 'admin' });
-  await waitFor(() => expect(controller.recover).toHaveBeenCalledWith('ffc_original'));
-  expect(controller.prepare).not.toHaveBeenCalled();
-  expect(await screen.findByRole('button', { name: 'Start playtest' })).toBeInTheDocument();
-});
-
-it('refuses a remembered challenge whose immutable version hash changed', async () => {
-  sessionStorage.setItem('nonbiri-fatfish-admin-playtest:ffv_one', 'ffc_original');
-  const alien = { id: 'ffc_original', version_id: 'ffv_other', content_hash: 'b'.repeat(64), ticket_price: '0', state: 'prepared' };
-  const controller = { snapshot: () => ({ phase: 'prepared', challenge: alien }), subscribe: () => () => {},
-    recover: vi.fn(async () => alien), prepare: vi.fn(), start: vi.fn(), dispose: vi.fn() };
-  sessions.create.mockReturnValue(controller);
-  await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={'a'.repeat(64)} />, { station: 'admin', role: 'admin' });
-  await waitFor(() => expect(controller.dispose).toHaveBeenCalled());
+it('recovers the one unfinished playtest and exposes a lost-capability abandon choice', async () => {
+  http.apiFetch.mockResolvedValue(metadata);
+  const candidate = controller(); candidate.recover.mockRejectedValue(new Error('missing capability'));
+  sessions.create.mockReturnValue(candidate);
+  const view = await renderWithProviders(<PlaytestPane />, { station: 'admin', role: 'admin' });
+  await act(async () => { view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }); });
+  await waitFor(() => expect(candidate.recover).toHaveBeenCalledWith('ffc_old'));
+  expect(screen.getByText(/Old level.*Version 3.*active/)).toBeInTheDocument();
+  expect(candidate.prepare).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: 'Start playtest' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Retry this tab’s playtest recovery' })).toBeInTheDocument();
-  expect(controller.prepare).not.toHaveBeenCalled();
+  await view.user.click(screen.getByRole('button', { name: 'Abandon playtest' }));
+  expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
 });
-
-it('refuses to start when the admin preview unexpectedly reports a ticket price', async () => {
-  const priced = { id: 'ffc_priced', version_id: 'ffv_one', content_hash: 'a'.repeat(64), ticket_price: '2', state: 'prepared' };
-  const controller = { snapshot: () => ({ phase: 'prepared', challenge: priced }), subscribe: () => () => {},
-    prepare: vi.fn(async () => priced), recover: vi.fn(), start: vi.fn(), dispose: vi.fn() };
-  sessions.create.mockReturnValue(controller);
-  const view = await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={'a'.repeat(64)} />, { station: 'admin', role: 'admin' });
+it('switches once after explicit abandon and retains a lost abandon reply key', async () => {
+  const old = controller({ ...prepared, ...metadata, ticket_price: '0' }), next = controller();
+  sessions.create.mockReturnValueOnce(old).mockReturnValueOnce(next);
+  let abandonAttempts = 0;
+  http.apiFetch.mockImplementation(async (path: string) => {
+    if (path.endsWith('/current')) return metadata;
+    if (path.endsWith('/abandon')) {
+      if (++abandonAttempts === 1) throw new ApiError('unavailable', 'Reply lost', 502);
+      return { ...metadata, state: 'abandoned' };
+    }
+    throw new Error('Unexpected route');
+  });
+  const view = await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={hash} />, { station: 'admin', role: 'admin' });
+  await act(async () => { view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }); });
+  await waitFor(() => expect(old.recover).toHaveBeenCalledWith('ffc_old'));
   await view.user.click(screen.getByRole('button', { name: 'Prepare playtest' }));
-  await waitFor(() => expect(controller.dispose).toHaveBeenCalled());
-  expect(controller.start).not.toHaveBeenCalled();
+  const dialog = await screen.findByRole('alertdialog');
+  expect(next.prepare).not.toHaveBeenCalled();
+  await view.user.click(within(dialog).getByRole('button', { name: 'Abandon playtest' }));
+  await screen.findByText('Reply lost');
+  expect(dialog).toBeInTheDocument();
+  await view.user.click(within(dialog).getByRole('button', { name: 'Abandon playtest' }));
+  await waitFor(() => expect(next.prepare).toHaveBeenCalledTimes(1));
+  const calls = http.apiFetch.mock.calls.filter((call) => call[0].endsWith('/abandon'));
+  expect(calls[1][1].json).toEqual(calls[0][1].json);
+  expect((calls[1][1].headers as Headers).get('Idempotency-Key')).toBe((calls[0][1].headers as Headers).get('Idempotency-Key'));
+  expect(old.dispose).toHaveBeenCalled();
+  expect(next.start).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+});
+it('disposes a late prepared response after the administrator session changes', async () => {
+  const candidate = controller();
+  let release: (value: typeof prepared) => void = () => {};
+  candidate.prepare.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+  sessions.create.mockReturnValue(candidate);
+  const view = await renderWithProviders(<PlaytestPane versionID="ffv_one" contentHash={hash} />, { station: 'admin', role: 'admin' });
+  await act(async () => { view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }); });
+  await view.user.click(screen.getByRole('button', { name: 'Prepare playtest' }));
+  await waitFor(() => expect(candidate.prepare).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'replacement-admin' } });
+    release(prepared);
+  });
+  await waitFor(() => expect(candidate.dispose).toHaveBeenCalled());
   expect(screen.queryByRole('button', { name: 'Start playtest' })).not.toBeInTheDocument();
-  expect(sessionStorage.getItem('nonbiri-fatfish-admin-playtest:ffv_one')).toBe('ffc_priced');
+});
+it('disposes an in-flight initial recovery after the administrator session changes', async () => {
+  http.apiFetch.mockResolvedValueOnce(metadata).mockResolvedValue(null);
+  const candidate = controller({ ...prepared, ...metadata, ticket_price: '0' });
+  let release: (value: typeof prepared) => void = () => {};
+  candidate.recover.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+  sessions.create.mockReturnValue(candidate);
+  const view = await renderWithProviders(<PlaytestPane />, { station: 'admin', role: 'admin' });
+  await act(async () => { view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }); });
+  await waitFor(() => expect(candidate.recover).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'replacement-admin' } });
+    release({ ...prepared, ...metadata, ticket_price: '0' });
+  });
+  await waitFor(() => expect(candidate.dispose).toHaveBeenCalled());
+  expect(screen.queryByText('Shared playtest player')).not.toBeInTheDocument();
+});
+
+it('does not reopen an abandon dialog from an old account read', async () => {
+  http.apiFetch.mockResolvedValueOnce(metadata).mockResolvedValue(null);
+  const candidate = controller(); candidate.recover.mockRejectedValue(new Error('missing capability'));
+  sessions.create.mockReturnValue(candidate);
+  const view = await renderWithProviders(<PlaytestPane />, { station: 'admin', role: 'admin' });
+  await act(async () => { view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }); });
+  await waitFor(() => expect(candidate.recover).toHaveBeenCalledTimes(1));
+  let release: (value: typeof metadata) => void = () => {};
+  http.apiFetch.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  await view.user.click(screen.getByRole('button', { name: 'Abandon playtest' }));
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'replacement-admin' } });
+    release(metadata);
+  });
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Old level/)).not.toBeInTheDocument();
 });

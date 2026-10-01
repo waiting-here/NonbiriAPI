@@ -83,6 +83,7 @@ export interface FatFishResult {
   verification_duration_ms?: number;
 }
 export interface FatFishChallenge {
+  revision?: string;
   id: string;
   state: 'prepared' | 'active' | 'verifying' | 'settled_pass' | 'settled_fail' | 'abandoned' | 'expired' | 'cancelled_refunded';
   period_id?: string;
@@ -144,12 +145,13 @@ export const fatFishApi = {
 export interface FatFishSubmission { tab_capability: string; inputs: InputTuple[]; terminal_tick: number }
 export interface FatFishChallengeTransport {
   prepareScope: string;
+  autoSubmit?: boolean;
   prepare(tabCapabilityHash: string, idempotencyKey: string): Promise<FatFishChallenge>;
   start(challengeID: string, tabCapability: string, idempotencyKey: string): Promise<FatFishChallenge>;
   read(challengeID: string, tabCapability: string): Promise<FatFishChallenge>;
   submit(challengeID: string, payload: FatFishSubmission, idempotencyKey: string): Promise<FatFishChallenge>;
   current?(tabCapability: string): Promise<FatFishChallenge | null>;
-  abandon?(challengeID: string, tabCapability: string, idempotencyKey: string): Promise<FatFishChallenge>;
+  abandon?(challengeID: string, tabCapability: string, idempotencyKey: string, expectedRevision?: string): Promise<FatFishChallenge>;
 }
 
 export function userChallengeTransport(periodID: string, nodeID: string, revision: string): FatFishChallengeTransport {

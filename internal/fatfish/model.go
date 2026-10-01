@@ -78,6 +78,7 @@ type PeriodPage struct {
 }
 
 type ChallengeView struct {
+	Revision       string          `json:"revision"`
 	ID             string          `json:"id"`
 	State          string          `json:"state"`
 	PeriodID       string          `json:"period_id,omitempty"`
