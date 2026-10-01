@@ -257,6 +257,9 @@ func (service *Service) Embeddings(ctx context.Context, writer http.ResponseWrit
 	service.execute(ctx, writer, userID, embeddingRequest(request), body, mediaType, language, nil)
 }
 
+// execute keeps admission and the route snapshot ahead of claim acceptance:
+// admission rejection must not reserve funds or dispatch credentials. Keep new
+// orchestration in focused helpers so the ordering remains visible here.
 func (service *Service) execute(ctx context.Context, writer http.ResponseWriter, userID int64, request *validatedRequest, body []byte, mediaType, language string, inbound http.Header) {
 	if service == nil || ctx == nil || writer == nil || userID <= 0 || !request.valid() {
 		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
@@ -291,6 +294,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		return
 	}
 	routeKind := requestkind.ForOperation(request.operation, admission.charity)
+	// Debug needs the admitted identity; a dry interception must stop before
+	// any live request claim or credential dispatch.
 	decision, err := service.debug.DecideAfterAdmission(bounded, debug.CaptureInput{
 		UserID: userID, RouteKind: routeKind, Model: request.Model, Stream: request.Stream,
 		MediaType: mediaType, Body: body, Charity: admission.charity,
@@ -320,6 +325,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		}
 	}
 
+	// Freeze route capabilities and adaptations before reserving the request
+	// budget, so dispatch uses the same terms that admission accepted.
 	plan, err := service.snapshot(executionContext, userID, request.Model, attemptRequest, admission, decision, inbound)
 	if err != nil {
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
@@ -353,6 +360,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
 	}
+	// The accepted claim now owns the request identity. The HTTP error sink
+	// must not create a second rejection record for a later execution failure.
 	requestattempt.Handled(parent)
 
 	run := service.runAttempts(parent, executionContext, writer, suppressor, decision.Trace, userID, attemptRequest, plan, accepted)
@@ -361,6 +370,9 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		disposition = claim.AccountingCommit
 	}
 	actualCharge := int64(0)
+	// A dispatched request keeps the conservative commit disposition even if
+	// the caller leaves. Settlement has its own finite budget to finish
+	// accounting after cancellation; failed completion remains recoverable.
 	settleContext, settleCancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 	defer settleCancel()
 	if plan.charity && disposition == claim.AccountingCommit {
@@ -383,6 +395,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		failure = &value
 	}
 
+	// Failed attempt completion leaves recovery responsible for unresolved
+	// accounting; do not mark the logical request terminal ahead of it.
 	if !run.terminalBlocked {
 		_, completionErr := service.claims.CompleteRequest(settleContext, claim.CompleteRequestInput{
 			RequestID: accepted.ID, Caller: caller, Disposition: disposition, ActualChargeMilli: actualCharge,
@@ -397,6 +411,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		service.writeDebugTerminal(parent, suppressor, decision, run, caller, failure)
 		return
 	}
+	// Cancellation and an already committed response both forbid a second
+	// terminal write, including an error after streaming bytes were sent.
 	if parent.Err() != nil || caller.Class == claim.ResultCancelled || run.hasResult && run.result.Committed {
 		return
 	}
@@ -1082,6 +1098,9 @@ func (service *Service) writeDebugTerminal(parent context.Context, suppressor *d
 	_ = suppressor.WriteCaptured()
 }
 
+// writePreAcceptanceFailure finishes any Debug caller record before emitting
+// the platform failure. A canceled caller gets no write; a live suppressor
+// retains control of the response until the pre-dispatch outcome is settled.
 func (service *Service) writePreAcceptanceFailure(
 	parent context.Context,
 	writer http.ResponseWriter,

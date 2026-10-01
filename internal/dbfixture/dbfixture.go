@@ -1,6 +1,8 @@
 // Package dbfixture materializes isolated Generation 2 SQLite databases for
 // tests that need current seeded state but do not exercise fresh-startup
-// behavior. Production packages must not depend on it.
+// behavior. Tests of Open, bootstrap, locks or injected startup failures must
+// keep their real startup path, using dbtest for directory setup when needed.
+// Production packages must not depend on this package.
 package dbfixture
 
 import (
@@ -43,8 +45,8 @@ const (
 
 var generationTwoTemplate = imageCache{build: loadOrBuildGenerationTwoTemplate}
 
-// BuildGenerationTwoTemplate builds a fresh image for the race-instrumented
-// per-runner fixture helper. It never reads an inherited shared template.
+// BuildGenerationTwoTemplate builds a fresh image for the shared CI fixture
+// helper. It never reads an inherited shared template.
 func BuildGenerationTwoTemplate() ([]byte, error) {
 	return buildGenerationTwoTemplate()
 }
