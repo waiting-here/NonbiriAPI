@@ -148,7 +148,10 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		if credentials == 0 {
 			t.Fatal("source contains no credential preservation evidence")
 		}
-		publishedScalar(t, database, `SELECT count(*) FROM limited_activity_configs WHERE activity_key='fat-fish' AND visible=0 AND starts_at IS NULL AND ends_at IS NULL`, 1)
+		if expectedSourceManifest == preInteractionManifestHash {
+			publishedScalar(t, database, `SELECT count(*) FROM limited_activity_configs WHERE activity_key='fat-fish' AND visible=0 AND starts_at IS NULL AND ends_at IS NULL`, 1)
+		}
+		publishedScalar(t, database, `SELECT count(*) FROM limited_activity_configs WHERE activity_key='lake-notes' AND visible=0 AND starts_at IS NULL AND ends_at IS NULL`, 1)
 		if err := store.Close(); err != nil {
 			t.Fatal(err)
 		}
