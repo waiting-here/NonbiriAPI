@@ -123,6 +123,7 @@
       "TestProgressionMissingDonationEvidenceRollsBack",
       "TestProgressionQuickStakeMigrationUsesSourceLimits",
       "TestPublicModelDescriptionTextBoundary",
+      "TestPublishedSequenceProjectionKeepsHistoricalAllocators",
       "TestPublishedTokenQuotaUpgradePreservesScalarHistory",
       "TestQuotaAggregateModeCannotDrift",
       "TestQuotaReceiptPeriodReferenceIsRetainedUntilRelease",
