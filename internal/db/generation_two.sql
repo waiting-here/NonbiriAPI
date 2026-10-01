@@ -6886,7 +6886,7 @@ BEGIN
  WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
  UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id
  UNION SELECT scan_id FROM risk_scan_window_sources WHERE request_log_id=OLD.request_log_id)
- OR (kind IN ('client_hits','shared_ips','user_ips') AND (
+ OR (kind IN ('client_hits','users','shared_ips','user_ips') AND (
  json_extract(checkpoint_json,'$.pending_user')=(SELECT origin_user_id FROM request_logs WHERE id=OLD.request_log_id)
  OR json_extract(checkpoint_json,'$.after_user')=(SELECT origin_user_id FROM request_logs WHERE id=OLD.request_log_id)
  OR json_extract(checkpoint_json,'$.pending_discord')=(SELECT origin_discord_id FROM request_logs WHERE id=OLD.request_log_id)
