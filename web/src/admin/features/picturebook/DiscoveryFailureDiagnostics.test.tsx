@@ -10,7 +10,19 @@ vi.mock('@shared/observability/independentApi', () => ({
   getIndependentDiagnostics: requests.list,
   getIndependentDiagnostic: requests.detail,
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { resolvedLanguage: 'en' } }) }));
+vi.mock('react-i18next', async () => {
+  const { default: copy } = await import('@shared/i18n/common/en.json');
+  return {
+    useTranslation: () => ({
+      i18n: { resolvedLanguage: 'en' },
+      t: (key: string) =>
+        key
+          .split('.')
+          .reduce<unknown>((value, part) => (value as Record<string, unknown>)?.[part], copy) ??
+        key,
+    }),
+  };
+});
 
 const firstOperation = 'op_AAAAAAAAAAAAAAAAAAAAAA';
 const secondOperation = 'op_BBBBBBBBBBBBBBBBBBBBBB';

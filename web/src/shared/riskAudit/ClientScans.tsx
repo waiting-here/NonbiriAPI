@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { scanReasonKey } from './scanReason';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber, isPageSize } from '@shared/operations/pageNumbers';
@@ -23,8 +25,7 @@ export function ClientScans({
   renderItem: (item: Request) => ReactNode;
 }) {
   const formatDateTime = useDateTimeFormatter();
-  const { i18n } = useTranslation();
-  const t = (zh: string, en: string) => (i18n.language.startsWith('zh') ? zh : en);
+  const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
   const id = params.get('audit_scan') ?? '';
   const rawPage = params.get('audit_page');
@@ -69,63 +70,70 @@ export function ClientScans({
       return p;
     });
   };
-  const start = useMutation({
-    mutationKey: [...prefix, 'create'],
-    mutationFn: (value: typeof input) => riskAPI(role).createScan(value),
-    onSuccess: (next) => {
-      setToken(crypto.randomUUID());
-      select(next);
-      void client.invalidateQueries({ queryKey: [...prefix, 'recent'] });
+  const authorityRoot =
+    role === 'admin' ? ['admin', 'risk-audit'] : ['user', 'steward', 'risk-audit'];
+  const refresh = () => client.invalidateQueries({ queryKey: prefix }, { throwOnError: true });
+  const start = useRetainedOperation<typeof input, ClientScan>(
+    async (value, _key, context) => {
+      const result = await riskAPI(role).createScan(value, context.signal);
+      context.commit(() => {
+        setToken(crypto.randomUUID());
+        select(result);
+      });
+      return result;
     },
-  });
-  const cancel = useMutation({
-    mutationKey: [...prefix, 'cancel'],
-    mutationFn: (scanID: string) => riskAPI(role).cancelScan(scanID),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: prefix });
-    },
-  });
+    refresh,
+    authorityRoot,
+  );
+  const cancel = useRetainedOperation<string, ClientScan>(
+    (scanID, _key, context) => riskAPI(role).cancelScan(scanID, context.signal),
+    refresh,
+    authorityRoot,
+  );
   const active = recent.data?.find((item) => running(item.id === scan?.id ? scan : item));
   const status: Record<ClientScan['state'], string> = {
-    queued: t('排队中', 'Queued'),
-    running: t('扫描中', 'Scanning'),
-    completed: t('扫描完成', 'Completed'),
-    cancelled: t('已停止，保留已有结果', 'Stopped; existing results retained'),
-    limited: t('已达到结果上限', 'Result limit reached'),
-    failed: t('扫描未完成', 'Scan incomplete'),
+    queued: t('common.auditScans.queued'),
+    running: t('common.auditScans.scanning'),
+    completed: t('common.auditScans.completed'),
+    cancelled: t('common.auditScans.stoppedExistingResultsRetained'),
+    limited: t('common.auditScans.resultLimitReached'),
+    failed: t('common.auditScans.scanIncomplete'),
   };
   return (
     <div className="ops-stack">
       <Card>
-        <h2>{t('扫描客户端线索', 'Scan client evidence')}</h2>
-        <p>
-          {t(
-            '按当前筛选和已启用规则扫描请求。结果按命中请求分页；扫描期间可以查看已发现的结果。任务保留 24 小时。',
-            'Scan requests using the current filters and enabled rules. Pages contain matching requests; discovered results remain available while scanning. Tasks are retained for 24 hours.',
-          )}
-        </p>
+        <h2>{t('common.auditScans.scanClientEvidence')}</h2>
+        <p>{t('common.auditScans.scanRequestsUsingTheCurrentFiltersAnd')}</p>
         <div className="ops-actions">
           <button
             type="button"
             className="btn btn-primary"
-            disabled={start.isPending || !!active || running(scan) || recent.isPending}
+            disabled={
+              start.isPending ||
+              start.outcome === 'unknown' ||
+              !!active ||
+              running(scan) ||
+              recent.isPending
+            }
             onClick={() => start.mutate(input)}
           >
-            {start.isPending ? t('正在开始…', 'Starting…') : t('开始新扫描', 'Start new scan')}
+            {start.isPending
+              ? t('common.auditScans.starting')
+              : t('common.auditScans.startNewScan')}
           </button>
           {running(scan) && (
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={cancel.isPending}
+              disabled={cancel.isPending || cancel.outcome === 'unknown'}
               onClick={() => cancel.mutate(id)}
             >
-              {t('停止扫描', 'Stop scan')}
+              {t('common.auditScans.stopScan')}
             </button>
           )}
           {active && active.id !== id && (
             <button type="button" className="btn btn-secondary" onClick={() => select(active)}>
-              {t('查看进行中的扫描', 'Open active scan')}
+              {t('common.auditScans.openActiveScan')}
             </button>
           )}
           <button
@@ -135,7 +143,7 @@ export function ClientScans({
               void client.invalidateQueries({ queryKey: prefix });
             }}
           >
-            {t('刷新', 'Refresh')}
+            {t('common.auditScans.refresh')}
           </button>
         </div>
         {start.error && (
@@ -144,10 +152,16 @@ export function ClientScans({
         {cancel.error && cancel.variables === id && (
           <ErrorState error={cancel.error} onRetry={() => cancel.mutate(cancel.variables!)} />
         )}
+        {start.refreshError ? (
+          <ErrorState error={start.refreshError} onRetry={() => void start.refresh()} />
+        ) : null}
+        {cancel.refreshError ? (
+          <ErrorState error={cancel.refreshError} onRetry={() => void cancel.refresh()} />
+        ) : null}
         {recent.error && <ErrorState error={recent.error} onRetry={() => void recent.refetch()} />}
         {!!recent.data?.length && (
           <label>
-            {t('最近的扫描', 'Recent scans')}
+            {t('common.auditScans.recentScans')}
             <select
               value={id}
               onChange={(event) => {
@@ -155,11 +169,11 @@ export function ClientScans({
                 if (selected) select(selected);
               }}
             >
-              <option value="">{t('选择扫描', 'Choose a scan')}</option>
+              <option value="">{t('common.auditScans.chooseAScan')}</option>
               {recent.data.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {status[item.state]} · {item.matched} {t('次命中', 'matches')} ·{' '}
-                  {item.id.slice(-6)}
+                  {status[item.state]} · {formatDateTime(item.from)} — {formatDateTime(item.to)} ·{' '}
+                  {item.matched} {t('common.auditScans.matches')}
                 </option>
               ))}
             </select>
@@ -178,73 +192,50 @@ export function ClientScans({
             <div className="ops-actions">
               <strong aria-live="polite">{status[scan.state]}</strong>
               <span>
-                {t('已扫描', 'Scanned')}: {scan.scanned} / {scan.candidates} ·{' '}
-                {t('发现命中', 'Matches found')}: {scan.matched} · {t('启用规则', 'Enabled rules')}:{' '}
-                {scan.rule_count}
+                {t('common.auditScans.scanned')}: {scan.scanned} / {scan.candidates} ·{' '}
+                {t('common.auditScans.matchesFound')}: {scan.matched} ·{' '}
+                {t('common.auditScans.enabledRules')}: {scan.rule_count}
               </span>
             </div>
             <progress
               className="audit-scan-progress"
-              aria-label={t('扫描进度', 'Scan progress')}
+              aria-label={t('common.auditScans.scanProgress')}
               value={Number((BigInt(scan.scanned) * 1000n) / (BigInt(scan.candidates) || 1n))}
               max={1000}
             />
-            <p>
-              {t(
-                '已冻结筛选和规则；新请求或后续规则修改不会加入本次扫描。',
-                'Filters and rules are frozen; new requests and later rule edits are excluded.',
-              )}
-            </p>
+            <p>{t('common.auditScans.filtersAndRulesAreFrozenNewRequests')}</p>
             <p>
               {formatDateTime(scan.from)} – {formatDateTime(scan.to)} ·{' '}
               {
                 {
-                  total: t('全部调用', 'All calls'),
-                  self: t('自用', 'Personal'),
-                  charity: t('公益', 'Charity'),
-                  unclassified: t('未分类', 'Unclassified'),
+                  total: t('common.auditScans.allCalls'),
+                  self: t('common.auditScans.personal'),
+                  charity: t('common.auditScans.charity'),
+                  unclassified: t('common.auditScans.unclassified'),
                 }[scan.kind]
               }
               {scan.model && (
                 <>
                   {' '}
-                  · {t('模型', 'Model')}: {scan.model}
+                  · {t('common.auditScans.model')}: {scan.model}
                 </>
               )}
               {' · '}
-              {t('保留至', 'Available until')}: {formatDateTime(scan.expires_at)}
+              {t('common.auditScans.availableUntil')}: {formatDateTime(scan.expires_at)}
             </p>
             {running(scan) && (
               <p role="status">
-                {t(
-                  '以下页数与总数仅对应目前发现且仍保留的结果，扫描完成后才是最终结果。',
-                  'Page counts and totals cover discovered, retained results so far. They are provisional until the scan completes.',
-                )}
+                {t('common.auditScans.pageCountsAndTotalsCoverDiscoveredRetained')}
               </p>
             )}
-            {scan.state === 'limited' && (
-              <p role="status">
-                {t(
-                  '本次最多保留 100,000 次命中。请缩小时间范围后重新扫描；当前结果不是完整范围。',
-                  'This scan reached the 100,000-match limit. Narrow the time range and start again; the current result is incomplete.',
-                )}
-              </p>
-            )}
+            {scan.state === 'limited' && <p role="status">{t(scanReasonKey(scan.reason))}</p>}
             {scan.state === 'failed' && (
               <p role="alert">
-                {t(
-                  '扫描多次失败，已保留成功提交的结果。可开始新扫描；如再次失败请检查服务日志。',
-                  'Repeated scan failures stopped the task. Committed results are retained. Start a new scan; check service logs if the failure recurs.',
-                )}
+                {t('common.auditScans.repeatedScanFailuresStoppedTheTaskCommitted')}
               </p>
             )}
             {scan.rule_count === 0 && (
-              <p>
-                {t(
-                  '没有已启用的客户端规则，请先在“客户端规则”中保存并启用规则。',
-                  'No client rules are enabled. Save and enable rules in Client rules first.',
-                )}
-              </p>
+              <p>{t('common.auditScans.noClientRulesAreEnabledSaveAnd')}</p>
             )}
           </Card>
           <PagePagination
@@ -271,14 +262,11 @@ export function ClientScans({
           {query.data.items.map(renderItem)}
           {!query.data.items.length && (
             <EmptyState
-              title={t('暂无匹配结果', 'No matching results yet')}
+              title={t('common.auditScans.noMatchingResultsYet')}
               body={
                 running(scan)
-                  ? t('扫描仍在进行，请稍候。', 'The scan is still running.')
-                  : t(
-                      '本次扫描没有可显示的命中记录。',
-                      'There are no retained matches to display for this scan.',
-                    )
+                  ? t('common.auditScans.theScanIsStillRunning')
+                  : t('common.auditScans.thereAreNoRetainedMatchesToDisplay')
               }
             />
           )}

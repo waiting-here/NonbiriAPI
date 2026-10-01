@@ -14,12 +14,14 @@ import { managementResourceID } from '@shared/operations/charityModelPages';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { useCharityModelScope } from './charityModelScopeContext';
+import { DonationManualCandidates } from './DonationManualCandidates';
 
 interface Props {
   role: CharityRole;
   accountId: string;
   donationId: string;
   keyId: string;
+  editable?: boolean;
   onCapabilityLoss?: () => void;
 }
 
@@ -57,7 +59,12 @@ export function DonationKeyModels(props: Props) {
       >
         {t('common.keyModels.title')}
       </button>
-      {open ? <KeyModelPages {...props} prefix={name} /> : null}
+      {open ? (
+        <>
+          <DonationManualCandidates {...props} />
+          <KeyModelPages {...props} prefix={name} />
+        </>
+      ) : null}
     </section>
   );
 }

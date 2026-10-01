@@ -4,6 +4,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { ReasonText } from '@shared/components/ReasonText';
 import { CopyValue } from '@shared/components/CopyValue';
 import {
   Card,
@@ -208,7 +209,7 @@ function UserAuthority({
                   : t('management.users.banUntilShort', {
                       time: formatDateTime(user.banned_until),
                     })}{' '}
-                · {user.banned_reason || t('management.users.banReasonMissing')}
+                <ReasonText reason={user.banned_reason} automatic={user.automatic_reason} />
               </dd>
             </>
           ) : null}
@@ -510,15 +511,16 @@ export function UserManagement({
   onAuthorityLoss,
   renderDeletion,
 }: UserManagementProps) {
-  const { t, i18n } = useTranslation();
-  const accountLabels = i18n.language.startsWith('zh') ? accountCopy.zh : accountCopy.en;
+  const { t } = useTranslation();
+  const accountLabels = accountCopy(t);
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const rawBanned = searchParams.get('is_banned');
   const banned: '' | 'true' | 'false' =
     rawBanned === 'true' || rawBanned === 'false' ? rawBanned : '';
   const rawAccountState = searchParams.get('account_state');
-  const accountState: AccountState = rawAccountState === 'active' || rawAccountState === 'deleted' ? rawAccountState : 'all';
+  const accountState: AccountState =
+    rawAccountState === 'active' || rawAccountState === 'deleted' ? rawAccountState : 'all';
   const query = searchParams.get('q') ?? '';
   const rawLevel = searchParams.get('level') ?? '';
   const level = ['1', '2', '3', '4', '5', '6'].includes(rawLevel) ? rawLevel : '';
@@ -526,17 +528,21 @@ export function UserManagement({
   const userID = rawUserID;
   const invalidCommittedUserID = userID !== '' && !isPageNumber(userID, 9_223_372_036_854_775_807n);
   const discordID = searchParams.get('discord_id') ?? '';
-  const invalidCommittedDiscordID = discordID !== '' && !isPageNumber(discordID, 18_446_744_073_709_551_615n);
+  const invalidCommittedDiscordID =
+    discordID !== '' && !isPageNumber(discordID, 18_446_744_073_709_551_615n);
   const selectedValue = searchParams.get('user');
   const selected = isPageNumber(selectedValue, 9_223_372_036_854_775_807n) ? selectedValue : '';
   const selectedDeletedValue = searchParams.get('deleted');
-  const selectedDeleted = isPageNumber(selectedDeletedValue, 9_223_372_036_854_775_807n) ? selectedDeletedValue : '';
+  const selectedDeleted = isPageNumber(selectedDeletedValue, 9_223_372_036_854_775_807n)
+    ? selectedDeletedValue
+    : '';
   const [queryDraft, setQueryDraft] = useState(query);
   const [userIDDraft, setUserIDDraft] = useState(userID);
   const [discordIDDraft, setDiscordIDDraft] = useState(discordID);
   const invalidUserIDDraft =
     userIDDraft !== '' && !isPageNumber(userIDDraft, 9_223_372_036_854_775_807n);
-  const invalidDiscordIDDraft = discordIDDraft !== '' && !isPageNumber(discordIDDraft, 18_446_744_073_709_551_615n);
+  const invalidDiscordIDDraft =
+    discordIDDraft !== '' && !isPageNumber(discordIDDraft, 18_446_744_073_709_551_615n);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: `${role}.users`,
@@ -558,7 +564,18 @@ export function UserManagement({
       discordID,
     ),
     queryFn: ({ signal }) =>
-      getManagedAccountsPage(role, accountState, banned, query, level, pager.page, pager.pageSize, signal, userID, discordID),
+      getManagedAccountsPage(
+        role,
+        accountState,
+        banned,
+        query,
+        level,
+        pager.page,
+        pager.pageSize,
+        signal,
+        userID,
+        discordID,
+      ),
     retry: false,
     enabled: scopeReady && !invalidCommittedUserID && !invalidCommittedDiscordID,
     placeholderData: (previous, previousQuery) =>
@@ -578,13 +595,18 @@ export function UserManagement({
     queryKey: managedUserKeys.detail(role, account, selected),
     queryFn: ({ signal }) => getManagedUserDetail(role, selected, signal),
     retry: false,
-    enabled: Boolean(selected) && scopeReady && !invalidCommittedUserID && !invalidCommittedDiscordID,
+    enabled:
+      Boolean(selected) && scopeReady && !invalidCommittedUserID && !invalidCommittedDiscordID,
   });
   const deletedDetail = useQuery({
     queryKey: [...managementRoot(role), 'deleted-account', account, selectedDeleted],
     queryFn: ({ signal }) => getDeletedAccountDetail(role, selectedDeleted, signal),
     retry: false,
-    enabled: Boolean(selectedDeleted) && scopeReady && !invalidCommittedUserID && !invalidCommittedDiscordID,
+    enabled:
+      Boolean(selectedDeleted) &&
+      scopeReady &&
+      !invalidCommittedUserID &&
+      !invalidCommittedDiscordID,
   });
   const detailUnavailable =
     isUnauthorized(users.error) ||
@@ -632,8 +654,11 @@ export function UserManagement({
     nextAccountState: AccountState = accountState,
     nextDiscordID = discordID,
   ) => {
-    if (nextUserID !== '' && !isPageNumber(nextUserID, 9_223_372_036_854_775_807n) ||
-      nextDiscordID !== '' && !isPageNumber(nextDiscordID, 18_446_744_073_709_551_615n)) return;
+    if (
+      (nextUserID !== '' && !isPageNumber(nextUserID, 9_223_372_036_854_775_807n)) ||
+      (nextDiscordID !== '' && !isPageNumber(nextDiscordID, 18_446_744_073_709_551_615n))
+    )
+      return;
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       if (nextQuery) next.set('q', nextQuery);
@@ -694,7 +719,14 @@ export function UserManagement({
           className="ops-toolbar"
           onSubmit={(event) => {
             event.preventDefault();
-            commitListState(queryDraft.trim(), banned, level, userIDDraft, accountState, discordIDDraft);
+            commitListState(
+              queryDraft.trim(),
+              banned,
+              level,
+              userIDDraft,
+              accountState,
+              discordIDDraft,
+            );
           }}
         >
           <label>
@@ -743,7 +775,18 @@ export function UserManagement({
           </label>
           <label>
             <span>{accountLabels.allAccounts}</span>
-            <select value={accountState} onChange={(event) => commitListState(query, banned, level, userIDDraft, event.target.value as AccountState)}>
+            <select
+              value={accountState}
+              onChange={(event) =>
+                commitListState(
+                  query,
+                  banned,
+                  level,
+                  userIDDraft,
+                  event.target.value as AccountState,
+                )
+              }
+            >
               <option value="all">{accountLabels.allAccounts}</option>
               <option value="active">{accountLabels.activeAccounts}</option>
               <option value="deleted">{accountLabels.deletedAccounts}</option>
@@ -768,17 +811,29 @@ export function UserManagement({
               {t('management.users.userIdInvalid')}
             </p>
           ) : null}
-          {invalidDiscordIDDraft ? <p className="field-error" role="alert">{accountLabels.discordInvalid}</p> : null}
-          <button className="btn btn-secondary" type="submit" disabled={invalidUserIDDraft || invalidDiscordIDDraft}>
+          {invalidDiscordIDDraft ? (
+            <p className="field-error" role="alert">
+              {accountLabels.discordInvalid}
+            </p>
+          ) : null}
+          <button
+            className="btn btn-secondary"
+            type="submit"
+            disabled={invalidUserIDDraft || invalidDiscordIDDraft}
+          >
             {t('common.applyFilter')}
           </button>
         </form>
       </Card>
       <Card>
         <h2>{t('management.users.listTitle')}</h2>
-        {accountState !== 'active' ? <p>{i18n.language.startsWith('zh') ? accountHistoryCopy.zh.coverage : accountHistoryCopy.en.coverage}</p> : null}
+        {accountState !== 'active' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
         {invalidCommittedUserID || invalidCommittedDiscordID ? (
-          <p role="status">{invalidCommittedUserID ? t('management.users.userIdInvalid') : accountLabels.discordInvalid}</p>
+          <p role="status">
+            {invalidCommittedUserID
+              ? t('management.users.userIdInvalid')
+              : accountLabels.discordInvalid}
+          </p>
         ) : sessionError ? (
           <ErrorState error={sessionError} />
         ) : users.isPending ? (
@@ -809,66 +864,94 @@ export function UserManagement({
                       const history = entry.deleted;
                       return (
                         <tr key={`deleted:${history.record_id}`}>
-                          <td data-label={t('management.users.userId')}>{history.former_user_id ?? accountLabels.unknown}</td>
-                          <td data-label={t('management.users.username')}>{accountLabels.deleted}</td>
-                          <td data-label={t('management.users.discordId')}>{history.discord_id ?? accountLabels.unknown}</td>
+                          <td data-label={t('management.users.userId')}>
+                            {history.former_user_id ?? accountLabels.unknown}
+                          </td>
+                          <td data-label={t('management.users.username')}>
+                            {accountLabels.deleted}
+                          </td>
+                          <td data-label={t('management.users.discordId')}>
+                            {history.discord_id ?? accountLabels.unknown}
+                          </td>
                           <td data-label={t('management.users.status')}>{accountLabels.deleted}</td>
-                          <td data-label={t('management.users.level')}>{history.effective_level ?? accountLabels.unknown}</td>
-                          <td data-label={t('management.users.balances')}>{history.general_balance ?? accountLabels.unknown} · {history.game_balance ?? accountLabels.unknown}</td>
-                          <td data-label={t('management.users.actions')}>
-                            <button className="btn btn-secondary" type="button" disabled={!scopeReady || users.isFetching} onClick={() => selectDeleted(history.record_id)}>{t('management.users.view')}</button>
+                          <td data-label={t('management.users.level')}>
+                            {history.effective_level ?? accountLabels.unknown}
+                          </td>
+                          <td data-label={t('management.users.balances')}>
+                            {history.general_balance ?? accountLabels.unknown} ·{' '}
+                            {history.game_balance ?? accountLabels.unknown}
+                          </td>
+                          <td
+                            data-label={t('management.users.actions')}
+                            style={{ whiteSpace: 'nowrap' }}
+                          >
+                            <button
+                              className="btn btn-secondary"
+                              type="button"
+                              disabled={!scopeReady || users.isFetching}
+                              style={{ whiteSpace: 'nowrap' }}
+                              onClick={() => selectDeleted(history.record_id)}
+                            >
+                              {t('management.users.view')}
+                            </button>
                           </td>
                         </tr>
                       );
                     }
                     const user = entry.user;
                     return (
-                    <tr key={user.id}>
-                      <td data-label={t('management.users.userId')}>{user.id}</td>
-                      <td data-label={t('management.users.username')}>{user.username}</td>
-                      <td
-                        data-label={t('management.users.discordId')}
-                        className="ops-users-discord"
-                      >
-                        {user.discord_id ? (
-                          <CopyValue
-                            value={user.discord_id}
-                            label={t('management.users.discordId')}
-                          />
-                        ) : (
-                          t('management.users.discordUnlinked')
-                        )}
-                      </td>
-                      <td data-label={t('management.users.status')}>
-                        <StatusBadge
-                          active={!user.is_banned}
-                          danger={user.is_banned}
-                          label={t(
-                            user.is_banned ? 'management.users.banned' : 'management.users.active',
-                          )}
-                        />
-                      </td>
-                      <td data-label={t('management.users.level')}>{user.level.effective}</td>
-                      <td data-label={t('management.users.balances')}>
-                        {user.balance} {t('management.users.creditsBalance')} · {user.game_balance}{' '}
-                        {t('management.users.gameBalance')}
-                      </td>
-                      <td data-label={t('management.users.actions')}>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          disabled={!scopeReady || users.isFetching}
-                          onClick={() => selectUser(user.id)}
+                      <tr key={user.id}>
+                        <td data-label={t('management.users.userId')}>{user.id}</td>
+                        <td data-label={t('management.users.username')}>{user.username}</td>
+                        <td
+                          data-label={t('management.users.discordId')}
+                          className="ops-users-discord"
                         >
-                          {t(
-                            role === 'steward' &&
-                              (user.id === account || user.level.effective === 6)
-                              ? 'management.users.view'
-                              : 'management.users.manage',
+                          {user.discord_id ? (
+                            <CopyValue
+                              value={user.discord_id}
+                              label={t('management.users.discordId')}
+                            />
+                          ) : (
+                            t('management.users.discordUnlinked')
                           )}
-                        </button>
-                      </td>
-                    </tr>
+                        </td>
+                        <td data-label={t('management.users.status')}>
+                          <StatusBadge
+                            active={!user.is_banned}
+                            danger={user.is_banned}
+                            label={t(
+                              user.is_banned
+                                ? 'management.users.banned'
+                                : 'management.users.active',
+                            )}
+                          />
+                        </td>
+                        <td data-label={t('management.users.level')}>{user.level.effective}</td>
+                        <td data-label={t('management.users.balances')}>
+                          {user.balance} {t('management.users.creditsBalance')} ·{' '}
+                          {user.game_balance} {t('management.users.gameBalance')}
+                        </td>
+                        <td
+                          data-label={t('management.users.actions')}
+                          style={{ whiteSpace: 'nowrap' }}
+                        >
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            disabled={!scopeReady || users.isFetching}
+                            style={{ whiteSpace: 'nowrap' }}
+                            onClick={() => selectUser(user.id)}
+                          >
+                            {t(
+                              role === 'steward' &&
+                                (user.id === account || user.level.effective === 6)
+                                ? 'management.users.view'
+                                : 'management.users.manage',
+                            )}
+                          </button>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -886,7 +969,12 @@ export function UserManagement({
           />
         ) : null}
       </Card>
-      {scopeReady && !sessionError && !invalidCommittedUserID && !invalidCommittedDiscordID && selected && !detailUnavailable ? (
+      {scopeReady &&
+      !sessionError &&
+      !invalidCommittedUserID &&
+      !invalidCommittedDiscordID &&
+      selected &&
+      !detailUnavailable ? (
         detail.isPending ? (
           <LoadingState />
         ) : detail.error ? (
@@ -909,11 +997,23 @@ export function UserManagement({
       {selected && detailUnavailable ? (
         <ErrorState error={detail.error ?? users.error} onRetry={closeUser} />
       ) : null}
-      {scopeReady && !sessionError && !invalidCommittedUserID && !invalidCommittedDiscordID && selectedDeleted && !detailUnavailable ? (
-        deletedDetail.isPending ? <LoadingState /> : deletedDetail.error ? (
+      {scopeReady &&
+      !sessionError &&
+      !invalidCommittedUserID &&
+      !invalidCommittedDiscordID &&
+      selectedDeleted &&
+      !detailUnavailable ? (
+        deletedDetail.isPending ? (
+          <LoadingState />
+        ) : deletedDetail.error ? (
           <ErrorState error={deletedDetail.error} onRetry={() => void deletedDetail.refetch()} />
         ) : (
-          <DeletedAccountCard key={deletedDetail.data.record_id} account={deletedDetail.data} role={role} onClose={closeUser} />
+          <DeletedAccountCard
+            key={deletedDetail.data.record_id}
+            account={deletedDetail.data}
+            role={role}
+            onClose={closeUser}
+          />
         )
       ) : null}
       {selectedDeleted && detailUnavailable ? (

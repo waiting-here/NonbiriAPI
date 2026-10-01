@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { readLoginRestrictions, type AutomaticRestriction } from '@shared/operations/restrictions';
+import { type AutomaticRestriction } from '@shared/operations/restrictions';
+import { getAccessDenial } from '@shared/operations/accessDenial';
+import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { ErrorState, LoadingState } from './States';
+import { ReasonText } from './ReasonText';
 
 export function AutomaticRestrictions({ restrictions }: { restrictions: AutomaticRestriction[] }) {
   const formatDateTime = useDateTimeFormatter();
-  const { i18n } = useTranslation();
-  const en = i18n.language.startsWith('en');
+  const { t } = useTranslation();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     if (!restrictions.length) return;
@@ -16,38 +20,17 @@ export function AutomaticRestrictions({ restrictions }: { restrictions: Automati
   const current = restrictions.filter((r) => r.ends_at === null || r.ends_at > now);
   if (!current.length) return null;
   return (
-    <section
-      className="nb-card"
-      aria-label={en ? 'Current automatic restrictions' : '当前自动限制'}
-    >
-      <h2>{en ? 'Current automatic restrictions' : '当前自动限制'}</h2>
+    <section className="nb-card" aria-label={t('common.reasons.automaticTitle')}>
+      <h2>{t('common.reasons.automaticTitle')}</h2>
       {current.map((r) => (
         <div key={r.kind}>
           <strong>
-            {r.kind === 'ban'
-              ? en
-                ? 'Account access restricted'
-                : '账号访问受限'
-              : en
-                ? 'Charity calls suspended'
-                : '公益调用已暂停'}
+            {t(r.kind === 'ban' ? 'common.reasons.ban' : 'common.reasons.charitySuspend')}
           </strong>
+          <ReasonText reason={r.reason} reasonCode={r.reason_code} />
           <p>
-            {r.reason_code === 'charity_rpm'
-              ? en
-                ? 'Repeated charity requests exceeded the rate limit.'
-                : '公益调用多次超过请求频率限制。'
-              : en
-                ? 'Charity request content did not meet the minimum length.'
-                : '公益调用的有效内容未达到最低长度要求。'}
-          </p>
-          <p>
-            {en ? 'Ends: ' : '结束时间：'}
-            {r.ends_at === null
-              ? en
-                ? 'No scheduled end'
-                : '未设定结束时间'
-              : formatDateTime(r.ends_at, en ? 'en' : 'zh')}
+            {t('common.reasons.ends')}:{' '}
+            {r.ends_at === null ? t('common.reasons.noEnd') : formatDateTime(r.ends_at)}
           </p>
         </div>
       ))}
@@ -55,19 +38,23 @@ export function AutomaticRestrictions({ restrictions }: { restrictions: Automati
   );
 }
 
-// The fragment is untrusted display data, never a session or an authorization
-// input. Remove it from browser history after this one page receives it.
 export function LoginRestrictions() {
-  const [restrictions] = useState(() =>
-    window.location.pathname === '/access-denied'
-      ? readLoginRestrictions(window.location.hash)
-      : [],
-  );
+  const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
+  const enabled = window.location.pathname === '/access-denied';
+  const query = useInfiniteQuery({
+    queryKey: ['login-denial'],
+    queryFn: ({ pageParam, signal }) => getAccessDenial(pageParam, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.next_cursor,
+    enabled,
+    retry: false,
+    gcTime: 0,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
   useEffect(() => {
-    if (
-      window.location.pathname === '/access-denied' &&
-      window.location.hash.startsWith('#restrictions=')
-    ) {
+    if (window.location.pathname === '/access-denied' && window.location.hash) {
       window.history.replaceState(
         window.history.state,
         '',
@@ -75,5 +62,51 @@ export function LoginRestrictions() {
       );
     }
   }, []);
-  return <AutomaticRestrictions restrictions={restrictions} />;
+  if (!enabled) return null;
+  if (query.isPending) return <LoadingState />;
+  if (isUnauthorized(query.error) || isForbidden(query.error))
+    return <p>{t('common.reasons.recheckLogin')}</p>;
+  if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.data?.pages[0]?.restricted === false)
+    return <p role="status">{t('common.reasons.cleared')}</p>;
+  const kinds = {
+    ban: 'common.reasons.ban',
+    blacklist: 'common.reasons.blacklist',
+    blacklist_note: 'common.reasons.additionalNote',
+  } as const;
+  return (
+    <section className="nb-card ops-stack" aria-label={t('common.reasons.accessTitle')}>
+      <h2>{t('common.reasons.accessTitle')}</h2>
+      {query.data?.pages
+        .flatMap((page) => page.items)
+        .map((item, index) => (
+          <article key={index} className="ops-subcard">
+            <h3>{t(kinds[item.kind])}</h3>
+            <ReasonText
+              reason={item.reason}
+              automatic={item.automatic_reason}
+              reasonCode={item.automatic?.reason_code}
+              reasonCodes={item.reason_codes}
+            />
+            <p>
+              {t('common.reasons.started')}: {formatDateTime(item.started_at)}
+            </p>
+            <p>
+              {t('common.reasons.ends')}:{' '}
+              {item.ends_at === null ? t('common.reasons.noEnd') : formatDateTime(item.ends_at)}
+            </p>
+          </article>
+        ))}
+      {query.hasNextPage ? (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage()}
+        >
+          {t('common.reasons.more')}
+        </button>
+      ) : null}
+    </section>
+  );
 }

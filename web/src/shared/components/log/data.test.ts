@@ -67,6 +67,27 @@ const charityStewardRow = {
   route_kind: 'charity_chat_completions',
 };
 
+it('keeps retained origin identity distinct from the current account and rejects it in the personal projection', () => {
+  const history = {
+    ...row,
+    user_id: null,
+    caller_identity: null,
+    origin_user_id: '7',
+    origin_discord_id: '123456789012345678',
+    origin_deleted: true,
+    origin_unknown: false,
+    history_record_id: '19',
+  };
+  expect(normalizeAdminLogRow(history)).toMatchObject({
+    user_id: null,
+    origin_user_id: '7',
+    origin_discord_id: '123456789012345678',
+    origin_deleted: true,
+    history_record_id: '19',
+  });
+  expect(() => normalizeUserLogRow({ ...userRow, origin_user_id: '7' })).toThrow(/invalid/i);
+});
+
 const attempt = {
   attempt_seq: '1',
   result_kind: 'response',

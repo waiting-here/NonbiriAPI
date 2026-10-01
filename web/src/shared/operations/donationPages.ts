@@ -72,7 +72,7 @@ export type DonationPageSafeSource =
     };
 
 export interface DonationPageReviewResult {
-  decision: 'approve' | 'reject';
+  decision: 'approve' | 'reject' | 'force_reject';
   reason: string;
   reviewed_at: number;
 }
@@ -188,6 +188,7 @@ const DONATION_COMMON_FIELDS = [
 ] as const;
 
 const DONATION_KEY_FIELDS = [
+  'review',
   'input_token_reserve',
   'output_token_reserve',
   'breakdown_started_at',
@@ -352,7 +353,11 @@ function pageReview(value: unknown, label: string): DonationPageReviewResult | n
   if (value === null) return null;
   const root = record(value, ['decision', 'reason', 'reviewed_at'], label);
   return {
-    decision: oneOf(root.decision, ['approve', 'reject'] as const, `${label} decision`),
+    decision: oneOf(
+      root.decision,
+      ['approve', 'reject', 'force_reject'] as const,
+      `${label} decision`,
+    ),
     reason: string(root.reason, `${label} reason`, { max: 1_024, bytes: 4_096, multiline: true }),
     reviewed_at: unixSecond(root.reviewed_at, `${label} time`),
   };
@@ -394,22 +399,22 @@ function donationCommon(
   if (filters.status !== '' && status !== filters.status) invalidResponse(`${label} status filter`);
   const review = pageReview(root.review_result, `${label} review`);
   const reviewer = pageReviewer(root.reviewer, `${label} reviewer`);
-  if (
-    reviewer === null &&
-    review !== null &&
-    (review.decision !== 'approve' || review.reason !== '')
-  ) {
-    invalidResponse(`${label} automatic review`);
-  }
   if (reviewer !== null && review === null) invalidResponse(`${label} attributed review`);
   if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
   if (status === 'approved' && review?.decision !== 'approve') {
     invalidResponse(`${label} approved review`);
   }
-  if ((status === 'expired' || status === 'deleted') && review?.decision === 'reject') {
+  if (
+    (status === 'expired' || status === 'deleted') &&
+    (review?.decision === 'reject' || review?.decision === 'force_reject')
+  ) {
     invalidResponse(`${label} terminal review`);
   }
-  if (status === 'rejected' && review?.decision !== 'reject') {
+  if (
+    status === 'rejected' &&
+    review?.decision !== 'reject' &&
+    review?.decision !== 'force_reject'
+  ) {
     invalidResponse(`${label} rejected review`);
   }
   const keyCount = decimal(root.key_count, `${label} key count`);
@@ -524,6 +529,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     KEY_SUMMARY_FIELDS.filter(
       (field) =>
         ![
+          'review',
           'donation_note',
           'approval_note',
           'visible_models',
@@ -536,6 +542,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
   );
   const key = normalizeManagedKey(
     {
+      review: root.review,
       binding_count: root.binding_count,
       failure_disable_threshold: root.failure_disable_threshold,
       idle: root.idle,

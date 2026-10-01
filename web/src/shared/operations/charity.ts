@@ -1,6 +1,7 @@
 import { apiFetch } from '@shared/query/http';
 import { decoded, idempotentOptions, queryPath } from './api';
 import { excludedFields } from './charityScope';
+import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import {
   amount,
   array,
@@ -67,6 +68,7 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey {
+  review?: { required: boolean; revision: string | null; material_available: boolean };
   failure_disable_threshold: string;
   binding_count: string;
   idle: boolean;
@@ -111,13 +113,20 @@ export interface ManagedDonationKey {
 }
 
 interface DonationCommon {
+  first_approval_origin?: 'auto' | 'manual' | 'unknown';
+  can_force_reject?: boolean;
+  force_reject_unavailable_reason?: string | null;
   discord_public_thanks?: boolean | null;
   handling: DonationHandling;
   id: string;
   status: DonationStatus;
   revision: string;
   description: string;
-  review_result: { decision: 'approve' | 'reject'; reason: string; reviewed_at: number } | null;
+  review_result: {
+    decision: 'approve' | 'reject' | 'force_reject';
+    reason: string;
+    reviewed_at: number;
+  } | null;
   keys: ManagedDonationKey[];
   reviewer: { user_id: string | null; role: 'admin' | 'steward' } | null;
   created_at: number;
@@ -242,6 +251,7 @@ export function normalizeManagedKey(
       'input_token_reserve',
       'output_token_reserve',
       'breakdown_started_at',
+      'review',
     ],
     label,
     required,
@@ -314,6 +324,22 @@ export function normalizeManagedKey(
     invalidResponse(`${label} expiry authorization`);
   }
   return {
+    ...(root.review === undefined
+      ? {}
+      : {
+          review: (() => {
+            const review = record(
+              root.review,
+              ['required', 'revision', 'material_available'],
+              `${label} review`,
+            );
+            return {
+              required: boolean(review.required, `${label} review required`),
+              revision: nullableDecimal(review.revision, `${label} review revision`),
+              material_available: boolean(review.material_available, `${label} review material`),
+            };
+          })(),
+        }),
     binding_count: bindingCount,
     failure_disable_threshold: decimal(root.failure_disable_threshold, 'failure threshold'),
     idle,
@@ -478,7 +504,11 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
       `${label} review`,
     );
     review = {
-      decision: oneOf(value.decision, ['approve', 'reject'] as const, `${label} review decision`),
+      decision: oneOf(
+        value.decision,
+        ['approve', 'reject', 'force_reject'] as const,
+        `${label} review decision`,
+      ),
       reason: string(value.reason, `${label} review reason`, {
         max: 1_024,
         bytes: 4_096,
@@ -487,24 +517,36 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
       reviewed_at: unixSecond(value.reviewed_at, `${label} review time`),
     };
   }
-  if (
-    reviewer === null &&
-    review !== null &&
-    (review.decision !== 'approve' || review.reason !== '')
-  ) {
-    invalidResponse(`${label} automatic review`);
-  }
   if (reviewer !== null && review === null) {
     invalidResponse(`${label} attributed review`);
   }
   if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
   if (status === 'approved' && review?.decision !== 'approve')
     invalidResponse(`${label} approved review`);
-  if ((status === 'expired' || status === 'deleted') && review?.decision === 'reject')
+  if (
+    (status === 'expired' || status === 'deleted') &&
+    (review?.decision === 'reject' || review?.decision === 'force_reject')
+  )
     invalidResponse(`${label} terminal review`);
-  if (status === 'rejected' && review?.decision !== 'reject')
+  if (status === 'rejected' && review?.decision !== 'reject' && review?.decision !== 'force_reject')
     invalidResponse(`${label} rejected review`);
   return {
+    first_approval_origin:
+      root.first_approval_origin === undefined
+        ? 'unknown'
+        : oneOf(
+            root.first_approval_origin,
+            ['auto', 'manual', 'unknown'] as const,
+            `${label} first approval origin`,
+          ),
+    can_force_reject:
+      root.can_force_reject === undefined
+        ? false
+        : boolean(root.can_force_reject, `${label} force rejection availability`),
+    force_reject_unavailable_reason:
+      root.force_reject_unavailable_reason === undefined
+        ? null
+        : nullableString(root.force_reject_unavailable_reason, `${label} force rejection reason`),
     id: decimalID(root.id, `${label} id`),
     status,
     discord_public_thanks:
@@ -542,12 +584,23 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     'reviewer',
     'created_at',
     'updated_at',
+    'first_approval_origin',
+    'can_force_reject',
+    'force_reject_unavailable_reason',
   ] as const;
   const root = record(
     value,
     fields,
     'administrator donation',
-    fields.filter((field) => field !== 'discord_public_thanks'),
+    fields.filter(
+      (field) =>
+        ![
+          'discord_public_thanks',
+          'first_approval_origin',
+          'can_force_reject',
+          'force_reject_unavailable_reason',
+        ].includes(field),
+    ),
   );
   const common = normalizeDonationCommon(root, 'administrator donation');
   let owner: AdminDonation['owner'] = null;
@@ -588,12 +641,23 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
     'reviewer',
     'created_at',
     'updated_at',
+    'first_approval_origin',
+    'can_force_reject',
+    'force_reject_unavailable_reason',
   ] as const;
   const root = record(
     value,
     fields,
     'steward donation',
-    fields.filter((field) => field !== 'discord_public_thanks'),
+    fields.filter(
+      (field) =>
+        ![
+          'discord_public_thanks',
+          'first_approval_origin',
+          'can_force_reject',
+          'force_reject_unavailable_reason',
+        ].includes(field),
+    ),
   );
   const common = normalizeDonationCommon(root, 'steward donation');
   if (root.owner === null) return { ...common, owner: null };
@@ -621,6 +685,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
 }
 
 export interface CharityModel {
+  role_policy?: RolePolicy;
   is_mainstream?: boolean;
   excluded_request_fields?: string[];
   route_strategy: 'ordered' | 'random' | 'expiry_weighted' | 'cache_balanced';
@@ -714,6 +779,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
       'token_reserve_credits',
       'is_mainstream',
       'excluded_request_fields',
+      'role_policy',
     ],
     label,
     required,
@@ -828,6 +894,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
       end_at: endAt,
     },
     flatten_tool_calls: boolean(root.flatten_tool_calls, `${label} flatten tool calls`),
+    role_policy: normalizeRolePolicy(root.role_policy, `${label} role policy`),
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
     binding_revision: decimal(root.binding_revision, `${label} binding revision`),
     binding_count: decimal(root.binding_count, `${label} binding count`),

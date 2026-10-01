@@ -703,7 +703,6 @@
       "allStatuses": "全部状态",
       "noDonations": "暂无捐赠",
       "noDonationsBody": "没有符合此状态的捐赠记录。",
-      "donationNumber": "捐赠 #{{id}}",
       "approve": "通过捐赠",
       "reject": "驳回捐赠",
       "saveKeyLimits": "保存密钥限制",
@@ -792,24 +791,7 @@
       "title": "法律保留"
     },
     "blacklist": {
-      "title": "Discord 黑名单",
-      "description": "名单中的 Discord ID 无法注册；已有账号会立即永久封禁并撤销登录会话与调用密钥。移除名单不会自动解封已有账号。",
-      "addTitle": "加入黑名单",
-      "reason": "原因",
-      "add": "加入并永久封禁",
-      "added": "已加入黑名单，已有账号已永久封禁。",
-      "removed": "已移除黑名单；已有账号如需恢复，请在用户管理中单独解封。",
-      "invalid": "请填写有效 Discord ID 和最多 2000 字的说明。",
-      "invalidID": "请填写有效的纯数字 Discord ID 或发起人站内 ID。",
-      "search": "搜索 Discord ID 或首次说明",
-      "applySearch": "查询",
-      "empty": "没有匹配的黑名单记录",
-      "emptyBody": "可以通过上方表单添加 Discord ID。",
-      "account": "站内账号",
-      "noAccount": "当前无账号",
-      "created": "加入时间",
-      "action": "操作",
-      "remove": "移除黑名单"
+      "title": "Discord 黑名单"
     },
     "lakeNotes": {
       "title": "垂钓手记期次",

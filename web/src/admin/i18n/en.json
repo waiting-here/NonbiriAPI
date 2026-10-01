@@ -703,7 +703,6 @@
       "allStatuses": "All statuses",
       "noDonations": "No donations",
       "noDonationsBody": "No donation records match this status.",
-      "donationNumber": "Donation #{{id}}",
       "approve": "Approve donation",
       "reject": "Reject donation",
       "saveKeyLimits": "Save key limits",
@@ -792,24 +791,7 @@
       "title": "Legal holds"
     },
     "blacklist": {
-      "title": "Discord blacklist",
-      "description": "Listed Discord IDs cannot register. Existing accounts are permanently banned and lose sessions and caller keys. Removing an entry does not unban an existing account.",
-      "addTitle": "Add to blacklist",
-      "reason": "Reason",
-      "add": "Add and permanently ban",
-      "added": "Added to the blacklist. Any existing account is permanently banned.",
-      "removed": "Removed from the blacklist. Unban existing accounts separately in user management if needed.",
-      "invalid": "Enter a valid Discord ID and a note of up to 2,000 characters.",
-      "invalidID": "Enter a valid numeric Discord ID or actor user ID.",
-      "search": "Search Discord ID or first note",
-      "applySearch": "Search",
-      "empty": "No matching blacklist entries",
-      "emptyBody": "Use the form above to add a Discord ID.",
-      "account": "Account",
-      "noAccount": "No current account",
-      "created": "Added",
-      "action": "Action",
-      "remove": "Remove from blacklist"
+      "title": "Discord blacklist"
     },
     "lakeNotes": {
       "title": "Lake notes periods",
