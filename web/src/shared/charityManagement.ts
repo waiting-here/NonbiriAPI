@@ -48,6 +48,10 @@ export interface ManagementCharityModel {
   discount: { percent: number; enabled: boolean; start_at?: number; end_at?: number };
   success_samples: number;
   success_count: number;
+  role_policy?: {
+    default_action: 'native' | 'passthrough' | 'system' | 'user' | 'assistant' | 'reject';
+    rules: Record<string, 'native' | 'passthrough' | 'system' | 'user' | 'assistant' | 'reject'>;
+  };
 }
 
 export interface ManagementDonationKey {
@@ -1019,6 +1023,9 @@ export function normalizeManagementCharityModel(value: unknown): ManagementChari
       typeof recordValue(record, 'enabled') === 'boolean'
         ? (recordValue(record, 'enabled') as boolean)
         : invalidResponse('charity model enabled'),
+    ...(record.role_policy
+      ? { role_policy: record.role_policy as ManagementCharityModel['role_policy'] }
+      : {}),
     flatten_tool_calls: requiredPolicyBoolean(
       recordValue(record, 'flatten_tool_calls'),
       'charity tool-call policy',

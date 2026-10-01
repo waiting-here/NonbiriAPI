@@ -66,7 +66,11 @@ export type EndpointSecretDraftEvent =
   | { type: 'submit'; accountId: string; pageInstanceId: string }
   | { type: 'local-error'; accountId: string; pageInstanceId: string; message: string }
   | { type: 'request-error'; accountId: string; pageInstanceId: string; message: string }
-  | { type: 'success' | 'cancel' | 'leave'; accountId: string; pageInstanceId: string }
+  | {
+      type: 'success' | 'cancel' | 'leave' | 'clear-secret';
+      accountId: string;
+      pageInstanceId: string;
+    }
   | { type: 'boundary'; accountId: string; pageInstanceId: string };
 
 export function initialEndpointSecretDraftState(
@@ -95,6 +99,7 @@ export function endpointSecretDraftReducer(
     return { ...state, secret: event.secret, status: 'editing', message: null };
   if (event.type === 'ownership')
     return { ...state, ownershipConfirmed: event.confirmed, status: 'editing', message: null };
+  if (event.type === 'clear-secret') return { ...state, secret: '', message: null };
   if (event.type === 'submit')
     return state.status === 'submitting'
       ? state

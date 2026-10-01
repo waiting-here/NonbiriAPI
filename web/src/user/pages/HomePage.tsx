@@ -19,6 +19,7 @@ import {
   ExactCredits,
   StatusPill,
 } from '../features/core/components';
+import { useQuickstartCopy } from '../features/core/quickstartCopy';
 import { useCoreCopy } from '../features/core/copy';
 import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
 import { CapabilityUnavailableError, productionHomeAdapters } from '../features/core/adapters';
@@ -100,11 +101,6 @@ function SignedOutHome() {
   const { t } = useCoreCopy();
   return (
     <div className="page core-page core-stack">
-      <PageHeader
-        icon="home"
-        title={t('home.signedOutTitle')}
-        description={t('home.signedOutBody')}
-      />
       <section className="core-card">
         <div className="core-card__header">
           <div>
@@ -571,6 +567,7 @@ export function HomeDashboard({
   sessionReady?: boolean;
 }) {
   const { t } = useCoreCopy();
+  const { t: text } = useQuickstartCopy();
   return (
     <div className="page core-page core-stack">
       <PageHeader
@@ -578,6 +575,18 @@ export function HomeDashboard({
         title={t('home.title', { name: user.guild_nick || user.username })}
         description={t('home.description')}
       />
+      <section className="core-card">
+        <h2>{text('title')}</h2>
+        <p>{text('body')}</p>
+        <div className="core-row-actions">
+          <Link className="btn btn-primary" to="/endpoints?quickstart=1">
+            {text('start')}
+          </Link>
+          <Link className="btn btn-secondary" to="/charity">
+            {text('community')}
+          </Link>
+        </div>
+      </section>
       <HomeAnnouncements
         accountId={user.id}
         language={user.lang}
