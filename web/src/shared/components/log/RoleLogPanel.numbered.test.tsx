@@ -45,6 +45,11 @@ function adminRow(index: number) {
     ...commonRow(index),
     usage_total_mismatch: false,
     user_id: String(index + 1),
+    origin_user_id: String(index + 1),
+    origin_discord_id: '100000000000000101',
+    origin_deleted: false,
+    origin_unknown: false,
+    history_record_id: null,
     caller_identity: null,
     attempt_count: '1',
   };
@@ -308,7 +313,7 @@ describe('numbered role log panel', () => {
     );
     await view.user.click(screen.getByRole('button', { name: 'Back' }));
     await waitFor(() => expect(queryFromProbe(view.container).get('page')).toBe('2147483647'));
-    expect(screen.getByText('21', { exact: true })).toBeVisible();
+    expect(await screen.findByText('Original account: 21', { exact: true })).toBeVisible();
 
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
     const dialog = await screen.findByRole('dialog');

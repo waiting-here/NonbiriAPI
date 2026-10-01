@@ -571,10 +571,11 @@ describe('Generation 2 charity management policy', () => {
       { station: 'user', role: 'user' },
     );
 
-    expect(await screen.findByText('My donation')).toBeInTheDocument();
+    expect(await screen.findByRole('cell', { name: /^My donation/ })).toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Review' }));
     await waitFor(() => expect(onCapabilityLoss).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByText('My donation')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('cell', { name: /^My donation/ })).not.toBeInTheDocument());
+    expect(screen.queryByRole('checkbox', { name: 'My donation', exact: true, hidden: true })).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(/access.*no longer/i);
   });
 });
