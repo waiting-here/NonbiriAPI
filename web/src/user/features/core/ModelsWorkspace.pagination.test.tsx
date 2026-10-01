@@ -472,10 +472,14 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     await screen.findByText('second-provider/model-51');
-    expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '51'))).toEqual(firstModel);
-    expect(rendered.queryClient.getQueryData(coreKeys.model(otherAccount.id, '51'))).toEqual(
-      secondModel,
-    );
+    expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '51'))).toEqual({
+      ...firstModel,
+      role_policy: { default_action: 'native', rules: {} },
+    });
+    expect(rendered.queryClient.getQueryData(coreKeys.model(otherAccount.id, '51'))).toEqual({
+      ...secondModel,
+      role_policy: { default_action: 'native', rules: {} },
+    });
   });
 
   it('hides private model detail when the session identity disappears', async () => {

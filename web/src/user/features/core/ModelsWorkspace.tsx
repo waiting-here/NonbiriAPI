@@ -1,3 +1,6 @@
+import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
+import { buildRolePolicy, draftFromRolePolicy, type RolePolicy } from '@shared/rolePolicy';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import {
@@ -97,6 +100,52 @@ function selectedModelID(searchParams: URLSearchParams): string | null {
   }
 }
 
+function sameRolePolicy(current: RolePolicy | undefined, expected: RolePolicy): boolean {
+  const policy = current ?? { default_action: 'native', rules: {} };
+  return (
+    policy.default_action === expected.default_action &&
+    Object.keys(policy.rules).length === Object.keys(expected.rules).length &&
+    Object.entries(expected.rules).every(([role, action]) => policy.rules[role] === action)
+  );
+}
+
+const roleSummaryKeys = {
+  title: 'common.rolePolicy.title',
+  defaultAction: 'common.rolePolicy.defaultAction',
+  nativeHelp: 'common.rolePolicy.nativeHelp',
+  toolsHelp: 'common.rolePolicy.toolsHelp',
+  native: 'common.rolePolicy.action.native',
+  passthrough: 'common.rolePolicy.action.passthrough',
+  system: 'common.rolePolicy.action.system',
+  user: 'common.rolePolicy.action.user',
+  assistant: 'common.rolePolicy.action.assistant',
+  reject: 'common.rolePolicy.action.reject',
+} as const;
+
+function ModelRoleSummary({ policy }: { policy?: RolePolicy }) {
+  const { t: text } = useRegisteredCopy(roleSummaryKeys);
+  const current = policy ?? { default_action: 'native', rules: {} };
+  return (
+    <section className="core-card">
+      <h2>{text('title')}</h2>
+      <dl className="core-detail-list">
+        <div>
+          <dt>{text('defaultAction')}</dt>
+          <dd>{text(current.default_action)}</dd>
+        </div>
+        {Object.entries(current.rules).map(([role, action]) => (
+          <div key={role}>
+            <dt>{role}</dt>
+            <dd>{text(action)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="core-muted">{text('nativeHelp')}</p>
+      <p className="core-muted">{text('toolsHelp')}</p>
+    </section>
+  );
+}
+
 function ModelEditor({
   accountId,
   initial,
@@ -117,6 +166,8 @@ function ModelEditor({
   const [strategy, setStrategy] = useState<RouteStrategy>(initial?.route_strategy ?? 'ordered');
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
   const [flattenTools, setFlattenTools] = useState(initial?.flatten_tool_calls ?? false);
+  const [roleDraft, setRoleDraft] = useState(() => draftFromRolePolicy(initial?.role_policy));
+  const roleResult = buildRolePolicy(roleDraft);
   const { t: text } = useQuickstartCopy();
   const [validation, setValidation] = useState(false);
   const [permissionLost, setPermissionLost] = useState<unknown>(null);
@@ -171,7 +222,10 @@ function ModelEditor({
           BigInt(current.revision) > BigInt(patch.expected_revision) &&
           Object.entries(patch).every(
             ([field, value]) =>
-              field === 'expected_revision' || current[field as keyof Model] === value,
+              field === 'expected_revision' ||
+              (field === 'role_policy'
+                ? sameRolePolicy(current.role_policy, value as RolePolicy)
+                : current[field as keyof Model] === value),
           );
         if (confirmed)
           context.commit(() => {
@@ -222,6 +276,7 @@ function ModelEditor({
     }
     let input = operation.outcome === 'unknown' ? operation.variables : undefined;
     if (!input) {
+      if (!roleResult.policy) return;
       try {
         validatePersonalProviderName(provider);
         validateLogicalName(modelName);
@@ -235,6 +290,7 @@ function ModelEditor({
         route_strategy: strategy,
         silent_retry: silentRetry,
         flatten_tool_calls: flattenTools,
+        role_policy: roleResult.policy,
         ...(initial ? { expected_revision: initial.revision } : {}),
       };
     }
@@ -323,6 +379,8 @@ function ModelEditor({
       </label>
       <p className="core-muted">{text('retryHelp')}</p>
       <p className="core-muted">{text('toolsHelp')}</p>
+      <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
+
       {validation ? (
         <p className="core-inline-error" role="alert">
           {t('models.invalidName')}
@@ -344,7 +402,11 @@ function ModelEditor({
       )}
       <div className="core-form-actions">
         <span />
-        <button type="submit" className="btn btn-primary" disabled={busy}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={busy || (!hasAttempt && !!roleResult.error)}
+        >
           {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
         </button>
       </div>
@@ -1405,7 +1467,7 @@ function ModelDetail({
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const model = useModel(accountId, modelId);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<Model | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const permissionScope = `${accountId}\u0000${modelId}`;
   const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
@@ -1446,7 +1508,7 @@ function ModelDetail({
     {
       clearSecrets: () => {
         setDeleteOpen(false);
-        setEditing(false);
+        setEditing(null);
       },
     },
   );
@@ -1526,7 +1588,7 @@ function ModelDetail({
             type="button"
             className="btn btn-secondary"
             disabled={reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() => setEditing(true)}
+            onClick={() => setEditing(model.data ?? null)}
           >
             {t('models.editModel')}
           </button>
@@ -1535,10 +1597,10 @@ function ModelDetail({
       {editing ? (
         <ModelEditor
           accountId={accountId}
-          key={model.data.revision}
-          initial={model.data}
-          onCancel={() => setEditing(false)}
-          onSaved={() => setEditing(false)}
+          key={editing.revision}
+          initial={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => setEditing(null)}
           onCapabilityLoss={(error) => setPermissionLost({ scope: permissionScope, error })}
         />
       ) : (
@@ -1580,6 +1642,7 @@ function ModelDetail({
           </dl>
         </section>
       )}
+      {!editing ? <ModelRoleSummary policy={model.data.role_policy} /> : null}
       <BindingSelector accountId={accountId} model={model.data} />
       <BindingOrder accountId={accountId} model={model.data} />
       <section className="core-card core-danger-zone">

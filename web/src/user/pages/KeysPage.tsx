@@ -1,3 +1,4 @@
+import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -374,6 +375,15 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
 
 export function KeysPage() {
   return (
-    <CoreUserGate>{(user) => <CallerKeyPanel key={user.id} accountId={user.id} />}</CoreUserGate>
+    <CoreUserGate>
+      {(user) => (
+        <>
+          <CallerKeyPanel key={user.id} accountId={user.id} />
+          <div className="page core-page">
+            <PersonalAutomationGuide />
+          </div>
+        </>
+      )}
+    </CoreUserGate>
   );
 }

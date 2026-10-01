@@ -1,0 +1,38 @@
+.personal-automation-guide {
+  min-width: 0;
+}
+.personal-automation-guide > summary {
+  cursor: pointer;
+}
+.personal-automation-guide[open] > summary {
+  margin-bottom: 1rem;
+}
+.personal-automation-guide .core-copy-value {
+  align-items: flex-start;
+}
+.personal-automation-guide .core-mono {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.personal-automation-guide table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.personal-automation-guide th,
+.personal-automation-guide td {
+  text-align: start;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--nb-color-border);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.personal-automation-guide th:first-child {
+  width: 15%;
+}
+.personal-automation-guide th:nth-child(2) {
+  width: 50%;
+}
+.personal-automation-guide td code {
+  white-space: normal;
+}
