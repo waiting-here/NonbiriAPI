@@ -172,3 +172,9 @@
   .fatfish-admin .fatfish-fields, .fatfish-admin .fatfish-toolbar > .fatfish-fields { grid-template-columns: minmax(0, 1fr); }
   .fatfish-admin .fatfish-examples > .fatfish-actions { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+.fatfish-node-map code { overflow-wrap: anywhere; }
+.fatfish-node-map li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.fatfish-node-map svg { touch-action: none; }
+.fatfish-editor-workspace circle[aria-label] { cursor: grab; }

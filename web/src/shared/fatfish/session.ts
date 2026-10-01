@@ -78,6 +78,7 @@ export class FatFishSessionController {
   private lastRecoveryAttemptMS = -Infinity;
   private writeTail: Promise<void> = Promise.resolve();
   private readonly inFlightFlushes = new Set<Promise<void>>();
+  private autoSubmitAttempted = false;
   private actionTail: Promise<unknown> = Promise.resolve();
 
   constructor(transport: FatFishChallengeTransport) { this.transport = transport; }
@@ -184,10 +185,13 @@ export class FatFishSessionController {
     else if (view.state === 'active') this.phase = 'waiting';
     this.publish();
   }
-  async prepare(): Promise<FatFishChallenge> {
+  prepare(): Promise<FatFishChallenge> {
+    return this.queueAction(() => this.prepareSerial());
+  }
+  private async prepareSerial(): Promise<FatFishChallenge> {
     try {
       requireLocalPlaySupport();
-      if (this.view) throw new Error('A challenge is already open in this tab.');
+      if (this.view) return this.view;
       const db = await this.databaseReady();
       const pending = pendingCapability(this.transport.prepareScope);
       let view: FatFishChallenge;
@@ -225,7 +229,10 @@ export class FatFishSessionController {
       return this.fail(error);
     }
   }
-  async recover(challengeID: string): Promise<FatFishChallenge> {
+  recover(challengeID: string): Promise<FatFishChallenge> {
+    return this.queueAction(() => this.recoverSerial(challengeID));
+  }
+  private async recoverSerial(challengeID: string): Promise<FatFishChallenge> {
     try {
       requireLocalPlaySupport();
       if (this.view) throw new Error('A challenge is already open in this tab.');
@@ -258,9 +265,13 @@ export class FatFishSessionController {
       return this.fail(error);
     }
   }
-  async start(): Promise<FatFishChallenge> {
+  start(): Promise<FatFishChallenge> {
+    return this.queueAction(() => this.startSerial());
+  }
+  private async startSerial(): Promise<FatFishChallenge> {
     try {
       this.assertOwner();
+      if (this.view?.state === 'active') return this.view;
       if (this.view?.state !== 'prepared') throw new Error('The challenge is not prepared.');
       const record = this.record!;
       if (!record.start_key) record.start_key = freshKey();
@@ -346,6 +357,10 @@ export class FatFishSessionController {
     }
     if (this.engine.terminal) {
       this.record.terminal_tick = this.engine.tick;
+      if (this.transport.autoSubmit && !this.autoSubmitAttempted && !this.record.accepted && this.view?.state === 'active') {
+        this.autoSubmitAttempted = true;
+        void this.submit().catch(() => undefined);
+      }
       if (this.phase !== 'verifying') this.phase = 'running';
     }
     if (count) this.publish();
@@ -371,7 +386,11 @@ export class FatFishSessionController {
     if (this.disposed) throw new Error('The challenge view has closed.');
   }
   private queueAction<T>(action: () => Promise<T>): Promise<T> {
-    const run = this.actionTail.then(action, action);
+    const guarded = () => {
+      if (this.disposed) throw new Error('The challenge view has closed.');
+      return action();
+    };
+    const run = this.actionTail.then(guarded, guarded);
     this.actionTail = run.catch(() => undefined);
     return run;
   }
@@ -539,10 +558,13 @@ export class FatFishSessionController {
       this.assertOwner();
       if (!this.transport.abandon) throw new Error('Abandon is unavailable in this mode.');
       const record = this.record!;
-      if (!record.abandon_key) record.abandon_key = freshKey();
+      if (!record.abandon_key) {
+        record.abandon_key = freshKey();
+        record.abandon_revision = this.view?.revision;
+      }
       await this.flush();
       let view: FatFishChallenge;
-      try { view = await this.transport.abandon(record.id, this.capability, record.abandon_key); }
+      try { view = await this.transport.abandon(record.id, this.capability, record.abandon_key, record.abandon_revision); }
       catch (error) {
         const current = await this.transport.read(record.id, this.capability).catch(() => null);
         if (!current || !terminalState(current.state)) throw error;

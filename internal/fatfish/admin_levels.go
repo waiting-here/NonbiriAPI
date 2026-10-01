@@ -32,7 +32,14 @@ type LevelView struct {
 	CreatedAt   int64           `json:"created_at"`
 	UpdatedAt   int64           `json:"updated_at"`
 }
+type PlaytestSummary struct {
+	Count     int64  `json:"count"`
+	BestStars int    `json:"best_stars"`
+	LastAt    *int64 `json:"last_at"`
+}
 type VersionView struct {
+	VersionNumber   string          `json:"version_number"`
+	PlaytestSummary PlaytestSummary `json:"playtest_summary"`
 	ID              string          `json:"id"`
 	LevelID         string          `json:"level_id"`
 	ContentHash     string          `json:"content_hash"`
@@ -302,12 +309,19 @@ func (s *Service) PublishVersion(ctx context.Context, actorID int64, levelID, ex
 	var id string
 	err = tx.QueryRowContext(ctx, `SELECT id FROM fatfish_level_versions WHERE level_id=? AND content_hash=? AND engine_version=? AND scoring_version=?`, levelID, hashRaw, level.EngineVersion, level.ScoringVersion).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
+		var latest int64
+		if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version_number),0) FROM fatfish_level_versions WHERE level_id=?", levelID).Scan(&latest); err != nil {
+			return VersionView{}, err
+		}
+		if latest == int64(^uint64(0)>>1) {
+			return VersionView{}, ErrConflict
+		}
 		id, err = db.GenerateOpaqueID("ffv_")
 		if err != nil {
 			return VersionView{}, err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO fatfish_level_versions(id,level_id,content_hash,engine_version,scoring_version,content_json,duration_seconds,maximum_stars,created_at)
- VALUES(?,?,?,?,?,?,?,?,?)`, id, levelID, hashRaw, level.EngineVersion, level.ScoringVersion, string(content), level.DurationSeconds, 3, nowMS/1000)
+		_, err = tx.ExecContext(ctx, `INSERT INTO fatfish_level_versions(id,level_id,content_hash,engine_version,scoring_version,content_json,duration_seconds,maximum_stars,created_at,version_number)
+ VALUES(?,?,?,?,?,?,?,?,?,?)`, id, levelID, hashRaw, level.EngineVersion, level.ScoringVersion, string(content), level.DurationSeconds, 3, nowMS/1000, latest+1)
 		if err != nil {
 			return VersionView{}, err
 		}
@@ -329,7 +343,7 @@ func readVersionTx(ctx context.Context, tx *sql.Tx, id string) (VersionView, err
 	var v VersionView
 	var hash []byte
 	var content string
-	err := tx.QueryRowContext(ctx, `SELECT id,level_id,content_hash,engine_version,scoring_version,content_json,duration_seconds,maximum_stars,created_at FROM fatfish_level_versions WHERE id=?`, id).Scan(&v.ID, &v.LevelID, &hash, &v.EngineVersion, &v.ScoringVersion, &content, &v.DurationSeconds, &v.MaximumStars, &v.CreatedAt)
+	err := tx.QueryRowContext(ctx, `SELECT id,level_id,content_hash,engine_version,scoring_version,content_json,duration_seconds,maximum_stars,created_at,CAST(version_number AS TEXT) FROM fatfish_level_versions WHERE id=?`, id).Scan(&v.ID, &v.LevelID, &hash, &v.EngineVersion, &v.ScoringVersion, &content, &v.DurationSeconds, &v.MaximumStars, &v.CreatedAt, &v.VersionNumber)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -338,6 +352,9 @@ func readVersionTx(ctx context.Context, tx *sql.Tx, id string) (VersionView, err
 	}
 	v.ContentHash = hex.EncodeToString(hash)
 	v.Content = json.RawMessage(content)
+	if err = tx.QueryRowContext(ctx, "SELECT count(*),COALESCE(MAX(CASE WHEN passed=1 THEN stars ELSE 0 END),0),MAX(created_at) FROM fatfish_playtests WHERE version_id=?", id).Scan(&v.PlaytestSummary.Count, &v.PlaytestSummary.BestStars, &v.PlaytestSummary.LastAt); err != nil {
+		return v, err
+	}
 	return v, nil
 }
 
@@ -372,7 +389,9 @@ func (s *Service) Versions(ctx context.Context, actorID int64, levelID string, p
 	if err = s.authorizeAdminTx(ctx, tx, actorID); err != nil {
 		return VersionPage{}, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,level_id,content_hash,engine_version,scoring_version,duration_seconds,maximum_stars,created_at FROM fatfish_level_versions WHERE level_id=? ORDER BY created_at DESC,id LIMIT ? OFFSET ?`, levelID, collectionPageSize+1, (page-1)*collectionPageSize)
+	rows, err := tx.QueryContext(ctx, `SELECT v.id,v.level_id,v.content_hash,v.engine_version,v.scoring_version,v.duration_seconds,v.maximum_stars,v.created_at,CAST(v.version_number AS TEXT),
+ count(p.id),COALESCE(MAX(CASE WHEN p.passed=1 THEN p.stars ELSE 0 END),0),MAX(p.created_at)
+ FROM fatfish_level_versions v LEFT JOIN fatfish_playtests p ON p.version_id=v.id WHERE v.level_id=? GROUP BY v.id ORDER BY v.version_number DESC LIMIT ? OFFSET ?`, levelID, collectionPageSize+1, (page-1)*collectionPageSize)
 	if err != nil {
 		return VersionPage{}, err
 	}
@@ -380,7 +399,7 @@ func (s *Service) Versions(ctx context.Context, actorID int64, levelID string, p
 	for rows.Next() {
 		var item VersionView
 		var hash []byte
-		if err = rows.Scan(&item.ID, &item.LevelID, &hash, &item.EngineVersion, &item.ScoringVersion, &item.DurationSeconds, &item.MaximumStars, &item.CreatedAt); err != nil {
+		if err = rows.Scan(&item.ID, &item.LevelID, &hash, &item.EngineVersion, &item.ScoringVersion, &item.DurationSeconds, &item.MaximumStars, &item.CreatedAt, &item.VersionNumber, &item.PlaytestSummary.Count, &item.PlaytestSummary.BestStars, &item.PlaytestSummary.LastAt); err != nil {
 			rows.Close()
 			return VersionPage{}, err
 		}

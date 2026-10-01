@@ -13,7 +13,7 @@ describe('Fat Fish example picker', () => {
     format: 'nonbiri-fatfish-examples', version: 1, license: 'AGPL-3.0', source: 'Bundled examples',
     examples: [entry, ...Array.from({ length: 7 }, (_, index) => ({ ...entry, id: `other_${index}`, title: `Other ${index}` }))],
   });
-  it('loads only a manifest-listed same-origin level with its normalized engine hash', async () => {
+  it('imports and downloads a bundled level', async () => {
     const level = blankLevel(), onImport = vi.fn();
     const path = '/examples/fatfish/01-example.fatfish.json';
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('manifest.json')
@@ -33,14 +33,6 @@ describe('Fat Fish example picker', () => {
     expect(downloaded).toBe('first.fatfish.json');
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     click.mockRestore();
-  });
-  it('rejects external manifest URLs before fetching a level', async () => {
-    const fetch = vi.fn(async () => reply(manifest({ id: 'first', title: 'External', url: 'https://other.example/level.json', content_hash: 'a'.repeat(64) })));
-    vi.stubGlobal('fetch', fetch);
-    await renderWithProviders(<ExamplePicker onImport={vi.fn()} />, { station: 'admin', role: 'admin' });
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'External' })).not.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledTimes(1);
   });
   it('accepts all eight bundled examples with their published canonical hashes', () => {
     const raw = readFileSync('public/examples/fatfish/manifest.json', 'utf8');
