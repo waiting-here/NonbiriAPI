@@ -12,19 +12,17 @@ import {
   type SourceFacts,
 } from './api';
 import type { FormattedError } from './formatError';
+import { sourceFlagLabel, sourceQualityLabel } from './sourceLabels';
+import { fieldLabel, riskCopy } from '@shared/riskAudit/copy';
 import './observability.css';
-
-function useWords() {
-  const { i18n } = useTranslation();
-  return (en: string, zh: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
-}
 
 export function RequestSource(props: { role: DiagnosticRole; requestID: string }) {
   return <ScopedRequestSource key={props.role + ':' + props.requestID} {...props} />;
 }
 
 function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; requestID: string }) {
-  const words = useWords();
+  const { t } = useTranslation();
+  const labels = riskCopy(t);
   const [source, setSource] = useState<SourceFacts | null>();
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -36,25 +34,24 @@ function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; reques
       });
     return () => controller.abort();
   }, [role, requestID]);
-  if (error)
-    return <p role="status">{words('Source details are unavailable.', '来源详情暂不可用。')}</p>;
-  if (!source) return <p>{words('No source details recorded.', '没有已记录的来源详情。')}</p>;
+  if (error) return <p role="status">{t('common.diagnostics.sourceDetailsAreUnavailable')}</p>;
+  if (!source) return <p>{t('common.diagnostics.noSourceDetailsRecorded')}</p>;
   return (
-    <section className="request-diagnostics" aria-label={words('Request source', '请求来源')}>
-      <p>{words('Client headers are self-reported clues.', '客户端请求头是客户端自报线索。')}</p>
+    <section className="request-diagnostics" aria-label={t('common.diagnostics.requestSource')}>
+      <p>{t('common.diagnostics.clientHeadersAreSelfreportedClues')}</p>
       <dl>
         {Object.entries(source)
           .filter(([key]) => key !== 'quality')
           .map(([key, value]) => (
             <div key={key}>
-              <dt>{key}</dt>
+              <dt>{key === 'ip_quality' ? labels.quality : fieldLabel(key, labels)}</dt>
               <dd>
-                {String(value)}{' '}
+                {key === 'ip_quality' ? sourceQualityLabel(String(value), t) : String(value)}{' '}
                 {source.quality?.[key] && (
                   <span>
                     {Object.entries(source.quality[key])
                       .filter(([, flag]) => flag)
-                      .map(([flag]) => flag)
+                      .map(([flag]) => sourceFlagLabel(flag, t))
                       .join(', ')}
                   </span>
                 )}
@@ -84,7 +81,7 @@ function ScopedAttemptErrors({
   requestID: string;
   attempt: number;
 }) {
-  const words = useWords();
+  const { t } = useTranslation();
   const [page, setPage] = useState<ErrorPage>();
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -113,17 +110,15 @@ function ScopedAttemptErrors({
         disabled={busy}
         onClick={() => void load()}
       >
-        {words('Upstream error details', '上游错误详情')}
+        {t('common.diagnostics.upstreamErrorDetails')}
       </button>
-      {failed && <p role="alert">{words('Could not load diagnostics.', '无法加载错误详情。')}</p>}
-      {page && page.data.length === 0 && (
-        <p>{words('No error body was recorded.', '没有已记录的错误正文。')}</p>
-      )}
+      {failed && <p role="alert">{t('common.diagnostics.couldNotLoadDiagnostics')}</p>}
+      {page && page.data.length === 0 && <p>{t('common.diagnostics.noErrorBodyWasRecorded')}</p>}
       {page?.data.map((error) => (
         <details key={error.event_seq}>
           <summary>
-            {words('Error event', '错误事件')} {error.event_seq} · HTTP {error.http_status ?? '—'} ·{' '}
-            {error.bytes_saved} B {error.truncated ? words('(truncated)', '（已截断）') : ''}
+            {t('common.diagnostics.errorEvent')} {error.event_seq} · HTTP {error.http_status ?? '—'}{' '}
+            · {error.bytes_saved} B {error.truncated ? t('common.diagnostics.truncated') : ''}
           </summary>
           {error.save_state === 'saved' ? (
             <LazyErrorBody
@@ -135,11 +130,8 @@ function ScopedAttemptErrors({
           ) : (
             <p>
               {error.save_state === 'capacity_exhausted'
-                ? words(
-                    'Raw body was not saved because the storage budget was full.',
-                    '原文因容量不足未保存。',
-                  )
-                : words('Raw body could not be saved.', '原文读取或保存失败。')}
+                ? t('common.diagnostics.rawBodyWasNotSavedBecauseThe')
+                : t('common.diagnostics.rawBodyCouldNotBeSaved')}
             </p>
           )}
         </details>
@@ -151,7 +143,7 @@ function ScopedAttemptErrors({
           disabled={busy}
           onClick={() => void load(page.next_after!)}
         >
-          {words('Next events', '后续事件')}
+          {t('common.diagnostics.nextEvents')}
         </button>
       )}
     </section>
@@ -169,7 +161,7 @@ function LazyErrorBody({
   attempt: number;
   event: number;
 }) {
-  const words = useWords();
+  const { t } = useTranslation();
   const [body, setBody] = useState<ErrorBody>();
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -201,17 +193,15 @@ function LazyErrorBody({
         disabled={busy}
         onClick={() => void load()}
       >
-        {words('Load original body', '加载原始正文')}
+        {t('common.diagnostics.loadOriginalBody')}
       </button>
-      {failed && (
-        <p role="alert">{words('Could not load the error body.', '无法加载错误正文。')}</p>
-      )}
+      {failed && <p role="alert">{t('common.diagnostics.couldNotLoadTheErrorBody')}</p>}
     </>
   );
 }
 
 export function RawErrorViewer({ body }: { body: ErrorBody }) {
-  const words = useWords();
+  const { t } = useTranslation();
   const raw = new TextDecoder().decode(errorBytes(body));
   const synthetic = body.content_type === 'application/vnd.nonbiriapi.image-diagnostic+json';
   const [formatted, setFormatted] = useState<string>();
@@ -247,26 +237,20 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
         if (event.data.text !== undefined) {
           setFormatted(event.data.text);
           setShowRaw(false);
-        } else
-          setNotice(
-            words(
-              'Formatting is unavailable; use the original text or download.',
-              '无法格式化，请查看原文或下载。',
-            ),
-          );
+        } else setNotice(t('common.diagnostics.formattingIsUnavailableUseTheOriginalText'));
       };
       current.onerror = () => {
         finish();
-        setNotice(words('Formatting is unavailable.', '格式化暂不可用。'));
+        setNotice(t('common.diagnostics.formattingIsUnavailable'));
       };
       timer.current = setTimeout(() => {
         finish();
-        setNotice(words('Formatting timed out.', '格式化超时。'));
+        setNotice(t('common.diagnostics.formattingTimedOut'));
       }, 2000);
       current.postMessage({ raw, truncated: body.truncated });
     } catch {
       setFormatting(false);
-      setNotice(words('Formatting is unavailable.', '格式化暂不可用。'));
+      setNotice(t('common.diagnostics.formattingIsUnavailable'));
     }
   }
   function download() {
@@ -282,23 +266,11 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
   return (
     <div className="request-diagnostics">
       {synthetic && (
-        <p role="status">
-          {words(
-            'This is a safe diagnostic summary generated by the site, not the original upstream body.',
-            '这是本站生成的安全诊断摘要，不包含上游原始响应正文。',
-          )}
-        </p>
+        <p role="status">{t('common.diagnostics.thisIsASafeDiagnosticSummaryGenerated')}</p>
       )}
-      {body.truncated && (
-        <p role="status">{words('The body was truncated at 1 MiB.', '正文已在 1 MiB 处截断。')}</p>
-      )}
+      {body.truncated && <p role="status">{t('common.diagnostics.theBodyWasTruncatedAt1Mib')}</p>}
       {body.encoding === 'base64' && (
-        <p>
-          {words(
-            'Non-UTF-8 bytes are replaced for display. Download preserves the original bytes.',
-            '非 UTF-8 字节以替换字符显示；下载保留原始字节。',
-          )}
-        </p>
+        <p>{t('common.diagnostics.nonutf8BytesAreReplacedForDisplayDownload')}</p>
       )}
       <div className="diagnostic-actions">
         <button
@@ -307,7 +279,7 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
           disabled={body.truncated || body.encoding === 'base64' || formatting}
           onClick={format}
         >
-          {words('Format JSON', '格式化 JSON')}
+          {t('common.diagnostics.formatJson')}
         </button>
         {formatted && (
           <button
@@ -316,10 +288,10 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
             onClick={() => setShowRaw((value) => !value)}
           >
             {showRaw
-              ? words('Formatted', '格式化')
+              ? t('common.diagnostics.formatted')
               : synthetic
-                ? words('Summary text', '摘要文本')
-                : words('Original', '原文')}
+                ? t('common.diagnostics.summaryText')
+                : t('common.diagnostics.original')}
           </button>
         )}
         <button
@@ -327,28 +299,23 @@ export function RawErrorViewer({ body }: { body: ErrorBody }) {
           type="button"
           onClick={() => {
             void copyText(showRaw ? raw : (formatted ?? raw)).then((ok) =>
-              setNotice(ok ? words('Copied.', '已复制。') : words('Copy failed.', '复制失败。')),
+              setNotice(ok ? t('common.diagnostics.copied') : t('common.diagnostics.copyFailed')),
             );
           }}
         >
-          {words('Copy text', '复制文本')}
+          {t('common.diagnostics.copyText')}
         </button>
         <button className="btn btn-secondary" type="button" onClick={download}>
           {synthetic
-            ? words('Download diagnostic summary', '下载诊断摘要')
-            : words('Download original', '下载原始正文')}
+            ? t('common.diagnostics.downloadDiagnosticSummary')
+            : t('common.diagnostics.downloadOriginal')}
         </button>
       </div>
       <details open={body.bytes_saved <= 16_384}>
-        <summary>{words('Body preview', '正文预览')}</summary>
+        <summary>{t('common.diagnostics.bodyPreview')}</summary>
         <pre>{(showRaw ? raw : (formatted ?? raw)).slice(0, 65_536)}</pre>
         {(showRaw ? raw : (formatted ?? raw)).length > 65_536 && (
-          <p>
-            {words(
-              'Preview shows the first 65,536 characters. Copy or download for the complete body.',
-              '预览仅展示前 65,536 个字符，可复制或下载完整正文。',
-            )}
-          </p>
+          <p>{t('common.diagnostics.previewShowsTheFirst65536CharactersCopy')}</p>
         )}
       </details>
       {notice && <p role="status">{notice}</p>}

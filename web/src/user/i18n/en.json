@@ -68,7 +68,6 @@
       "allStatuses": "All statuses",
       "noDonations": "No donations",
       "noDonationsBody": "No donation records match this status.",
-      "donationNumber": "Donation #{{id}}",
       "approve": "Approve donation",
       "reject": "Reject donation",
       "saveKeyLimits": "Save key limits",

@@ -68,7 +68,6 @@
       "allStatuses": "全部状态",
       "noDonations": "暂无捐赠",
       "noDonationsBody": "没有符合此状态的捐赠记录。",
-      "donationNumber": "捐赠 #{{id}}",
       "approve": "通过捐赠",
       "reject": "驳回捐赠",
       "saveKeyLimits": "保存密钥限制",

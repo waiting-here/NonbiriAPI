@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { BlacklistPage } from './BlacklistPage';
@@ -68,6 +68,13 @@ it('adds and removes an identity with idempotency keys and refreshes the list', 
   await rendered.user.type(screen.getByLabelText('Discord ID'), '123456789012345678');
   await rendered.user.type(screen.getByLabelText('Reason'), 'Policy violation');
   await rendered.user.click(screen.getByRole('button', { name: 'Add and permanently ban' }));
+  const dialog = await screen.findByRole('alertdialog');
+  expect(dialog).toHaveTextContent('123456789012345678');
+  expect(dialog).toHaveTextContent('Policy violation');
+  expect(writes).toHaveLength(0);
+  await rendered.user.click(
+    within(dialog).getByRole('button', { name: 'Add and permanently ban' }),
+  );
   expect(await screen.findByRole('link', { name: '42' })).toBeVisible();
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Remove from blacklist' })).toBeEnabled(),

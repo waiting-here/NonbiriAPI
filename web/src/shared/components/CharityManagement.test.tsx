@@ -283,11 +283,16 @@ function installDonationFetch(initial: AdminDonation) {
         status: approved ? 'approved' : 'rejected',
         revision: String(Number(current.revision) + 1),
         review_result: {
-          decision: approved ? 'approve' : 'reject',
+          decision: approved
+            ? 'approve'
+            : body.decision === 'force_reject'
+              ? 'force_reject'
+              : 'reject',
           reason: String(body.reason),
           reviewed_at: 11,
         },
         reviewer: { user_id: '9', role: 'admin' },
+        can_force_reject: false,
         keys: current.keys.map((key) => ({
           ...key,
           charity_state: approved ? 'available' : key.charity_state,
@@ -546,7 +551,7 @@ describe('CharityManagement corrective controls', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    await screen.findByRole('heading', { name: 'Donation #1' });
+    await screen.findByRole('heading', { name: 'Donation review' });
     expect(screen.getByLabelText('Charity switch change')).toHaveValue('');
     await view.user.click(screen.getByRole('checkbox', { name: 'Reset failure streak' }));
     await view.user.click(screen.getByRole('button', { name: 'Save key limits' }));
@@ -578,7 +583,7 @@ describe('CharityManagement corrective controls', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    await screen.findByRole('heading', { name: 'Donation #1' });
+    await screen.findByRole('heading', { name: 'Donation review' });
     await view.user.selectOptions(screen.getByLabelText('Charity switch change'), 'false');
     await view.user.click(screen.getByRole('button', { name: 'Save key limits' }));
 
@@ -598,6 +603,98 @@ describe('CharityManagement corrective controls', () => {
       expires_at: null,
     });
     expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
+  });
+
+  it('confirms an automatic donation rejection once and submits its mandatory reason without key settings', async () => {
+    const requests = installDonationFetch({
+      ...approvedDonation(),
+      first_approval_origin: 'auto',
+      can_force_reject: true,
+      force_reject_unavailable_reason: null,
+    });
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+    const action = await screen.findByRole('button', {
+      name: 'Reject an automatically approved donation',
+    });
+    expect(action).toBeDisabled();
+    await view.user.type(
+      screen.getByLabelText('Reason'),
+      'Review this source before future donations',
+    );
+    await view.user.click(action);
+    expect(requests.reviewBodies).toHaveLength(0);
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/Dispatched calls settle normally/)).toBeVisible();
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument();
+    await view.user.click(
+      within(dialog).getByRole('button', { name: 'Reject an automatically approved donation' }),
+    );
+    await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
+    expect(requests.reviewBodies[0]).toEqual({
+      decision: 'force_reject',
+      expected_revision: '1',
+      reason: 'Review this source before future donations',
+    });
+    expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
+  });
+
+  it('includes the current member review revision only when that member is explicitly enabled', async () => {
+    const donation = pendingDonation();
+    donation.keys[0].review = { required: true, revision: '7', material_available: true };
+    const requests = installDonationFetch(donation);
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+    await screen.findByRole('heading', { name: 'Review pending submission' });
+    await view.user.type(screen.getByLabelText('Reason'), 'Reviewed the current member');
+    await view.user.click(
+      screen.getByRole('checkbox', {
+        name: 'I confirm this review result and its per-key consequences.',
+      }),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
+    await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
+    expect(requests.reviewBodies[0].key_settings).toEqual([
+      expect.objectContaining({
+        donation_key_id: '11',
+        enabled: true,
+        expected_review_revision: '7',
+      }),
+    ]);
+  });
+
+  it('leaves missing review material disabled and preserves its requirement when approving other settings', async () => {
+    const donation = pendingDonation();
+    donation.keys[0].review = { required: true, revision: '7', material_available: false };
+    const requests = installDonationFetch(donation);
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+    await screen.findByRole('heading', { name: 'Review pending submission' });
+    await view.user.type(screen.getByLabelText('Reason'), 'Keep the affected member disabled');
+    await view.user.click(
+      screen.getByRole('checkbox', {
+        name: 'I confirm this review result and its per-key consequences.',
+      }),
+    );
+    expect(screen.getByRole('button', { name: 'Approve donation' })).toBeDisabled();
+    await view.user.click(screen.getByRole('checkbox', { name: 'Enable for charity' }));
+    await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
+    await waitFor(() => expect(requests.reviewBodies).toHaveLength(1));
+    expect(requests.reviewBodies[0].key_settings).toEqual([
+      expect.objectContaining({ enabled: false }),
+    ]);
+    expect(
+      (requests.reviewBodies[0].key_settings as Record<string, unknown>[])[0],
+    ).not.toHaveProperty('expected_review_revision');
   });
 
   it('submits an explicit per-key null expiry for a pending donation', async () => {
@@ -713,7 +810,10 @@ describe('CharityManagement corrective controls', () => {
       expect(editor.getByLabelText('Start (optional)')).toHaveValue(siteDateTime(start)),
     );
     expect(editor.getByLabelText('End (optional)')).toHaveValue(siteDateTime(end));
-    await view.user.selectOptions(editor.getByRole('combobox', { name: /Routing strategy/ }), 'cache_balanced');
+    await view.user.selectOptions(
+      editor.getByRole('combobox', { name: /Routing strategy/ }),
+      'cache_balanced',
+    );
     fireEvent.change(editor.getByRole('spinbutton', { name: /Association duration/ }), {
       target: { value: '86400' },
     });
@@ -722,6 +822,7 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      role_policy: { default_action: 'native', rules: {} },
       is_mainstream: false,
       excluded_request_fields: [],
       route_strategy: 'cache_balanced',

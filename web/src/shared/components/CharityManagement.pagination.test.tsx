@@ -257,14 +257,11 @@ describe('managed donation page integration', () => {
     '$role shows an empty-source binding as unavailable in $locale',
     async ({ role, locale, unavailable }) => {
       installBindingNavigation(role, false, []);
-      await renderWithProviders(
-        <CharityManagement frame={role} accountId="1" />,
-        {
-          station: role === 'admin' ? 'admin' : 'user',
-          locale,
-          route: '/charity?charity_section=models&charity_model=1',
-        },
-      );
+      await renderWithProviders(<CharityManagement frame={role} accountId="1" />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        locale,
+        route: '/charity?charity_section=models&charity_model=1',
+      });
 
       expect(await screen.findByText(unavailable)).toBeVisible();
       const bindingRow = screen.getByRole('row', { name: /embedding-model/ });
@@ -288,10 +285,10 @@ describe('managed donation page integration', () => {
         },
       );
       await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
-      const selected = await screen.findByRole('heading', { name: 'Key 31 · head31…tail' });
+      const selected = await screen.findByRole('heading', { name: 'Service key head31…tail' });
       expect(selected.closest('section.is-selected')).toBeVisible();
       expect(
-        screen.queryByRole('heading', { name: 'Key 11 · head11…tail' }),
+        screen.queryByRole('heading', { name: 'Service key head11…tail' }),
       ).not.toBeInTheDocument();
       expect(
         requests.some(
@@ -310,7 +307,7 @@ describe('managed donation page integration', () => {
       expect(params.has('donation_id')).toBe(false);
       expect(params.has('donation_key')).toBe(false);
       await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
-      expect(await screen.findByRole('heading', { name: 'Key 31 · head31…tail' })).toBeVisible();
+      expect(await screen.findByRole('heading', { name: 'Service key head31…tail' })).toBeVisible();
     },
   );
   it.each(['admin', 'steward'] as const)(
@@ -328,7 +325,7 @@ describe('managed donation page integration', () => {
       await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
       await waitFor(() => expect(lost).toHaveBeenCalled());
       expect(
-        screen.queryByRole('heading', { name: 'Key 31 · head31…tail' }),
+        screen.queryByRole('heading', { name: 'Service key head31…tail' }),
       ).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Manage key #31' })).not.toBeInTheDocument();
       expect(screen.queryByText('Synthetic donor')).not.toBeInTheDocument();
@@ -364,7 +361,7 @@ describe('managed donation page integration', () => {
       station: 'admin',
       route: '/charity?donation_id=7',
     });
-    await screen.findByRole('heading', { name: 'Key 11 · head11…tail' });
+    await screen.findByRole('heading', { name: 'Service key head11…tail' });
     const disclosure = view.container.querySelector(
       'details.recurring-limits-disclosure',
     ) as HTMLDetailsElement;
@@ -385,7 +382,16 @@ describe('managed donation page integration', () => {
     act(() => {
       refresh = view.queryClient.invalidateQueries({ queryKey: charityKeys.root('admin') });
     });
-    await screen.findByText('Configuration version 2', { exact: true });
+    await waitFor(() =>
+      expect(
+        view.queryClient
+          .getQueriesData({ queryKey: charityKeys.root('admin') })
+          .some(
+            ([, data]) =>
+              data && typeof data === 'object' && 'revision' in data && data.revision === '2',
+          ),
+      ).toBe(true),
+    );
     expect(disclosure).toBeInTheDocument();
     expect(disclosure.open).toBe(true);
     expect(within(disclosure).getByRole('textbox', { name: 'Limit' })).toHaveValue('77');

@@ -5,7 +5,18 @@ import type { ErrorBody } from './api';
 
 const requests = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock('@shared/query/http', () => ({ apiFetch: requests.apiFetch }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { resolvedLanguage: 'en' } }) }));
+vi.mock('react-i18next', async () => {
+  const { default: copy } = await import('@shared/i18n/common/en.json');
+  return {
+    useTranslation: () => ({
+      t: (key: string) =>
+        key
+          .split('.')
+          .reduce<unknown>((value, part) => (value as Record<string, unknown>)?.[part], copy) ??
+        key,
+    }),
+  };
+});
 afterEach(() => {
   requests.apiFetch.mockReset();
 });

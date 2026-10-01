@@ -1,15 +1,23 @@
-import { decoded, queryPath } from './api';
+import { decoded, idempotentOptions, queryPath } from './api';
 import { charityScopePath } from './charityScope';
 import { type CharityRole } from './charity';
-import { normalizeNumberedPage, validateWindow, invalidRequest } from './numberedPage';
+import {
+  normalizeNumberedPage,
+  validateWindow,
+  invalidRequest,
+  type NumberedPage,
+} from './numberedPage';
 import { type PageSize } from './pageNumbers';
 import {
   boolean,
+  array,
   decimal,
   decimalID,
   integer,
   invalidResponse,
   oneOf,
+  nullableDecimal,
+  nullableDecimalID,
   record,
   string,
 } from './wire';
@@ -38,6 +46,53 @@ export interface DonationKeyModelBinding {
   ord: number;
   state: (typeof donationBindingStates)[number];
 }
+export interface ManualCandidate {
+  upstream_model_id: string;
+  display_name: string;
+  source: 'automatic' | 'manual' | 'both';
+  verified: boolean;
+  manual_entry_id: string | null;
+  manual_entry_revision: string | null;
+}
+export interface ManualCatalog {
+  entries: ManualCandidate[];
+  manual_catalog_revision: string;
+}
+function normalizeCandidate(value: unknown): ManualCandidate {
+  const row = record(
+    value,
+    [
+      'upstream_model_id',
+      'display_name',
+      'source',
+      'verified',
+      'manual_entry_id',
+      'manual_entry_revision',
+    ],
+    'candidate model',
+  );
+  return {
+    upstream_model_id: string(row.upstream_model_id, 'upstream model', {
+      min: 1,
+      max: 512,
+      bytes: 2048,
+    }),
+    display_name: string(row.display_name, 'candidate display', { min: 1, max: 512, bytes: 2048 }),
+    source: oneOf(row.source, ['automatic', 'manual', 'both'] as const, 'candidate source'),
+    verified: boolean(row.verified, 'candidate verified'),
+    manual_entry_id: nullableDecimalID(row.manual_entry_id, 'manual entry id'),
+    manual_entry_revision: nullableDecimal(row.manual_entry_revision, 'manual entry revision'),
+  };
+}
+function normalizeCatalog(value: unknown): ManualCatalog {
+  const row = record(value, ['entries', 'manual_catalog_revision'], 'manual catalog');
+  return {
+    entries: array(row.entries, 'manual entries', 100).map(normalizeCandidate),
+    manual_catalog_revision: decimal(row.manual_catalog_revision, 'manual catalog revision', {
+      positive: true,
+    }),
+  };
+}
 
 function path(role: CharityRole, donationId: string, keyId: string): string {
   if (role !== 'admin' && role !== 'steward') invalidRequest();
@@ -53,16 +108,30 @@ export function getDonationKeyModels(
   size: PageSize,
   signal?: AbortSignal,
   charityModelID?: string,
+  q?: string,
 ) {
   validateWindow(page, size);
   return decoded(
     charityScopePath(
-      queryPath(path(role, donationId, keyId), { page, page_size: size }),
+      queryPath(path(role, donationId, keyId), { page, page_size: size, q }),
       charityModelID,
     ),
-    (value) =>
-      normalizeNumberedPage<DonationKeyModel>(
+    (value) => {
+      const root = record(
         value,
+        [
+          'data',
+          'next_cursor',
+          'pagination',
+          'candidates',
+          'candidates_pagination',
+          'manual_catalog_revision',
+        ],
+        'donation key models',
+        ['data', 'next_cursor', 'pagination'],
+      );
+      const models = normalizeNumberedPage<DonationKeyModel>(
+        { data: root.data, next_cursor: root.next_cursor, pagination: root.pagination },
         'donation key models',
         (entry) => {
           const row = record(
@@ -85,8 +154,72 @@ export function getDonationKeyModels(
         page,
         size,
         (entry) => entry.model_id,
-      ),
+      );
+      const candidates: NumberedPage<ManualCandidate> | undefined =
+        root.candidates === undefined
+          ? undefined
+          : normalizeNumberedPage(
+              { data: root.candidates, next_cursor: null, pagination: root.candidates_pagination },
+              'candidate models',
+              normalizeCandidate,
+              page,
+              size,
+              (entry) => entry.upstream_model_id,
+            );
+      return {
+        ...models,
+        candidates,
+        manual_catalog_revision:
+          root.manual_catalog_revision === undefined
+            ? undefined
+            : decimal(root.manual_catalog_revision, 'manual catalog revision', { positive: true }),
+      };
+    },
     { signal },
+  );
+}
+
+export function addDonationManualModels(
+  role: CharityRole,
+  donationId: string,
+  keyId: string,
+  entries: string[],
+  revision: string,
+  operationKey: string,
+  signal?: AbortSignal,
+  charityModelID?: string,
+) {
+  return decoded(
+    charityScopePath(`${path(role, donationId, keyId)}/manual`, charityModelID),
+    normalizeCatalog,
+    idempotentOptions(operationKey, {
+      method: 'POST',
+      json: { entries, expected_manual_catalog_revision: revision },
+      signal,
+    }),
+  );
+}
+export function removeDonationManualModel(
+  role: CharityRole,
+  donationId: string,
+  keyId: string,
+  entryId: string,
+  revision: string,
+  operationKey: string,
+  signal?: AbortSignal,
+  charityModelID?: string,
+) {
+  return decoded(
+    charityScopePath(
+      `${path(role, donationId, keyId)}/manual/${decimalID(entryId, 'manual entry id')}`,
+      charityModelID,
+    ),
+    normalizeCatalog,
+    idempotentOptions(operationKey, {
+      method: 'DELETE',
+      json: { expected_manual_catalog_revision: revision },
+      signal,
+    }),
   );
 }
 
