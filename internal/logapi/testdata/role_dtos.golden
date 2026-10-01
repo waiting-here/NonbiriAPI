@@ -110,6 +110,10 @@
   },
   "admin": {
     "request": {
+      "origin_user_id": "101",
+      "origin_discord_id": null,
+      "origin_deleted": false,
+      "origin_unknown": true,
       "phase": "handler",
       "rejection_stage": null,
       "rejection_reason": null,
@@ -190,6 +194,10 @@
   },
   "steward": {
     "request": {
+      "origin_user_id": "101",
+      "origin_discord_id": null,
+      "origin_deleted": false,
+      "origin_unknown": true,
       "phase": "handler",
       "rejection_stage": null,
       "rejection_reason": null,

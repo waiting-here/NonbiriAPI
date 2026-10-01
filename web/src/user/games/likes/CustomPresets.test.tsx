@@ -1,16 +1,25 @@
+import {
+  beginManagementSessionRequest,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CustomPresets } from './CustomPresets';
 import { customPresetList } from './presetApi';
 import { initialSelection } from './selection';
 import { testCatalog } from './testCatalog';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: string) => en }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'en') };
+});
 
 const selection = initialSelection(testCatalog.modes.quick);
 const stored = (slot: number, revision = '1', mode: 'quick' | 'standard' = 'quick') => ({
   slot,
+  name: '',
   revision,
   mode,
   loadout: initialSelection(testCatalog.modes[mode]),
@@ -25,6 +34,9 @@ const response = (value: unknown, status = 200) =>
 function mount(fetchMock: ReturnType<typeof vi.fn>, blocked = false, onLoad = vi.fn()) {
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['user', 'session'], {
+    user: { id: '1', username: 'player', effective_level: 1 },
+  });
   const view = render(
     <QueryClientProvider client={client}>
       <CustomPresets
@@ -63,7 +75,7 @@ describe('account custom presets', () => {
     );
     expect(screen.getAllByText('Empty slot')).toHaveLength(10);
     fireEvent.click(screen.getByRole('button', { name: 'Save to Preset1' }));
-    await screen.findByText('Custom presets: Preset1 saved.');
+    await screen.findByText('Preset saved.');
     expect(screen.getByRole('button', { name: 'Load Preset1' })).toBeEnabled();
     expect(fetchMock.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(1);
   });
@@ -91,7 +103,7 @@ describe('account custom presets', () => {
     ).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm overwrite' }));
-    await screen.findByText('Custom presets: Preset3 overwritten.');
+    await screen.findByText('Preset saved.');
     expect(fetchMock.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(1);
   });
 
@@ -126,7 +138,7 @@ describe('account custom presets', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Overwrite Preset2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm overwrite' }));
-    await screen.findByText('Custom presets: Preset2 overwritten.');
+    await screen.findByText('Preset saved.');
     expect(revisions).toEqual(['2', '3']);
     expect(onLoad).not.toHaveBeenCalled();
   });
@@ -171,7 +183,10 @@ describe('account custom presets', () => {
     const fetchMock = vi.fn(async () => pending);
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(['user', 'games', 'likes', 'custom-presets'], {
+    client.setQueryData(['user', 'session'], {
+      user: { id: '1', username: 'player', effective_level: 1 },
+    });
+    client.setQueryData(['user', 'games', 'likes', 'custom-presets', '1'], {
       capacity: 10,
       slots: [stored(1)],
     });
@@ -203,5 +218,156 @@ describe('account custom presets', () => {
         ],
       }),
     ).toThrow();
+  });
+});
+
+describe('preset names and summaries', () => {
+  it('shows the complete stored order and repairs unavailable IDs only through an explicit overwrite', async () => {
+    const item = stored(1);
+    item.loadout = {
+      ...selection,
+      harness: 'H01',
+      skills: [selection.skills[1], selection.skills[0], 'gone-skill'],
+    };
+    const fetchMock = vi.fn(async (_path: string, options: RequestInit) => {
+      if (options.method === 'PUT') {
+        expect(JSON.parse(options.body as string).loadout).toEqual(selection);
+        return response(stored(1, '2'));
+      }
+      return response({ capacity: 10, slots: [item] });
+    });
+    const { onLoad } = mount(fetchMock);
+    const card = await screen.findByRole('article', { name: 'Preset1' });
+    await within(card).findByText('Unavailable: gone-skill');
+    expect(
+      within(card).getByText(testCatalog.modes.quick.harnesses.find((h) => h.id === 'H01')!.name),
+    ).toBeInTheDocument();
+    expect(
+      within(card)
+        .getAllByRole('listitem')
+        .map((node) => node.textContent),
+    ).toEqual([
+      ...item.loadout.skills
+        .slice(0, 2)
+        .map((id) => testCatalog.modes.quick.skills.find((skill) => skill.id === id)!.name),
+      'Unavailable: gone-skill',
+    ]);
+    expect(within(card).getByRole('button', { name: 'Load Preset1' })).toBeDisabled();
+    expect(onLoad).not.toHaveBeenCalled();
+    fireEvent.click(within(card).getByRole('button', { name: 'Overwrite Preset1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm overwrite' }));
+    await screen.findByText('Preset saved.');
+    expect(onLoad).not.toHaveBeenCalled();
+  });
+
+  it('saves and clears a Unicode short name without loading or changing the stored selection', async () => {
+    let item = { ...stored(1), name: 'Old name' };
+    const original = structuredClone(item.loadout);
+    const fetchMock = vi.fn(async (_path: string, options: RequestInit) => {
+      if (options.method === 'PATCH') {
+        const body = JSON.parse(options.body as string);
+        expect(Object.keys(body).sort()).toEqual(['expected_revision', 'name']);
+        item = { ...item, name: body.name, revision: String(Number(item.revision) + 1) };
+        return response(item);
+      }
+      return response({ capacity: 10, slots: [item] });
+    });
+    const { onLoad } = mount(fetchMock);
+    const input = await screen.findByRole('textbox', { name: 'Preset1 name' });
+    fireEvent.change(input, { target: { value: '鱼'.repeat(19) + '🐟' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await screen.findByText('Preset saved.');
+    expect(fetchMock.mock.calls.filter(([, options]) => options.method === 'PATCH')).toHaveLength(
+      1,
+    );
+    expect(item.loadout).toEqual(original);
+    expect(onLoad).not.toHaveBeenCalled();
+    await waitFor(() => expect(input).toBeEnabled());
+    fireEvent.change(input, { target: { value: 'Unsaved name' } });
+    expect(screen.queryByText('Preset saved.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear name' }));
+    await waitFor(() => expect(item.name).toBe(''));
+    await waitFor(() => expect(input).toHaveValue(''));
+    expect(item.loadout).toEqual(original);
+    expect(onLoad).not.toHaveBeenCalled();
+  });
+
+  it('retains the original rename identity while checking and retrying an unknown response', async () => {
+    let item = stored(1);
+    const requests: { key: string | null; body: unknown }[] = [];
+    const fetchMock = vi.fn(async (_path: string, options: RequestInit) => {
+      if (options.method === 'PATCH') {
+        requests.push({
+          key: new Headers(options.headers).get('Idempotency-Key'),
+          body: JSON.parse(options.body as string),
+        });
+        if (requests.length === 1) throw new Error('response lost');
+        item = { ...item, revision: '2', name: 'Fast' };
+        return response(item);
+      }
+      return response({ capacity: 10, slots: [item] });
+    });
+    mount(fetchMock);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Preset1 name' }), {
+      target: { value: 'Fast' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+    await screen.findByText(
+      'Saving could not be confirmed. Check current presets or retry saving.',
+    );
+    expect(screen.getByRole('textbox', { name: 'Preset1 name' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Check current presets' }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([, options]) => options.method === 'GET').length,
+      ).toBeGreaterThanOrEqual(3),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saving custom presets' }));
+    await screen.findByText('Preset saved.');
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toEqual(requests[0]);
+  });
+
+  it('closes the old confirmation and ignores a late rename after an account switch', async () => {
+    let account = '1';
+    let finish!: (value: Response) => void;
+    const oldRequest = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    const fetchMock = vi.fn(async (_path: string, options: RequestInit) => {
+      if (options.method === 'PATCH') return oldRequest;
+      return response({
+        capacity: 10,
+        slots: [{ ...stored(1), name: account === '1' ? 'Old account' : 'New account' }],
+      });
+    });
+    const { client } = mount(fetchMock);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Preset1 name' }), {
+      target: { value: 'Late name' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, options]) => options.method === 'PATCH')).toBe(true),
+    );
+    account = '2';
+    act(() => {
+      const value = { user: { id: '2', username: 'other-player', effective_level: 1 } };
+      const generation = beginManagementSessionRequest(client, 'steward');
+      expect(noteManagementSessionSuccess(client, 'steward', value, generation)).toBe(true);
+      client.setQueryData(['user', 'session'], value);
+    });
+    await screen.findByText('New account');
+    await act(async () => finish(response({ ...stored(1, '2'), name: 'Late name' })));
+    expect(screen.getByRole('textbox', { name: 'Preset1 name' })).toHaveValue('New account');
+    expect(screen.queryByText('Preset saved.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Overwrite Preset1' }));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    act(() => {
+      const value = { user: { id: '3', username: 'third-player', effective_level: 1 } };
+      const generation = beginManagementSessionRequest(client, 'steward');
+      expect(noteManagementSessionSuccess(client, 'steward', value, generation)).toBe(true);
+      client.setQueryData(['user', 'session'], value);
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 });

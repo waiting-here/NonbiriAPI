@@ -3,6 +3,8 @@ package lifecycle
 import (
 	"context"
 	"database/sql"
+
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 // ExportDocument is the only value encoded by the export handler. Every
@@ -11,34 +13,35 @@ import (
 type ExportDocument struct {
 	GovernanceExport
 	InteractionExport
-	Checkins            []CheckinExport         `json:"checkins"`
-	GameOnboarding      []OnboardingExport      `json:"game_onboarding"`
-	GameOnboardingHolds []OnboardingHoldExport  `json:"game_onboarding_holds"`
-	Loans               []LoanExport            `json:"loans"`
-	GameRankings        RankingExport           `json:"game_rankings"`
-	Penalties           []PenaltyExport         `json:"penalties"`
-	SchemaVersion       int                     `json:"schema_version"`
-	GeneratedAt         int64                   `json:"generated_at"`
-	User                UserExport              `json:"user"`
-	Endpoints           []EndpointExport        `json:"endpoints"`
-	CatalogPairs        []CatalogPairExport     `json:"catalog_pairs"`
-	Models              []ModelExport           `json:"models"`
-	CallerKey           *CallerKeyExport        `json:"caller_key"`
-	Usage               UsageExport             `json:"usage"`
-	LogSummary          LogSummaryExport        `json:"log_summary"`
-	Issues              []IssueExport           `json:"issues"`
-	CreditLedger        []LedgerEntryExport     `json:"credit_ledger"`
-	WelfareClaims       []WelfareExport         `json:"welfare_claims"`
-	Thursday            []ThursdayExport        `json:"thursday"`
-	Donations           []DonationExport        `json:"donations"`
-	Charity             CharityExport           `json:"charity"`
-	Fishing             FishingExport           `json:"fishing"`
-	LinkLink            LinkLinkExport          `json:"linklink"`
-	RPS                 RPSExport               `json:"rps"`
-	Bidding             DuelExport              `json:"bidding"`
-	Likes               DuelExport              `json:"likes"`
-	Blackjack           BlackjackExport         `json:"blackjack"`
-	Randomness          []RandomnessProofExport `json:"randomness"`
+	Checkins            []CheckinExport                 `json:"checkins"`
+	GameOnboarding      []OnboardingExport              `json:"game_onboarding"`
+	GameOnboardingHolds []OnboardingHoldExport          `json:"game_onboarding_holds"`
+	Loans               []LoanExport                    `json:"loans"`
+	GameRankings        RankingExport                   `json:"game_rankings"`
+	Penalties           []PenaltyExport                 `json:"penalties"`
+	SchemaVersion       int                             `json:"schema_version"`
+	GeneratedAt         int64                           `json:"generated_at"`
+	User                UserExport                      `json:"user"`
+	Endpoints           []EndpointExport                `json:"endpoints"`
+	CatalogPairs        []CatalogPairExport             `json:"catalog_pairs"`
+	Models              []ModelExport                   `json:"models"`
+	CallerKey           *CallerKeyExport                `json:"caller_key"`
+	PersonalAutomation  []PersonalAutomationBatchExport `json:"personal_automation"`
+	Usage               UsageExport                     `json:"usage"`
+	LogSummary          LogSummaryExport                `json:"log_summary"`
+	Issues              []IssueExport                   `json:"issues"`
+	CreditLedger        []LedgerEntryExport             `json:"credit_ledger"`
+	WelfareClaims       []WelfareExport                 `json:"welfare_claims"`
+	Thursday            []ThursdayExport                `json:"thursday"`
+	Donations           []DonationExport                `json:"donations"`
+	Charity             CharityExport                   `json:"charity"`
+	Fishing             FishingExport                   `json:"fishing"`
+	LinkLink            LinkLinkExport                  `json:"linklink"`
+	RPS                 RPSExport                       `json:"rps"`
+	Bidding             DuelExport                      `json:"bidding"`
+	Likes               DuelExport                      `json:"likes"`
+	Blackjack           BlackjackExport                 `json:"blackjack"`
+	Randomness          []RandomnessProofExport         `json:"randomness"`
 }
 
 type UserExport struct {
@@ -147,16 +150,17 @@ type CatalogPairExport struct {
 }
 
 type ModelExport struct {
-	ID               string          `json:"id"`
-	Provider         string          `json:"provider"`
-	Model            string          `json:"model"`
-	FullName         string          `json:"full_name"`
-	RouteStrategy    string          `json:"route_strategy"`
-	SilentRetry      bool            `json:"silent_retry"`
-	FlattenToolCalls bool            `json:"flatten_tool_calls"`
-	CreatedAt        int64           `json:"created_at"`
-	UpdatedAt        int64           `json:"updated_at"`
-	Bindings         []BindingExport `json:"bindings"`
+	RolePolicy       rolepolicy.Policy `json:"role_policy"`
+	ID               string            `json:"id"`
+	Provider         string            `json:"provider"`
+	Model            string            `json:"model"`
+	FullName         string            `json:"full_name"`
+	RouteStrategy    string            `json:"route_strategy"`
+	SilentRetry      bool              `json:"silent_retry"`
+	FlattenToolCalls bool              `json:"flatten_tool_calls"`
+	CreatedAt        int64             `json:"created_at"`
+	UpdatedAt        int64             `json:"updated_at"`
+	Bindings         []BindingExport   `json:"bindings"`
 }
 
 type BindingExport struct {
@@ -246,22 +250,35 @@ type DonationReviewExport struct {
 	ReviewedAt int64  `json:"reviewed_at"`
 }
 
+type DonationKeyReviewExport struct {
+	Required          bool    `json:"required"`
+	Revision          *string `json:"revision"`
+	MaterialAvailable bool    `json:"material_available"`
+}
+
+type DonationManualModelExport struct {
+	UpstreamModelID string `json:"upstream_model_id"`
+	DisplayName     string `json:"display_name"`
+}
+
 type DonationKeyExport struct {
-	RecurringLimits     []RecurringLimitExport   `json:"recurring_limits"`
-	ID                  string                   `json:"id"`
-	EndpointKeyID       *string                  `json:"endpoint_key_id"`
-	DisplayHead         string                   `json:"display_head"`
-	DisplayTail         string                   `json:"display_tail"`
-	SafeSource          DonationSafeSourceExport `json:"safe_source"`
-	PhysicalEnabled     bool                     `json:"physical_enabled"`
-	CharityState        string                   `json:"charity_state"`
-	Limits              DonationLimitsExport     `json:"limits"`
-	Usage               DonationUsageExport      `json:"usage"`
-	TokenReserve        int64                    `json:"token_reserve"`
-	AuthorizedExpiresAt *int64                   `json:"authorized_expires_at"`
-	ExpiresAt           *int64                   `json:"expires_at"`
-	Streak              DonationStreakExport     `json:"streak"`
-	EndedReason         *string                  `json:"ended_reason"`
+	Review              DonationKeyReviewExport     `json:"review"`
+	ManualModels        []DonationManualModelExport `json:"manual_models"`
+	RecurringLimits     []RecurringLimitExport      `json:"recurring_limits"`
+	ID                  string                      `json:"id"`
+	EndpointKeyID       *string                     `json:"endpoint_key_id"`
+	DisplayHead         string                      `json:"display_head"`
+	DisplayTail         string                      `json:"display_tail"`
+	SafeSource          DonationSafeSourceExport    `json:"safe_source"`
+	PhysicalEnabled     bool                        `json:"physical_enabled"`
+	CharityState        string                      `json:"charity_state"`
+	Limits              DonationLimitsExport        `json:"limits"`
+	Usage               DonationUsageExport         `json:"usage"`
+	TokenReserve        int64                       `json:"token_reserve"`
+	AuthorizedExpiresAt *int64                      `json:"authorized_expires_at"`
+	ExpiresAt           *int64                      `json:"expires_at"`
+	Streak              DonationStreakExport        `json:"streak"`
+	EndedReason         *string                     `json:"ended_reason"`
 }
 
 type RecurringLimitExport struct {

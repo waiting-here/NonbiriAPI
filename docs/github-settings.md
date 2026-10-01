@@ -22,14 +22,35 @@ Direct updates to `master` are disabled: all changes, including emergency fixes,
 
 For a multi-part version, maintainers may use a version integration branch (for example, `codex/dev-v1.0.0-beta.4`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
 
-Complete CI runs on pull requests and can also be started manually. After merging, verify that the resulting `master` tree matches the passing PR tree before reusing its evidence for release. A changed tree requires checks for the affected inputs. CodeQL keeps its independent triggers; removing redundant post-merge CI does not remove required PR checks or authorize direct updates.
+Pull requests run a conservative routine CI scope. Manual dispatch defaults to full verification. After merging, verify that the resulting `master` tree matches the passing PR tree before reusing its evidence for release. A changed tree requires checks for the affected inputs. CodeQL keeps its independent triggers; removing redundant post-merge CI does not remove required PR checks or authorize direct updates.
 
-`Go checks` requires both the build/vet/test/upgrade job and every race shard.
-`Web checks` requires the unit/type/lint/build job and both browser suites. These
-aggregate jobs run even when a dependency fails or is cancelled, and succeed
-only when every dependency succeeded. Keep the protected check names stable
-when changing parallelism; a skipped or failed suite must not produce a green
-aggregate check.
+`Go checks` requires ordinary build/vet/tests and populated upgrades, the live
+race preparation, and every dynamically scheduled risk race shard.
+`Web checks` requires unit/types/lint, an independent station build, and both
+browser suites. Browser jobs consume the immutable build artifact ID and can
+start while unit checks continue. The picture-book, audit, management, Fat Fish
+and Lake Notes integration suites reuse one compiled test binary, with separate
+processes and databases.
+
+Routine PR runs use a conservative live dependency closure. Unknown input
+falls back to full verification; manual dispatch defaults to full. Full
+coverage runs all ordinary tests and the complete concurrency-risk catalog.
+Exact reviewed exclusions in `internal/citools/raceplan/exclusions.json`
+retain serial schema/upgrade/scale and pure-rule tests in ordinary coverage;
+new names stay in race and removed/renamed exclusions fail policy validation.
+Timing hints affect balance, never membership. The timing file records the Linux measurements and immutable run/commit source
+used to calibrate scheduling; template and catalog changes can alter those
+costs. Refresh estimates from actual complete CI logs, and report missing or
+obsolete weights without changing live coverage. A reusable ordinary-built empty
+database and race catalog are prepared once per run; each test gets an isolated
+database copy and still exercises production Open validation. Fresh, upgrade
+and recovery tests continue to use their actual startup paths.
+
+Aggregate jobs run after failure or cancellation and accept a skipped child
+only when the live plan records it as inapplicable. Keep the protected names
+`Go checks`, `Web checks`, and the full-coverage confirmation steps stable.
+Re-runs consume this run's immutable artifact IDs instead of resolving a build
+or database template by a reusable name.
 
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 

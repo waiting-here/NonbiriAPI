@@ -121,7 +121,7 @@ func TestInteractionUpgradePreservesExistingScanResults(t *testing.T) {
 		}
 		hostileInsertTerminalRequest(t, database, request, user, "openai_chat_completions", "success", 200, nil)
 		log := hostileMustLastID(t, hostileMustExec(t, database, `INSERT INTO request_logs(logical_request_id,user_id,route_kind,model,upstream_model_id,endpoint_base_url,caller_result_class,caller_status,status_code,attempt_count,started_at,completed_at) VALUES(?,?,'openai_chat_completions','model','upstream','https://upstream.example/v1','success',200,200,0,0,1)`, request, user))
-		hostileMustExec(t, database, `INSERT INTO request_source_facts VALUES(?,?,'self','192.0.2.1','direct_peer','{}',1)`, log, user)
+		hostileMustExec(t, database, `INSERT INTO request_source_facts(request_log_id,user_id,kind,effective_ip,ip_quality,source_json,occurred_at) VALUES(?,?,'self','192.0.2.1','direct_peer','{}',1)`, log, user)
 		logs = append(logs, log)
 	}
 	hostileMustExec(t, database, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,scanned,matched,created_at,updated_at,expires_at) VALUES(?,?,1,'abcdefghijklmnop','{}','[]','completed',0,100,'total','',?,0,3,3,3,0,0,86400)`, scan, user, logs[1])
@@ -144,8 +144,8 @@ func TestInteractionUpgradePreservesExistingScanResults(t *testing.T) {
 	}
 	hostileMustExec(t, database, `UPDATE request_source_facts SET user_id=NULL WHERE request_log_id=?`, logs[0])
 	var count, changed int
-	if err := database.QueryRow(`SELECT (SELECT count(*) FROM risk_scan_results WHERE scan_id=?),changed FROM risk_client_scans WHERE id=?`, scan, scan).Scan(&count, &changed); err != nil || count != 1 || changed != 1 {
-		t.Fatal("retained result missed privacy invalidation", count, changed, err)
+	if err := database.QueryRow(`SELECT (SELECT count(*) FROM risk_scan_results WHERE scan_id=?),changed FROM risk_client_scans WHERE id=?`, scan, scan).Scan(&count, &changed); err != nil || count != 2 || changed != 0 {
+		t.Fatal("account detachment changed historical scan results", count, changed, err)
 	}
 }
 
@@ -164,7 +164,7 @@ func interactionOriginalRows(t *testing.T, database *sql.DB, source generationMa
 		}
 		query := "SELECT " + strings.Join(columns, ",") + " FROM " + hostileQuoteIdent(table.Name)
 		if table.Name == "limited_activity_configs" || table.Name == "limited_activity_revisions" {
-			query += " WHERE activity_key<>'fat-fish'"
+			query += addedActivityRowsFilter(source)
 		}
 		rows, err := database.Query(query)
 		if err != nil {
@@ -305,4 +305,25 @@ func TestInteractionMigrationRollbackAndUnknownSource(t *testing.T) {
 	if err := extendKnownGenerationTwoSchema(ctx, database); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Exclude only bootstrap activities that did not exist in the source schema.
+func addedActivityRowsFilter(source generationManifest) string {
+	present := make(map[string]bool, len(source.Tables))
+	for _, table := range source.Tables {
+		present[table.Name] = true
+	}
+	var additions []string
+	for _, activity := range []struct{ table, key string }{
+		{"fatfish_levels", "'fat-fish'"},
+		{"lake_notes_periods", "'lake-notes'"},
+	} {
+		if !present[activity.table] {
+			additions = append(additions, activity.key)
+		}
+	}
+	if len(additions) == 0 {
+		return ""
+	}
+	return " WHERE activity_key NOT IN (" + strings.Join(additions, ",") + ")"
 }

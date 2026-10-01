@@ -232,43 +232,6 @@ describe('production account lifecycle adapter', () => {
     expect(JSON.parse(await attachment.blob.text())).toEqual(document);
   });
 
-  it.each([
-    'duplicate_slot',
-    'overflow_slot',
-    'unsafe_revision',
-    'extra_owner',
-    'duplicate_skill',
-    'too_many',
-  ])('rejects invalid custom preset export: %s', async (kind) => {
-    const document = exportDocument();
-    const item: Record<string, unknown> = {
-      slot: 1,
-      revision: '1',
-      mode: 'quick',
-      loadout: { role: 'tank', harness: null, skills: ['guard'] },
-      updated_at: 1_699_999_900,
-    };
-    const loadouts = [item];
-    if (kind === 'duplicate_slot') loadouts.push({ ...item });
-    if (kind === 'overflow_slot') item.slot = 11;
-    if (kind === 'unsafe_revision') item.revision = 9_007_199_254_740_992;
-    if (kind === 'extra_owner') item.user_id = '2';
-    if (kind === 'duplicate_skill')
-      item.loadout = { role: 'tank', harness: null, skills: ['guard', 'guard'] };
-    if (kind === 'too_many')
-      loadouts.push(...Array.from({ length: 10 }, (_, i) => ({ ...item, slot: i + 2 })));
-    document.likes = { loadouts };
-    const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
-    vi.stubGlobal('fetch', fetchMock);
-    await expect(
-      productionAccountLifecycleAdapter.exportAccount({
-        accountId: '1',
-        elevatedToken: 'elevated_token',
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_response' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
   it.each(['abandoned', 'cancelled_refunded'])(
     'accepts a %s receipt terminated during the countdown',
     async (state) => {
@@ -300,7 +263,7 @@ describe('production account lifecycle adapter', () => {
   it('rejects malformed, wrong-version and oversized successful exports without retrying', async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock
-      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), extra: true }))
+      .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: '11' }))
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 4 }))
       .mockResolvedValueOnce(
         exportResponse(exportDocument(), { 'Content-Length': String(16 * 1024 * 1024 + 1) }),
@@ -318,26 +281,34 @@ describe('production account lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it.each([
-    'limited_activities',
-    'image_tasks',
-    'inactivity',
-    'request_adaptations',
-    'continuity',
-    'fat_fish',
-  ])('rejects an export missing the required %s section without retrying', async (key) => {
-    const document = exportDocument();
-    delete document[key];
-    const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
+  it('downloads a v12 attachment and rejects a version mismatch in its filename', async () => {
+    const document = {
+      ...exportDocument(),
+      schema_version: 12,
+      lake_notes: { server_projection: true },
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        exportResponse(document, {
+          'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v12.json"',
+        }),
+      )
+      .mockResolvedValueOnce(exportResponse(document));
     vi.stubGlobal('fetch', fetchMock);
-
+    const result = await productionAccountLifecycleAdapter.exportAccount({
+      accountId: '1',
+      elevatedToken: 'elevated_token',
+    });
+    expect(result.schemaVersion).toBe(12);
+    expect(JSON.parse(await result.blob.text())).toEqual(document);
     await expect(
       productionAccountLifecycleAdapter.exportAccount({
         accountId: '1',
         elevatedToken: 'elevated_token',
       }),
     ).rejects.toMatchObject({ code: 'invalid_response' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('rejects the previous export schema and filename without retrying', async () => {
@@ -365,142 +336,75 @@ describe('production account lifecycle adapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    [
-      'foreign adaptation endpoint',
-      (doc: Record<string, unknown>) => {
-        (doc.request_adaptations as Record<string, unknown>[])[0].endpoint_id = '2';
-      },
-    ],
-    [
-      'foreign account identity',
-      (doc: Record<string, unknown>) => {
-        doc.user = { id: '2' };
-      },
-    ],
-    [
-      'adaptation secret value',
-      (doc: Record<string, unknown>) => {
-        const adaptation = (doc.request_adaptations as Record<string, unknown>[])[0];
-        (adaptation.fixed_headers as Record<string, unknown>[])[0].value = 'secret';
-      },
-    ],
-    [
-      'continuity identity key',
-      (doc: Record<string, unknown>) => {
-        (doc.continuity as Record<string, unknown>[])[0].identity_key = 'secret';
-      },
-    ],
-    [
-      'unknown continuity kind',
-      (doc: Record<string, unknown>) => {
-        (doc.continuity as Record<string, unknown>[])[0].kind = 'abuse_state';
-      },
-    ],
-    [
-      'bad continuity expiry',
-      (doc: Record<string, unknown>) => {
-        (doc.continuity as Record<string, unknown>[])[0].expires_at = 1_700_000_000_000;
-      },
-    ],
-    [
-      'fish seed',
-      (doc: Record<string, unknown>) => {
-        const fish = doc.fat_fish as Record<string, Record<string, unknown>[]>;
-        fish.summaries[0].seed = 'secret';
-      },
-    ],
-    [
-      'fish progress input',
-      (doc: Record<string, unknown>) => {
-        const fish = doc.fat_fish as Record<string, Record<string, unknown>[]>;
-        fish.progress[0].input = 'secret';
-      },
-    ],
-    [
-      'numeric fish amount',
-      (doc: Record<string, unknown>) => {
-        const fish = doc.fat_fish as Record<string, Record<string, unknown>[]>;
-        fish.summaries[0].ticket_charge = 1.5;
-      },
-    ],
-    [
-      'invalid fish score',
-      (doc: Record<string, unknown>) => {
-        const fish = doc.fat_fish as Record<string, Record<string, unknown>[]>;
-        fish.progress[0].best_score_units = '100000001';
-      },
-    ],
-    [
-      'fish timestamp beyond milliseconds',
-      (doc: Record<string, unknown>) => {
-        const fish = doc.fat_fish as Record<string, Record<string, unknown>[]>;
-        fish.summaries[0].completed_at_ms = 253_402_300_799_001;
-      },
-    ],
-    [
-      'fish unknown collection',
-      (doc: Record<string, unknown>) => {
-        (doc.fat_fish as Record<string, unknown>).inputs = [];
-      },
-    ],
-  ] as const)('rejects %s in a new export domain', async (_label, mutate) => {
+  it('binds the attachment to the current account but leaves domain interpretation to the server', async () => {
     const document = populatedExportDocument();
-    mutate(document);
-    const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
+    document.likes = { loadouts: [{ revision: '9007199254740993', name: 'Saved preset' }] };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(exportResponse(document))
+      .mockResolvedValueOnce(exportResponse({ ...document, user: { id: '2' } }));
     vi.stubGlobal('fetch', fetchMock);
-
-    await expect(
-      productionAccountLifecycleAdapter.exportAccount({
-        accountId: '1',
-        elevatedToken: 'elevated_token',
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_response' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('accepts exactly 10000 combined fish rows and rejects the next row', async () => {
-    const document = exportDocument();
-    const fish = document.fat_fish as { summaries: unknown[]; progress: unknown[] };
-    fish.summaries.push(fishSummary());
-    fish.progress = Array.from({ length: 9_999 }, (_, index) => fishProgress(index));
-    const fetchMock = vi.fn<typeof fetch>();
-    fetchMock.mockResolvedValueOnce(exportResponse(document));
-    fish.progress.push(fishProgress(9_999));
-    fetchMock.mockResolvedValueOnce(exportResponse(document));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const first = await productionAccountLifecycleAdapter.exportAccount({
+    const result = await productionAccountLifecycleAdapter.exportAccount({
       accountId: '1',
       elevatedToken: 'elevated_token',
     });
-    expect(first.schemaVersion).toBe(11);
+    expect(JSON.parse(await result.blob.text())).toEqual(document);
     await expect(
       productionAccountLifecycleAdapter.exportAccount({
         accountId: '1',
         elevatedToken: 'elevated_token',
       }),
     ).rejects.toMatchObject({ code: 'invalid_response' });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['request_adaptations', 'continuity'])(
-    'rejects %s above its own 10000-row limit',
-    async (key) => {
-      const document = exportDocument();
-      document[key] = Array.from({ length: 10_001 }, () => null);
-      const fetchMock = vi.fn<typeof fetch>(async () => exportResponse(document));
-      vi.stubGlobal('fetch', fetchMock);
-
+  it('rejects invalid UTF-8 and malformed JSON without producing an attachment', async () => {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v11.json"',
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(new Uint8Array([255]), { headers }))
+      .mockResolvedValueOnce(new Response('{', { headers }));
+    vi.stubGlobal('fetch', fetchMock);
+    for (let index = 0; index < 2; index++) {
       await expect(
         productionAccountLifecycleAdapter.exportAccount({
           accountId: '1',
           elevatedToken: 'elevated_token',
         }),
       ).rejects.toMatchObject({ code: 'invalid_response' });
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    },
-  );
+    }
+  });
+
+  it('cancels an oversized streamed attachment before parsing or downloading', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(16 * 1024 * 1024 + 1));
+      },
+      cancel,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(
+        async () =>
+          new Response(body, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v11.json"',
+            },
+          }),
+      ),
+    );
+    await expect(
+      productionAccountLifecycleAdapter.exportAccount({
+        accountId: '1',
+        elevatedToken: 'elevated_token',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 
   it('submits exact DELETE once and accepts only a 204 response', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));

@@ -4,6 +4,7 @@ import { Card, ErrorState } from '@shared/components/States';
 import { parameterLabel, usePictureBookText } from '@shared/picturebook/copy';
 import {
   initialValues,
+  retainModelValues,
   prepareSubmission,
   previewPrice,
   type ParameterValues,
@@ -231,9 +232,14 @@ export function ModelForm({
           <select
             disabled={operation.locked}
             value={snapshot?.id ?? ''}
-            onChange={(event) =>
-              setSnapshot(models.find((model) => model.id === event.target.value))
-            }
+            onChange={(event) => {
+              const next = models.find((model) => model.id === event.target.value);
+              if (next && snapshot && !drafts[next.id]) {
+                const previous = drafts[snapshot.id] ?? initialValues(snapshot);
+                setDrafts((old) => ({ ...old, [next.id]: retainModelValues(next, previous) }));
+              }
+              setSnapshot(next);
+            }}
           >
             {!snapshot || !latest ? (
               <option value={snapshot?.id ?? ''}>
@@ -279,7 +285,15 @@ export function ModelForm({
             </p>
           ) : null}
           <Fields
-            key={snapshot.id + ':' + snapshot.revision + ':' + formGeneration}
+            key={
+              snapshot.id +
+              ':' +
+              snapshot.revision +
+              ':' +
+              snapshot.pricing_revision +
+              ':' +
+              formGeneration
+            }
             model={snapshot}
             locked={operation.locked}
             permitted={available && !stale}

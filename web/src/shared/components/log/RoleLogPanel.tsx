@@ -18,6 +18,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { type PageSize } from '@shared/operations/pageNumbers';
 import { CallerIdentity } from './CallerIdentity';
+import { LogOriginIdentity } from './LogOriginIdentity';
 import { LogDetailDrawer } from './LogDetailDrawer';
 import { LogFilters, type LogFilterField } from './LogFilters';
 import { LogTable, type LogColumn } from './LogTable';
@@ -576,8 +577,13 @@ function ScopedRoleLogPanel({
           },
           {
             key: 'user',
-            header: t('common.userId'),
-            render: (row: RoleLogRow) => ('user_id' in row ? (row.user_id ?? '—') : '—'),
+            header: t('common.history.originalIdentity'),
+            render: (row: RoleLogRow) =>
+              row.role === 'admin' || row.role === 'steward' ? (
+                <LogOriginIdentity value={row} role={row.role} />
+              ) : (
+                '—'
+              ),
           },
         ]
       : []),
@@ -646,8 +652,8 @@ function ScopedRoleLogPanel({
                   value: detailRequest.charity_model ?? '—',
                 },
                 {
-                  label: t('common.userId'),
-                  value: detailRequest.user_id ?? '—',
+                  label: t('common.history.originalIdentity'),
+                  value: <LogOriginIdentity value={detailRequest} role={detailRequest.role} />,
                 },
                 {
                   label: t('logs.caller'),

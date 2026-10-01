@@ -257,6 +257,11 @@ func TestLegalHoldNumberedProjectsLateCommittedExpiryWithoutWriting(t *testing.T
 	if _, err = writer.ExecContext(context.Background(), `PRAGMA foreign_keys=ON`); err != nil {
 		t.Fatal(err)
 	}
+	// Initialize the second connection before the bounded request starts.
+	var holds int
+	if err := fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM legal_holds`).Scan(&holds); err != nil {
+		t.Fatal(err)
+	}
 	var id string
 	auth := &numberedHoldAuthorizer{testFinalAuth: fixture.auth, before: func(ctx context.Context, call int) error {
 		if call != 2 {

@@ -6,18 +6,19 @@ package engine
 import "context"
 
 const (
-	LegacyEngineVersion = 1
-	EngineVersion       = 2
-	ScoringVersion      = 1
-	FieldWidth          = 480 * 64
-	FieldHeight         = 560 * 64
-	DragBuffer          = 128 * 64
-	FishRadius          = 8 * 64
-	TicksPerSecond      = 60
-	Substeps            = 2
-	MaxInputs           = 72000
-	MaxInputBytes       = 4 << 20
-	MaxLevelBytes       = 256 << 10
+	LegacyEngineVersion   = 1
+	PreviousEngineVersion = 2
+	EngineVersion         = 3
+	ScoringVersion        = 1
+	FieldWidth            = 480 * 64
+	FieldHeight           = 560 * 64
+	DragBuffer            = 128 * 64
+	FishRadius            = 8 * 64
+	TicksPerSecond        = 60
+	Substeps              = 2
+	MaxInputs             = 72000
+	MaxInputBytes         = 4 << 20
+	MaxLevelBytes         = 256 << 10
 )
 
 type Point struct {
@@ -132,7 +133,7 @@ type FishState struct {
 	Motion         *MotionState `json:"motion,omitempty"`
 }
 
-// MotionState is serialized only by version 2. Version 1 keeps its original
+// MotionState is serialized by versions 2 and 3. Version 1 keeps its original
 // fish state fields and digest bytes.
 type MotionState struct {
 	TurnRemainder    int64 `json:"turn_remainder"`

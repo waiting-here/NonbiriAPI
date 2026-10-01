@@ -301,7 +301,24 @@ func (s *Service) periodTx(ctx context.Context, tx *sql.Tx, userID int64, id str
 			n.ConditionHint = &hint
 		}
 	}
-	return p, rows.Err()
+	if err = rows.Err(); err != nil {
+		return p, err
+	}
+	rows.Close()
+	layout, err := readGraphLayoutTx(ctx, tx, id)
+	if err != nil {
+		return p, err
+	}
+	positions := map[string]GraphPosition{}
+	for _, position := range layout.Nodes {
+		positions[position.NodeID] = position
+	}
+	for i := range p.Nodes {
+		position := positions[p.Nodes[i].ID]
+		p.Nodes[i].MapX = position.MapX
+		p.Nodes[i].MapY = position.MapY
+	}
+	return p, nil
 }
 
 func (s *Service) Node(ctx context.Context, userID int64, periodID, nodeID string) (NodeView, error) {

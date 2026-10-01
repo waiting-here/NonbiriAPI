@@ -96,7 +96,7 @@ func TestEmbeddingExtensionPreservesReleasedDataAndStorage(t *testing.T) {
 			}
 			added := []string{"rejection_stage", "rejection_reason", "request_method", "request_path"}
 			if table == "request_logs" {
-				added = append(added, "usage_total_mismatch")
+				added = append(added, "usage_total_mismatch", "origin_user_id", "origin_discord_id")
 			}
 			if len(previous) == 0 || len(current) != len(previous)+len(added) || !reflect.DeepEqual(current[:len(previous)], previous) {
 				t.Fatalf("request table %s changed existing columns", table)

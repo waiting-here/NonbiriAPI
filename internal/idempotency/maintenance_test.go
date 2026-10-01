@@ -204,6 +204,8 @@ func TestMaintenanceCoversEveryCanonicalScope(t *testing.T) {
 		idempotency.ScopeGameLinkLink,
 		idempotency.ScopeGameRPS,
 		idempotency.ScopeDonation,
+		idempotency.ScopeLakeNotes,
+		idempotency.ScopePersonalAutomation,
 	}
 	t.Run("recovery", func(t *testing.T) {
 		store := openStore(t)

@@ -56,6 +56,10 @@ func ClassifyForAudit(kind Kind, sourceID string) AuditClassification {
 		channel, behavior = "onboarding", "reward"
 	case KindActivityLoan:
 		channel, behavior = "loan", "exchange"
+	case KindLakeEntry:
+		channel, behavior = "lake_notes", "fee"
+	case KindLakeExchange:
+		channel, behavior = "lake_notes", "exchange"
 	case KindActivityExchange:
 		channel, behavior = "picture_book", "exchange"
 	case KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize:

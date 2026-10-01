@@ -1,12 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber, isPageSize } from '@shared/operations/pageNumbers';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { riskAPI, type Filters, type RiskRole, type TaskKind, type TaskScan } from './api';
+import { scanReasonKey } from './scanReason';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 
 const running = (scan?: TaskScan) => scan?.state === 'running' || scan?.state === 'queued';
 const options = { retry: false, gcTime: 0, staleTime: 0, refetchOnWindowFocus: false } as const;
@@ -26,11 +28,11 @@ export function TaskScans<T>({
   signal?: '' | 'rpm' | 'concurrency';
   renderItem: (item: T) => ReactNode;
 }) {
-  const { i18n } = useTranslation();
-  const t = (zh: string, en: string) => (i18n.language.startsWith('zh') ? zh : en);
+  const { t } = useTranslation();
   const formatDateTime = useDateTimeFormatter();
   const [params, setParams] = useSearchParams();
-  const prefix = kind === 'users' ? 'audit_users_' : 'audit_ips_';
+  const prefix =
+    kind === 'users' ? 'audit_users_' : kind === 'user_ips' ? 'audit_user_ips_' : 'audit_ips_';
   const id = params.get(prefix + 'scan') ?? '';
   const rawPage = params.get(prefix + 'page');
   const page = isPageNumber(rawPage) ? rawPage : '1';
@@ -84,80 +86,86 @@ export function TaskScans<T>({
       next.set(prefix + 'page', '1');
       return next;
     });
-  const start = useMutation({
-    mutationKey: [...key, 'create'],
-    mutationFn: (value: typeof input) => riskAPI(role).createTask(value),
-    onSuccess: (scan) => {
-      setToken(crypto.randomUUID());
-      select(scan);
-      void client.invalidateQueries({ queryKey: [...key, 'recent'] });
+  const authorityRoot =
+    role === 'admin' ? ['admin', 'risk-audit'] : ['user', 'steward', 'risk-audit'];
+  const refresh = () => client.invalidateQueries({ queryKey: key }, { throwOnError: true });
+  const start = useRetainedOperation<typeof input, TaskScan>(
+    async (value, _key, context) => {
+      const result = await riskAPI(role).createTask(value, context.signal);
+      context.commit(() => {
+        setToken(crypto.randomUUID());
+        select(result);
+      });
+      return result;
     },
-  });
-  const cancel = useMutation({
-    mutationKey: [...key, 'cancel'],
-    mutationFn: (scanID: string) => riskAPI(role).cancelTask(scanID),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: key });
-    },
-  });
+    refresh,
+    authorityRoot,
+  );
+  const cancel = useRetainedOperation<string, TaskScan>(
+    (scanID, _key, context) => riskAPI(role).cancelTask(scanID, context.signal),
+    refresh,
+    authorityRoot,
+  );
   const visible = recent.data?.filter((item) => item.kind === kind) ?? [];
   const scan = task.data?.scan;
   const statuses: Record<TaskScan['state'], string> = {
-    queued: t('排队中', 'Queued'),
-    running: t('扫描中', 'Scanning'),
-    completed: t('扫描完成', 'Completed'),
-    cancelled: t('已停止，结果不完整', 'Stopped; results incomplete'),
-    limited: t('达到扫描上限，结果不完整', 'Scan limit reached; results incomplete'),
-    failed: t('扫描失败，结果不完整', 'Scan failed; results incomplete'),
+    queued: t('common.auditScans.queued'),
+    running: t('common.auditScans.scanning'),
+    completed: t('common.auditScans.completed'),
+    cancelled: t('common.auditScans.stoppedResultsIncomplete'),
+    limited: t('common.auditScans.scanLimitReachedResultsIncomplete'),
+    failed: t('common.auditScans.scanFailedResultsIncomplete'),
   };
   const callKindLabel = (value: string) =>
     ({
-      total: t('全部调用', 'All calls'),
-      self: t('自用', 'Personal'),
-      charity: t('公益', 'Charity'),
-      unclassified: t('未分类', 'Unclassified'),
+      total: t('common.auditScans.allCalls'),
+      self: t('common.auditScans.personal'),
+      charity: t('common.auditScans.charity'),
+      unclassified: t('common.auditScans.unclassified'),
     })[value] ?? value;
   const signalLabel = (value: string) =>
     ({
-      '': t('全部用户', 'All users'),
-      rpm: t('高 RPM', 'High RPM'),
-      concurrency: t('高并发', 'High concurrency'),
+      '': t('common.auditScans.allUsers'),
+      rpm: t('common.auditScans.highRpm'),
+      concurrency: t('common.auditScans.highConcurrency'),
     })[value] ?? value;
   const frozenLabel = (value: TaskScan) =>
-    `${callKindLabel(value.call_kind)} · ${kind === 'users' ? `${signalLabel(value.signal)} · ` : ''}${formatDateTime(value.from)} – ${formatDateTime(value.to)} · ${t('修订', 'Revision')} ${value.filter_revision}`;
+    `${callKindLabel(value.call_kind)} · ${kind === 'users' ? `${signalLabel(value.signal)} · ` : ''}${formatDateTime(value.from)} – ${formatDateTime(value.to)}`;
   return (
     <div className="ops-stack">
       <Card>
         <h2>
-          {kind === 'users'
-            ? t('扫描用户汇总', 'Scan user summaries')
-            : t('扫描共享 IP', 'Scan shared IPs')}
+          {kind === 'user_ips'
+            ? t('common.audit.userIPsTitle')
+            : kind === 'users'
+              ? t('common.auditScans.scanUserSummaries')
+              : t('common.auditScans.scanSharedIps')}
         </h2>
-        <p>
-          {t(
-            '上方筛选用于新扫描；选取历史扫描会恢复其冻结条件。任务和结果保留 24 小时。',
-            'The filters above start a new scan; choosing a saved scan restores its frozen conditions. Tasks and results remain available for 24 hours.',
-          )}
-        </p>
+        <p>{t('common.auditScans.theFiltersAboveStartANewScan')}</p>
         <div className="ops-actions">
           <button
             type="button"
             className="btn btn-primary"
             disabled={
-              start.isPending || recent.isPending || recent.data?.filter(running).length === 2
+              start.isPending ||
+              start.outcome === 'unknown' ||
+              recent.isPending ||
+              recent.data?.filter(running).length === 2
             }
             onClick={() => start.mutate(input)}
           >
-            {start.isPending ? t('正在开始…', 'Starting…') : t('开始新扫描', 'Start new scan')}
+            {start.isPending
+              ? t('common.auditScans.starting')
+              : t('common.auditScans.startNewScan')}
           </button>
           {running(scan) && (
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={cancel.isPending}
+              disabled={cancel.isPending || cancel.outcome === 'unknown'}
               onClick={() => cancel.mutate(id)}
             >
-              {t('停止扫描', 'Stop scan')}
+              {t('common.auditScans.stopScan')}
             </button>
           )}
           <button
@@ -165,7 +173,7 @@ export function TaskScans<T>({
             className="btn btn-secondary"
             onClick={() => void client.invalidateQueries({ queryKey: key })}
           >
-            {t('刷新', 'Refresh')}
+            {t('common.auditScans.refresh')}
           </button>
         </div>
         {start.error && (
@@ -174,10 +182,16 @@ export function TaskScans<T>({
         {cancel.error && (
           <ErrorState error={cancel.error} onRetry={() => cancel.mutate(cancel.variables!)} />
         )}
+        {start.refreshError ? (
+          <ErrorState error={start.refreshError} onRetry={() => void start.refresh()} />
+        ) : null}
+        {cancel.refreshError ? (
+          <ErrorState error={cancel.refreshError} onRetry={() => void cancel.refresh()} />
+        ) : null}
         {recent.error && <ErrorState error={recent.error} onRetry={() => void recent.refetch()} />}
         {!!visible.length && (
           <label>
-            {t('最近的扫描', 'Recent scans')}
+            {t('common.auditScans.recentScans')}
             <select
               value={id}
               onChange={(event) => {
@@ -185,11 +199,10 @@ export function TaskScans<T>({
                 if (selected) select(selected);
               }}
             >
-              <option value="">{t('选择扫描', 'Choose a scan')}</option>
+              <option value="">{t('common.auditScans.chooseAScan')}</option>
               {visible.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {statuses[item.state]} · {frozenLabel(item)} · {item.matched} ·{' '}
-                  {item.id.slice(-6)}
+                  {statuses[item.state]} · {frozenLabel(item)} · {item.matched}
                 </option>
               ))}
             </select>
@@ -207,40 +220,47 @@ export function TaskScans<T>({
           <Card>
             <strong aria-live="polite">{statuses[scan.state]}</strong>
             <p>
-              {t('已检查候选', 'Examined candidates')}: {scan.scanned_candidates} /{' '}
-              {scan.candidates} · {t('已发布结果', 'Published results')}: {scan.matched}
+              {t('common.auditScans.examinedCandidates')}: {scan.scanned_candidates} /{' '}
+              {scan.candidates} · {t('common.auditScans.publishedResults')}: {scan.matched}
             </p>
             <p>
-              {t('本次扫描冻结条件', 'Frozen conditions for this scan')}: {frozenLabel(scan)} ·{' '}
-              {t('模型', 'Model')}: {scan.model || t('不限', 'Any')} ·{' '}
-              {t('保留至', 'Available until')}: {formatDateTime(scan.expires_at)}
+              {t('common.auditScans.frozenConditionsForThisScan')}: {frozenLabel(scan)} ·{' '}
+              {t('common.auditScans.model')}: {scan.model || t('common.auditScans.any')} ·{' '}
+              {t('common.auditScans.availableUntil')}: {formatDateTime(scan.expires_at)}
             </p>
             {(running(scan) || scan.coverage !== 'complete') && (
               <p role="status">
                 {running(scan)
-                  ? t(
-                      '结果与页数仍是已完成组的暂时统计。',
-                      'Results and page counts are provisional for completed groups so far.',
-                    )
-                  : t(
-                      '结果只覆盖已处理的候选。请缩小范围重试。',
-                      'Results cover only examined candidates. Narrow the range and retry.',
-                    )}
+                  ? t('common.auditScans.resultsAndPageCountsAreProvisionalFor')
+                  : t('common.auditScans.resultsCoverOnlyExaminedCandidatesNarrowThe')}
               </p>
             )}
             {scan.changed && (
-              <p role="status">
-                {t(
-                  '有相关用户或来源已删除；显示结果已更新。',
-                  'Related users or sources were removed; visible results have been updated.',
-                )}
-              </p>
+              <p role="status">{t('common.auditScans.relatedUsersOrSourcesWereRemovedVisible')}</p>
             )}
             {scan.truncated_reason && (
               <p>
-                {t('未完成原因', 'Incomplete reason')}: {scan.truncated_reason}
+                {t('common.auditScans.incompleteReason')}: {t(scanReasonKey(scan.truncated_reason))}
               </p>
             )}
+            {scan.last_source_at !== undefined ? (
+              <p>
+                {t('common.audit.lastSourceTime')}: {formatDateTime(scan.last_source_at)}
+              </p>
+            ) : null}
+            {scan.source_watermark ? (
+              <details>
+                <summary>{t('common.audit.progressDetails')}</summary>
+                <p>
+                  {t('common.audit.sourceSnapshot')}: {scan.source_watermark}
+                </p>
+                {scan.last_source_id ? (
+                  <p>
+                    {t('common.audit.lastSource')}: {scan.last_source_id}
+                  </p>
+                ) : null}
+              </details>
+            ) : null}
           </Card>
           <PagePagination
             metadata={task.data}
@@ -266,11 +286,11 @@ export function TaskScans<T>({
           {task.data.items.map(renderItem)}
           {!task.data.items.length && (
             <EmptyState
-              title={t('暂无结果', 'No results yet')}
+              title={t('common.auditScans.noResultsYet')}
               body={
                 running(scan)
-                  ? t('扫描仍在进行。', 'The scan is still running.')
-                  : t('当前没有可显示的结果。', 'No retained results match this scan.')
+                  ? t('common.auditScans.theScanIsStillRunning')
+                  : t('common.auditScans.noRetainedResultsMatchThisScan')
               }
             />
           )}

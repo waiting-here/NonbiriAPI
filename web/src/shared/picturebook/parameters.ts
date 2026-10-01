@@ -8,12 +8,14 @@ import type {
   SubmitInput,
 } from './publicTypes';
 import {
+  exactSizeCandidates,
   multipliedPrice,
   parseDimensions,
   quotePricing,
   resolveSize,
   type PriceSelection,
   type ResolvedSize,
+  type SizeCapability,
 } from './capabilities';
 
 export { currencyUnits, maxCurrencyUnits, multipliedPrice, parseDimensions } from './capabilities';
@@ -30,6 +32,35 @@ export function textLength(value: string, unit: LengthUnit): number {
 export const promptBytes = (prompt: string, negative = '') =>
   textLength(prompt, 'utf8_bytes') + textLength(negative, 'utf8_bytes');
 export type ParameterValues = Partial<Record<ParameterKey, string>>;
+type SizeModel = Pick<ImageModel, 'parameters' | 'size_capability' | 'pricing' | 'combinations'>;
+
+export function effectiveSizeCapability(model: SizeModel): SizeCapability | undefined {
+  if (model.size_capability) return model.size_capability;
+  if (model.pricing?.fallback !== 'unavailable') return undefined;
+  const rule = model.parameters.find(
+    (rule) => rule.key === 'size' && rule.supported && rule.dimensions && !rule.enum,
+  );
+  return rule?.dimensions
+    ? { mode: 'width_height', width: rule.dimensions.width, height: rule.dimensions.height }
+    : undefined;
+}
+
+export function exactModelSizes(model: SizeModel) {
+  const capability = effectiveSizeCapability(model);
+  if (capability?.mode !== 'width_height' || model.pricing?.fallback !== 'unavailable') return null;
+  const rule = model.parameters.find((rule) => rule.key === 'size' && rule.supported);
+  return exactSizeCandidates(capability, model.pricing).filter((row) => {
+    const size = `${row.width}x${row.height}`;
+    return (
+      (!rule || validScalar(rule, size)) &&
+      model.combinations.every((combination) => {
+        const index = combination.keys.indexOf('size');
+        return index === -1 || combination.allowed.some((tuple) => tuple[index] === size);
+      })
+    );
+  });
+}
+
 export function initialValues(model: ImageModel): ParameterValues {
   const values: ParameterValues = { prompt: '' };
   for (const rule of model.parameters) {
@@ -37,22 +68,36 @@ export function initialValues(model: ImageModel): ParameterValues {
     const initial = rule.default ?? (rule.key === 'n' ? 1 : undefined);
     if (initial !== undefined) values[rule.key] = String(initial);
   }
+  const exact = exactModelSizes(model);
+  if (exact !== null && values.size !== 'auto') {
+    const candidate = exact.find((row) => `${row.width}x${row.height}` === values.size) ?? exact[0];
+    values.size = candidate ? `${candidate.width}x${candidate.height}` : '';
+    values.aspect_ratio = '';
+    values.resolution = '';
+    return values;
+  }
   if (model.size_capability) {
     const capability = model.size_capability;
     const resolved = resolveSize(capability, {
-      aspect_ratio: values.aspect_ratio, resolution: values.resolution,
-      size: values.size === 'auto' ? undefined : values.size, auto: values.size === 'auto',
+      aspect_ratio: values.aspect_ratio,
+      resolution: values.resolution,
+      size: values.size === 'auto' ? undefined : values.size,
+      auto: values.size === 'auto',
     });
     if (resolved) Object.assign(values, resolved.values);
     else {
       const rows = capability.combinations;
-      const row = rows?.find((item) =>
-        (!values.aspect_ratio || item.ratio === values.aspect_ratio)
-        && (!values.resolution || item.resolution === values.resolution)
-        && (!values.size || `${item.width}x${item.height}` === values.size),
-      ) ?? rows?.[0];
+      const row =
+        rows?.find(
+          (item) =>
+            (!values.aspect_ratio || item.ratio === values.aspect_ratio) &&
+            (!values.resolution || item.resolution === values.resolution) &&
+            (!values.size || `${item.width}x${item.height}` === values.size),
+        ) ?? rows?.[0];
       if (row) {
-        delete values.aspect_ratio; delete values.resolution; delete values.size;
+        delete values.aspect_ratio;
+        delete values.resolution;
+        delete values.size;
         if (row.ratio) values.aspect_ratio = row.ratio;
         if (row.resolution) values.resolution = row.resolution;
         if (row.width && row.height) values.size = `${row.width}x${row.height}`;
@@ -61,6 +106,21 @@ export function initialValues(model: ImageModel): ParameterValues {
   }
   return values;
 }
+export function retainModelValues(model: ImageModel, previous: ParameterValues): ParameterValues {
+  const next = initialValues(model);
+  for (const rule of model.parameters) {
+    const raw = previous[rule.key];
+    if (!rule.supported || raw === undefined) continue;
+    next[rule.key] = raw;
+  }
+  if (exactModelSizes(model) !== null) {
+    next.size = previous.size ?? '';
+    next.aspect_ratio = '';
+    next.resolution = '';
+  }
+  return next;
+}
+
 function scalarValue(rule: ParameterRule, raw: string): Scalar | null {
   if (rule.type === 'string') return normalizeLines(raw);
   if (!raw.trim()) return null;
@@ -126,8 +186,16 @@ export function validScalar(rule: ParameterRule, value: Scalar): boolean {
 }
 export type InputProblem = ParameterKey | 'combination' | 'prompt_size' | 'price';
 function selectedSize(model: ImageModel, values: ParameterValues): ResolvedSize | null {
-  return model.size_capability
-    ? resolveSize(model.size_capability, {
+  const capability = effectiveSizeCapability(model);
+  const exact = exactModelSizes(model);
+  if (
+    values.size !== 'auto' &&
+    exact !== null &&
+    !exact.some((row) => `${row.width}x${row.height}` === values.size)
+  )
+    return null;
+  return capability
+    ? resolveSize(capability, {
         aspect_ratio: values.aspect_ratio,
         resolution: values.resolution,
         size: values.size === 'auto' ? undefined : values.size,
@@ -141,7 +209,8 @@ export function previewPrice(model: ImageModel, values: ParameterValues) {
   if (!resolved) return null;
   const countRule = model.parameters.find((rule) => rule.key === 'n' && rule.supported);
   const count = Number(values.n || countRule?.default || 1);
-  if (model.pricing) return quotePricing(model.pricing, resolved.selection, count);
+  if (model.pricing)
+    return quotePricing(model.pricing, resolved.selection, count, effectiveSizeCapability(model));
   const total = multipliedPrice(model.price.paper, model.price.brush, count);
   return total ? { unit: model.price, total, basis: 'default' as const, price_key: '' } : null;
 }
@@ -194,7 +263,9 @@ export function prepareSubmission(
       return { problem: 'combination' };
   }
   const n = typeof output.n === 'number' ? output.n : 1;
-  const quote = model.pricing ? quotePricing(model.pricing, selection, n) : null;
+  const quote = model.pricing
+    ? quotePricing(model.pricing, selection, n, effectiveSizeCapability(model))
+    : null;
   const price = model.pricing
     ? quote?.total
     : multipliedPrice(model.price.paper, model.price.brush, n);

@@ -55,7 +55,7 @@ func serveScans(repository *Repository, action string, actor Actor, w http.Respo
 		var input taskScanInput
 		err = decodeBody(w, r, &input)
 		if err == nil {
-			if input.Kind != "client_hits" && input.Kind != "users" && input.Kind != "shared_ips" {
+			if input.Kind == "" {
 				err = ErrInvalid
 			} else {
 				var scan ClientScan

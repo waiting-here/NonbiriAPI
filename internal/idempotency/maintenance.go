@@ -115,17 +115,39 @@ WHERE rowid IN (
 		return MaintenanceResult{}, ErrState
 	}
 
+	// Resource receipts share the fixed replay window but have their own user
+	// cascade. Keep the combined deletion within the existing batch budget.
+	projectionResult, err := tx.ExecContext(workerCtx, `
+DELETE FROM resource_operation_status
+WHERE (actor_scope_hash,key_hash) IN (
+ SELECT actor_scope_hash,key_hash FROM resource_operation_status
+ WHERE expires_at<=?
+ ORDER BY expires_at,actor_scope_hash,key_hash
+ LIMIT ?
+)`, decisionNow, int64(limit)-processed)
+	if err != nil {
+		return MaintenanceResult{}, fmt.Errorf("delete expired resource operation receipts: %w", err)
+	}
+	projectionCount, err := projectionResult.RowsAffected()
+	if err != nil {
+		return MaintenanceResult{}, fmt.Errorf("observe resource receipt retention: %w", err)
+	}
+	if projectionCount < 0 || projectionCount > int64(limit)-processed {
+		return MaintenanceResult{}, ErrState
+	}
+	processed += projectionCount
+
 	var more int
 	switch operation {
 	case maintenanceRecovery:
 		err = tx.QueryRowContext(workerCtx, `SELECT EXISTS(
  SELECT 1 FROM idempotency_records
  WHERE state='accepted' OR expires_at<=?
-)`, decisionNow).Scan(&more)
+) OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`, decisionNow, decisionNow).Scan(&more)
 	case maintenanceRetention:
 		err = tx.QueryRowContext(workerCtx, `SELECT EXISTS(
  SELECT 1 FROM idempotency_records WHERE expires_at<=?
-)`, decisionNow).Scan(&more)
+) OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`, decisionNow, decisionNow).Scan(&more)
 	}
 	if err != nil {
 		return MaintenanceResult{}, fmt.Errorf("check remaining idempotency maintenance work: %w", err)

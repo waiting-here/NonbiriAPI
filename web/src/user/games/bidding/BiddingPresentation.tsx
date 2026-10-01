@@ -5,9 +5,12 @@ import type { BiddingView, Reward } from './normalize';
 import { cardLabel, handSuit } from './labels';
 import { RewardCard } from './Cards';
 import type { EffectCue } from '../common/audio/assets';
-
 type BiddingHome = DuelHome<BiddingView, never, never, never>;
-type Snapshot = { readonly id: string; readonly round: number; readonly view: BiddingView };
+type Snapshot = {
+  readonly id: string;
+  readonly round: number;
+  readonly view: BiddingView;
+};
 type Scene = {
   readonly key: string;
   readonly round: number;
@@ -22,7 +25,6 @@ type Scene = {
   readonly poolAfter: number;
   readonly you: Seat;
 };
-
 function snapshotOf(home: BiddingHome): Snapshot | undefined {
   if (home.queue && !home.current) return undefined;
   if (home.current)
@@ -73,12 +75,12 @@ function sceneFrom(
     you,
   };
 }
-function resultText(scene: Scene, t: ReturnType<typeof useDuelText>) {
-  if (scene.discarded) return t('末轮平手，奖池弃置', 'Final tie — the pool is discarded');
-  if (scene.carried) return t('平手，奖池累积到下一轮', 'Tie — the pool carries to the next round');
-  if (scene.awardedTo === null) return t('本轮结算完成', 'Round settled');
-  const owner = scene.awardedTo === scene.you ? t('你', 'You') : t('对手', 'Opponent');
-  return t(`${owner} 收走整个奖池`, `${owner} collects the whole pool`);
+function resultText(scene: Scene, text: ReturnType<typeof useDuelText>) {
+  if (scene.discarded) return text('bidding.finalTieThePoolIsDiscarded');
+  if (scene.carried) return text('bidding.tieThePoolCarriesToTheNext');
+  if (scene.awardedTo === null) return text('bidding.roundSettled');
+  const owner = scene.awardedTo === scene.you ? text('bidding.you') : text('bidding.opponent');
+  return text('bidding.collectsTheWholePool', { owner: owner });
 }
 function BidCard({
   value,
@@ -89,15 +91,14 @@ function BidCard({
   readonly seat: Seat;
   readonly className: string;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <span className={`bid-presentation__bid bid-suit--${seat} ${className}`} aria-hidden="true">
       {cardLabel(value)}
-      <small>{handSuit(seat, t).symbol}</small>
+      <small>{handSuit(seat, text).symbol}</small>
     </span>
   );
 }
-
 export function BiddingPresentation({
   home,
   onCue,
@@ -105,7 +106,7 @@ export function BiddingPresentation({
   readonly home: BiddingHome | undefined;
   readonly onCue?: (cue: EffectCue) => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const reduced =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -121,7 +122,6 @@ export function BiddingPresentation({
   useEffect(() => {
     latestHome.current = home;
   }, [home]);
-
   // This effect only detects adjacent facts. Timers live in the separate scene effect below.
   useEffect(() => {
     if (!home) return;
@@ -167,7 +167,6 @@ export function BiddingPresentation({
       else setScene(nextScene);
     }
   }, [home, scene]);
-
   useEffect(() => {
     if (!scene) return;
     let cancelled = false;
@@ -207,7 +206,6 @@ export function BiddingPresentation({
       window.clearTimeout(clear);
     };
   }, [onCue, scene]);
-
   useEffect(() => {
     const onVisibility = () => {
       const current = latestHome.current;
@@ -220,7 +218,6 @@ export function BiddingPresentation({
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
-
   useLayoutEffect(() => {
     const visibleStep = stepKey === scene?.key ? step : scene?.bids ? 'reveal' : 'draw';
     if (!scene || visibleStep !== 'draw') return;
@@ -260,16 +257,10 @@ export function BiddingPresentation({
       });
     };
   }, [scene, step, stepKey]);
-
   if (!scene)
     return home?.current ? (
       <section className="bid-presentation bid-presentation--idle">
-        <p>
-          {t(
-            '从手牌中暗选一张并锁定，等待双方亮牌。',
-            'Choose a bid privately and lock it, then wait for both bids to be revealed.',
-          )}
-        </p>
+        <p>{text('bidding.chooseABidPrivatelyAndLockIt')}</p>
       </section>
     ) : null;
   const visibleStep = stepKey === scene.key ? step : scene.bids ? 'reveal' : 'draw';
@@ -287,11 +278,11 @@ export function BiddingPresentation({
   const ownerLabel =
     scene.awardedTo === null
       ? scene.discarded
-        ? t('弃置', 'Discarded')
-        : t('累积到下一轮', 'Carry to next round')
+        ? text('bidding.discarded')
+        : text('bidding.carryToNextRound')
       : scene.awardedTo === scene.you
-        ? t('你', 'You')
-        : t('对手', 'Opponent');
+        ? text('bidding.you')
+        : text('bidding.opponent');
   return (
     <section
       className={`bid-presentation bid-presentation--${visibleStep}`}
@@ -301,7 +292,7 @@ export function BiddingPresentation({
     >
       <div className={`bid-presentation__stage ${ownerClass}`}>
         <div className="bid-presentation__side is-you">
-          <span>{t('你', 'You')}</span>
+          <span>{text('bidding.you')}</span>
           {visibleStep !== 'draw' && scene.bids && (
             <BidCard seat={scene.you} value={scene.bids[scene.you]} className="is-left" />
           )}
@@ -317,12 +308,12 @@ export function BiddingPresentation({
           </div>
           {visibleStep !== 'draw' && (
             <strong className="bid-presentation__pot">
-              {pool} {t('分奖池', 'pool points')}
+              {pool} {text('bidding.poolPoints')}
             </strong>
           )}
         </div>
         <div className="bid-presentation__side is-opponent">
-          <span>{t('对手', 'Opponent')}</span>
+          <span>{text('bidding.opponent')}</span>
           {visibleStep !== 'draw' && scene.bids && (
             <BidCard
               seat={(1 - scene.you) as Seat}
@@ -335,30 +326,29 @@ export function BiddingPresentation({
       <div className="bid-presentation__copy">
         <strong>
           {visibleStep === 'draw'
-            ? t(
-                `第 ${scene.bids ? scene.round + 1 : scene.round} 轮：从两侧牌堆抽取奖励`,
-                `Round ${scene.bids ? scene.round + 1 : scene.round}: draw rewards from both decks`,
-              )
+            ? text('bidding.roundDrawRewardsFromBothDecks', {
+                value: scene.bids ? scene.round + 1 : scene.round,
+              })
             : visibleStep === 'reveal' && scene.bids
-              ? t('双方同步亮牌', 'Both bids revealed together')
+              ? text('bidding.bothBidsRevealedTogether')
               : scene.bids
-                ? resultText(scene, t)
-                : t('奖励牌已到位，开始暗选', 'Rewards are ready; choose privately')}
+                ? resultText(scene, text)
+                : text('bidding.rewardsAreReadyChoosePrivately')}
         </strong>
         {scene.bids && visibleStep !== 'draw' && (
           <span>
-            {t('你', 'You')} {handSuit(scene.you, t).name} {cardLabel(scene.bids[scene.you])} ·{' '}
-            {t('对手', 'Opponent')} {handSuit(1 - scene.you, t).name}{' '}
-            {cardLabel(scene.bids[(1 - scene.you) as Seat])}
+            {text('bidding.you')} {handSuit(scene.you, text).name}{' '}
+            {cardLabel(scene.bids[scene.you])} · {text('bidding.opponent')}{' '}
+            {handSuit(1 - scene.you, text).name} {cardLabel(scene.bids[(1 - scene.you) as Seat])}
           </span>
         )}
         {visibleStep === 'settle' && scene.bids && (
           <span>
-            {ownerLabel} · {pool} {t('分奖池', 'pool points')}
+            {ownerLabel} · {pool} {text('bidding.poolPoints')}
           </span>
         )}
         {visibleStep === 'settle' && scene.rewards.some((r) => r.multiplier === 2) && (
-          <small>{t('Joker 倍率 ×2 已计入奖励', 'Joker multiplier ×2 is included')}</small>
+          <small>{text('bidding.jokerMultiplier2IsIncluded')}</small>
         )}
       </div>
     </section>

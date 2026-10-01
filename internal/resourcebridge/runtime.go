@@ -42,6 +42,7 @@ type Vault interface {
 // and Random are injectable so timestamp and context generation boundaries can
 // be exercised deterministically.
 type Config struct {
+	Review     *secret.DonationReview
 	Store      *db.Store
 	Vault      Vault
 	Claims     *claim.Service
@@ -60,6 +61,7 @@ func (Config) LogValue() slog.Value {
 // Runtime owns the derived fingerprint key and coordinates its lifetime with
 // in-flight writes and discoveries.
 type Runtime struct {
+	review     *secret.DonationReview
 	db         *db.Store
 	vault      Vault
 	claims     *claim.Service
@@ -86,7 +88,7 @@ var (
 // New derives the reporting key exactly once and copies it into runtime-owned
 // storage. The returned runtime never retains the derivation slice.
 func New(config Config) (*Runtime, error) {
-	if config.Store == nil || config.Store.DB() == nil || nilInterface(config.Vault) ||
+	if config.Review == nil || config.Store == nil || config.Store.DB() == nil || nilInterface(config.Vault) ||
 		config.Claims == nil || backend.IsNil(config.Backend) || config.Backend.MaxResponseBytes() <= 0 {
 		return nil, ErrInvalidInput
 	}
@@ -107,6 +109,7 @@ func New(config Config) (*Runtime, error) {
 	}
 	runtime := &Runtime{
 		db:         config.Store,
+		review:     config.Review,
 		vault:      config.Vault,
 		claims:     config.Claims,
 		backend:    config.Backend,

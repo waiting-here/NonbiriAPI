@@ -187,8 +187,12 @@ async function prepareDebug(
   fixture: DebugFixture,
 ) {
   const consoleGuard = collectConsoleViolations(page);
-  await installURLPersistenceObserver(context, [SESSION_ONE, SESSION_TWO, TRACE_MARKER,
-    ...(fixture.embedding ? ['caller-supplied'] : [])]);
+  await installURLPersistenceObserver(context, [
+    SESSION_ONE,
+    SESSION_TWO,
+    TRACE_MARKER,
+    ...(fixture.embedding ? ['caller-supplied'] : []),
+  ]);
   await configureNarrowReducedMotion(page);
   await page.addInitScript(
     ({ language, selectedTheme }) => {
@@ -240,7 +244,9 @@ for (const locale of ['en', 'zh'] as const)
         const guard = await prepareDebug(context, page, locale, theme, fixture);
         await page.setViewportSize({ width, height: 900 });
         await page.goto(`${USER_ORIGIN}/debug`);
-        await expect(page.locator('p').filter({ hasText: 'debug_live_cancelled' })).toContainText('(409)');
+        await expect(page.locator('p').filter({ hasText: 'debug_live_cancelled' })).toContainText(
+          '(409)',
+        );
         const label =
           locale === 'zh'
             ? fixture.charity
@@ -253,7 +259,14 @@ for (const locale of ['en', 'zh'] as const)
         await expect(trace.locator('summary').first()).toContainText(label);
         await trace.locator('summary').first().click();
         const fields = trace.locator('.ops-debug-presence').first();
-        await expect(fields.locator('dt')).toHaveText([
+        await expect(fields.locator(':scope > div > dt')).toHaveText([
+          'model',
+          'input',
+          'encoding_format',
+          'dimensions',
+          'user',
+        ]);
+        await expect(fields.locator('.nb-message-field > dt')).toHaveText([
           'model',
           'input',
           'encoding_format',

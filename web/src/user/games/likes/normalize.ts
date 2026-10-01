@@ -381,7 +381,7 @@ function validateAttempt(value: unknown) {
     'draw',
     'derived',
   ]);
-  safeInteger(r.rules_version, 2, 2, 'application rules');
+  safeInteger(r.rules_version, 2, 3, 'application rules');
   stepValue(r.step);
   if (seatValue(r.source) === seatValue(r.target)) invalidResponse('hostile effect target');
   label(r.skill_id);

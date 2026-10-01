@@ -1,10 +1,16 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import type { Asset } from './api';
+const keys = { lakeTitle: 'common.lakeNotes.title' } as const;
 export function useEconomyText() {
+  const { t } = useRegisteredCopy(keys);
   const { i18n } = useTranslation();
   const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false;
-  return useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]);
+  return Object.assign(
+    useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]),
+    { lakeTitle: t('lakeTitle') },
+  );
 }
 export type Text = ReturnType<typeof useEconomyText>;
 export function assetLabel(asset: Asset, t: Text) {
@@ -16,6 +22,7 @@ export function assetLabel(asset: Asset, t: Text) {
   }[asset];
 }
 export function channelLabel(channel: string, t: Text) {
+  if (channel === 'lake_notes') return t.lakeTitle;
   return (
     (
       {

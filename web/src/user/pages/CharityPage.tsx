@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useParams } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { listReturnPath } from '@shared/operations/listReturn';
@@ -18,6 +18,7 @@ import {
 import { OwnerDonationKeys, OwnerDonationsPanel } from '../features/economy/OwnerDonationsPanel';
 import { useCharityCapability, useDonation } from '../features/economy/queries';
 import '../features/economy/economy.css';
+import './CharityPage.css';
 
 function validDonationID(value: string): boolean {
   if (!/^[1-9][0-9]{0,18}$/.test(value)) return false;
@@ -161,6 +162,12 @@ function CharityContent() {
           </button>
         ))}
       </nav>
+      <div hidden={tab !== 'models'} className="charity-quick-use">
+        <Card>
+          <h2>{t('user.charity.quickUseTitle')}</h2>
+          <p>{t('user.charity.quickUseBody')}</p>
+        </Card>
+      </div>
       <section
         hidden={tab !== 'models'}
         className="economy-model-workspace"

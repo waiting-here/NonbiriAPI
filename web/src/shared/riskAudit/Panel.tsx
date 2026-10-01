@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
+import { queryPath } from '@shared/operations/api';
 import { ClientScans } from './ClientScans';
 import { TaskScans } from './TaskScans';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { sourceFlagLabel, sourceQualityLabel } from '@shared/observability/sourceLabels';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber, isPageSize } from '@shared/operations/pageNumbers';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
@@ -28,6 +32,7 @@ import {
   type Source,
   type Stats,
   type Summary,
+  type UserIPs,
 } from './api';
 import { fieldLabel, pathLabel, riskCopy, type RiskCopy } from './copy';
 import '@shared/operations/operations.css';
@@ -83,12 +88,13 @@ function Coverage({ value, c }: { value: string; c: RiskCopy }) {
   );
 }
 function SourceView({ source, c }: { source: Source; c: RiskCopy }) {
+  const { t } = useTranslation();
   return (
     <details>
       <summary>{c.source}</summary>
       <dl className="ops-kv">
         <dt>{c.quality}</dt>
-        <dd>{source.ip_quality || c.unknown}</dd>
+        <dd>{source.ip_quality ? sourceQualityLabel(source.ip_quality, t) : c.unknown}</dd>
         {sourceFields.map((field) => (
           <div key={field}>
             <dt>{fieldLabel(field, c)}</dt>
@@ -97,7 +103,7 @@ function SourceView({ source, c }: { source: Source; c: RiskCopy }) {
               {source.quality[field] && Object.values(source.quality[field]!).some(Boolean)
                 ? ` (${Object.entries(source.quality[field]!)
                     .filter(([, v]) => v)
-                    .map(([k]) => k)
+                    .map(([k]) => sourceFlagLabel(k, t))
                     .join(', ')})`
                 : ''}
             </dd>
@@ -110,16 +116,29 @@ function SourceView({ source, c }: { source: Source; c: RiskCopy }) {
 function RequestView({
   item,
   c,
+  role,
   inspect,
 }: {
   item: Request;
   c: RiskCopy;
+  role: RiskRole;
   inspect?: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <div className="ops-actions">
         <strong>{item.request_id}</strong>
+        <Link
+          to={queryPath(role === 'admin' ? '/logs' : '/steward', {
+            tab: role === 'steward' ? 'logs' : undefined,
+            request_id: item.request_id,
+            from: Math.max(0, item.occurred_at - 60),
+            to: item.occurred_at + 60,
+          })}
+        >
+          {t('common.audit.openRequest')}
+        </Link>
         {inspect ? (
           <button className="btn btn-secondary" onClick={() => inspect(item.user_id)}>
             {c.inspect} {item.user_id}
@@ -214,6 +233,7 @@ function Samples({ value, c }: { value: Stats; c: RiskCopy }) {
   );
 }
 function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
+  const { t } = useTranslation();
   const stamp = useStamp();
   return (
     <>
@@ -269,7 +289,7 @@ function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
         <h2>{c.distribution}</h2>
         {detail.source_distribution.map((s, i) => (
           <p key={i} className="ops-wrap">
-            {s.user_agent || c.unknown} · {s.ip_quality} · {s.count}
+            {s.user_agent || c.unknown} · {sourceQualityLabel(s.ip_quality, t)} · {s.count}
           </p>
         ))}
       </Card>
@@ -391,7 +411,7 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
         <>
           <DetailBody detail={query.data} c={c} />
           {query.data.requests.items.map((item) => (
-            <RequestView key={item.log_id} item={item} c={c} />
+            <RequestView key={item.log_id} item={item} c={c} role={role} />
           ))}
           <Coverage value={query.data.requests.coverage} c={c} />
           {query.data.requests.page &&
@@ -491,6 +511,7 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
   );
 }
 function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
+  const { t } = useTranslation();
   const stamp = useStamp();
   const { c, filters } = scope;
   return (
@@ -505,8 +526,8 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
           <Card key={ip.ip}>
             <h2>{ip.ip}</h2>
             <p>
-              {c.users}: {ip.users} · {c.count}: {ip.requests} · {stamp(ip.first_seen)} —{' '}
-              {stamp(ip.last_seen)}
+              {t('common.audit.distinctDiscord')}: {ip.users} · {c.count}: {ip.requests} ·{' '}
+              {stamp(ip.first_seen)} — {stamp(ip.last_seen)}
             </p>
             <h3>{c.related}</h3>
             {ip.associations.map((a) => (
@@ -527,6 +548,95 @@ function IPs({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
     </div>
   );
 }
+function UserIPWindows(scope: Scope) {
+  const { t } = useTranslation();
+  const stamp = useStamp();
+  return (
+    <div className="ops-stack">
+      <p>{t('common.audit.userIPsHelp')}</p>
+      <TaskScans<UserIPs>
+        role={scope.role}
+        scopeKey={scope.scopeKey}
+        filters={scope.filters}
+        kind="user_ips"
+        renderItem={(item) => (
+          <Card key={item.discord_id}>
+            <h2>
+              {t('common.history.discord')}: {item.discord_id}
+            </h2>
+            <p>
+              {t('common.audit.ipPeak', { count: item.peak })} · {stamp(item.window_from)} —{' '}
+              {stamp(item.window_to)}
+            </p>
+            <div className="ops-table-scroll">
+              <table className="ops-table">
+                <thead>
+                  <tr>
+                    <th>{t('common.history.originalAccount')}</th>
+                    <th>{scope.c.kind}</th>
+                    <th>{scope.c.count}</th>
+                    <th>{scope.c.dispatched}</th>
+                    <th>{scope.c.rejected}</th>
+                    <th>
+                      {scope.c.from} / {scope.c.to}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {item.accounts.map((account) => (
+                    <tr key={`${account.user_id}:${account.call_kind}`}>
+                      <td>{account.user_id}</td>
+                      <td>
+                        {(
+                          {
+                            total: scope.c.total,
+                            self: scope.c.self,
+                            charity: scope.c.charity,
+                            unclassified: scope.c.unclassified,
+                          } as Record<string, string>
+                        )[account.call_kind] ?? account.call_kind}
+                      </td>
+                      <td>{account.requests}</td>
+                      <td>{account.dispatched}</td>
+                      <td>{account.rejected}</td>
+                      <td>
+                        {stamp(account.first_seen)} — {stamp(account.last_seen)}
+                        <br />
+                        <Link
+                          to={queryPath(scope.role === 'admin' ? '/logs' : '/steward', {
+                            tab: scope.role === 'steward' ? 'logs' : undefined,
+                            user_id: account.user_id,
+                            from: item.window_from,
+                            to: item.window_to + 1,
+                          })}
+                        >
+                          {t('common.audit.openLogs')}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <details>
+              <summary>{t('common.audit.windowIPs')}</summary>
+              <ul>
+                {item.ips.map((ip) => (
+                  <li key={ip} className="mono">
+                    {ip}
+                  </li>
+                ))}
+              </ul>
+            </details>
+            {item.ips_truncated || item.accounts_truncated ? (
+              <p>{t('common.audit.windowTruncated')}</p>
+            ) : null}
+          </Card>
+        )}
+      />
+    </div>
+  );
+}
 function Clients({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
   return (
     <ClientScans
@@ -534,7 +644,13 @@ function Clients({ inspect, ...scope }: Scope & { inspect: (id: string) => void 
       scopeKey={scope.scopeKey}
       filters={scope.filters}
       renderItem={(item) => (
-        <RequestView key={item.log_id} item={item} c={scope.c} inspect={inspect} />
+        <RequestView
+          key={item.log_id}
+          item={item}
+          c={scope.c}
+          role={scope.role}
+          inspect={inspect}
+        />
       )}
     />
   );
@@ -565,6 +681,8 @@ function RuleEditor({
   c: RiskCopy;
   busy: boolean;
 }) {
+  const { t } = useTranslation();
+  const [confirmation, setConfirmation] = useState<RuleInput | null>(null);
   const [value, setValue] = useState<RuleInput>(() => rule ?? emptyRule());
   const originalSeconds = rule?.auto_ban?.duration_seconds;
   const initialUnit =
@@ -614,7 +732,9 @@ function RuleEditor({
                   enabled: banEnabled,
                   duration_seconds: banMode === 'permanent' ? null : duration,
                 };
-        save({ ...value, auto_ban });
+        const input = { ...value, auto_ban };
+        if (input.enabled && auto_ban?.enabled) setConfirmation(input);
+        else save(input);
       }}
     >
       {!rule && (
@@ -853,6 +973,32 @@ function RuleEditor({
           {c.cancel}
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={t('common.riskAudit.confirmAutoBan')}
+        description={
+          <>
+            <p>{confirmation?.name}</p>
+            <p>{c.autoBanHelp}</p>
+            <p>
+              {confirmation?.auto_ban?.duration_seconds === null
+                ? c.autoBanPermanent
+                : `${durationInput} ${banMode === 'days' ? c.autoBanDays : banMode === 'hours' ? c.autoBanHours : c.autoBanSeconds}`}
+            </p>
+            {confirmation?.evidence_note ? <p>{confirmation.evidence_note}</p> : null}
+          </>
+        }
+        confirmLabel={c.save}
+        danger
+        busy={busy}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (confirmation) {
+            save(confirmation);
+            setConfirmation(null);
+          }
+        }}
+      />
     </form>
   );
 }
@@ -884,24 +1030,25 @@ function Rules({ role, scopeKey, c }: Scope) {
       { replace: true },
     );
   }, [query.data, revision, setParams]);
-  const mutation = useMutation({
-    mutationKey: ['risk', role, scopeKey, 'rules'],
-    gcTime: 0,
-    mutationFn: (v: { input?: RuleInput; rule?: Rule }) =>
-      v.input
-        ? riskAPI(role).saveRule(v.input, v.rule?.id)
-        : riskAPI(role).deleteRule(v.rule!.id, v.rule!.revision),
-    onSuccess: async () => {
-      setEditing(null);
-      setParams((previous) => {
-        const next = new URLSearchParams(previous);
-        next.delete('audit_rules_revision');
-        next.set('audit_rules_page', '1');
-        return next;
+  const mutation = useRetainedOperation<{ input?: RuleInput; rule?: Rule }, unknown>(
+    async (v, _key, context) => {
+      const result = v.input
+        ? await riskAPI(role).saveRule(v.input, v.rule?.id, context.signal)
+        : await riskAPI(role).deleteRule(v.rule!.id, v.rule!.revision, context.signal);
+      context.commit(() => {
+        setEditing(null);
+        setParams((previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete('audit_rules_revision');
+          next.set('audit_rules_page', '1');
+          return next;
+        });
       });
-      await client.invalidateQueries({ queryKey: ['risk', role, scopeKey] });
+      return result;
     },
-  });
+    () => client.invalidateQueries({ queryKey: ['risk', role, scopeKey] }, { throwOnError: true }),
+    role === 'admin' ? ['admin', 'risk-audit'] : ['user', 'steward', 'risk-audit'],
+  );
   return (
     <Card>
       <p>{c.ruleSteps}</p>
@@ -914,6 +1061,9 @@ function Rules({ role, scopeKey, c }: Scope) {
             void query.refetch();
           }}
         />
+      ) : null}
+      {mutation.refreshError ? (
+        <ErrorState error={mutation.refreshError} onRetry={() => void mutation.refresh()} />
       ) : null}
       {editing ? (
         <RuleEditor
@@ -1044,12 +1194,19 @@ function ConfigForm({
   save: (value: Config) => void;
   busy: boolean;
 }) {
-  const [draft, setDraft] = useState(value);
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState({
+    ...value,
+    user_ip_window_hours: value.user_ip_window_hours ?? 24,
+    user_ip_min_ips: value.user_ip_min_ips ?? 3,
+  });
   const fields = [
     ['threshold_percent', c.threshold, 1, 100],
     ['consecutive_minutes', c.consecutive, 1, 60],
     ['shared_ip_hours', c.hours, 1, 720],
     ['shared_ip_users', c.accounts, 2, 1000],
+    ['user_ip_window_hours', t('common.audit.userIPWindow'), 1, 720],
+    ['user_ip_min_ips', t('common.audit.userIPMinimum'), 2, 1000],
   ] as const;
   return (
     <form
@@ -1094,12 +1251,11 @@ function Configuration({ role, scopeKey, c }: Scope) {
       queryFn: ({ signal }) => riskAPI(role).config(signal),
       ...queryOptions,
     });
-  const mutation = useMutation({
-    mutationKey: ['risk', role, scopeKey, 'config'],
-    gcTime: 0,
-    mutationFn: (value: Config) => riskAPI(role).saveConfig(value),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['risk', role, scopeKey] }),
-  });
+  const mutation = useRetainedOperation<Config, Config>(
+    (value, _key, context) => riskAPI(role).saveConfig(value, context.signal),
+    () => client.invalidateQueries({ queryKey: ['risk', role, scopeKey] }, { throwOnError: true }),
+    role === 'admin' ? ['admin', 'risk-audit'] : ['user', 'steward', 'risk-audit'],
+  );
   return (
     <Card>
       <p>{c.configHelp}</p>
@@ -1126,6 +1282,9 @@ function Configuration({ role, scopeKey, c }: Scope) {
       ) : (
         <LoadingState />
       )}
+      {mutation.refreshError ? (
+        <ErrorState error={mutation.refreshError} onRetry={() => void mutation.refresh()} />
+      ) : null}
     </Card>
   );
 }
@@ -1363,7 +1522,7 @@ function Access({ role, scopeKey, c, filters }: Scope) {
     </div>
   );
 }
-type Tab = 'users' | 'ips' | 'clients' | 'rules' | 'config' | 'access';
+type Tab = 'users' | 'ips' | 'user_ips' | 'clients' | 'rules' | 'config' | 'access';
 function useAuditAuthority(role: RiskRole, scopeKey: string) {
   const client = useQueryClient(),
     [error, setError] = useState<unknown>(null);
@@ -1395,13 +1554,13 @@ function useAuditAuthority(role: RiskRole, scopeKey: string) {
 }
 function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
   const authorityError = useAuditAuthority(role, scopeKey);
-  const { i18n } = useTranslation(),
-    c = riskCopy(i18n.language);
+  const { t } = useTranslation(),
+    c = riskCopy(t);
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('audit_tab') ?? '';
-  const tab: Tab = (['users', 'ips', 'clients', 'rules', 'config', 'access'] as string[]).includes(
-    rawTab,
-  )
+  const tab: Tab = (
+    ['users', 'ips', 'user_ips', 'clients', 'rules', 'config', 'access'] as string[]
+  ).includes(rawTab)
     ? (rawTab as Tab)
     : 'users';
   const selectedUser = /^[1-9][0-9]{0,18}$/.test(params.get('audit_user') ?? '')
@@ -1446,7 +1605,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
       }
       p.delete('audit_scan');
       p.delete('audit_page');
-      for (const name of ['users', 'ips']) {
+      for (const name of ['users', 'ips', 'user_ips']) {
         p.delete(`audit_${name}_scan`);
         p.delete(`audit_${name}_page`);
       }
@@ -1466,6 +1625,18 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
     to: createTimeDraft(Number(filters.to ?? Math.floor(Date.now() / 1000))),
     kind: String(filters.kind ?? 'total'),
   }));
+  const filterIdentity = [filters.from, filters.to, filters.lookback_hours, filters.kind].join('/');
+  const [draftIdentity, setDraftIdentity] = useState(filterIdentity);
+  if (draftIdentity !== filterIdentity) {
+    setDraftIdentity(filterIdentity);
+    setRange(filters.from !== undefined ? 'custom' : String(filters.lookback_hours ?? 'default'));
+    setDraft({
+      from: filters.from === undefined ? draft.from : createTimeDraft(Number(filters.from)),
+      to: filters.to === undefined ? draft.to : createTimeDraft(Number(filters.to)),
+      kind: String(filters.kind ?? 'total'),
+    });
+    setRangeError(false);
+  }
   const customRange = filters.from !== undefined || filters.lookback_hours !== undefined;
   const scope = useMemo(
     () => ({ role, scopeKey, c, filters, customRange }),
@@ -1503,28 +1674,30 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
       <Card>
         <p>{c.caveat}</p>
         <div className="ops-tabs audit-tabs" role="group" aria-label={c.title}>
-          {(['users', 'ips', 'clients', 'rules', 'config', 'access'] as Tab[]).map((v) => (
-            <button
-              className={tab === v && !selectedUser ? 'btn btn-primary' : 'btn btn-secondary'}
-              key={v}
-              aria-pressed={tab === v && !selectedUser}
-              onClick={() => {
-                setParams((previous) => {
-                  const next = new URLSearchParams(previous);
-                  next.set('audit_tab', v);
-                  next.delete('audit_user');
-                  next.delete('audit_user_from');
-                  next.delete('audit_user_to');
-                  next.delete('audit_user_watermark');
-                  next.delete('audit_user_total');
-                  next.set('audit_user_page', '1');
-                  return next;
-                });
-              }}
-            >
-              {c[v]}
-            </button>
-          ))}
+          {(['users', 'ips', 'user_ips', 'clients', 'rules', 'config', 'access'] as Tab[]).map(
+            (v) => (
+              <button
+                className={tab === v && !selectedUser ? 'btn btn-primary' : 'btn btn-secondary'}
+                key={v}
+                aria-pressed={tab === v && !selectedUser}
+                onClick={() => {
+                  setParams((previous) => {
+                    const next = new URLSearchParams(previous);
+                    next.set('audit_tab', v);
+                    next.delete('audit_user');
+                    next.delete('audit_user_from');
+                    next.delete('audit_user_to');
+                    next.delete('audit_user_watermark');
+                    next.delete('audit_user_total');
+                    next.set('audit_user_page', '1');
+                    return next;
+                  });
+                }}
+              >
+                {v === 'user_ips' ? t('common.audit.userIPsTab') : c[v]}
+              </button>
+            ),
+          )}
         </div>
         {tab !== 'rules' && tab !== 'config' ? (
           <form className="ops-stack" onSubmit={apply}>
@@ -1611,7 +1784,7 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
           </form>
         ) : null}
       </Card>
-      <div key={JSON.stringify(filters)}>
+      <div>
         {selectedUser ? (
           <UserDetail
             key={selectedUser}
@@ -1623,6 +1796,8 @@ function RiskBody({ role, scopeKey }: { role: RiskRole; scopeKey: string }) {
           <Users {...scope} inspect={setSelectedUser} />
         ) : tab === 'ips' ? (
           <IPs {...scope} inspect={setSelectedUser} />
+        ) : tab === 'user_ips' ? (
+          <UserIPWindows {...scope} />
         ) : tab === 'clients' ? (
           <Clients {...scope} inspect={setSelectedUser} />
         ) : tab === 'rules' ? (
@@ -1645,10 +1820,6 @@ export function RiskAuditPanel({
   scopeKey: string;
   enabled?: boolean;
 }) {
-  const [params] = useSearchParams();
-  const filterIdentity = filterFields.map((key) => params.get('audit_' + key)).join('/');
   if (!enabled || !scopeKey) return <LoadingState />;
-  return (
-    <RiskBody key={role + '/' + scopeKey + '/' + filterIdentity} role={role} scopeKey={scopeKey} />
-  );
+  return <RiskBody key={role + '/' + scopeKey} role={role} scopeKey={scopeKey} />;
 }

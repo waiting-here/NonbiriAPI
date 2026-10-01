@@ -52,7 +52,7 @@ func makePreGovernanceFixture(t *testing.T, database *sql.DB) {
 	// These are the only new tables seeded without user actions.
 	seedRows := map[string]int{
 		"observability_state": 1, "risk_audit_config": 1, "economy_audit_checkpoint": 1,
-		"limited_activity_configs": 2, "limited_activity_revisions": 2, "activity_exchange_state": 2,
+		"limited_activity_configs": 3, "limited_activity_revisions": 3, "activity_exchange_state": 2,
 		"inactivity_policy": 1, "game_rank_net_rebuild": 1, "image_activity_state": 1,
 		"charity_routing_capacity": 1, "fatfish_capacity": 1, "game_bidding_net_rebuild": 1,
 	}

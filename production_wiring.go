@@ -51,7 +51,7 @@ type publicForwardRuntime struct {
 	handler     http.Handler
 }
 
-func newStewardAutomationHandler(service *stewardautomation.Service, repository *resources.Repository, lifecycle *lifecyclegate.Gate, gate *maintenance.Gate) (http.Handler, error) {
+func newAutomationHandler(service *stewardautomation.Service, repository *resources.Repository, lifecycle *lifecyclegate.Gate, gate *maintenance.Gate) (http.Handler, error) {
 	callerKey, err := forward.NewCallerKeyMiddleware(repository, lifecycle)
 	if err != nil {
 		return nil, err
@@ -62,14 +62,15 @@ func newStewardAutomationHandler(service *stewardautomation.Service, repository 
 			httperr.WriteError(w, httperr.New(httperr.CodeUnauthorized, "authentication required"))
 			return
 		}
-		ctx := authz.WithStewardCaller(r.Context(), authz.StewardCaller{UserID: identity.UserID, Generation: identity.Generation})
+		ctx := r.Context()
+		if stewardautomation.IsPersonalPath(r.URL.Path) {
+			ctx = authz.WithPersonalCaller(ctx, authz.PersonalCaller{UserID: identity.UserID, Generation: identity.Generation})
+		} else {
+			ctx = authz.WithStewardCaller(ctx, authz.StewardCaller{UserID: identity.UserID, Generation: identity.Generation})
+		}
 		service.ServeHTTP(w, r.WithContext(ctx))
 	})
-	return maintenance.GateMiddleware(gate, callerKey.WrapExactMethods(inner, map[string][]string{
-		stewardautomation.DonationsPath:     {http.MethodPost},
-		stewardautomation.BindingsPath:      {http.MethodPost},
-		stewardautomation.FailurePolicyPath: {http.MethodGet, http.MethodPatch},
-	})), nil
+	return maintenance.GateMiddleware(gate, callerKey.WrapRouteMethods(inner, stewardautomation.RouteMethods)), nil
 }
 
 func newPublicForwardRuntime(

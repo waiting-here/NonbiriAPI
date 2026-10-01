@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 const (
@@ -46,6 +47,7 @@ const (
 )
 
 type Config struct {
+	Review     *secret.DonationReview
 	Store      *db.Store
 	OwnerAuth  OwnerFinalTxAuthorizer
 	RoleAuth   RoleFinalTxAuthorizer
@@ -54,12 +56,13 @@ type Config struct {
 }
 
 type Service struct {
-	db         *sql.DB
-	ownerAuth  OwnerFinalTxAuthorizer
-	roleAuth   RoleFinalTxAuthorizer
-	heldRead   AdminHeldReadAuthorizer
-	cursorKeys resources.CursorKeyDeriver
-	now        func() time.Time
+	reviewMaterial *secret.DonationReview
+	db             *sql.DB
+	ownerAuth      OwnerFinalTxAuthorizer
+	roleAuth       RoleFinalTxAuthorizer
+	heldRead       AdminHeldReadAuthorizer
+	cursorKeys     resources.CursorKeyDeriver
+	now            func() time.Time
 }
 
 func New(config Config) (*Service, error) {
@@ -70,7 +73,7 @@ func New(config Config) (*Service, error) {
 		config.Now = time.Now
 	}
 	return &Service{db: config.Store.DB(), ownerAuth: config.OwnerAuth, roleAuth: config.RoleAuth,
-		cursorKeys: config.CursorKeys, now: config.Now}, nil
+		cursorKeys: config.CursorKeys, now: config.Now, reviewMaterial: config.Review}, nil
 }
 
 func (s *Service) nowUnix() (int64, error) {
@@ -193,6 +196,13 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		if err != nil || donationKeyID <= 0 {
 			return Donation{}, ErrInvariant
 		}
+		required, err := s.reviewMaterial.CaptureDonationKey(ctx, tx, donationKeyID, key.id, time.Unix(now, 0))
+		if err != nil {
+			return Donation{}, mapReviewError(err)
+		}
+		if required {
+			autoApprove = false
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE donation_keys SET breakdown_started_at=? WHERE id=?`, now, donationKeyID); err != nil {
 			return Donation{}, err
 		}
@@ -211,7 +221,7 @@ endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`,
 		if err := applyApprovalKeySettingsTx(ctx, tx, donationID, defaultSettings, now); err != nil {
 			return Donation{}, err
 		}
-		result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',review_note='',
+		result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',first_approval_origin='auto',review_note='',
 reviewed_by_user_id=NULL,reviewed_by_role='',reviewed_at=?,updated_at=?
 WHERE id=? AND status='pending' AND revision=1`, now, now, donationID)
 		if err != nil {
@@ -482,7 +492,7 @@ func (s *Service) review(
 		}
 		return roleDonationMutation{}, ErrConflict
 	}
-	if err := reviewDonationTx(ctx, tx, donationID, actorID, string(role), input, now); err != nil {
+	if err := s.reviewDonationTx(ctx, tx, donationID, actorID, string(role), input, now); err != nil {
 		return roleDonationMutation{}, err
 	}
 	value, err := getAdminDonationTx(ctx, tx, donationID, now)
@@ -499,19 +509,26 @@ func (s *Service) review(
 	return out, nil
 }
 
-func reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, actorID int64, role string, input ReviewInput, now int64) error {
-	var status string
+func (s *Service) reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, actorID int64, role string, input ReviewInput, now int64) error {
+	var status, origin string
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT status,revision FROM donations WHERE id=?`, donationID).Scan(&status, &revision); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT status,revision,first_approval_origin FROM donations WHERE id=?`, donationID).Scan(&status, &revision, &origin); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
 		return fmt.Errorf("donation: read review state: %w", err)
 	}
-	if revision != input.ExpectedRevision || status != "pending" && !(status == "approved" && input.Decision == "approve") {
+	if revision != input.ExpectedRevision || status != "pending" && !(status == "approved" && (input.Decision == "approve" || input.Decision == "force_reject")) {
 		return ErrConflict
 	}
-	if input.Decision == "reject" {
-		if status != "pending" {
+	if input.Decision == "reject" || input.Decision == "force_reject" {
+		if input.Decision == "force_reject" {
+			if status != "approved" || origin != "auto" {
+				return ErrConflict
+			}
+			if err := s.reviewMaterial.RequireDonation(ctx, tx, donationID, time.Unix(now, 0)); err != nil {
+				return mapReviewError(err)
+			}
+		} else if status != "pending" {
 			return ErrConflict
 		}
 		if err := clearDonationMembershipsTx(ctx, tx, donationID, "terminated", now); err != nil {
@@ -519,7 +536,7 @@ func reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, actorID int64
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE donations SET status='rejected',revision=revision+1,
 review_note=?,reviewed_by_user_id=?,reviewed_by_role=?,reviewed_at=?,updated_at=?,terminal_at=?
-WHERE id=? AND status='pending' AND revision=?`, input.Reason, actorID, role, now, now, now, donationID, revision)
+WHERE id=? AND status=? AND revision=?`, input.Reason, actorID, role, now, now, now, donationID, status, revision)
 		if err != nil {
 			return fmt.Errorf("donation: reject submission: %w", err)
 		}
@@ -531,14 +548,24 @@ WHERE id=? AND status='pending' AND revision=?`, input.Reason, actorID, role, no
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
-VALUES(?,?,?,?, 'reject',?,?)`, donationID, revision+1, actorID, role, input.Reason, now)
+VALUES(?,?,?,?,?,?,?)`, donationID, revision+1, actorID, role, input.Decision, input.Reason, now)
 		return err
+	}
+
+	if status == "pending" {
+		approvals := make([]secret.ReviewApproval, len(input.KeySettings))
+		for i, setting := range input.KeySettings {
+			approvals[i] = secret.ReviewApproval{DonationKeyID: setting.DonationKeyID, Enabled: setting.Enabled, ExpectedRevision: setting.ExpectedReviewRevision}
+		}
+		if err := s.reviewMaterial.ApproveDonationKeys(ctx, tx, donationID, approvals, time.Unix(now, 0)); err != nil {
+			return mapReviewError(err)
+		}
 	}
 
 	if err := applyApprovalKeySettingsTx(ctx, tx, donationID, input.KeySettings, now); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',revision=revision+1,
+	result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',first_approval_origin=CASE WHEN status='pending' THEN 'manual' ELSE first_approval_origin END,revision=revision+1,
 review_note=?,reviewed_by_user_id=?,reviewed_by_role=?,reviewed_at=?,updated_at=?,terminal_at=NULL
 WHERE id=? AND status=? AND revision=?`, input.Reason, actorID, role, now, now, donationID, status, revision)
 	if err != nil {
@@ -1251,11 +1278,11 @@ func validMutation(input resources.ControlMutation, method, route string, ids ..
 }
 
 func validReviewInput(input ReviewInput) bool {
-	if input.ExpectedRevision <= 0 || !validDonationText(input.Reason) || input.Decision != "approve" && input.Decision != "reject" {
+	if input.ExpectedRevision <= 0 || !validReviewReason(input.Reason) || input.Decision != "approve" && input.Decision != "reject" && input.Decision != "force_reject" {
 		return false
 	}
-	if input.Decision == "reject" {
-		return len(input.KeySettings) == 0
+	if input.Decision == "reject" || input.Decision == "force_reject" {
+		return len(input.KeySettings) == 0 && (input.Decision != "force_reject" || strings.TrimSpace(input.Reason) != "")
 	}
 	return len(input.KeySettings) >= 1 && len(input.KeySettings) <= maxDonationKeys
 }
@@ -1503,3 +1530,28 @@ func boolInt(value bool) int {
 }
 
 func newBigInt(value int64) *big.Int { return big.NewInt(value) }
+
+func mapReviewError(err error) error {
+	if errors.Is(err, secret.ErrReviewConflict) {
+		return ErrConflict
+	}
+	if errors.Is(err, secret.ErrReviewMaterial) {
+		return ErrReviewMaterialUnavailable
+	}
+	if strings.Contains(err.Error(), "review requirement capacity exhausted") {
+		return ErrResourceLimit
+	}
+	return err
+}
+
+func validReviewReason(value string) bool {
+	if !utf8.ValidString(value) || utf8.RuneCountInString(value) > maxDonationTextRunes {
+		return false
+	}
+	for _, r := range value {
+		if r != '\n' && (r < 0x20 || r >= 0x7f && r <= 0x9f) {
+			return false
+		}
+	}
+	return true
+}

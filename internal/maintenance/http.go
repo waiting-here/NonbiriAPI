@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
@@ -354,29 +354,17 @@ func validReadRequest(request *http.Request) bool {
 }
 
 func decodeHTTPMutation(request *http.Request, destination any) error {
-	if request == nil || request.URL == nil || request.URL.ForceQuery || request.URL.RawQuery != "" || destination == nil {
+	if !httpapi.EmptyQuery(request, true, true) || destination == nil {
 		return ErrInvalidMutation
 	}
-	reader := http.MaxBytesReader(nil, request.Body, maxHTTPBodyBytes)
-	body, err := io.ReadAll(reader)
+	body, err := httpapi.ReadJSON(nil, request, destination, httpapi.BodyOptions{MaxBytes: maxHTTPBodyBytes, Validate: strictjson.ValidateObject})
+	if errors.Is(err, httpapi.ErrTooLarge) {
+		return errHTTPPayloadTooLarge
+	}
 	if err != nil {
-		var maximum *http.MaxBytesError
-		if errors.As(err, &maximum) {
-			return errHTTPPayloadTooLarge
-		}
 		return ErrInvalidMutation
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		return ErrInvalidMutation
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		return ErrInvalidMutation
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return ErrInvalidMutation
-	}
+	clear(body)
 	return nil
 }
 

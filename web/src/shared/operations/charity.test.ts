@@ -80,9 +80,15 @@ describe.each([normalizeAdminDonation, normalizeStewardDonation])(
       'rejects contradictory %s reviews',
       (status) => {
         const review = { decision: 'reject', reason: 'rejected', reviewed_at: 1 };
-        expect(() => normalize({ ...common, owner: null, status, review_result: review })).toThrow(
-          /review/i,
-        );
+        if (status === 'rejected') {
+          expect(
+            normalize({ ...common, owner: null, status, review_result: review }).review_result,
+          ).toEqual(review);
+        } else {
+          expect(() =>
+            normalize({ ...common, owner: null, status, review_result: review }),
+          ).toThrow(/review/i);
+        }
         expect(() =>
           normalize({ ...common, owner: null, status, reviewer: { role: 'admin', user_id: '2' } }),
         ).toThrow(/review/i);
@@ -535,10 +541,7 @@ describe('charity model wire', () => {
       /candidate source types/i,
     );
     expect(() =>
-      normalizeCharityBindingCandidate(
-        candidateDTO(['catalogue-v3']),
-        'candidate',
-      ),
+      normalizeCharityBindingCandidate(candidateDTO(['catalogue-v3']), 'candidate'),
     ).toThrow(/candidate source types/i);
   });
 

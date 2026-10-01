@@ -150,7 +150,7 @@ describe("version 2 behavioral boundaries", () => {
   });
   it("rejects unsupported rules in both level parsing and explicit commitments", () => {
     const item = suite.cases[0], seed = decodeHex(item.seed);
-    for (const [engineVersion, scoringVersion] of [[0, 1], [3, 1], [2, 0], [2, 2]]) {
+    for (const [engineVersion, scoringVersion] of [[0, 1], [4, 1], [2, 0], [2, 2]]) {
       expect(() => seedCommitForVersion("challenge", "period", "node", item.result.content_hash, engineVersion, scoringVersion, seed)).toThrow("unsupported");
       expect(() => parseLevel(JSON.stringify({ ...item.level, engine_version: engineVersion, scoring_version: scoringVersion }))).toThrow("unsupported");
     }

@@ -14,7 +14,7 @@ const fishRows = (count, x1, x2, y1, gap, heading = 0) => Array.from({ length: c
   id: index + 1, x: px(index % 2 === 0 ? x1 : x2), y: px(y1 + Math.floor(index / 2) * gap), heading,
 }));
 const base = (fish, duration_seconds, speed_pixels_per_second, thresholds) => ({
-  format: 'nonbiri-fatfish-level', format_version: 1, engine_version: 2, scoring_version: 1,
+  format: 'nonbiri-fatfish-level', format_version: 1, engine_version: 3, scoring_version: 1,
   duration_seconds, speed_pixels_per_second, thresholds,
   fish, tools: [], solids: [], hazards: [], bowls: [], switches: [], gates: [], directions: [],
 });

@@ -43,6 +43,9 @@ import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { TimeInput } from './TimeInput';
 import { TimeContextNotice } from './TimeContext';
+import { RolePolicyEditor } from './RolePolicyEditor';
+import { CharityRolePolicyForm } from './CharityRolePolicyForm';
+import { buildRolePolicy, draftFromRolePolicy, type RolePolicyDraft } from '@shared/rolePolicy';
 import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import {
@@ -76,6 +79,26 @@ import { amount } from '@shared/operations/wire';
 import '@shared/operations/operations.css';
 
 type ManagedDonation = AdminDonation | StewardDonation;
+const approvalOriginCopy = {
+  auto: 'common.donationReview.origin.auto',
+  manual: 'common.donationReview.origin.manual',
+  unknown: 'common.donationReview.origin.unknown',
+} as const;
+const forceUnavailableCopy: Record<string, string> = {
+  not_automatically_approved: 'common.donationReview.unavailable.manual',
+  approval_origin_unknown: 'common.donationReview.unavailable.unknown',
+  review_material_unavailable: 'common.donationReview.materialUnavailable',
+  not_approved: 'common.donationReview.unavailable.notApproved',
+};
+type DonationReviewInput = {
+  revision: string;
+  decision: 'approve' | 'reject' | 'force_reject';
+  reason: string;
+  settings: Record<
+    string,
+    ReturnType<typeof keySettingsBody> & { expected_review_revision?: string }
+  >;
+};
 
 function snapshotPage<T>(items: readonly T[], requestedPage: string, pageSize: PageSize) {
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -572,8 +595,7 @@ function DonationKeyEditor({
   return (
     <section className="ops-subcard ops-unframed donation-key-editor">
       <h4>
-        {t('common.operations.charity.keyHeading', {
-          id: item.id,
+        {t('common.donationReview.memberHeading', {
           head: item.display_head,
           tail: item.display_tail,
         })}
@@ -816,45 +838,37 @@ function DonationReview({
     scopeKey: `${accountId}:${item.id}`,
   });
   const reviewPage = snapshotPage(item.keys, reviewPager.page, reviewPager.pageSize);
-  const [decision, setDecision] = useState<'approve' | 'reject'>('approve');
+  const [decision, setDecision] = useState<DonationReviewInput['decision']>(
+    item.status === 'approved' ? 'force_reject' : 'approve',
+  );
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [forceConfirmation, setForceConfirmation] = useState(false);
   const [keys, setKeys] = useState<Record<string, KeySettingsDraft>>(() =>
     Object.fromEntries(item.keys.map((key) => [key.id, keySettingsDraft(key)])),
   );
-  const review = useRetainedOperation<
-    {
-      decision: 'approve' | 'reject';
-      reason: string;
-      settings: Record<string, ReturnType<typeof keySettingsBody>>;
-    },
-    ManagedDonation
-  >(
-    (
-      input: {
-        decision: 'approve' | 'reject';
-        reason: string;
-        settings: Record<string, ReturnType<typeof keySettingsBody>>;
-      },
-      key,
-    ) =>
+  const review = useRetainedOperation<DonationReviewInput, ManagedDonation>(
+    (input, key) =>
       reviewManagedDonation(
         role,
         item.id,
-        input.decision === 'reject'
-          ? { decision: 'reject', expected_revision: item.revision, reason: input.reason }
+        input.decision !== 'approve'
+          ? { decision: input.decision, expected_revision: input.revision, reason: input.reason }
           : {
               decision: 'approve',
-              expected_revision: item.revision,
+              expected_revision: input.revision,
               reason: input.reason,
-              key_settings: item.keys.map((entry) => ({
-                donation_key_id: entry.id,
-                ...input.settings[entry.id],
+              key_settings: Object.entries(input.settings).map(([id, settings]) => ({
+                donation_key_id: id,
+                ...settings,
               })),
             },
         key,
       ),
-    refresh,
+    async (_input, _error, context) => {
+      context.assertCurrent();
+      return refresh();
+    },
     charityKeys.root(role),
   );
   useEffect(() => {
@@ -862,11 +876,21 @@ function DonationReview({
     return () => onPendingChange(false);
   }, [onPendingChange, review.isPending]);
   const owner = item.owner;
-  let validationError: KeySettingsValidation | 'reviewReason' | 'completeSettings' | null = null;
+  let validationError:
+    KeySettingsValidation | 'reviewReason' | 'completeSettings' | 'reviewMaterial' | null = null;
   if (!validText(reason.trim(), 1_024, true)) {
     validationError = 'reviewReason';
   } else if (decision === 'approve') {
-    if (item.keys.length === 0 || item.keys.some((entry) => !keys[entry.id])) {
+    if (
+      item.keys.some(
+        (entry) =>
+          keys[entry.id]?.enabled &&
+          entry.review?.required &&
+          (!entry.review.material_available || !entry.review.revision),
+      )
+    ) {
+      validationError = 'reviewMaterial';
+    } else if (item.keys.length === 0 || item.keys.some((entry) => !keys[entry.id])) {
       validationError = 'completeSettings';
     } else {
       validationError =
@@ -891,7 +915,7 @@ function DonationReview({
   return (
     <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
       <Card>
-        <h3>{t(charityCopyKey(role, 'donationNumber'), { id: item.id })}</h3>
+        <h3>{t('common.donationReview.title')}</h3>
         <DonationHandlingControl
           donationID={item.id}
           role={role}
@@ -907,14 +931,14 @@ function DonationReview({
             }
             label={t(charityStatusKey(role, item.status))}
           />
-          <span>{t('common.operations.charity.revision', { revision: item.revision })}</span>
+          {item.status !== 'pending' ? (
+            <span>{t(approvalOriginCopy[item.first_approval_origin ?? 'unknown'])}</span>
+          ) : null}
         </div>
         <dl className="ops-kv">
           <dt>{t('common.operations.charity.owner')}</dt>
           <dd>
-            {owner
-              ? `${owner.display_name} · ${owner.user_id}`
-              : t('common.operations.charity.deidentified')}
+            {owner ? owner.display_name : t('common.operations.charity.deidentified')}
             {owner
               ? ` · ${owner.discord_id ?? t('common.operations.charity.discordDetached')}`
               : ''}
@@ -947,10 +971,32 @@ function DonationReview({
           </dd>
         </dl>
       </Card>
-      {item.status === 'pending' ? (
+      {item.status === 'approved' &&
+      !item.can_force_reject &&
+      item.force_reject_unavailable_reason ? (
+        <p role="note">
+          {t(
+            forceUnavailableCopy[item.force_reject_unavailable_reason] ??
+              'common.donationReview.unavailable.unknown',
+          )}
+        </p>
+      ) : null}
+      {item.status === 'pending' || item.can_force_reject ? (
         <Card>
-          <h3>{t('common.operations.charity.pendingReviewTitle')}</h3>
-          <p>{t('common.operations.charity.pendingReviewBody')}</p>
+          <h3>
+            {t(
+              item.status === 'pending'
+                ? 'common.operations.charity.pendingReviewTitle'
+                : 'common.donationReview.forceTitle',
+            )}
+          </h3>
+          <p>
+            {t(
+              item.status === 'pending'
+                ? 'common.operations.charity.pendingReviewBody'
+                : 'common.donationReview.forceHelp',
+            )}
+          </p>
           <div className="ops-field-grid">
             <label>
               <span>{t('common.operations.charity.decisionLabel')}</span>
@@ -961,8 +1007,16 @@ function DonationReview({
                   setConfirmed(false);
                 }}
               >
-                <option value="approve">{t('common.operations.charity.decision.approve')}</option>
-                <option value="reject">{t('common.operations.charity.decision.reject')}</option>
+                {item.status === 'pending' ? (
+                  <>
+                    <option value="approve">
+                      {t('common.operations.charity.decision.approve')}
+                    </option>
+                    <option value="reject">{t('common.operations.charity.decision.reject')}</option>
+                  </>
+                ) : (
+                  <option value="force_reject">{t('common.donationReview.forceTitle')}</option>
+                )}
               </select>
             </label>
             <label>
@@ -979,6 +1033,15 @@ function DonationReview({
                     <h4>
                       {entry.display_head}…{entry.display_tail} · {entry.safe_source.base_url}
                     </h4>
+                    {entry.review?.required ? (
+                      <p role="note">
+                        {t(
+                          entry.review.material_available
+                            ? 'common.donationReview.required'
+                            : 'common.donationReview.materialUnavailable',
+                        )}
+                      </p>
+                    ) : null}
                     <KeyLimitSummary
                       concurrency={entry.max_concurrency}
                       rpm={entry.max_rpm}
@@ -1044,25 +1107,56 @@ function DonationReview({
               />
             </div>
           ) : null}
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(event) => setConfirmed(event.target.checked)}
-            />
-            <span>{t('common.operations.charity.confirmReview')}</span>
-          </label>
+          {decision !== 'force_reject' ? (
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              <span>{t('common.operations.charity.confirmReview')}</span>
+            </label>
+          ) : null}
           {validationError && (reason.length > 0 || confirmed) ? (
             <p className="field-error" role="alert">
-              {t(`common.operations.charity.validation.${validationError}`)}
+              {t(
+                validationError === 'reviewMaterial'
+                  ? 'common.donationReview.materialUnavailable'
+                  : `common.operations.charity.validation.${validationError}`,
+              )}
             </p>
           ) : null}
           {review.error ? <ErrorState error={review.error} /> : null}
+          {review.outcome === 'unknown' ? (
+            <p role="status">{t('common.donationReview.unknown')}</p>
+          ) : null}
+          {review.outcome === 'unknown' && review.variables ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => review.variables && review.mutate(review.variables)}
+            >
+              {t('common.donationReview.retrySame')}
+            </button>
+          ) : null}
+          {review.refreshError ? (
+            <ErrorState error={review.refreshError} onRetry={() => void review.refresh()} />
+          ) : null}
           <button
-            className={decision === 'reject' ? 'btn btn-danger' : 'btn btn-primary'}
+            className={decision !== 'approve' ? 'btn btn-danger' : 'btn btn-primary'}
             type="button"
-            disabled={!reason.trim() || !confirmed || review.isPending || Boolean(validationError)}
+            disabled={
+              !reason.trim() ||
+              (decision !== 'force_reject' && !confirmed) ||
+              review.isPending ||
+              review.outcome === 'unknown' ||
+              Boolean(validationError)
+            }
             onClick={() => {
+              if (decision === 'force_reject') {
+                setForceConfirmation(true);
+                return;
+              }
               if (
                 !confirmed ||
                 !validText(reason.trim(), 1024, true) ||
@@ -1075,19 +1169,69 @@ function DonationReview({
               )
                 return;
               review.mutate({
+                revision: item.revision,
                 decision,
                 reason: reason.trim(),
                 settings:
                   decision === 'approve'
                     ? Object.fromEntries(
-                        Object.entries(keys).map(([id, value]) => [id, keySettingsBody(value)]),
+                        item.keys.map((entry) => [
+                          entry.id,
+                          {
+                            ...keySettingsBody(keys[entry.id]),
+                            ...(keys[entry.id].enabled &&
+                            entry.review?.required &&
+                            entry.review.revision
+                              ? { expected_review_revision: entry.review.revision }
+                              : {}),
+                          },
+                        ]),
                       )
                     : {},
               });
             }}
           >
-            {t(charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'))}
+            {t(
+              decision === 'force_reject'
+                ? 'common.donationReview.forceTitle'
+                : charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'),
+            )}
           </button>
+          <ConfirmDialog
+            open={forceConfirmation}
+            title={t('common.donationReview.forceTitle')}
+            description={
+              <>
+                <p>
+                  {owner?.display_name ?? t('common.operations.charity.deidentified')} ·{' '}
+                  {item.description}
+                </p>
+                <p>{t('common.donationReview.forceHelp')}</p>
+                <p>
+                  {t('common.operations.charity.reason')}: {reason.trim()}
+                </p>
+              </>
+            }
+            confirmLabel={t('common.donationReview.forceTitle')}
+            confirmDisabled={
+              Boolean(validationError) || !item.can_force_reject || review.outcome === 'unknown'
+            }
+            busy={review.isPending}
+            danger
+            onCancel={() => setForceConfirmation(false)}
+            onConfirm={() => {
+              if (validationError || !item.can_force_reject || review.outcome === 'unknown') return;
+              review.mutate(
+                {
+                  revision: item.revision,
+                  decision: 'force_reject',
+                  reason: reason.trim(),
+                  settings: {},
+                },
+                { onSuccess: () => setForceConfirmation(false) },
+              );
+            }}
+          />
         </Card>
       ) : null}
     </fieldset>
@@ -1177,7 +1321,7 @@ function DonationKeyPages({
           onCapabilityLoss={onCapabilityLoss}
           choices={keys.data.data.map((key) => ({
             id: key.id,
-            label: `${key.id} · ${key.display_head}…${key.display_tail}`,
+            label: `${key.display_head}…${key.display_tail}`,
             target: {
               donation_id: item.id,
               key_id: key.id,
@@ -1226,6 +1370,7 @@ function DonationKeyPages({
                   accountId={accountId}
                   donationId={item.id}
                   keyId={key.id}
+                  editable={key.charity_state !== 'ended' && key.charity_state !== 'expired'}
                   onCapabilityLoss={onCapabilityLoss}
                 />
                 <DonationDiscoveryControl
@@ -1479,7 +1624,7 @@ function DonationsPanel({
             onCapabilityLoss={onCapabilityLoss}
             choices={list.data.data.map((item) => ({
               id: item.id,
-              label: `${item.id} · ${item.description}`,
+              label: item.description || t('common.operations.charity.noDescription'),
               target: { view: 'donation_keys', donation_id: item.id },
             }))}
           />
@@ -1499,7 +1644,6 @@ function DonationsPanel({
               <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
-                    <th>{t('common.itemId')}</th>
                     <th>{t('common.operations.charity.description')}</th>
                     <th>{t('common.operations.charity.owner')}</th>
                     <th>{t('common.status')}</th>
@@ -1511,9 +1655,6 @@ function DonationsPanel({
                 <tbody>
                   {list.data.data.map((item) => (
                     <tr key={item.id}>
-                      <td className="ops-id" data-label={t('common.itemId')}>
-                        {item.id}
-                      </td>
                       <td
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.description')}
@@ -1521,6 +1662,10 @@ function DonationsPanel({
                         <MarkdownText>
                           {item.description || t('common.operations.charity.noDescription')}
                         </MarkdownText>
+                        <details>
+                          <summary>{t('common.itemId')}</summary>
+                          {item.id}
+                        </details>
                         <ul className="ops-source-preview">
                           {item.sources.map((source) => (
                             <li
@@ -1630,6 +1775,7 @@ function DonationsPanel({
 }
 
 interface ModelDraft {
+  rolePolicy: RolePolicyDraft;
   isMainstream: boolean;
   excluded: string;
   routeStrategy: CharityModel['route_strategy'];
@@ -1660,6 +1806,7 @@ const zeroPrices = (): TokenPrices => ({
 
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
+    rolePolicy: draftFromRolePolicy(model?.role_policy),
     isMainstream: model?.is_mainstream ?? false,
     excluded: (model?.excluded_request_fields ?? []).join(', '),
     routeStrategy: model?.route_strategy ?? 'expiry_weighted',
@@ -1690,7 +1837,10 @@ function modelBody(
   const start = timeDraftValue(draft.discountStart);
   const end = timeDraftValue(draft.discountEnd);
   if (start === undefined || end === undefined) throw new Error('Time is not ready');
+  const rolePolicy = buildRolePolicy(draft.rolePolicy);
+  if (rolePolicy.error) throw new Error('Role fields are not ready');
   const body = {
+    role_policy: rolePolicy.policy,
     is_mainstream: draft.isMainstream,
     excluded_request_fields: excludedFields(draft.excluded) ?? [],
     route_strategy: draft.routeStrategy,
@@ -1719,6 +1869,7 @@ function modelBody(
 }
 
 type ModelValidation =
+  | 'rolePolicy'
   | 'excludedFields'
   | 'modelIdentity'
   | 'modelLevels'
@@ -1730,6 +1881,7 @@ type ModelValidation =
   | 'discountDates';
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
+  if (buildRolePolicy(draft.rolePolicy).error) return 'rolePolicy';
   if (
     !Number.isInteger(draft.affinityTTLSeconds) ||
     draft.affinityTTLSeconds < 1 ||
@@ -1808,7 +1960,7 @@ function ModelForm({
     { body: ReturnType<typeof modelBody>; revision?: string },
     CharityModel
   >(
-    async (input, key) => {
+    async (input, key, context) => {
       const result = model
         ? await patchManagedCharityModel(
             role,
@@ -1817,7 +1969,7 @@ function ModelForm({
             key,
           )
         : await createManagedCharityModel(role, input.body, key);
-      if (model) setBaseRevision(result.revision);
+      if (model) context.commit(() => setBaseRevision(result.revision));
       return result;
     },
     refresh,
@@ -2041,6 +2193,15 @@ function ModelForm({
           </label>
         </div>
       </fieldset>
+      <RolePolicyEditor
+        value={draft.rolePolicy}
+        onChange={(rolePolicy) => {
+          if (save.isPending || remove.isPending || unknownSave) return;
+          setDraft((current) => ({ ...current, rolePolicy }));
+          save.reset();
+        }}
+        disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+      />
       <fieldset className="ops-form-section">
         <legend>{copy.pricingRewards}</legend>
         <div className="ops-field-grid">
@@ -2215,7 +2376,7 @@ function ModelForm({
       {model && model.revision !== baseRevision ? (
         <p role="status">{t('common.operations.charity.modelChanged')}</p>
       ) : null}
-      {validationError ? (
+      {validationError && validationError !== 'rolePolicy' ? (
         <p className="field-error" role="alert">
           {validationError === 'excludedFields'
             ? copy.excludedInvalid
@@ -2907,7 +3068,14 @@ function ModelsPanel({
               className="ops-stack ops-unframed"
               disabled={detail.isFetching || models.isFetching || Boolean(models.error)}
             >
-              {!trainee ? (
+              {trainee ? (
+                <CharityRolePolicyForm
+                  key={`roles:${selected.id}`}
+                  model={selected}
+                  refresh={refresh}
+                  onCapabilityLoss={onCapabilityLoss}
+                />
+              ) : (
                 <ModelForm
                   key={`model:${selected.id}`}
                   role={role}
@@ -2916,7 +3084,7 @@ function ModelsPanel({
                   onDeleted={() => setSelected('')}
                   onCapabilityLoss={onCapabilityLoss}
                 />
-              ) : null}
+              )}
               {!trainee ? (
                 <RequestAdaptationEditor
                   key={`${accountId}:${role}:${selected.id}`}
@@ -3161,6 +3329,9 @@ function ScopedKeyBrowser({
               accountId={accountId}
               donationId={detail.data.donation_id}
               keyId={detail.data.key_id}
+              editable={
+                detail.data.charity_state !== 'ended' && detail.data.charity_state !== 'expired'
+              }
               onCapabilityLoss={onCapabilityLoss}
             />
             <RecurringLimitsDisclosure

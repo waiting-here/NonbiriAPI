@@ -1,15 +1,13 @@
 package resources
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
@@ -30,6 +28,7 @@ func RegisterRoutes(registrar UserRouteRegistrar, repository *Repository) error 
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
+		{http.MethodPost, routeOperationStatus, api.resourceOperationStatus},
 		{http.MethodGet, routeEndpoints, api.listEndpoints},
 		{http.MethodPost, routeEndpoints, api.createEndpoint},
 		{http.MethodGet, routeEndpointCreateOptions, api.endpointCreateOptions},
@@ -69,66 +68,23 @@ func RegisterRoutes(registrar UserRouteRegistrar, repository *Repository) error 
 	return nil
 }
 
-type requestField[T any] struct {
-	Value T
-	Set   bool
-}
-
-func (field *requestField[T]) UnmarshalJSON(data []byte) error {
-	if field == nil || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return errors.New("null is not allowed")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&field.Value); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	field.Set = true
-	return nil
-}
+type requestField[T any] = httpapi.RequestField[T]
 
 func decodeStrictObject[T any](writer http.ResponseWriter, request *http.Request, destination *T) ([]byte, bool) {
-	if request == nil || request.Body == nil || destination == nil {
-		writeResourceError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	limited := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
+	body, err := httpapi.ReadJSON(writer, request, destination, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: validateResourceJSONObject})
 	if err != nil {
-		var maxBytes *http.MaxBytesError
-		if errors.As(err, &maxBytes) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeResourceError(writer, ErrInvalidRequest)
 		}
 		return nil, false
 	}
-	if len(body) == 0 || validateResourceJSONObject(body) != nil {
-		writeResourceError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		writeResourceError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		writeResourceError(writer, ErrInvalidRequest)
-		return nil, false
-	}
 	return body, true
 }
 
 func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
-	if request == nil || request.Body == nil {
-		return true
-	}
-	body, err := io.ReadAll(io.LimitReader(request.Body, 1))
-	if err != nil || len(body) != 0 {
+	if !httpapi.NoBody(request) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return false
 	}
@@ -149,24 +105,11 @@ func parsePathID(writer http.ResponseWriter, request *http.Request, name string)
 }
 
 func exactQuery(values url.Values, allowed ...string) bool {
-	allow := make(map[string]struct{}, len(allowed))
-	for _, key := range allowed {
-		allow[key] = struct{}{}
-	}
-	for key, entries := range values {
-		if _, ok := allow[key]; !ok || len(entries) != 1 {
-			return false
-		}
-	}
-	return true
+	return httpapi.ExactQuery(values, allowed...)
 }
 
 func requestQuery(writer http.ResponseWriter, request *http.Request) (url.Values, bool) {
-	if request == nil || request.URL == nil {
-		writeResourceError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	values, err := url.ParseQuery(request.URL.RawQuery)
+	values, err := httpapi.ParseQuery(request, false)
 	if err != nil {
 		writeResourceError(writer, ErrInvalidRequest)
 		return nil, false
@@ -284,28 +227,17 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 }
 
 func writeResourceError(writer http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrInvalidRequest):
-		httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
-	case errors.Is(err, ErrUnauthorized):
-		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
-	case errors.Is(err, ErrForbidden):
-		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "access denied"))
-	case errors.Is(err, ErrMaintenance):
-		httperr.WriteError(writer, httperr.New(httperr.CodeMaintenance, "maintenance in progress"))
-	case errors.Is(err, ErrNotFound):
-		httperr.WriteError(writer, httperr.New(httperr.CodeNotFound, "not found"))
-	case errors.Is(err, ErrConflict):
-		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "request conflicts with current state"))
-	case errors.Is(err, ErrResourceLocked):
-		httperr.WriteError(writer, httperr.New(httperr.CodeResourceLocked, "resource is locked"))
-	case errors.Is(err, ErrResourceLimit):
-		httperr.WriteError(writer, httperr.New(httperr.CodeResourceLimitExceeded, "resource limit exceeded"))
-	case errors.Is(err, errDiscoveryWorkerUnavailable):
-		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
-	default:
-		httperr.WriteError(writer, httperr.New(httperr.CodeInternal, "internal error"))
-	}
+	httperr.WriteMapped(writer, err,
+		httperr.Mapping{Err: ErrInvalidRequest, Code: httperr.CodeInvalidRequest, Message: "invalid request"},
+		httperr.Mapping{Err: ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
+		httperr.Mapping{Err: ErrForbidden, Code: httperr.CodeForbidden, Message: "access denied"},
+		httperr.Mapping{Err: ErrMaintenance, Code: httperr.CodeMaintenance, Message: "maintenance in progress"},
+		httperr.Mapping{Err: ErrNotFound, Code: httperr.CodeNotFound, Message: "not found"},
+		httperr.Mapping{Err: ErrConflict, Code: httperr.CodeConflict, Message: "request conflicts with current state"},
+		httperr.Mapping{Err: ErrResourceLocked, Code: httperr.CodeResourceLocked, Message: "resource is locked"},
+		httperr.Mapping{Err: ErrResourceLimit, Code: httperr.CodeResourceLimitExceeded, Message: "resource limit exceeded"},
+		httperr.Mapping{Err: errDiscoveryWorkerUnavailable, Code: httperr.CodeServiceUnavailable, Message: "service unavailable"},
+	)
 }
 
 func canonicalExpectedRevision(value requestField[string]) (int64, bool) {

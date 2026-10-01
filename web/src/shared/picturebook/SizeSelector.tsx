@@ -1,7 +1,16 @@
 import { useId } from 'react';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { usePictureBookText } from './copy';
 import type { ParameterValues } from './parameters';
-import type { SizeCapability, SizeCombination } from './capabilities';
+import type { SizeCapability, SizeCombination, SizePrice } from './capabilities';
+
+const dimensionCopy = {
+  exact: 'common.picturebook.dimensions.exact',
+  select: 'common.picturebook.dimensions.select',
+  empty: 'common.picturebook.dimensions.empty',
+  reselect: 'common.picturebook.dimensions.reselect',
+  pairHelp: 'common.picturebook.dimensions.pairHelp',
+} as const;
 
 function rowValues(row: SizeCombination): ParameterValues {
   return {
@@ -13,14 +22,17 @@ function rowValues(row: SizeCombination): ParameterValues {
 
 export function SizeSelector({
   capability,
+  exactSizes = null,
   values,
   onChange,
 }: {
   readonly capability: SizeCapability;
+  readonly exactSizes?: SizePrice[] | null;
   readonly values: ParameterValues;
   readonly onChange: (next: ParameterValues) => void;
 }) {
   const t = usePictureBookText();
+  const { t: dimensions } = useRegisteredCopy(dimensionCopy);
   const id = useId();
   const rows = capability.combinations ?? [];
   const auto = values.size === 'auto';
@@ -38,6 +50,10 @@ export function SizeSelector({
   ];
   const choose = (row: SizeCombination) => onChange(rowValues(row));
   const explicit = () => {
+    if (exactSizes !== null) {
+      onChange({ aspect_ratio: '', resolution: '', size: '' });
+      return;
+    }
     const first = rows[0];
     if (first) choose(first);
     else if (capability.width && capability.height)
@@ -64,7 +80,44 @@ export function SizeSelector({
           {t('自动选择尺寸', 'Choose size automatically')}
         </label>
       ) : null}
-      {!auto && capability.mode === 'width_height' && capability.width && capability.height ? (
+      {!auto && exactSizes !== null ? (
+        <div className="picturebook-field">
+          <label htmlFor={id + 'pair'}>{dimensions('exact')}</label>
+          <select
+            id={id + 'pair'}
+            required
+            disabled={exactSizes.length === 0}
+            value={
+              exactSizes.some((row) => `${row.width}x${row.height}` === values.size)
+                ? values.size
+                : ''
+            }
+            aria-describedby={id + 'pair-help'}
+            onChange={(event) =>
+              onChange({ aspect_ratio: '', resolution: '', size: event.target.value })
+            }
+          >
+            <option value="">{dimensions('select')}</option>
+            {exactSizes.map((row) => (
+              <option key={`${row.width}x${row.height}`} value={`${row.width}x${row.height}`}>
+                {row.width} × {row.height} px
+              </option>
+            ))}
+          </select>
+          <p id={id + 'pair-help'} role="status">
+            {exactSizes.length === 0
+              ? dimensions('empty')
+              : !exactSizes.some((row) => `${row.width}x${row.height}` === values.size)
+                ? dimensions('reselect')
+                : dimensions('pairHelp')}
+          </p>
+        </div>
+      ) : null}
+      {!auto &&
+      exactSizes === null &&
+      capability.mode === 'width_height' &&
+      capability.width &&
+      capability.height ? (
         <div className="picturebook-dimensions">
           {(['width', 'height'] as const).map((axis) => {
             const range = capability[axis]!;

@@ -246,6 +246,8 @@ func publishedGovernanceDefaults(t *testing.T, database *sql.DB, earliest, lates
 		`SELECT count(*) FROM risk_audit_config WHERE threshold_percent=80 AND consecutive_minutes=5 AND shared_ip_hours=24 AND shared_ip_users=3`:               1,
 		`SELECT count(*) FROM site_config WHERE key LIKE 'legal_%_override_%' AND value<>''`:                                                                     4,
 		`SELECT count(*) FROM site_config a JOIN site_config b ON a.updated_at=b.updated_at WHERE a.key='level_display_name_5' AND b.key='level_display_name_6'`: 1,
+		`SELECT count(*) FROM request_source_facts`:                                                            0,
+		`SELECT count(*) FROM sqlite_sequence WHERE name='request_source_facts' AND seq=0`:                     1,
 		`SELECT count(*) FROM risk_client_rules`:                                                               0,
 		`SELECT count(*) FROM site_config WHERE key='level_display_name_5' AND value='见习协管'`:                   1,
 		`SELECT count(*) FROM site_config WHERE key='request_error_body_budget_mib' AND value='1024'`:          1,
@@ -336,6 +338,11 @@ func publishedRetainedImages(t *testing.T, database *sql.DB, prior map[string]re
 		}
 		if table == "sqlite_sequence" {
 			query += " WHERE name<>'credit_accounts'"
+			if prior != nil {
+				// The source has no request-source allocator. Rebuilding its
+				// newly introduced empty table creates exactly this zero row.
+				query += " AND NOT (name='request_source_facts' AND seq=0)"
+			}
 		}
 		if table == "site_config" && prior != nil {
 			marks := make([]string, len(prior[table].Keys))
@@ -383,4 +390,35 @@ func publishedRetainedImages(t *testing.T, database *sql.DB, prior map[string]re
 		out[table] = retainedTableImage{Columns: columns, Keys: keys, Rows: len(encoded), Digest: sha256.Sum256([]byte(strings.Join(encoded, "\n")))}
 	}
 	return out
+}
+
+func TestPublishedSequenceProjectionKeepsHistoricalAllocators(t *testing.T) {
+	database, err := openSQLite(bootstrapTestPath(t, "sequence-projection.sqlite"), "rwc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	hostileMustExec(t, database, `CREATE TABLE historical_rows(id INTEGER PRIMARY KEY AUTOINCREMENT)`)
+	hostileMustExec(t, database, `INSERT INTO historical_rows(id) VALUES(77)`)
+	hostileMustExec(t, database, `DELETE FROM historical_rows`)
+	before := publishedRetainedImages(t, database, nil)
+	hostileMustExec(t, database, `CREATE TABLE request_source_facts(source_id INTEGER PRIMARY KEY AUTOINCREMENT)`)
+	hostileMustExec(t, database, `INSERT INTO request_source_facts SELECT id FROM historical_rows`)
+	publishedScalar(t, database, `SELECT count(*) FROM sqlite_sequence WHERE name='request_source_facts' AND seq=0`, 1)
+	if after := publishedRetainedImages(t, database, before); !reflect.DeepEqual(after, before) {
+		t.Fatal("empty new source allocator changed the historical projection")
+	}
+	for _, test := range []struct{ name, change, restore string }{
+		{"historical_high_water", `UPDATE sqlite_sequence SET seq=78 WHERE name='historical_rows'`, `UPDATE sqlite_sequence SET seq=77 WHERE name='historical_rows'`},
+		{"nonzero_new_allocator", `UPDATE sqlite_sequence SET seq=1 WHERE name='request_source_facts'`, `UPDATE sqlite_sequence SET seq=0 WHERE name='request_source_facts'`},
+		{"unexpected_allocator", `INSERT INTO sqlite_sequence(name,seq) VALUES('unexpected',0)`, `DELETE FROM sqlite_sequence WHERE name='unexpected'`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			hostileMustExec(t, database, test.change)
+			if after := publishedRetainedImages(t, database, before); reflect.DeepEqual(after["sqlite_sequence"], before["sqlite_sequence"]) {
+				t.Fatal("unexpected allocator mutation disappeared from the projection")
+			}
+			hostileMustExec(t, database, test.restore)
+		})
+	}
 }

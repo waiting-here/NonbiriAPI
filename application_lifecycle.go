@@ -125,6 +125,9 @@ func (a *application) beginShutdown() {
 		a.setClosePhase("admission")
 		go func() {
 			defer close(a.shutdownDone)
+			if a.automation != nil {
+				_ = a.automation.Close()
+			}
 			if a.accountEvents != nil {
 				_ = a.accountEvents.Close()
 			}

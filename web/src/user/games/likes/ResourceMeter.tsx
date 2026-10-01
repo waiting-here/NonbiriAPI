@@ -1,7 +1,6 @@
 import { interpolate } from './motion';
 import { useDuelText } from '../common/duel/copy';
 import type { ResourceShortage } from './shortage';
-
 export function ResourceMeter({
   label,
   from,
@@ -25,7 +24,7 @@ export function ResourceMeter({
   readonly shortage?: ResourceShortage;
   readonly shortagePulse?: boolean;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const value = reduced ? to : interpolate(from, to, progress),
     extent = Math.max(cap ?? 0, from, to, 1),
     delta = to - from;
@@ -74,8 +73,8 @@ export function ResourceMeter({
       )}
       {shortage && (
         <small className="likes-resource-warning" role="status">
-          {t('过载时', 'At overload')}: {t('需', 'need')} {shortage.required}
-          {unit} · {t('可用', 'available')} {shortage.available}
+          {text('likes.atOverload')}: {text('likes.need')} {shortage.required}
+          {unit} · {text('likes.available2')} {shortage.available}
           {unit}
         </small>
       )}

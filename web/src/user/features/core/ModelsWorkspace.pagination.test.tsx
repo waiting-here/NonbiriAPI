@@ -181,7 +181,7 @@ async function renderWorkspace(route: string, user = account) {
     </>,
     { station: 'user', role: 'user', route },
   );
-  rendered.queryClient.setQueryData(coreKeys.session, { user: { id: user.id } });
+  rendered.queryClient.setQueryData(coreKeys.session, { user });
   return rendered;
 }
 
@@ -463,7 +463,7 @@ describe('ModelsWorkspace numbered pagination', () => {
 
     const rendered = await renderWorkspace('/models?model_id=51', account);
     await screen.findByText('provider-51/model-51');
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: otherAccount.id } });
+    rendered.queryClient.setQueryData(coreKeys.session, { user: otherAccount });
     rendered.rerender(
       <>
         <ModelsWorkspace user={otherAccount} />
@@ -472,10 +472,14 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     await screen.findByText('second-provider/model-51');
-    expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '51'))).toEqual(firstModel);
-    expect(rendered.queryClient.getQueryData(coreKeys.model(otherAccount.id, '51'))).toEqual(
-      secondModel,
-    );
+    expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '51'))).toEqual({
+      ...firstModel,
+      role_policy: { default_action: 'native', rules: {} },
+    });
+    expect(rendered.queryClient.getQueryData(coreKeys.model(otherAccount.id, '51'))).toEqual({
+      ...secondModel,
+      role_policy: { default_action: 'native', rules: {} },
+    });
   });
 
   it('hides private model detail when the session identity disappears', async () => {
@@ -587,9 +591,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected connection(s)' }));
 
     expect(writes).toHaveLength(1);
-    expect(
-      await screen.findByText('Your current session no longer permits this operation.'),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(rendered.queryClient.getQueryData(coreKeys.session)).toBeNull());
     expect(
       screen.queryByRole('button', { name: 'Add 1 selected connection(s)' }),
     ).not.toBeInTheDocument();

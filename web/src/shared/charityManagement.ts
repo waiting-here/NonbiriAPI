@@ -48,6 +48,10 @@ export interface ManagementCharityModel {
   discount: { percent: number; enabled: boolean; start_at?: number; end_at?: number };
   success_samples: number;
   success_count: number;
+  role_policy?: {
+    default_action: 'native' | 'passthrough' | 'system' | 'user' | 'assistant' | 'reject';
+    rules: Record<string, 'native' | 'passthrough' | 'system' | 'user' | 'assistant' | 'reject'>;
+  };
 }
 
 export interface ManagementDonationKey {
@@ -242,7 +246,10 @@ export function stationSessionMatches(
   snapshot: StationSessionSnapshot,
 ): boolean {
   const authority = sessionAuthority(client, frame);
-  return authority.generation === snapshot.generation && authority.subject === snapshot.subject;
+  const sessionKey = frame === 'admin' ? ['admin', 'session'] : ['user', 'session'];
+  const cachedIdentity = managementSessionIdentity(frame, client.getQueryData(sessionKey));
+  return authority.generation === snapshot.generation && authority.subject === snapshot.subject &&
+    cachedIdentity?.subject === snapshot.subject;
 }
 
 /** Bind one account-scoped request to the exact station subject and generation. */
@@ -1016,6 +1023,9 @@ export function normalizeManagementCharityModel(value: unknown): ManagementChari
       typeof recordValue(record, 'enabled') === 'boolean'
         ? (recordValue(record, 'enabled') as boolean)
         : invalidResponse('charity model enabled'),
+    ...(record.role_policy
+      ? { role_policy: record.role_policy as ManagementCharityModel['role_policy'] }
+      : {}),
     flatten_tool_calls: requiredPolicyBoolean(
       recordValue(record, 'flatten_tool_calls'),
       'charity tool-call policy',

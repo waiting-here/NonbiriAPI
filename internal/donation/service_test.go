@@ -113,7 +113,14 @@ func newDonationTestEnv(t *testing.T) *donationTestEnv {
 	clock := &atomic.Int64{}
 	clock.Store(donationTestNow)
 	auth := &donationTestAuth{}
-	service, err := New(Config{Store: store, OwnerAuth: auth, RoleAuth: auth, CursorKeys: vault,
+	review, err := secret.NewDonationReview(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = review.Initialize(context.Background(), store.DB()); err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(Config{Review: review, Store: store, OwnerAuth: auth, RoleAuth: auth, CursorKeys: vault,
 		Now: func() time.Time { return time.Unix(clock.Load(), 0) }})
 	if err != nil {
 		t.Fatalf("donation.New: %v", err)
@@ -162,9 +169,17 @@ VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?)`, userID, baseUR
 	endpointID, _ := result.LastInsertId()
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[15], fingerprint[31] = suffix, suffix
+	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := environment.vault.SealForGenerationTwoContext([]byte(fmt.Sprintf("credential-%c", suffix)), credentialContext)
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,?,'openai-compatible','test-envelope',?)`, contextID, baseURL, now)
+VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, encoded, now)
 	if err != nil {
 		t.Fatalf("seed secret: %v", err)
 	}
@@ -1011,7 +1026,7 @@ VALUES(?,?,?,?,0,0,0,'reserved',?)`, claimID, donationKeyID, one, one, expires);
 		t.Fatalf("Cleanup with reserved usage = %d, %v", cleaned, err)
 	}
 	if _, err := environment.store.DB().Exec(`UPDATE donation_usage_reservations
-SET state='released',finalized_at=? WHERE claim_id=?`, expires+1, claimID); err != nil {
+SET state='released',finalized_at=?,streak_disposition='neutral',failure_origin='client_cancel' WHERE claim_id=?`, expires+1, claimID); err != nil {
 		t.Fatal(err)
 	}
 	cleaned, err = environment.service.Cleanup(context.Background(), expires+terminalRetention, 10)

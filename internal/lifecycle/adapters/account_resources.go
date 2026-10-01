@@ -165,7 +165,8 @@ func (adapter *AccountResources) ExportResources(
 	models := make([]lifecycle.ModelExport, 0, len(slice.Models))
 	for _, model := range slice.Models {
 		item := lifecycle.ModelExport{
-			ID: model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
+			RolePolicy: model.RolePolicy.Clone(),
+			ID:         model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
 			FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]lifecycle.BindingExport, 0, len(model.Bindings)),

@@ -292,6 +292,20 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 		// the actual old account IDs and every old row remain covered below.
 		if table == "sqlite_sequence" {
 			query += " WHERE name<>'credit_accounts'"
+			// Newly introduced tables own new allocator rows. Preserve every
+			// allocator that existed in the source, including its high-water mark.
+			if image, ok := prior[table]; ok {
+				if len(image.Keys) == 0 {
+					query += " AND 0"
+				} else {
+					marks := make([]string, len(image.Keys))
+					for i, key := range image.Keys {
+						marks[i] = "?"
+						args = append(args, key)
+					}
+					query += " AND name IN (" + strings.Join(marks, ",") + ")"
+				}
+			}
 		}
 		if projectPriorAssets && table == "credit_accounts" {
 			query += " WHERE asset_type='general'"
@@ -348,7 +362,7 @@ func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, pr
 					}
 				}
 			}
-			if table == "site_config" {
+			if table == "site_config" || table == "sqlite_sequence" {
 				keys = append(keys, values[0].(string))
 			}
 			typed := make([]any, len(values))

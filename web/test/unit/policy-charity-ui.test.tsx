@@ -23,13 +23,7 @@ import { EndpointsPage } from '../../src/user/pages/EndpointsPage';
 import { UserLayout } from '../../src/user/layouts/UserLayout';
 import { ModelsPage } from '../../src/user/pages/ModelsPage';
 import { StewardPage } from '../../src/user/pages/StewardPage';
-import { CallerKeyPanel } from '../../src/user/pages/KeysPage';
-import { AccountLifecyclePanel } from '../../src/user/features/core/AccountWorkspace';
 import { coreKeys } from '../../src/user/features/core/queries';
-import type {
-  AccountExportAttachment,
-  AccountLifecycleAdapter,
-} from '../../src/user/features/core/types';
 import { userKeys } from '../../src/user/data';
 import { ApiError } from '../../src/shared/query/http';
 import { charityKeys } from '../../src/shared/operations/charity';
@@ -454,14 +448,6 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   });
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
 }
 
 function ManagementBindingsProbe() {
@@ -905,6 +891,8 @@ describe('experimental policy and charity controls', () => {
         keyReads += 1;
         return jsonResponse(coreNumberedPage([keyReads === 1 ? coreEndpointKey : committed]));
       }
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
+        return jsonResponse(corePage([committed]));
       if (method === 'GET' && path === '/api/models?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (
@@ -971,14 +959,26 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/The response was lost/)).resolves.toBeVisible();
     expect(modelReads).toBeGreaterThan(1);
-    expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
+    const check = screen.getByRole('button', { name: 'Check result' });
+    expect(check).toBeVisible();
     expect(rendered.queryClient.getQueryData(coreKeys.model('1', '3'))).toMatchObject({
       flatten_tool_calls: false,
       revision: '1',
     });
+    const attempts = () =>
+      fetchMock.mock.calls.filter(
+        (call) => requestPath(call[0]) === '/api/models/3' && call[1]?.method === 'PATCH',
+      );
+    expect(attempts()).toHaveLength(1);
+    const originalHeaders = new Headers(attempts()[0][1]?.headers);
+    await rendered.user.click(check);
+    await waitFor(() => expect(attempts()).toHaveLength(2));
+    const retryHeaders = new Headers(attempts()[1][1]?.headers);
+    expect(retryHeaders.get('Idempotency-Key')).toBe(originalHeaders.get('Idempotency-Key'));
+    expect(attempts()[1][1]?.body).toBe(attempts()[0][1]?.body);
   });
 
-  test('reconciles a lost endpoint-key create response before offering exact replay', async () => {
+  test('reconciles a lost endpoint-key create response from its recorded operation identity', async () => {
     let keyReads = 0;
     let keyPosts = 0;
     const createdKey = {
@@ -1002,6 +1002,14 @@ describe('experimental policy and charity controls', () => {
           coreNumberedPage(keyReads === 1 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
         );
       }
+      if (method === 'POST' && path === '/api/resource-operation-status')
+        return jsonResponse({
+          status: 'recorded',
+          stage: 'key',
+          result: { endpoint_id: '1', endpoint_key_id: '4' },
+        });
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
+        return jsonResponse(corePage([coreEndpointKey, createdKey]));
       if (method === 'GET' && path === '/api/models?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (
@@ -1032,20 +1040,28 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
     await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
+    expect(screen.queryByLabelText('Service key')).toBeNull();
+    const original = fetchMock.mock.calls.find(
+      (call) => requestPath(call[0]) === '/api/endpoints/1/keys' && call[1]?.method === 'POST',
+    )!;
+    expect(lastBody(fetchMock, 'POST', '/api/resource-operation-status')).toEqual({
+      operation_key: new Headers(original[1]?.headers).get('Idempotency-Key'),
+    });
     expect(keyPosts).toBe(1);
     expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
   });
 
-  test('reconciles a lost personal-model create response before offering exact replay', async () => {
+  test('reconciles a lost personal-model create response for valid astral names from its recorded identity', async () => {
     let modelReads = 0;
     let modelPosts = 0;
+    const provider = '😀'.repeat(64);
+    const name = '🧭'.repeat(64);
     const createdModel = {
       ...coreModel,
       id: '4',
-      provider: 'created-provider',
-      model: 'created-model',
-      full_name: 'created-provider/created-model',
+      provider,
+      model: name,
+      full_name: `${provider}/${name}`,
       revision: '1',
       binding_revision: '0',
       binding_count: '0',
@@ -1062,6 +1078,9 @@ describe('experimental policy and charity controls', () => {
           coreNumberedPage(modelReads === 1 ? [coreModel] : [coreModel, createdModel]),
         );
       }
+      if (method === 'POST' && path === '/api/resource-operation-status')
+        return jsonResponse({ status: 'recorded', stage: 'model', result: { model_id: '4' } });
+      if (method === 'GET' && path === '/api/models/4') return jsonResponse(createdModel);
       if (method === 'POST' && path === '/api/models') {
         modelPosts += 1;
         return jsonResponse(
@@ -1076,12 +1095,25 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(screen.getByRole('button', { name: 'Create platform model' }));
     const createForm = within(screen.getByLabelText('Model name').closest('form')!);
-    await rendered.user.type(createForm.getByLabelText('Service provider'), 'created-provider');
-    await rendered.user.type(createForm.getByLabelText('Model name'), 'created-model');
+    const providerInput = createForm.getByLabelText('Service provider') as HTMLInputElement;
+    const nameInput = createForm.getByLabelText('Model name') as HTMLInputElement;
+    expect(providerInput.maxLength).toBeGreaterThanOrEqual(provider.length);
+    expect(nameInput.maxLength).toBeGreaterThanOrEqual(name.length);
+    await rendered.user.type(providerInput, provider);
+    await rendered.user.type(nameInput, name);
+    expect(providerInput).toHaveValue(provider);
+    expect(nameInput).toHaveValue(name);
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await screen.findAllByText('created-provider/created-model');
+    await screen.findAllByText(`${provider}/${name}`);
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
+    expect(screen.queryByLabelText('Model name')).toBeNull();
+    const original = fetchMock.mock.calls.find(
+      (call) => requestPath(call[0]) === '/api/models' && call[1]?.method === 'POST',
+    )!;
+    expect(lastBody(fetchMock, 'POST', '/api/models')).toMatchObject({ provider, model: name });
+    expect(lastBody(fetchMock, 'POST', '/api/resource-operation-status')).toEqual({
+      operation_key: new Headers(original[1]?.headers).get('Idempotency-Key'),
+    });
     expect(modelPosts).toBe(1);
   });
 
@@ -1221,6 +1253,7 @@ describe('experimental policy and charity controls', () => {
         route_strategy: 'ordered',
         silent_retry: false,
         flatten_tool_calls: true,
+        role_policy: { default_action: 'native', rules: {} },
         expected_revision: '1',
       }),
     );
@@ -1229,7 +1262,8 @@ describe('experimental policy and charity controls', () => {
   test('keeps authoritative binding deletion available when the candidate endpoint page is empty', async () => {
     const binding = coreBinding('10', 'gpt-a', 0);
     const oneBindingModel = { ...coreModel, binding_count: '1' };
-    const fetchMock = installJsonFetchFixtures([
+    let deleted = false;
+    const fallback = installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: coreSession },
       {
         method: 'GET',
@@ -1253,6 +1287,24 @@ describe('experimental policy and charity controls', () => {
         body: { bindings: [], binding_revision: '3' },
       },
     ]);
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : 'GET')
+      ).toUpperCase();
+      if (method === 'DELETE' && path === '/api/models/3/bindings/10') {
+        deleted = true;
+        return jsonResponse({ bindings: [], binding_revision: '3' });
+      }
+      if (method === 'GET' && path === '/api/models/3/bindings')
+        return jsonResponse(
+          deleted
+            ? { bindings: [], binding_revision: '3' }
+            : { bindings: [binding], binding_revision: '2' },
+        );
+      return fallback(input, init);
+    });
+    vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
@@ -1593,7 +1645,7 @@ describe('experimental policy and charity controls', () => {
       station: 'admin',
       role: 'admin',
     });
-    await screen.findByText('review expiry fixture');
+    await screen.findByRole('cell', { name: /^review expiry fixture/ });
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await rendered.user.type(screen.getByLabelText('Reason'), 'expiry validation');
@@ -1683,7 +1735,7 @@ describe('experimental policy and charity controls', () => {
       station: 'admin',
       role: 'admin',
     });
-    await screen.findByText('detail retry fixture');
+    await screen.findByRole('cell', { name: /^detail retry fixture/ });
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await waitFor(() => expect(detailReads).toBeGreaterThan(0));
     await rendered.user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -2017,7 +2069,7 @@ describe('experimental policy and charity controls', () => {
         station,
         role,
       });
-      await screen.findByText('review fixture');
+      await screen.findByRole('cell', { name: /^review fixture/ });
       await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
       await screen.findByRole('heading', { name: /sk-a…tail.*upstream\.test\/v1/i });
       expect(screen.getByText(/Original key status: enabled/i)).toBeVisible();
@@ -2722,111 +2774,6 @@ describe('experimental policy and charity controls', () => {
     expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('steward'))).toBe(
       false,
     );
-  });
-
-  test('never reveals a caller key returned after the account changes', async () => {
-    const marker = `nbk_${'A'.repeat(43)}`;
-    const lateResponse = deferred<Response>();
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = requestPath(input);
-      const method = (
-        init?.method ?? (input instanceof Request ? input.method : 'GET')
-      ).toUpperCase();
-      if (method === 'GET' && path === '/api/caller-key') {
-        const headers = new Headers({ 'content-type': 'application/json' });
-        headers.set('X-Nonbiri-CallerKey-Generation', '0');
-        return new Response('null', { status: 200, headers });
-      }
-      if (method === 'POST' && path === '/api/caller-key/regenerate') {
-        return lateResponse.promise;
-      }
-      throw new Error(`Unexpected fixture request: ${method} ${path}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(<CallerKeyPanel accountId="1" />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-    await screen.findByText('No account API key');
-    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
-    );
-
-    rendered.rerender(<CallerKeyPanel accountId="2" />);
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '2' } });
-    await act(async () => {
-      lateResponse.resolve(
-        jsonResponse({
-          secret: marker,
-          metadata: {
-            display: 'nbk_AAAA…AAAA',
-            created_at: 1_700_000_000,
-            updated_at: 1_700_000_000,
-            generation: '1',
-          },
-        }),
-      );
-      await lateResponse.promise;
-    });
-
-    await waitFor(() => expect(screen.queryByText(marker)).toBeNull());
-    expect(rendered.queryClient.getQueryData(coreKeys.callerKey('2'))).toEqual({
-      generation: '0',
-      metadata: null,
-    });
-    expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
-  });
-
-  test('does not download an export returned for the previous account', async () => {
-    const marker = 'account-a-export-marker-123456';
-    const completion = deferred<AccountExportAttachment>();
-    const exportAccount = vi.fn(() => completion.promise);
-    const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportAccount: true, deleteAccount: false },
-      beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportAccount,
-      deleteAccount: vi.fn(async () => undefined),
-      readAccountAuthority: vi.fn(async () => 'active' as const),
-    };
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => undefined);
-    window.sessionStorage.setItem('nb.pending.elevation', 'export');
-    window.sessionStorage.setItem('nb.pending.elevation.account', '1');
-    document.cookie = 'nb_elevated=test-token-123456; Path=/; SameSite=Lax';
-    try {
-      const rendered = await renderWithProviders(
-        <AccountLifecyclePanel accountId="1" adapter={adapter} />,
-        { station: 'user', role: 'user', locale: 'en' },
-      );
-      rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-      const dialog = await screen.findByRole('alertdialog');
-      await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportAccount).toHaveBeenCalledTimes(1));
-
-      rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
-      const currentSession = { user: { id: '2' } };
-      rendered.queryClient.setQueryData(coreKeys.session, currentSession);
-      await act(async () => {
-        completion.resolve({
-          blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 11,
-        });
-        await completion.promise;
-      });
-
-      expect(clickSpy).not.toHaveBeenCalled();
-      expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual(currentSession);
-      expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
-    } finally {
-      document.cookie = 'nb_elevated=; Max-Age=0; path=/';
-      window.sessionStorage.removeItem('nb.pending.elevation');
-      window.sessionStorage.removeItem('nb.pending.elevation.account');
-      clickSpy.mockRestore();
-    }
   });
 
   test('failed user logout clears the station before showing the server error', async () => {

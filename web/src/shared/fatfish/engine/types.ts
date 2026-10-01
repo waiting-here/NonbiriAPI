@@ -1,8 +1,12 @@
 export const LEGACY_ENGINE_VERSION = 1;
-export const ENGINE_VERSION = 2;
+export const PREVIOUS_ENGINE_VERSION = 2;
+export const ENGINE_VERSION = 3;
+export const TURN_DENOMINATOR_V3 = 5_000_000_000_000;
+export const SIDE_TURN_NUMERATOR_V3 = 97_784_797_035;
+export const FRONT_TURN_NUMERATOR_V3 = 117_341_756_442;
 export const SCORING_VERSION = 1;
 export function supportedVersions(engineVersion: unknown, scoringVersion: unknown): boolean {
-  return (engineVersion === LEGACY_ENGINE_VERSION || engineVersion === ENGINE_VERSION) && scoringVersion === SCORING_VERSION;
+  return (engineVersion === LEGACY_ENGINE_VERSION || engineVersion === PREVIOUS_ENGINE_VERSION || engineVersion === ENGINE_VERSION) && scoringVersion === SCORING_VERSION;
 }
 export const FIELD_WIDTH = 480 * 64;
 export const FIELD_HEIGHT = 560 * 64;
@@ -27,7 +31,7 @@ export interface Direction extends Shape { mode: "entry" | "oneway"; heading: nu
 export interface Level {
   format: "nonbiri-fatfish-level";
   format_version: 1;
-  engine_version: 1 | 2;
+  engine_version: 1 | 2 | 3;
   scoring_version: 1;
   duration_seconds: number;
   speed_pixels_per_second: number;

@@ -482,6 +482,9 @@ func (s *Service) PrepareAccountDeletion(ctx context.Context, tx *sql.Tx, userID
 	if s == nil || ctx == nil || tx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return ErrInvalidRequest
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM donation_key_manual_models WHERE donation_key_id IN (SELECT dk.id FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id WHERE d.user_id=?)`, userID); err != nil {
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,status,revision FROM donations WHERE user_id=? ORDER BY id`, userID)
 	if err != nil {
 		return fmt.Errorf("donation: read account donations: %w", err)
@@ -611,6 +614,25 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 			if err != nil {
 				return nil, ErrInvariant
 			}
+			keys[index].ManualModels = make([]ManualModelExport, 0)
+			rows, err := tx.QueryContext(ctx, `SELECT normalized_model_id,display_name FROM donation_key_manual_models WHERE donation_key_id=? ORDER BY normalized_model_id LIMIT 1024`, keyID)
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var candidate ManualModelExport
+				if err = rows.Scan(&candidate.UpstreamModelID, &candidate.DisplayName); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				keys[index].ManualModels = append(keys[index].ManualModels, candidate)
+			}
+			if err = rows.Close(); err != nil {
+				return nil, err
+			}
+			if err = rows.Err(); err != nil {
+				return nil, err
+			}
 			keys[index].RecurringLimits, err = donationquota.Views(ctx, tx, keyID, decisionNow)
 			if err != nil {
 				return nil, quotaError(err)
@@ -632,6 +654,7 @@ func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
 		owner := ownerKey(value)
 		out[index] = ExportDonationKey{
 			TokenBreakdown:          value.TokenBreakdown,
+			Review:                  owner.Review,
 			FailureDisableThreshold: owner.FailureDisableThreshold,
 			ID:                      owner.ID, EndpointKeyID: owner.EndpointKeyID,
 			DisplayHead: owner.DisplayHead, DisplayTail: owner.DisplayTail,

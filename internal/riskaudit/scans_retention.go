@@ -23,6 +23,7 @@ func cleanupScansTx(ctx context.Context, tx *sql.Tx, now int64, limit int) (Clea
 		return result, err
 	}
 	queries := []string{
+		`DELETE FROM risk_scan_window_sources WHERE (scan_id,request_log_id) IN (SELECT scan_id,request_log_id FROM risk_scan_window_sources WHERE scan_id=? LIMIT ?)`,
 		`DELETE FROM risk_scan_result_sources WHERE (scan_id,row_no,request_log_id) IN (SELECT scan_id,row_no,request_log_id FROM risk_scan_result_sources WHERE scan_id=? LIMIT ?)`,
 		`DELETE FROM risk_scan_result_users WHERE (scan_id,row_no,user_id) IN (SELECT scan_id,row_no,user_id FROM risk_scan_result_users WHERE scan_id=? LIMIT ?)`,
 		`DELETE FROM risk_scan_results WHERE (scan_id,row_no) IN (SELECT r.scan_id,r.row_no FROM risk_scan_results r WHERE r.scan_id=? AND NOT EXISTS (SELECT 1 FROM risk_scan_result_sources s WHERE s.scan_id=r.scan_id AND s.row_no=r.row_no) AND NOT EXISTS (SELECT 1 FROM risk_scan_result_users u WHERE u.scan_id=r.scan_id AND u.row_no=r.row_no) LIMIT ?)`,

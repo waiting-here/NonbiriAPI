@@ -33,12 +33,14 @@ test('admin level and period editors remain usable at desktop and mobile widths'
     body: { format: 'nonbiri-fatfish-examples', version: 1, license: 'AGPL-3.0', source: 'Fixtures',
       examples: Array.from({ length: 8 }, (_, index) => ({ id: `example_${index}`, title: `Example ${index + 1}`,
         url: `/examples/fatfish/0${index + 1}-example.fatfish.json`, content_hash: 'a'.repeat(64) })) } });
+  await mockJson(page, { origin: ADMIN_ORIGIN, method: 'GET', path: base + '/playtests/current', body: null });
+  await mockJson(page, { origin: ADMIN_ORIGIN, method: 'GET', path: base + '/periods/ffp_first/layout', body: { revision: '0', nodes: [{ node_id: 'ffn_first', map_x: 200, map_y: 200 }] } });
   await page.goto(`${ADMIN_ORIGIN}/limited-activities/fat-fish`);
   await expect(page.getByRole('heading', { name: 'Level directory' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add fish' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Fish' })).toBeVisible();
   await expect(page.getByLabel('Fat Fish level map')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('button', { name: 'Add hazard' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Hazard' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByLabel('Title').fill('Unsaved example');
   expect(await page.evaluate(() => {
@@ -46,20 +48,16 @@ test('admin level and period editors remain usable at desktop and mobile widths'
     window.dispatchEvent(event);
     return event.defaultPrevented;
   })).toBe(true);
-  await Promise.all([
-    page.waitForEvent('dialog').then((dialog) => dialog.dismiss()),
-    page.getByRole('button', { name: 'Periods and nodes' }).click(),
-  ]);
+  await page.getByRole('button', { name: 'Periods and nodes' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Stay here' }).click();
   await expect(page.getByRole('heading', { name: 'Level directory' })).toBeVisible();
   await expect(page.getByLabel('Title')).toHaveValue('Unsaved example');
-  await Promise.all([
-    page.waitForEvent('dialog').then((dialog) => dialog.accept()),
-    page.getByRole('button', { name: 'Periods and nodes' }).click(),
-  ]);
+  await page.getByRole('button', { name: 'Periods and nodes' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Leave page' }).click();
   await expect(page.getByRole('heading', { name: 'Period directory' })).toBeVisible();
   await page.getByRole('button', { name: /Autumn period · draft/ }).click();
   await expect(page.getByRole('button', { name: /First node/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Check and preview publish conditions' }).click();
+  await page.getByRole('button', { name: 'Preview publishing checks' }).click();
   await expect(page.getByText(/Missing one-star playtest.*First node/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });

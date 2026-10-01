@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 type httpAPI struct{ service *Service }
@@ -31,6 +32,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 	}{
 		{http.MethodGet, routeAdminModels, api.listAdminModels},
 		{http.MethodGet, routeAdminKeyModels, api.adminKeyModels},
+		{http.MethodPost, routeAdminManual, api.adminAddManual},
+		{http.MethodDelete, routeAdminManual + "/{entryId}", api.adminDeleteManual},
 		{http.MethodGet, routeAdminKeyModelBindings, api.adminKeyModelBindings},
 		{http.MethodPost, routeAdminModels, api.createAdminModel},
 		{http.MethodGet, routeAdminModel, api.getAdminModel},
@@ -67,6 +70,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 	}{
 		{http.MethodGet, routeStewardModels, api.listStewardModels},
 		{http.MethodGet, routeStewardKeyModels, api.stewardKeyModels},
+		{http.MethodPost, routeStewardManual, api.stewardAddManual},
+		{http.MethodDelete, routeStewardManual + "/{entryId}", api.stewardDeleteManual},
 		{http.MethodGet, routeStewardKeyModelBindings, api.stewardKeyModelBindings},
 		{http.MethodPost, routeStewardModels, api.createStewardModel},
 		{http.MethodGet, routeStewardModel, api.getStewardModel},
@@ -324,19 +329,20 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	IsMainstream          requiredField[bool]         `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]     `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]       `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]        `json:"allowed_levels"`
-	PublicDescription     requiredField[string]       `json:"public_description"`
-	RouteStrategy         requiredField[string]       `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]          `json:"affinity_ttl_seconds"`
-	Provider              requiredField[string]       `json:"provider"`
-	Model                 requiredField[string]       `json:"model"`
-	Enabled               requiredField[bool]         `json:"enabled"`
-	Pricing               requiredField[pricingWire]  `json:"pricing"`
-	Discount              requiredField[discountWire] `json:"discount"`
-	FlattenToolCalls      requiredField[bool]         `json:"flatten_tool_calls"`
+	RolePolicy            requiredField[rolepolicy.Policy] `json:"role_policy"`
+	IsMainstream          requiredField[bool]              `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]          `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]            `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]             `json:"allowed_levels"`
+	PublicDescription     requiredField[string]            `json:"public_description"`
+	RouteStrategy         requiredField[string]            `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]               `json:"affinity_ttl_seconds"`
+	Provider              requiredField[string]            `json:"provider"`
+	Model                 requiredField[string]            `json:"model"`
+	Enabled               requiredField[bool]              `json:"enabled"`
+	Pricing               requiredField[pricingWire]       `json:"pricing"`
+	Discount              requiredField[discountWire]      `json:"discount"`
+	FlattenToolCalls      requiredField[bool]              `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -395,6 +401,11 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 			return ModelCreate{}, nil, ErrInvalidRequest
 		}
 		canonical["public_description"] = input.PublicDescription
+	}
+	if wire.RolePolicy.Set {
+		policy := wire.RolePolicy.Value.Clone()
+		input.RolePolicy = &policy
+		canonical["role_policy"] = policy
 	}
 	return input, canonical, nil
 }
@@ -478,6 +489,7 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
+	RolePolicy            requiredField[rolepolicy.Policy] `json:"role_policy"`
 	IsMainstream          requiredField[bool]              `json:"is_mainstream"`
 	ExcludedRequestFields requiredField[[]string]          `json:"excluded_request_fields"`
 	TokenReserveCredits   nullableField[string]            `json:"token_reserve_credits"`
@@ -573,6 +585,11 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 		}
 		input.Discount = value
 		canonical["discount"] = encoded
+	}
+	if wire.RolePolicy.Set {
+		policy := wire.RolePolicy.Value.Clone()
+		input.RolePolicy = &policy
+		canonical["role_policy"] = policy
 	}
 	if wire.FlattenToolCalls.Set {
 		input.FlattenToolCalls = &wire.FlattenToolCalls.Value

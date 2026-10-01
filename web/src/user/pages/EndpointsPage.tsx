@@ -1,7 +1,7 @@
 import { useResourceFilters, useResourceListScroll } from '../features/core/useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from '../features/core/ResourceFilterControls';
 import { useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -17,6 +17,8 @@ import {
 } from '../features/core/components';
 import { EndpointDetail } from '../features/core/EndpointDetail';
 import { EndpointBrowseSummary } from '../features/core/ResourceBrowse';
+import { Quickstart } from '../features/core/Quickstart';
+import { useQuickstartCopy } from '../features/core/quickstartCopy';
 import { EndpointWizard } from '../features/core/EndpointWizard';
 import { useCoreCopy } from '../features/core/copy';
 import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
@@ -26,6 +28,9 @@ import '../features/core/core.css';
 
 function EndpointList({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
+  const { t: text } = useQuickstartCopy();
+  const [search, setSearch] = useSearchParams();
+  const quickstart = search.get('quickstart') === '1';
   const location = useLocation();
   const filters = useResourceFilters('endpoints', user.id);
   const pager = useUrlPagePager({
@@ -71,12 +76,39 @@ function EndpointList({ user }: { user: UserProfile }) {
         title={t('endpoints.title')}
         description={t('endpoints.description')}
         actions={
-          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-            {t('endpoints.create')}
-          </button>
+          <div className="core-row-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() =>
+                setSearch((previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.set('quickstart', '1');
+                  return next;
+                })
+              }
+            >
+              {text('start')}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setCreating(true)}>
+              {text('advanced')}
+            </button>
+          </div>
         }
       />
 
+      {quickstart ? (
+        <Quickstart
+          accountId={user.id}
+          onClose={() =>
+            setSearch((previous) => {
+              const next = new URLSearchParams(previous);
+              next.delete('quickstart');
+              return next;
+            })
+          }
+        />
+      ) : null}
       {creating ? (
         <EndpointWizard
           accountId={user.id}

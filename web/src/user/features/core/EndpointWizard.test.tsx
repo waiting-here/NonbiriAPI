@@ -82,7 +82,15 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       <EndpointWizard accountId="1" onClose={vi.fn()} onCreated={vi.fn()} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(
+      coreKeys.session,
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'),
+          'utf8',
+        ),
+      ),
+    );
     await reachEndpointForm(rendered.user);
     await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
     for (const note of ['Primary', 'Backup']) {
@@ -90,7 +98,9 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
         target: { value: `synthetic-secret-${note}` },
       });
       await rendered.user.type(screen.getByLabelText('Key note'), note);
-      await rendered.user.click(screen.getByLabelText(/I own this credential/));
+      if (note === 'Primary')
+        await rendered.user.click(screen.getByLabelText(/I own this credential/));
+      else expect(screen.getByLabelText(/I own this credential/)).toBeChecked();
       await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
       await screen.findByRole('button', { name: 'Add another key' });
       if (note === 'Primary') {
@@ -145,7 +155,15 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       <EndpointWizard accountId="1" onClose={vi.fn()} onCreated={onCreated} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(
+      coreKeys.session,
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'),
+          'utf8',
+        ),
+      ),
+    );
 
     expect(await screen.findByRole('button', { name: 'Mainstream channel' })).toHaveAttribute(
       'aria-pressed',
@@ -182,7 +200,15 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       <EndpointWizard accountId="1" onClose={vi.fn()} onCreated={vi.fn()} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(
+      coreKeys.session,
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'),
+          'utf8',
+        ),
+      ),
+    );
     await reachEndpointForm(rendered.user);
     await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
 
@@ -211,7 +237,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('GET-reconciles first and reuses one request body and Idempotency-Key after response loss', async () => {
+  it('checks the receipt first and reuses the request body and identity after response loss', async () => {
     const onCreated = vi.fn();
     let endpointPosts = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -222,9 +248,8 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
           ? jsonResponse({ error: { code: 'internal', message: 'safe uncertain response' } }, 503)
           : jsonResponse(endpointFixture(), 201);
       }
-      if (String(input) === '/api/endpoints?limit=50' && (init?.method ?? 'GET') === 'GET') {
-        return jsonResponse({ data: [], next_cursor: null });
-      }
+      if (String(input) === '/api/resource-operation-status')
+        return jsonResponse({ status: 'not_recorded' });
       throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${String(input)}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -232,17 +257,27 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       <EndpointWizard accountId="1" onClose={vi.fn()} onCreated={onCreated} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    rendered.queryClient.setQueryData(
+      coreKeys.session,
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), '..', 'internal/auth/testdata/user_envelope.json'),
+          'utf8',
+        ),
+      ),
+    );
     await reachEndpointForm(rendered.user);
     await rendered.user.type(screen.getByLabelText('Note'), 'endpoint note');
     await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
 
-    const replay = await screen.findByRole('button', { name: 'Retry the same operation' });
+    const replay = await screen.findByRole('button', { name: 'Check result' });
     expect(screen.getByLabelText('Service address')).toBeDisabled();
     await rendered.user.click(replay);
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
 
-    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
+    const posts = fetchMock.mock.calls.filter(
+      ([path, init]) => String(path) === '/api/endpoints' && init?.method === 'POST',
+    );
     expect(posts).toHaveLength(2);
     const firstHeaders = new Headers(posts[0]?.[1]?.headers);
     const secondHeaders = new Headers(posts[1]?.[1]?.headers);
@@ -253,7 +288,8 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     ).toEqual([
       'GET /api/endpoint-create-options',
       'POST /api/endpoints',
-      'GET /api/endpoints?limit=50',
+      'POST /api/resource-operation-status',
+      'POST /api/resource-operation-status',
       'POST /api/endpoints',
     ]);
     expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([

@@ -11,6 +11,7 @@ export interface LevelRecord {
   draft?: Level; created_at: number; updated_at: number;
 }
 export interface VersionRecord {
+  version_number?: string; playtest_summary?: { count: number; best_stars: number; last_at: number | null };
   id: string; level_id: string; content_hash: string; engine_version: number;
   scoring_version: number; duration_seconds: number; maximum_stars: number;
   content?: Level; created_at: number;
@@ -70,3 +71,9 @@ export const savePeriod = (id: string | null, input: PeriodInput, key: string) =
 export const saveNode = (periodID: string, nodeID: string | null, input: NodeInput, key: string) => apiFetch<NodeRecord>(nodeID ? `${base}/periods/${part(periodID)}/nodes/${part(nodeID)}` : `${base}/periods/${part(periodID)}/nodes`, idempotentOptions(key, { method: nodeID ? 'PUT' : 'POST', json: input }));
 export const changePeriodState = (id: string, action: 'publish' | 'close' | 'reopen', expected_revision: string, key: string) => apiFetch<PeriodRecord>(`${base}/periods/${part(id)}/${action}`, idempotentOptions(key, { method: 'POST', json: { expected_revision } }));
 export const listPlaytests = (versionID: string) => apiFetch<PlaytestRecord[]>(queryPath(`${base}/playtests`, { version_id: versionID }));
+
+export interface GraphPosition { node_id: string; map_x: number; map_y: number }
+export interface GraphLayout { revision: string; nodes: GraphPosition[] }
+export const getGraphLayout = (periodID: string) => apiFetch<GraphLayout>(base + '/periods/' + part(periodID) + '/layout');
+export const saveGraphLayout = (periodID: string, input: { expected_revision: string; nodes: GraphPosition[] }, key: string) =>
+  apiFetch<GraphLayout>(base + '/periods/' + part(periodID) + '/layout', idempotentOptions(key, { method: 'PUT', json: input }));

@@ -26,7 +26,8 @@ func TestManagedDonationDiscoveryRegisteredSessionRoutes(t *testing.T) {
 	}
 	exec(`UPDATE site_config SET value='1' WHERE key='donation_accept_enabled'`)
 	endpoint := exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at) VALUES(?,'openai-compatible','https://discovery.example.test/v1','',1,1,?,?)`, f.userID, f.now, f.now)
-	secret := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(randomblob(16),'https://discovery.example.test/v1','openai-compatible','synthetic-envelope',?)`, f.now)
+	contextID, envelope := sealRootTestCredential(t)
+	secret := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,'https://discovery.example.test/v1','openai-compatible',?,?)`, contextID, envelope, f.now)
 	physical := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at) VALUES(?,?,randomblob(32),'head','tail','',1,0,1,?,?)`, endpoint, secret, f.now, f.now)
 	exec(`INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision) VALUES(?,'unknown',1)`, physical)
 	headers := func(host, seed string) map[string]string {

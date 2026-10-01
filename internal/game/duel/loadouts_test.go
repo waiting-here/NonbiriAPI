@@ -177,6 +177,7 @@ func TestCustomPresetHTTPStrictOwnerAndNoQueueSideEffect(t *testing.T) {
 		{"GET", "/api/games/likes/loadouts?x=1", "", nil, 400},
 		{"GET", "/api/games/likes/loadouts", "{}", nil, 400},
 		{"PUT", path, body, nil, 400},
+		{"PUT", path, strings.TrimSuffix(body, "}") + `,"name":null}`, []string{f.key()}, 400},
 		{"PUT", path, body, []string{f.key(), f.key()}, 400},
 		{"PUT", "/api/games/likes/loadouts/01", body, []string{f.key()}, 400},
 		{"PUT", "/api/games/likes/loadouts/11", body, []string{f.key()}, 400},

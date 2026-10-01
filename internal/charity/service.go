@@ -17,6 +17,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -396,10 +397,9 @@ JOIN endpoints e ON e.id=k.endpoint_id
 JOIN charity_models cm ON cm.id=cr.charity_model_id
 JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.donation_key_id=dk.id
  AND b.endpoint_key_id=k.id AND b.upstream_model_id=?
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id
- AND pc.normalized_model_id=b.upstream_model_id AND pc.normalized_model_id=?
+AND b.upstream_model_id=?
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=? AND e.id=? AND k.id=?
-  AND (pc.automatic_supports>0 OR pc.manual_supports>0)
+  AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
 LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 		input.RequestID, input.ActorUserID, input.ActorUserID,
 		input.EndpointID, input.EndpointKeyID).Scan(
@@ -477,6 +477,12 @@ func reserveDimension(used, reserved db.U128, limitBlob []byte, increment *big.I
 }
 
 func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input claim.CharityRelease) error {
+	if input.FailureOrigin == "" {
+		input.FailureOrigin = connectorcontract.OriginPlatform
+	}
+	if !connectorcontract.ValidOutcome(connectorcontract.StreakNeutral, input.FailureOrigin) {
+		return claim.ErrInvalidInput
+	}
 	if s == nil || ctx == nil || tx == nil || !db.ValidateOpaqueID(input.RequestID, "req_") ||
 		!db.ValidateOpaqueID(input.ClaimID, "clm_") || !validTime(input.ReleasedAt) {
 		return claim.ErrInvalidInput
@@ -489,6 +495,14 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 		return claim.ErrConflict
 	}
 	if row.state == "released" {
+		var disposition connectorcontract.StreakDisposition
+		var origin connectorcontract.FailureOrigin
+		if err := tx.QueryRowContext(ctx, "SELECT streak_disposition,failure_origin FROM donation_usage_reservations WHERE claim_id=?", input.ClaimID).Scan(&disposition, &origin); err != nil {
+			return err
+		}
+		if disposition != connectorcontract.StreakNeutral || origin != input.FailureOrigin {
+			return claim.ErrConflict
+		}
 		return nil
 	}
 	if row.state != "reserved" {
@@ -506,7 +520,7 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE donation_usage_reservations
-SET state='released',finalized_at=? WHERE claim_id=? AND state='reserved'`, input.ReleasedAt, input.ClaimID)
+SET state='released',finalized_at=?,streak_disposition='neutral',failure_origin=? WHERE claim_id=? AND state='reserved'`, input.ReleasedAt, input.FailureOrigin, input.ClaimID)
 	if err != nil {
 		return fmt.Errorf("charity: release claim reservation: %w", err)
 	}
@@ -607,6 +621,7 @@ WHERE id=? AND price_reserved_mag=? AND calls_reserved=? AND tokens_reserved=?`,
 }
 
 func (s *Service) PrepareAttempt(ctx context.Context, tx *sql.Tx, input claim.CharityAttemptInput) (claim.CharityActual, error) {
+	input = normalizeAttemptInput(input)
 	if s == nil || ctx == nil || tx == nil || !validAttemptInput(input) {
 		return claim.CharityActual{}, claim.ErrInvalidInput
 	}
@@ -614,6 +629,7 @@ func (s *Service) PrepareAttempt(ctx context.Context, tx *sql.Tx, input claim.Ch
 }
 
 func prepareAttempt(ctx context.Context, tx *sql.Tx, input claim.CharityAttemptInput) (claim.CharityActual, error) {
+	input = normalizeAttemptInput(input)
 	var state, mode string
 	var key, receiver sql.NullInt64
 	var requestUser, requestReward int64
@@ -688,6 +704,7 @@ FROM charity_reservations cr WHERE cr.logical_request_id=?`, input.RequestID).Sc
 }
 
 func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion claim.CharityAttemptCompletion) error {
+	completion.Attempt = normalizeAttemptInput(completion.Attempt)
 	input := completion.Attempt
 	if s == nil || ctx == nil || tx == nil || !validAttemptInput(input) ||
 		!validMoney(completion.Actual.PriceMilli) || !validMoney(completion.Actual.RewardMilli) {
@@ -747,9 +764,9 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE donation_usage_reservations SET
 price_actual_milli=?,reward_actual_milli=?,calls_actual=?,tokens_actual=?,protocol_success=?,usage_unknown=?,input_tokens_actual=?,output_tokens_actual=?,
-state='committed',finalized_at=? WHERE claim_id=? AND state='reserved'`,
+state='committed',finalized_at=?,streak_disposition=?,failure_origin=? WHERE claim_id=? AND state='reserved'`,
 		completion.Actual.PriceMilli, completion.Actual.RewardMilli, callsActual, tokensActual,
-		boolInt(input.ProtocolSuccess), boolInt(input.UsageUnknown), tokenActual.Input, tokenActual.Output, input.CompletedAt, input.ClaimID)
+		boolInt(input.ProtocolSuccess), boolInt(input.UsageUnknown), tokenActual.Input, tokenActual.Output, input.CompletedAt, input.StreakDisposition, input.FailureOrigin, input.ClaimID)
 	if err != nil {
 		return fmt.Errorf("charity: commit attempt usage: %w", err)
 	}
@@ -769,13 +786,15 @@ func verifyCompletedAttempt(ctx context.Context, tx *sql.Tx, completion claim.Ch
 	}
 	expected, countErr := actualTokenVector(completion.Attempt, reservation.tokenVector())
 	var state string
+	var disposition connectorcontract.StreakDisposition
+	var origin connectorcontract.FailureOrigin
 	var price, reward, calls, tokens sql.NullInt64
 	var success, unknown sql.NullInt64
 	var input, output *int64
 	err = tx.QueryRowContext(ctx, `SELECT state,price_actual_milli,reward_actual_milli,calls_actual,tokens_actual,
-protocol_success,usage_unknown,input_tokens_actual,output_tokens_actual
+protocol_success,usage_unknown,input_tokens_actual,output_tokens_actual,streak_disposition,failure_origin
 FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).Scan(
-		&state, &price, &reward, &calls, &tokens, &success, &unknown, &input, &output)
+		&state, &price, &reward, &calls, &tokens, &success, &unknown, &input, &output, &disposition, &origin)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.ErrNotFound
 	}
@@ -790,7 +809,7 @@ FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).
 		price.Int64 == completion.Actual.PriceMilli && reward.Int64 == completion.Actual.RewardMilli &&
 		calls.Int64 == callCount && tokens.Int64 == expected.Total && equalTokenValue(input, expected.Input) && equalTokenValue(output, expected.Output) &&
 		success.Int64 == int64(boolInt(completion.Attempt.ProtocolSuccess)) &&
-		unknown.Int64 == int64(boolInt(completion.Attempt.UsageUnknown)) {
+		unknown.Int64 == int64(boolInt(completion.Attempt.UsageUnknown)) && disposition == completion.Attempt.StreakDisposition && origin == completion.Attempt.FailureOrigin {
 		return nil
 	}
 	return claim.ErrConflict
@@ -972,22 +991,35 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 	for {
 		var state string
 		var success sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success FROM donation_usage_reservations
+		var disposition, origin sql.NullString
+		err := tx.QueryRowContext(ctx, `SELECT state,protocol_success,streak_disposition,failure_origin FROM donation_usage_reservations
 WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
-			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success)
+			keyID, db.EncodeU128(generation), db.EncodeU128(next)).Scan(&state, &success, &disposition, &origin)
 		if errors.Is(err, sql.ErrNoRows) || state == "reserved" {
 			break
 		}
 		if err != nil {
 			return fmt.Errorf("charity: read streak result: %w", err)
 		}
-		if state == "committed" {
-			if !success.Valid {
+		if !disposition.Valid || !origin.Valid || !connectorcontract.ValidOutcome(connectorcontract.StreakDisposition(disposition.String), connectorcontract.FailureOrigin(origin.String)) {
+			return claim.ErrInvariant
+		}
+		if state != "committed" && state != "released" {
+			return claim.ErrInvariant
+		}
+		if disposition.String == "success" || disposition.String == "upstream_failure" {
+			if state != "committed" || !success.Valid {
 				return claim.ErrInvariant
 			}
-			if success.Int64 == 1 {
+			if disposition.String == "success" {
+				if success.Int64 != 1 {
+					return claim.ErrInvariant
+				}
 				streak = db.U128{}
 			} else {
+				if success.Int64 != 0 {
+					return claim.ErrInvariant
+				}
 				streak, err = addU128(streak, big.NewInt(1))
 				if err != nil {
 					return err
@@ -999,8 +1031,6 @@ WHERE donation_key_id=? AND streak_generation=? AND claim_seq=?`,
 					disablingFold = next
 				}
 			}
-		} else if state != "released" {
-			return claim.ErrInvariant
 		}
 		next, err = addU128(next, big.NewInt(1))
 		if err != nil {
@@ -1267,14 +1297,27 @@ func (s *Service) Cleanup(ctx context.Context, decisionNow int64, limit int) (in
 	return count, nil
 }
 
+func normalizeAttemptInput(input claim.CharityAttemptInput) claim.CharityAttemptInput {
+	if input.StreakDisposition == "" && input.FailureOrigin == "" {
+		input.StreakDisposition = connectorcontract.StreakNeutral
+		input.FailureOrigin = connectorcontract.OriginPlatform
+		if input.ProtocolSuccess {
+			input.StreakDisposition = connectorcontract.StreakSuccess
+			input.FailureOrigin = connectorcontract.OriginNone
+		}
+	}
+	return input
+}
 func validAttemptInput(input claim.CharityAttemptInput) bool {
+	if !connectorcontract.ValidOutcome(input.StreakDisposition, input.FailureOrigin) ||
+		input.ProtocolSuccess != (input.StreakDisposition == connectorcontract.StreakSuccess) {
+		return false
+	}
 	if !db.ValidateOpaqueID(input.RequestID, "req_") || !db.ValidateOpaqueID(input.ClaimID, "clm_") ||
 		!validTime(input.CompletedAt) || input.UsageUnknown != !input.Usage.Present {
 		return false
 	}
-	if input.ProtocolSuccess && !input.ResponseStarted {
-		return false
-	}
+
 	if input.DonationKeyID != nil && *input.DonationKeyID <= 0 || input.ReceiverUserID != nil && *input.ReceiverUserID <= 0 {
 		return false
 	}

@@ -61,11 +61,22 @@ WHERE token_hash IN (
 	if deleted < 0 || deleted > int64(limit) {
 		return LifecycleRetentionResult{}, fmt.Errorf("auth: retain sessions: invalid rows affected")
 	}
+	if deleted < int64(limit) {
+		result, err = tx.ExecContext(workerCtx, `DELETE FROM auth_denial_grants WHERE token_hash IN (SELECT token_hash FROM auth_denial_grants WHERE expires_at<=? ORDER BY expires_at,token_hash LIMIT ?)`, decisionNow, int64(limit)-deleted)
+		if err != nil {
+			return LifecycleRetentionResult{}, fmt.Errorf("auth: retain denial grants: %w", err)
+		}
+		n, e := result.RowsAffected()
+		if e != nil {
+			return LifecycleRetentionResult{}, e
+		}
+		deleted += n
+	}
 
 	var more int
 	if err := tx.QueryRowContext(workerCtx, `SELECT EXISTS(
- SELECT 1 FROM sessions WHERE expires_at<=?
-)`, decisionNow).Scan(&more); err != nil {
+ SELECT 1 FROM sessions WHERE expires_at<=? UNION SELECT 1 FROM auth_denial_grants WHERE expires_at<=?
+)`, decisionNow, decisionNow).Scan(&more); err != nil {
 		return LifecycleRetentionResult{}, fmt.Errorf("auth: retain sessions: check remaining: %w", err)
 	}
 	if more != 0 && more != 1 {

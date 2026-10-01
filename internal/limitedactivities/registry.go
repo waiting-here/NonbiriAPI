@@ -76,3 +76,16 @@ func nilInterface(value any) bool {
 	}
 	return false
 }
+
+// WithLakeNotes registers the compiled lake module during composition.
+func (r *Registry) WithLakeNotes(runtime Runtime) *Registry {
+	if r == nil {
+		return nil
+	}
+	if _, exists := r.modules[LakeNotes]; !exists {
+		r.keys = append(r.keys, LakeNotes)
+	}
+	r.modules[LakeNotes] = definition{LakeNotes, "垂钓手记", LakeNotes, runtime, lakeConfiguration{}}
+	sort.Strings(r.keys)
+	return r
+}

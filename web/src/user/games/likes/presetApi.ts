@@ -4,6 +4,7 @@ import type { Selection } from './types';
 
 export interface SavedPreset {
   readonly slot: number;
+  readonly name: string;
   readonly revision: string;
   readonly mode: 'quick' | 'standard';
   readonly loadout: {
@@ -20,6 +21,7 @@ export interface CustomPresetList {
 }
 
 export interface SavePresetIntent {
+  readonly name?: string;
   readonly slot: number;
   readonly expectedRevision: string;
   readonly mode: 'quick' | 'standard';
@@ -33,7 +35,7 @@ function identifier(value: unknown, field: string): string {
 }
 
 export function savedPreset(value: unknown): SavedPreset {
-  const r = exactRecord(value, ['slot', 'revision', 'mode', 'loadout', 'updated_at']);
+  const r = exactRecord(value, ['slot', 'name', 'revision', 'mode', 'loadout', 'updated_at']);
   const revision = r.revision;
   if (
     typeof revision !== 'string' ||
@@ -47,6 +49,7 @@ export function savedPreset(value: unknown): SavedPreset {
   const skills = loadout.skills.map((skill) => identifier(skill, 'custom preset skill'));
   if (new Set(skills).size !== skills.length) invalidResponse('custom preset skills');
   return {
+    name: presetName(r.name),
     slot: safeInteger(r.slot, 1, 10, 'custom preset slot'),
     revision,
     mode: enumValue(r.mode, ['quick', 'standard'], 'custom preset mode'),
@@ -78,11 +81,16 @@ export async function fetchCustomPresets(signal?: AbortSignal): Promise<CustomPr
   return customPresetList(result.data);
 }
 
-export async function saveCustomPreset(intent: SavePresetIntent): Promise<SavedPreset> {
+export async function saveCustomPreset(
+  intent: SavePresetIntent,
+  signal?: AbortSignal,
+): Promise<SavedPreset> {
   const result = await gameRequest<unknown>(`/api/games/likes/loadouts/${intent.slot}`, {
     method: 'PUT',
+    signal,
     json: {
       expected_revision: intent.expectedRevision,
+      ...(intent.name === undefined ? {} : { name: presetName(intent.name) }),
       mode: intent.mode,
       loadout: intent.loadout,
     },
@@ -93,4 +101,35 @@ export async function saveCustomPreset(intent: SavePresetIntent): Promise<SavedP
   if (item.slot !== intent.slot || item.mode !== intent.mode)
     invalidResponse('saved custom preset');
   return item;
+}
+
+export function presetName(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    [...value].length > 20 ||
+    /[\p{Cc}\p{Zl}\p{Zp}\p{Cs}]/u.test(value)
+  )
+    invalidResponse('custom preset name');
+  return value;
+}
+
+export interface RenamePresetIntent {
+  readonly slot: number;
+  readonly expectedRevision: string;
+  readonly name: string;
+  readonly key: string;
+}
+
+export async function renameCustomPreset(
+  intent: RenamePresetIntent,
+  signal?: AbortSignal,
+): Promise<SavedPreset> {
+  const result = await gameRequest<unknown>(`/api/games/likes/loadouts/${intent.slot}`, {
+    method: 'PATCH',
+    signal,
+    json: { expected_revision: intent.expectedRevision, name: presetName(intent.name) },
+    idempotencyKey: intent.key,
+    expectedStatuses: [200],
+  });
+  return savedPreset(result.data);
 }

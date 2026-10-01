@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 11 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 12 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -32,7 +32,7 @@ func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
 }
 
 func TestExportDocumentHasClosedTopLevel(t *testing.T) {
-	payload, err := json.Marshal(ExportDocument{})
+	payload, err := json.Marshal(ExportDocument{GovernanceExport: GovernanceExport{LakeNotes: testLakeNotesExport()}})
 	if err != nil {
 		t.Fatalf("marshal export document: %v", err)
 	}
@@ -47,12 +47,12 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"request_adaptations", "continuity", "fat_fish",
-		"limited_activities", "image_tasks", "inactivity",
+		"limited_activities", "image_tasks", "inactivity", "lake_notes",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
 		"bidding", "likes", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
 		"fishing", "generated_at", "issues", "linklink", "log_summary", "models", "rps",
-		"schema_version", "thursday", "usage", "user", "welfare_claims",
+		"schema_version", "thursday", "usage", "user", "welfare_claims", "personal_automation",
 	}
 	sort.Strings(want)
 	if !reflect.DeepEqual(got, want) {
@@ -61,7 +61,10 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 }
 
 func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
-	assertClosedJSONKeys(t, GovernanceExport{}, "limited_activities", "image_tasks", "inactivity")
+	assertClosedJSONKeys(t, PersonalAutomationBatchExport{}, "id", "kind", "target_id", "item_count", "created_at", "expires_at", "results")
+	assertClosedJSONKeys(t, PersonalAutomationStepExport{Outcome: "imported", EndpointKeyID: "key", BindingID: "binding", Code: "code", Message: "message"}, "index", "status", "outcome", "endpoint_key_id", "binding_id", "code", "message")
+	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes")
+	assertClosedJSONKeys(t, testLakeNotesExport(), "rules_id", "profile_revision", "profile", "casts", "entries", "exchanges")
 	assertClosedJSONKeys(t, ImageTaskExport{}, "id", "status", "n", "created_at", "dispatched_at", "completed_at", "billing_state", "charge", "refund", "actual_images")
 	assertClosedJSONKeys(t, LimitedActivityExport{}, "wallet", "exchanges")
 	assertClosedJSONKeys(t, InactivityExport{}, "activity", "runs")
@@ -80,12 +83,15 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 		Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel",
 	}, "kind", "channel_id", "name")
 
+	assertClosedJSONKeys(t, ModelExport{}, "role_policy", "id", "provider", "model", "full_name", "route_strategy", "silent_retry", "flatten_tool_calls", "created_at", "updated_at", "bindings")
 	assertClosedJSONKeys(t, DonationExport{},
 		"id", "status", "description", "review_result", "keys", "created_at", "updated_at")
 	assertClosedJSONKeys(t, DonationKeyExport{},
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
 		"physical_enabled", "charity_state", "limits", "usage", "token_reserve",
-		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits")
+		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "review", "manual_models")
+	assertClosedJSONKeys(t, DonationKeyReviewExport{}, "required", "revision", "material_available")
+	assertClosedJSONKeys(t, DonationManualModelExport{}, "upstream_model_id", "display_name")
 	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")
 	assertClosedJSONKeys(t, DonationSafeSourceExport{Kind: "custom"},
 		"kind", "connector_type", "base_url")

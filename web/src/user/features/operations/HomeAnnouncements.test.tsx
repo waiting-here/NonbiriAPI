@@ -1,6 +1,10 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import { CancelledError } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  beginManagementSessionRequest,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import { ApiError } from '@shared/query/http';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { coreKeys } from '../core/queries';
@@ -111,7 +115,12 @@ function confirmedSession(accountId: string, language: 'en' | 'zh' = 'en') {
 
 function confirmSession(rendered: RenderedProviders, accountId: string): void {
   act(() => {
-    rendered.queryClient.setQueryData(coreKeys.session, confirmedSession(accountId));
+    const session = confirmedSession(accountId);
+    const generation = beginManagementSessionRequest(rendered.queryClient, 'steward');
+    expect(noteManagementSessionSuccess(rendered.queryClient, 'steward', session, generation)).toBe(
+      true,
+    );
+    rendered.queryClient.setQueryData(coreKeys.session, session);
   });
 }
 
@@ -331,7 +340,7 @@ describe('home announcement previews', () => {
     confirmSession(rendered, '1');
     await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
 
-    act(() => {
+    await act(async () => {
       rendered.queryClient.setQueryData(coreKeys.session, confirmedSession('2'));
       rendered.rerender(
         <HomeAnnouncements
@@ -342,6 +351,9 @@ describe('home announcement previews', () => {
         />,
       );
     });
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(newSummary.title)).not.toBeInTheDocument();
+    confirmSession(rendered, '2');
     expect(await screen.findByText(newSummary.title)).toBeVisible();
 
     await act(async () => {

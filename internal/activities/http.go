@@ -1,17 +1,15 @@
 package activities
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -475,60 +473,22 @@ func (api *httpAPI) resumeThursday(writer http.ResponseWriter, request *http.Req
 	writeActivitiesMutation(writer, result.Status, result.Body)
 }
 
-type requestField[T any] struct {
-	Value T
-	Set   bool
-}
-
-func (field *requestField[T]) UnmarshalJSON(data []byte) error {
-	if field == nil || bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return errors.New("null is not allowed")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&field.Value); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON")
-	}
-	field.Set = true
-	return nil
-}
+type requestField[T any] = httpapi.RequestField[T]
 
 func decodeStrictObject[T any](writer http.ResponseWriter, request *http.Request, destination *T) bool {
-	if request == nil || request.Body == nil || destination == nil {
-		writeActivitiesError(writer, ErrInvalidRequest)
-		return false
-	}
 	if !requireEmptyQuery(writer, request) {
 		return false
 	}
-	limited := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
-	body, err := io.ReadAll(limited)
+	body, err := httpapi.ReadJSON(writer, request, destination, httpapi.BodyOptions{MaxBytes: idempotency.MaxControlBodyBytes, Validate: strictjson.ValidateObject})
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if errors.Is(err, httpapi.ErrTooLarge) {
 			httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, "request body is too large"))
 		} else {
 			writeActivitiesError(writer, ErrInvalidRequest)
 		}
 		return false
 	}
-	if len(body) == 0 || strictjson.ValidateObject(body) != nil {
-		writeActivitiesError(writer, ErrInvalidRequest)
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		writeActivitiesError(writer, ErrInvalidRequest)
-		return false
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		writeActivitiesError(writer, ErrInvalidRequest)
-		return false
-	}
+	clear(body)
 	return true
 }
 
@@ -574,11 +534,7 @@ func requireReadRequest(writer http.ResponseWriter, request *http.Request) bool 
 }
 
 func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
-	if request == nil || request.Body == nil {
-		return true
-	}
-	body, err := io.ReadAll(io.LimitReader(request.Body, 1))
-	if err != nil || len(body) != 0 {
+	if !httpapi.NoBody(request) {
 		writeActivitiesError(writer, ErrInvalidRequest)
 		return false
 	}
@@ -586,11 +542,7 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 }
 
 func strictQuery(writer http.ResponseWriter, request *http.Request) (url.Values, bool) {
-	if request == nil || request.URL == nil {
-		writeActivitiesError(writer, ErrInvalidRequest)
-		return nil, false
-	}
-	values, err := url.ParseQuery(request.URL.RawQuery)
+	values, err := httpapi.ParseQuery(request, false)
 	if err != nil {
 		writeActivitiesError(writer, ErrInvalidRequest)
 		return nil, false
@@ -599,16 +551,7 @@ func strictQuery(writer http.ResponseWriter, request *http.Request) (url.Values,
 }
 
 func exactQuery(values url.Values, allowed ...string) bool {
-	allow := make(map[string]struct{}, len(allowed))
-	for _, key := range allowed {
-		allow[key] = struct{}{}
-	}
-	for key, entries := range values {
-		if _, ok := allow[key]; !ok || len(entries) != 1 {
-			return false
-		}
-	}
-	return true
+	return httpapi.ExactQuery(values, allowed...)
 }
 
 func requireEmptyQuery(writer http.ResponseWriter, request *http.Request) bool {

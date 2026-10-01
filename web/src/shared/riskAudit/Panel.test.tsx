@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { RiskAuditPanel } from './Panel';
@@ -71,8 +71,131 @@ function HistoryProbe() {
     </>
   );
 }
+it('shows a single Discord IP window with retained original accounts and bounded evidence links', async () => {
+  const ipScan = {
+    ...scan,
+    kind: 'user_ips',
+    coverage: 'partial',
+    truncated_reason: 'identity_or_ip_unavailable',
+    source_watermark: '4097',
+    last_source_at: 1,
+    last_source_id: '4096',
+  };
+  api.recentTasks.mockResolvedValue([ipScan]);
+  api.taskResults.mockResolvedValue({
+    scan: ipScan,
+    items: [
+      {
+        discord_id: '123456789012345678',
+        peak: 3,
+        window_from: 1,
+        window_to: 2,
+        ips: ['203.0.113.1', '203.0.113.2', '203.0.113.3'],
+        ips_truncated: false,
+        accounts_truncated: true,
+        accounts: [
+          {
+            user_id: '7',
+            call_kind: 'self',
+            requests: 4,
+            dispatched: 3,
+            rejected: 1,
+            first_seen: 1,
+            last_seen: 2,
+          },
+        ],
+      },
+    ],
+    page: '1',
+    page_size: 20,
+    total_items: '1',
+    total_pages: '1',
+    coverage: 'partial',
+  });
+  const view = await renderWithProviders(
+    <>
+      <RiskAuditPanel role="steward" scopeKey="6" />
+      <HistoryProbe />
+    </>,
+    {
+      station: 'user',
+      role: 'level6',
+      route: '/steward?audit_tab=user_ips&audit_user_ips_scan=' + scanID,
+    },
+  );
+  expect(
+    await screen.findByRole('heading', { name: 'Discord ID: 123456789012345678' }),
+  ).toBeVisible();
+  const link = screen.getByRole('link', { name: 'View original requests in this window' });
+  const path = new URL(link.getAttribute('href')!, 'https://example.test');
+  expect(path.pathname).toBe('/steward');
+  expect(path.searchParams.get('tab')).toBe('logs');
+  expect(path.searchParams.get('user_id')).toBe('7');
+  expect(path.searchParams.get('from')).toBe('1');
+  expect(path.searchParams.get('to')).toBe('3');
+  expect(screen.getByText(/Some requests lack original identity/)).toBeVisible();
+  expect(screen.getByText(/IP or account details are truncated here/)).toBeVisible();
+  expect(api.user).not.toHaveBeenCalled();
+  await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
+  await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+  expect(screen.getByTestId('audit-location')).not.toHaveTextContent('audit_user_ips_scan');
+  expect(
+    screen.queryByRole('heading', { name: 'Discord ID: 123456789012345678' }),
+  ).not.toBeInTheDocument();
+});
+
+it('retries a missed scan response using the original filters and request token', async () => {
+  api.createTask
+    .mockRejectedValueOnce(new ApiError('network_error', 'Connection interrupted.', 0))
+    .mockResolvedValueOnce(scan);
+  const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/risk-audit',
+  });
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
+  await view.user.click(await screen.findByRole('button', { name: 'Start new scan' }));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Start new scan' })).toBeDisabled(),
+  );
+  const original = structuredClone(api.createTask.mock.calls[0][0]);
+  await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
+  await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+  await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
+  await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(2));
+  expect(api.createTask.mock.calls[1][0]).toEqual(original);
+});
+
+it('does not navigate after an old scan response arrives for a replaced account', async () => {
+  let finish!: (value: typeof scan) => void;
+  api.createTask.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = await renderWithProviders(
+    <>
+      <RiskAuditPanel role="admin" scopeKey="operator" />
+      <HistoryProbe />
+    </>,
+    { station: 'admin', role: 'admin', route: '/risk-audit' },
+  );
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
+  await view.user.click(await screen.findByRole('button', { name: 'Start new scan' }));
+  await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], {
+      admin: { username: 'another-operator' },
+    });
+    finish(scan);
+  });
+  expect(api.createTask.mock.calls[0][1].aborted).toBe(true);
+  expect(screen.getByTestId('audit-location')).toHaveTextContent('');
+  expect(api.taskResults).not.toHaveBeenCalled();
+});
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   api.recentTasks.mockResolvedValue([scan]);
   api.taskResults.mockResolvedValue({
     scan,
@@ -231,6 +354,7 @@ it('uses server-relative quick ranges even when the browser clock is ahead', asy
     route: selectedScanRoute,
   });
   await screen.findByText(/User ID: 9007199254740993/);
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
   await view.user.selectOptions(screen.getByLabelText('Time range'), '168');
   await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
   await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
@@ -262,6 +386,7 @@ it('converts a bounded administrator ban duration exactly and keeps it off ordin
     station: 'admin',
     role: 'admin',
   });
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
   await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
   await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
   await view.user.click(screen.getByRole('button', { name: 'Tavo' }));
@@ -274,10 +399,16 @@ it('converts a bounded administrator ban duration exactly and keeps it off ordin
   await view.user.type(screen.getByRole('spinbutton', { name: /Ban duration/ }), '2');
   await view.user.click(screen.getByRole('checkbox', { name: 'Automatic ban enabled' }));
   await view.user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(api.saveRule).not.toHaveBeenCalled();
+  const confirmation = await screen.findByRole('alertdialog');
+  expect(confirmation).toHaveTextContent('Tavo');
+  expect(confirmation).toHaveTextContent('2 Hours');
+  await view.user.click(within(confirmation).getByRole('button', { name: 'Save' }));
   await waitFor(() =>
     expect(api.saveRule).toHaveBeenCalledWith(
       expect.objectContaining({ auto_ban: { enabled: true, duration_seconds: 7200 } }),
       undefined,
+      expect.any(AbortSignal),
     ),
   );
 });
@@ -361,7 +492,7 @@ it('restores a saved aggregate scan’s frozen signal, call kind and time across
   );
   expect(await screen.findByText(/Frozen conditions for this scan/)).toHaveTextContent('Charity');
   expect(screen.getByText(/Frozen conditions for this scan/)).toHaveTextContent('High RPM');
-  expect(screen.getByText(/Frozen conditions for this scan/)).toHaveTextContent('Revision 7');
+  expect(screen.getByText(/Frozen conditions for this scan/)).toHaveTextContent('09/21/2026');
   expect(screen.getByRole('combobox', { name: 'Call type' })).toHaveValue('charity');
   expect(screen.getByRole('combobox', { name: 'Risk filter' })).toHaveValue('rpm');
   const selected = new URLSearchParams(screen.getByTestId('audit-location').textContent ?? '');
@@ -382,6 +513,7 @@ it('restores a saved aggregate scan’s frozen signal, call kind and time across
     new URLSearchParams(screen.getByTestId('audit-location').textContent ?? '').get('audit_model'),
   ).toBeNull();
   expect(await screen.findByText(/Frozen conditions for this scan/)).toHaveTextContent('High RPM');
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
   await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
   await waitFor(() =>
     expect(api.createTask.mock.lastCall?.[0]).toMatchObject({

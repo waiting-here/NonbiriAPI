@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -55,35 +56,36 @@ func (keys testCursorKeys) DeriveGenerationTwoSubkey([]byte) ([]byte, error) {
 }
 
 type testExportAdapter struct {
-	mu               sync.Mutex
-	calls            []string
-	tx               *sql.Tx
-	user             UserExport
-	usage            UsageExport
-	log              LogSummaryExport
-	endpoints        []EndpointExport
-	pairs            []CatalogPairExport
-	models           []ModelExport
-	callerKey        *CallerKeyExport
-	issues           []IssueExport
-	ledger           []LedgerEntryExport
-	welfare          []WelfareExport
-	thursday         []ThursdayExport
-	activity         ActivityExport
-	rankings         RankingExport
-	penalties        []PenaltyExport
-	governance       GovernanceExport
-	interaction      InteractionExport
-	fatFishFinalizer ExportFinalizer
-	donations        []DonationExport
-	charity          CharityExport
-	fishing          FishingExport
-	linklink         LinkLinkExport
-	rps              RPSExport
-	errAt            string
-	fishingFinalizer ExportFinalizer
-	linkFinalizer    ExportFinalizer
-	rpsFinalizer     ExportFinalizer
+	mu                 sync.Mutex
+	calls              []string
+	tx                 *sql.Tx
+	user               UserExport
+	usage              UsageExport
+	log                LogSummaryExport
+	endpoints          []EndpointExport
+	pairs              []CatalogPairExport
+	models             []ModelExport
+	callerKey          *CallerKeyExport
+	personalAutomation []PersonalAutomationBatchExport
+	issues             []IssueExport
+	ledger             []LedgerEntryExport
+	welfare            []WelfareExport
+	thursday           []ThursdayExport
+	activity           ActivityExport
+	rankings           RankingExport
+	penalties          []PenaltyExport
+	governance         GovernanceExport
+	interaction        InteractionExport
+	fatFishFinalizer   ExportFinalizer
+	donations          []DonationExport
+	charity            CharityExport
+	fishing            FishingExport
+	linklink           LinkLinkExport
+	rps                RPSExport
+	errAt              string
+	fishingFinalizer   ExportFinalizer
+	linkFinalizer      ExportFinalizer
+	rpsFinalizer       ExportFinalizer
 }
 
 func (adapter *testExportAdapter) record(name string, tx *sql.Tx) error {
@@ -111,6 +113,10 @@ func (adapter *testExportAdapter) ExportIdentity(_ context.Context, tx *sql.Tx, 
 func (adapter *testExportAdapter) ExportResources(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]EndpointExport, []CatalogPairExport, []ModelExport, *CallerKeyExport, error) {
 	err := adapter.record("resources", tx)
 	return adapter.endpoints, adapter.pairs, adapter.models, adapter.callerKey, err
+}
+
+func (adapter *testExportAdapter) ExportPersonalAutomation(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]PersonalAutomationBatchExport, error) {
+	return adapter.personalAutomation, adapter.record("personal_automation", tx)
 }
 
 func (adapter *testExportAdapter) ExportIssues(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]IssueExport, error) {
@@ -357,7 +363,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	auth := &testFinalAuth{}
-	exports := &testExportAdapter{}
+	exports := &testExportAdapter{governance: GovernanceExport{LakeNotes: testLakeNotesExport()}}
 	deleteCalls := []string{}
 	noopDelete := func(name string) DeleteAdapter { return testDeleteAdapter{name: name, calls: &deleteCalls} }
 	noopRecovery := func(name string) RecoveryAdapter { return testRecoveryAdapter{name: name} }
@@ -368,7 +374,8 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 		Store: store, UserAuth: auth, AdminAuth: auth, CursorKeys: testCursorKeys{},
 		Retirement: testRetirementBoundary{retirement: retirement}, Ledger: &testLedgerDelete{},
 		Export: ExportAdapters{
-			RequestAdaptation: exports, Continuity: exports, FatFish: exports,
+			PersonalAutomation: exports,
+			RequestAdaptation:  exports, Continuity: exports, FatFish: exports,
 			Identity: exports, Resources: exports, Issues: exports, Ledger: exports, Activities: exports,
 			Donations: exports, Charity: exports, Fishing: exports, LinkLink: exports, RPS: exports,
 			Bidding: testDuelExport{owner: exports, name: "bidding"}, Likes: testDuelExport{owner: exports, name: "likes"},
@@ -377,6 +384,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Rankings:   exports, Penalties: exports, Governance: exports,
 		},
 		Delete: DeleteAdapters{
+			PersonalAutomation:   noopDelete("personal_automation"),
 			FatFish:              noopDelete("fat_fish"),
 			RequestAdaptation:    noopDelete("request_adaptation"),
 			Continuity:           noopDelete("continuity"),
@@ -389,21 +397,23 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopDelete("bidding"), Likes: noopDelete("likes"), Blackjack: noopDelete("blackjack"),
 		},
 		Recovery: RecoveryAdapters{
-			FatFish:        noopRecovery("fat_fish"),
-			CharityRouting: noopRecovery("charity_routing"),
-			Governance:     noopRecovery("governance"),
-			Idempotency:    noopRecovery("idempotency"), Discovery: noopRecovery("discovery"), Claims: noopRecovery("claims"),
+			PersonalAutomation: noopRecovery("personal_automation"),
+			FatFish:            noopRecovery("fat_fish"),
+			CharityRouting:     noopRecovery("charity_routing"),
+			Governance:         noopRecovery("governance"),
+			Idempotency:        noopRecovery("idempotency"), Discovery: noopRecovery("discovery"), Claims: noopRecovery("claims"),
 			Thursday: noopRecovery("thursday"), Reports: noopRecovery("reports"), Fishing: noopRecovery("fishing"),
 			LinkLink: noopRecovery("linklink"), RPS: noopRecovery("rps"), Donations: noopRecovery("donations"), Secrets: noopRecovery("secrets"),
 			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
-			FatFish:           noopRetention("fat_fish"),
-			RequestAdaptation: noopRetention("request_adaptation"),
-			Continuity:        noopRetention("continuity"),
-			CharityRouting:    noopRetention("charity_routing"),
-			Governance:        noopRetention("governance"),
-			Sessions:          noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
+			PersonalAutomation: noopRetention("personal_automation"),
+			FatFish:            noopRetention("fat_fish"),
+			RequestAdaptation:  noopRetention("request_adaptation"),
+			Continuity:         noopRetention("continuity"),
+			CharityRouting:     noopRetention("charity_routing"),
+			Governance:         noopRetention("governance"),
+			Sessions:           noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
 			Observability: noopRetention("observability"), RiskAudit: noopRetention("risk_audit"),
 			Issues: noopRetention("issues"), Fishing: noopRetention("fishing"), LinkLink: noopRetention("linklink"),
 			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Donations: noopRetention("donations"),
@@ -425,4 +435,8 @@ func mustNewLifecycleCoordinator(t *testing.T, config Config) *Coordinator {
 		t.Fatalf("New: %v", err)
 	}
 	return coordinator
+}
+
+func testLakeNotesExport() LakeNotesExport {
+	return LakeNotesExport{RulesID: rules.RulesID, ProfileRevision: "0", Profile: rules.InitialProfile()}
 }

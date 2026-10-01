@@ -28,18 +28,19 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
 const (
-	charityModelPrefix = "[公益]"
-	maxPersonalRunes   = 129
-	maxCharityRunes    = 133
-	maxProviderRunes   = 64
-	maxUnixSecond      = int64(253402300799)
+	maxPersonalRunes = 129
+	maxCharityRunes  = 133
+	maxProviderRunes = 64
+	maxUnixSecond    = int64(253402300799)
 )
 
 // Service owns one complete Generation 2 logical request. Its read lock is
@@ -69,6 +70,8 @@ type Service struct {
 }
 
 type logicalAdmission struct {
+	rolePolicy    rolepolicy.Policy
+	modelRevision int64
 	charity       bool
 	modelID       int64
 	fullName      string
@@ -171,8 +174,10 @@ func (service *Service) Close() error {
 	return nil
 }
 
-func (*Service) String() string   { return "[forward service]" }
+func (*Service) String() string { return "[forward service]" }
+
 func (*Service) GoString() string { return "[forward service]" }
+
 func (*Service) LogValue() slog.Value {
 	return slog.StringValue("[forward service]")
 }
@@ -252,6 +257,9 @@ func (service *Service) Embeddings(ctx context.Context, writer http.ResponseWrit
 	service.execute(ctx, writer, userID, embeddingRequest(request), body, mediaType, language, nil)
 }
 
+// execute keeps admission and the route snapshot ahead of claim acceptance:
+// admission rejection must not reserve funds or dispatch credentials. Keep new
+// orchestration in focused helpers so the ordering remains visible here.
 func (service *Service) execute(ctx context.Context, writer http.ResponseWriter, userID int64, request *validatedRequest, body []byte, mediaType, language string, inbound http.Header) {
 	if service == nil || ctx == nil || writer == nil || userID <= 0 || !request.valid() {
 		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
@@ -259,7 +267,7 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	}
 	bound, filtered, cleanup, policyErr := service.bindDirectPolicy(ctx, userID, request, body)
 	if policyErr != nil {
-		service.writePreAcceptanceFailure(ctx, writer, nil, nil, policyErr, strings.HasPrefix(request.Model, charityModelPrefix), language)
+		service.writePreAcceptanceFailure(ctx, writer, nil, nil, policyErr, modelname.IsCharity(request.Model), language)
 		return
 	}
 	if cleanup != nil {
@@ -286,6 +294,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		return
 	}
 	routeKind := requestkind.ForOperation(request.operation, admission.charity)
+	// Debug needs the admitted identity; a dry interception must stop before
+	// any live request claim or credential dispatch.
 	decision, err := service.debug.DecideAfterAdmission(bounded, debug.CaptureInput{
 		UserID: userID, RouteKind: routeKind, Model: request.Model, Stream: request.Stream,
 		MediaType: mediaType, Body: body, Charity: admission.charity,
@@ -315,6 +325,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		}
 	}
 
+	// Freeze route capabilities and adaptations before reserving the request
+	// budget, so dispatch uses the same terms that admission accepted.
 	plan, err := service.snapshot(executionContext, userID, request.Model, attemptRequest, admission, decision, inbound)
 	if err != nil {
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
@@ -348,6 +360,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
 	}
+	// The accepted claim now owns the request identity. The HTTP error sink
+	// must not create a second rejection record for a later execution failure.
 	requestattempt.Handled(parent)
 
 	run := service.runAttempts(parent, executionContext, writer, suppressor, decision.Trace, userID, attemptRequest, plan, accepted)
@@ -356,6 +370,9 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		disposition = claim.AccountingCommit
 	}
 	actualCharge := int64(0)
+	// A dispatched request keeps the conservative commit disposition even if
+	// the caller leaves. Settlement has its own finite budget to finish
+	// accounting after cancellation; failed completion remains recoverable.
 	settleContext, settleCancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 	defer settleCancel()
 	if plan.charity && disposition == claim.AccountingCommit {
@@ -378,6 +395,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		failure = &value
 	}
 
+	// Failed attempt completion leaves recovery responsible for unresolved
+	// accounting; do not mark the logical request terminal ahead of it.
 	if !run.terminalBlocked {
 		_, completionErr := service.claims.CompleteRequest(settleContext, claim.CompleteRequestInput{
 			RequestID: accepted.ID, Caller: caller, Disposition: disposition, ActualChargeMilli: actualCharge,
@@ -392,6 +411,8 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		service.writeDebugTerminal(parent, suppressor, decision, run, caller, failure)
 		return
 	}
+	// Cancellation and an already committed response both forbid a second
+	// terminal write, including an error after streaming bytes were sent.
 	if parent.Err() != nil || caller.Class == claim.ResultCancelled || run.hasResult && run.result.Committed {
 		return
 	}
@@ -406,14 +427,14 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 
 func (service *Service) preflight(ctx context.Context, userID int64, request *validatedRequest) (logicalAdmission, *validatedRequest, func(), error) {
 	kind := "self"
-	if strings.HasPrefix(request.Model, charityModelPrefix) {
+	if modelname.IsCharity(request.Model) {
 		kind = "charity"
 	}
 	requestattempt.Classify(ctx, kind)
 	if service.classify != nil {
 		service.classify(ctx, userID, kind)
 	}
-	if strings.HasPrefix(request.Model, charityModelPrefix) {
+	if modelname.IsCharity(request.Model) {
 		now := request.policyDecisionNow
 		var err error
 		if request.policyModelID == 0 {
@@ -435,9 +456,13 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 			return logicalAdmission{charity: true}, request, nil, charityrouting.ErrNotFound
 		}
 		admission := logicalAdmission{
-			charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
+			rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
 			silentRetry: true, flatten: value.FlattenToolCalls, reservedMilli: value.ReservedMilli,
 			decisionNow: now,
+		}
+		if request.roleSnapshot != nil {
+			admission.rolePolicy = request.roleSnapshot.Clone()
+			admission.modelRevision = request.policyRevision
 		}
 		return prepareModelPolicy(request, admission)
 	}
@@ -446,8 +471,12 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		return logicalAdmission{}, request, nil, err
 	}
 	admission := logicalAdmission{
-		modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
+		rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
 		silentRetry: value.SilentRetry, flatten: value.FlattenToolCalls,
+	}
+	if request.roleSnapshot != nil {
+		admission.rolePolicy = request.roleSnapshot.Clone()
+		admission.modelRevision = request.policyRevision
 	}
 	return prepareModelPolicy(request, admission)
 }
@@ -456,14 +485,31 @@ func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (
 	if !validAdmission(admission) {
 		return admission, request, nil, ErrInternal
 	}
-	if !admission.flatten || request.operation != connectorcontract.OperationChatCompletions {
+	if request.operation != connectorcontract.OperationChatCompletions {
 		return admission, request, nil, nil
 	}
-	transformed, err := request.chat.ReverseFlatten()
+	var restored *openai.ChatRequest
+	var err error
+	if admission.flatten {
+		restored, err = request.chat.ReverseFlatten()
+	} else {
+		restored = request.chat.CloneForAttempt()
+	}
+	if err != nil || restored == nil {
+		return admission, request, nil, openai.ErrInvalidRequest
+	}
+	transformed, err := restored.ApplyRolePolicy(admission.rolePolicy)
+	restored.Clear()
 	if err != nil || transformed == nil {
 		return admission, request, nil, openai.ErrInvalidRequest
 	}
-	return admission, chatRequest(transformed), transformed.Clear, nil
+	copy := chatRequest(transformed)
+	copy.policyModelID, copy.policyDecisionNow = request.policyModelID, request.policyDecisionNow
+	copy.policyRevision = admission.modelRevision
+	policy := admission.rolePolicy.Clone()
+	copy.roleSnapshot = &policy
+	copy.excluded = append([]string(nil), request.excluded...)
+	return admission, copy, copy.Clear, nil
 }
 
 func (service *Service) snapshot(
@@ -517,10 +563,6 @@ func (service *Service) snapshot(
 	capabilityByType := make(map[connectorcontract.Type]bool, len(service.connectors))
 	for _, candidate := range plan.candidates {
 		if !service.validCandidate(candidate, admission.charity) {
-			plan.clearPrepared()
-			return executionPlan{}, ErrInternal
-		}
-		if request.chat != nil && admission.flatten && candidate.ConnectorType != connectorcontract.TypeOpenAICompatible {
 			plan.clearPrepared()
 			return executionPlan{}, ErrInternal
 		}
@@ -583,7 +625,7 @@ func (service *Service) supportedCharityConnectorTypes(request *validatedRequest
 	}
 	connectorTypes := make([]connectorcontract.Type, 0, len(service.connectors))
 	for connectorType, instance := range service.connectors {
-		if instance == nil || request.chat != nil && flatten && connectorType != connectorcontract.TypeOpenAICompatible {
+		if instance == nil || request.chat != nil && !request.chat.SupportsRolePassthrough(string(connectorType)) {
 			continue
 		}
 		if service.adaptations != nil {
@@ -821,7 +863,7 @@ func (service *Service) runAttempts(
 		if responseStart != nil && responseStart.started {
 			run.responseStarted = true
 		}
-		if executionContext.Err() != nil && !result.Success && !result.Committed && !run.responseStarted {
+		if executionContext.Err() != nil && !result.Success && !result.Committed && !run.responseStarted && !connectorcontract.ValidOutcome(result.StreakDisposition, result.FailureOrigin) {
 			result = endedExecutionResult(parent, executionContext)
 		}
 		if !validAttemptResult(result) {
@@ -1056,6 +1098,9 @@ func (service *Service) writeDebugTerminal(parent context.Context, suppressor *d
 	_ = suppressor.WriteCaptured()
 }
 
+// writePreAcceptanceFailure finishes any Debug caller record before emitting
+// the platform failure. A canceled caller gets no write; a live suppressor
+// retains control of the response until the pre-dispatch outcome is settled.
 func (service *Service) writePreAcceptanceFailure(
 	parent context.Context,
 	writer http.ResponseWriter,
@@ -1130,7 +1175,7 @@ func validAdmission(value logicalAdmission) bool {
 		(value.strategy == "ordered" || value.strategy == "random") &&
 		value.reservedMilli >= 0 && value.reservedMilli <= claim.MaxMoneyMilli &&
 		(!value.charity || value.decisionNow >= 0 && value.decisionNow <= maxUnixSecond) &&
-		(value.charity == strings.HasPrefix(value.fullName, charityModelPrefix))
+		(value.charity == modelname.IsCharity(value.fullName))
 }
 
 func samePersonalSnapshot(preflight logicalAdmission, snapshot PersonalSnapshot, userID int64) bool {
@@ -1152,14 +1197,16 @@ func charityModelID(plan executionPlan) int64 {
 }
 
 func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome {
+	result = connectorcontract.NormalizeOutcome(result)
 	kind := claim.ResultSynthetic
 	if result.UpstreamStatus != 0 {
 		kind = claim.ResultResponse
 	}
 	return claim.AttemptOutcome{
+		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
 		UpstreamCode: result.ErrorDetail.Code(),
-		Usage:        result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
+		Usage:        result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess, ResponseStarted: result.Committed,
 	}
 }
 
@@ -1239,7 +1286,7 @@ func validListedModel(value ListedModel, charity bool) bool {
 	return value.ModelID > 0 && value.CreatedAt >= 0 &&
 		validBoundedText(value.Provider, maxProviderRunes, 4096) &&
 		validBoundedText(value.FullName, maxRunes, 4096) &&
-		(charity == strings.HasPrefix(value.FullName, charityModelPrefix))
+		(charity == modelname.IsCharity(value.FullName))
 }
 
 func validBoundedText(value string, maxRunes, maxBytes int) bool {

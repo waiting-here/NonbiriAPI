@@ -132,7 +132,7 @@ test('custom presets persist across reloads without matchmaking, payment or cros
     await page.locator('.likes-role-option').nth(1).click();
     await page.locator('.likes-harness-option [data-guide^="harness:"]').first().click();
     await presets.getByRole('button', { name: 'Save to Preset1', exact: true }).click();
-    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset1 saved.');
+    await expect(presets.getByRole('status')).toHaveText('Preset saved.');
     const savedResponse = await api(owner, '/api/games/likes/loadouts');
     expect(savedResponse.status()).toBe(200);
     const saved = (await savedResponse.json()) as {
@@ -165,7 +165,7 @@ test('custom presets persist across reloads without matchmaking, payment or cros
       );
     expect(selectedSkills.sort()).toEqual([...saved.slots[0].loadout.skills].sort());
     await presets.getByRole('button', { name: 'Save to Preset10', exact: true }).click();
-    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset10 saved.');
+    await expect(presets.getByRole('status')).toHaveText('Preset saved.');
     await presets.getByRole('button', { name: 'Overwrite Preset1', exact: true }).click();
     const dialog = page.getByRole('alertdialog', { name: 'Overwrite custom presets', exact: true });
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -174,7 +174,7 @@ test('custom presets persist across reloads without matchmaking, payment or cros
     );
     await presets.getByRole('button', { name: 'Overwrite Preset1', exact: true }).click();
     await dialog.getByRole('button', { name: 'Confirm overwrite', exact: true }).click();
-    await expect(presets.getByRole('status')).toHaveText('Custom presets: Preset1 overwritten.');
+    await expect(presets.getByRole('status')).toHaveText('Preset saved.');
     expect((await (await api(owner, '/api/games/likes/loadouts')).json()).slots[0].revision).toBe(
       '2',
     );
@@ -310,7 +310,7 @@ async function riskEvidence(page: Page, sustained = true) {
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
-  await expect(page.getByText('Users: 4', { exact: false })).toBeVisible();
+  await expect(page.getByText('Distinct Discord identities: 4', { exact: false })).toBeVisible();
   await group.getByRole('button', { name: 'Client matches', exact: true }).click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
@@ -330,7 +330,7 @@ function amount(value: string) {
   expect(magnitude % 1000n).toBe(0n);
   return whole.toLocaleString('en-US');
 }
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'default' });
 
 test('an alert opens the exact retained issue context across refresh and mobile layout', async ({
   browser,
@@ -367,197 +367,207 @@ test('an alert opens the exact retained issue context across refresh and mobile 
   }
 });
 
-test('administrator reviews raw diagnostics, human audit evidence and all four asset ledgers', async ({
-  browser,
-}) => {
-  const f = fixture();
-  const context = await session(browser, 'admin');
-  try {
-    const page = await context.newPage();
-    const timeContext = await api(context, '/admin/api/time-context', true);
-    expect(timeContext.status()).toBe(200);
-    expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
-    await requestDiagnostics(page, true);
-    await discoveryDiagnostics(page, true);
-    await page.goto(f.admin_url + '/abuse-audit');
-    await clientRule(page, 'Synthetic client signal');
-    await riskEvidence(page);
-    await page
-      .getByRole('group', { name: 'Abuse audit', exact: true })
-      .getByRole('button', { name: 'Thresholds', exact: true })
-      .click();
-    await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('80');
-    await page.getByLabel('Threshold (%)', { exact: true }).fill('75');
-    const updated = page.waitForResponse(
-      (r) => r.url().endsWith('/abuse-audit/config') && r.request().method() === 'PUT',
-    );
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    expect((await updated).status()).toBe(200);
-    await expect(page.getByText('Policy revision: 2', { exact: true })).toBeVisible();
+test.describe('administrator policy changes and subsequent steward review', () => {
+  test.describe.configure({ mode: 'serial' });
 
-    await page.goto(f.admin_url + '/economy-audit');
-    await expect(
-      page.getByRole('heading', { name: 'Credit economy audit', exact: true }),
-    ).toBeVisible();
-    const names: Record<Asset, string> = {
-      general: 'General credits',
-      game: 'Game credits',
-      sketch_paper: 'Sketch paper',
-      sketch_brush: 'Paint brushes',
-    };
-    const net: Record<Asset, string> = {
-      general: '2800000000',
-      game: '4000',
-      sketch_paper: '400000',
-      sketch_brush: '80000',
-    };
-    for (const asset of Object.keys(names) as Asset[]) {
-      await page.getByLabel('Asset').selectOption(asset);
-      await page.getByRole('button', { name: 'Apply', exact: true }).click();
-      await expect(page.getByRole('heading', { name: names[asset], exact: true })).toBeVisible();
-      const response = await api(context, '/admin/api/economy-audit/summary?asset=' + asset, true);
-      expect(response.status()).toBe(200);
-      const summary = (await response.json()) as Summary;
-      expect(summary.metadata.projected_seq).toBe(summary.metadata.ledger_seq);
-      expect(summary.reconciliation.status).toBe('matched');
-      expect(summary.reconciliation.inventory_net).toBe(net[asset]);
-      expect(summary.reconciliation.ledger_net).toBe(net[asset]);
-      expect(summary.inventory).toEqual(f.summaries[asset].inventory);
-      const stock = page.getByRole('heading', { name: 'Current stock', exact: true }).locator('..');
+  test('administrator reviews raw diagnostics, human audit evidence and all four asset ledgers', async ({
+    browser,
+  }) => {
+    const f = fixture();
+    const context = await session(browser, 'admin');
+    try {
+      const page = await context.newPage();
+      const timeContext = await api(context, '/admin/api/time-context', true);
+      expect(timeContext.status()).toBe(200);
+      expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
+      await requestDiagnostics(page, true);
+      await discoveryDiagnostics(page, true);
+      await page.goto(f.admin_url + '/abuse-audit');
+      await clientRule(page, 'Synthetic client signal');
+      await riskEvidence(page);
+      await page
+        .getByRole('group', { name: 'Abuse audit', exact: true })
+        .getByRole('button', { name: 'Thresholds', exact: true })
+        .click();
+      await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('80');
+      await page.getByLabel('Threshold (%)', { exact: true }).fill('75');
+      const updated = page.waitForResponse(
+        (r) => r.url().endsWith('/abuse-audit/config') && r.request().method() === 'PUT',
+      );
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      expect((await updated).status()).toBe(200);
+      await expect(page.getByText('Policy revision: 2', { exact: true })).toBeVisible();
+
+      await page.goto(f.admin_url + '/economy-audit');
       await expect(
-        stock
-          .locator('dt')
-          .filter({ hasText: /^Net stock$/ })
-          .locator('..'),
-      ).toContainText(amount(net[asset]));
-      await expect(
-        page.getByText(
-          'Retained-ledger reconciliation matches: net stock = issuance − retirement.',
-          { exact: true },
-        ),
+        page.getByRole('heading', { name: 'Credit economy audit', exact: true }),
       ).toBeVisible();
-      await expect(
-        page.getByRole('table', { name: 'Flows by time bucket', exact: true }),
-      ).toBeVisible();
-      const chart = page.getByRole('slider', { name: 'Issuance and retirement time bucket' });
-      await chart.focus();
-      await page.keyboard.press('Home');
-      await expect(chart).toHaveAttribute('aria-valuenow', '1');
-      await expect(page.locator('.audit-chart-selection')).toContainText('New issuance');
-      await page.keyboard.press('End');
-      await expect(chart).not.toHaveAttribute('aria-valuenow', '1');
-      if (asset === 'general') {
-        for (const width of [1440, 1920, 2560, 3440, 390]) {
-          await page.setViewportSize({ width, height: 1000 });
-          await expect
-            .poll(() =>
-              chart.evaluate((element) => {
-                const canvas = element as HTMLCanvasElement;
-                const box = canvas.getBoundingClientRect();
-                const parent = canvas.parentElement!.getBoundingClientRect();
-                return (
-                  box.left >= 0 &&
-                  box.right <= innerWidth + 1 &&
-                  Math.abs(box.width - parent.width) <= 1 &&
-                  Math.abs(canvas.width - box.width * devicePixelRatio) <= 1 &&
-                  Math.abs(canvas.height - box.height * devicePixelRatio) <= 1
-                );
-              }),
-            )
-            .toBe(true);
-          await page
-            .locator('.audit-chart')
-            .screenshot({ path: `test-results/audit/chart-${width}.png` });
-        }
-        await page.evaluate(() => {
-          document.documentElement.dataset.theme = 'dark';
-        });
-        await page.evaluate(
-          () =>
-            new Promise<void>((resolve) =>
-              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-            ),
+      const names: Record<Asset, string> = {
+        general: 'General credits',
+        game: 'Game credits',
+        sketch_paper: 'Sketch paper',
+        sketch_brush: 'Paint brushes',
+      };
+      const net: Record<Asset, string> = {
+        general: '2800000000',
+        game: '4000',
+        sketch_paper: '400000',
+        sketch_brush: '80000',
+      };
+      for (const asset of Object.keys(names) as Asset[]) {
+        await page.getByLabel('Asset').selectOption(asset);
+        await page.getByRole('button', { name: 'Apply', exact: true }).click();
+        await expect(page.getByRole('heading', { name: names[asset], exact: true })).toBeVisible();
+        const response = await api(
+          context,
+          '/admin/api/economy-audit/summary?asset=' + asset,
+          true,
         );
-        await page
-          .locator('.audit-chart')
-          .screenshot({ path: 'test-results/audit/chart-dark.png' });
-      }
-      if (asset === 'game')
+        expect(response.status()).toBe(200);
+        const summary = (await response.json()) as Summary;
+        expect(summary.metadata.projected_seq).toBe(summary.metadata.ledger_seq);
+        expect(summary.reconciliation.status).toBe('matched');
+        expect(summary.reconciliation.inventory_net).toBe(net[asset]);
+        expect(summary.reconciliation.ledger_net).toBe(net[asset]);
+        expect(summary.inventory).toEqual(f.summaries[asset].inventory);
+        const stock = page
+          .getByRole('heading', { name: 'Current stock', exact: true })
+          .locator('..');
         await expect(
           stock
             .locator('dt')
-            .filter({ hasText: /^Negative user balances$/ })
+            .filter({ hasText: /^Net stock$/ })
             .locator('..'),
-        ).toContainText('1');
+        ).toContainText(amount(net[asset]));
+        await expect(
+          page.getByText(
+            'Retained-ledger reconciliation matches: net stock = issuance − retirement.',
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await expect(
+          page.getByRole('table', { name: 'Flows by time bucket', exact: true }),
+        ).toBeVisible();
+        const chart = page.getByRole('slider', { name: 'Issuance and retirement time bucket' });
+        await chart.focus();
+        await page.keyboard.press('Home');
+        await expect(chart).toHaveAttribute('aria-valuenow', '1');
+        await expect(page.locator('.audit-chart-selection')).toContainText('New issuance');
+        await page.keyboard.press('End');
+        await expect(chart).not.toHaveAttribute('aria-valuenow', '1');
+        if (asset === 'general') {
+          for (const width of [1440, 1920, 2560, 3440, 390]) {
+            await page.setViewportSize({ width, height: 1000 });
+            await expect
+              .poll(() =>
+                chart.evaluate((element) => {
+                  const canvas = element as HTMLCanvasElement;
+                  const box = canvas.getBoundingClientRect();
+                  const parent = canvas.parentElement!.getBoundingClientRect();
+                  return (
+                    box.left >= 0 &&
+                    box.right <= innerWidth + 1 &&
+                    Math.abs(box.width - parent.width) <= 1 &&
+                    Math.abs(canvas.width - box.width * devicePixelRatio) <= 1 &&
+                    Math.abs(canvas.height - box.height * devicePixelRatio) <= 1
+                  );
+                }),
+              )
+              .toBe(true);
+            await page
+              .locator('.audit-chart')
+              .screenshot({ path: `test-results/audit/chart-${width}.png` });
+          }
+          await page.evaluate(() => {
+            document.documentElement.dataset.theme = 'dark';
+          });
+          await page.evaluate(
+            () =>
+              new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+              ),
+          );
+          await page
+            .locator('.audit-chart')
+            .screenshot({ path: 'test-results/audit/chart-dark.png' });
+        }
+        if (asset === 'game')
+          await expect(
+            stock
+              .locator('dt')
+              .filter({ hasText: /^Negative user balances$/ })
+              .locator('..'),
+          ).toContainText('1');
+      }
+      await page
+        .getByRole('group', { name: 'Audit view' })
+        .getByRole('button', { name: 'Channels', exact: true })
+        .click();
+      const channels = page.getByRole('table', {
+        name: 'Open a channel to inspect its ledger entries',
+      });
+      await channels
+        .getByRole('row')
+        .filter({ hasText: 'activity_exchange' })
+        .getByRole('button', { name: 'Picture book', exact: true })
+        .click();
+      const operation = page.locator('details.audit-operation').first();
+      await operation.locator('summary').click();
+      await expect(operation).toContainText('activity_exchange');
+      await expect(operation.getByRole('table')).toContainText('Paint brushes');
+      await expect(operation.getByRole('table')).toContainText('General credits');
+      await expect(page.getByRole('button', { name: 'Clear operation filter' })).toBeVisible();
+    } finally {
+      await context.close();
     }
-    await page
-      .getByRole('group', { name: 'Audit view' })
-      .getByRole('button', { name: 'Channels', exact: true })
-      .click();
-    const channels = page.getByRole('table', {
-      name: 'Open a channel to inspect its ledger entries',
-    });
-    await channels
-      .getByRole('row')
-      .filter({ hasText: 'activity_exchange' })
-      .getByRole('button', { name: 'Picture book', exact: true })
-      .click();
-    const operation = page.locator('details.audit-operation').first();
-    await operation.locator('summary').click();
-    await expect(operation).toContainText('activity_exchange');
-    await expect(operation.getByRole('table')).toContainText('Paint brushes');
-    await expect(operation.getByRole('table')).toContainText('General credits');
-    await expect(page.getByRole('button', { name: 'Clear operation filter' })).toBeVisible();
-  } finally {
-    await context.close();
-  }
-});
+  });
 
-test('full steward reads sources and activity diagnostics and edits rules but not thresholds or economy', async ({
-  browser,
-}) => {
-  const f = fixture();
-  const context = await session(browser, 6, true);
-  try {
-    const timeContext = await api(context, '/api/steward/time-context');
-    expect(timeContext.status()).toBe(200);
-    expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
-    const page = await context.newPage();
-    await requestDiagnostics(page, false, true);
-    await discoveryDiagnostics(page, false);
-    await page.goto(f.user_url + '/steward?tab=risk');
-    await clientRule(page, 'Synthetic client reviewed', true);
-    // A policy revision must not reinterpret older complete minutes as current evidence.
-    await riskEvidence(page, false);
-    await page
-      .getByRole('group', { name: 'Abuse audit', exact: true })
-      .getByRole('button', { name: 'Thresholds', exact: true })
-      .click();
-    await expect(page.getByLabel('Threshold (%)', { exact: true })).toBeDisabled();
-    await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('75');
-    await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
-    await expect(
-      page.getByText('Only administrators can change thresholds.', { exact: true }),
-    ).toBeVisible();
-    const configResponse = await api(context, '/api/steward/abuse-audit/config');
-    expect(configResponse.status()).toBe(200);
-    const config = (await configResponse.json()) as Record<string, unknown>;
-    const denied = await api(context, '/api/steward/abuse-audit/config', false, 'PUT', {
-      ...config,
-      threshold_percent: 90,
-    });
-    expect(denied.status()).toBe(403);
-    const economy = await api(context, '/admin/api/economy-audit/summary', true);
-    expect(economy.status()).toBe(401);
-    expect(await economy.text()).not.toContain('"inventory"');
-    await page.goto(f.admin_url + '/economy-audit');
-    await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: 'Credit economy audit', exact: true }),
-    ).toHaveCount(0);
-  } finally {
-    await context.close();
-  }
+  test('full steward reads sources and activity diagnostics and edits rules but not thresholds or economy', async ({
+    browser,
+  }) => {
+    const f = fixture();
+    const context = await session(browser, 6, true);
+    try {
+      const timeContext = await api(context, '/api/steward/time-context');
+      expect(timeContext.status()).toBe(200);
+      expect(await timeContext.json()).toEqual({ mode: 'site', offset_minutes: 0 });
+      const page = await context.newPage();
+      await requestDiagnostics(page, false, true);
+      await discoveryDiagnostics(page, false);
+      await page.goto(f.user_url + '/steward?tab=risk');
+      await clientRule(page, 'Synthetic client reviewed', true);
+      // A policy revision must not reinterpret older complete minutes as current evidence.
+      await riskEvidence(page, false);
+      await page
+        .getByRole('group', { name: 'Abuse audit', exact: true })
+        .getByRole('button', { name: 'Thresholds', exact: true })
+        .click();
+      await expect(page.getByLabel('Threshold (%)', { exact: true })).toBeDisabled();
+      await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('75');
+      await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+      await expect(
+        page.getByText('Only administrators can change thresholds.', { exact: true }),
+      ).toBeVisible();
+      const configResponse = await api(context, '/api/steward/abuse-audit/config');
+      expect(configResponse.status()).toBe(200);
+      const config = (await configResponse.json()) as Record<string, unknown>;
+      const denied = await api(context, '/api/steward/abuse-audit/config', false, 'PUT', {
+        ...config,
+        threshold_percent: 90,
+      });
+      expect(denied.status()).toBe(403);
+      const economy = await api(context, '/admin/api/economy-audit/summary', true);
+      expect(economy.status()).toBe(401);
+      expect(await economy.text()).not.toContain('"inventory"');
+      await page.goto(f.admin_url + '/economy-audit');
+      await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'Credit economy audit', exact: true }),
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 for (const level of [5, 1] as const) {

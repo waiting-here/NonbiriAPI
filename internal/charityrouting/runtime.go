@@ -11,12 +11,14 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
+	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 const (
@@ -93,20 +95,25 @@ WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gat
 	}
 
 	var preflight RuntimePreflight
+	var encodedPolicy string
 	var enabled, discount, discountEnabled int
 	var pricingMode string
 	var requestPrice int64
 	var discountStart, discountEnd sql.NullInt64
 	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision
 FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &preflight.Provider, &preflight.Model,
 		&preflight.FullName, &enabled, &preflight.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimePreflight{}, ErrNotFound
 	}
 	if err != nil {
 		return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight model: %w", err)
+	}
+	preflight.RolePolicy, err = rolepolicy.Decode(encodedPolicy)
+	if err != nil {
+		return RuntimePreflight{}, ErrInvariant
 	}
 	if enabled != 1 {
 		return RuntimePreflight{}, ErrNotFound
@@ -297,6 +304,7 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 // second transaction or materializing expiry inside a browse request.
 func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callerID int64) (RuntimeSnapshot, error) {
 	var snapshot RuntimeSnapshot
+	var encodedPolicy string
 	var enabled int
 	var pricingMode string
 	var requestPrice int64
@@ -313,15 +321,19 @@ func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decis
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision
 FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Provider, &snapshot.Model,
 		&snapshot.FullName, &enabled, &snapshot.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime model: %w", err)
+	}
+	snapshot.RolePolicy, err = rolepolicy.Decode(encodedPolicy)
+	if err != nil {
+		return RuntimeSnapshot{}, ErrInvariant
 	}
 	if enabled != 1 {
 		return RuntimeSnapshot{}, ErrNotFound
@@ -351,10 +363,10 @@ JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
-JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
+
 WHERE b.charity_model_id=? AND d.status='approved'
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
-AND k.enabled=1 AND e.enabled=1 AND (pc.automatic_supports>0 OR pc.manual_supports>0)
+AND k.enabled=1 AND e.enabled=1 AND `+charityscope.SupportSQL("dk.id", "b.endpoint_key_id", "b.upstream_model_id")+`
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
 AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level)=6))
 AND EXISTS(SELECT 1 FROM users donor WHERE donor.id=d.user_id AND (donor.is_banned=0 OR donor.banned_until<=? OR (donor.banned_until IS NULL AND donor.ban_kind='protective_inactivity')))

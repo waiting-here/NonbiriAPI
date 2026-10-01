@@ -233,6 +233,19 @@ func (r *Repository) startDiscovery(ctx context.Context, userID, endpointID, key
 	committed := false
 	defer finishTx(tx, &committed)
 	var authorize func(context.Context, *sql.Tx) error
+	if snapshot, ok := ctx.Value(automationDiscoverySnapshotKey{}).(AutomationDiscoverySnapshot); ok {
+		if err := r.VerifyAutomationDiscoverySnapshotInTransaction(ctx, tx, userID, snapshot); err != nil {
+			return MutationResult[DiscoveryAccepted]{}, err
+		}
+		identity := context.WithoutCancel(ctx)
+		authorize = func(work context.Context, transaction *sql.Tx) error {
+			bound := discoveryIdentityContext{Context: work, identity: identity}
+			if err := r.finalAuth.AuthorizeUserMutation(bound, transaction, userID); err != nil {
+				return err
+			}
+			return r.VerifyAutomationDiscoverySnapshotInTransaction(bound, transaction, userID, snapshot)
+		}
+	}
 	if managed != nil {
 		target, err := r.managedDiscovery.AuthorizeManagedDiscovery(ctx, tx, managed.role, actorID, managed.donationID, managed.keyID, true)
 		if err != nil {
@@ -345,6 +358,11 @@ WHERE endpoint_key_id=? AND revision=? AND state<>'checking'`, newRevision, oper
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusAccepted, accepted)
 	if err != nil {
 		return MutationResult[DiscoveryAccepted]{}, err
+	}
+	if managed == nil {
+		if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeModelDiscovery, "catalog_refresh", ResourceOperationResult{EndpointID: strconv.FormatInt(endpointID, 10), EndpointKeyID: strconv.FormatInt(keyID, 10), OperationID: operationID}); err != nil {
+			return MutationResult[DiscoveryAccepted]{}, err
+		}
 	}
 	if err := commitTx(tx, &committed); err != nil {
 		return MutationResult[DiscoveryAccepted]{}, err

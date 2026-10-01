@@ -1,10 +1,10 @@
-import { contentHash, normalizeLevel, stateDigest } from "./canonical";
+import { contentHash, normalizeLevel, stateDigestForVersion } from "./canonical";
 import { boundsOverlap, containsPolygon, polygonIntersectionArea, Rat, ringBounds, translatePolygon, type Bounds } from "./geometry";
 import { preparedFootprintOverlap, preparedIntersectsFish, preparePolygon, extendBounds, rectIntersectsCenter, type PreparedPolygon } from "./prepared";
 import { initialFishRNG, nextTurnBit, nextTurnWord, scoreUnits, stars, validateInputs } from "./protocol";
 import { firstSweptContact } from "./sweep";
 import { fishFootprint, positiveMod, sinCos } from "./trig_helpers";
-import { ENGINE_VERSION, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, SUBSTEPS, TICKS_PER_SECOND, type BowlState, type Direction, type EngineState, type FishState, type Gate, type InputTuple, type Level, type Point, type Polygon, type ReplayResult, type Switch } from "./types";
+import { ENGINE_VERSION, FRONT_TURN_NUMERATOR_V3, SIDE_TURN_NUMERATOR_V3, TURN_DENOMINATOR_V3, FIELD_HEIGHT, FIELD_WIDTH, FISH_RADIUS, SUBSTEPS, TICKS_PER_SECOND, type BowlState, type Direction, type EngineState, type FishState, type Gate, type InputTuple, type Level, type Point, type Polygon, type ReplayResult, type Switch } from "./types";
 import type { OverlapResult } from "./geometry_union";
 
 const SCALE = 1 << 20;
@@ -32,7 +32,7 @@ export class Engine {
     this.contentHash = contentHash(this.level);
     this.current = {
       tick: 0, solid_revision: 0,
-      fish: this.level.fish.map((fish): FishState => ({ id: fish.id, x: fish.x, y: fish.y, heading: fish.heading, status: "walking", bowl_id: 0, turn_dir: 0, turn_distance: 0, flow_id: 0, speed_remainder: 0, x_remainder: 0, y_remainder: 0, rng: initialFishRNG(seed, fish.id), ...(this.level.engine_version === ENGINE_VERSION ? { motion: { turn_remainder: 0, ambiguous_turn_dir: 0 } } : {}) })).sort((a, b) => a.id - b.id),
+      fish: this.level.fish.map((fish): FishState => ({ id: fish.id, x: fish.x, y: fish.y, heading: fish.heading, status: "walking", bowl_id: 0, turn_dir: 0, turn_distance: 0, flow_id: 0, speed_remainder: 0, x_remainder: 0, y_remainder: 0, rng: initialFishRNG(seed, fish.id), ...(this.level.engine_version !== 1 ? { motion: { turn_remainder: 0, ambiguous_turn_dir: 0 } } : {}) })).sort((a, b) => a.id - b.id),
       tools: this.level.tools.map((tool) => ({ id: tool.id, placed: tool.placed, x: tool.x, y: tool.y })).sort((a, b) => a.id - b.id),
       switches: this.level.switches.map((object) => ({ id: object.id, active: false, triggered: false, occupied: false })).sort((a, b) => a.id - b.id),
       gates: this.level.gates.map((gate) => ({ id: gate.id, open: gate.initially_open, pending: false })).sort((a, b) => a.id - b.id),
@@ -63,7 +63,7 @@ export class Engine {
 
   get tick(): number { return this.current.tick; }
   get terminal(): boolean { return this.current.terminal; }
-  stateHash(): string { return stateDigest(this.current); }
+  stateHash(): string { return stateDigestForVersion(this.level.engine_version, this.current); }
 
   private refreshSolids(): void {
     const solids = this.level.solids.map((item) => item.polygon);
@@ -179,7 +179,7 @@ export class Engine {
       if (move) { fish.x = move[0].x; fish.y = move[0].y; fish.x_remainder = move[1]; fish.y_remainder = move[2]; this.resolveContact(fish, start, move[0]); }
       return;
     }
-    if (this.level.engine_version === ENGINE_VERSION) { this.moveSubstepV2(fish, start, distance); return; }
+    if (this.level.engine_version !== 1) { this.moveSubstepV2(fish, start, distance); return; }
     if (fish.turn_dir !== 0) fish.heading = positiveMod(fish.heading + fish.turn_dir * 23, 4096);
     else {
       const move = this.canMove(fish, fish.heading, distance);
@@ -246,9 +246,14 @@ export class Engine {
       return;
     }
     const factor = 950 + Math.floor(nextTurnWord(fish.rng) * 101 / 4294967296);
+    let denominator = 5000;
+    if (this.level.engine_version === ENGINE_VERSION) {
+      denominator = TURN_DENOMINATOR_V3;
+      base = base === 138 ? FRONT_TURN_NUMERATOR_V3 : SIDE_TURN_NUMERATOR_V3;
+    }
     const accumulated = motion.turn_remainder + base * factor;
-    motion.turn_remainder = accumulated % 5000;
-    fish.heading = positiveMod(fish.heading + fish.turn_dir * Math.trunc(accumulated / 5000), 4096);
+    motion.turn_remainder = accumulated % denominator;
+    fish.heading = positiveMod(fish.heading + fish.turn_dir * Math.trunc(accumulated / denominator), 4096);
   }
 
   private updateMechanisms(): void {

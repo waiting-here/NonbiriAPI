@@ -403,15 +403,18 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await expect(
     page.locator('.status-badge').filter({ hasText: 'Pending follow-up' }).first(),
   ).toBeVisible();
-  await expect(page.getByText('Synthetic pending donation', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.ops-table tbody').getByText('Synthetic pending donation', { exact: true }),
+  ).toBeVisible();
   expect(listReads).toContain('?page=1&page_size=20');
   expect(listReads).toContain('?handling=pending&page=1&page_size=20');
   await saveScreenshot(page, 'admin-pending-queue-1280-light-en');
 
   await page.getByRole('button', { name: 'Review', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Donation #7', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/donation_id=7(?:&|$)/);
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Key 11 · sk-live…fixture', exact: true }),
+    page.getByRole('heading', { name: 'Service key sk-live…fixture', exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mark as processed', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Mark as processed', exact: true }).click();
@@ -455,9 +458,9 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
     'pending',
   );
-  await expect(page.getByRole('heading', { name: 'Donation #7', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Key 11 · sk-live…fixture', exact: true }),
+    page.getByRole('heading', { name: 'Service key sk-live…fixture', exact: true }),
   ).toBeVisible();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0);
@@ -467,9 +470,11 @@ test('admin pending badge opens the shared queue and processing survives refresh
     'pending',
   );
   await expect(page.getByText('No donations', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Donation #7', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Follow-up status', exact: true }).selectOption('');
-  await expect(page.getByText('Synthetic pending donation', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.ops-table tbody').getByText('Synthetic pending donation', { exact: true }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
   expect(processRequests).toHaveLength(1);
@@ -750,12 +755,13 @@ test('level-six stewardship shows the shared owner projection and caller identit
   await expect(page.getByText('Synthetic other donor', { exact: true })).toBeVisible();
   expect(donationListReads).toContain('?handling=pending&page=1&page_size=20');
   await page.getByRole('button', { name: 'Review', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Donation #8', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/donation_id=8(?:&|$)/);
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Key 12 · sk-live…fixture', exact: true }),
+    page.getByRole('heading', { name: 'Service key sk-live…fixture', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText('Synthetic other donor · 43 · 222222222222222222', { exact: true }),
+    page.getByText('Synthetic other donor · 222222222222222222', { exact: true }),
   ).toBeVisible();
   expect(donationDetailReads).toContain('');
   expect(donationKeyReads).toContain('?page=1&page_size=20');

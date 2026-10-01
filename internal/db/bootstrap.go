@@ -1250,7 +1250,17 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 		return err
 	}
 	if interactionPresent {
-		return seedInteractionStorage(ctx, tx)
+		if err := seedInteractionStorage(ctx, tx); err != nil {
+			return err
+		}
+	}
+	// Historical upgrade fixtures also use this seed path.
+	var lakePresent bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='lake_notes_periods')`).Scan(&lakePresent); err != nil {
+		return err
+	}
+	if lakePresent {
+		return seedLakeNotesStorage(ctx, tx)
 	}
 	return nil
 }

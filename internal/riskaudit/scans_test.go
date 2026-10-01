@@ -180,8 +180,13 @@ func TestClientScanCancellationPermissionsDeletionAndRetention(t *testing.T) {
 	}
 	f.exec(`UPDATE request_source_facts SET user_id=NULL WHERE request_log_id=?`, page.Items[0].LogID)
 	page, err = f.repository.ScanResults(ctx, steward, scan.ID, 1, 100)
+	if err != nil || page.TotalItems != "100" {
+		t.Fatal("active projection clear lost retained facts", err, page.TotalItems)
+	}
+	f.exec(`DELETE FROM request_source_facts WHERE request_log_id=?`, page.Items[0].LogID)
+	page, err = f.repository.ScanResults(ctx, steward, scan.ID, 1, 100)
 	if err != nil || page.TotalItems != "99" {
-		t.Fatal("retired association remains", err, page.TotalItems)
+		t.Fatal("retired source remains", err, page.TotalItems)
 	}
 	second, err := f.repository.CreateScan(ctx, steward, scanInput("steward_second_scan"))
 	if err != nil {
@@ -479,5 +484,29 @@ func TestClientScanCompletedPermissionsAndExpiredReplay(t *testing.T) {
 	f.exec(`UPDATE sessions SET expires_at=?,absolute_expires_at=?,last_seen_at=?`, f.now+600, f.now+1200, f.now)
 	if _, err = f.repository.CreateScan(ctx, other, expiredInput); !errors.Is(err, ErrConflict) {
 		t.Fatal("expired replay must not hit a storage constraint", err)
+	}
+}
+
+func TestClientScanIncludesRetainedSourcesAfterAccountDeletion(t *testing.T) {
+	f := newAuditFixture(t)
+	ctx := context.Background()
+	actor := Actor{Admin: true, UserID: f.admin}
+	subject := f.user(1)
+	scanRuleFixture(t, f)
+	root := f.source(subject, "self", "192.0.2.1", "direct_peer", "Example/1", "model", "success", 0)
+	f.exec(`UPDATE logical_requests SET user_id=NULL WHERE user_id=?`, subject)
+	f.exec(`DELETE FROM users WHERE id=?`, subject)
+	scan, err := f.repository.CreateScan(ctx, actor, scanInput("retained_client_source"))
+	if err != nil || scan.Candidates != 1 || scan.State != "queued" {
+		t.Fatal(scan, err)
+	}
+	finishScan(t, f.repository)
+	result, err := f.repository.ScanResults(ctx, actor, scan.ID, 1, 20)
+	if err != nil || result.Scan.Scanned != 1 || len(result.Items) != 1 || result.Items[0].LogID != root || result.Items[0].UserID != subject {
+		t.Fatal(result, err)
+	}
+	matches, err := f.repository.ClientMatches(ctx, actor, Window{})
+	if err != nil || len(matches.Items) != 1 || matches.Items[0].LogID != root || matches.Items[0].UserID != subject {
+		t.Fatal(matches, err)
 	}
 }

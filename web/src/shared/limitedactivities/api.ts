@@ -1,3 +1,4 @@
+import { decodeLakeDetail } from '@shared/lakenotes/api';
 import { decoded, idempotentOptions } from '@shared/operations/api';
 import {
   amount,
@@ -68,6 +69,8 @@ export function decodeSupply(value: unknown) {
 }
 export type Supply = ReturnType<typeof decodeSupply>;
 export function decodeDetail(value: unknown) {
+  if (value !== null && typeof value === 'object' && 'key' in value && value.key === 'lake-notes')
+    return decodeLakeDetail(value);
   const v = record(
     value,
     [

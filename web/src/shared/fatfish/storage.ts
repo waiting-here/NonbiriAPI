@@ -18,6 +18,7 @@ export interface StoredFishSession {
   start_key: string;
   submit_key: string;
   abandon_key: string;
+  abandon_revision?: string;
   terminal_tick: number | null;
   accepted: boolean;
   accepted_at_ms: number | null;

@@ -11,9 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 const (
@@ -27,12 +28,17 @@ const (
 )
 
 type modelRow struct {
+	rolePolicy                                                        string
 	id, revision, bindingRevision, bindingCount, createdAt, updatedAt int64
 	provider, model, fullName, routeStrategy                          string
 	silentRetry, flattenToolCalls                                     int
 }
 
 func (row modelRow) dto() (Model, error) {
+	policy, policyErr := rolepolicy.Decode(row.rolePolicy)
+	if policyErr != nil {
+		return Model{}, ErrUnavailable
+	}
 	id, err := decimalID(row.id)
 	if err != nil || row.revision < 1 || row.bindingRevision < 0 || row.bindingCount < 0 ||
 		row.silentRetry < 0 || row.silentRetry > 1 || row.flattenToolCalls < 0 || row.flattenToolCalls > 1 ||
@@ -40,7 +46,7 @@ func (row modelRow) dto() (Model, error) {
 		return Model{}, ErrUnavailable
 	}
 	return Model{
-		ID: id, Provider: row.provider, Model: row.model, FullName: row.fullName,
+		RolePolicy: policy, ID: id, Provider: row.provider, Model: row.model, FullName: row.fullName,
 		RouteStrategy: row.routeStrategy, SilentRetry: row.silentRetry == 1,
 		FlattenToolCalls: row.flattenToolCalls == 1, Revision: strconv.FormatInt(row.revision, 10),
 		BindingRevision: strconv.FormatInt(row.bindingRevision, 10), BindingCount: strconv.FormatInt(row.bindingCount, 10),
@@ -52,7 +58,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (Model, error) {
 	var row modelRow
 	if err := scanner.Scan(&row.id, &row.provider, &row.model, &row.fullName, &row.routeStrategy,
 		&row.silentRetry, &row.flattenToolCalls, &row.revision, &row.bindingRevision, &row.bindingCount,
-		&row.createdAt, &row.updatedAt); err != nil {
+		&row.createdAt, &row.updatedAt, &row.rolePolicy); err != nil {
 		return Model{}, err
 	}
 	return row.dto()
@@ -61,7 +67,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (Model, error) {
 const modelSelect = `
 SELECT m.id,m.provider,m.model,m.full_name,m.route_strategy,m.silent_retry,m.flatten_tool_calls,
        m.revision,m.binding_revision,(SELECT count(*) FROM model_bindings b WHERE b.model_id=m.id),
-       m.created_at,m.updated_at
+       m.created_at,m.updated_at,m.role_policy
 FROM models m`
 
 func (r *Repository) ListModels(ctx context.Context, userID int64, limit int, cursor string) (Page[Model], error) {
@@ -143,10 +149,8 @@ func getModelTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) (Model, 
 	return model, nil
 }
 
-const reservedCharityProviderPrefix = "[公益]"
-
 func validPersonalModelProvider(provider string) bool {
-	return validateExactText(provider, 1, maxModelNameRunes) && !strings.HasPrefix(provider, reservedCharityProviderPrefix)
+	return validateExactText(provider, 1, maxModelNameRunes) && !modelname.IsCharity(provider)
 }
 
 func validModelIdentity(provider, model string) bool {
@@ -158,6 +162,14 @@ func validRouteStrategy(strategy string) bool {
 }
 
 func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation ControlMutation, input CreateModelInput) (MutationResult[Model], error) {
+	policy := rolepolicy.Default()
+	if input.RolePolicy != nil {
+		policy = input.RolePolicy.Clone()
+	}
+	encodedPolicy, policyErr := policy.Canonical()
+	if policyErr != nil {
+		return MutationResult[Model]{}, ErrInvalidRequest
+	}
 	if input.RouteStrategy == "" {
 		input.RouteStrategy = "ordered"
 	}
@@ -194,10 +206,10 @@ func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation Con
 		return MutationResult[Model]{}, ErrResourceLimit
 	}
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,created_at,updated_at)
-SELECT ?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`,
+INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,role_policy,revision,binding_revision,created_at,updated_at)
+SELECT ?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`,
 		userID, input.Provider, input.Model, input.Provider+"/"+input.Model, input.RouteStrategy,
-		boolInt(input.SilentRetry), boolInt(input.FlattenToolCalls), now, now, userID)
+		boolInt(input.SilentRetry), boolInt(input.FlattenToolCalls), encodedPolicy, now, now, userID)
 	if err != nil {
 		return MutationResult[Model]{}, conflictOrError("create model", err)
 	}
@@ -214,6 +226,12 @@ SELECT ?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_
 			return MutationResult[Model]{}, err
 		}
 	}
+	defaultPolicy, _ := rolepolicy.Default().Canonical()
+	if encodedPolicy != defaultPolicy {
+		if err := rolepolicy.RecordAudit(ctx, tx, userID, "owner", "model", modelID, 0, 1, now); err != nil {
+			return MutationResult[Model]{}, err
+		}
+	}
 	model, err := getModelTx(ctx, tx, userID, modelID)
 	if err != nil {
 		return MutationResult[Model]{}, err
@@ -225,6 +243,9 @@ SELECT ?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_
 	if err != nil {
 		return MutationResult[Model]{}, err
 	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "model", ResourceOperationResult{ModelID: model.ID}); err != nil {
+		return MutationResult[Model]{}, err
+	}
 	if err := commitTx(tx, &committed); err != nil {
 		return MutationResult[Model]{}, err
 	}
@@ -233,7 +254,7 @@ SELECT ?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_
 
 func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, mutation ControlMutation, input PatchModelInput) (MutationResult[Model], error) {
 	if r == nil || userID <= 0 || modelID <= 0 || mutation.Route != routeModel || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, modelID) || mutation.Query != "" || input.ExpectedRevision < 1 ||
-		(input.Provider == nil && input.Model == nil && input.RouteStrategy == nil && input.SilentRetry == nil && input.FlattenToolCalls == nil) ||
+		(input.Provider == nil && input.Model == nil && input.RouteStrategy == nil && input.SilentRetry == nil && input.FlattenToolCalls == nil && input.RolePolicy == nil) ||
 		(input.Provider != nil && !validPersonalModelProvider(*input.Provider)) ||
 		(input.Model != nil && !validateExactText(*input.Model, 1, maxModelNameRunes)) ||
 		(input.RouteStrategy != nil && !validRouteStrategy(*input.RouteStrategy)) {
@@ -264,6 +285,14 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 	if revision != input.ExpectedRevision || revision == int64(^uint64(0)>>1) {
 		return MutationResult[Model]{}, ErrConflict
 	}
+	policy := current.RolePolicy.Clone()
+	if input.RolePolicy != nil {
+		policy = input.RolePolicy.Clone()
+	}
+	encodedPolicy, policyErr := policy.Canonical()
+	if policyErr != nil {
+		return MutationResult[Model]{}, ErrInvalidRequest
+	}
 	provider, modelName, strategy := current.Provider, current.Model, current.RouteStrategy
 	silentRetry, flatten := current.SilentRetry, current.FlattenToolCalls
 	if input.Provider != nil {
@@ -281,19 +310,10 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 	if input.FlattenToolCalls != nil {
 		flatten = *input.FlattenToolCalls
 	}
-	if !current.FlattenToolCalls && flatten {
-		incompatible, err := modelHasNonOpenAIBindingTx(ctx, tx, modelID)
-		if err != nil {
-			return MutationResult[Model]{}, err
-		}
-		if incompatible {
-			return MutationResult[Model]{}, ErrConflict
-		}
-	}
 	result, err := tx.ExecContext(ctx, `
-UPDATE models SET provider=?,model=?,full_name=?,route_strategy=?,silent_retry=?,flatten_tool_calls=?,revision=revision+1,updated_at=?
+UPDATE models SET provider=?,model=?,full_name=?,route_strategy=?,silent_retry=?,flatten_tool_calls=?,role_policy=?,revision=revision+1,updated_at=?
 WHERE id=? AND user_id=? AND revision=?`, provider, modelName, provider+"/"+modelName, strategy,
-		boolInt(silentRetry), boolInt(flatten), now, modelID, userID, input.ExpectedRevision)
+		boolInt(silentRetry), boolInt(flatten), encodedPolicy, now, modelID, userID, input.ExpectedRevision)
 	if err != nil {
 		return MutationResult[Model]{}, conflictOrError("patch model", err)
 	}
@@ -303,6 +323,12 @@ WHERE id=? AND user_id=? AND revision=?`, provider, modelName, provider+"/"+mode
 	}
 	if current.FlattenToolCalls != flatten {
 		if err := writePolicyAudit(ctx, tx, userID, "model", modelID, "flatten_tool_calls", current.FlattenToolCalls, flatten, now); err != nil {
+			return MutationResult[Model]{}, err
+		}
+	}
+	oldPolicy, _ := current.RolePolicy.Canonical()
+	if encodedPolicy != oldPolicy {
+		if err := rolepolicy.RecordAudit(ctx, tx, userID, "owner", "model", modelID, revision, revision+1, now); err != nil {
 			return MutationResult[Model]{}, err
 		}
 	}
@@ -318,20 +344,6 @@ WHERE id=? AND user_id=? AND revision=?`, provider, modelName, provider+"/"+mode
 		return MutationResult[Model]{}, err
 	}
 	return out, nil
-}
-
-func modelHasNonOpenAIBindingTx(ctx context.Context, tx *sql.Tx, modelID int64) (bool, error) {
-	var incompatible int
-	if err := tx.QueryRowContext(ctx, `
-SELECT EXISTS(
- SELECT 1 FROM model_bindings b
- JOIN endpoint_keys k ON k.id=b.endpoint_key_id
- JOIN endpoints e ON e.id=k.endpoint_id
- WHERE b.model_id=? AND e.connector_type<>?
-)`, modelID, string(connectorcontract.TypeOpenAICompatible)).Scan(&incompatible); err != nil {
-		return false, fmt.Errorf("resources: validate model flatten bindings: %w", err)
-	}
-	return incompatible == 1, nil
 }
 
 func (r *Repository) DeleteModel(ctx context.Context, userID, modelID int64, mutation ControlMutation, expectedRevision int64) (MutationResult[struct{}], error) {
@@ -479,15 +491,12 @@ func (r *Repository) AddBindings(ctx context.Context, userID, modelID int64, mut
 		return MutationResult[BindingsResponse]{}, ErrResourceLimit
 	}
 	for index, selection := range selections {
-		connectorType, eligible, err := bindingSelectionConnectorTx(ctx, tx, userID, selection.EndpointKeyID, selection.UpstreamModelID)
+		_, eligible, err := bindingSelectionConnectorTx(ctx, tx, userID, selection.EndpointKeyID, selection.UpstreamModelID)
 		if err != nil {
 			return MutationResult[BindingsResponse]{}, err
 		}
 		if !eligible {
 			return MutationResult[BindingsResponse]{}, ErrNotFound
-		}
-		if model.FlattenToolCalls && connectorType != string(connectorcontract.TypeOpenAICompatible) {
-			return MutationResult[BindingsResponse]{}, ErrConflict
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
@@ -508,6 +517,9 @@ VALUES(?,?,?,?,?,?)`, modelID, selection.EndpointKeyID, selection.UpstreamModelI
 	response := BindingsResponse{Bindings: bindings, BindingRevision: strconv.FormatInt(expectedBindingRevision+1, 10)}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusCreated, response)
 	if err != nil {
+		return MutationResult[BindingsResponse]{}, err
+	}
+	if err := recordResourceOperation(ctx, tx, userID, mutation, idempotency.ScopeControlMutation, "binding_batch", ResourceOperationResult{ModelID: model.ID, BindingIDs: bindingOperationIDs(bindings[int(currentCount):])}); err != nil {
 		return MutationResult[BindingsResponse]{}, err
 	}
 	if err := commitTx(tx, &committed); err != nil {

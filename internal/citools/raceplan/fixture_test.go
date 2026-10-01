@@ -40,7 +40,7 @@ func TestRunnerFixtureEnvironmentReplacesInheritedValues(t *testing.T) {
 
 func TestPrepareRunnerFixtureUsesUniquePrivateRunIdentity(t *testing.T) {
 	if os.Getenv("NONBIRI_RACE_FIXTURE_INTEGRATION") != "1" {
-		t.Skip("run explicitly to verify the race-instrumented child builder")
+		t.Skip("run explicitly to verify the closed template child builder")
 	}
 	goTool := os.Getenv("GO")
 	if goTool == "" {

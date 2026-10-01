@@ -165,6 +165,7 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 	}
 
 	endpointKeyID := "endpoint-key-id"
+	reviewRevision := "3"
 	priceLimit, callsLimit, tokensLimit := "10.5", "20", "3000"
 	endedReason := "expired"
 	channelID, channelName := "mch_safe", "Safe channel"
@@ -173,6 +174,7 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 		ID: "donation", Status: "approved", Description: "description",
 		ReviewResult: &donation.ReviewResult{Decision: "approve", Reason: "accepted", ReviewedAt: 80},
 		Keys: []donation.ExportDonationKey{{
+			Review: donation.ReviewState{Required: true, Revision: &reviewRevision, MaterialAvailable: true}, ManualModels: []donation.ManualModelExport{{UpstreamModelID: "own manual model", DisplayName: "own manual model"}},
 			ID: "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
 			SafeSource: donation.SafeSource{
 				Kind: "mainstream", BaseURL: "https://example.invalid", ConnectorType: "openai-compatible",
@@ -204,6 +206,7 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 		ID: "donation", Status: "approved", Description: "description",
 		ReviewResult: &lifecycle.DonationReviewExport{Decision: "approve", Reason: "accepted", ReviewedAt: 80},
 		Keys: []lifecycle.DonationKeyExport{{
+			Review: lifecycle.DonationKeyReviewExport{Required: true, Revision: &reviewRevision, MaterialAvailable: true}, ManualModels: []lifecycle.DonationManualModelExport{{UpstreamModelID: "own manual model", DisplayName: "own manual model"}},
 			RecurringLimits: []lifecycle.RecurringLimitExport{},
 			ID:              "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
 			SafeSource: lifecycle.DonationSafeSourceExport{

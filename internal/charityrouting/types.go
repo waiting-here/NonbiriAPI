@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 var (
@@ -134,6 +135,7 @@ type AdminRollingSuccess struct {
 }
 
 type AdminCharityModel struct {
+	RolePolicy            rolepolicy.Policy   `json:"role_policy"`
 	IsMainstream          bool                `json:"is_mainstream"`
 	ExcludedRequestFields []string            `json:"excluded_request_fields"`
 	TokenReserveCredits   *string             `json:"token_reserve_credits"`
@@ -188,6 +190,7 @@ type StewardRollingSuccess struct {
 }
 
 type StewardCharityModel struct {
+	RolePolicy            rolepolicy.Policy     `json:"role_policy"`
 	IsMainstream          bool                  `json:"is_mainstream"`
 	ExcludedRequestFields []string              `json:"excluded_request_fields"`
 	TokenReserveCredits   *string               `json:"token_reserve_credits"`
@@ -305,34 +308,36 @@ type DiscountPatchInput struct {
 }
 
 type ModelCreate struct {
-	IsMainstream          bool          `json:"is_mainstream"`
-	ExcludedRequestFields []string      `json:"excluded_request_fields,omitempty"`
-	TokenReserveCredits   *string       `json:"token_reserve_credits,omitempty"`
-	AllowedLevels         []int         `json:"allowed_levels,omitempty"`
-	PublicDescription     string        `json:"public_description,omitempty"`
-	RouteStrategy         string        `json:"route_strategy,omitempty"`
-	AffinityTTLSeconds    *int          `json:"affinity_ttl_seconds,omitempty"`
-	Provider              string        `json:"provider"`
-	Model                 string        `json:"model"`
-	Enabled               bool          `json:"enabled"`
-	Pricing               PricingInput  `json:"pricing"`
-	Discount              DiscountInput `json:"discount"`
-	FlattenToolCalls      bool          `json:"flatten_tool_calls"`
+	RolePolicy            *rolepolicy.Policy `json:"role_policy,omitempty"`
+	IsMainstream          bool               `json:"is_mainstream"`
+	ExcludedRequestFields []string           `json:"excluded_request_fields,omitempty"`
+	TokenReserveCredits   *string            `json:"token_reserve_credits,omitempty"`
+	AllowedLevels         []int              `json:"allowed_levels,omitempty"`
+	PublicDescription     string             `json:"public_description,omitempty"`
+	RouteStrategy         string             `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds    *int               `json:"affinity_ttl_seconds,omitempty"`
+	Provider              string             `json:"provider"`
+	Model                 string             `json:"model"`
+	Enabled               bool               `json:"enabled"`
+	Pricing               PricingInput       `json:"pricing"`
+	Discount              DiscountInput      `json:"discount"`
+	FlattenToolCalls      bool               `json:"flatten_tool_calls"`
 }
 
 type ModelPatch struct {
-	IsMainstream          *bool         `json:"is_mainstream,omitempty"`
-	ExcludedRequestFields *[]string     `json:"excluded_request_fields,omitempty"`
-	TokenReserveCredits   **string      `json:"token_reserve_credits,omitempty"`
-	AllowedLevels         *[]int        `json:"allowed_levels,omitempty"`
-	PublicDescription     *string       `json:"public_description,omitempty"`
-	RouteStrategy         *string       `json:"route_strategy,omitempty"`
-	AffinityTTLSeconds    *int          `json:"affinity_ttl_seconds,omitempty"`
-	ExpectedRevision      string        `json:"expected_revision"`
-	Provider              *string       `json:"provider,omitempty"`
-	Model                 *string       `json:"model,omitempty"`
-	Enabled               *bool         `json:"enabled,omitempty"`
-	Pricing               *PricingInput `json:"pricing,omitempty"`
+	RolePolicy            *rolepolicy.Policy `json:"role_policy,omitempty"`
+	IsMainstream          *bool              `json:"is_mainstream,omitempty"`
+	ExcludedRequestFields *[]string          `json:"excluded_request_fields,omitempty"`
+	TokenReserveCredits   **string           `json:"token_reserve_credits,omitempty"`
+	AllowedLevels         *[]int             `json:"allowed_levels,omitempty"`
+	PublicDescription     *string            `json:"public_description,omitempty"`
+	RouteStrategy         *string            `json:"route_strategy,omitempty"`
+	AffinityTTLSeconds    *int               `json:"affinity_ttl_seconds,omitempty"`
+	ExpectedRevision      string             `json:"expected_revision"`
+	Provider              *string            `json:"provider,omitempty"`
+	Model                 *string            `json:"model,omitempty"`
+	Enabled               *bool              `json:"enabled,omitempty"`
+	Pricing               *PricingInput      `json:"pricing,omitempty"`
 	Discount              *DiscountPatchInput
 	FlattenToolCalls      *bool `json:"flatten_tool_calls,omitempty"`
 }
@@ -400,6 +405,8 @@ func (candidate RuntimeCandidate) ClaimCandidate() claim.Candidate {
 }
 
 type RuntimeSnapshot struct {
+	RolePolicy       rolepolicy.Policy
+	Revision         int64
 	ModelID          int64
 	RouteStrategy    string
 	Provider         string
@@ -414,6 +421,8 @@ type RuntimeSnapshot struct {
 // eligibility facts. It intentionally has no endpoint, key, donation, health,
 // quota, or binding field.
 type RuntimePreflight struct {
+	RolePolicy       rolepolicy.Policy
+	Revision         int64
 	ModelID          int64
 	Provider         string
 	Model            string

@@ -31,6 +31,12 @@ type SecretWriter interface {
 	MarkEndpointSecretOrphaned(context.Context, *sql.Tx, int64, int64) error
 }
 
+// SecretMatcher compares a caller's body with a transaction-selected credential
+// reference without returning persisted plaintext to the resource repository.
+type SecretMatcher interface {
+	MatchEndpointSecret(context.Context, *sql.Tx, int64, []byte) (bool, error)
+}
+
 // EndpointKeyDeletionHook lets the donation owner terminate references before
 // the resource repository physically deletes verified owner keys. The hook
 // runs in the caller's transaction and must not independently authorize or commit.

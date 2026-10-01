@@ -1,3 +1,4 @@
+import { normalizeRolePolicy } from '@shared/rolePolicy';
 import { normalizeAnnouncementSummary } from '../operations/data';
 import { oneOf } from '@shared/operations/wire';
 import { automaticRestrictions } from '@shared/operations/restrictions';
@@ -1287,7 +1288,7 @@ export function normalizeModel(value: unknown): Model {
       'created_at',
       'updated_at',
     ],
-    ['browse'],
+    ['browse', 'role_policy'],
     'logical model',
   );
   const provider = logicalName(record.provider, 'logical model provider');
@@ -1319,6 +1320,7 @@ export function normalizeModel(value: unknown): Model {
     created_at: createdAt,
     updated_at: updatedAt,
     ...(browse ? { browse } : {}),
+    role_policy: normalizeRolePolicy(record.role_policy),
   };
 }
 

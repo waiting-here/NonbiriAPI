@@ -3,7 +3,6 @@ import type {
   BindingSelection,
   CallerKeyAuthority,
   CallerKeyMetadata,
-  LifecycleIntent,
 } from './types';
 
 export type MutationOutcome = 'idle' | 'pending' | 'success' | 'conflict' | 'unknown' | 'error';
@@ -67,7 +66,11 @@ export type EndpointSecretDraftEvent =
   | { type: 'submit'; accountId: string; pageInstanceId: string }
   | { type: 'local-error'; accountId: string; pageInstanceId: string; message: string }
   | { type: 'request-error'; accountId: string; pageInstanceId: string; message: string }
-  | { type: 'success' | 'cancel' | 'leave'; accountId: string; pageInstanceId: string }
+  | {
+      type: 'success' | 'cancel' | 'leave' | 'clear-secret';
+      accountId: string;
+      pageInstanceId: string;
+    }
   | { type: 'boundary'; accountId: string; pageInstanceId: string };
 
 export function initialEndpointSecretDraftState(
@@ -96,6 +99,7 @@ export function endpointSecretDraftReducer(
     return { ...state, secret: event.secret, status: 'editing', message: null };
   if (event.type === 'ownership')
     return { ...state, ownershipConfirmed: event.confirmed, status: 'editing', message: null };
+  if (event.type === 'clear-secret') return { ...state, secret: '', message: null };
   if (event.type === 'submit')
     return state.status === 'submitting'
       ? state
@@ -365,118 +369,4 @@ export function bindingDraftReducer(
     bindingRevision: event.bindingRevision ?? state.bindingRevision,
     selections: event.outcome === 'success' ? [] : state.selections,
   };
-}
-
-export interface LifecycleMachineState {
-  accountId: string;
-  intent: LifecycleIntent | null;
-  status:
-    | 'idle'
-    | 'elevating'
-    | 'confirming'
-    | 'pending'
-    | 'unknown'
-    | 'checking'
-    | 'active'
-    | 'error'
-    | 'complete';
-  actionId: string | null;
-  message: string | null;
-}
-
-export type LifecycleMachineEvent =
-  | { type: 'boundary'; accountId: string }
-  | { type: 'elevate'; accountId: string; intent: LifecycleIntent }
-  | { type: 'elevation-error'; accountId: string; intent: LifecycleIntent; message: string }
-  | { type: 'confirm'; accountId: string; intent: LifecycleIntent }
-  | { type: 'start'; accountId: string; intent: LifecycleIntent; actionId: string }
-  | {
-      type: 'uncertain';
-      accountId: string;
-      intent: LifecycleIntent;
-      actionId: string;
-      message: string;
-    }
-  | { type: 'check-start'; accountId: string }
-  | { type: 'authority-active'; accountId: string; message: string }
-  | { type: 'authority-error'; accountId: string; message: string }
-  | { type: 'error'; accountId: string; intent: LifecycleIntent; actionId: string; message: string }
-  | { type: 'complete'; accountId: string; intent: LifecycleIntent; actionId?: string }
-  | { type: 'cancel'; accountId: string };
-
-export function initialLifecycleMachineState(accountId: string): LifecycleMachineState {
-  return {
-    accountId,
-    intent: null,
-    status: 'idle',
-    actionId: null,
-    message: null,
-  };
-}
-
-export function lifecycleMachineReducer(
-  state: LifecycleMachineState,
-  event: LifecycleMachineEvent,
-): LifecycleMachineState {
-  if (event.type === 'boundary') return initialLifecycleMachineState(event.accountId);
-  if (event.accountId !== state.accountId) return state;
-  if (event.type === 'cancel') return initialLifecycleMachineState(state.accountId);
-  if (event.type === 'elevate') {
-    return {
-      ...state,
-      intent: event.intent,
-      status: 'elevating',
-      actionId: null,
-      message: null,
-    };
-  }
-  if (event.type === 'elevation-error') {
-    if (state.status !== 'elevating' || state.intent !== event.intent) return state;
-    return { ...state, status: 'error', message: event.message };
-  }
-  if (event.type === 'confirm') {
-    return {
-      ...state,
-      intent: event.intent,
-      status: 'confirming',
-      actionId: null,
-      message: null,
-    };
-  }
-  if (event.type === 'start') {
-    if (state.status !== 'confirming' || state.intent !== event.intent) return state;
-    return { ...state, status: 'pending', actionId: event.actionId, message: null };
-  }
-  if (event.type === 'complete' && event.actionId === undefined && state.status === 'elevating') {
-    return { ...state, status: 'complete' };
-  }
-  if (event.type === 'check-start') {
-    return (state.status === 'unknown' || state.status === 'active') && state.intent === 'delete'
-      ? { ...state, status: 'checking', message: null }
-      : state;
-  }
-  if (event.type === 'authority-active') {
-    return state.status === 'checking' && state.intent === 'delete'
-      ? { ...state, status: 'active', message: event.message }
-      : state;
-  }
-  if (event.type === 'authority-error') {
-    return state.status === 'checking' && state.intent === 'delete'
-      ? { ...state, status: 'unknown', message: event.message }
-      : state;
-  }
-  if (
-    state.status !== 'pending' ||
-    state.intent !== event.intent ||
-    state.actionId !== event.actionId
-  ) {
-    return state;
-  }
-  if (event.type === 'uncertain') {
-    return { ...state, status: 'unknown', actionId: null, message: event.message };
-  }
-  if (event.type === 'error') {
-    return { ...state, status: 'error', message: event.message, actionId: null };
-  }
-  return { ...state, status: 'complete', actionId: null, message: null };
 }

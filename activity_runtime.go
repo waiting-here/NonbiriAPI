@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/imageactivity"
 	"github.com/waiting-here/NonbiriAPI/internal/inactivity"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -29,6 +30,7 @@ type activityRuntime struct {
 	limited     *limitedactivities.Service
 	images      *imageactivity.Service
 	fish        *fatfish.Service
+	lake        *lakenotes.Service
 	inactivity  *inactivity.Service
 	cancelGames inactivity.CancelUserTx
 	now         func() time.Time
@@ -112,9 +114,17 @@ func newActivityRuntime(store *db.Store, vault *secret.Vault, sessions *auth.Run
 		_ = a.Close()
 		return nil, err
 	}
+	a.lake, err = lakenotes.New(lakenotes.Config{
+		Database: store.DB(), Users: users, Admins: roles, Gate: admission,
+		Keys: vault, Activity: activeActivityRecorder{}, Now: now,
+	})
+	if err != nil {
+		_ = a.Close()
+		return nil, err
+	}
 	a.limited, err = limitedactivities.New(limitedactivities.Config{
 		Database: store.DB(), Users: users, Admins: roles, Gate: admission, Keys: vault,
-		Registry: limitedactivities.NewRegistry(a.images, a.fish.ActivityRuntime()), Activity: activeActivityRecorder{}, Now: now,
+		Registry: limitedactivities.NewRegistry(a.images, a.fish.ActivityRuntime()).WithLakeNotes(a.lake.ActivityRuntime()), Activity: activeActivityRecorder{}, Now: now,
 	})
 	if err == nil {
 		a.inactivity, err = inactivity.New(inactivity.Config{
@@ -263,6 +273,17 @@ func (r limitedRoutes) RegisterAdminRoute(method, path string, handler limitedac
 	})
 }
 
+type lakeRoutes struct{ limitedRoutes }
+
+func (r lakeRoutes) RegisterUserRoute(method, path string, handler limitedactivities.AuthorizedUserHandler) error {
+	if method == http.MethodPost && path == "/api/limited-activities/lake-notes/casts/{id}/pause" {
+		return r.sessions.RegisterContinuationUserRoute(method, path, func(w http.ResponseWriter, req *http.Request, p resources.ContinuationUserPrincipal) {
+			handler(w, req, limitedactivities.UserPrincipal{UserID: p.UserID})
+		})
+	}
+	return r.limitedRoutes.RegisterUserRoute(method, path, handler)
+}
+
 type imageRoutes struct{ sessions *auth.Runtime }
 
 func (r imageRoutes) RegisterUserRoute(method, path string, handler imageactivity.AuthorizedUserHandler) error {
@@ -299,6 +320,9 @@ func (a *activityRuntime) RegisterRoutes(sessions *auth.Runtime) error {
 		return err
 	}
 	if err := fatfish.RegisterAdminRoutes(f, a.fish); err != nil {
+		return err
+	}
+	if err := lakenotes.RegisterRoutes(lakeRoutes{l}, l, a.lake); err != nil {
 		return err
 	}
 	if err := limitedactivities.RegisterRoutes(l, l, a.limited); err != nil {

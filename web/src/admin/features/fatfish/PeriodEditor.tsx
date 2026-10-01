@@ -3,35 +3,37 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
-import { useActivityText } from '@shared/limitedactivities/copy';
+import { useFatFishText } from './copy';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
 import {
-  changePeriodState, getNode, getPeriod, listPeriods, savePeriod, validatePeriod,
-  type GraphValidation, type NodeRecord, type PeriodInput, type PeriodRecord,
+  changePeriodState, getPeriod, listPeriods, savePeriod, validatePeriod,
+  type Condition, type GraphValidation, type NodeRecord, type PeriodInput, type PeriodRecord,
 } from './api';
 import { NodeEditor } from './NodeEditor';
-import { NodeMap } from './NodeMap';
-import { useDraftGuard } from './useDraftGuard';
+import { PeriodGraph } from './PeriodGraph';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { addPassedPrerequisite, EmptyConditionGroup, removeConditionEdge, type ConditionPath } from './conditionEdges';
+import { useDraftGuard, useWorkspaceConfirm } from './useDraftGuard';
 import { utf8Bytes } from './draft';
 
 function GraphPreview({ graph, nodes }: { graph: GraphValidation; nodes: NodeRecord[] }) {
-  const t = useActivityText();
+  const text = useFatFishText();
   const name = (id: string) => nodes.find((node) => node.id === id)?.title ?? id;
-  return <section className="fatfish-graph-preview" aria-label={t('发布前预览', 'Publish preview')}>
-    <h3>{t('逻辑可达与试玩核验', 'Logical reachability and playtest proofs')}</h3>
-    <p>{t('可发布', 'Publishable')}: {graph.publishable ? t('是', 'Yes') : t('否', 'No')}</p>
-    <p>{t('可达节点', 'Reachable nodes')}: {graph.reachable.map(name).join('、') || '—'}</p>
-    <p>{t('不可达节点', 'Unreachable nodes')}: {graph.unreachable.map(name).join('、') || '—'}</p>
-    <p>{t('缺少至少一星试玩', 'Missing one-star playtest')}: {graph.missing_playtests.map(name).join('、') || '—'}</p>
+  return <section className="fatfish-graph-preview" aria-label={text('publish_preview')}>
+    <h3>{text('logical_reachability_and_playtest_proofs')}</h3>
+    <p>{text('publishable')}: {graph.publishable ? text('yes') : text('no_2')}</p>
+    <p>{text('reachable_nodes')}: {graph.reachable.map(name).join('、') || '—'}</p>
+    <p>{text('unreachable_nodes')}: {graph.unreachable.map(name).join('、') || '—'}</p>
+    <p>{text('missing_one_star_playtest')}: {graph.missing_playtests.map(name).join('、') || '—'}</p>
   </section>;
 }
 
 function PeriodDraftEditor({ initial, onSaved, onDirty }: {
   initial: PeriodRecord | null; onSaved(period: PeriodRecord): void; onDirty(dirty: boolean): void;
 }) {
-  const t = useActivityText(), client = useQueryClient();
+  const text = useFatFishText(), client = useQueryClient();
   const [title, setTitle] = useState(initial?.title ?? ''), [description, setDescription] = useState(initial?.description ?? '');
   const [visible, setVisible] = useState(initial?.visible ?? false), [paused, setPaused] = useState(initial?.paused ?? false);
   const [pastPublic, setPastPublic] = useState(initial?.past_public ?? false);
@@ -39,7 +41,9 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
   const [end, setEnd] = useState(() => createTimeDraft(initial?.ends_at ?? null, 'second'));
   const [revision, setRevision] = useState(initial?.revision), [state, setState] = useState(initial?.state ?? 'draft');
   const [selectedNodeID, setSelectedNodeID] = useState<string | null>(null), [newNode, setNewNode] = useState(false);
-  const [nodeDirty, setNodeDirty] = useState(false), [nodePosition, setNodePosition] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [nodeDirty, setNodeDirty] = useState(false);
+  const [selectedCondition, setSelectedCondition] = useState<Condition | undefined>();
+  const [emptyEdge, setEmptyEdge] = useState<{ target: string; value: Condition; path: ConditionPath } | null>(null);
   const [error, setError] = useState<unknown>(null), [notice, setNotice] = useState('');
   const [graph, setGraph] = useState<GraphValidation | null>(null);
   const [saved, setSaved] = useState(() => JSON.stringify({ title: initial?.title ?? '', description: initial?.description ?? '', visible: initial?.visible ?? false,
@@ -50,7 +54,8 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
     ends: end.text === end.originalText && !end.invalidInput ? end.originalEpoch : ends ?? end.text });
   const dirty = saved !== current;
   const textValid = utf8Bytes(title) <= 128 && utf8Bytes(description) <= 8192;
-  useDraftGuard(dirty || nodeDirty);
+  const { dialog: leaveDialog } = useDraftGuard(dirty || nodeDirty);
+  const changingNode = useWorkspaceConfirm();
   useEffect(() => onDirty(dirty || nodeDirty), [dirty, nodeDirty, onDirty]);
   const save = useRetainedOperation((request: { id: string | null; input: PeriodInput }, key) => savePeriod(request.id, request.input, key),
     () => client.invalidateQueries({ queryKey: ['fatfish', 'periods'] }), ['admin', 'fatfish']);
@@ -69,7 +74,7 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
       const result = await save.mutateAsync(request);
       setSaved(JSON.stringify({ title: request.input.title, description: request.input.description, visible: request.input.visible,
         paused: request.input.paused, pastPublic: request.input.past_public, starts: request.input.starts_at, ends: request.input.ends_at }));
-      setRevision(result.revision); setState(result.state); setNotice(t('期次草稿已保存。', 'Period draft saved.'));
+      setRevision(result.revision); setState(result.state); setNotice(text('period_draft_saved'));
       client.setQueryData(['fatfish', 'period', result.id], { ...result, nodes: initial?.nodes ?? [] });
       onSaved(result);
     } catch (cause) { setError(cause); }
@@ -90,78 +95,103 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
         if (!latest.publishable) return;
       }
       const result = await transition.mutateAsync({ id: period.id, action, revision });
-      setRevision(result.revision); setState(result.state); setNotice(`${t('期次状态', 'Period state')}: ${result.state}`);
+      setRevision(result.revision); setState(result.state); setNotice(`${text('period_state')}: ${result.state}`);
       client.setQueryData(['fatfish', 'period', period.id], { ...result, nodes: period.nodes });
       onSaved(result);
     } catch (cause) { setError(cause); }
   };
-  const selectNode = (id: string): boolean => {
-    if (nodeDirty && !window.confirm(t('放弃未保存的节点修改？', 'Discard unsaved node changes?'))) return false;
-    setSelectedNodeID(id); setNewNode(false); setNodeDirty(false); setNodePosition(null);
+  const selectNode = async (id: string): Promise<boolean> => {
+    if (id === selectedNodeID && !newNode) return true;
+    if (nodeDirty && !await changingNode.confirm(text('discard_unsaved_node_changes'))) return false;
+    setSelectedNodeID(id); setNewNode(false); setNodeDirty(false); setSelectedCondition(period?.nodes?.find((node) => node.id === id)?.condition);
     return true;
   };
-  const newNodeForm = () => {
-    if (nodeDirty && !window.confirm(t('放弃未保存的节点修改？', 'Discard unsaved node changes?'))) return;
-    setSelectedNodeID(null); setNewNode(true); setNodeDirty(false); setNodePosition(null);
+  const newNodeForm = async () => {
+    if (nodeDirty && !await changingNode.confirm(text('discard_unsaved_node_changes'))) return;
+    setSelectedNodeID(null); setNewNode(true); setNodeDirty(false);
   };
-  const selectedDetail = useQuery({ queryKey: ['fatfish', 'node', period?.id, selectedNodeID], queryFn: () => getNode(period!.id, selectedNodeID!), enabled: !!period && !!selectedNodeID });
-  return <div className="fatfish-period-editor">
-    <h2>{initial ? t('编辑期次', 'Edit period') : t('新建期次', 'New period')}</h2>
-    {period ? <p role="status">{t('当前状态', 'Current state')}: {state} · r{revision}</p> : null}
+  const applyCondition = async (id: string, value: Condition) => {
+    if (id !== selectedNodeID && !await selectNode(id)) return;
+    setSelectedCondition(value);
+  };
+  const graphCondition = (id: string) => id === selectedNodeID && selectedCondition ? selectedCondition : period?.nodes?.find((node) => node.id === id)?.condition ?? {};
+  const removeEdge = (target: string, path: ConditionPath) => {
+    const value = graphCondition(target);
+    try { applyCondition(target, removeConditionEdge(value, path)); }
+    catch (cause) {
+      if (cause instanceof EmptyConditionGroup) setEmptyEdge({ target, value, path });
+      else setError(cause);
+    }
+  };
+  return <div className="fatfish-period-editor">{leaveDialog}{changingNode.dialog}
+    <h2>{initial ? text('edit_period') : text('new_period')}</h2>
+    {period ? <p role="status">{text('current_state')}: {state} · r{revision}</p> : null}
     <div className="fatfish-fields" inert={editingLocked}>
-      <label>{t('标题', 'Title')}<input value={title} maxLength={128} onChange={(event) => setTitle(event.target.value)} /></label>
-      <label>{t('说明', 'Description')}<textarea value={description} maxLength={8192} onChange={(event) => setDescription(event.target.value)} /></label>
-      <label><input type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} />{t('目录可见', 'Visible in directory')}</label>
-      <label><input type="checkbox" checked={paused} onChange={(event) => setPaused(event.target.checked)} />{t('暂停挑战', 'Pause challenges')}</label>
-      <label><input type="checkbox" checked={pastPublic} onChange={(event) => setPastPublic(event.target.checked)} />{t('结束后公开', 'Public after close')}</label>
+      <label>{text('title')}<input value={title} maxLength={128} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label>{text('description')}<textarea value={description} maxLength={8192} onChange={(event) => setDescription(event.target.value)} /></label>
+      <label><input type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} />{text('visible_in_directory')}</label>
+      <label><input type="checkbox" checked={paused} onChange={(event) => setPaused(event.target.checked)} />{text('pause_challenges')}</label>
+      <label><input type="checkbox" checked={pastPublic} onChange={(event) => setPastPublic(event.target.checked)} />{text('public_after_close')}</label>
     </div>
     <TimeContextNotice station="admin" />
-    <div className="fatfish-fields" inert={editingLocked}><TimeInput label={t('开始时间', 'Start time')} station="admin" draft={start} showZoneHint={false} onChange={setStart} />
-      <TimeInput label={t('结束时间（不含）', 'End time (exclusive)')} station="admin" draft={end} showZoneHint={false} onChange={setEnd} /></div>
-    <p>{t('保存草稿不会自动开放正式期次；发布前要检查逻辑可达性与试玩证据。', 'Saving a draft never opens a formal period; check reachability and playtest proofs before publishing.')}</p>
-    {dirty ? <p role="status">{t('有未保存修改。', 'Unsaved changes.')}</p> : null}
-    {!textValid ? <p role="alert">{t('标题最多128字节，说明最多8192字节（按UTF-8计算）。', 'Title is limited to 128 UTF-8 bytes; description to 8192 bytes.')}</p> : null}
-    {uncertain ? <p role="status">{t('保存结果未确定，请重试同一请求。', 'Save outcome unknown. Retry the same request.')}</p> : null}
-    <div className="fatfish-actions"><button type="button" disabled={!title.trim() || !textValid || starts === null || starts === undefined || ends === null || ends === undefined || ends <= starts || save.isPending} onClick={() => void submit()}>{uncertain ? t('重试保存', 'Retry save') : t('保存期次', 'Save period')}</button>
-      {period ? <button type="button" disabled={editingLocked} onClick={() => void checkGraph()}>{t('检查并预览发布条件', 'Check and preview publish conditions')}</button> : null}
-      {period && state === 'draft' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('publish')}>{t('发布期次', 'Publish period')}</button> : null}
-      {period && state === 'open' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('close')}>{t('关闭期次', 'Close period')}</button> : null}
-      {period && state === 'closed' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('reopen')}>{t('重新开放', 'Reopen period')}</button> : null}
+    <div className="fatfish-fields" inert={editingLocked}><TimeInput label={text('start_time')} station="admin" draft={start} showZoneHint={false} onChange={setStart} />
+      <TimeInput label={text('end_time_exclusive')} station="admin" draft={end} showZoneHint={false} onChange={setEnd} /></div>
+    <p>{text('saving_a_draft_never_opens_a_formal_period_check_reachability_and_play')}</p>
+    {dirty ? <p role="status">{text('unsaved_changes')}</p> : null}
+    {!textValid ? <p role="alert">{text('title_is_limited_to_128_utf_8_bytes_description_to_8192_bytes')}</p> : null}
+    {uncertain ? <p role="status">{text('save_outcome_unknown_retry_the_same_request')}</p> : null}
+    <div className="fatfish-actions"><button type="button" disabled={!title.trim() || !textValid || starts === null || starts === undefined || ends === null || ends === undefined || ends <= starts || save.isPending} onClick={() => void submit()}>{uncertain ? text('retry_save') : text('save_period')}</button>
+      {period ? <button type="button" disabled={editingLocked} onClick={() => void checkGraph()}>{text('check_and_preview_publish_conditions')}</button> : null}
+      {period && state === 'draft' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('publish')}>{text('publish_period')}</button> : null}
+      {period && state === 'open' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('close')}>{text('close_period')}</button> : null}
+      {period && state === 'closed' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('reopen')}>{text('reopen_period')}</button> : null}
     </div>
     {graph && period ? <GraphPreview graph={graph} nodes={period.nodes ?? []} /> : null}
     {notice ? <p role="status">{notice}</p> : null}
     {error ? <ErrorState error={error} /> : null}
     {period ? <div inert={editingLocked}>
-      <div className="fatfish-actions"><h3>{t('节点编排', 'Node arrangement')}</h3>
-        <button type="button" disabled={state === 'closed' || (period.nodes?.length ?? 0) >= 128} onClick={newNodeForm}>{t('新增节点', 'Add node')}</button></div>
-      <NodeMap nodes={period.nodes ?? []} selectedID={selectedNodeID} selectedCondition={selectedDetail.data?.condition}
-        onSelect={selectNode} onMove={(id, x, y) => { if (selectNode(id)) setNodePosition({ id, x, y }); }} />
-      {selectedNodeID || newNode ? <NodeEditor period={period} nodeID={selectedNodeID} position={nodePosition} onDirty={setNodeDirty}
+      <div className="fatfish-actions"><h3>{text('node_arrangement')}</h3>
+        <button type="button" disabled={state === 'closed' || (period.nodes?.length ?? 0) >= 128} onClick={newNodeForm}>{text('add_node')}</button></div>
+      <PeriodGraph period={period} selectedID={selectedNodeID} selectedCondition={selectedCondition}
+        onSelect={selectNode} onConnect={(source, target) => applyCondition(target, addPassedPrerequisite(graphCondition(target), source))} onRemove={removeEdge} />
+      {selectedNodeID || newNode ? <NodeEditor period={period} nodeID={selectedNodeID} conditionValue={selectedCondition} onCondition={setSelectedCondition} onDirty={setNodeDirty}
         onSaved={(node) => {
-          setSelectedNodeID(node.id); setNewNode(false); setNodeDirty(false); setGraph(null); setNodePosition(null);
+          setSelectedNodeID(node.id); setNewNode(false); setNodeDirty(false); setGraph(null);
           void getPeriod(period.id).then((latest) => { client.setQueryData(['fatfish', 'period', period.id], latest); setRevision(latest.revision); }).catch(setError);
         }} /> : null}
     </div> : null}
+    <ConfirmDialog open={!!emptyEdge} title={text('the_condition_group_would_be_empty')}
+      description={text('choose_to_remove_the_empty_group_or_make_it_always_true_other_conditio')}
+      confirmLabel={text('remove_empty_group')} onCancel={() => setEmptyEdge(null)} onConfirm={() => {
+        if (emptyEdge) applyCondition(emptyEdge.target, removeConditionEdge(emptyEdge.value, emptyEdge.path, 'remove_group'));
+        setEmptyEdge(null);
+      }}>
+      <button type="button" onClick={() => {
+        if (emptyEdge) applyCondition(emptyEdge.target, removeConditionEdge(emptyEdge.value, emptyEdge.path, 'always'));
+        setEmptyEdge(null);
+      }}>{text('make_always_true')}</button>
+    </ConfirmDialog>
   </div>;
 }
 
 export function PeriodManager() {
-  const t = useActivityText();
+  const text = useFatFishText();
   const [page, setPage] = useState(1), [selectedID, setSelectedID] = useState<string | null>(null), [generation, setGeneration] = useState(0);
   const [draftDirty, setDraftDirty] = useState(false);
   const list = useQuery({ queryKey: ['fatfish', 'periods', page], queryFn: () => listPeriods(page) });
   const detail = useQuery({ queryKey: ['fatfish', 'period', selectedID], queryFn: () => getPeriod(selectedID!), enabled: !!selectedID });
-  const switchTo = (id: string | null) => {
-    if (draftDirty && !window.confirm(t('放弃当前未保存期次或节点？', 'Discard unsaved period or node changes?'))) return;
+  const switching = useWorkspaceConfirm();
+  const switchTo = async (id: string | null) => {
+    if (draftDirty && !await switching.confirm(text('discard_unsaved_period_or_node_changes'))) return;
     setSelectedID(id); setGeneration((value) => value + 1); setDraftDirty(false);
   };
-  return <div className="fatfish-manager">
-    <aside className="fatfish-directory"><h2>{t('期次目录', 'Period directory')}</h2>
-      <button type="button" onClick={() => switchTo(null)}>{t('新建期次', 'New period')}</button>
+  return <div className="fatfish-manager">{switching.dialog}
+    <aside className="fatfish-directory"><h2>{text('period_directory')}</h2>
+      <button type="button" onClick={() => switchTo(null)}>{text('new_period')}</button>
       {list.isPending ? <LoadingState /> : list.error ? <ErrorState error={list.error} onRetry={() => void list.refetch()} /> : <>
         <ul>{list.data?.items.map((item) => <li key={item.id}><button type="button" onClick={() => switchTo(item.id)}>{item.title} · {item.state}</button></li>)}</ul>
-        <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('上一页', 'Previous')}</button>
-        <button type="button" disabled={!list.data?.has_more} onClick={() => setPage(page + 1)}>{t('下一页', 'Next')}</button>
+        <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>{text('previous')}</button>
+        <button type="button" disabled={!list.data?.has_more} onClick={() => setPage(page + 1)}>{text('next')}</button>
       </>}
     </aside>
     {selectedID && detail.isPending ? <LoadingState /> : selectedID && detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> :

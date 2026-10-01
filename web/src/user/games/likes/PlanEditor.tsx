@@ -7,7 +7,6 @@ import { buffName, chosenEffect, kindName, shopName, skillName } from './labels'
 import { SkillCost } from './Glossary';
 import { EffectSummary } from './GuideText';
 import { planControls } from './planControls';
-
 export function PlanSummary({
   catalog,
   plan,
@@ -17,15 +16,15 @@ export function PlanSummary({
   readonly plan: Plan;
   readonly emptyMainLabel?: string;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const describe = (choice: Choice) =>
     [
       skillName(catalog, choice.skillId),
-      choice.pay === 'api' ? t('API支付', 'API payment') : t('自动支付', 'Automatic payment'),
+      choice.pay === 'api' ? text('likes.aPIPayment') : text('likes.automaticPayment'),
       choice.cleanseMode
         ? choice.cleanseMode === 'self'
-          ? t('净化自身', 'Cleanse self')
-          : t('驱散对手', 'Dispel opponent')
+          ? text('likes.cleanseSelf')
+          : text('likes.dispelOpponent')
         : '',
       ...(choice.targets ?? []).map((id) => buffName(catalog, id)),
     ]
@@ -34,23 +33,23 @@ export function PlanSummary({
   return (
     <div className="likes-plan-summary">
       <span>
-        {t('购物', 'Shop')}:{' '}
+        {text('likes.shop')}:{' '}
         {plan.purchases.length
           ? plan.purchases
               .map(
                 (p) =>
-                  `${shopName(p.item, t)}${p.target ? ` · ${buffName(catalog, p.target)}` : ''}`,
+                  `${shopName(p.item, text)}${p.target ? ` · ${buffName(catalog, p.target)}` : ''}`,
               )
               .join(' + ')
-          : t('无', 'None')}
+          : text('likes.none')}
       </span>
       <span>
-        {t('主招', 'Main')}:{' '}
-        {plan.main ? describe(plan.main) : (emptyMainLabel ?? t('跳过', 'Skip'))}
+        {text('likes.main')}:{' '}
+        {plan.main ? describe(plan.main) : (emptyMainLabel ?? text('likes.skip'))}
       </span>
       {plan.extra.map((choice, i) => (
         <span key={i}>
-          {t('额外招', 'Extra')}: {describe(choice)}
+          {text('likes.extra')}: {describe(choice)}
         </span>
       ))}
     </div>
@@ -69,7 +68,7 @@ function ChoiceOptions({
   readonly onChange: (v: Choice) => void;
   readonly disabled: boolean;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     player = state.view.players[state.you],
     skill = catalog.skills.find((s) => s.id === value.skillId)!;
   const effect = chosenEffect(catalog, player, value);
@@ -83,21 +82,21 @@ function ChoiceOptions({
     <div className="likes-choice-options">
       {skill.payment === 'mix' && (
         <label>
-          {t('付款方式', 'Payment')}
+          {text('likes.payment2')}
           <select
             data-guide="payment"
             value={value.pay ?? 'auto'}
             disabled={disabled}
             onChange={(e) => onChange({ ...value, pay: e.target.value === 'api' ? 'api' : 'auto' })}
           >
-            <option value="auto">{t('自动分配', 'Automatic')}</option>
-            <option value="api">{t('使用API余量', 'Use API reserve')}</option>
+            <option value="auto">{text('likes.automatic')}</option>
+            <option value="api">{text('likes.useAPIReserve')}</option>
           </select>
         </label>
       )}
       {effect?.kind === 'CLEANSE_OR_DISPEL' && (
         <label>
-          {t('作用方向', 'Target side')}
+          {text('likes.targetSide')}
           <select
             value={value.cleanseMode ?? 'self'}
             disabled={disabled}
@@ -109,18 +108,18 @@ function ChoiceOptions({
               })
             }
           >
-            <option value="self">{t('净化自身负面Buff', 'Cleanse own debuffs')}</option>
-            <option value="opponent">{t('驱散对手正面Buff', 'Dispel opponent buffs')}</option>
+            <option value="self">{text('likes.cleanseOwnDebuffs')}</option>
+            <option value="opponent">{text('likes.dispelOpponentBuffs')}</option>
           </select>
         </label>
       )}
       {removable && !effect?.randomTargets && (
         <fieldset disabled={disabled}>
           <legend>
-            {t('选择目标Buff', 'Choose target buffs')} · {t('最多', 'Up to')} {effect?.p}
+            {text('likes.chooseTargetBuffs')} · {text('likes.upTo')} {effect?.p}
           </legend>
           {statuses.length === 0 ? (
-            <p>{t('当前没有可选目标。', 'No eligible targets right now.')}</p>
+            <p>{text('likes.noEligibleTargetsRightNow')}</p>
           ) : (
             statuses.map((s) => (
               <label className="likes-check" key={s.key}>
@@ -149,11 +148,11 @@ function ChoiceOptions({
       )}
       {value.skillId === 'PUB41' && (
         <p>
-          {t('当前蒸馏模板', 'Current distilled template')}:{' '}
+          {text('likes.currentDistilledTemplate')}:{' '}
           {player.distill?.template
             ? `${skillName(catalog, player.distill.template)} ${player.distill.level ?? ''}`
-            : t('尚未学习', 'Not learned')}{' '}
-          · {t('学习进度', 'Learning')}: {player.distill?.learning ?? 0}
+            : text('likes.notLearned')}{' '}
+          · {text('likes.learning2')}: {player.distill?.learning ?? 0}
         </p>
       )}
     </div>
@@ -174,7 +173,7 @@ export function PlanEditor({
   readonly onInspect: (id: string) => void;
   readonly onSelect?: () => void;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     player = state.view.players[state.you];
   const [draft, setDraft] = useState<Plan>({ purchases: [], main: null, extra: [] });
   const [tab, setTab] = useState<'skills' | 'shop'>('skills');
@@ -205,18 +204,14 @@ export function PlanEditor({
   return (
     <section className="likes-plan-editor">
       <div className="likes-section-heading">
-        <h2>{locked ? t('方案已锁定', 'Plan locked') : t('本轮方案', 'This round’s plan')}</h2>
-        <span>
-          {locked
-            ? t('等待双方揭示', 'Waiting for the reveal')
-            : t('选择后确认锁定', 'Choose, then confirm')}
-        </span>
+        <h2>{locked ? text('likes.planLocked') : text('likes.thisRoundSPlan')}</h2>
+        <span>{locked ? text('likes.waitingForTheReveal') : text('likes.chooseThenConfirm')}</span>
       </div>
       <div className="likes-plan-confirm">
         <PlanSummary
           catalog={catalog}
           plan={plan}
-          emptyMainLabel={!skipCasting && !locked ? t('待选择', 'Choose a skill') : undefined}
+          emptyMainLabel={!skipCasting && !locked ? text('likes.chooseASkill') : undefined}
         />
         <button
           type="button"
@@ -226,44 +221,34 @@ export function PlanEditor({
           onClick={() => onLock(plan)}
         >
           {locked
-            ? t('已锁定', 'Locked')
+            ? text('bidding.locked')
             : skipCasting
-              ? t('跳过出招', 'Skip casting')
-              : t('确认方案', 'Lock in plan')}
+              ? text('likes.skipCasting')
+              : text('likes.lockInPlan')}
         </button>
         {!locked && !affordable && (
-          <p className="likes-warning">
-            {t('金币不足，请调整购物方案。', 'Not enough gold. Adjust your purchases.')}
-          </p>
+          <p className="likes-warning">{text('likes.notEnoughGoldAdjustYourPurchases')}</p>
         )}
         {!locked && !skipCasting && !plan.main && (
-          <p>{t('请选择本轮主招。', 'Choose a main skill for this round.')}</p>
+          <p>{text('likes.chooseAMainSkillForThisRound')}</p>
         )}
       </div>
       {player.overloaded && (
         <p className="likes-warning">
-          {t(
-            '过载中，本轮无法购物或施放技能。',
-            'Overloaded: shopping and casting are unavailable this round.',
-          )}
+          {text('likes.overloadedShoppingAndCastingAreUnavailableThis')}
         </p>
       )}
       {player.stunned && (
-        <p className="likes-warning">
-          {t(
-            '眩晕Buff生效。可先使用净化道具解除，再选择技能；否则本轮跳过出招。',
-            'Stun is active. You may cleanse it with an item before choosing a skill; otherwise skip casting this round.',
-          )}
-        </p>
+        <p className="likes-warning">{text('likes.stunIsActiveYouMayCleanseIt')}</p>
       )}
-      <div className="likes-tabs" role="group" aria-label={t('方案编辑区', 'Plan sections')}>
+      <div className="likes-tabs" role="group" aria-label={text('likes.planSections')}>
         <button
           type="button"
           data-guide="tab:skills"
           aria-pressed={tab === 'skills'}
           onClick={() => setTab('skills')}
         >
-          {t('技能', 'Skills')}
+          {text('likes.skills')}
         </button>
         <button
           type="button"
@@ -271,17 +256,12 @@ export function PlanEditor({
           aria-pressed={tab === 'shop'}
           onClick={() => setTab('shop')}
         >
-          {t('购物', 'Shop')} ({plan.purchases.length}/{catalog.parameters.PREP_MAX})
+          {text('likes.shop')} ({plan.purchases.length}/{catalog.parameters.PREP_MAX})
         </button>
       </div>
       {tab === 'shop' ? (
         <div className="likes-shop">
-          <p>
-            {t(
-              '购物在技能费用检查前共同结算。充电会增加双方共用的电池；净化与稳压器占用同一类购买名额。',
-              'Both players shop before skill costs are checked. Charging fills the shared battery. Cleansing and regulators share one purchase category.',
-            )}
-          </p>
+          <p>{text('likes.bothPlayersShopBeforeSkillCostsAre')}</p>
           <div className="likes-shop-grid">
             {(['sub', 'api', 'charge', 'cleanse', 'regulator'] as const).map((item) => {
               const selected = plan.purchases.some((p) => p.item === item),
@@ -299,9 +279,9 @@ export function PlanEditor({
                 (item === 'cleanse' && cleansable.length === 0);
               return (
                 <div key={item}>
-                  <strong>{shopName(item, t)}</strong>
+                  <strong>{shopName(item, text)}</strong>
                   <span>
-                    {prices[item]} {t('基础金币', 'base gold')}
+                    {prices[item]} {text('likes.baseGold')}
                   </span>
                   <small>
                     {item === 'api'
@@ -311,8 +291,8 @@ export function PlanEditor({
                         : item === 'sub'
                           ? `+${catalog.parameters.SUB_BURST_UPGRADE} / +${catalog.parameters.SUB_TOTAL_UPGRADE} K`
                           : item === 'regulator'
-                            ? `${t('省电', 'Energy reduction')} ${catalog.parameters.REGULATOR_SAVE}`
-                            : t('移除一个负面Buff', 'Remove one debuff')}
+                            ? `${text('likes.energyReduction')} ${catalog.parameters.REGULATOR_SAVE}`
+                            : text('likes.removeOneDebuff')}
                   </small>
                   <button
                     type="button"
@@ -330,11 +310,11 @@ export function PlanEditor({
                           })
                     }
                   >
-                    {selected ? t('移除', 'Remove') : t('加入方案', 'Add to plan')}
+                    {selected ? text('likes.remove') : text('likes.addToPlan')}
                   </button>
                   {item === 'cleanse' && selected && (
                     <select
-                      aria-label={t('净化目标', 'Cleansing target')}
+                      aria-label={text('likes.cleansingTarget')}
                       disabled={disabled}
                       value={plan.purchases.find((p) => p.item === 'cleanse')?.target ?? ''}
                       onChange={(e) =>
@@ -376,10 +356,10 @@ export function PlanEditor({
                 >
                   <strong>{skill.name}</strong>
                   <small>
-                    {kindName(skill.kind, t)} ·{' '}
+                    {kindName(skill.kind, text)} ·{' '}
                     {skill.maxUses === null
-                      ? t('不限次数', 'Unlimited')
-                      : `${Math.max(0, skill.maxUses - (player.used[skill.id] ?? 0))} ${t('次剩余', 'uses left')}`}
+                      ? text('likes.unlimited2')
+                      : `${Math.max(0, skill.maxUses - (player.used[skill.id] ?? 0))} ${text('likes.usesLeft')}`}
                   </small>
                   <SkillCost skill={skill} />
                   <EffectSummary
@@ -396,7 +376,7 @@ export function PlanEditor({
                 <button
                   type="button"
                   className="likes-info"
-                  aria-label={`${skill.name} ${t('详情', 'details')}`}
+                  aria-label={`${skill.name} ${text('likes.details')}`}
                   onClick={() => onInspect(skill.id)}
                 >
                   ⓘ
@@ -416,7 +396,7 @@ export function PlanEditor({
           {allowExtra && (
             <div className="likes-extra">
               <label>
-                {t('预选额外技能', 'Preselect an extra skill')}
+                {text('likes.preselectAnExtraSkill')}
                 <select
                   disabled={disabled}
                   value={plan.extra[0]?.skillId ?? ''}
@@ -427,7 +407,7 @@ export function PlanEditor({
                     })
                   }
                 >
-                  <option value="">{t('不追加', 'No extra skill')}</option>
+                  <option value="">{text('likes.noExtraSkill')}</option>
                   {skills.map((sk) => (
                     <option key={sk.id} value={sk.id}>
                       {sk.name}

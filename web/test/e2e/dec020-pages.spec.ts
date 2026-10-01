@@ -909,7 +909,16 @@ test('user charity overview fails closed on an invalid numbered page and privacy
   await page.goto(`${USER_ORIGIN}/privacy`);
   await expect(page.getByRole('heading', { name: 'Privacy policy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Retention and deletion' })).toBeVisible();
-  await expect(page.locator('body')).toContainText('Account export version 11');
+  await expect(page.locator('body')).toContainText(
+    'It excludes full keys, encrypted key content, sign-in tokens, raw diagnostics, source IP and client clues',
+  );
+  await expect(page.locator('body')).toContainText(
+    'A new account using the same Discord identity cannot read or export old logs.',
+  );
+  await expect(page.locator('body')).toContainText(
+    'Request logs and necessary sources remain until 30 days after completion or an applicable hold, including after self, administrator or inactivity deletion.',
+  );
+  await expect(page.locator('body')).toContainText('clears private account projections');
   await expect(page.locator('body')).toContainText('up to 90 days');
   await assertClean(page, guard);
 });

@@ -62,31 +62,60 @@ describe('capability-aware submission', () => {
   it('preserves non-first discovered ratio and resolution defaults and their exact price', () => {
     const next: ImageModel = {
       ...model,
-      size_capability: { mode: 'resolution_ratio_grid', combinations: [
-        { ratio: '1:1', resolution: 'small', width: 512, height: 512, tier: 'small' },
-        { ratio: '4:3', resolution: 'medium', width: 1024, height: 768, tier: 'medium' },
-      ] },
-      parameters: model.parameters.map((rule) => rule.key === 'aspect_ratio' ? { ...rule, default: '4:3' }
-        : rule.key === 'resolution' ? { ...rule, default: 'medium' } : rule),
+      size_capability: {
+        mode: 'resolution_ratio_grid',
+        combinations: [
+          { ratio: '1:1', resolution: 'small', width: 512, height: 512, tier: 'small' },
+          { ratio: '4:3', resolution: 'medium', width: 1024, height: 768, tier: 'medium' },
+        ],
+      },
+      parameters: model.parameters.map((rule) =>
+        rule.key === 'aspect_ratio'
+          ? { ...rule, default: '4:3' }
+          : rule.key === 'resolution'
+            ? { ...rule, default: 'medium' }
+            : rule,
+      ),
     };
     const values = initialValues(next);
     expect(values).toMatchObject({ aspect_ratio: '4:3', resolution: 'medium', size: '1024x768' });
-    expect(previewPrice(next, values)).toMatchObject({ unit: { paper: '5', brush: '0' }, basis: 'size' });
-    expect(prepareSubmission(next, { ...values, prompt: 'hello' })).toHaveProperty('input.size', '1024x768');
+    expect(previewPrice(next, values)).toMatchObject({
+      unit: { paper: '5', brush: '0' },
+      basis: 'size',
+    });
+    expect(prepareSubmission(next, { ...values, prompt: 'hello' })).toHaveProperty(
+      'input.size',
+      '1024x768',
+    );
   });
 
   it('keeps a ratio-only default and a valid width-height default ahead of the first combination', () => {
-    const ratio: ImageModel = { ...model,
-      size_capability: { mode: 'ratio_resolution', combinations: [{ ratio: '1:1' }, { ratio: '16:9' }] },
-      parameters: model.parameters.filter((rule) => !['size', 'resolution'].includes(rule.key))
-        .map((rule) => rule.key === 'aspect_ratio' ? { ...rule, default: '16:9' } : rule),
+    const ratio: ImageModel = {
+      ...model,
+      size_capability: {
+        mode: 'ratio_resolution',
+        combinations: [{ ratio: '1:1' }, { ratio: '16:9' }],
+      },
+      parameters: model.parameters
+        .filter((rule) => !['size', 'resolution'].includes(rule.key))
+        .map((rule) => (rule.key === 'aspect_ratio' ? { ...rule, default: '16:9' } : rule)),
     };
     expect(initialValues(ratio).aspect_ratio).toBe('16:9');
-    const dimensions: ImageModel = { ...model,
-      size_capability: { mode: 'width_height', width: { minimum: 256, maximum: 2048, step: 8 }, height: { minimum: 256, maximum: 2048, step: 8 },
-        combinations: [{ width: 512, height: 512 }, { width: 1024, height: 1024 }] },
-      parameters: model.parameters.filter((rule) => !['aspect_ratio', 'resolution'].includes(rule.key))
-        .map((rule) => rule.key === 'size' ? { ...rule, default: '1024x1024' } : rule),
+    const dimensions: ImageModel = {
+      ...model,
+      pricing: { ...model.pricing!, fallback: 'default' },
+      size_capability: {
+        mode: 'width_height',
+        width: { minimum: 256, maximum: 2048, step: 8 },
+        height: { minimum: 256, maximum: 2048, step: 8 },
+        combinations: [
+          { width: 512, height: 512 },
+          { width: 1024, height: 1024 },
+        ],
+      },
+      parameters: model.parameters
+        .filter((rule) => !['aspect_ratio', 'resolution'].includes(rule.key))
+        .map((rule) => (rule.key === 'size' ? { ...rule, default: '1024x1024' } : rule)),
     };
     expect(initialValues(dimensions).size).toBe('1024x1024');
   });

@@ -33,15 +33,17 @@ type Config struct {
 	ConsecutiveMinutes int   `json:"consecutive_minutes"`
 	SharedIPHours      int   `json:"shared_ip_hours"`
 	SharedIPUsers      int   `json:"shared_ip_users"`
+	UserIPWindowHours  int   `json:"user_ip_window_hours"`
+	UserIPMinIPs       int   `json:"user_ip_min_ips"`
 	Revision           int64 `json:"revision"`
 	UpdatedAt          int64 `json:"updated_at"`
 }
 
 func DefaultConfig() Config {
-	return Config{ThresholdPercent: 80, ConsecutiveMinutes: 5, SharedIPHours: 24, SharedIPUsers: 3, Revision: 1}
+	return Config{ThresholdPercent: 80, ConsecutiveMinutes: 5, SharedIPHours: 24, SharedIPUsers: 3, UserIPWindowHours: 24, UserIPMinIPs: 3, Revision: 1}
 }
 func (c Config) Valid() bool {
-	return c.ThresholdPercent >= 1 && c.ThresholdPercent <= 100 && c.ConsecutiveMinutes >= 1 && c.ConsecutiveMinutes <= 60 && c.SharedIPHours >= 1 && c.SharedIPHours <= 720 && c.SharedIPUsers >= 2 && c.SharedIPUsers <= 1000 && c.Revision >= 1
+	return c.ThresholdPercent >= 1 && c.ThresholdPercent <= 100 && c.ConsecutiveMinutes >= 1 && c.ConsecutiveMinutes <= 60 && c.SharedIPHours >= 1 && c.SharedIPHours <= 720 && c.SharedIPUsers >= 2 && c.SharedIPUsers <= 1000 && c.UserIPWindowHours >= 1 && c.UserIPWindowHours <= 720 && c.UserIPMinIPs >= 2 && c.UserIPMinIPs <= 1000 && c.Revision >= 1
 }
 
 type Minute struct {

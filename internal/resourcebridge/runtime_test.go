@@ -59,7 +59,7 @@ func TestNewDerivesOnceClearsAliasAndCloseClearsRuntimeKey(t *testing.T) {
 
 func TestNewRejectsMissingAndFailedDependencies(t *testing.T) {
 	fixture := newBridgeFixture(t)
-	base := Config{
+	base := Config{Review: fixture.runtime.review,
 		Store: fixture.store, Vault: fixture.vault, Claims: fixture.claims, Backend: fixture.backend,
 		Now: func() time.Time { return time.Unix(bridgeTestNow, 0) },
 	}
@@ -69,6 +69,7 @@ func TestNewRejectsMissingAndFailedDependencies(t *testing.T) {
 		name   string
 		mutate func(*Config)
 	}{
+		{name: "review material", mutate: func(config *Config) { config.Review = nil }},
 		{name: "store", mutate: func(config *Config) { config.Store = nil }},
 		{name: "vault", mutate: func(config *Config) { config.Vault = nil }},
 		{name: "typed nil vault", mutate: func(config *Config) { config.Vault = nilVault }},

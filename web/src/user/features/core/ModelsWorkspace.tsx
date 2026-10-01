@@ -1,7 +1,11 @@
+import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
+import { buildRolePolicy, draftFromRolePolicy, type RolePolicy } from '@shared/rolePolicy';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useReducer,
   useRef,
@@ -9,6 +13,8 @@ import {
   type DragEvent,
   type FormEvent,
 } from 'react';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import { readResourceResult, resourceStatus } from './resourceOperation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -19,6 +25,8 @@ import { usePagePager, type PagePager } from '@shared/operations/usePagePager';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
+  getBindings,
+  getModel,
   addBindings,
   createModel,
   deleteBinding,
@@ -39,12 +47,12 @@ import {
   SafeCopyValue,
   StatusPill,
 } from './components';
+import { useQuickstartCopy } from './quickstartCopy';
 import { useCoreCopy } from './copy';
 import { validateLogicalName, validatePersonalProviderName } from './normalizers';
 import {
   applyBindingsResponse,
   coreKeys,
-  coreSessionMatchesAccount,
   invalidateResourceDependents,
   useCoreSession,
   useBindings,
@@ -52,21 +60,19 @@ import {
 } from './queries';
 import { useNumberedBindingCandidates, useNumberedModels } from './modelNumberedQueries';
 import { useNumberedEndpointKeys, useNumberedEndpoints } from './numberedQueries';
-import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
-import {
-  bindingDraftReducer,
-  initialBindingDraftState,
-  type MutationOutcome,
-} from './stateMachines';
+import { isConflict, isOutcomeUnknown } from './request';
+import { bindingDraftReducer, initialBindingDraftState } from './stateMachines';
 import type {
   Binding,
   BindingCandidate,
+  Endpoint,
+  EndpointKey,
+  BindingsResponse,
   BindingSelection,
   CatalogSourceType,
   Model,
   ModelCreateInput,
   ModelPatchInput,
-  OperationIdentity,
   RouteStrategy,
   UserProfile,
 } from './types';
@@ -75,12 +81,6 @@ import type { NumberedPage } from './pageTypes';
 
 type VisibleOutcome = 'conflict' | 'unknown' | 'error' | null;
 type PermissionLoss = { scope: string; error: unknown };
-
-function visibleOutcome(error: unknown): VisibleOutcome {
-  if (isConflict(error)) return 'conflict';
-  if (isOutcomeUnknown(error)) return 'unknown';
-  return 'error';
-}
 
 function asNotice(outcome: VisibleOutcome) {
   return outcome ? <MutationNotice outcome={outcome} /> : null;
@@ -98,6 +98,52 @@ function selectedModelID(searchParams: URLSearchParams): string | null {
   } catch {
     return null;
   }
+}
+
+function sameRolePolicy(current: RolePolicy | undefined, expected: RolePolicy): boolean {
+  const policy = current ?? { default_action: 'native', rules: {} };
+  return (
+    policy.default_action === expected.default_action &&
+    Object.keys(policy.rules).length === Object.keys(expected.rules).length &&
+    Object.entries(expected.rules).every(([role, action]) => policy.rules[role] === action)
+  );
+}
+
+const roleSummaryKeys = {
+  title: 'common.rolePolicy.title',
+  defaultAction: 'common.rolePolicy.defaultAction',
+  nativeHelp: 'common.rolePolicy.nativeHelp',
+  toolsHelp: 'common.rolePolicy.toolsHelp',
+  native: 'common.rolePolicy.action.native',
+  passthrough: 'common.rolePolicy.action.passthrough',
+  system: 'common.rolePolicy.action.system',
+  user: 'common.rolePolicy.action.user',
+  assistant: 'common.rolePolicy.action.assistant',
+  reject: 'common.rolePolicy.action.reject',
+} as const;
+
+function ModelRoleSummary({ policy }: { policy?: RolePolicy }) {
+  const { t: text } = useRegisteredCopy(roleSummaryKeys);
+  const current = policy ?? { default_action: 'native', rules: {} };
+  return (
+    <section className="core-card">
+      <h2>{text('title')}</h2>
+      <dl className="core-detail-list">
+        <div>
+          <dt>{text('defaultAction')}</dt>
+          <dd>{text(current.default_action)}</dd>
+        </div>
+        {Object.entries(current.rules).map(([role, action]) => (
+          <div key={role}>
+            <dt>{role}</dt>
+            <dd>{text(action)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="core-muted">{text('nativeHelp')}</p>
+      <p className="core-muted">{text('toolsHelp')}</p>
+    </section>
+  );
 }
 
 function ModelEditor({
@@ -120,125 +166,135 @@ function ModelEditor({
   const [strategy, setStrategy] = useState<RouteStrategy>(initial?.route_strategy ?? 'ordered');
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
   const [flattenTools, setFlattenTools] = useState(initial?.flatten_tool_calls ?? false);
-  const [busy, setBusy] = useState(false);
+  const [roleDraft, setRoleDraft] = useState(() => draftFromRolePolicy(initial?.role_policy));
+  const roleResult = buildRolePolicy(roleDraft);
+  const { t: text } = useQuickstartCopy();
   const [validation, setValidation] = useState(false);
-  const [outcome, setOutcome] = useState<VisibleOutcome>(null);
   const [permissionLost, setPermissionLost] = useState<unknown>(null);
-  const attemptRef = useRef<{
-    operation: OperationIdentity;
-    input: ModelCreateInput | ModelPatchInput;
-  } | null>(null);
-  const [hasAttempt, setHasAttempt] = useState(false);
-
-  const discardStaleMutation = () => {
-    attemptRef.current = null;
-    setHasAttempt(false);
-    setBusy(false);
-    setOutcome(null);
-  };
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setValidation(false);
-    setOutcome(null);
-    try {
-      validatePersonalProviderName(provider);
-      validateLogicalName(modelName);
-    } catch {
-      setValidation(true);
-      return;
-    }
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-
-    const input: ModelCreateInput | ModelPatchInput = initial
-      ? {
-          provider,
-          model: modelName,
-          route_strategy: strategy,
-          silent_retry: silentRetry,
-          flatten_tool_calls: flattenTools,
-          expected_revision: initial.revision,
+  const savedResult = useRef<Model | null>(null);
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<ModelCreateInput | ModelPatchInput, Model>(
+    async (input, key, context) => {
+      try {
+        const identity = { idempotencyKey: key, actionId: key };
+        const saved = initial
+          ? await patchModel(initial.id, input as ModelPatchInput, identity, context.signal)
+          : await createModel(input as ModelCreateInput, identity, context.signal);
+        context.commit(() => {
+          savedResult.current = saved;
+          queryClient.setQueryData(coreKeys.model(accountId, saved.id), saved);
+        });
+        return saved;
+      } catch (error) {
+        if (isAccessLoss(error))
+          context.commit(() => {
+            setPermissionLost(error);
+            onCapabilityLoss?.(error);
+          });
+        throw error;
+      }
+    },
+    async (input, error, context) => {
+      let confirmed = false;
+      retryAllowed.current = false;
+      if (error && !initial && isOutcomeUnknown(error) && context.operationKey) {
+        const status = await resourceStatus(context.operationKey, context.signal);
+        context.assertCurrent();
+        retryAllowed.current = status.status === 'not_recorded';
+        const result = await readResourceResult(
+          { kind: 'model', row: '', input: input as ModelCreateInput },
+          status,
+          context.signal,
+        );
+        if (result?.kind === 'model') {
+          context.commit(() => {
+            savedResult.current = result.model;
+            queryClient.setQueryData(coreKeys.model(accountId, result.model.id), result.model);
+          });
+          confirmed = true;
         }
-      : {
-          provider,
-          model: modelName,
-          route_strategy: strategy,
-          silent_retry: silentRetry,
-          flatten_tool_calls: flattenTools,
-        };
-    const attempt = attemptRef.current ?? { input, operation: createOperationIdentity() };
-    attemptRef.current = attempt;
-    setHasAttempt(true);
-    setBusy(true);
-    try {
-      const saved = initial
-        ? await patchModel(initial.id, attempt.input as ModelPatchInput, attempt.operation)
-        : await createModel(attempt.input as ModelCreateInput, attempt.operation);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      attemptRef.current = null;
-      setHasAttempt(false);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      queryClient.setQueryData(coreKeys.model(accountId, saved.id), saved);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
+      } else if (error && initial && isOutcomeUnknown(error)) {
+        const current = await getModel(initial.id, context.signal);
+        context.assertCurrent();
+        const patch = input as ModelPatchInput;
+        retryAllowed.current = current.revision === patch.expected_revision;
+        confirmed =
+          BigInt(current.revision) > BigInt(patch.expected_revision) &&
+          Object.entries(patch).every(
+            ([field, value]) =>
+              field === 'expected_revision' ||
+              (field === 'role_policy'
+                ? sameRolePolicy(current.role_policy, value as RolePolicy)
+                : current[field as keyof Model] === value),
+          );
+        if (confirmed)
+          context.commit(() => {
+            savedResult.current = current;
+          });
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
+        initial
+          ? queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, initial.id) })
+          : Promise.resolve(),
         invalidateResourceDependents(queryClient, accountId),
       ]);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
+      context.assertCurrent();
+      if (!error || confirmed) {
+        const saved = savedResult.current;
+        if (saved) context.commit(() => onSaved(saved));
       }
-      onSaved(saved);
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (isAccessLoss(error)) {
-        setPermissionLost(error);
-        onCapabilityLoss?.(error);
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = visibleOutcome(error);
-      if (nextOutcome !== 'unknown') {
-        attemptRef.current = null;
-        setHasAttempt(false);
-      }
-      setOutcome(nextOutcome);
-      if (initial && (isConflict(error) || isOutcomeUnknown(error))) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, initial.id) }),
-          queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        ]);
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      } else if (!initial && isOutcomeUnknown(error)) {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        await queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) });
-        if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-      }
-    } finally {
-      setBusy(false);
+      if (confirmed) return { operationConfirmed: true };
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        savedResult.current = null;
+      },
+    },
+  );
+  const busy = operation.isPending,
+    hasAttempt = busy || operation.outcome === 'unknown';
+  const outcome: VisibleOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setValidation(false);
+    if (operation.isSuccess) {
+      await operation.refresh();
+      return;
     }
+    if (operation.outcome === 'unknown' && operation.variables) {
+      await operation.check();
+      if (retryAllowed.current)
+        await operation.mutateAsync(operation.variables).catch(() => undefined);
+      return;
+    }
+    let input = operation.outcome === 'unknown' ? operation.variables : undefined;
+    if (!input) {
+      if (!roleResult.policy) return;
+      try {
+        validatePersonalProviderName(provider);
+        validateLogicalName(modelName);
+      } catch {
+        setValidation(true);
+        return;
+      }
+      input = {
+        provider,
+        model: modelName,
+        route_strategy: strategy,
+        silent_retry: silentRetry,
+        flatten_tool_calls: flattenTools,
+        role_policy: roleResult.policy,
+        ...(initial ? { expected_revision: initial.revision } : {}),
+      };
+    }
+    await operation.mutateAsync(input).catch(() => undefined);
   };
 
   if (permissionLost) {
@@ -296,6 +352,7 @@ function ModelEditor({
           </select>
         </label>
       </div>
+      <p className="core-muted">{text('strategyHelp')}</p>
       <div className="core-model-preview">
         <span>{t('models.namePreview')}</span>
         <output className="core-mono">
@@ -320,16 +377,37 @@ function ModelEditor({
         />
         <span>{t('models.flattenTools')}</span>
       </label>
+      <p className="core-muted">{text('retryHelp')}</p>
+      <p className="core-muted">{text('toolsHelp')}</p>
+      <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
+
       {validation ? (
         <p className="core-inline-error" role="alert">
           {t('models.invalidName')}
         </p>
       ) : null}
-      {asNotice(outcome)}
+      {operation.outcome === 'refresh-failed' ? (
+        <p role="status">
+          {text('savedRefresh')}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void operation.refresh()}
+          >
+            {t('common.refresh')}
+          </button>
+        </p>
+      ) : (
+        asNotice(outcome)
+      )}
       <div className="core-form-actions">
         <span />
-        <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? t('common.working') : hasAttempt ? t('common.retrySame') : t('common.save')}
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={busy || (!hasAttempt && !!roleResult.error)}
+        >
+          {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
         </button>
       </div>
     </form>
@@ -437,29 +515,28 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
-  const permissionScope = `${accountId}\u0000${model.id}`;
+  const [endpointQuery, setEndpointQuery] = useState(''),
+    [keyQuery, setKeyQuery] = useState('');
+  const { t: text } = useQuickstartCopy();
+  const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | undefined>();
+  const [selectedKey, setSelectedKey] = useState<EndpointKey | undefined>();
   const [endpointId, setEndpointId] = useState('');
   const [keyId, setKeyId] = useState('');
   const [modelQuery, setModelQuery] = useState('');
   const [queryDraft, setQueryDraft] = useState('');
   const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
   const [invalidSelection, setInvalidSelection] = useState(false);
-  const [replayAttempt, setReplayAttempt] = useState<{
-    revision: string;
-    selections: BindingSelection[];
-    operation: OperationIdentity;
-  } | null>(null);
-  const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
   const endpointPager = usePagePager({
     station: 'user',
     listType: 'models-binding-endpoints',
     scopeKey: accountId,
+    resetKey: endpointQuery,
   });
   const keyPager = usePagePager({
     station: 'user',
     listType: 'models-binding-keys',
     scopeKey: `${accountId}\u0000${model.id}`,
-    resetKey: endpointId,
+    resetKey: `${endpointId}:${keyQuery}`,
   });
   const automaticPager = usePagePager({
     station: 'user',
@@ -473,15 +550,18 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     scopeKey: `${accountId}\u0000${model.id}`,
     resetKey: `${endpointId}\u0000${keyId}\u0000${modelQuery}`,
   });
-  const endpoints = useNumberedEndpoints(accountId, {
-    page: endpointPager.page,
-    pageSize: endpointPager.pageSize,
-  });
+  const endpoints = useNumberedEndpoints(
+    accountId,
+    { page: endpointPager.page, pageSize: endpointPager.pageSize },
+    true,
+    { q: endpointQuery },
+  );
   const keys = useNumberedEndpointKeys(
     accountId,
     endpointId || undefined,
     { page: keyPager.page, pageSize: keyPager.pageSize },
     Boolean(endpointId),
+    { q: keyQuery },
   );
   const automatic = useNumberedBindingCandidates(
     accountId,
@@ -518,44 +598,32 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     automatic.error,
     manual.error,
   ].find((error) => isAccessLoss(error));
-  const accessLossError =
-    (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
-    queryPermissionError ??
-    null;
-
-  const discardStaleMutation = () => {
-    setReplayAttempt(null);
-    setInvalidSelection(false);
+  const resetDraft = useEffectEvent(() =>
     dispatch({
       type: 'boundary',
       accountId,
       modelId: model.id,
       bindingRevision: model.binding_revision,
-    });
-  };
-
+    }),
+  );
   useEffect(() => {
-    dispatch({
-      type: 'boundary',
-      accountId,
-      modelId: model.id,
-      bindingRevision: model.binding_revision,
-    });
+    resetDraft();
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
+      setSelectedEndpoint(undefined);
+      setSelectedKey(undefined);
       setEndpointId('');
       setKeyId('');
       setModelQuery('');
       setQueryDraft('');
       setSelectionDetails({});
       setInvalidSelection(false);
-      setReplayAttempt(null);
     });
     return () => {
       active = false;
     };
-  }, [accountId, model.binding_revision, model.id]);
+  }, [accountId, model.id]);
 
   useEffect(() => {
     const revision = bindings.data?.binding_revision;
@@ -574,6 +642,8 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
   );
 
   const chooseEndpoint = (next: string) => {
+    setSelectedEndpoint(endpoints.data?.data.find((entry) => entry.id === next));
+    setSelectedKey(undefined);
     setEndpointId(next);
     setKeyId('');
     setModelQuery('');
@@ -581,6 +651,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
   };
 
   const chooseKey = (next: string) => {
+    setSelectedKey(keys.data?.data.find((entry) => entry.id === next));
     setKeyId(next);
     setModelQuery('');
     setQueryDraft('');
@@ -591,176 +662,120 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     dispatch({ type: 'toggle', accountId, modelId: model.id, candidate });
   };
 
-  const reconcileSelections = async (): Promise<boolean> => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
-    }
-    let removed = false;
-    for (const selection of draft.selections) {
-      try {
-        const page = await getBindingCandidatesPage(
-          model.id,
-          {
-            keyId: selection.endpoint_key_id,
-            query: selection.upstream_model_id,
-          },
-          { page: '1', pageSize: 100 },
-        );
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return false;
-        }
-        const stillValid = page.data.some(
-          (candidate) => candidateIdentity(candidate) === candidateIdentity(selection),
-        );
-        if (!stillValid && page.pagination.total_pages === '1') {
-          removed = true;
-          dispatch({
-            type: 'candidate-invalid',
-            accountId,
-            modelId: model.id,
-            candidate: selection,
-          });
-        }
-      } catch (error) {
-        if (isAccessLoss(error)) {
-          setPermissionLost({ scope: permissionScope, error });
-          discardStaleMutation();
-          return false;
-        }
-        // A failed verifier is not evidence that a selection disappeared.
-      }
-    }
-    return removed;
-  };
-
-  const reconcileAuthority = async (attempt = replayAttempt): Promise<boolean> => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
-    }
-    const refreshed = await bindings.refetch();
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
-    }
-    if (isAccessLoss(refreshed.error)) {
-      setPermissionLost({ scope: permissionScope, error: refreshed.error });
-      discardStaleMutation();
-      return false;
-    }
-    if (refreshed.error || !refreshed.data) return false;
-    const authoritativeBound = new Set(refreshed.data.bindings.map(candidateIdentity));
-    const confirmed =
-      Boolean(attempt) &&
-      attempt!.selections.every((selection) =>
-        authoritativeBound.has(candidateIdentity(selection)),
-      );
-    if (!attempt || confirmed) {
-      for (const selection of attempt?.selections ?? draft.selections) {
-        if (!authoritativeBound.has(candidateIdentity(selection))) continue;
-        dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate: selection });
-      }
-    }
-    if (confirmed) setReplayAttempt(null);
+  type Intent = { revision: string; selections: BindingSelection[] };
+  const retryAllowed = useRef(false);
+  const publish = (response: BindingsResponse, intent: Intent) => {
+    applyBindingsResponse(queryClient, accountId, model.id, response);
+    const bound = new Set(response.bindings.map(candidateIdentity));
+    for (const candidate of intent.selections)
+      if (bound.has(candidateIdentity(candidate)))
+        dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate });
     dispatch({
       type: 'authoritative',
       accountId,
       modelId: model.id,
-      bindingRevision: refreshed.data.binding_revision,
+      bindingRevision: response.binding_revision,
     });
-    return true;
   };
-
-  const submit = async () => {
-    if (draft.status === 'pending' || (!replayAttempt && draft.selections.length === 0)) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    setInvalidSelection(false);
-    const attempt = replayAttempt ?? {
-      operation: createOperationIdentity(),
-      revision: draft.bindingRevision,
-      selections: [...draft.selections],
-    };
-    const { operation, revision, selections } = attempt;
-    dispatch({ type: 'submit', accountId, modelId: model.id, actionId: operation.actionId });
-    try {
-      const response = await addBindings(model.id, revision, selections, operation);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setReplayAttempt(null);
-      if (!applyBindingsResponse(queryClient, accountId, model.id, response)) {
-        discardStaleMutation();
-        return;
-      }
-      dispatch({
-        type: 'result',
-        accountId,
-        modelId: model.id,
-        actionId: operation.actionId,
-        outcome: 'success',
-        bindingRevision: response.binding_revision,
-      });
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await queryClient.invalidateQueries({
-        queryKey: coreKeys.candidatesRoot(accountId, model.id),
-      });
-      if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (isAccessLoss(error)) {
-        setPermissionLost({ scope: permissionScope, error });
-        discardStaleMutation();
-        return;
-      }
-      const outcome: Exclude<MutationOutcome, 'idle' | 'pending' | 'success'> = isConflict(error)
-        ? 'conflict'
-        : isOutcomeUnknown(error)
-          ? 'unknown'
-          : 'error';
-      if (outcome === 'error') {
-        const invalid = await reconcileSelections();
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
+  const operation = useRetainedOperation<Intent, BindingsResponse>(
+    async (intent, key, context) => {
+      try {
+        const response = await addBindings(
+          model.id,
+          intent.revision,
+          intent.selections,
+          { idempotencyKey: key, actionId: key },
+          context.signal,
+        );
+        context.commit(() => publish(response, intent));
+        return response;
+      } catch (error) {
+        if (!isConflict(error) && !isOutcomeUnknown(error) && !isAccessLoss(error)) {
+          let removed = false;
+          for (const candidate of intent.selections) {
+            const page = await getBindingCandidatesPage(
+              model.id,
+              { keyId: candidate.endpoint_key_id, query: candidate.upstream_model_id },
+              { page: '1', pageSize: 100 },
+              context.signal,
+            );
+            context.assertCurrent();
+            if (
+              page.pagination.total_pages === '1' &&
+              !page.data.some((item) => candidateIdentity(item) === candidateIdentity(candidate))
+            ) {
+              removed = true;
+              context.commit(() =>
+                dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate }),
+              );
+            }
+          }
+          context.commit(() => setInvalidSelection(removed));
         }
-        setInvalidSelection(invalid);
+        throw error;
       }
-      if (outcome === 'conflict' || outcome === 'unknown') {
-        setReplayAttempt(outcome === 'unknown' ? attempt : null);
+    },
+    async (intent, error, context) => {
+      retryAllowed.current = false;
+      if (error && isOutcomeUnknown(error) && context.operationKey) {
+        const status = await resourceStatus(context.operationKey, context.signal);
+        context.assertCurrent();
+        retryAllowed.current = status.status === 'not_recorded';
+      }
+      const response = await getBindings(model.id, context.signal);
+      context.commit(() =>
+        queryClient.setQueryData(coreKeys.bindings(accountId, model.id), response),
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, model.id) }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.candidatesRoot(accountId, model.id) }),
+      ]);
+      context.assertCurrent();
+      const bound = new Set(response.bindings.map(candidateIdentity));
+      const confirmed = intent.selections.every((item) => bound.has(candidateIdentity(item)));
+      if (!error || confirmed) context.commit(() => publish(response, intent));
+      if (error && confirmed) return { operationConfirmed: true };
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setSelectionDetails({});
         dispatch({
-          type: 'result',
+          type: 'boundary',
           accountId,
           modelId: model.id,
-          actionId: operation.actionId,
-          outcome,
-          bindingRevision: revision,
+          bindingRevision: model.binding_revision,
         });
-        await reconcileAuthority(outcome === 'unknown' ? attempt : null);
-        return;
-      }
-      dispatch({
-        type: 'result',
-        accountId,
-        modelId: model.id,
-        actionId: operation.actionId,
-        outcome,
-        bindingRevision: revision,
-      });
+      },
+    },
+  );
+  const replayAttempt = operation.outcome === 'unknown' ? (operation.variables ?? null) : null;
+  const operationStatus = operation.outcome === 'failed' ? 'error' : operation.outcome;
+  const reconcileAuthority = async () => {
+    if (operation.outcome === 'unknown') await operation.check();
+    else if (operation.isSuccess) await operation.refresh();
+    else await bindings.refetch();
+  };
+  const submit = async () => {
+    setInvalidSelection(false);
+    if (operation.outcome === 'refresh-failed') {
+      await operation.refresh();
+      return;
     }
+    if (replayAttempt) {
+      await operation.check();
+      if (retryAllowed.current) await operation.mutateAsync(replayAttempt).catch(() => undefined);
+      return;
+    }
+    if (!draft.selections.length) return;
+    await operation
+      .mutateAsync({ revision: draft.bindingRevision, selections: [...draft.selections] })
+      .catch(() => undefined);
   };
 
+  const accessLossError =
+    (isAccessLoss(operation.error) ? operation.error : null) ?? queryPermissionError;
   if (accessLossError) {
     return (
       <section className="core-card">
@@ -812,16 +827,25 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       </nav>
       {endpointId ? (
         <p className="core-muted core-selector-context">
-          {endpoints.data?.data.find((entry) => entry.id === endpointId)?.note} ·{' '}
-          {endpoints.data?.data.find((entry) => entry.id === endpointId)?.base_url}
+          {selectedEndpoint?.note} · {selectedEndpoint?.base_url}
           {keyId
-            ? ` / ${keys.data?.data.find((entry) => entry.id === keyId)?.note || ''} · ${keys.data?.data.find((entry) => entry.id === keyId)?.display_head || ''}…${keys.data?.data.find((entry) => entry.id === keyId)?.display_tail || ''}`
+            ? ` / ${selectedKey?.note || ''} · ${selectedKey?.display_head || ''}…${selectedKey?.display_tail || ''}`
             : ''}
         </p>
       ) : null}
       <div className="core-selector">
         <section className="core-selector__level" hidden={Boolean(endpointId)}>
           <h3>{t('models.levelEndpoint')}</h3>
+          <label>
+            {text('serviceSearch')}
+            <input
+              type="search"
+              maxLength={128}
+              value={endpointQuery}
+              onChange={(e) => setEndpointQuery(e.target.value)}
+            />
+            <small>{text('searchHelp')}</small>
+          </label>
           {endpoints.isPending ? (
             <CoreLoading compact />
           ) : endpoints.error ? (
@@ -840,6 +864,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                 `${endpoint.note} ${endpoint.base_url} ${endpoint.connector_type}`
               }
               label={t('models.levelEndpoint')}
+              searchable={false}
             >
               {(endpoint) => (
                 <button
@@ -877,6 +902,16 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
 
         <section className="core-selector__level" hidden={!endpointId || Boolean(keyId)}>
           <h3>{t('models.levelKey')}</h3>
+          <label>
+            {text('keySearch')}
+            <input
+              type="search"
+              maxLength={128}
+              value={keyQuery}
+              onChange={(e) => setKeyQuery(e.target.value)}
+            />
+            <small>{text('searchHelp')}</small>
+          </label>
           {!endpointId ? (
             <p className="core-muted">{t('models.chooseEndpoint')}</p>
           ) : keys.isPending ? (
@@ -891,6 +926,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
               getKey={(key) => key.id}
               getSearchText={(key) => `${key.note} ${key.display_head} ${key.display_tail}`}
               label={t('models.levelKey')}
+              searchable={false}
             >
               {(key) => {
                 const unavailable = !key.enabled || key.suspension_state !== 'none';
@@ -1011,7 +1047,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                 <button
                   type="button"
                   className="btn btn-quiet"
-                  disabled={draft.status === 'pending' || Boolean(replayAttempt)}
+                  disabled={operation.isPending || Boolean(replayAttempt)}
                   onClick={() =>
                     dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate })
                   }
@@ -1030,13 +1066,15 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
         outcome={
           replayAttempt
             ? 'unknown'
-            : draft.status === 'conflict' || draft.status === 'unknown' || draft.status === 'error'
-              ? draft.status
+            : operationStatus === 'conflict' ||
+                operationStatus === 'unknown' ||
+                operationStatus === 'error'
+              ? operationStatus
               : null
         }
       />
       <div className="core-form-actions">
-        {draft.status === 'conflict' || draft.status === 'unknown' ? (
+        {operationStatus === 'conflict' || operationStatus === 'unknown' ? (
           <button
             type="button"
             className="btn btn-secondary"
@@ -1052,17 +1090,15 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
           className="btn btn-primary"
           disabled={
             !bindingsKnown ||
-            draft.status === 'pending' ||
-            draft.status === 'conflict' ||
-            draft.status === 'unknown' ||
+            operation.isPending ||
             (!replayAttempt && draft.selections.length === 0)
           }
           onClick={() => void submit()}
         >
-          {draft.status === 'pending'
+          {operation.isPending
             ? t('common.working')
             : replayAttempt
-              ? t('common.retrySame')
+              ? t('common.reconcile')
               : t('models.addSelected', { count: draft.selections.length })}
         </button>
       </div>
@@ -1099,7 +1135,6 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
-  const permissionScope = `${accountId}\u0000${model.id}`;
   const pager = usePagePager({
     station: 'user',
     listType: 'models-binding-order',
@@ -1108,24 +1143,74 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
   });
   const [order, setOrder] = useState<string[]>([]);
   const [dragged, setDragged] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<VisibleOutcome>(null);
-  const [reconciliationRequired, setReconciliationRequired] = useState(false);
   const [removing, setRemoving] = useState<Binding | null>(null);
-  const [replayAttempt, setReplayAttempt] = useState<
-    | { kind: 'order'; expectedRevision: string; order: string[]; operation: OperationIdentity }
-    | { kind: 'delete'; expectedRevision: string; bindingId: string; operation: OperationIdentity }
-    | null
-  >(null);
-  const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
-
-  const discardStaleMutation = () => {
-    setReplayAttempt(null);
-    setBusy(false);
-    setOutcome(null);
-    setReconciliationRequired(false);
-    setRemoving(null);
-  };
+  type Intent =
+    | { kind: 'order'; expectedRevision: string; order: string[] }
+    | { kind: 'delete'; expectedRevision: string; bindingId: string };
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<Intent, BindingsResponse>(
+    async (intent, key, context) => {
+      const identity = { idempotencyKey: key, actionId: key };
+      const response =
+        intent.kind === 'order'
+          ? await orderBindings(
+              model.id,
+              intent.expectedRevision,
+              intent.order,
+              identity,
+              context.signal,
+            )
+          : await deleteBinding(
+              model.id,
+              intent.bindingId,
+              intent.expectedRevision,
+              identity,
+              context.signal,
+            );
+      context.commit(() => {
+        applyBindingsResponse(queryClient, accountId, model.id, response);
+        if (intent.kind === 'delete') setRemoving(null);
+      });
+      return response;
+    },
+    async (intent, error, context) => {
+      const current = await getBindings(model.id, context.signal);
+      context.commit(() => {
+        applyBindingsResponse(queryClient, accountId, model.id, current);
+        retryAllowed.current = current.binding_revision === intent.expectedRevision;
+        setOrder(current.bindings.map((binding) => binding.id));
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, model.id) }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
+        queryClient.invalidateQueries({ queryKey: coreKeys.candidatesRoot(accountId, model.id) }),
+      ]);
+      context.assertCurrent();
+      const confirmed =
+        intent.kind === 'delete'
+          ? !current.bindings.some((binding) => binding.id === intent.bindingId)
+          : current.bindings.length === intent.order.length &&
+            current.bindings.every((binding, index) => binding.id === intent.order[index]);
+      if (confirmed && intent.kind === 'delete') context.commit(() => setRemoving(null));
+      if (error && confirmed) return { operationConfirmed: true };
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setRemoving(null);
+        setDragged(null);
+      },
+    },
+  );
+  const busy = operation.isPending;
+  const outcome: VisibleOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const reconciliationRequired = operation.outcome === 'refresh-failed';
+  const replayAttempt = operation.outcome === 'unknown' ? (operation.variables ?? null) : null;
 
   useEffect(() => {
     if (!bindings.data) return;
@@ -1155,178 +1240,35 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
     if (BigInt(pager.page) > BigInt(pagination.total_pages)) pager.setPage(pagination.page);
   }, [pager, pagination.page, pagination.total_pages]);
 
-  const reconcile = async (attempt = replayAttempt) => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
+  const reconcile = () => (operation.isSuccess ? operation.refresh() : operation.check());
+  const run = async (intent: Intent) => {
+    if (reconciliationRequired) {
+      await operation.refresh();
+      return;
     }
-    const [refreshed] = await Promise.all([
-      bindings.refetch(),
-      queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, model.id) }),
-      queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-    ]);
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return false;
+    if (replayAttempt) {
+      await operation.check();
+      if (retryAllowed.current) await operation.mutateAsync(replayAttempt).catch(() => undefined);
+      return;
     }
-    if (isAccessLoss(refreshed.error)) {
-      setPermissionLost({ scope: permissionScope, error: refreshed.error });
-      discardStaleMutation();
-      return false;
-    }
-    const ready = !refreshed.error && Boolean(refreshed.data);
-    setReconciliationRequired(!ready);
-    if (refreshed.data) {
-      const authoritativeOrder = refreshed.data.bindings.map((binding) => binding.id);
-      setOrder(authoritativeOrder);
-      if (removing && !refreshed.data.bindings.some((binding) => binding.id === removing.id)) {
-        setRemoving(null);
-      }
-      const confirmed =
-        attempt?.kind === 'order'
-          ? authoritativeOrder.length === attempt.order.length &&
-            authoritativeOrder.every((id, index) => id === attempt.order[index])
-          : attempt?.kind === 'delete'
-            ? !refreshed.data.bindings.some((binding) => binding.id === attempt.bindingId)
-            : false;
-      if (confirmed) {
-        setReplayAttempt(null);
-        setOutcome(null);
-        if (attempt?.kind === 'delete') setRemoving(null);
-      } else if (attempt) {
-        setOutcome('unknown');
-      } else if (ready) {
-        setOutcome(null);
-      }
-    }
-    return ready;
+    await operation.mutateAsync(intent).catch(() => undefined);
   };
-
   const saveOrder = async () => {
-    if (
-      !bindings.data ||
-      busy ||
-      reconciliationRequired ||
-      replayAttempt?.kind === 'delete' ||
-      (!replayAttempt && !dirty)
-    )
+    if (!bindings.data || busy || replayAttempt?.kind === 'delete' || (!replayAttempt && !dirty))
       return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt =
-      replayAttempt?.kind === 'order'
-        ? replayAttempt
-        : {
-            kind: 'order' as const,
-            expectedRevision: bindings.data.binding_revision,
-            order: [...order],
-            operation: createOperationIdentity(),
-          };
-    setBusy(true);
-    setOutcome(null);
-    try {
-      const response = await orderBindings(
-        model.id,
-        attempt.expectedRevision,
-        attempt.order,
-        attempt.operation,
-      );
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setReplayAttempt(null);
-      if (!applyBindingsResponse(queryClient, accountId, model.id, response))
-        discardStaleMutation();
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (isAccessLoss(error)) {
-        setPermissionLost({ scope: permissionScope, error });
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = visibleOutcome(error);
-      setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error))
-        await reconcile(nextOutcome === 'unknown' ? attempt : null);
-    } finally {
-      setBusy(false);
-    }
+    await run({
+      kind: 'order',
+      expectedRevision: bindings.data.binding_revision,
+      order: [...order],
+    });
   };
-
   const remove = async () => {
-    if (
-      !bindings.data ||
-      !removing ||
-      busy ||
-      reconciliationRequired ||
-      replayAttempt?.kind === 'order'
-    )
-      return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt =
-      replayAttempt?.kind === 'delete'
-        ? replayAttempt
-        : {
-            kind: 'delete' as const,
-            expectedRevision: bindings.data.binding_revision,
-            bindingId: removing.id,
-            operation: createOperationIdentity(),
-          };
-    setBusy(true);
-    setOutcome(null);
-    try {
-      const response = await deleteBinding(
-        model.id,
-        attempt.bindingId,
-        attempt.expectedRevision,
-        attempt.operation,
-      );
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setReplayAttempt(null);
-      if (!applyBindingsResponse(queryClient, accountId, model.id, response)) {
-        discardStaleMutation();
-        return;
-      }
-      setRemoving(null);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await queryClient.invalidateQueries({
-        queryKey: coreKeys.candidatesRoot(accountId, model.id),
-      });
-      if (!coreSessionMatchesAccount(queryClient, accountId)) discardStaleMutation();
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (isAccessLoss(error)) {
-        setPermissionLost({ scope: permissionScope, error });
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = visibleOutcome(error);
-      setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
-      setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error))
-        await reconcile(nextOutcome === 'unknown' ? attempt : null);
-    } finally {
-      setBusy(false);
-    }
+    if (!bindings.data || !removing || busy || replayAttempt?.kind === 'order') return;
+    await run({
+      kind: 'delete',
+      expectedRevision: bindings.data.binding_revision,
+      bindingId: removing.id,
+    });
   };
 
   const drop = (event: DragEvent, targetId: string) => {
@@ -1339,7 +1281,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
   };
 
   const accessLossError =
-    (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
+    (isAccessLoss(operation.error) ? operation.error : null) ??
     (isAccessLoss(bindings.error) ? bindings.error : null);
   if (accessLossError) {
     return (
@@ -1489,7 +1431,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
           {busy
             ? t('common.working')
             : replayAttempt?.kind === 'order'
-              ? t('common.retrySame')
+              ? t('common.reconcile')
               : t('models.saveOrder')}
         </button>
       </div>
@@ -1498,7 +1440,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
         title={t('models.removeBindingTitle')}
         description={t('models.removeBindingBody')}
         confirmLabel={
-          replayAttempt?.kind === 'delete' ? t('common.retrySame') : t('models.removeBinding')
+          replayAttempt?.kind === 'delete' ? t('common.reconcile') : t('models.removeBinding')
         }
         danger
         busy={busy}
@@ -1525,30 +1467,78 @@ function ModelDetail({
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const model = useModel(accountId, modelId);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<Model | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<VisibleOutcome>(null);
-  const [reconciliationRequired, setReconciliationRequired] = useState(false);
-  const [replayAttempt, setReplayAttempt] = useState<{
-    expectedRevision: string;
-    operation: OperationIdentity;
-  } | null>(null);
   const permissionScope = `${accountId}\u0000${modelId}`;
   const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
+  const retryAllowed = useRef(false);
+  const operation = useRetainedOperation<{ expectedRevision: string }, void>(
+    async (intent, key, context) => {
+      await deleteModel(
+        modelId,
+        intent.expectedRevision,
+        { idempotencyKey: key, actionId: key },
+        context.signal,
+      );
+    },
+    async (intent, error, context) => {
+      let deleted = !error;
+      if (error) {
+        try {
+          const current = await getModel(modelId, context.signal);
+          context.commit(() => {
+            retryAllowed.current = current.revision === intent.expectedRevision;
+          });
+        } catch (caught) {
+          if (isNotFoundError(caught)) deleted = true;
+          else throw caught;
+        }
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
+        invalidateResourceDependents(queryClient, accountId),
+      ]);
+      context.assertCurrent();
+      if (deleted) {
+        context.commit(onDeleted);
+        if (error) return { operationConfirmed: true };
+      }
+    },
+    ['user', 'core'],
+    {
+      clearSecrets: () => {
+        setDeleteOpen(false);
+        setEditing(null);
+      },
+    },
+  );
+  const busy = operation.isPending;
+  const outcome: VisibleOutcome =
+    operation.outcome === 'unknown' || operation.outcome === 'conflict'
+      ? operation.outcome
+      : operation.outcome === 'failed'
+        ? 'error'
+        : null;
+  const reconciliationRequired = operation.outcome === 'refresh-failed';
+  const replayAttempt = operation.outcome === 'unknown' ? (operation.variables ?? null) : null;
+  const reconcileDeletion = () => (operation.isSuccess ? operation.refresh() : operation.check());
+  const remove = async () => {
+    if (reconciliationRequired) {
+      await operation.refresh();
+      return;
+    }
+    if (replayAttempt) {
+      await operation.check();
+      if (retryAllowed.current) await operation.mutateAsync(replayAttempt).catch(() => undefined);
+      return;
+    }
+    if (model.data)
+      await operation.mutateAsync({ expectedRevision: model.data.revision }).catch(() => undefined);
+  };
 
   const accessLossError =
     (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
     (isAccessLoss(model.error) ? model.error : null);
-
-  const discardStaleMutation = () => {
-    setReplayAttempt(null);
-    setBusy(false);
-    setOutcome(null);
-    setReconciliationRequired(false);
-    setDeleteOpen(false);
-    setEditing(false);
-  };
 
   if (accessLossError)
     return (
@@ -1582,114 +1572,6 @@ function ModelDetail({
       </div>
     );
 
-  const reconcileDeletion = async () => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const result = await model.refetch();
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    if (isAccessLoss(result.error)) {
-      setPermissionLost({ scope: permissionScope, error: result.error });
-      discardStaleMutation();
-      return;
-    }
-    if (result.error && isNotFoundError(result.error)) {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId),
-      ]);
-      setReplayAttempt(null);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      onDeleted();
-      return;
-    }
-    setReconciliationRequired(Boolean(result.error));
-    if (!result.error && !replayAttempt) setOutcome(null);
-  };
-
-  const remove = async () => {
-    if (reconciliationRequired) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      discardStaleMutation();
-      return;
-    }
-    const attempt = replayAttempt ?? {
-      expectedRevision: model.data.revision,
-      operation: createOperationIdentity(),
-    };
-    setBusy(true);
-    setOutcome(null);
-    try {
-      await deleteModel(model.data.id, attempt.expectedRevision, attempt.operation);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      setReplayAttempt(null);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        invalidateResourceDependents(queryClient, accountId),
-      ]);
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      onDeleted();
-    } catch (error) {
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      if (isAccessLoss(error)) {
-        setPermissionLost({ scope: permissionScope, error });
-        discardStaleMutation();
-        return;
-      }
-      const nextOutcome = visibleOutcome(error);
-      setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
-      setOutcome(nextOutcome);
-      if (nextOutcome === 'unknown' || nextOutcome === 'conflict') {
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        const refreshed = await model.refetch();
-        if (!coreSessionMatchesAccount(queryClient, accountId)) {
-          discardStaleMutation();
-          return;
-        }
-        if (refreshed.error && isNotFoundError(refreshed.error)) {
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-            invalidateResourceDependents(queryClient, accountId),
-          ]);
-          setReplayAttempt(null);
-          if (!coreSessionMatchesAccount(queryClient, accountId)) {
-            discardStaleMutation();
-            return;
-          }
-          onDeleted();
-          return;
-        }
-        setReconciliationRequired(Boolean(refreshed.error));
-        if (!refreshed.error) setOutcome(null);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="page core-page core-stack">
       <PageHeader
@@ -1706,7 +1588,7 @@ function ModelDetail({
             type="button"
             className="btn btn-secondary"
             disabled={reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() => setEditing(true)}
+            onClick={() => setEditing(model.data ?? null)}
           >
             {t('models.editModel')}
           </button>
@@ -1715,10 +1597,10 @@ function ModelDetail({
       {editing ? (
         <ModelEditor
           accountId={accountId}
-          key={model.data.revision}
-          initial={model.data}
-          onCancel={() => setEditing(false)}
-          onSaved={() => setEditing(false)}
+          key={editing.revision}
+          initial={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => setEditing(null)}
           onCapabilityLoss={(error) => setPermissionLost({ scope: permissionScope, error })}
         />
       ) : (
@@ -1760,6 +1642,7 @@ function ModelDetail({
           </dl>
         </section>
       )}
+      {!editing ? <ModelRoleSummary policy={model.data.role_policy} /> : null}
       <BindingSelector accountId={accountId} model={model.data} />
       <BindingOrder accountId={accountId} model={model.data} />
       <section className="core-card core-danger-zone">
@@ -1788,7 +1671,7 @@ function ModelDetail({
               disabled={busy || reconciliationRequired}
               onClick={() => void remove()}
             >
-              {t('common.retrySame')}
+              {t('common.reconcile')}
             </button>
           ) : null}
           <button
@@ -1805,7 +1688,7 @@ function ModelDetail({
         open={deleteOpen}
         title={t('models.deleteModelTitle')}
         description={t('models.deleteModelBody')}
-        confirmLabel={replayAttempt ? t('common.retrySame') : t('models.deleteModel')}
+        confirmLabel={replayAttempt ? t('common.reconcile') : t('models.deleteModel')}
         danger
         busy={busy}
         onCancel={() => {

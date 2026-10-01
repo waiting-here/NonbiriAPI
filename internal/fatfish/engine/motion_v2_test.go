@@ -255,7 +255,7 @@ func TestVersionedCommitAndStateSerialization(t *testing.T) {
 	if err != nil || legacy == current {
 		t.Fatal("commitment did not bind the explicit engine version")
 	}
-	for _, versions := range [][2]int{{0, 1}, {3, 1}, {2, 0}, {2, 2}} {
+	for _, versions := range [][2]int{{0, 1}, {4, 1}, {2, 0}, {2, 2}} {
 		if _, err := SeedCommitForVersion("challenge", "period", "node", hash, versions[0], versions[1], [32]byte{}); err == nil {
 			t.Fatal("commitment accepted unsupported rules")
 		}

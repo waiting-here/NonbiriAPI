@@ -368,12 +368,16 @@ func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID int64) (Adm
 	var reviewedAt sql.NullInt64
 	var reviewRole, reviewNote string
 	var thanks sql.NullBool
+	var unknown bool
+	var lastAction string
 	err := tx.QueryRowContext(ctx, `SELECT d.id,d.status,d.revision,d.description,d.review_note,
 d.reviewed_by_user_id,d.reviewed_by_role,d.reviewed_at,d.created_at,d.updated_at,
-d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,''),d.discord_public_thanks
+d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,''),d.discord_public_thanks,d.first_approval_origin,
+EXISTS(SELECT 1 FROM donation_keys dk WHERE dk.donation_id=d.id AND dk.key_body_review_hmac IS NULL),
+COALESCE((SELECT action FROM donation_reviews dr WHERE dr.donation_id=d.id ORDER BY dr.id DESC LIMIT 1),'')
 FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).Scan(
 		&id, &out.Status, &revision, &out.Description, &reviewNote, &reviewedBy, &reviewRole,
-		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick, &thanks)
+		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick, &thanks, &out.FirstApprovalOrigin, &unknown, &lastAction)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminDonation{}, ErrNotFound
 	}
@@ -381,6 +385,20 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		return AdminDonation{}, fmt.Errorf("donation: read projection: %w", err)
 	}
 	out.ID = strconv.FormatInt(id, 10)
+	out.CanForceReject = out.Status == "approved" && out.FirstApprovalOrigin == "auto" && !unknown
+	if !out.CanForceReject {
+		reason := "not_automatically_approved"
+		if out.FirstApprovalOrigin == "unknown" {
+			reason = "approval_origin_unknown"
+		}
+		if unknown {
+			reason = "review_material_unavailable"
+		}
+		if out.Status != "approved" {
+			reason = "not_approved"
+		}
+		out.ForceRejectUnavailableReason = &reason
+	}
 	if thanks.Valid {
 		out.DiscordPublicThanks = &thanks.Bool
 	}
@@ -389,6 +407,9 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		decision := "approve"
 		if out.Status == "rejected" {
 			decision = "reject"
+			if lastAction == "force_reject" {
+				decision = lastAction
+			}
 		}
 		out.ReviewResult = &ReviewResult{Decision: decision, Reason: reviewNote, ReviewedAt: reviewedAt.Int64}
 	}
@@ -462,8 +483,10 @@ EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpo
 EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
-(SELECT COUNT(*) FROM charity_model_bindings b WHERE b.donation_key_id=dk.id)
+(SELECT COUNT(*) FROM charity_model_bindings b WHERE b.donation_key_id=dk.id),
+dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision
 FROM donation_keys dk
+LEFT JOIN donation_key_review_requirements rr ON rr.hmac=dk.key_body_review_hmac
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
@@ -486,16 +509,21 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 		var channelID, channelName, channelCategory sql.NullString
 		var channelRevision sql.NullInt64
 		var bindingCount int64
+		var reviewRevision sql.NullInt64
 		if err := rows.Scan(&id, &endpointKeyID, &item.DisplayHead, &item.DisplayTail,
 			&item.SafeSource.BaseURL, &item.SafeSource.ConnectorType, &channelID, &channelRevision,
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &bindingCount); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
 		item.BindingCount = strconv.FormatInt(bindingCount, 10)
+		if reviewRevision.Valid {
+			value := strconv.FormatInt(reviewRevision.Int64, 10)
+			item.Review.Revision = &value
+		}
 		item.Idle = bindingCount == 0
 		if endpointKeyID.Valid {
 			value := strconv.FormatInt(endpointKeyID.Int64, 10)
@@ -616,6 +644,7 @@ func stewardFromAdmin(value AdminDonation, _ int64) StewardDonation {
 		DiscordPublicThanks: value.DiscordPublicThanks,
 		ID:                  value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
 		ReviewResult: value.ReviewResult, Keys: stewardKeys(value.Keys),
+		FirstApprovalOrigin: value.FirstApprovalOrigin, CanForceReject: value.CanForceReject, ForceRejectUnavailableReason: value.ForceRejectUnavailableReason,
 		Owner: owner, Reviewer: value.Reviewer, Handling: value.Handling, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
 	}
 }
@@ -646,6 +675,7 @@ func ownerKey(value AdminDonationKey) DonationKey {
 	}
 	return DonationKey{
 		TokenBreakdown:          value.TokenBreakdown,
+		Review:                  value.Review,
 		FailureDisableThreshold: value.FailureDisableThreshold,
 		ID:                      value.ID, EndpointKeyID: value.EndpointKeyID, DisplayHead: value.DisplayHead,
 		DisplayTail: value.DisplayTail, SafeSource: source, PhysicalEnabled: value.PhysicalEnabled,

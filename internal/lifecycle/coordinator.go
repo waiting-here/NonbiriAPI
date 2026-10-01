@@ -21,31 +21,33 @@ type OpaqueIDSource func(string) (string, error)
 // ExportAdapters is the closed Generation 2 export registry. The coordinator
 // converges game state before reading financial projections in one transaction.
 type ExportAdapters struct {
-	RequestAdaptation RequestAdaptationExporter
-	Continuity        ContinuityExporter
-	FatFish           FatFishExporter
-	Identity          IdentityExporter
-	Resources         ResourceExporter
-	Issues            IssueExporter
-	Ledger            LedgerExporter
-	Activities        ActivityExporter
-	Donations         DonationExporter
-	Charity           CharityExporter
-	Fishing           FishingExporter
-	LinkLink          LinkLinkExporter
-	RPS               RPSExporter
-	Bidding           DuelExporter
-	Likes             DuelExporter
-	Blackjack         BlackjackExporter
-	Randomness        RandomnessExporter
-	Rankings          RankingExporter
-	Penalties         PenaltyExporter
-	Governance        GovernanceExporter
+	PersonalAutomation PersonalAutomationExporter
+	RequestAdaptation  RequestAdaptationExporter
+	Continuity         ContinuityExporter
+	FatFish            FatFishExporter
+	Identity           IdentityExporter
+	Resources          ResourceExporter
+	Issues             IssueExporter
+	Ledger             LedgerExporter
+	Activities         ActivityExporter
+	Donations          DonationExporter
+	Charity            CharityExporter
+	Fishing            FishingExporter
+	LinkLink           LinkLinkExporter
+	RPS                RPSExporter
+	Bidding            DuelExporter
+	Likes              DuelExporter
+	Blackjack          BlackjackExporter
+	Randomness         RandomnessExporter
+	Rankings           RankingExporter
+	Penalties          PenaltyExporter
+	Governance         GovernanceExporter
 }
 
 // DeleteAdapters is the closed account-deletion registry. Each adapter owns
 // its domain SQL; the coordinator only fixes the cross-domain order.
 type DeleteAdapters struct {
+	PersonalAutomation   DeleteAdapter
 	Continuity           DeleteAdapter
 	AuthSessionCallerKey DeleteAdapter
 	RequestAdaptation    DeleteAdapter
@@ -71,6 +73,7 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 	return []DeleteAdapter{
 		adapters.Continuity,
 		adapters.AuthSessionCallerKey,
+		adapters.PersonalAutomation,
 		adapters.RequestAdaptation,
 		adapters.Resources,
 		adapters.ClaimLog,
@@ -95,22 +98,23 @@ func (adapters DeleteAdapters) ordered() []DeleteAdapter {
 // runtime registry. Legal-hold expiry is owned by the coordinator and runs
 // before this list.
 type RecoveryAdapters struct {
-	Idempotency    RecoveryAdapter
-	Discovery      RecoveryAdapter
-	Claims         RecoveryAdapter
-	Thursday       RecoveryAdapter
-	Reports        RecoveryAdapter
-	Fishing        RecoveryAdapter
-	LinkLink       RecoveryAdapter
-	RPS            RecoveryAdapter
-	Bidding        RecoveryAdapter
-	Likes          RecoveryAdapter
-	Blackjack      RecoveryAdapter
-	FatFish        RecoveryAdapter
-	Donations      RecoveryAdapter
-	Secrets        RecoveryAdapter
-	Governance     RecoveryAdapter
-	CharityRouting RecoveryAdapter
+	PersonalAutomation RecoveryAdapter
+	Idempotency        RecoveryAdapter
+	Discovery          RecoveryAdapter
+	Claims             RecoveryAdapter
+	Thursday           RecoveryAdapter
+	Reports            RecoveryAdapter
+	Fishing            RecoveryAdapter
+	LinkLink           RecoveryAdapter
+	RPS                RecoveryAdapter
+	Bidding            RecoveryAdapter
+	Likes              RecoveryAdapter
+	Blackjack          RecoveryAdapter
+	FatFish            RecoveryAdapter
+	Donations          RecoveryAdapter
+	Secrets            RecoveryAdapter
+	Governance         RecoveryAdapter
+	CharityRouting     RecoveryAdapter
 }
 
 type namedRecoveryAdapter struct {
@@ -120,6 +124,7 @@ type namedRecoveryAdapter struct {
 
 func (adapters RecoveryAdapters) ordered() []namedRecoveryAdapter {
 	return []namedRecoveryAdapter{
+		{"personal_automation", adapters.PersonalAutomation},
 		{"idempotency", adapters.Idempotency},
 		{"discovery", adapters.Discovery},
 		{"claims", adapters.Claims},
@@ -142,28 +147,29 @@ func (adapters RecoveryAdapters) ordered() []namedRecoveryAdapter {
 // RetentionAdapters fixes the six-hour cleanup order. Separate game fields
 // keep each reducer and retention cursor under its domain owner.
 type RetentionAdapters struct {
-	RequestAdaptation RetentionAdapter
-	Continuity        RetentionAdapter
-	Sessions          RetentionAdapter
-	RequestLogs       RetentionAdapter
-	Audits            RetentionAdapter
-	Observability     RetentionAdapter
-	RiskAudit         RetentionAdapter
-	Issues            RetentionAdapter
-	Fishing           RetentionAdapter
-	LinkLink          RetentionAdapter
-	RPS               RetentionAdapter
-	Bidding           RetentionAdapter
-	Likes             RetentionAdapter
-	Blackjack         RetentionAdapter
-	FatFish           RetentionAdapter
-	Reports           RetentionAdapter
-	Donations         RetentionAdapter
-	Charity           RetentionAdapter
-	Idempotency       RetentionAdapter
-	Secrets           RetentionAdapter
-	Governance        RetentionAdapter
-	CharityRouting    RetentionAdapter
+	PersonalAutomation RetentionAdapter
+	RequestAdaptation  RetentionAdapter
+	Continuity         RetentionAdapter
+	Sessions           RetentionAdapter
+	RequestLogs        RetentionAdapter
+	Audits             RetentionAdapter
+	Observability      RetentionAdapter
+	RiskAudit          RetentionAdapter
+	Issues             RetentionAdapter
+	Fishing            RetentionAdapter
+	LinkLink           RetentionAdapter
+	RPS                RetentionAdapter
+	Bidding            RetentionAdapter
+	Likes              RetentionAdapter
+	Blackjack          RetentionAdapter
+	FatFish            RetentionAdapter
+	Reports            RetentionAdapter
+	Donations          RetentionAdapter
+	Charity            RetentionAdapter
+	Idempotency        RetentionAdapter
+	Secrets            RetentionAdapter
+	Governance         RetentionAdapter
+	CharityRouting     RetentionAdapter
 }
 
 type namedRetentionAdapter struct {
@@ -173,6 +179,7 @@ type namedRetentionAdapter struct {
 
 func (adapters RetentionAdapters) ordered() []namedRetentionAdapter {
 	return []namedRetentionAdapter{
+		{"personal_automation", adapters.PersonalAutomation},
 		{"continuity", adapters.Continuity},
 		{"sessions", adapters.Sessions},
 		{"request_logs", adapters.RequestLogs},
@@ -290,7 +297,7 @@ func New(config Config) (*Coordinator, error) {
 }
 
 func completeExportAdapters(a ExportAdapters) bool {
-	return a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
+	return a.PersonalAutomation != nil && a.Identity != nil && a.Resources != nil && a.Issues != nil && a.Ledger != nil &&
 		a.Activities != nil && a.Donations != nil && a.Charity != nil && a.Fishing != nil &&
 		a.LinkLink != nil && a.RPS != nil && a.Bidding != nil && a.Likes != nil && a.Blackjack != nil && a.Randomness != nil &&
 		a.Rankings != nil && a.Penalties != nil && a.Governance != nil &&
@@ -417,6 +424,9 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if document.Endpoints, document.CatalogPairs, document.Models, document.CallerKey, err = coordinator.export.Resources.ExportResources(ctx, tx, request); err != nil {
 		return nil, err
 	}
+	if document.PersonalAutomation, err = coordinator.export.PersonalAutomation.ExportPersonalAutomation(ctx, tx, request); err != nil {
+		return nil, err
+	}
 	if document.Issues, err = coordinator.export.Issues.ExportIssues(ctx, tx, request); err != nil {
 		return nil, err
 	}
@@ -476,6 +486,14 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 }
 
 func normalizeExportDocument(document *ExportDocument) {
+	if document.PersonalAutomation == nil {
+		document.PersonalAutomation = []PersonalAutomationBatchExport{}
+	}
+	for i := range document.PersonalAutomation {
+		if document.PersonalAutomation[i].Results == nil {
+			document.PersonalAutomation[i].Results = []PersonalAutomationStepExport{}
+		}
+	}
 	if document.RequestAdaptations == nil {
 		document.RequestAdaptations = []RequestAdaptationExport{}
 	}
@@ -508,6 +526,15 @@ func normalizeExportDocument(document *ExportDocument) {
 	}
 	if document.LimitedActivities.Exchanges == nil {
 		document.LimitedActivities.Exchanges = []ActivityExchangeExport{}
+	}
+	if document.LakeNotes.Casts == nil {
+		document.LakeNotes.Casts = []LakeCastExport{}
+	}
+	if document.LakeNotes.Entries == nil {
+		document.LakeNotes.Entries = []LakeEntryExport{}
+	}
+	if document.LakeNotes.Exchanges == nil {
+		document.LakeNotes.Exchanges = []LakeExchangeExport{}
 	}
 	if document.ImageTasks == nil {
 		document.ImageTasks = []ImageTaskExport{}
@@ -631,6 +658,19 @@ func normalizeExportDocument(document *ExportDocument) {
 }
 
 func validateExportCollectionBounds(document ExportDocument) error {
+	automationRows := len(document.PersonalAutomation)
+	for _, batch := range document.PersonalAutomation {
+		if len(batch.Results) > CollectionLimit-automationRows {
+			return ErrTooLarge
+		}
+		automationRows += len(batch.Results)
+	}
+	if automationRows > CollectionLimit {
+		return ErrTooLarge
+	}
+	if len(document.LakeNotes.Casts) > CollectionLimit || len(document.LakeNotes.Entries) > CollectionLimit || len(document.LakeNotes.Exchanges) > CollectionLimit {
+		return ErrTooLarge
+	}
 	if len(document.FatFish.Summaries) > CollectionLimit || len(document.FatFish.Progress) > CollectionLimit-len(document.FatFish.Summaries) {
 		return ErrTooLarge
 	}

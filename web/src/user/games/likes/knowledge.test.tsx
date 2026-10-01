@@ -1,17 +1,23 @@
+import { testDuelText } from '../common/duel/copy.test-support';
+import { duelCopyKeys } from '../common/duel/copy';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { testCatalog } from './testCatalog';
 import { guideLevels, knowledge, relatedEntries } from './knowledge';
 import { Glossary } from './Glossary';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (zh: string) => zh }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'zh') };
+});
 HTMLDialogElement.prototype.showModal = function () {
   this.open = true;
 };
 HTMLDialogElement.prototype.close = function () {
   this.open = false;
 };
-const zh = (text: string) => text;
+const zh = testDuelText(duelCopyKeys, 'zh');
 describe.each(['quick', 'standard'] as const)('%s player explanations', (mode) => {
   const catalog = testCatalog.modes[mode];
   it('describes every entry and version with resolved, deduplicated links and separate flavor', () => {

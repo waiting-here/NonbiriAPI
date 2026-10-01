@@ -15,7 +15,6 @@ import {
 import { FrameChanges } from './Arena';
 import { PlanSummary } from './PlanEditor';
 import { characterPassive } from './characterPassives';
-
 function EventData({
   data,
   catalog,
@@ -25,89 +24,92 @@ function EventData({
   readonly kind: string;
   readonly catalog: ModeCatalog;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const passiveName = (id: string) => {
     const role = catalog.roles.find((r) => r.passive?.id === id);
-    return role ? (characterPassive(role, t)?.name ?? id) : id;
+    return role
+      ? (characterPassive(role, text)?.name ?? id)
+      : (catalog.passives.find((p) => p.id === id)?.name ?? id);
   };
   const labels: Record<string, string> = {
-    skillId: t('技能', 'Skill'),
-    derived: t('连答', 'Follow-up'),
-    main: t('主技能', 'Main skill'),
-    energy: t('电能消耗', 'Energy paid'),
-    token: t('Token消耗', 'Tokens paid'),
-    likes: t('得赞', 'Likes'),
-    passiveLikes: t('被动得赞', 'Passive likes'),
-    trialPayment: t('试用支付', 'Trial paid'),
-    subPayment: t('订阅支付', 'Subscription paid'),
-    apiPayment: t('API支付', 'API paid'),
-    gold: t('金币', 'Gold'),
-    resourceCosts: t('资源消耗', 'Resource costs'),
-    templateId: t('蒸馏模板', 'Distilled template'),
-    success: t('成功', 'Success'),
-    level: t('等级', 'Level'),
-    reason: t('原因', 'Reason'),
-    item: t('商品', 'Item'),
-    price: t('金币价格', 'Gold price'),
-    amount: t('数量', 'Amount'),
-    target: t('目标', 'Target'),
-    requested: t('请求量', 'Requested'),
-    actual: t('实际变化', 'Actual change'),
-    overflow: t('溢出', 'Overflow'),
-    required: t('需求', 'Required'),
-    available: t('可用', 'Available'),
-    quotes: t('双方报价', 'Both energy quotes'),
-    overloaded: t('双方过载状态', 'Both overload states'),
-    owner: t('所属席位', 'Owner seat'),
-    key: t('状态标识', 'Status'),
-    hit: t('命中', 'Hit'),
-    reduction: t('减少得赞', 'Likes reduction'),
-    reward: t('额外得赞', 'Extra likes'),
-    api: t('API余量', 'API reserve'),
-    resource: t('资源', 'Resource'),
-    before: t('变化前', 'Before'),
-    after: t('变化后', 'After'),
-    template: t('学习模板', 'Learned template'),
-    remaining: t('剩余', 'Remaining'),
-    sample: t('样本', 'Sample'),
-    layers: kind === 'persist' ? t('持久层数', 'Persistent layers') : t('层数', 'Layers'),
-    persistentLayers: t('持久层数', 'Persistent layers'),
+    skillId: text('likes.skill'),
+    derived: text('likes.followUp'),
+    main: text('likes.mainSkill'),
+    energy: text('likes.energyPaid'),
+    token: text('likes.tokensPaid'),
+    likes: text('likes.likes2'),
+    passiveLikes: text('likes.passiveLikes'),
+    trialPayment: text('likes.trialPaid'),
+    subPayment: text('likes.subscriptionPaid'),
+    apiPayment: text('likes.aPIPaid'),
+    gold: text('likes.gold'),
+    resourceCosts: text('likes.resourceCosts'),
+    templateId: text('likes.distilledTemplate'),
+    success: text('likes.success'),
+    level: text('likes.level'),
+    reason: text('likes.reason'),
+    item: text('likes.item'),
+    price: text('likes.goldPrice'),
+    amount: text('likes.amount'),
+    target: text('likes.target'),
+    requested: text('likes.requested'),
+    actual: text('likes.actualChange'),
+    overflow: text('likes.overflow'),
+    required: text('likes.required'),
+    available: text('likes.available'),
+    quotes: text('likes.bothEnergyQuotes'),
+    overloaded: text('likes.bothOverloadStates'),
+    owner: text('likes.ownerSeat'),
+    key: text('likes.status'),
+    hit: text('likes.hit'),
+    reduction: text('likes.likesReduction'),
+    reward: text('likes.extraLikes'),
+    api: text('likes.aPIReserve'),
+    resource: text('likes.resource'),
+    before: text('likes.before'),
+    after: text('likes.after'),
+    template: text('likes.learnedTemplate'),
+    remaining: text('likes.remaining'),
+    sample: text('likes.sample'),
+    layers: kind === 'persist' ? text('likes.persistentLayers2') : text('likes.layers'),
+    persistentLayers: text('likes.persistentLayers2'),
     buffId: 'Buff',
-    enabled: t('启用', 'Enabled'),
-    status: t('状态', 'Status'),
-    result: t('结果', 'Result'),
-    plans: t('双方方案', 'Both plans'),
-    shortage: t('过载原因', 'Overload cause'),
-    payment: t('支付方式', 'Payment'),
-    resources: t('相关资源', 'Affected resources'),
-    characterPassive: t('角色被动', 'Character passive'),
-    applications: t('施加结果', 'Applications'),
-    step: t('结算步', 'Resolution step'),
-    kind: t('类型', 'Kind'),
-    index: t('序号（从零开始）', 'Index (zero based)'),
-    rules_version: t('规则版本', 'Rule version'),
-    source: t('施放席位', 'Source seat'),
-    skill_id: t('技能', 'Skill'),
-    buff_id: t('效果', 'Effect'),
-    layer: t('尝试层', 'Attempted layer'),
-    resist: t('抵抗', 'Resistance'),
-    resisted: t('抵抗层数', 'Resisted layers'),
-    numerator: t('成功区间', 'Successful values'),
-    denominator: t('候选数量', 'Candidate count'),
-    draw: t('随机抽样序号；空表示必中', 'Draw ordinal; empty means guaranteed'),
+    enabled: text('likes.enabled'),
+    status: text('likes.status2'),
+    result: text('likes.result'),
+    plans: text('likes.bothPlans'),
+    shortage: text('likes.overloadCause'),
+    payment: text('likes.payment'),
+    resources: text('likes.affectedResources'),
+    passive_id: text('likes.harnessPassive'),
+    characterPassive: text('likes.characterPassive'),
+    applications: text('likes.applications'),
+    step: text('likes.resolutionStep'),
+    kind: text('likes.kind'),
+    index: text('likes.indexZeroBased'),
+    rules_version: text('likes.ruleVersion'),
+    source: text('likes.sourceSeat'),
+    skill_id: text('likes.skill'),
+    buff_id: text('likes.effect'),
+    layer: text('likes.attemptedLayer'),
+    resist: text('likes.resistance'),
+    resisted: text('likes.resistedLayers'),
+    numerator: text('likes.successfulValues'),
+    denominator: text('likes.candidateCount'),
+    draw: text('likes.drawOrdinalEmptyMeansGuaranteed'),
   };
   const render = (value: JSONValue, key: string): string => {
     if (value === null) return '—';
-    if (typeof value === 'boolean') return value ? t('是', 'Yes') : t('否', 'No');
+    if (typeof value === 'boolean') return value ? text('likes.yes') : text('likes.no');
     if (typeof value === 'number') return String(value);
     if (typeof value === 'string')
-      return key === 'characterPassive'
+      return key === 'characterPassive' || key === 'passive_id'
         ? passiveName(value)
         : key === 'kind' && ['main', 'extra', 'flash'].includes(value)
           ? ({
-              main: t('主技能', 'Main skill'),
-              extra: t('额外技能', 'Extra skill'),
-              flash: t('Flash 连答', 'Flash follow-up'),
+              main: text('likes.mainSkill'),
+              extra: text('likes.extraSkill'),
+              flash: text('likes.flashFollowUp'),
             }[value] ?? value)
           : key === 'skillId' || key === 'skill_id' || key === 'templateId' || key === 'template'
             ? skillName(catalog, value)
@@ -121,21 +123,22 @@ function EventData({
                       layers: data.layers,
                       persistent_layers: data.layers,
                     },
-                    t,
+                    text,
                   )
                 : buffName(catalog, value)
               : key === 'reason'
-                ? reasonName(value, t)
+                ? reasonName(value, text)
                 : key === 'item'
-                  ? shopName(value, t)
+                  ? shopName(value, text)
                   : key === 'resource'
-                    ? resourceName(value, t)
+                    ? resourceName(value, text)
                     : key === 'payment'
                       ? ({
-                          energy: t('共享电能不足', 'Shared energy shortage'),
-                          api: t('API 余量不足', 'API reserve shortage'),
-                          sub: t('订阅额度不足', 'Subscription shortage'),
-                          mix: t('Token 不足', 'Token shortage'),
+                          energy: text('likes.sharedEnergyShortage'),
+                          api: text('likes.aPIReserveShortage'),
+                          sub: text('likes.subscriptionShortage'),
+                          mix: text('likes.tokenShortage'),
+                          image: text('likes.imageQuotaShortage'),
                         }[value] ?? value)
                       : value;
     if (Array.isArray(value)) return value.map((v) => render(v, key)).join(' / ');
@@ -163,11 +166,11 @@ function EventLine({
   readonly catalog: ModeCatalog;
   readonly you: Seat;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   if (event.transition)
     return (
       <details>
-        <summary>{stageName('round-start', t)}</summary>
+        <summary>{stageName('round-start', text)}</summary>
         <FrameChanges
           before={event.transition.before}
           after={event.transition.after}
@@ -176,37 +179,38 @@ function EventLine({
       </details>
     );
   const names: Record<string, string> = {
-    cast: t('成功施放', 'Successful cast'),
-    'skill-cancelled': t('施放取消', 'Cast cancelled'),
-    overload: t('过载', 'Overload'),
-    shop: t('购物', 'Purchase'),
-    charge: t('共享充电', 'Shared charge'),
-    cleanse: t('净化／驱散', 'Cleanse / dispel'),
-    counter: t('反制', 'Counter'),
-    'resource-gain': t('资源获得', 'Resource gain'),
-    trial: t('试用额度', 'Trial quota'),
-    resource: t('资源变化', 'Resource change'),
-    'usage-reset': t('额度重置', 'Quota reset'),
-    learn: t('学习', 'Learning'),
-    power: t('发电', 'Power generation'),
-    conversion: t('缓存转换', 'Cache conversion'),
-    'combo-skip': t('连答未施放', 'Follow-up skipped'),
-    effect: t('Buff获得', 'Buff applied'),
-    'effect-attempt': t('减益命中与抵抗', 'Debuff hit and resistance'),
-    persist: t('持久缓存', 'Persistent cache'),
-    mode: t('模式变化', 'Mode change'),
-    end: t('终局', 'Game ended'),
-    reveal: t('方案揭示', 'Plans revealed'),
+    cast: text('likes.successfulCast'),
+    'harness-like': text('likes.harnessBonusLike'),
+    'skill-cancelled': text('likes.castCancelled'),
+    overload: text('likes.overload'),
+    shop: text('likes.purchase'),
+    charge: text('likes.sharedCharge'),
+    cleanse: text('likes.cleanseDispel'),
+    counter: text('likes.counter'),
+    'resource-gain': text('likes.resourceGain'),
+    trial: text('likes.trialQuota'),
+    resource: text('likes.resourceChange'),
+    'usage-reset': text('likes.quotaReset'),
+    learn: text('likes.learning'),
+    power: text('likes.powerGeneration'),
+    conversion: text('likes.cacheConversion'),
+    'combo-skip': text('likes.followUpSkipped'),
+    effect: text('likes.buffApplied'),
+    'effect-attempt': text('likes.debuffHitAndResistance'),
+    persist: text('likes.persistentCache2'),
+    mode: text('likes.modeChange'),
+    end: text('likes.gameEnded'),
+    reveal: text('likes.plansRevealed'),
   };
   return (
     <details className="likes-event">
       <summary>
         <span>
           {event.seat === null
-            ? t('全局', 'Global')
+            ? text('likes.global')
             : event.seat === you
-              ? t('你', 'You')
-              : t('对手', 'Opponent')}
+              ? text('bidding.you')
+              : text('bidding.opponent')}
         </span>{' '}
         · {names[event.kind] ?? event.kind}
         {event.cast ? ` · ${skillName(catalog, event.cast.skillId)} +${event.cast.likes} ♥` : ''}
@@ -215,26 +219,23 @@ function EventLine({
       {event.score && (
         <>
           <p>
-            {t('基础得赞', 'Base likes')}: {event.score.original}
+            {text('likes.baseLikes2')}: {event.score.original}
           </p>
           {event.score.parts.map((part, index) => (
             <p key={index}>
               {part.buff_id
                 ? buffName(catalog, part.buff_id)
                 : part.key === 'character'
-                  ? t('角色被动', 'Character passive')
+                  ? text('likes.characterPassive')
                   : part.key}
               : {part.amount >= 0 ? '+' : ''}
               {part.amount}
             </p>
           ))}
           <p>
-            {t(
-              '条件／倍率前／倍率／被动／实得',
-              'Conditional / pre-multiplier / multiplier / passive / final',
-            )}
-            : {event.score.conditional} / {event.score.before_multiplier} / {event.score.multiplier}{' '}
-            / {event.score.passive} / <strong>{event.score.final}</strong>
+            {text('likes.conditionalPreMultiplierMultiplierPassiveFinal')}:{' '}
+            {event.score.conditional} / {event.score.before_multiplier} / {event.score.multiplier} /{' '}
+            {event.score.passive} / <strong>{event.score.final}</strong>
           </p>
         </>
       )}
@@ -250,7 +251,7 @@ export function LikesRoundLog({
   readonly you: Seat;
   readonly catalog: ModeCatalog;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <div className="likes-round-log">
       {round.startEvents?.map((event) => (
@@ -258,23 +259,23 @@ export function LikesRoundLog({
       ))}
       {[you, (1 - you) as Seat].map((seat) => (
         <section key={seat}>
-          <h4>{seat === you ? t('你的方案', 'Your plan') : t('对手方案', 'Opponent’s plan')}</h4>
+          <h4>{seat === you ? text('likes.yourPlan') : text('likes.opponentSPlan')}</h4>
           <PlanSummary catalog={catalog} plan={round.facts.plans[seat]} />
         </section>
       ))}
       <FrameChanges before={round.facts.before} after={round.facts.after} catalog={catalog} />
-      <h4>{t('完整结算事件', 'Complete settlement events')}</h4>
+      <h4>{text('likes.completeSettlementEvents')}</h4>
       {round.facts.events.map((event) => (
         <EventLine event={event} catalog={catalog} you={you} key={event.id} />
       ))}
       {round.facts.draws.length > 0 && (
         <details>
-          <summary>{t('本轮随机抽样', 'Random selections this round')}</summary>
+          <summary>{text('likes.randomSelectionsThisRound')}</summary>
           <ol>
             {round.facts.draws.map((draw) => (
               <li key={draw.ordinal}>
-                {t('候选数量', 'Candidate count')}: {draw.candidate_count} ·{' '}
-                {t('选中位置（从零开始）', 'Selected position (zero based)')}: {draw.index}
+                {text('likes.candidateCount')}: {draw.candidate_count} ·{' '}
+                {text('likes.selectedPositionZeroBased')}: {draw.index}
               </li>
             ))}
           </ol>

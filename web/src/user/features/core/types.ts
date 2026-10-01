@@ -1,3 +1,5 @@
+import type { RolePolicy } from '@shared/rolePolicy';
+export type { RoleAction, RolePolicy } from '@shared/rolePolicy';
 import type { AutomaticRestriction } from '@shared/operations/restrictions';
 
 export const CONNECTOR_TYPES = [
@@ -219,6 +221,7 @@ export interface Model {
   created_at: number;
   updated_at: number;
   browse?: ModelBrowse;
+  role_policy?: RolePolicy;
 }
 
 export interface BindingCandidate {
@@ -321,6 +324,7 @@ export interface ModelCreateInput {
   route_strategy?: RouteStrategy;
   silent_retry?: boolean;
   flatten_tool_calls?: boolean;
+  role_policy?: RolePolicy;
 }
 
 export interface ModelPatchInput {
@@ -329,6 +333,7 @@ export interface ModelPatchInput {
   route_strategy?: RouteStrategy;
   silent_retry?: boolean;
   flatten_tool_calls?: boolean;
+  role_policy?: RolePolicy;
   expected_revision: string;
 }
 
@@ -468,22 +473,24 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 11;
+  schemaVersion: 11 | 12;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
   capabilities: Readonly<{ exportAccount: boolean; deleteAccount: boolean }>;
-  beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
+  beginElevation(intent: LifecycleIntent, accountId: string, signal?: AbortSignal): Promise<string>;
   exportAccount(input: {
     accountId: string;
     elevatedToken: string;
+    signal?: AbortSignal;
   }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;
+    signal?: AbortSignal;
     confirmation: 'DELETE';
   }): Promise<void>;
-  readAccountAuthority(accountId: string): Promise<AccountAuthority>;
+  readAccountAuthority(accountId: string, signal?: AbortSignal): Promise<AccountAuthority>;
 }

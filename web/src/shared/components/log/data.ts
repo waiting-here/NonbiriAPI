@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { decoded, queryPath } from '@shared/operations/api';
+import { logOriginFields, normalizeLogOrigin, type LogOrigin } from '@shared/operations/logOrigin';
 import {
   MODEL_CALL_ROUTES,
   isCharityRoute,
@@ -77,7 +78,7 @@ export interface UserCharityLogRow extends LogRowCommon {
 
 export type UserLogRow = UserSelfLogRow | UserCharityLogRow;
 
-export interface AdminLogRow extends LogRowCommon {
+export interface AdminLogRow extends LogRowCommon, LogOrigin {
   charity_model?: string | null;
   role: 'admin';
   usage_total_mismatch: boolean;
@@ -86,7 +87,7 @@ export interface AdminLogRow extends LogRowCommon {
   attempt_count: string;
 }
 
-export interface StewardLogRow extends LogRowCommon {
+export interface StewardLogRow extends LogRowCommon, LogOrigin {
   charity_model?: string | null;
   role: 'steward';
   usage_total_mismatch: boolean;
@@ -377,6 +378,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
     value,
     [
       ...COMMON_ROW_FIELDS,
+      ...logOriginFields,
       'user_id',
       'caller_identity',
       'attempt_count',
@@ -394,6 +396,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   return {
     ...common,
     role: 'admin',
+    ...normalizeLogOrigin(root),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
@@ -434,6 +437,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
     value,
     [
       ...COMMON_ROW_FIELDS,
+      ...logOriginFields,
       'user_id',
       'caller_identity',
       'attempt_count',
@@ -451,6 +455,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   return {
     ...common,
     role: 'steward',
+    ...normalizeLogOrigin(root),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
     user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,

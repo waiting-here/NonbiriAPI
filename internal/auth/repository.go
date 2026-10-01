@@ -499,14 +499,14 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 	}
 	now := r.now().Unix()
 	if banned == 1 && (!bannedUntil.Valid || bannedUntil.Int64 > now) {
-		restrictions, err := readAutomaticRestrictions(ctx, tx, userID, now, language)
-		if err != nil {
-			return "", 0, err
-		}
-		if len(restrictions) > 0 {
-			return "", 0, &verifiedLoginDenial{restrictions: restrictions}
-		}
-		return "", 0, errSessionForbidden
+		return "", 0, &verifiedLoginDenial{discordID: identity.ID}
+	}
+	var blacklisted bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM discord_blacklist WHERE discord_id=?)`, identity.ID).Scan(&blacklisted); err != nil {
+		return "", 0, err
+	}
+	if blacklisted {
+		return "", 0, &verifiedLoginDenial{discordID: identity.ID}
 	}
 	next, err := incrementU128(revision)
 	if err != nil {
@@ -600,7 +600,7 @@ func (r *Runtime) registerUser(ctx context.Context, identity DiscordIdentity, me
 		return 0, "", 0, ErrProviderUnavailable
 	}
 	if blacklisted {
-		return 0, "", 0, errSessionForbidden
+		return 0, "", 0, &verifiedLoginDenial{discordID: identity.ID}
 	}
 	userID, err := canonicalUserInsert(ctx, tx, identity.ID, identity.Username, identity.Avatar, member.Nick, member.Avatar, false, now)
 	if err != nil {

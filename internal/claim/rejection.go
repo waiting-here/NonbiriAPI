@@ -12,6 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
@@ -75,7 +76,7 @@ func (s *Service) RecordRejectionTx(ctx context.Context, tx *sql.Tx, user int64,
 	} else if fact.Path == "/v1/embeddings" {
 		route = "openai_embeddings"
 	}
-	if strings.HasPrefix(model, "[公益]") {
+	if modelname.IsCharity(model) {
 		route = strings.Replace(route, "openai_", "charity_", 1)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO logical_requests

@@ -55,6 +55,33 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 			Action: e.Action, GeneralMilli: e.GeneralMilli, GameMilli: e.GameMilli, OperationID: e.OperationID, CreatedAt: e.CreatedAt,
 		})
 	}
+	lake, err := a.lake.ExportUserTx(ctx, tx, r.UserID, r.Limit)
+	if err != nil {
+		return out, activityExportError(err)
+	}
+	out.LakeNotes = lifecycle.LakeNotesExport{RulesID: lake.RulesID, ProfileRevision: lake.ProfileRevision, Profile: lake.Profile}
+	for _, cast := range lake.Casts {
+		out.LakeNotes.Casts = append(out.LakeNotes.Casts, lifecycle.LakeCastExport{
+			ID: cast.ID, SourcePeriodID: cast.SourcePeriodID, RulesID: cast.RulesID,
+			Generation: cast.Generation, Revision: cast.Revision, AckTick: cast.AckTick,
+			Phase: cast.Phase, Paused: cast.Paused, State: cast.State,
+		})
+	}
+	for _, entry := range lake.Entries {
+		out.LakeNotes.Entries = append(out.LakeNotes.Entries, lifecycle.LakeEntryExport{
+			PeriodID: entry.PeriodID, PeriodRevision: entry.PeriodRevision, FeeMilli: entry.FeeMilli,
+			OperationID: entry.OperationID, LedgerSeq: entry.LedgerSeq, CreatedAt: entry.CreatedAt,
+		})
+	}
+	for _, exchange := range lake.Exchanges {
+		out.LakeNotes.Exchanges = append(out.LakeNotes.Exchanges, lifecycle.LakeExchangeExport{
+			ID: exchange.ID, Direction: string(exchange.Direction), Quantity: exchange.Quantity,
+			PeriodID: exchange.PeriodID, PeriodRevision: exchange.PeriodRevision,
+			SourceAmount: exchange.SourceAmount, TargetAmount: exchange.TargetAmount,
+			SourceLot: exchange.SourceLot, TargetLot: exchange.TargetLot,
+			OperationID: exchange.OperationID, LedgerSeq: exchange.LedgerSeq, CreatedAt: exchange.CreatedAt,
+		})
+	}
 	return out, nil
 }
 
@@ -88,6 +115,17 @@ func (a *activityRuntime) RecoverBeforeListener(ctx context.Context, _ int64, li
 	// Fat Fish has its own typed maintenance owner; the catalog remains the
 	// shared authority for pause, ban and delete handoffs, never a second sweep.
 	r, err := a.images.RecoverBeforeListener(ctx, a.now().Unix(), limit, budget)
+	if err != nil {
+		return r, err
+	}
+	budget = min(time.Until(deadline), lifecycle.WorkerBudget)
+	if r.Processed == limit || budget <= 0 {
+		r.More = true
+		return r, nil
+	}
+	lake, err := a.lake.RecoverBeforeListener(ctx, a.now().Unix(), limit-r.Processed, budget)
+	r.Processed += lake.Processed
+	r.More = r.More || lake.More
 	if err == nil && !r.More {
 		a.recovered.Store(true)
 	}
@@ -112,5 +150,16 @@ func (a *activityRuntime) Retain(ctx context.Context, _ int64, limit int, deadli
 	i, err := a.images.Retain(ctx, now, limit-r.Processed, budget)
 	r.Processed += i.Processed
 	r.More = r.More || i.More
+	if err != nil {
+		return r, err
+	}
+	budget = min(time.Until(deadline), lifecycle.WorkerBudget)
+	if r.Processed == limit || budget <= 0 {
+		r.More = true
+		return r, nil
+	}
+	lake, err := a.lake.Retain(ctx, now, limit-r.Processed, budget)
+	r.Processed += lake.Processed
+	r.More = r.More || lake.More
 	return r, err
 }

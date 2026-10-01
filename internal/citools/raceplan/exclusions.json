@@ -1,0 +1,386 @@
+[
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/db",
+    "reason": "Serial DDL, upgrade, recovery or storage constraint matrix; ordinary fresh/upgrade gate retained.",
+    "tests": [
+      "TestAccountProtectionPublishedSourceUpgrade",
+      "TestAccountProtectionSchemaPins",
+      "TestActivityRefinementUpgradePreservesDataAndRepairsOrder",
+      "TestActivityRefinementUpgradeRollsBackAndRejectsDrift",
+      "TestAuditScanPublishedSourceUpgrade",
+      "TestBetaTwoExtensionSeedsSidecarDefaultsFromBeta1",
+      "TestBetaTwoFreshSeedsCapacitySingleton",
+      "TestBetaTwoSidecarHostileConstraints",
+      "TestBindingCompactionDeletionPositions",
+      "TestBindingReorderAtCapacityPreservesDependentRows",
+      "TestBlackjackNineSeatFreshConstraintAndRepeatedOpenNoOp",
+      "TestBlackjackPartialSourceRejectedWithoutWriting",
+      "TestBlackjackPreviousCandidateUpgradeAndReopen",
+      "TestBrowseExtensionPreservesPopulatedStateFromPreBrowse",
+      "TestBrowseExtensionPreservesPopulatedStateFromPreHourlyQuota",
+      "TestBrowseExtensionPreservesPopulatedStateFromPreQuotaCleanup",
+      "TestBrowseExtensionPreservesPopulatedStateFromPreStewardHoldRead",
+      "TestCanonicalSchemaPreservesDeployedDDLBytes",
+      "TestCredentialRestartValidatesStoredURLsAndLiveTargets",
+      "TestCustomPresetUpgradeBoundsOwnershipAndDeletion",
+      "TestDualAssetSeeds",
+      "TestDualAssetUpgradeFromReleasedBinary",
+      "TestDuelBootstrapRollbackAndPartialSourceRejection",
+      "TestDuelExtensionRequiresExactSourceAndPreservesExistingRows",
+      "TestDuelFreshAndUpgradeSchemaIdentity",
+      "TestEmbeddingExtensionPreservesReleasedDataAndStorage",
+      "TestEmbeddingExtensionRollsBackAndResetsConnection",
+      "TestEmbeddingRouteChecksAcceptOnlyKnownOperations",
+      "TestFishingLengthUpgradeUsesOnlyProvenCompleteSettlements",
+      "TestGameRandomnessSchemaExtension",
+      "TestGatewayPolicySchemaUpgradeAndDefaults",
+      "TestGenerationTwoBootstrapFreshRequiresAbsentSidecarsAndSeedsIdentity",
+      "TestGenerationTwoCanonicalDDLExecutes",
+      "TestGenerationTwoCurrentEnabledRPSSnapshotReopensWithSameVault",
+      "TestGenerationTwoCurrentEnabledWelfareZeroSnapshotReopensWithSameVault",
+      "TestGenerationTwoCurrentFreshEpochAndIdentityAreStableAcrossRestart",
+      "TestGenerationTwoCurrentRecoveryFailurePreservesStableClassification",
+      "TestGenerationTwoCurrentRejectsExternallyMutatedValidDatabaseWithoutSourceWrite",
+      "TestGenerationTwoCurrentRejectsNonGenerationTwoSecretEnvelopes",
+      "TestGenerationTwoCurrentRejectsSourceRecheckMutation",
+      "TestGenerationTwoCurrentReopensWithControlledWALCheckpoint",
+      "TestGenerationTwoCurrentTimezoneLockMarkerIsStableAcrossRestart",
+      "TestGenerationTwoFreshConfigSeedUsesIndependentGolden",
+      "TestGenerationTwoFreshFailureIsAtomicAndCleansOnlyOwnedFile",
+      "TestGenerationTwoHostileAdminAlertKinds",
+      "TestGenerationTwoHostileAnnouncementAuditRevisionMatrix",
+      "TestGenerationTwoHostileAutomaticCatalogIdentity",
+      "TestGenerationTwoHostileDonationKeyExpiryAndTraceMatrix",
+      "TestGenerationTwoHostileEndpointChannelSnapshotMatrix",
+      "TestGenerationTwoHostileGameParentAndProjectionMatrices",
+      "TestGenerationTwoHostileIdempotencyExpiryAcrossScopes",
+      "TestGenerationTwoHostileIdempotencyIdentityAndTransitions",
+      "TestGenerationTwoHostileIntegerColumnStructuralGuards",
+      "TestGenerationTwoHostileLegalHoldMarkersDeletesAndAudits",
+      "TestGenerationTwoHostileLogicalRequestTerminalSnapshot",
+      "TestGenerationTwoHostileMainstreamChannelMatrices",
+      "TestGenerationTwoHostileMaintenanceActorDeidentificationDeadline",
+      "TestGenerationTwoHostileMaintenanceActorMatrix",
+      "TestGenerationTwoHostileManifestDynamicRPSAccountIdentity",
+      "TestGenerationTwoHostileOIDPrefixesAndNotNull",
+      "TestGenerationTwoHostilePK64PositiveIDs",
+      "TestGenerationTwoHostilePublicSiteConfigWriteBoundary",
+      "TestGenerationTwoHostileRPSPhaseSeatEnvelope",
+      "TestGenerationTwoHostileReportCursorAndTargetSourceMatrix",
+      "TestGenerationTwoHostileReportDecisionTerminalMatrix",
+      "TestGenerationTwoHostileRequestClaimAttemptMatrices",
+      "TestGenerationTwoHostileSQLiteIntegerAffinity",
+      "TestGenerationTwoHostileSQLiteIntegerAffinityRepresentative",
+      "TestGenerationTwoHostileScalarBoundaries",
+      "TestGenerationTwoHostileSecretReportDonationMembership",
+      "TestGenerationTwoHostileStorageAndAppendOnlyGuards",
+      "TestGenerationTwoHostileThursdayDeidentifiedSettlementMatrix",
+      "TestGenerationTwoHostileThursdaySharedPoolAndWelfareInvariants",
+      "TestGenerationTwoHostileUnicodeScalarTextBounds",
+      "TestGenerationTwoHostileWideIntegerCodecs",
+      "TestGenerationTwoManifestUsesIndependentFixture",
+      "TestGenerationTwoOIDConstraintsRejectHostileValues",
+      "TestGenerationTwoOrphanRecoveryHandles101RowsBoundaryAndRestart",
+      "TestGenerationTwoRPSUserSlotCardinality",
+      "TestGenerationTwoRejectAlpha3AndUnknownGenerationsWithoutSourceWrite",
+      "TestGenerationTwoRejectIsolatedSidecarsWithoutSourceWrite",
+      "TestGenerationTwoRejectRollbackJournalWithoutSourceWrite",
+      "TestGenerationTwoRejectWrongApplicationIDWithoutSourceWrite",
+      "TestGenerationTwoRejectZeroByteDatabaseWithoutSourceWrite",
+      "TestGenerationTwoRejectsNonDirectoryParentBeforeMkdirAll",
+      "TestGenerationTwoRejectsSpecialFinalPathWithoutOpeningIt",
+      "TestGenerationTwoRequestAttemptModelUsesUnicodeScalarBoundary",
+      "TestGenerationTwoSM128ConstraintsRejectHostileValues",
+      "TestGenerationTwoUserDeleteRequiresEconomicHandoff",
+      "TestGenerationTwoUserDeleteRequiresGameReservationHandoff",
+      "TestGovernanceActivityIntegerGuardsUseAll128Bits",
+      "TestGovernancePublishedSourceUpgrade",
+      "TestGovernanceUpgradeFromReleasedBinary",
+      "TestHandlingProcessingActorMatchesState",
+      "TestHourlyQuotaExtensionPreservesStorageAndEnforcesChecks",
+      "TestHourlyQuotaExtensionRollsBackAfterValidationFailure",
+      "TestInteractionAggregateScanSourceRemoval",
+      "TestInteractionContinuityAndPermanentProjection",
+      "TestInteractionFishFinancialAndScoreInvariants",
+      "TestInteractionMigrationRollbackAndUnknownSource",
+      "TestInteractionPublishedSourcePreservesRows",
+      "TestInteractionScanReasonsAndAccessPageIndex",
+      "TestInteractionUpgradeFromReleasedBinary",
+      "TestInteractionUpgradePreservesExistingScanResults",
+      "TestKeyLimitsExtensionPreservesExistingGenerationTwoData",
+      "TestLegacyStructuralFixturePreservesAutoincrementHistory",
+      "TestLevelDeletionUpgradePreservesPublishedData",
+      "TestLevelDeletionUpgradeRejectsUnknownSource",
+      "TestLimitedActivityRejectsFractionalAccountingAndScheduleFacts",
+      "TestLoanTermsExactArithmeticAndBounds",
+      "TestModelTokenReserveConstraintsAndCascade",
+      "TestModelTokenReserveExtensionPreservesDeployedData",
+      "TestModelTokenReserveExtensionRollsBackAndRetries",
+      "TestOpenContextCanceledBeforeSourceIO",
+      "TestOpenContextCanceledPreflightPreservesSource",
+      "TestOpenContextRejectsOwnedPathAndHardlink",
+      "TestProgressionFreshAndPublishedSourceUpgrade",
+      "TestProgressionMissingDonationEvidenceRollsBack",
+      "TestProgressionQuickStakeMigrationUsesSourceLimits",
+      "TestPublicModelDescriptionTextBoundary",
+      "TestPublishedSequenceProjectionKeepsHistoricalAllocators",
+      "TestPublishedTokenQuotaUpgradePreservesScalarHistory",
+      "TestQuotaAggregateModeCannotDrift",
+      "TestQuotaReceiptPeriodReferenceIsRetainedUntilRelease",
+      "TestQuotaRejectsInvalidStateCombinations",
+      "TestQuotaSameSecondAndPreUnixBoundaries",
+      "TestRequestAdaptationAuditContainsOnlyImmutablePartitionNames",
+      "TestResponseStartsExtensionPreservesExistingGenerationTwoData",
+      "TestRetainedBusinessDataBrowseAndQuotaSources",
+      "TestRetainedBusinessDataCoreAndRecurringSources",
+      "TestRetainedBusinessDataEarlyRoutingSources",
+      "TestRetainedExtensionRejectsMixedSourcesWithoutWriting",
+      "TestRetainedExtensionRollbackBrowseAndQuotaSources",
+      "TestRetainedExtensionRollbackCoreAndRecurringSources",
+      "TestRetainedExtensionRollbackEarlyRoutingSources",
+      "TestRoutingExtensionPreservesExistingGenerationTwoData",
+      "TestRoutingExtensionRejectsModifiedPriorSchema",
+      "TestScanCheckpointPrivacyWithoutPublishedResults",
+      "TestStartupDiagnosticsKeepPrimaryCauseAndHideSecondaryDetails",
+      "TestStartupSecondaryErrorsRemainBoundedAndSafe",
+      "TestStorageContractsCharityBindingKeepsEndpointLifetime",
+      "TestStorageContractsCompatibilityRegistryIsDetachedAndClosed",
+      "TestStorageContractsCredentialReviewIdentityAllowsOnlyInitialBackfill",
+      "TestStorageContractsEngineExpansionKeepsContentImmutable",
+      "TestStorageContractsLakePeriodsStayUnpublishedAndRejectOverlap",
+      "TestStorageContractsPersonalBatchIdentityProgressAndDeletion",
+      "TestStorageContractsRebuildFailureRollsBackAndRestoresForeignKeys",
+      "TestStorageContractsRejectsCancelledAndUnknownSource",
+      "TestStorageContractsRolePolicyDefaultAndMalformedPersistence",
+      "TestStorageContractsUpgradeFromReleasedBinary",
+      "TestStorageContractsUpgradeRetainsRowsReferencesAndSchema",
+      "TestUsageDiscrepancyUpgradePreservesHistoryAndBoundsMarkers",
+      "TestWorkerSuccessTimestampUpgradePreservesUnknownHistory"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/db",
+    "reason": "Serial scalar/configuration contract with no competing shared-state operations.",
+    "tests": [
+      "TestBrowseSQLWideCountersKeepExactCapacityAndOverflow",
+      "TestBrowseSQLCalendarAndOpaqueSourceIdentity",
+      "TestWideScalarsCanonicalAndHostile",
+      "TestOpaqueIDCanonicalAndHostile",
+      "TestHKDFRFC5869Vector",
+      "TestGenerationTwoVaultSubkeyMatchesFixedSaltGolden",
+      "TestGenerationTwoDigestVectors",
+      "TestCredentialReportDigestFieldFramingEmptyAndUnicode",
+      "TestCredentialReportSourceIPEnvelope",
+      "TestPaginationCursorCanonicalAndHostile",
+      "TestLeaderboardTieTupleWhitelist",
+      "TestLeaderboardTieGoldenVectors",
+      "TestGenerationTwoConfigCatalogSeparatesRequiredAndOptionalRows",
+      "TestGenerationTwoConfigDefaultsUseAuthoritativeSubsystemValues",
+      "TestGenerationTwoConfigScalarBoundaries",
+      "TestGenerationTwoConfigEveryFixedKeyHasExactScalarContract",
+      "TestGenerationTwoConfigCombinationHealth",
+      "TestGenerationTwoWelfareConfigSnapshotZeroValueBoundaries",
+      "TestGenerationTwoWelfareConfigSnapshotRejectsInvalidValues",
+      "TestGenerationTwoEnabledRPSSnapshotSurvivesCloseReopen",
+      "TestGenerationTwoConfigOptionalDeleteSurvivesCurrentValidation"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/db",
+    "reason": "Serial DDL, upgrade, recovery or storage constraint matrix; ordinary fresh/upgrade gate retained.",
+    "tests": [
+      "TestGenerationTwoRejectsParentSymlinkBeforeMkdirAll"
+    ],
+    "platforms": [
+      "linux"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/db",
+    "reason": "Cross-process kernel locking, not shared Go memory; ordinary Linux locking gate retained.",
+    "tests": [
+      "TestSQLitePOSIXLockProbeProcess",
+      "TestSQLitePOSIXLockProbeControl",
+      "TestSQLitePOSIXLocksFromActualOpen"
+    ],
+    "platforms": [
+      "linux"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/db",
+    "reason": "Scale/startup measurement in isolated child processes; ordinary Linux coverage retained.",
+    "tests": [
+      "TestStartupScale",
+      "TestStartupScaleChildProcess"
+    ],
+    "platforms": [
+      "linux"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules",
+    "reason": "Deterministic rules/replay/geometry over isolated values; ordinary conformance and bounds coverage retained.",
+    "tests": [
+      "TestOriginalActionConformance",
+      "TestAmountBoundaries",
+      "TestInitialProfileAndActionRejection",
+      "TestContractBoardRetentionAndLimits",
+      "TestSkillsAndFreeGearUnlocks",
+      "TestRandomAndWaitBoundaries",
+      "TestNonfiniteAndRecoveryBoundaries",
+      "TestRoundingAndQualityBoundaries",
+      "TestProfileClockBitsAndPerfectEdges",
+      "TestRolloverPreservesActiveAndLazyBoard",
+      "TestPrivateRewardRoundedUpperEndpoints",
+      "TestContractClaimAcrossDays",
+      "TestOriginalFullGameConformance",
+      "TestCatalogIdentity",
+      "TestRulesIdentity",
+      "TestLongOriginalMotionVectors"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/fatfish/engine",
+    "reason": "Deterministic rules/replay/geometry over isolated values; ordinary conformance and bounds coverage retained.",
+    "tests": [
+      "TestShapeCompilersRejectUnsafeInputsBeforeArithmetic",
+      "TestExactRectangleContactAndTangency",
+      "TestFullUnionKeepsInteriorGap",
+      "TestConcavePolygonDifferenceAndOverlap",
+      "TestPartialEscapeAndFullCover",
+      "TestSweptContactAndHoleBoundary",
+      "TestHoldSwitchDefersGateClosure",
+      "TestAggregateBowlQuotaBecomesUnreachable",
+      "TestScoreOrdersSavedFishBeforeTime",
+      "TestGoldenVectors",
+      "TestMaxLoadReplay",
+      "TestV2MaxLoadReplay",
+      "TestMaxLoadPartialGeometryReplay",
+      "TestV2MaxLoadPartialGeometryReplay",
+      "TestV2GoldenVectors",
+      "TestV2ProbeBranchesAndRandomConsumption",
+      "TestV2TurnFactorBoundaries",
+      "TestV2TurnRemainderPreservesPerturbation",
+      "TestV2AmbiguityMemoryAndImmediateStraightRelease",
+      "TestV2FloorProbesAndFixedPointRotation",
+      "TestV2PartialEscapePrecedesBlockedProbe",
+      "TestV2FullCoverWaitsForToolReturn",
+      "TestV2DirectionResetAndOneWayCompatibility",
+      "TestVersionedCommitAndStateSerialization",
+      "TestV1AndV2ReplayRecoveryUsesBoundVersion",
+      "TestInvalidProtocolVectors",
+      "TestFinishNeedsQuotaAndRejectsPostTerminalInput",
+      "TestPayloadAndEventCountBounds",
+      "TestV3GoldenVectors"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/bidding/engine",
+    "reason": "Deterministic rules/replay/geometry over isolated values; ordinary conformance and bounds coverage retained.",
+    "tests": [
+      "TestDealerAndJokerSymmetry",
+      "TestTimeoutsCarryAndLastRoundDiscard",
+      "TestReversedHandsAndMaximumPoints",
+      "TestProjectionAndInputIsolation",
+      "TestRandomGamesConserveCardsAndPoints",
+      "TestShuffleUsesIndependentDrawsAndFailsClosed",
+      "TestRejectsCorruptPersistedState"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine",
+    "reason": "Deterministic rules/replay/geometry over isolated values; ordinary conformance and bounds coverage retained.",
+    "tests": [
+      "TestScoresAndSoftSeventeen",
+      "TestNaturalPrecedenceAndPeek",
+      "TestSplitAndDoubleRules",
+      "TestBatchesUseSeatOrderAndIndependentRevisions",
+      "TestShuffleAndCorruptStates",
+      "TestFullTablesConserveShoeAndBoundInvestment"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/likes/engine",
+    "reason": "Deterministic rules/replay/geometry over isolated values; ordinary conformance and bounds coverage retained.",
+    "tests": [
+      "TestDenseRoundAndFullHistoryFitWithoutTruncation",
+      "TestDifferentialCatalogVariantsAndRounds",
+      "TestRoundResolutionAndSeparateFullRoundStart",
+      "TestOnlyPositiveSharedEnergyQuoteOverloads",
+      "TestExactEnergyZeroQuotesAndDoubleOverload",
+      "TestManualPlanRequiresCastAfterShoppingUnlessStillStunned",
+      "TestCharacterMainUsesSharedSnapshotAndNominalBase",
+      "TestExtraAndFlashSnapshotsAdvanceWithoutChangingRoundStart",
+      "TestCharacterBonusBeforeSuppressionAndMultiplierButDistillStaysSpecial",
+      "TestLayerResistanceBoundariesAndSOTASuccessChain",
+      "TestDeepSeekHitsGLMWithoutDrawAndFailureLeavesInputIntact",
+      "TestOverflowStillAttemptsAndRefreshesOnlyOnSuccess",
+      "TestPersistentFlashCacheSurvivesSkippedAndOverloadedRoundsAndRemainsDispellable",
+      "TestDistilledRandomCleanseReplaysFromRoundSeed",
+      "TestOverloadQuoteIncludesCancelledExtraAndPostShoppingCharge",
+      "TestExistingOverloadExpiresWithoutCancellingOtherZeroCostEffects",
+      "TestWinnerUsesCompletedRoundAndResultPriority",
+      "TestFlashBatchAndIndependentFailureNeverOverload",
+      "TestRandomFailureAndInvalidPlansLeaveNoPartialChanges",
+      "TestScoreBreakdownAndPaymentFramesAreAuthoritative",
+      "TestOverloadRecordsActualPaymentResources",
+      "TestExtraSkillShortageUsesBalanceAfterMainPayment",
+      "TestViewsHideUnusedLoadoutsAndPrivateState"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/citools/racefixture",
+    "reason": "Serial empty-template creation/reopen and existing-file rejection; ordinary fresh-template validation retained.",
+    "tests": [
+      "TestRunCreatesClosedCredentialFreeTemplate",
+      "TestRunRejectsExistingTargetWithoutOverwrite"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/lifecycle",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestLegalHoldNumberedScaleUsesCreatedIndex"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/donation",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestSourcePagesUseCompleteIndexedCollectionsAtScale"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/linklink",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestLeaderboardHundredThousandSummariesUseWindowIndex"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/adminusers",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestAdminNumberedPagesFullCollectionsAndNestedScale"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/reports",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestReportNumberedCasesScaleUsesOrderedIndex"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/linklink",
+    "reason": "Deterministic generation, geometry and failure bounds over isolated state; ordinary algorithm coverage retained.",
+    "tests": [
+      "TestConstructiveGenerationThousandSeedsPerSpec",
+      "TestGenerationGeometryMatchesLiveSearchOnArbitraryMasks",
+      "TestGenerationNearestPairFallbackVerifiesProgress",
+      "TestGenerationQualityRejectsRowAndColumnPairing",
+      "TestGenerationRandomFailuresAndBoundedDegenerateSources"
+    ]
+  }
+]

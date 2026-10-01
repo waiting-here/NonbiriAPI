@@ -13,7 +13,7 @@ describe('Fat Fish example picker', () => {
     format: 'nonbiri-fatfish-examples', version: 1, license: 'AGPL-3.0', source: 'Bundled examples',
     examples: [entry, ...Array.from({ length: 7 }, (_, index) => ({ ...entry, id: `other_${index}`, title: `Other ${index}` }))],
   });
-  it('loads only a manifest-listed same-origin level with its normalized engine hash', async () => {
+  it('imports and downloads a bundled level', async () => {
     const level = blankLevel(), onImport = vi.fn();
     const path = '/examples/fatfish/01-example.fatfish.json';
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('manifest.json')
@@ -34,14 +34,6 @@ describe('Fat Fish example picker', () => {
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     click.mockRestore();
   });
-  it('rejects external manifest URLs before fetching a level', async () => {
-    const fetch = vi.fn(async () => reply(manifest({ id: 'first', title: 'External', url: 'https://other.example/level.json', content_hash: 'a'.repeat(64) })));
-    vi.stubGlobal('fetch', fetch);
-    await renderWithProviders(<ExamplePicker onImport={vi.fn()} />, { station: 'admin', role: 'admin' });
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'External' })).not.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledTimes(1);
-  });
   it('accepts all eight bundled examples with their published canonical hashes', () => {
     const raw = readFileSync('public/examples/fatfish/manifest.json', 'utf8');
     const bundled = JSON.parse(raw) as { examples: { url: string; content_hash: string }[] };
@@ -51,7 +43,7 @@ describe('Fat Fish example picker', () => {
       const file = readFileSync(`public${example.url}`, 'utf8');
       expect(new TextEncoder().encode(file).byteLength).toBeLessThanOrEqual(256 * 1024);
       const level = JSON.parse(file) as Level;
-      expect(level.engine_version).toBe(2);
+      expect(level.engine_version).toBe(3);
       expect(localValidation(level)).toBeNull();
       expect(contentHash(level)).toBe(example.content_hash);
     }

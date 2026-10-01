@@ -178,7 +178,8 @@ func TestImageBrowserFixture(t *testing.T) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		var input struct {
-			Seconds int64 `json:"seconds"`
+			Seconds int64  `json:"seconds"`
+			Mode    string `json:"mode"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&input); err != nil {
 			http.Error(w, "invalid control body", 400)
@@ -191,6 +192,14 @@ func TestImageBrowserFixture(t *testing.T) {
 				return
 			}
 			f.offset.Add(input.Seconds)
+		case "/discovery":
+			if input.Mode != "success" && input.Mode != "empty" && input.Mode != "failed" {
+				http.Error(w, "invalid discovery mode", http.StatusBadRequest)
+				return
+			}
+			f.upstreamState.mu.Lock()
+			f.upstreamState.discoveryMode = input.Mode
+			f.upstreamState.mu.Unlock()
 		case "/release":
 			f.upstreamState.release()
 		case "/restart":
@@ -222,6 +231,7 @@ func TestImageBrowserFixture(t *testing.T) {
 		"control_token": controlToken, "users": f.users, "admin_cookie": f.adminCookie,
 		"private_markers": []string{imageFixtureSecret, imageFixtureModel, "synthetic-private-metadata", "synthetic-job-"},
 		"model_id":        f.modelID,
+		"upstream_url":    f.upstream.URL,
 	}
 	raw, err := json.Marshal(state)
 	if err != nil {
@@ -258,7 +268,7 @@ func (f *imageBrowserFixture) request(method, path string, body any, cookie *htt
 func (f *imageBrowserFixture) call(method, path string, body any, cookie *http.Cookie, admin bool) map[string]any {
 	f.t.Helper()
 	out := f.request(method, path, body, cookie, admin)
-	if out.Code != http.StatusOK {
+	if out.Code != http.StatusOK && out.Code != http.StatusCreated {
 		f.t.Fatalf("%s %s: %d %s", method, path, out.Code, out.Body.String())
 	}
 	var result map[string]any
@@ -423,7 +433,7 @@ func (f *imageBrowserFixture) initialize() {
 	}
 }
 
-func (f *imageBrowserFixture) seedUser(index, level int, admin int64) imageBrowserUser {
+func (f *imageBrowserFixture) seedUser(index, level int, admin int64, discordIDs ...string) imageBrowserUser {
 	t := f.t
 	ctx := context.Background()
 	now := f.now().Unix()
@@ -432,8 +442,12 @@ func (f *imageBrowserFixture) seedUser(index, level int, admin int64) imageBrows
 	if err != nil {
 		t.Fatal(err)
 	}
+	discordID := fmt.Sprintf("910000000000%06d", index)
+	if len(discordIDs) > 0 {
+		discordID = discordIDs[0]
+	}
 	result, err := f.store.DB().Exec(`INSERT INTO users(discord_id,username,level,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		fmt.Sprintf("image-fixture-%d", index), fmt.Sprintf("Canvas participant %d", index), level,
+		discordID, fmt.Sprintf("Canvas participant %d", index), level,
 		zero, zero, zero, zero, zero, zero, zero, db.EncodeU128(one), now, now)
 	if err != nil {
 		t.Fatal(err)
@@ -495,11 +509,12 @@ type imageFixtureJob struct {
 	released bool
 }
 type imageFixtureUpstream struct {
-	mu          sync.Mutex
-	jobs        map[string]*imageFixtureJob
-	png         string
-	submissions int
-	polls       int
+	mu            sync.Mutex
+	jobs          map[string]*imageFixtureJob
+	png           string
+	submissions   int
+	discoveryMode string
+	polls         int
 }
 
 func newImageFixtureUpstream(t *testing.T) *imageFixtureUpstream {
@@ -538,7 +553,14 @@ func (u *imageFixtureUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	defer u.mu.Unlock()
 	switch {
 	case r.URL.Path == "/v1/models" && r.Method == http.MethodGet:
-		writeImageFixtureJSON(w, map[string]any{"data": imageFixtureCatalog()})
+		switch u.discoveryMode {
+		case "empty":
+			writeImageFixtureJSON(w, map[string]any{"data": []any{}})
+		case "failed":
+			http.Error(w, "synthetic discovery failure", http.StatusBadGateway)
+		default:
+			writeImageFixtureJSON(w, map[string]any{"data": imageFixtureCatalog()})
+		}
 	case r.URL.Path == "/v1/images/generations" && r.Method == http.MethodPost:
 		var input struct {
 			Model          string  `json:"model"`

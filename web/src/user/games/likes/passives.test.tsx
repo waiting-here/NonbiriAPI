@@ -8,7 +8,11 @@ import { CharacterPassive } from './CharacterPassive';
 import { Arena } from './Arena';
 import { EffectSummary } from './GuideText';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: string) => en }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'en') };
+});
 const catalog = likesCatalog({
   ...catalogWire({ quick: wire.partial.content_hash, standard: wire.chain.content_hash }),
   compatible_modes: legacyCatalogWire(),
@@ -123,4 +127,34 @@ describe('versioned character passives and authoritative feedback', () => {
       c.skills.find((s) => s.id === 'GPT01')!.meme,
     );
   });
+});
+
+it('shows the independent harness reward separately from zero skill likes', () => {
+  const source = wire.partial;
+  const summary = presentationValue(source.summary);
+  const gain = summary.events.find((event) => event.kind === 'harness-like')!;
+  expect(gain.data.likes).toBe(1);
+  expect(summary.events.find((event) => event.cast)?.cast?.likes).toBe(0);
+  const at = source.summary.timeline.findIndex((step) => step.event_ids.includes(gain.id));
+  expect(at).toBeGreaterThanOrEqual(0);
+  const now =
+    100 +
+    source.summary.timeline.slice(0, at).reduce((n, step) => n + step.duration_ms, 0) / 1000 +
+    0.5;
+  render(
+    <Arena
+      catalog={catalog.modes.quick}
+      view={likesView(source.after)}
+      profiles={[{ kind: 'anonymous' }, { kind: 'anonymous' }]}
+      you={0}
+      round={1}
+      locked={[true, true]}
+      resolution={{ round: 1, startedAt: 100, endsAt: 100 + source.seconds, summary }}
+      roundStart={null}
+      now={now}
+      reduced
+      onInspect={vi.fn()}
+    />,
+  );
+  expect(screen.getByText('Harness bonus like +1')).toBeInTheDocument();
 });

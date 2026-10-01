@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useAdminSession } from '../../src/admin/data';
 import { describe, expect, test, vi, type Mock } from 'vitest';
@@ -310,6 +310,79 @@ describe('authoritative site-config frontend', () => {
     await zh.user.click((await screen.findByText('经济')).closest('button')!);
     expect(screen.getByText('每日签到二选一')).toBeVisible();
     expect(screen.getByText(/每个站点日只能领取一种签到/)).toBeVisible();
+  });
+
+  test.each(['account', 'unmount'] as const)(
+    'blocks late settings cache updates after %s during cancellation',
+    async (boundary) => {
+      const siteName = catalogEntry('site_name', {
+        type: 'string',
+        title: { zh: '站点名称', en: 'Site name' },
+        unit: null,
+        raw_default: 'Before',
+        effective_fallback: 'Before',
+        minimum: 1,
+        maximum: 256,
+        step: null,
+      });
+      const server = installSiteConfigServer({ revision: '1', values: { site_name: 'Before' } }, [
+        siteName,
+      ]);
+      const rendered = await renderSettings();
+      await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
+      let finish!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const cancel = vi.spyOn(rendered.queryClient, 'cancelQueries').mockReturnValue(pending);
+      try {
+        fireEvent.change(screen.getByLabelText('Site name'), { target: { value: 'After' } });
+        await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+        await waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+        expect(server.patches).toHaveLength(1);
+        if (boundary === 'account') {
+          act(() => {
+            const next = { admin: { username: 'second-fixture' } };
+            rendered.queryClient.setQueryData(['admin', 'session'], next);
+          });
+        } else rendered.unmount();
+        const writes = vi.spyOn(rendered.queryClient, 'setQueryData');
+        const reads = server.fetchMock.mock.calls.length;
+        await act(async () => {
+          finish();
+          await pending;
+        });
+        await waitFor(() => expect(rendered.queryClient.isMutating()).toBe(0));
+        expect(writes).not.toHaveBeenCalled();
+        expect(server.fetchMock.mock.calls).toHaveLength(reads);
+      } finally {
+        finish();
+        cancel.mockRestore();
+      }
+    },
+  );
+
+  test('clears saved settings feedback as soon as the user edits again', async () => {
+    const siteName = catalogEntry('site_name', {
+      type: 'string',
+      title: { zh: '站点名称', en: 'Site name' },
+      unit: null,
+      raw_default: 'Before',
+      effective_fallback: 'Before',
+      minimum: 1,
+      maximum: 256,
+      step: null,
+    });
+    installSiteConfigServer({ revision: '1', values: { site_name: 'Before' } }, [siteName]);
+    const rendered = await renderSettings();
+    await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
+    fireEvent.change(screen.getByLabelText('Site name'), { target: { value: 'Saved draft' } });
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    const message = rendered.i18n.t('admin.settings.saved');
+    expect(await screen.findByText(message)).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Site name'), { target: { value: 'Next draft' } });
+    expect(screen.queryByText(message)).toBeNull();
+    expect(screen.getByLabelText('Site name')).toHaveValue('Next draft');
   });
 
   test('keeps edits across groups and searches, then sends one atomic configuration update', async () => {
@@ -1337,9 +1410,11 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true }))
         .flatten_tool_calls,
     ).toBe(true);
-    const modelFixture = charityModelFixture(3, { flatten_tool_calls: true });
+    const role_policy = { default_action: 'passthrough', rules: { developer: 'system' } };
+    const modelFixture = charityModelFixture(3, { flatten_tool_calls: true, role_policy });
     expect(normalizeCharityModel(modelFixture).flatten_tool_calls).toBe(true);
     expect(normalizeManagementCharityModel(modelFixture).flatten_tool_calls).toBe(true);
+    expect(normalizeManagementCharityModel(modelFixture).role_policy).toEqual(role_policy);
     const keyFixture = {
       id: 4,
       max_concurrency: 100_000,

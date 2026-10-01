@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 const lifecycleCollectionLimit = 10_000
@@ -73,6 +75,7 @@ type LifecycleCatalogPair struct {
 }
 
 type LifecycleModel struct {
+	RolePolicy       rolepolicy.Policy
 	ID               string
 	Provider         string
 	Model            string
@@ -212,7 +215,8 @@ LIMIT ?`, userID, limit+1)
 			return empty, err
 		}
 		item := LifecycleModel{
-			ID: model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
+			RolePolicy: model.RolePolicy.Clone(),
+			ID:         model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
 			FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]LifecycleBinding, 0, len(bindings)),

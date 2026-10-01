@@ -11,7 +11,11 @@ import { planControls } from './planControls';
 import type { DuelState } from '../common/duel/types';
 import type { LikesEvent, LikesView, Presentation, Status } from './types';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: string) => en }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'en') };
+});
 vi.mock('./Glossary', () => ({ SkillCost: () => null }));
 
 const config = structuredClone(rawCatalog) as unknown as Record<string, unknown>;
@@ -23,14 +27,14 @@ config.paramMeta = (config.paramMeta as { id: string }[]).filter(
 );
 const mode = {
   rules_version: 1,
-  design_version: '0.18.1',
+  design_version: '0.19.0',
   schema_version: 16,
   content_hash: 'a'.repeat(64),
   config,
 };
 const catalog = likesCatalog({
   rules_version: 1,
-  design_version: '0.18.1',
+  design_version: '0.19.0',
   schema_version: 16,
   content_hash: 'a'.repeat(64),
   modes: { quick: mode, standard: { ...mode, config: { ...config, mode: 'standard' } } },

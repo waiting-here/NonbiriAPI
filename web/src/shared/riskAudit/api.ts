@@ -36,7 +36,7 @@ export interface ScanInput {
   kind?: string;
   model?: string;
 }
-export type TaskKind = 'client_hits' | 'users' | 'shared_ips';
+export type TaskKind = 'client_hits' | 'users' | 'shared_ips' | 'user_ips';
 export interface TaskScan extends Omit<ClientScan, 'kind'> {
   kind: TaskKind;
   call_kind: string;
@@ -47,6 +47,9 @@ export interface TaskScan extends Omit<ClientScan, 'kind'> {
   truncated_reason: string;
   status: ClientScan['state'];
   scanned_candidates: string;
+  source_watermark?: string;
+  last_source_at?: number;
+  last_source_id?: string;
 }
 export interface TaskInput extends Omit<ScanInput, 'kind'> {
   kind: TaskKind;
@@ -116,7 +119,11 @@ function scanResults(value: unknown, id: string, page: string, size: PageSize): 
 function taskScan(value: unknown): TaskScan {
   const o = obj(value);
   const base = clientScan(value);
-  if (!['client_hits', 'users', 'shared_ips'].includes(base.kind) || o.status !== base.state) return invalid();
+  if (
+    !['client_hits', 'users', 'shared_ips', 'user_ips'].includes(base.kind) ||
+    o.status !== base.state
+  )
+    return invalid();
   const scanned = text(o.scanned_candidates, 20);
   if (scanned !== base.scanned) return invalid();
   return {
@@ -130,9 +137,18 @@ function taskScan(value: unknown): TaskScan {
     truncated_reason: text(o.truncated_reason ?? '', 64),
     status: base.state,
     scanned_candidates: scanned,
+    source_watermark: o.source_watermark === undefined ? undefined : text(o.source_watermark, 64),
+    last_source_at: o.last_source_at == null ? undefined : num(o.last_source_at),
+    last_source_id: o.last_source_id === undefined ? undefined : text(o.last_source_id, 20),
   };
 }
-function taskResults<T>(value: unknown, scanID: string, requestedPage: string, size: PageSize, decode: (v: unknown) => T): TaskResults<T> {
+function taskResults<T>(
+  value: unknown,
+  scanID: string,
+  requestedPage: string,
+  size: PageSize,
+  decode: (v: unknown) => T,
+): TaskResults<T> {
   const o = obj(value);
   const metadata = pageMetadata(o);
   const items = list(o.items, decode, 100);
@@ -214,6 +230,8 @@ export interface Match {
   fields: string[];
 }
 export interface Config {
+  user_ip_window_hours?: number;
+  user_ip_min_ips?: number;
   threshold_percent: number;
   consecutive_minutes: number;
   shared_ip_hours: number;
@@ -328,6 +346,16 @@ export interface SharedIP {
     dispatched: number;
     rejected: number;
   }[];
+}
+export interface UserIPs {
+  discord_id: string;
+  peak: number;
+  window_from: number;
+  window_to: number;
+  ips: string[];
+  ips_truncated: boolean;
+  accounts: SharedIP['associations'];
+  accounts_truncated: boolean;
 }
 export interface AccessEvent {
   id: string;
@@ -548,6 +576,8 @@ function config(v: unknown): Config {
     consecutive_minutes: num(o.consecutive_minutes),
     shared_ip_hours: num(o.shared_ip_hours),
     shared_ip_users: num(o.shared_ip_users),
+    user_ip_window_hours: num(o.user_ip_window_hours ?? 24),
+    user_ip_min_ips: num(o.user_ip_min_ips ?? 3),
     revision: num(o.revision),
     updated_at: num(o.updated_at),
   };
@@ -609,18 +639,32 @@ function sharedIP(v: unknown): SharedIP {
     first_seen: num(o.first_seen),
     last_seen: num(o.last_seen),
     associations_truncated: bool(o.associations_truncated),
-    associations: list(o.associations, (v) => {
-      const a = obj(v);
-      return {
-        user_id: id(a.user_id),
-        call_kind: text(a.call_kind, 32),
-        first_seen: num(a.first_seen),
-        last_seen: num(a.last_seen),
-        requests: num(a.requests),
-        dispatched: num(a.dispatched),
-        rejected: num(a.rejected),
-      };
-    }),
+    associations: list(o.associations, ipAssociation, 24),
+  };
+}
+function ipAssociation(v: unknown): SharedIP['associations'][number] {
+  const a = obj(v);
+  return {
+    user_id: id(a.user_id),
+    call_kind: text(a.call_kind, 32),
+    first_seen: num(a.first_seen),
+    last_seen: num(a.last_seen),
+    requests: num(a.requests),
+    dispatched: num(a.dispatched),
+    rejected: num(a.rejected),
+  };
+}
+function userIPs(v: unknown): UserIPs {
+  const o = obj(v);
+  return {
+    discord_id: text(o.discord_id, 128),
+    peak: num(o.peak),
+    window_from: num(o.window_from),
+    window_to: num(o.window_to),
+    ips: list(o.ips, (value) => text(value, 64), 200),
+    ips_truncated: bool(o.ips_truncated),
+    accounts: list(o.accounts, ipAssociation, 24),
+    accounts_truncated: bool(o.accounts_truncated),
   };
 }
 function access(v: unknown): AccessEvent {
@@ -675,20 +719,54 @@ export function riskAPI(role: RiskRole) {
     signal?: AbortSignal,
   ) => decode(await apiFetch<unknown>(queryPath(base + path, filters), { signal }));
   return {
-    createTask: async (input: TaskInput) =>
-      taskScan(await apiFetch<unknown>(base + '/scans', { method: 'POST', json: input })),
+    createTask: async (input: TaskInput, signal?: AbortSignal) =>
+      taskScan(await apiFetch<unknown>(base + '/scans', { method: 'POST', json: input, signal })),
     recentTasks: async (signal?: AbortSignal) =>
       list(obj(await apiFetch<unknown>(base + '/scans', { signal })).items, taskScan, 200),
-    taskResults: async <T>(scanID: string, kind: TaskKind, page: string, size: PageSize, signal?: AbortSignal): Promise<TaskResults<T>> => {
-      const decode = (kind === 'users' ? summary : kind === 'shared_ips' ? sharedIP : request) as (v: unknown) => T;
-      const output = taskResults(await apiFetch<unknown>(queryPath(base + '/scans/' + encodeURIComponent(scanID) + '/results', { page, page_size: size }), { signal }), scanID, page, size, decode);
+    taskResults: async <T>(
+      scanID: string,
+      kind: TaskKind,
+      page: string,
+      size: PageSize,
+      signal?: AbortSignal,
+    ): Promise<TaskResults<T>> => {
+      const decode = (
+        kind === 'users'
+          ? summary
+          : kind === 'shared_ips'
+            ? sharedIP
+            : kind === 'user_ips'
+              ? userIPs
+              : request
+      ) as (v: unknown) => T;
+      const output = taskResults(
+        await apiFetch<unknown>(
+          queryPath(base + '/scans/' + encodeURIComponent(scanID) + '/results', {
+            page,
+            page_size: size,
+          }),
+          { signal },
+        ),
+        scanID,
+        page,
+        size,
+        decode,
+      );
       if (output.scan.kind !== kind) return invalid();
       return output;
     },
-    cancelTask: async (scanID: string) =>
-      taskScan(await apiFetch<unknown>(base + '/scans/' + encodeURIComponent(scanID) + '/cancel', { method: 'POST', json: {} })),
-    createScan: async (input: ScanInput) =>
-      clientScan(await apiFetch<unknown>(base + '/client-scans', { method: 'POST', json: input })),
+    cancelTask: async (scanID: string, signal?: AbortSignal) =>
+      taskScan(
+        await apiFetch<unknown>(base + '/scans/' + encodeURIComponent(scanID) + '/cancel', {
+          method: 'POST',
+          json: {},
+          signal,
+        }),
+      ),
+    createScan: async (input: ScanInput, signal?: AbortSignal) =>
+      clientScan(
+        await apiFetch<unknown>(base + '/client-scans', { method: 'POST', json: input, signal }),
+      ),
     recentScans: async (signal?: AbortSignal) =>
       list(obj(await apiFetch<unknown>(base + '/client-scans', { signal })).items, clientScan, 10),
     scanResults: async (scanID: string, page: string, size: PageSize, signal?: AbortSignal) =>
@@ -704,11 +782,12 @@ export function riskAPI(role: RiskRole) {
         page,
         size,
       ),
-    cancelScan: async (scanID: string) =>
+    cancelScan: async (scanID: string, signal?: AbortSignal) =>
       clientScan(
         await apiFetch<unknown>(base + '/client-scans/' + encodeURIComponent(scanID) + '/cancel', {
           method: 'POST',
           json: {},
+          signal,
         }),
       ),
     users: (f: Filters, s?: AbortSignal) => get('/users', (v) => page(v, summary), f, s),
@@ -718,8 +797,8 @@ export function riskAPI(role: RiskRole) {
       get('/users/' + encodeURIComponent(userID), detail, f, s),
     ips: (f: Filters, s?: AbortSignal) => get('/shared-ips', (v) => page(v, sharedIP), f, s),
     config: (s?: AbortSignal) => get('/config', config, {}, s),
-    saveConfig: async (value: Config) =>
-      config(await apiFetch<unknown>(base + '/config', { method: 'PUT', json: value })),
+    saveConfig: async (value: Config, signal?: AbortSignal) =>
+      config(await apiFetch<unknown>(base + '/config', { method: 'PUT', json: value, signal })),
     rules: (after: string, s?: AbortSignal) =>
       get(
         '/client-rules',
@@ -736,20 +815,26 @@ export function riskAPI(role: RiskRole) {
         s,
       ),
     numberedRules: (page: string, size: PageSize, revision?: string, s?: AbortSignal) =>
-      get('/client-rules', (v) => {
-        const o = obj(v);
-        const metadata = pageMetadata(o);
-        const items = list(o.items, rule);
-        const changed = bool(o.changed);
-        validatePageResponse(metadata, changed ? '1' : page, size, items.length);
-        return { ...metadata, items, revision: text(o.revision, 64), changed };
-      }, { page, page_size: size, revision }, s),
-    saveRule: async (value: RuleInput, ruleID?: string) =>
+      get(
+        '/client-rules',
+        (v) => {
+          const o = obj(v);
+          const metadata = pageMetadata(o);
+          const items = list(o.items, rule);
+          const changed = bool(o.changed);
+          validatePageResponse(metadata, changed ? '1' : page, size, items.length);
+          return { ...metadata, items, revision: text(o.revision, 64), changed };
+        },
+        { page, page_size: size, revision },
+        s,
+      ),
+    saveRule: async (value: RuleInput, ruleID?: string, signal?: AbortSignal) =>
       rule(
         await apiFetch<unknown>(
           base + '/client-rules' + (ruleID ? '/' + encodeURIComponent(ruleID) : ''),
           {
             method: ruleID ? 'PATCH' : 'POST',
+            signal,
             json: {
               name: value.name,
               status: value.status,
@@ -763,9 +848,10 @@ export function riskAPI(role: RiskRole) {
           },
         ),
       ),
-    deleteRule: (ruleID: string, revision: number) =>
+    deleteRule: (ruleID: string, revision: number, signal?: AbortSignal) =>
       apiFetch(queryPath(base + '/client-rules/' + encodeURIComponent(ruleID), { revision }), {
         method: 'DELETE',
+        signal,
       }),
     access: (f: Filters, s?: AbortSignal) =>
       get(
@@ -781,13 +867,25 @@ export function riskAPI(role: RiskRole) {
         s,
       ),
     numberedAccess: (f: Filters, requestedPage: string, size: PageSize, s?: AbortSignal) =>
-      get('/access-events', (v) => {
-        const o = obj(v);
-        const metadata = pageMetadata(o);
-        const items = list(o.data, access);
-        validatePageResponse(metadata, requestedPage, size, items.length);
-        return { ...metadata, items, watermark: text(o.watermark, 20), changed: bool(o.changed), from: num(o.from), to: num(o.to) };
-      }, { ...f, page: requestedPage, page_size: size }, s),
+      get(
+        '/access-events',
+        (v) => {
+          const o = obj(v);
+          const metadata = pageMetadata(o);
+          const items = list(o.data, access);
+          validatePageResponse(metadata, requestedPage, size, items.length);
+          return {
+            ...metadata,
+            items,
+            watermark: text(o.watermark, 20),
+            changed: bool(o.changed),
+            from: num(o.from),
+            to: num(o.to),
+          };
+        },
+        { ...f, page: requestedPage, page_size: size },
+        s,
+      ),
     accessSummary: (f: Filters, s?: AbortSignal) => get('/access-summary', accessSummary, f, s),
   };
 }

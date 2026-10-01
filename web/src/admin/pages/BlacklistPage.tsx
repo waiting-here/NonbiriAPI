@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { operationKey } from '@shared/operations/api';
+import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { ReasonText } from '@shared/components/ReasonText';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { clearStationSession } from '@shared/charityManagement';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -21,20 +23,17 @@ import {
 } from '../features/operations/blacklist';
 import '@shared/operations/operations.css';
 
-const labels = {
-  en: { title: 'Discord blacklist', description: 'Listed Discord IDs cannot register. Existing accounts are permanently banned and lose sessions and caller keys. Removing an entry does not unban an existing account.', addTitle: 'Add to blacklist', reason: 'Reason', add: 'Add and permanently ban', added: 'Added to the blacklist. Any existing account is permanently banned.', removed: 'Removed from the blacklist. Unban existing accounts separately in user management if needed.', invalid: 'Enter a valid Discord ID and a note of up to 2,000 characters.', invalidID: 'Enter a valid numeric Discord ID or actor user ID.', search: 'Search Discord ID or first note', applySearch: 'Search', empty: 'No matching blacklist entries', emptyBody: 'Use the form above to add a Discord ID.', account: 'Account', noAccount: 'No current account', created: 'Added', action: 'Action', remove: 'Remove from blacklist', firstActor: 'First actor', actorKind: 'First actor type', actorUserID: 'First actor user ID', exactDiscord: 'Exact Discord ID', events: 'Events', eventNote: 'Additional note', noEvents: 'No additional events', previous: 'Previous', next: 'Next' },
-  zh: { title: 'Discord 黑名单', description: '名单中的 Discord ID 无法注册；已有账号会立即永久封禁并撤销登录会话与调用密钥。移除名单不会自动解封已有账号。', addTitle: '加入黑名单', reason: '原因', add: '加入并永久封禁', added: '已加入黑名单，已有账号已永久封禁。', removed: '已移除黑名单；已有账号如需恢复，请在用户管理中单独解封。', invalid: '请填写有效 Discord ID 和最多 2000 字的说明。', invalidID: '请填写有效的纯数字 Discord ID 或发起人站内 ID。', search: '搜索 Discord ID 或首次说明', applySearch: '查询', empty: '没有匹配的黑名单记录', emptyBody: '可以通过上方表单添加 Discord ID。', account: '站内账号', noAccount: '当前无账号', created: '加入时间', action: '操作', remove: '移除黑名单', firstActor: '首次发起人', actorKind: '首次发起类型', actorUserID: '首次发起人站内 ID', exactDiscord: '精确 Discord ID', events: '追加记录', eventNote: '追加说明', noEvents: '没有追加记录', previous: '上一页', next: '下一页' },
-} as const;
-
 export function BlacklistPage() {
   const session = useAdminSession();
-  return <BlacklistManagement
-    role="admin"
-    accountID={session.data ? `admin:${session.data.admin.username}` : undefined}
-    sessionError={session.error}
-    sessionFetching={session.isFetching}
-    refreshSession={() => void session.refetch()}
-  />;
+  return (
+    <BlacklistManagement
+      role="admin"
+      accountID={session.data ? `admin:${session.data.admin.username}` : undefined}
+      sessionError={session.error}
+      sessionFetching={session.isFetching}
+      refreshSession={() => void session.refetch()}
+    />
+  );
 }
 
 interface BlacklistManagementProps {
@@ -46,42 +45,58 @@ interface BlacklistManagementProps {
   onAuthorityLoss?: () => void;
 }
 
-export function BlacklistManagement({ role, accountID, sessionError, sessionFetching, refreshSession, onAuthorityLoss }: BlacklistManagementProps) {
+export function BlacklistManagement({
+  role,
+  accountID,
+  sessionError,
+  sessionFetching,
+  refreshSession,
+  onAuthorityLoss,
+}: BlacklistManagementProps) {
   const formatDateTime = useDateTimeFormatter();
-  const { i18n, t } = useTranslation();
-  const zh = i18n.language.startsWith('zh');
-  const local = zh ? labels.zh : labels.en;
-  const actorLabels = zh
-    ? { admin: '管理员', steward6: '6 级协管', automatic: '系统自动', unknown: '未知' }
-    : { admin: 'Administrator', steward6: 'Level 6 steward', automatic: 'Automatic', unknown: 'Unknown' };
-  const label = role === 'admin' ? {
-    ...local,
-    title: t('admin.blacklist.title'),
-    description: t('admin.blacklist.description'),
-    addTitle: t('admin.blacklist.addTitle'),
-    reason: t('admin.blacklist.reason'),
-    add: t('admin.blacklist.add'),
-    added: t('admin.blacklist.added'),
-    removed: t('admin.blacklist.removed'),
-    invalid: t('admin.blacklist.invalid'),
-    invalidID: t('admin.blacklist.invalidID'),
-    search: t('admin.blacklist.search'),
-    applySearch: t('admin.blacklist.applySearch'),
-    empty: t('admin.blacklist.empty'),
-    emptyBody: t('admin.blacklist.emptyBody'),
-    account: t('admin.blacklist.account'),
-    noAccount: t('admin.blacklist.noAccount'),
-    created: t('admin.blacklist.created'),
-    action: t('admin.blacklist.action'),
-    remove: t('admin.blacklist.remove'),
-  } : local;
+  const { t } = useTranslation();
+  const label = {
+    title: t('common.blacklist.title'),
+    description: t('common.blacklist.description'),
+    addTitle: t('common.blacklist.addTitle'),
+    reason: t('common.blacklist.reason'),
+    add: t('common.blacklist.add'),
+    added: t('common.blacklist.added'),
+    removed: t('common.blacklist.removed'),
+    invalid: t('common.blacklist.invalid'),
+    invalidID: t('common.blacklist.invalidID'),
+    search: t('common.blacklist.search'),
+    applySearch: t('common.blacklist.applySearch'),
+    empty: t('common.blacklist.empty'),
+    emptyBody: t('common.blacklist.emptyBody'),
+    account: t('common.blacklist.account'),
+    noAccount: t('common.blacklist.noAccount'),
+    created: t('common.blacklist.created'),
+    action: t('common.blacklist.action'),
+    remove: t('common.blacklist.remove'),
+    firstActor: t('common.blacklist.firstActor'),
+    actorKind: t('common.blacklist.actorKind'),
+    actorUserID: t('common.blacklist.actorUserID'),
+    exactDiscord: t('common.blacklist.exactDiscord'),
+    events: t('common.blacklist.events'),
+    eventNote: t('common.blacklist.eventNote'),
+    noEvents: t('common.blacklist.noEvents'),
+    previous: t('common.blacklist.previous'),
+    next: t('common.blacklist.next'),
+  };
+  const actorLabels = {
+    admin: t('common.blacklist.actorAdmin'),
+    steward6: t('common.blacklist.actorSteward'),
+    automatic: t('common.blacklist.actorAutomatic'),
+    unknown: t('common.blacklist.actorUnknown'),
+  };
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const q = params.get('q') ?? '';
   const actorKind = params.get('actor_kind') ?? '';
   const actorUserID = params.get('actor_user_id') ?? '';
   const filterDiscordID = params.get('discord_id') ?? '';
-  const listKeys = [role, 'blacklist'] as const;
+  const listKeys = role === 'admin' ? ['admin', 'blacklist'] : ['user', 'steward', 'blacklist'];
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'blacklist',
@@ -90,8 +105,27 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
     resetKey: `${q}|${actorKind}|${actorUserID}|${filterDiscordID}`,
   });
   const result = useQuery({
-    queryKey: [...listKeys, accountID, q, actorKind, actorUserID, filterDiscordID, pager.page, pager.pageSize],
-    queryFn: ({ signal }) => getBlacklist(role, pager.page, pager.pageSize, q, actorKind, actorUserID, filterDiscordID, signal),
+    queryKey: [
+      ...listKeys,
+      accountID,
+      q,
+      actorKind,
+      actorUserID,
+      filterDiscordID,
+      pager.page,
+      pager.pageSize,
+    ],
+    queryFn: ({ signal }) =>
+      getBlacklist(
+        role,
+        pager.page,
+        pager.pageSize,
+        q,
+        actorKind,
+        actorUserID,
+        filterDiscordID,
+        signal,
+      ),
     enabled: Boolean(accountID) && !sessionFetching,
     retry: false,
   });
@@ -111,31 +145,35 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
   });
   const [validation, setValidation] = useState('');
   const [notice, setNotice] = useState('');
-  const mutation = useMutation({
-    retry: false,
-    mutationFn: (input: { id: string; reason: string; add: boolean; key: string }) =>
-      input.add
-        ? addBlacklist(role, input.id, input.reason, input.key)
-        : removeBlacklist(input.id, input.key),
-    onSuccess: (_, input) => {
-      setNotice(input.add ? label.added : label.removed);
-      if (input.add) {
-        setDiscordID('');
-        setReason('');
-      } else if (selected === input.id) {
-        setSelected('');
-      }
+  type BlacklistIntent = { id: string; reason: string; add: boolean };
+  const [confirmation, setConfirmation] = useState<BlacklistIntent | null>(null);
+  const mutation = useRetainedOperation<BlacklistIntent, void>(
+    async (input, key, context) => {
+      if (input.add) await addBlacklist(role, input.id, input.reason, key, context.signal);
+      else await removeBlacklist(input.id, key, context.signal);
+      context.commit(() => {
+        setNotice(input.add ? label.added : label.removed);
+        if (input.add) {
+          setDiscordID('');
+          setReason('');
+        } else if (selected === input.id) setSelected('');
+      });
     },
-    onError: (error) => {
-      if (isUnauthorized(error) || isForbidden(error)) {
-        if (onAuthorityLoss) onAuthorityLoss();
-        else clearStationSession(client, role);
-      }
-    },
-    onSettled: () => client.invalidateQueries({ queryKey: listKeys }),
-  });
+    () => client.invalidateQueries({ queryKey: listKeys }, { throwOnError: true }),
+    listKeys,
+  );
   useEffect(() => {
-    if (isUnauthorized(result.error) || isForbidden(result.error) || isUnauthorized(events.error) || isForbidden(events.error)) {
+    if (isUnauthorized(mutation.error) || isForbidden(mutation.error)) {
+      onAuthorityLoss?.();
+    }
+  }, [mutation.error, onAuthorityLoss]);
+  useEffect(() => {
+    if (
+      isUnauthorized(result.error) ||
+      isForbidden(result.error) ||
+      isUnauthorized(events.error) ||
+      isForbidden(events.error)
+    ) {
       if (onAuthorityLoss) onAuthorityLoss();
       else clearStationSession(client, role);
     }
@@ -144,6 +182,7 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
     !accountID ||
     Boolean(sessionError) ||
     mutation.isPending ||
+    mutation.outcome === 'unknown' ||
     result.isFetching ||
     sessionFetching;
   const submit = (event: FormEvent) => {
@@ -157,12 +196,17 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
       setValidation(label.invalid);
       return;
     }
-    mutation.mutate({ id, reason: why, add: true, key: operationKey() });
+    setConfirmation({ id, reason: why, add: true });
   };
   const applySearch = (event: FormEvent) => {
     event.preventDefault();
     setValidation('');
-    if ((discordDraft.trim() && !validDiscordID(discordDraft.trim())) || (actorDraft.trim() && (!/^[1-9][0-9]{0,18}$/.test(actorDraft.trim()) || BigInt(actorDraft.trim()) > 9223372036854775807n))) {
+    if (
+      (discordDraft.trim() && !validDiscordID(discordDraft.trim())) ||
+      (actorDraft.trim() &&
+        (!/^[1-9][0-9]{0,18}$/.test(actorDraft.trim()) ||
+          BigInt(actorDraft.trim()) > 9223372036854775807n))
+    ) {
       setValidation(label.invalidID);
       return;
     }
@@ -182,10 +226,7 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
   };
   return (
     <div className="page ops-page">
-      <PageHeader
-        title={label.title}
-        description={label.description}
-      />
+      <PageHeader title={label.title} description={label.description} />
       <Card>
         <h2>{label.addTitle}</h2>
         <form onSubmit={submit} className="ops-toolbar">
@@ -227,6 +268,9 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
             }}
           />
         ) : null}
+        {mutation.refreshError ? (
+          <ErrorState error={mutation.refreshError} onRetry={() => void mutation.refresh()} />
+        ) : null}
       </Card>
       <Card>
         <form onSubmit={applySearch} className="ops-field-grid">
@@ -240,12 +284,17 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
           </label>
           <label className="ops-form-field">
             <span>{label.exactDiscord}</span>
-            <input value={discordDraft} onChange={(event) => setDiscordDraft(event.target.value)} inputMode="numeric" maxLength={20} />
+            <input
+              value={discordDraft}
+              onChange={(event) => setDiscordDraft(event.target.value)}
+              inputMode="numeric"
+              maxLength={20}
+            />
           </label>
           <label className="ops-form-field">
             <span>{label.actorKind}</span>
             <select value={kindDraft} onChange={(event) => setKindDraft(event.target.value)}>
-              <option value="">{zh ? '全部' : 'All'}</option>
+              <option value="">{t('common.blacklist.all')}</option>
               <option value="admin">{actorLabels.admin}</option>
               <option value="steward6">{actorLabels.steward6}</option>
               <option value="automatic">{actorLabels.automatic}</option>
@@ -254,7 +303,12 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
           </label>
           <label className="ops-form-field">
             <span>{label.actorUserID}</span>
-            <input value={actorDraft} onChange={(event) => setActorDraft(event.target.value)} inputMode="numeric" maxLength={19} />
+            <input
+              value={actorDraft}
+              onChange={(event) => setActorDraft(event.target.value)}
+              inputMode="numeric"
+              maxLength={19}
+            />
           </label>
           <button className="btn btn-secondary" disabled={busy} type="submit">
             {label.applySearch}
@@ -269,10 +323,7 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
         ) : (
           <>
             {result.data.data.length === 0 ? (
-              <EmptyState
-                title={label.empty}
-                body={label.emptyBody}
-              />
+              <EmptyState title={label.empty} body={label.emptyBody} />
             ) : (
               <div className="ops-table-scroll">
                 <table className="ops-table ops-table--responsive">
@@ -293,38 +344,54 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
                         <td data-label={label.reason}>
                           <span className="ops-blacklist-note">{item.reason}</span>
                         </td>
-                        <td data-label={label.firstActor}>{actorLabels[item.first_actor_kind]}{item.first_actor_user_id ? ` #${item.first_actor_user_id}` : ''}</td>
+                        <td data-label={label.firstActor}>
+                          {actorLabels[item.first_actor_kind]}
+                          {item.first_actor_user_id ? ` #${item.first_actor_user_id}` : ''}
+                        </td>
                         <td data-label={label.account}>
                           {item.user_id ? (
-                            <Link to={role === 'admin' ? `/users?account_state=all&discord_id=${encodeURIComponent(item.discord_id)}` : `/steward?tab=users&account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`}>
+                            <Link
+                              to={
+                                role === 'admin'
+                                  ? `/users?account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`
+                                  : `/steward?tab=users&account_state=all&discord_id=${encodeURIComponent(item.discord_id)}`
+                              }
+                            >
                               {item.user_id}
                             </Link>
                           ) : (
                             label.noAccount
                           )}
                         </td>
-                        <td data-label={label.created}>
-                          {formatDateTime(item.created_at)}
-                        </td>
+                        <td data-label={label.created}>{formatDateTime(item.created_at)}</td>
                         <td className="ops-cell-wide" data-label={label.action}>
-                          <button type="button" className="btn btn-secondary ops-action-button" disabled={busy} onClick={() => { setSelected(item.discord_id); setEventsPage(1); }}>{label.events}</button>
-                          {role === 'admin' ? (
                           <button
                             type="button"
                             className="btn btn-secondary ops-action-button"
                             disabled={busy}
                             onClick={() => {
-                              setNotice('');
-                              mutation.mutate({
-                                id: item.discord_id,
-                                reason: '',
-                                add: false,
-                                key: operationKey(),
-                              });
+                              setSelected(item.discord_id);
+                              setEventsPage(1);
                             }}
                           >
-                            {label.remove}
+                            {label.events}
                           </button>
+                          {role === 'admin' ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary ops-action-button"
+                              disabled={busy}
+                              onClick={() => {
+                                setNotice('');
+                                mutation.mutate({
+                                  id: item.discord_id,
+                                  reason: '',
+                                  add: false,
+                                });
+                              }}
+                            >
+                              {label.remove}
+                            </button>
                           ) : null}
                         </td>
                       </tr>
@@ -346,23 +413,82 @@ export function BlacklistManagement({ role, accountID, sessionError, sessionFetc
       {selected ? (
         <Card>
           <div className="ops-actions">
-            <h2>{label.events}: {selected}</h2>
-            <button type="button" className="btn btn-quiet" onClick={() => setSelected('')}>{zh ? '关闭' : 'Close'}</button>
+            <h2>
+              {label.events}: {selected}
+            </h2>
+            <button type="button" className="btn btn-quiet" onClick={() => setSelected('')}>
+              {t('common.blacklist.close')}
+            </button>
           </div>
-          {events.isPending ? <LoadingState /> : events.error ? <ErrorState error={events.error} onRetry={() => void events.refetch()} /> : events.data.data.length === 0 ? <p>{label.noEvents}</p> : (
-            <ul>{events.data.data.map((event) => (
-              <li key={event.id}>
-                {formatDateTime(event.created_at)} · {actorLabels[event.actor_kind]}{event.actor_user_id ? ` #${event.actor_user_id}` : ''} · {label.eventNote}:{' '}
-                <span className="ops-blacklist-note">{event.safe_note}</span>
-              </li>
-            ))}</ul>
+          {events.isPending ? (
+            <LoadingState />
+          ) : events.error ? (
+            <ErrorState error={events.error} onRetry={() => void events.refetch()} />
+          ) : events.data.data.length === 0 ? (
+            <p>{label.noEvents}</p>
+          ) : (
+            <ul>
+              {events.data.data.map((event) => (
+                <li key={event.id}>
+                  {formatDateTime(event.created_at)} · {actorLabels[event.actor_kind]}
+                  {event.actor_user_id ? ` #${event.actor_user_id}` : ''} · {label.eventNote}:{' '}
+                  <ReasonText reason={event.safe_note} reasonCodes={event.reason_codes} />
+                </li>
+              ))}
+            </ul>
           )}
           <div className="ops-actions">
-            <button type="button" className="btn btn-secondary" disabled={eventsPage <= 1 || events.isFetching} onClick={() => setEventsPage(eventsPage - 1)}>{label.previous}</button>
-            <button type="button" className="btn btn-secondary" disabled={!events.data || BigInt(events.data.pagination.page) >= BigInt(events.data.pagination.total_pages) || events.isFetching} onClick={() => setEventsPage(eventsPage + 1)}>{label.next}</button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={eventsPage <= 1 || events.isFetching}
+              onClick={() => setEventsPage(eventsPage - 1)}
+            >
+              {label.previous}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={
+                !events.data ||
+                BigInt(events.data.pagination.page) >= BigInt(events.data.pagination.total_pages) ||
+                events.isFetching
+              }
+              onClick={() => setEventsPage(eventsPage + 1)}
+            >
+              {label.next}
+            </button>
           </div>
         </Card>
       ) : null}
+      <ConfirmDialog
+        open={
+          confirmation !== null &&
+          Boolean(accountID) &&
+          !isForbidden(mutation.error) &&
+          !isUnauthorized(mutation.error)
+        }
+        title={label.addTitle}
+        description={
+          <>
+            <p>Discord ID: {confirmation?.id}</p>
+            <p>{label.description}</p>
+            <p>
+              {label.reason}: {confirmation?.reason}
+            </p>
+          </>
+        }
+        confirmLabel={label.add}
+        danger
+        busy={mutation.isPending}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (confirmation) {
+            mutation.mutate(confirmation);
+            setConfirmation(null);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -136,7 +136,7 @@ func (r *roundRun) attempt(source int, g Grant, derived bool) (Grant, Applicatio
 		} else {
 			outcome.Resisted++
 		}
-		r.log("effect-attempt", ptr(source), map[string]any{"rules_version": catalog.BehaviorVersion, "step": r.step, "source": source, "target": g.Owner, "skill_id": g.SourceSkill, "buff_id": g.BuffID, "layer": layer, "hit": hit, "resist": resist, "numerator": numerator, "denominator": denominator, "success": ok, "draw": draw, "derived": derived})
+		r.log("effect-attempt", ptr(source), map[string]any{"rules_version": r.e.behaviorVersion(), "step": r.step, "source": source, "target": g.Owner, "skill_id": g.SourceSkill, "buff_id": g.BuffID, "layer": layer, "hit": hit, "resist": resist, "numerator": numerator, "denominator": denominator, "success": ok, "draw": draw, "derived": derived})
 	}
 	if g.Amount != nil {
 		g.Amount = ptr(outcome.Success)
@@ -169,6 +169,10 @@ func (r *roundRun) applyGrants(source int, skill string, grants []Grant) ([]Appl
 			enemySuccess = enemySuccess || g.Owner != source
 		}
 		if sota := r.e.passive(r.s.Players[source], "SOTA_ONLY"); enemySuccess && sota != nil && sota.P > 0 {
+			if r.e.currentBalance() && b.Category == "debuff" {
+				r.s.Players[source].Likes++
+				r.log("harness-like", ptr(source), map[string]any{"passive_id": sota.ID, "buff_id": b.ID, "skill_id": skill, "likes": int64(1)})
+			}
 			g := Grant{BuffID: sota.BuffID, Owner: other(source), SourceSkill: skill, Amount: ptr(sota.P)}
 			accepted, outcome, err := r.attempt(source, g, true)
 			if err != nil {

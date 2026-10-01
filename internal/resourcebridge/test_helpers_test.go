@@ -76,7 +76,14 @@ func newBridgeFixtureWithRandom(t testing.TB, random io.Reader) *bridgeFixture {
 		t.Fatalf("claim.New: %v", err)
 	}
 	fixture.claims = claims
-	runtime, err := New(Config{
+	review, err := secret.NewDonationReview(inner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = review.Initialize(context.Background(), store.DB()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := New(Config{Review: review,
 		Store: store, Vault: vault, Claims: claims, Backend: fixture.backend,
 		Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0) }, Random: random,
 	})

@@ -31,6 +31,132 @@ function quoted(body: string) {
 }
 
 describe('picture book page state', () => {
+  it('retains prompt and count across different model limits and submits only after correction', async () => {
+    const first = { ...modelFixture(), display_name: 'First model' };
+    const second = {
+      ...modelFixture(),
+      id: 'imdl_BBBBBBBBBBBBBBBBBBBBBB',
+      display_name: 'Second model',
+      parameters: modelFixture().parameters.map((rule) =>
+        rule.key === 'prompt'
+          ? { ...rule, max_length: 5 }
+          : rule.key === 'n'
+            ? { ...rule, maximum: 2 }
+            : rule,
+      ),
+    };
+    const fetch = vi.fn(async (path: unknown, init?: RequestInit) =>
+      String(path).endsWith('/quote') ? quoted(String(init?.body)) : reply({ task: taskFixture() }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const accepted = vi.fn();
+    const view = await renderWithProviders(
+      <ModelForm
+        account="1"
+        models={[first, second]}
+        available
+        wallet={wallet}
+        onAccepted={accepted}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    view.queryClient.setQueryData(['user', 'session'], session);
+    await view.user.type(screen.getByLabelText(/Prompt */), 'long draft');
+    await view.user.clear(screen.getByLabelText('Image count'));
+    await view.user.type(screen.getByLabelText('Image count'), '4');
+    await view.user.selectOptions(screen.getByLabelText('Image model'), second.id);
+    expect(screen.getByLabelText(/Prompt */)).toHaveValue('long draft');
+    expect(screen.getByLabelText('Image count')).toHaveValue(4);
+    await view.user.click(screen.getByRole('button', { name: 'Reserve currency and join queue' }));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(accepted).not.toHaveBeenCalled();
+    await view.user.clear(screen.getByLabelText(/Prompt */));
+    await view.user.type(screen.getByLabelText(/Prompt */), 'ok');
+    await view.user.clear(screen.getByLabelText('Image count'));
+    await view.user.type(screen.getByLabelText('Image count'), '2');
+    await view.user.click(screen.getByRole('button', { name: 'Reserve currency and join queue' }));
+    await waitFor(() => expect(accepted).toHaveBeenCalledOnce());
+    const submit = fetch.mock.calls.find(([path]) => !String(path).endsWith('/quote'));
+    expect(JSON.parse(String(submit?.[1]?.body))).toMatchObject({
+      model_id: second.id,
+      prompt: 'ok',
+      n: 2,
+    });
+    await view.user.selectOptions(screen.getByLabelText('Image model'), first.id);
+    expect(screen.getByLabelText(/Prompt */)).toHaveValue('long draft');
+    expect(screen.getByLabelText('Image count')).toHaveValue(4);
+  });
+
+  it('keeps an invalid size after switching models until a priced pair is selected', async () => {
+    const first = {
+      ...modelFixture(),
+      display_name: 'Flexible sizes',
+      parameters: [
+        ...modelFixture().parameters,
+        {
+          key: 'size' as const,
+          type: 'string' as const,
+          supported: true,
+          required: true,
+          default: '512x512',
+        },
+      ],
+      size_capability: {
+        mode: 'width_height' as const,
+        width: { minimum: 256, maximum: 1024, step: 256 },
+        height: { minimum: 256, maximum: 1024, step: 256 },
+      },
+    };
+    const second = {
+      ...first,
+      id: 'imdl_BBBBBBBBBBBBBBBBBBBBBB',
+      display_name: 'Exact prices',
+      parameters: first.parameters.map((rule) =>
+        rule.key === 'prompt'
+          ? { ...rule, max_length: 5 }
+          : rule.key === 'n'
+            ? { ...rule, maximum: 2 }
+            : rule,
+      ),
+      pricing: {
+        default: first.price,
+        fallback: 'unavailable' as const,
+        tiers: [],
+        sizes: [{ width: 512, height: 768, paper: '3', brush: '1' }],
+      },
+    };
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const view = await renderWithProviders(
+      <ModelForm
+        account="1"
+        models={[first, second]}
+        available
+        wallet={wallet}
+        onAccepted={vi.fn()}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    view.queryClient.setQueryData(['user', 'session'], session);
+    await view.user.type(screen.getByLabelText(/Prompt */), 'retained draft');
+    await view.user.clear(screen.getByLabelText('Image count'));
+    await view.user.type(screen.getByLabelText('Image count'), '4');
+    await view.user.selectOptions(screen.getByLabelText('Image model'), second.id);
+    expect(screen.getByLabelText(/Prompt */)).toHaveValue('retained draft');
+    expect(screen.getByLabelText('Image count')).toHaveValue(4);
+    expect(screen.getByLabelText('Exact size')).toHaveValue('');
+    expect(screen.getByText(/Choose an available size again/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
+    await view.user.selectOptions(screen.getByLabelText('Exact size'), '512x768');
+    expect(screen.getByText('12 paper + 4 brushes')).toBeVisible();
+    await view.user.selectOptions(screen.getByLabelText('Image model'), first.id);
+    expect(screen.getByLabelText('Width')).toHaveValue(512);
+    expect(screen.getByLabelText('Height')).toHaveValue(512);
+    await view.user.selectOptions(screen.getByLabelText('Image model'), second.id);
+    expect(screen.getByLabelText('Exact size')).toHaveValue('512x768');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('quotes per-image combined prices, escapes model copy, and retries one uncertain submission without caching its prompt', async () => {
     const calls: { body: string; key: string | null }[] = [];
     vi.stubGlobal(
@@ -257,4 +383,64 @@ describe('picture book page state', () => {
     expect(screen.getByText(/至少生成一张有效图片/)).toBeVisible();
     expect(screen.getByText(/10分钟可领取/)).toBeVisible();
   });
+});
+
+it('keeps prompt and other legal inputs when switching to exact sizes and reloading a price-only revision', async () => {
+  const first = { ...modelFixture(), display_name: 'First model' };
+  const second = {
+    ...modelFixture(),
+    id: 'imdl_BBBBBBBBBBBBBBBBBBBBBB',
+    display_name: 'Second model',
+    parameters: [
+      ...modelFixture().parameters,
+      { key: 'size' as const, supported: true, required: true, type: 'string' as const },
+    ],
+    size_capability: {
+      mode: 'width_height' as const,
+      width: { minimum: 256, maximum: 1024, step: 256 },
+      height: { minimum: 256, maximum: 1024, step: 256 },
+    },
+    pricing: {
+      default: { paper: '1', brush: '0' },
+      fallback: 'unavailable' as const,
+      tiers: [],
+      sizes: [{ width: 512, height: 768, paper: '3', brush: '0' }],
+    },
+  };
+  const view = await renderWithProviders(
+    <ModelForm
+      account="1"
+      models={[first, second]}
+      available
+      wallet={wallet}
+      onAccepted={() => undefined}
+    />,
+    { station: 'user' },
+  );
+  await view.user.type(screen.getByLabelText(/Prompt/), 'retained prompt');
+  await view.user.clear(screen.getByLabelText('Image count'));
+  await view.user.type(screen.getByLabelText('Image count'), '2');
+  await view.user.selectOptions(screen.getByLabelText('Image model'), second.id);
+  expect(screen.getByLabelText(/Prompt/)).toHaveValue('retained prompt');
+  expect(screen.getByLabelText('Image count')).toHaveValue(2);
+  expect(screen.getByRole('combobox', { name: 'Exact size' })).toHaveValue('');
+  expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
+  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Exact size' }), '512x768');
+  expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeEnabled();
+  const next = { ...second, pricing_revision: '3', pricing: { ...second.pricing, sizes: [] } };
+  view.rerender(
+    <ModelForm
+      account="1"
+      models={[first, next]}
+      available
+      wallet={wallet}
+      onAccepted={() => undefined}
+    />,
+  );
+  await view.user.click(screen.getByRole('button', { name: 'Load latest configuration' }));
+  expect(screen.getByLabelText(/Prompt/)).toHaveValue('retained prompt');
+  expect(screen.getByLabelText('Image count')).toHaveValue(2);
+  expect(screen.getByRole('combobox', { name: 'Exact size' })).toHaveValue('');
+  expect(screen.getByText(/No sizes are available/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Reserve currency and join queue' })).toBeDisabled();
 });

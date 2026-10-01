@@ -140,7 +140,7 @@ func TestHeldRequestLogDeadlineMarkerAggregateAndDeidentification(t *testing.T) 
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
-	if projectedUser.Valid || consumed != 1 || roots != 1 || attempts != 1 || pendingRoots != 0 {
+	if projectedUser.Valid || consumed != 1 || roots != 1 || attempts != 1 || pendingRoots != 1 {
 		_ = tx.Rollback()
 		t.Fatalf("held log user=%+v consumed=%d roots=%d attempts=%d pending=%d",
 			projectedUser, consumed, roots, attempts, pendingRoots)

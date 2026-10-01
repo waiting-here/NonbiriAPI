@@ -61,10 +61,9 @@ WHERE user_id=? AND (completed_at IS NULL OR completed_at>?)`, cutoff, userID, c
 	}, nil
 }
 
-// PrepareLifecycleAccountDeletion deletes every non-held request-log root;
-// attempts follow by the aggregate FK. An active held root and all of its
-// attempts remain byte-for-byte untouched for the later user FK projection
-// clear performed by the shared account deletion transaction.
+// PrepareLifecycleAccountDeletion preserves request aggregates until their
+// ordinary terminal deadline or legal-hold release. The shared deletion
+// transaction clears only the active account relationship.
 func (repository *Repository) PrepareLifecycleAccountDeletion(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -80,17 +79,6 @@ func (repository *Repository) PrepareLifecycleAccountDeletion(
 	}
 	if exists != 1 {
 		return ErrNotFound
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM request_logs
-WHERE user_id=?
-  AND NOT EXISTS(
-    SELECT 1 FROM legal_holds h
-    WHERE h.object_kind='request_log'
-      AND h.object_ref=CAST(request_logs.id AS TEXT)
-      AND h.state='active'
-  )`, userID); err != nil {
-		return fmt.Errorf("logapi: delete non-held lifecycle logs: %w", err)
 	}
 	return nil
 }

@@ -1,5 +1,5 @@
 import { concatBytes, decodeHex, hex, sha256, utf8 } from "./sha256";
-import { LEGACY_ENGINE_VERSION, MAX_LEVEL_BYTES, SCORING_VERSION, supportedVersions, type EngineState, type Level, type Polygon } from "./types";
+import { ENGINE_VERSION, TURN_DENOMINATOR_V3, LEGACY_ENGINE_VERSION, MAX_LEVEL_BYTES, SCORING_VERSION, supportedVersions, type EngineState, type Level, type Polygon } from "./types";
 import { validateLevel } from "./validate";
 
 export function strictJSON(source: string, maxDepth: number): unknown {
@@ -115,16 +115,21 @@ export function canonicalJSON(data: unknown): string {
 
 export function normalizedLevelBytes(level: Level): Uint8Array { return utf8(canonicalJSON(normalizeLevel(level))); }
 export function contentHash(level: Level): string { return hex(sha256(normalizedLevelBytes(level))); }
-export function stateDigest(state: EngineState): string {
+export function stateDigest(state: EngineState): string { return digestMotion(state, 5000, false); }
+export function stateDigestForVersion(version: number, state: EngineState): string {
+  if (!supportedVersions(version, SCORING_VERSION)) throw new Error("unsupported state rules version");
+  return version === ENGINE_VERSION ? digestMotion(state, TURN_DENOMINATOR_V3, true) : stateDigest(state);
+}
+function digestMotion(state: EngineState, denominator: number, requireMotion: boolean): string {
   let v2 = 0;
   for (const fish of state.fish) {
     if (fish.motion !== undefined) {
       v2++;
       const motion = fish.motion;
-      if (motion === null || typeof motion !== "object" || Object.keys(motion).length !== 2 || !Object.hasOwn(motion, "turn_remainder") || !Object.hasOwn(motion, "ambiguous_turn_dir") || ![motion.turn_remainder, motion.ambiguous_turn_dir, fish.turn_dir].every((value) => Number.isSafeInteger(value) && !Object.is(value, -0)) || motion.turn_remainder < 0 || motion.turn_remainder >= 5000 || Math.abs(motion.ambiguous_turn_dir) > 1 || Math.abs(fish.turn_dir) > 1 || fish.turn_distance !== 0) throw new Error("version 2 motion state is invalid");
+      if (motion === null || typeof motion !== "object" || Object.keys(motion).length !== 2 || !Object.hasOwn(motion, "turn_remainder") || !Object.hasOwn(motion, "ambiguous_turn_dir") || ![motion.turn_remainder, motion.ambiguous_turn_dir, fish.turn_dir].every((value) => Number.isSafeInteger(value) && !Object.is(value, -0)) || motion.turn_remainder < 0 || motion.turn_remainder >= denominator || Math.abs(motion.ambiguous_turn_dir) > 1 || Math.abs(fish.turn_dir) > 1 || fish.turn_distance !== 0) throw new Error("version 2 motion state is invalid");
     }
   }
-  if (v2 !== 0 && v2 !== state.fish.length) throw new Error("mixed motion state versions");
+  if ((v2 !== 0 || requireMotion) && v2 !== state.fish.length) throw new Error("mixed motion state versions");
   return hex(sha256(utf8(canonicalJSON(state))));
 }
 

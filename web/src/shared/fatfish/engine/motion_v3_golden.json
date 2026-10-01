@@ -1,0 +1,2342 @@
+[
+  {
+    "name": "front-probe-memory",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7296,
+                "y": 6144
+              },
+              {
+                "x": 7424,
+                "y": 6144
+              },
+              {
+                "x": 7424,
+                "y": 6656
+              },
+              {
+                "x": 7296,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        16,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "d3b0740487362033a04dc80cbb49e1f8f8f04b773272640e025a322018bff74a",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "10265512742ae04d6c2134193296e5de7bb2e59a8ed292df4c1920281d609ac6",
+      "final_state_hash": "02c481919768e3c4185f8975b3159d1afd02ab73f814d96477e109de77e0585d",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "right-probe-left-turn",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6912,
+                "y": 6720
+              },
+              {
+                "x": 7040,
+                "y": 6720
+              },
+              {
+                "x": 7040,
+                "y": 6848
+              },
+              {
+                "x": 6912,
+                "y": 6848
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        16,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "ca1cabc55a2262a6517de50a4bef3c2247ae70cabcedd3338090c335396f7516",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "8e6ec1138595e214f5cb67efc7f287e6084bce1ef3fc2e84a3b253a5da7246c3",
+      "final_state_hash": "4d07aa815242a013b002dea2d4a926c6c34a05c7ad39a14ad2514e313ef78835",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "left-probe-right-turn",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6912,
+                "y": 5952
+              },
+              {
+                "x": 7040,
+                "y": 5952
+              },
+              {
+                "x": 7040,
+                "y": 6080
+              },
+              {
+                "x": 6912,
+                "y": 6080
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        16,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "7cb3948a5513eb8799e1dfbb0e5230bf33d3aff6c62910e2ce77f0a578a2a157",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "81f8d33ca8ecd517ad124e8a6f3a364cf5ed33910ba8c52f6d30ad92f9717b24",
+      "final_state_hash": "06004b49ed12c4ae717d1e7a0235240b48f598678ff4f13b8d734cf245ff4ed1",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "both-side-probes-memory",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6912,
+                "y": 6720
+              },
+              {
+                "x": 7040,
+                "y": 6720
+              },
+              {
+                "x": 7040,
+                "y": 6848
+              },
+              {
+                "x": 6912,
+                "y": 6848
+              }
+            ],
+            "holes": null
+          }
+        },
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6912,
+                "y": 5952
+              },
+              {
+                "x": 7040,
+                "y": 5952
+              },
+              {
+                "x": 7040,
+                "y": 6080
+              },
+              {
+                "x": 6912,
+                "y": 6080
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        16,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "74b2ccedec8b59b83aec419c0a7f723673cadfb53f74aced25eee9dadd3abeda",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "91615fb0a3a12ae07c37ce2545baa0ba720a7bff89d4b29931e10cfb26921d58",
+      "final_state_hash": "cad7311bb2808dba615a466ffc337acc7392bc685b1a668f79221474a0b1db22",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "thin-wall-canmove-fallback",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6912,
+                "y": 6272
+              },
+              {
+                "x": 7040,
+                "y": 6272
+              },
+              {
+                "x": 7040,
+                "y": 6528
+              },
+              {
+                "x": 6912,
+                "y": 6528
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        24,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "bc1948fb8af792d710e1220d0318552c65b03fd3218b887e89e1e3bd9933ba45",
+    "tick_states": 26,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "011515031cb49755dcc12b6704bf3dffd479d485bfe890683ce99526bb041c2d",
+      "final_state_hash": "26d5731abdf599056b875e6baab0937f6a415a8f84cde366e2c39c89d4c7493e",
+      "terminal_tick": 24,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "partial-escape-overrides-front-probe",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 5632,
+                "y": 5888
+              },
+              {
+                "x": 6016,
+                "y": 5888
+              },
+              {
+                "x": 6016,
+                "y": 6912
+              },
+              {
+                "x": 5632,
+                "y": 6912
+              }
+            ],
+            "holes": null
+          }
+        },
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7296,
+                "y": 6272
+              },
+              {
+                "x": 7424,
+                "y": 6272
+              },
+              {
+                "x": 7424,
+                "y": 6528
+              },
+              {
+                "x": 7296,
+                "y": 6528
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        24,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "fd75c2f32bdc87356c504a85cb47de5f4433820163441ab613403e4d46bc6121",
+    "tick_states": 26,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "75ad7513822a6439c123f7dae9092106c5496cb4c783adfc094d46759e832f16",
+      "final_state_hash": "46f8318562fcf5102f54e59e595afb265896deb8f84cc8e90c7394ac217a42d0",
+      "terminal_tick": 24,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "full-cover-and-return",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": [
+        {
+          "id": 2,
+          "resource_key": "barrier",
+          "polygon": {
+            "outer": [
+              {
+                "x": -640,
+                "y": -640
+              },
+              {
+                "x": 640,
+                "y": -640
+              },
+              {
+                "x": 640,
+                "y": 640
+              },
+              {
+                "x": -640,
+                "y": 640
+              }
+            ],
+            "holes": null
+          },
+          "placed": false,
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        0,
+        1,
+        "place",
+        2,
+        6400,
+        6400
+      ],
+      [
+        5,
+        2,
+        "return",
+        2
+      ],
+      [
+        16,
+        3,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "c1a823aec4af49f61922e863038b0f2e92f0086d266f0676c9557d75d2acf8cd",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "d8d0b391c52c528db8f77ffd8fef2ea5e9c574954bf36a1d0e89b5496c879f6e",
+      "final_state_hash": "6a7167e0b0dc68169f453b8e43c175e7c678b943f9db5a7c46a8519facb61be7",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "tool-memory-release-and-reencounter",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": [
+        {
+          "id": 2,
+          "resource_key": "barrier",
+          "polygon": {
+            "outer": [
+              {
+                "x": -64,
+                "y": -256
+              },
+              {
+                "x": 64,
+                "y": -256
+              },
+              {
+                "x": 64,
+                "y": 256
+              },
+              {
+                "x": -64,
+                "y": 256
+              }
+            ],
+            "holes": null
+          },
+          "placed": true,
+          "x": 7360,
+          "y": 6400
+        }
+      ],
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        3,
+        1,
+        "place",
+        2,
+        6912,
+        6720
+      ],
+      [
+        6,
+        2,
+        "return",
+        2
+      ],
+      [
+        9,
+        3,
+        "place",
+        2,
+        7680,
+        6400
+      ],
+      [
+        16,
+        4,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "7db86e116fafb39c6ec9e2c1941cc08c576ee7af1444aba4ab17a57d084e3846",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "63ffc3b2ee55a62a75118f00b490cf68bdc9905ade1eddc734353201f8fa671c",
+      "final_state_hash": "e94189a7a9759432a4b8598d273ba87e7eada2bf081edb391232762a16a6dfb3",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "four-floor-boundaries",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        4,
+        4
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 512,
+          "y": 6400,
+          "heading": 2048
+        },
+        {
+          "id": 2,
+          "x": 30208,
+          "y": 6400,
+          "heading": 0
+        },
+        {
+          "id": 3,
+          "x": 6400,
+          "y": 512,
+          "heading": 3072
+        },
+        {
+          "id": 4,
+          "x": 6400,
+          "y": 35328,
+          "heading": 1024
+        }
+      ],
+      "tools": null,
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 4
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        24,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "569fdd785097a1e6be4f09b29f2b1b34e036fe607d0a086a8b66c49808fff893",
+    "tick_states": 26,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "ce3300370b8dd2265fc92c69d9f5841be46cec7127c248d3a1f7732ddf264936",
+      "final_state_hash": "773f3488550c7382ab40d6290c43f87a7238944102bfa3db4f2bda92b20f34e3",
+      "terminal_tick": 24,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 4,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "diagonal-fixed-point-probe",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 512
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6407,
+                "y": 7000
+              },
+              {
+                "x": 6535,
+                "y": 7000
+              },
+              {
+                "x": 6535,
+                "y": 7128
+              },
+              {
+                "x": 6407,
+                "y": 7128
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        16,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "760651cbc57eb8656358c723003440eaabeb54baa486d4991eb4a5cbd957ce6f",
+    "tick_states": 18,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "84115fe5a01aa1a0b5f7d86d09163b5768f77012f9672a0c8ec6c44063253b8f",
+      "final_state_hash": "e3a40349892b088a0a7d5f5e283c6def9853d2ed2738eca0a0e98d7bbc9ded26",
+      "terminal_tick": 16,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "independent-random-word-streams",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        2,
+        2
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        },
+        {
+          "id": 2,
+          "x": 6400,
+          "y": 12800,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7296,
+                "y": 6144
+              },
+              {
+                "x": 7424,
+                "y": 6144
+              },
+              {
+                "x": 7424,
+                "y": 6656
+              },
+              {
+                "x": 7296,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          }
+        },
+        {
+          "id": 4,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7296,
+                "y": 12544
+              },
+              {
+                "x": 7424,
+                "y": 12544
+              },
+              {
+                "x": 7424,
+                "y": 13056
+              },
+              {
+                "x": 7296,
+                "y": 13056
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 2
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        24,
+        99,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "2f58b6c21fafd06c304087d38dcf82f7245ddeb86d4b9205025882a544a8ce1d",
+    "tick_states": 26,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "e46d0ff93acef8d334402fb1348091787b506fb0db7ecf7da6291b2022bdc661",
+      "final_state_hash": "fd6d0c9a3a6940ec45fe24acbf38c7377e44c66e3b110d057a43dd2c16c74af7",
+      "terminal_tick": 24,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 2,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "minimum-and-capacity-v3",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 16,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6528,
+                "y": 6144
+              },
+              {
+                "x": 6912,
+                "y": 6144
+              },
+              {
+                "x": 6912,
+                "y": 6656
+              },
+              {
+                "x": 6528,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": null,
+    "trace_hash": "192859b207da62c3974e6f0f9607818aa38125d20c5f4179b866395b82542165",
+    "tick_states": 9,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "4561869b6c66a848cdfd3645fc96309fee908594ca2a0bc68b968b982ffddbfc",
+      "final_state_hash": "277951e4dc3d6b7590a8ea00fa91a2d828a73014e546f9bbcf942af113a75113",
+      "terminal_tick": 8,
+      "reason": "all_resolved",
+      "fed": 1,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 2,
+          "count": 1
+        }
+      ],
+      "passed": true,
+      "stars": 3,
+      "score_units": 99333888
+    }
+  },
+  {
+    "name": "hazard-hole-exit-v3",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": null,
+      "hazards": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 5120,
+                "y": 5120
+              },
+              {
+                "x": 7680,
+                "y": 5120
+              },
+              {
+                "x": 7680,
+                "y": 7680
+              },
+              {
+                "x": 5120,
+                "y": 7680
+              }
+            ],
+            "holes": [
+              [
+                {
+                  "x": 6016,
+                  "y": 6016
+                },
+                {
+                  "x": 6784,
+                  "y": 6016
+                },
+                {
+                  "x": 6784,
+                  "y": 6784
+                },
+                {
+                  "x": 6016,
+                  "y": 6784
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "bowls": [
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26240,
+                "y": 25600
+              },
+              {
+                "x": 26240,
+                "y": 26240
+              },
+              {
+                "x": 25600,
+                "y": 26240
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": null,
+    "trace_hash": "a2cc58c4d7a886b690764b2af2dcf22d81ba6dece9fd4a08c0b1d733ce172df6",
+    "tick_states": 4,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "90413a920c68c439d761f8aebb4095660c65557924a5beab40160009f7806249",
+      "final_state_hash": "f403fc54c2b5af12c841f834f4ce88c28ed1e9cbd82a0b29a803cc985768f350",
+      "terminal_tick": 3,
+      "reason": "all_resolved",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 3,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "explicit-finish-v3",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        2,
+        2
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        },
+        {
+          "id": 2,
+          "x": 12800,
+          "y": 12800,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6528,
+                "y": 6144
+              },
+              {
+                "x": 6912,
+                "y": 6144
+              },
+              {
+                "x": 6912,
+                "y": 6656
+              },
+              {
+                "x": 6528,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 2
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        30,
+        1,
+        "finish",
+        0
+      ]
+    ],
+    "trace_hash": "3c7afb3c8235e32f903cd7fb79cd98de227609e9e568742d64ffa9541bf0de68",
+    "tick_states": 32,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "5fe81ba86c523d0772a78676f9ff03c1db007eb2b6757c3783550973b11d275d",
+      "final_state_hash": "9f14afbdab7bddaffc25def99da96b0b0ab469e8e985070e03b6e0af945d99b2",
+      "terminal_tick": 30,
+      "reason": "finish",
+      "fed": 1,
+      "total": 2,
+      "bowl_counts": [
+        {
+          "id": 3,
+          "count": 1
+        }
+      ],
+      "passed": true,
+      "stars": 1,
+      "score_units": 64983351
+    }
+  },
+  {
+    "name": "hold-switch-and-deferred-gate-v3",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 4,
+          "polygon": {
+            "outer": [
+              {
+                "x": 8960,
+                "y": 6144
+              },
+              {
+                "x": 9472,
+                "y": 6144
+              },
+              {
+                "x": 9472,
+                "y": 6656
+              },
+              {
+                "x": 8960,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6144,
+                "y": 6144
+              },
+              {
+                "x": 6656,
+                "y": 6144
+              },
+              {
+                "x": 6656,
+                "y": 6656
+              },
+              {
+                "x": 6144,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          },
+          "mode": "hold"
+        }
+      ],
+      "gates": [
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7040,
+                "y": 6016
+              },
+              {
+                "x": 7168,
+                "y": 6016
+              },
+              {
+                "x": 7168,
+                "y": 6784
+              },
+              {
+                "x": 7040,
+                "y": 6784
+              }
+            ],
+            "holes": null
+          },
+          "initially_open": false,
+          "mode": "any",
+          "switch_ids": [
+            2
+          ]
+        }
+      ],
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": null,
+    "trace_hash": "ceb6f0a756ef3f17babdf581fec6e1945cdccbfbd079f1954d6abf51578b95d5",
+    "tick_states": 16,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "25baac21533989775e84748a13d31b78e23da90dcb29947dd7e4403f42a88ab0",
+      "final_state_hash": "66e8341cfab95192a85b0140567de4f0b685cad9db29fb92052ae769c1f08a29",
+      "terminal_tick": 15,
+      "reason": "all_resolved",
+      "fed": 1,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 4,
+          "count": 1
+        }
+      ],
+      "passed": true,
+      "stars": 3,
+      "score_units": 98751040
+    }
+  },
+  {
+    "name": "oneway-direction-entry-v3",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 1024
+        }
+      ],
+      "tools": null,
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7680,
+                "y": 6144
+              },
+              {
+                "x": 8192,
+                "y": 6144
+              },
+              {
+                "x": 8192,
+                "y": 6656
+              },
+              {
+                "x": 7680,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6144,
+                "y": 6144
+              },
+              {
+                "x": 6784,
+                "y": 6144
+              },
+              {
+                "x": 6784,
+                "y": 6656
+              },
+              {
+                "x": 6144,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          },
+          "mode": "oneway",
+          "heading": 0
+        }
+      ]
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": null,
+    "trace_hash": "586285423ebe08552810c32b73e8749ad3fd1e62ab6ea1c468eda916b158a787",
+    "tick_states": 9,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "29f7e4571851e2b58c001630e97e55e4099fb1baf0a7d1a8019d46273d2ba204",
+      "final_state_hash": "f965255bdbd5d5db2d428671c8ca236aeced9f7aa212d55270fd1423ce22960d",
+      "terminal_tick": 8,
+      "reason": "all_resolved",
+      "fed": 1,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 3,
+          "count": 1
+        }
+      ],
+      "passed": true,
+      "stars": 3,
+      "score_units": 99333888
+    }
+  },
+  {
+    "name": "entry-direction-keeps-turn-episode-v3",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 10,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 1024
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6976,
+                "y": 6144
+              },
+              {
+                "x": 7104,
+                "y": 6144
+              },
+              {
+                "x": 7104,
+                "y": 6656
+              },
+              {
+                "x": 6976,
+                "y": 6656
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 4,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 6144,
+                "y": 5760
+              },
+              {
+                "x": 7424,
+                "y": 5760
+              },
+              {
+                "x": 7424,
+                "y": 7040
+              },
+              {
+                "x": 6144,
+                "y": 7040
+              }
+            ],
+            "holes": null
+          },
+          "mode": "entry",
+          "heading": 0
+        }
+      ]
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        20,
+        1,
+        "abandon",
+        0
+      ]
+    ],
+    "trace_hash": "432e277f98204ce48db8623caf49bbb5c499260d632b6c35b44ad6385b5fd7e9",
+    "tick_states": 22,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "ad3a0d46603db3018f5919a80213fe4526dbb5459d4581b53e215aa9f67a49b0",
+      "final_state_hash": "b60e720ee1ad8ae37c54b196faf914be16bfa98146578f03637b83d9fc016329",
+      "terminal_tick": 20,
+      "reason": "abandon",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 4,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "maximum-duration-covered",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 600,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": [
+        {
+          "id": 2,
+          "resource_key": "barrier",
+          "polygon": {
+            "outer": [
+              {
+                "x": -640,
+                "y": -640
+              },
+              {
+                "x": 640,
+                "y": -640
+              },
+              {
+                "x": 640,
+                "y": 640
+              },
+              {
+                "x": -640,
+                "y": 640
+              }
+            ],
+            "holes": null
+          },
+          "placed": false,
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "solids": null,
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": [
+      [
+        0,
+        1,
+        "place",
+        2,
+        6400,
+        6400
+      ]
+    ],
+    "trace_hash": "c62720ede1d5e514e652a8442c1122725c08d3ca18194bcfdbe40f111a049d55",
+    "tick_states": 36001,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "a479c52b29e869fe903e2b9a7dfe5df22ad194bd1f173706dde7adbfe7fe7796",
+      "final_state_hash": "34cf32431d5ee6cb4307126dba0afe8cf33aa5b7e182c743d5b5a2418364bdef",
+      "terminal_tick": 36000,
+      "reason": "timeout",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  },
+  {
+    "name": "maximum-duration-continuous-turn",
+    "level": {
+      "format": "nonbiri-fatfish-level",
+      "format_version": 1,
+      "engine_version": 3,
+      "scoring_version": 1,
+      "duration_seconds": 600,
+      "speed_pixels_per_second": 160,
+      "thresholds": [
+        1,
+        1,
+        1
+      ],
+      "fish": [
+        {
+          "id": 1,
+          "x": 6400,
+          "y": 6400,
+          "heading": 0
+        }
+      ],
+      "tools": null,
+      "solids": [
+        {
+          "id": 2,
+          "polygon": {
+            "outer": [
+              {
+                "x": 5120,
+                "y": 5120
+              },
+              {
+                "x": 7680,
+                "y": 5120
+              },
+              {
+                "x": 7680,
+                "y": 5760
+              },
+              {
+                "x": 5120,
+                "y": 5760
+              }
+            ],
+            "holes": null
+          }
+        },
+        {
+          "id": 3,
+          "polygon": {
+            "outer": [
+              {
+                "x": 5120,
+                "y": 7040
+              },
+              {
+                "x": 7680,
+                "y": 7040
+              },
+              {
+                "x": 7680,
+                "y": 7680
+              },
+              {
+                "x": 5120,
+                "y": 7680
+              }
+            ],
+            "holes": null
+          }
+        },
+        {
+          "id": 4,
+          "polygon": {
+            "outer": [
+              {
+                "x": 5120,
+                "y": 5760
+              },
+              {
+                "x": 5760,
+                "y": 5760
+              },
+              {
+                "x": 5760,
+                "y": 7040
+              },
+              {
+                "x": 5120,
+                "y": 7040
+              }
+            ],
+            "holes": null
+          }
+        },
+        {
+          "id": 5,
+          "polygon": {
+            "outer": [
+              {
+                "x": 7040,
+                "y": 5760
+              },
+              {
+                "x": 7680,
+                "y": 5760
+              },
+              {
+                "x": 7680,
+                "y": 7040
+              },
+              {
+                "x": 7040,
+                "y": 7040
+              }
+            ],
+            "holes": null
+          }
+        }
+      ],
+      "hazards": null,
+      "bowls": [
+        {
+          "id": 9,
+          "polygon": {
+            "outer": [
+              {
+                "x": 25600,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 25600
+              },
+              {
+                "x": 26112,
+                "y": 26112
+              },
+              {
+                "x": 25600,
+                "y": 26112
+              }
+            ],
+            "holes": null
+          },
+          "required": 0,
+          "capacity": 1
+        }
+      ],
+      "switches": null,
+      "gates": null,
+      "directions": null
+    },
+    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "inputs": null,
+    "trace_hash": "d101fe733c921cfa9d10bbf1045fd54dd9571b1a01ed1a140247c3c711232e8b",
+    "tick_states": 36001,
+    "result": {
+      "engine_version": 3,
+      "scoring_version": 1,
+      "content_hash": "d92d6e762b63c087b6a3bf97050d8d2be49f0c50c669e2841a906f589d2e2154",
+      "final_state_hash": "e894d3163e604affaa2c68f3b2dab41470e1128e2c4487310e572a5ee8800579",
+      "terminal_tick": 36000,
+      "reason": "timeout",
+      "fed": 0,
+      "total": 1,
+      "bowl_counts": [
+        {
+          "id": 9,
+          "count": 0
+        }
+      ],
+      "passed": false,
+      "stars": 0,
+      "score_units": 0
+    }
+  }
+]

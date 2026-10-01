@@ -137,6 +137,15 @@ func TestEmbeddingCheckpointAndFailureContract(t *testing.T) {
 			if result.Success || writer.Body.Len() != 0 || writer.marked != tc.marked || result.Usage.Present != tc.usage {
 				t.Fatalf("result=%+v marked=%v bytes=%d", result, writer.marked, writer.Body.Len())
 			}
+			wantDisposition, wantOrigin := connectorcontract.StreakUpstreamFailure, connectorcontract.OriginUpstreamProtocol
+			if tc.usage {
+				wantDisposition, wantOrigin = connectorcontract.StreakSuccess, connectorcontract.OriginNone
+			} else if tc.name == "reported_error" || tc.status != http.StatusOK {
+				wantOrigin = connectorcontract.OriginUpstreamResponse
+			}
+			if result.StreakDisposition != wantDisposition || result.FailureOrigin != wantOrigin {
+				t.Fatalf("terminal outcome lost: %+v", result)
+			}
 			if tc.cancel && result.Failure != FailureCanceled {
 				t.Fatal("cancellation classification lost")
 			}

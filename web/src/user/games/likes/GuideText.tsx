@@ -3,9 +3,8 @@ import type { GuideLevel } from './knowledge';
 import { entryTitle, knowledge } from './knowledge';
 import { useDuelText } from '../common/duel/copy';
 import { effectCategory } from './characterPassives';
-
 export function GuideText({
-  text,
+  text: prose,
   catalog,
   onInspect,
 }: {
@@ -13,10 +12,10 @@ export function GuideText({
   readonly catalog: ModeCatalog;
   readonly onInspect: (id: string) => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <>
-      {text.split(/(\[\[[^\]]+\]\])/g).map((part, index) =>
+      {prose.split(/(\[\[[^\]]+\]\])/g).map((part, index) =>
         part.startsWith('[[') ? (
           <button
             type="button"
@@ -24,7 +23,7 @@ export function GuideText({
             key={index}
             onClick={() => onInspect(part.slice(2, -2))}
           >
-            {entryTitle(catalog, part.slice(2, -2), t)}
+            {entryTitle(catalog, part.slice(2, -2), text)}
           </button>
         ) : (
           part
@@ -33,7 +32,6 @@ export function GuideText({
     </>
   );
 }
-
 export function EffectSummary({
   catalog,
   id,
@@ -45,11 +43,11 @@ export function EffectSummary({
   readonly level?: GuideLevel;
   readonly harness?: string | null;
 }) {
-  const t = useDuelText();
-  const entry = knowledge(catalog, id, level, t);
+  const text = useDuelText();
+  const entry = knowledge(catalog, id, level, text);
   const buff = catalog.buffs.find((b) => b.id === id);
-  const text = entry.summary.replace(/\[\[([^\]]+)\]\]/g, (_, ref: string) =>
-    entryTitle(catalog, ref, t),
+  const summary = entry.summary.replace(/\[\[([^\]]+)\]\]/g, (_, ref: string) =>
+    entryTitle(catalog, ref, text),
   );
   const skill = catalog.skills.find((s) => s.id === id);
   const strength = catalog.harnesses
@@ -62,11 +60,11 @@ export function EffectSummary({
       : 0;
   return (
     <span className="likes-effect-summary">
-      {buff && <strong className="likes-effect-category">{effectCategory(buff, t)} · </strong>}
-      {text}
+      {buff && <strong className="likes-effect-category">{effectCategory(buff, text)} · </strong>}
+      {summary}
       {bonus > 0 && (
         <span className="likes-base-bonus">
-          {t(` 当前 Harness 基础加成 +${bonus} 赞。`, ` Current harness adds ${bonus} base likes.`)}
+          {text('likes.currentHarnessAddsBaseLikes', { bonus: bonus })}
         </span>
       )}
       {entry.meme && <q className="likes-inline-flavor">{entry.meme}</q>}

@@ -25,7 +25,7 @@ func TestRuntimeSurfaceDoesNotExposeDeletionSecretLookupClaimOrPosting(t *testin
 		methods = append(methods, runtimeType.Method(index).Name)
 	}
 	sort.Strings(methods)
-	want := []string{"Close", "Discover", "GoString", "LogValue", "MarkEndpointSecretOrphaned", "String", "WriteEndpointSecret"}
+	want := []string{"Close", "Discover", "GoString", "LogValue", "MarkEndpointSecretOrphaned", "MatchEndpointSecret", "String", "WriteEndpointSecret"}
 	if !reflect.DeepEqual(methods, want) {
 		t.Fatalf("exported Runtime methods = %v, want %v", methods, want)
 	}

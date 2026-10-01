@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -21,17 +21,20 @@ import {
   updateCoreSessionLanguage,
   useCoreMe,
 } from './queries';
-import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
+import { isOutcomeUnknown } from './request';
+import {
+  useRetainedOperation,
+  type OperationContext,
+} from '@shared/operations/useRetainedOperation';
+import { useOperation } from '@shared/operations/useOperation';
+import { useElevationReturn } from '@shared/operations/useElevationReturn';
 import {
   clearAccountLocalNamespace,
   clearElevatedCapabilityCookie,
   clearPendingElevation,
   downloadAccountExport,
-  moveElevatedCapabilityFromCookie,
-  readPendingElevation,
   writePendingElevation,
 } from './sensitive';
-import { initialLifecycleMachineState, lifecycleMachineReducer } from './stateMachines';
 import type {
   AccountLifecycleAdapter,
   ExplicitLanguage,
@@ -49,208 +52,113 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
   const { i18n } = useTranslation();
   const queryClient = useQueryClient();
   const me = useCoreMe(user.id);
-  const abortRef = useRef<AbortController | null>(null);
-  const committedLanguageRef = useRef<ExplicitLanguage | null>(null);
-  const attemptRef = useRef<{
-    language: ExplicitLanguage;
-    operation: ReturnType<typeof createOperationIdentity>;
-  } | null>(null);
-  const [hasAttempt, setHasAttempt] = useState(false);
   const original = currentExplicitLanguage(user, i18n.resolvedLanguage);
   const [language, setLanguage] = useState<ExplicitLanguage>(original);
-  const languageMatchesAuthority =
-    (user.lang === 'zh' || user.lang === 'en') && language === original;
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [outcome, setOutcome] = useState<'conflict' | 'unknown' | 'error' | null>(null);
+  const committed = useRef<ExplicitLanguage | null>(null);
 
-  const discardAttemptForBoundaryChange = () => {
-    attemptRef.current = null;
-    committedLanguageRef.current = null;
-    setHasAttempt(false);
-    setLanguage(original);
-    setSaved(false);
-    setOutcome(null);
-  };
-
-  const setDocumentLanguage = (confirmed: ExplicitLanguage) => {
-    document.documentElement.lang = confirmed === 'zh' ? 'zh-CN' : 'en';
-  };
-
-  const restoreLanguageAfterBoundaryChange = async (fallback: ExplicitLanguage) => {
-    const current = currentCoreSessionLanguage(queryClient) ?? fallback;
-    await i18n.changeLanguage(current);
-    setDocumentLanguage(current);
-  };
-
-  const applyConfirmedLanguage = async (
-    confirmed: ExplicitLanguage,
-    fallback: ExplicitLanguage,
-  ): Promise<boolean> => {
-    if (!coreSessionMatchesAccount(queryClient, user.id)) return false;
+  const applyLanguage = async (confirmed: ExplicitLanguage, context: OperationContext) => {
+    context.assertCurrent();
     await i18n.changeLanguage(confirmed);
-    if (!coreSessionMatchesAccount(queryClient, user.id)) {
-      await restoreLanguageAfterBoundaryChange(fallback);
-      return false;
+    if (!context.isCurrent()) {
+      const current = currentCoreSessionLanguage(queryClient) ?? original;
+      await i18n.changeLanguage(current);
+      document.documentElement.lang = current === 'zh' ? 'zh-CN' : 'en';
+      context.assertCurrent();
     }
-    if (!updateCoreSessionLanguage(queryClient, user.id, confirmed)) {
-      await restoreLanguageAfterBoundaryChange(fallback);
-      return false;
-    }
-    try {
-      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, confirmed);
-    } catch {
-      // The confirmed account language remains authoritative even if this
-      // browser blocks the optional explicit local preference.
-    }
-    setDocumentLanguage(confirmed);
-    return true;
-  };
-
-  useEffect(
-    () => () => {
-      abortRef.current?.abort();
-      abortRef.current = null;
-    },
-    [user.id],
-  );
-
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      setLanguage(original);
-      if (committedLanguageRef.current === original) {
-        committedLanguageRef.current = null;
-        return;
+    context.commit(() => {
+      updateCoreSessionLanguage(queryClient, user.id, confirmed);
+      try {
+        window.localStorage.setItem(LANGUAGE_STORAGE_KEY, confirmed);
+      } catch {
+        // Account language remains authoritative when optional browser storage is blocked.
       }
-      setSaved(false);
-      setOutcome(null);
+      document.documentElement.lang = confirmed === 'zh' ? 'zh-CN' : 'en';
+      committed.current = confirmed;
+      setLanguage(confirmed);
     });
-    return () => {
-      active = false;
-    };
-  }, [original, user.id]);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (busy || (!attemptRef.current && languageMatchesAuthority)) return;
-    setBusy(true);
-    setSaved(false);
-    setOutcome(null);
-    const attempt = attemptRef.current ?? {
-      language,
-      operation: createOperationIdentity(),
-    };
-    attemptRef.current = attempt;
-    setHasAttempt(true);
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    const fallback = currentExplicitLanguage(user, i18n.resolvedLanguage);
-    try {
-      const envelope = await patchLanguage(attempt.language, attempt.operation, controller.signal);
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, user.id)) {
-        discardAttemptForBoundaryChange();
-        return;
-      }
-      if (envelope.user.id !== user.id) {
-        throw new ApiError(
-          'invalid_response',
-          'The server returned a different user profile.',
-          200,
-        );
-      }
-      if (currentExplicitLanguage(envelope.user, i18n.resolvedLanguage) !== attempt.language) {
+  };
+  const operation = useRetainedOperation<ExplicitLanguage, void>(
+    async (intent, key, context) => {
+      const envelope = await patchLanguage(
+        intent,
+        { idempotencyKey: key, actionId: key },
+        context.signal,
+      );
+      if (envelope.user.id !== user.id || envelope.user.lang !== intent)
         throw new ApiError(
           'invalid_response',
           'The server returned a different account language.',
           200,
         );
+      await applyLanguage(intent, context);
+      context.commit(() => queryClient.setQueryData(coreKeys.me(user.id), envelope));
+    },
+    async (intent, error, context) => {
+      if (!error) return;
+      const refreshed = await me.refetch();
+      context.assertCurrent();
+      const restored = refreshed.data
+        ? currentExplicitLanguage(refreshed.data.user, i18n.resolvedLanguage)
+        : original;
+      if (isOutcomeUnknown(error) && refreshed.data && restored === intent) {
+        await applyLanguage(intent, context);
+        return { operationConfirmed: true };
       }
-      if (!(await applyConfirmedLanguage(attempt.language, fallback))) {
-        discardAttemptForBoundaryChange();
-        return;
-      }
-      attemptRef.current = null;
-      setHasAttempt(false);
-      committedLanguageRef.current = attempt.language;
-      if (!coreSessionMatchesAccount(queryClient, user.id)) {
-        discardAttemptForBoundaryChange();
-        return;
-      }
-      queryClient.setQueryData(coreKeys.me(user.id), envelope);
-      setSaved(true);
-    } catch (error) {
-      if (controller.signal.aborted || abortRef.current !== controller) return;
-      if (!coreSessionMatchesAccount(queryClient, user.id)) {
-        discardAttemptForBoundaryChange();
-        return;
-      }
-      const nextOutcome = isConflict(error)
-        ? 'conflict'
-        : isOutcomeUnknown(error)
-          ? 'unknown'
-          : 'error';
-      if (nextOutcome !== 'unknown') {
-        attemptRef.current = null;
-        setHasAttempt(false);
-      }
-      setOutcome(nextOutcome);
-      let restored = original;
-      if (nextOutcome === 'conflict' || nextOutcome === 'unknown') {
-        const refreshed = await me.refetch();
-        if (controller.signal.aborted || abortRef.current !== controller) return;
-        if (!coreSessionMatchesAccount(queryClient, user.id)) {
-          discardAttemptForBoundaryChange();
-          return;
-        }
-        if (refreshed.data)
-          restored = currentExplicitLanguage(refreshed.data.user, i18n.resolvedLanguage);
-        if (
-          nextOutcome === 'unknown' &&
-          attemptRef.current &&
-          restored === attemptRef.current.language
-        ) {
-          const confirmed = attemptRef.current.language;
-          if (!(await applyConfirmedLanguage(confirmed, fallback))) {
-            discardAttemptForBoundaryChange();
-            return;
-          }
-          attemptRef.current = null;
-          setHasAttempt(false);
-          committedLanguageRef.current = confirmed;
-          setSaved(true);
-          setOutcome(null);
-        }
-      }
-      setLanguage(restored);
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        setBusy(false);
-      }
-    }
-  };
+      context.commit(() => setLanguage(restored));
+    },
+    ['user', 'core'],
+    { clearSecrets: () => setLanguage(original) },
+  );
 
+  const resetOperation = operation.reset;
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setLanguage(original);
+      if (committed.current === original) committed.current = null;
+      else resetOperation();
+    });
+    return () => {
+      active = false;
+    };
+  }, [original, user.id, resetOperation]);
+
+  const pendingIntent = operation.outcome === 'unknown' ? operation.variables : undefined;
+  const matchesAuthority = user.lang === language;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (operation.isPending || (!pendingIntent && matchesAuthority)) return;
+    operation.mutate(pendingIntent ?? language);
+  };
+  const outcome =
+    operation.outcome === 'unknown'
+      ? 'unknown'
+      : operation.outcome === 'conflict'
+        ? 'conflict'
+        : operation.outcome === 'failed'
+          ? 'error'
+          : null;
   return (
-    <form className="core-form" onSubmit={(event) => void submit(event)}>
+    <form className="core-form" onSubmit={submit}>
       <p className="core-muted">{t('account.languageBody')}</p>
       <div className="core-field-grid">
         <label>
           <span>{t('account.language')}</span>
           <select
-            disabled={busy || hasAttempt}
+            disabled={operation.isPending || Boolean(pendingIntent)}
             value={language}
-            onChange={(event) => setLanguage(event.target.value === 'zh' ? 'zh' : 'en')}
+            onChange={(event) => {
+              setLanguage(event.target.value === 'zh' ? 'zh' : 'en');
+              operation.reset();
+            }}
           >
             <option value="zh">{t('account.zh')}</option>
             <option value="en">{t('account.en')}</option>
           </select>
         </label>
       </div>
-      {saved ? (
+      {operation.isSuccess ? (
         <p className="core-inline-success" role="status">
           {t('account.languageSaved')}
         </p>
@@ -261,9 +169,13 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={busy || (!hasAttempt && languageMatchesAuthority)}
+          disabled={operation.isPending || (!pendingIntent && matchesAuthority)}
         >
-          {busy ? t('common.working') : hasAttempt ? t('common.retrySame') : t('common.save')}
+          {operation.isPending
+            ? t('common.working')
+            : pendingIntent
+              ? t('common.retrySame')
+              : t('common.save')}
         </button>
       </div>
     </form>
@@ -357,232 +269,114 @@ export function AccountLifecyclePanel({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const tokenRef = useRef('');
-  const asyncBoundaryRef = useRef(0);
-  const actionSequenceRef = useRef(0);
-  const beginPendingRef = useRef(false);
-  const executePendingRef = useRef(false);
-  const authorityPendingRef = useRef(false);
-  const [state, dispatch] = useReducer(lifecycleMachineReducer, undefined, () =>
-    initialLifecycleMachineState(accountId),
-  );
-  const [dialog, setDialog] = useState<LifecycleIntent | null>(null);
-  const [deleteWord, setDeleteWord] = useState('');
-  const [deleteWordError, setDeleteWordError] = useState(false);
-
+  const [intent, setIntent] = useState<LifecycleIntent | null>(null);
+  const [dialog, setDialog] = useState(false);
   const clearCapability = () => {
     tokenRef.current = '';
     clearElevatedCapabilityCookie();
     clearPendingElevation();
   };
-
-  useEffect(() => {
-    const boundary = asyncBoundaryRef.current + 1;
-    asyncBoundaryRef.current = boundary;
-    beginPendingRef.current = false;
-    executePendingRef.current = false;
-    authorityPendingRef.current = false;
-    dispatch({ type: 'boundary', accountId });
-    tokenRef.current = '';
-    const intent = readPendingElevation(accountId);
-    const token = moveElevatedCapabilityFromCookie();
-    clearPendingElevation();
-    if (
-      intent &&
-      token &&
-      (intent === 'export'
-        ? adapter.capabilities.exportAccount
-        : adapter.capabilities.deleteAccount)
-    ) {
-      tokenRef.current = token;
-      dispatch({ type: 'confirm', accountId, intent });
-      queueMicrotask(() => {
-        if (asyncBoundaryRef.current === boundary) setDialog(intent);
-      });
-    }
-    return () => {
-      if (asyncBoundaryRef.current === boundary) asyncBoundaryRef.current = boundary + 1;
-      beginPendingRef.current = false;
-      executePendingRef.current = false;
-      authorityPendingRef.current = false;
-      tokenRef.current = '';
-      clearElevatedCapabilityCookie();
-    };
-  }, [accountId, adapter]);
-
-  const begin = async (intent: LifecycleIntent) => {
-    if (beginPendingRef.current) return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      clearCapability();
-      dispatch({ type: 'cancel', accountId });
-      return;
-    }
-    const boundary = asyncBoundaryRef.current;
-    beginPendingRef.current = true;
-    dispatch({ type: 'elevate', accountId, intent });
-    try {
-      const target = new URL(await adapter.beginElevation(intent, accountId));
-      if (asyncBoundaryRef.current !== boundary) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        clearCapability();
-        dispatch({ type: 'cancel', accountId });
-        return;
-      }
-      if (target.protocol !== 'https:') throw new Error('invalid authorization URL');
-      writePendingElevation(intent, accountId);
-      window.location.assign(target.toString());
-    } catch {
-      if (asyncBoundaryRef.current !== boundary) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        clearCapability();
-        dispatch({ type: 'cancel', accountId });
-        return;
-      }
-      clearCapability();
-      dispatch({
-        type: 'elevation-error',
-        accountId,
-        intent,
-        message: t('account.elevationFailed'),
-      });
-    } finally {
-      if (asyncBoundaryRef.current === boundary) beginPendingRef.current = false;
-    }
-  };
-
-  const completeDeletion = (): boolean => {
-    if (!coreSessionMatchesAccount(queryClient, accountId)) return false;
+  const completeDeletion = () => {
     clearAccountLocalNamespace(accountId);
     clearCoreUserSession(queryClient);
     navigate('/');
-    return true;
   };
-
-  const checkAccountAuthority = async () => {
+  const execute = useOperation<LifecycleIntent | 'confirm-delete', string>({
+    authorityRoot: ['user', 'core'],
+    clearSecrets: () => {
+      tokenRef.current = '';
+      setDialog(false);
+      setIntent(null);
+    },
+    execute: async (action, token, _key, context) => {
+      if (!token || !coreSessionMatchesAccount(queryClient, accountId))
+        throw new ApiError('elevated_required', 'Verify the account identity again.', 403);
+      if (action === 'confirm-delete') {
+        context.commit(() => {
+          tokenRef.current = token;
+          setIntent('delete');
+          setDialog(true);
+        });
+        return;
+      }
+      tokenRef.current = '';
+      if (action === 'export') {
+        const attachment = await adapter.exportAccount({
+          accountId,
+          elevatedToken: token,
+          signal: context.signal,
+        });
+        context.commit(() => downloadAccountExport(attachment));
+      } else {
+        await adapter.deleteAccount({
+          accountId,
+          elevatedToken: token,
+          confirmation: 'DELETE',
+          signal: context.signal,
+        });
+        context.commit(completeDeletion);
+      }
+    },
+    reconcile: () => undefined,
+  });
+  const elevation = useOperation<LifecycleIntent>({
+    authorityRoot: ['user', 'core'],
+    execute: async (action, _secret, _key, context) => {
+      if (!coreSessionMatchesAccount(queryClient, accountId))
+        throw new ApiError('invalid_request', 'The account session changed.', 400);
+      const target = new URL(await adapter.beginElevation(action, accountId, context.signal));
+      if (target.protocol !== 'https:') throw new Error('invalid authorization URL');
+      context.commit(() => {
+        writePendingElevation(action, accountId);
+        window.location.assign(target.toString());
+      });
+    },
+    reconcile: () => undefined,
+  });
+  const authority = useOperation<null, never, 'active' | 'deleted'>({
+    authorityRoot: ['user', 'core'],
+    execute: async (_intent, _secret, _key, context) => {
+      const result = await adapter.readAccountAuthority(accountId, context.signal);
+      if (result === 'deleted') context.commit(completeDeletion);
+      return result;
+    },
+    reconcile: () => undefined,
+  });
+  useEffect(() => {
+    return () => {
+      tokenRef.current = '';
+    };
+  }, [accountId]);
+  useElevationReturn(accountId, (returnedIntent, token, context) => {
     if (
-      authorityPendingRef.current ||
-      state.intent !== 'delete' ||
-      (state.status !== 'unknown' && state.status !== 'active')
+      !(returnedIntent === 'export'
+        ? adapter.capabilities.exportAccount
+        : adapter.capabilities.deleteAccount)
     )
       return;
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      clearCapability();
-      dispatch({ type: 'cancel', accountId });
-      return;
-    }
-    const boundary = asyncBoundaryRef.current;
-    authorityPendingRef.current = true;
-    dispatch({ type: 'check-start', accountId });
-    try {
-      const authority = await adapter.readAccountAuthority(accountId);
-      if (asyncBoundaryRef.current !== boundary) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        clearCapability();
-        dispatch({ type: 'cancel', accountId });
-        return;
-      }
-      if (authority === 'deleted') {
-        if (completeDeletion()) dispatch({ type: 'complete', accountId, intent: 'delete' });
-        return;
-      }
-      dispatch({ type: 'authority-active', accountId, message: t('account.deleteStillActive') });
-    } catch {
-      if (asyncBoundaryRef.current !== boundary) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        clearCapability();
-        dispatch({ type: 'cancel', accountId });
-        return;
-      }
-      dispatch({ type: 'authority-error', accountId, message: t('account.authorityCheckFailed') });
-    } finally {
-      if (asyncBoundaryRef.current === boundary) authorityPendingRef.current = false;
-    }
+    context.commit(() => {
+      setIntent(returnedIntent);
+      void execute
+        .run(returnedIntent === 'delete' ? 'confirm-delete' : 'export', token)
+        .catch(() => undefined);
+    });
+  });
+  const begin = (action: LifecycleIntent) => {
+    setIntent(action);
+    execute.reset();
+    authority.reset();
+    void elevation.run(action).catch(() => undefined);
   };
-
-  const execute = async (intent: LifecycleIntent) => {
-    if (executePendingRef.current || !tokenRef.current || dialog !== intent) return;
-    if (intent === 'delete' && deleteWord !== 'DELETE') {
-      setDeleteWordError(true);
-      return;
-    }
-    if (!coreSessionMatchesAccount(queryClient, accountId)) {
-      clearCapability();
-      dispatch({ type: 'cancel', accountId });
-      return;
-    }
-    const boundary = asyncBoundaryRef.current;
-    executePendingRef.current = true;
-    setDeleteWordError(false);
-    actionSequenceRef.current += 1;
-    const actionId = String(actionSequenceRef.current);
-    const elevatedToken = tokenRef.current;
-    dispatch({ type: 'start', accountId, intent, actionId });
-    try {
-      const attachment =
-        intent === 'export'
-          ? await adapter.exportAccount({ accountId, elevatedToken })
-          : await adapter
-              .deleteAccount({ accountId, elevatedToken, confirmation: 'DELETE' })
-              .then(() => null);
-      if (asyncBoundaryRef.current !== boundary) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        clearCapability();
-        dispatch({ type: 'cancel', accountId });
-        return;
-      }
-      clearCapability();
-      setDialog(null);
-      if (intent === 'export' && attachment) {
-        downloadAccountExport(attachment);
-        dispatch({ type: 'complete', accountId, intent, actionId });
-      } else {
-        if (completeDeletion()) dispatch({ type: 'complete', accountId, intent, actionId });
-      }
-    } catch (error) {
-      if (asyncBoundaryRef.current !== boundary) return;
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        clearCapability();
-        dispatch({ type: 'cancel', accountId });
-        return;
-      }
-      clearCapability();
-      setDialog(null);
-      if (isOutcomeUnknown(error)) {
-        dispatch({
-          type: 'uncertain',
-          accountId,
-          intent,
-          actionId,
-          message: t(intent === 'export' ? 'account.exportUnknown' : 'account.deleteUnknown'),
-        });
-      } else {
-        dispatch({
-          type: 'error',
-          accountId,
-          intent,
-          actionId,
-          message: t('common.errorBody'),
-        });
-      }
-    } finally {
-      if (asyncBoundaryRef.current === boundary) executePendingRef.current = false;
-    }
-  };
-
   const cancel = () => {
-    asyncBoundaryRef.current += 1;
-    beginPendingRef.current = false;
-    executePendingRef.current = false;
-    authorityPendingRef.current = false;
+    execute.cancel();
+    elevation.cancel();
+    authority.cancel();
     clearCapability();
-    setDialog(null);
-    setDeleteWord('');
-    setDeleteWordError(false);
-    dispatch({ type: 'cancel', accountId });
+    setDialog(false);
   };
-
-  const busy =
-    state.status === 'elevating' || state.status === 'pending' || state.status === 'checking';
-
+  const busy = execute.isPending || elevation.isPending || authority.isPending;
+  const unknown = execute.outcome === 'unknown';
+  const failed = execute.outcome === 'failed' || execute.outcome === 'conflict';
   return (
     <>
       <section className="core-card">
@@ -590,30 +384,36 @@ export function AccountLifecyclePanel({
           <h2>{t('account.exportTitle')}</h2>
         </div>
         <p>{t('account.exportBody')}</p>
+        <p className="core-muted">{t('account.reauthorize')}</p>
         {!adapter.capabilities.exportAccount ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
-        {state.intent === 'export' && state.status === 'error' ? (
-          <p className="core-inline-error">{state.message ?? t('common.errorBody')}</p>
+        {intent === 'export' && (failed || elevation.isError) ? (
+          <p className="core-inline-error">
+            {t(elevation.isError ? 'account.elevationFailed' : 'common.errorBody')}
+          </p>
         ) : null}
-        {state.intent === 'export' && state.status === 'unknown' ? (
-          <p className="core-inline-warning">{state.message ?? t('account.exportUnknown')}</p>
+        {intent === 'export' && unknown ? (
+          <p className="core-inline-warning">{t('account.exportUnknown')}</p>
         ) : null}
         <div className="core-row-actions">
-          <span />
+          {execute.isPending && intent === 'export' ? (
+            <button type="button" className="btn btn-secondary" onClick={cancel}>
+              {t('common.cancel')}
+            </button>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
             className="btn btn-primary"
             disabled={!adapter.capabilities.exportAccount || busy}
-            onClick={() => void begin('export')}
+            onClick={() => begin('export')}
           >
-            {state.intent === 'export' && state.status === 'elevating'
-              ? t('common.working')
-              : t('account.export')}
+            {busy && intent === 'export' ? t('common.working') : t('account.export')}
           </button>
         </div>
       </section>
-
       <section className="core-card core-danger-zone">
         <div className="core-card__header">
           <h2>{t('account.dangerTitle')}</h2>
@@ -623,24 +423,29 @@ export function AccountLifecyclePanel({
         {!adapter.capabilities.deleteAccount ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
-        {state.intent === 'delete' && state.status === 'error' ? (
-          <p className="core-inline-error">{state.message ?? t('common.errorBody')}</p>
+        {intent === 'delete' && (failed || elevation.isError) ? (
+          <p className="core-inline-error">
+            {t(elevation.isError ? 'account.elevationFailed' : 'common.errorBody')}
+          </p>
         ) : null}
-        {state.intent === 'delete' && (state.status === 'unknown' || state.status === 'active') ? (
-          <p className="core-inline-warning">{state.message ?? t('account.deleteUnknown')}</p>
+        {intent === 'delete' && unknown ? (
+          <p className="core-inline-warning">{t('account.deleteUnknown')}</p>
+        ) : null}
+        {authority.data === 'active' ? (
+          <p className="core-inline-warning">{t('account.deleteStillActive')}</p>
+        ) : null}
+        {authority.isError ? (
+          <p className="core-inline-error">{t('account.authorityCheckFailed')}</p>
         ) : null}
         <div className="core-row-actions">
-          {state.intent === 'delete' &&
-          (state.status === 'unknown' ||
-            state.status === 'checking' ||
-            state.status === 'active') ? (
+          {intent === 'delete' && unknown ? (
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={state.status === 'checking'}
-              onClick={() => void checkAccountAuthority()}
+              disabled={busy}
+              onClick={() => void authority.run(null).catch(() => undefined)}
             >
-              {state.status === 'checking' ? t('common.working') : t('account.checkAuthority')}
+              {t('account.checkAuthority')}
             </button>
           ) : (
             <span />
@@ -651,55 +456,27 @@ export function AccountLifecyclePanel({
             disabled={
               !adapter.capabilities.deleteAccount ||
               busy ||
-              (state.intent === 'delete' && state.status === 'unknown')
+              (intent === 'delete' && unknown && authority.data !== 'active')
             }
-            onClick={() => void begin('delete')}
+            onClick={() => begin('delete')}
           >
-            {state.intent === 'delete' && state.status === 'elevating'
-              ? t('common.working')
-              : t('account.delete')}
+            {busy && intent === 'delete' ? t('common.working') : t('account.delete')}
           </button>
         </div>
       </section>
-
       <ConfirmDialog
-        open={dialog === 'export'}
-        title={t('account.exportTitle')}
-        description={t('account.reauthorize')}
-        confirmLabel={t('account.exportConfirm')}
-        busy={state.status === 'pending'}
-        onCancel={cancel}
-        onConfirm={() => void execute('export')}
-      />
-      <ConfirmDialog
-        open={dialog === 'delete'}
+        open={dialog}
         title={t('account.deleteTitle')}
         description={t('account.deleteBody')}
         confirmLabel={t('account.deleteConfirm')}
         danger
-        busy={state.status === 'pending'}
+        busy={execute.isPending}
         onCancel={cancel}
-        onConfirm={() => void execute('delete')}
-      >
-        <label className="core-form">
-          <span>{t('account.deleteWord')}</span>
-          <input
-            value={deleteWord}
-            maxLength={6}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => {
-              setDeleteWord(event.target.value);
-              setDeleteWordError(false);
-            }}
-          />
-        </label>
-        {deleteWordError ? (
-          <p className="core-inline-error" role="alert">
-            {t('account.deleteWordError')}
-          </p>
-        ) : null}
-      </ConfirmDialog>
+        onConfirm={() => {
+          setDialog(false);
+          void execute.run('delete', tokenRef.current).catch(() => undefined);
+        }}
+      />
     </>
   );
 }

@@ -91,7 +91,7 @@ func readConfig(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }) (Config, error) {
 	var c Config
-	err := q.QueryRowContext(ctx, `SELECT threshold_percent,consecutive_minutes,shared_ip_hours,shared_ip_users,revision,updated_at FROM risk_audit_config WHERE id=1`).Scan(&c.ThresholdPercent, &c.ConsecutiveMinutes, &c.SharedIPHours, &c.SharedIPUsers, &c.Revision, &c.UpdatedAt)
+	err := q.QueryRowContext(ctx, `SELECT threshold_percent,consecutive_minutes,shared_ip_hours,shared_ip_users,revision,updated_at,user_ip_window_hours,user_ip_min_ips FROM risk_audit_config WHERE id=1`).Scan(&c.ThresholdPercent, &c.ConsecutiveMinutes, &c.SharedIPHours, &c.SharedIPUsers, &c.Revision, &c.UpdatedAt, &c.UserIPWindowHours, &c.UserIPMinIPs)
 	if err != nil || !c.Valid() {
 		return Config{}, ErrUnavailable
 	}
@@ -132,7 +132,7 @@ func (r *Repository) UpdateConfig(ctx context.Context, actor Actor, c Config) (C
 	}
 	c.Revision++
 	c.UpdatedAt = r.now().Unix()
-	_, err = tx.ExecContext(ctx, `UPDATE risk_audit_config SET threshold_percent=?,consecutive_minutes=?,shared_ip_hours=?,shared_ip_users=?,revision=?,updated_at=? WHERE id=1`, c.ThresholdPercent, c.ConsecutiveMinutes, c.SharedIPHours, c.SharedIPUsers, c.Revision, c.UpdatedAt)
+	_, err = tx.ExecContext(ctx, `UPDATE risk_audit_config SET threshold_percent=?,consecutive_minutes=?,shared_ip_hours=?,shared_ip_users=?,revision=?,updated_at=?,user_ip_window_hours=?,user_ip_min_ips=? WHERE id=1`, c.ThresholdPercent, c.ConsecutiveMinutes, c.SharedIPHours, c.SharedIPUsers, c.Revision, c.UpdatedAt, c.UserIPWindowHours, c.UserIPMinIPs)
 	if err != nil || tx.Commit() != nil {
 		return Config{}, ErrUnavailable
 	}

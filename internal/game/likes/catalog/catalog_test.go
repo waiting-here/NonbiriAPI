@@ -149,3 +149,14 @@ func TestRejectsBrokenFlashTerminationAssumptions(t *testing.T) {
 		}
 	}
 }
+
+func TestPriorBalancePreservesPublishedCatalogIdentity(t *testing.T) {
+	expected := map[string]string{"quick": "ce86861b57caff1058cd5e56f572287d47c3ec5aaa57f784a2c5e8ceea61c460", "standard": "5daccc5ccbcb621f5c0f69c25f6f703d47e7fc0ee1012f873f830fe8377d1eed"}
+	for mode, want := range expected {
+		_, hash, err := LoadPriorBalance(mode)
+		snapshot, publicErr := PublicPriorBalance(mode)
+		if err != nil || publicErr != nil || hash != want || snapshot.ContentHash != want || snapshot.DesignVersion != "0.18.1" {
+			t.Fatal(mode, hash, err, publicErr)
+		}
+	}
+}

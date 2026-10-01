@@ -21,15 +21,15 @@ export function LoadoutEditor({
   readonly disabled: boolean;
   readonly onInspect: (id: string) => void;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     slots = 4 + (catalog.harnesses.find((h) => h.id === value.harness)?.activeSlots ?? 0);
   const problem = selectionProblem(catalog, value),
     role = catalog.roles.find((r) => r.id === value.role)!;
   return (
     <div className="likes-loadout">
       <div className="likes-section-heading">
-        <h2>{t('选择角色', 'Choose a character')}</h2>
-        <span>{t('技能与资源均为游戏设定', 'Skills and resources belong to this game')}</span>
+        <h2>{text('likes.chooseACharacter')}</h2>
+        <span>{text('likes.skillsAndResourcesBelongToThisGame')}</span>
       </div>
       <div className="likes-role-grid">
         {catalog.roles.map((role) => (
@@ -57,7 +57,7 @@ export function LoadoutEditor({
       <p className="likes-role-note">
         <strong>{role.difficulty}</strong> · {role.note}
         <br />
-        {t('弱点', 'Weakness')}: {role.weakness}
+        {text('likes.weakness')}: {role.weakness}
       </p>
       <CharacterPassive role={role} onInspect={onInspect} />
       <h3>Harness</h3>
@@ -68,8 +68,8 @@ export function LoadoutEditor({
           disabled={disabled}
           onClick={() => onChange({ ...value, harness: null, skills: value.skills.slice(0, 4) })}
         >
-          {t('不携带', 'None')}
-          <small>4 {t('主动槽', 'active slots')}</small>
+          {text('likes.none2')}
+          <small>4 {text('likes.activeSlots')}</small>
         </button>
         {catalog.harnesses.map((h) => (
           <div className="likes-harness-option" key={h.id}>
@@ -90,14 +90,14 @@ export function LoadoutEditor({
               <strong>{h.name}</strong>
               <EffectSummary catalog={catalog} id={h.id} />
               <small>
-                +{h.activeSlots} {t('主动槽', 'active')} · {h.passives.length}{' '}
-                {t('被动', 'passive')}
+                +{h.activeSlots} {text('likes.active')} · {h.passives.length}{' '}
+                {text('likes.passive2')}
               </small>
             </button>
             <button
               type="button"
               className="likes-info"
-              aria-label={`${h.name} ${t('详情', 'details')}`}
+              aria-label={`${h.name} ${text('likes.details')}`}
               onClick={() => onInspect(h.id)}
             >
               ⓘ
@@ -107,10 +107,10 @@ export function LoadoutEditor({
       </div>
       <div className="likes-section-heading">
         <h3>
-          {t('配装', 'Loadout')} {value.skills.length} / {slots}
+          {text('likes.loadout')} {value.skills.length} / {slots}
         </h3>
         <label>
-          {t('推荐配装', 'Suggested set')}
+          {text('likes.suggestedSet')}
           <select
             value=""
             disabled={disabled}
@@ -119,7 +119,7 @@ export function LoadoutEditor({
               if (preset) onChange({ ...value, skills: [...preset.skills] });
             }}
           >
-            <option value="">{t('选择预设', 'Choose a preset')}</option>
+            <option value="">{text('likes.chooseAPreset')}</option>
             {catalog.loadouts
               .filter((p) => p.role === value.role || p.role === '任意角色')
               .map((p) => (
@@ -130,12 +130,7 @@ export function LoadoutEditor({
           </select>
         </label>
       </div>
-      <p>
-        {t(
-          '选择至少一项可持续得赞的稳定技能；其余槽位可以留空。',
-          'Include at least one sustainable, stable scoring skill. Other slots may remain empty.',
-        )}
-      </p>
+      <p>{text('likes.includeAtLeastOneSustainableStableScoring')}</p>
       <div className="likes-skill-grid">
         {catalog.skills
           .filter((s) => s.owner === value.role || s.owner === '全局公共')
@@ -161,7 +156,7 @@ export function LoadoutEditor({
                 <span>
                   <strong>{skill.name}</strong>
                   <small>
-                    {kindName(skill.kind, t)} · {skill.owner}
+                    {kindName(skill.kind, text)} · {skill.owner}
                   </small>
                   <SkillCost skill={skill} />
                   <EffectSummary catalog={catalog} id={skill.id} harness={value.harness} />
@@ -170,7 +165,7 @@ export function LoadoutEditor({
               <button
                 type="button"
                 className="likes-info"
-                aria-label={`${skill.name} ${t('详情', 'details')}`}
+                aria-label={`${skill.name} ${text('likes.details')}`}
                 onClick={() => onInspect(skill.id)}
               >
                 ⓘ
@@ -181,14 +176,8 @@ export function LoadoutEditor({
       {problem && (
         <p role="alert" className="likes-warning">
           {problem === 'slots'
-            ? t(
-                '请检查技能归属、重复项及槽位数量。',
-                'Check skill ownership, duplicates and slot count.',
-              )
-            : t(
-                '请至少选择一项可持续得赞的稳定技能。',
-                'Select at least one sustainable, stable scoring skill.',
-              )}
+            ? text('likes.checkSkillOwnershipDuplicatesAndSlotCount')
+            : text('likes.selectAtLeastOneSustainableStableScoring')}
         </p>
       )}
     </div>

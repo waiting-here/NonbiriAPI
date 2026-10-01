@@ -10,7 +10,7 @@ import { clampWorkspace } from '@shared/fatfish/workspace';
 export type ObjectKind = 'fish' | 'tools' | 'solids' | 'hazards' | 'bowls' | 'switches' | 'gates' | 'directions';
 export interface Selection { kind: ObjectKind; id: number }
 export const GRID = 8 * 64;
-export const px = (value: number) => Math.round(value / 64);
+export const px = (value: number) => value / 64;
 export const unit = (value: number) => Math.round(value * 64);
 export const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 export const snap = (value: number, enabled: boolean) => enabled ? Math.round(value / GRID) * GRID : Math.round(value);
