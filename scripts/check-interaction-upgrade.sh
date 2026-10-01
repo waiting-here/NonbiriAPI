@@ -69,6 +69,8 @@ else
 fi
 unset NONBIRI_INTERACTION_MASTER_KEY_FILE
 (
+    # Released binaries create fixtures from their own schema.
+    unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
     cd "$temporary/released"
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-wallet.test" ./internal/ledger
     "$temporary/released-wallet.test" -test.run '^TestWriteReleasedDualWalletFixture$' -test.v -test.timeout 2m

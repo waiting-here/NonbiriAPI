@@ -43,6 +43,8 @@ export NONBIRI_BILLING_FIXTURE="$temporary/data/billing.db"
 export NONBIRI_DUAL_DUEL_FIXTURE="$temporary/data/duel.db"
 export NONBIRI_DUAL_BLACKJACK_FIXTURE="$temporary/data/blackjack.db"
 (
+    # Released binaries create fixtures from their own schema.
+    unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
     cd "$temporary/released"
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-app.test" .
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-wallet.test" ./internal/ledger
