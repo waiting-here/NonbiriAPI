@@ -29,7 +29,7 @@ export function ReasonText({
             <li key={label}>{label}</li>
           ))}
         </ul>
-        {reason ? <p className="ops-break">{reason}</p> : null}
+        {reason ? <p className="ops-break ops-blacklist-note">{reason}</p> : null}
       </div>
     );
   if (automatic?.kind === 'client_rules' && automatic.schema_version === 1) {
@@ -44,7 +44,7 @@ export function ReasonText({
           ))}
         </ul>
         {automatic.manual_text ? (
-          <p className="ops-break">
+          <p className="ops-break ops-blacklist-note">
             {t('common.reasons.existingManual')}: {automatic.manual_text}
           </p>
         ) : null}
@@ -58,7 +58,7 @@ export function ReasonText({
         ? 'common.reasons.charityShortContent'
         : undefined;
   return (
-    <p className="ops-break">
+    <p className={code ? 'ops-break' : 'ops-break ops-blacklist-note'}>
       {code ? t(code) : automatic?.manual_text || reason || t('common.reasons.unspecified')}
     </p>
   );
