@@ -53,6 +53,7 @@ function summary(overrides: Record<string, unknown> = {}) {
 
 function key(overrides: Record<string, unknown> = {}) {
   return {
+    review: { required: false, revision: null, material_available: false },
     id: KEY_ID,
     endpoint_key_id: '61',
     display_head: 'sk-head',
@@ -243,6 +244,26 @@ describe('owner donation numbered-page normalizers', () => {
         20,
       ),
     ).toThrow(ApiError);
+  });
+
+  it('shows a forced rejection as rejected with its reason', () => {
+    const result = normalizeOwnerDonationsPage(
+      page([
+        summary({
+          status: 'rejected',
+          review_result: {
+            decision: 'force_reject',
+            reason: 'Review required',
+            reviewed_at: 1_800_000_001,
+          },
+          state_counts: { ...summary().state_counts, pending: '0', ended: '1' },
+        }),
+      ]),
+      {},
+      '1',
+      20,
+    ).data[0];
+    expect(result.reviewResult).toMatchObject({ decision: 'reject', reason: 'Review required' });
   });
 
   it('enforces status and review state projections, including logical expiry', () => {

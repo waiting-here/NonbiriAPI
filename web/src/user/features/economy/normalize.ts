@@ -476,10 +476,10 @@ export function normalizeCharityCapability(value: unknown): CharityCapability {
 function normalizeReviewResult(value: unknown): DonationReviewResult | null {
   if (value === null) return null;
   const result = record(value, 'donation review result', ['decision', 'reason', 'reviewed_at']);
-  if (result.decision !== 'approve' && result.decision !== 'reject')
-    invalid('donation review decision');
+  const decision = result.decision === 'force_reject' ? 'reject' : result.decision;
+  if (decision !== 'approve' && decision !== 'reject') invalid('donation review decision');
   return {
-    decision: result.decision,
+    decision,
     reason: text(result.reason, 'donation review reason', 1024),
     reviewedAt: timestamp(result.reviewed_at, 'donation reviewed timestamp'),
   };
@@ -563,7 +563,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       'streak',
       'ended_reason',
     ],
-    ['input_token_reserve', 'output_token_reserve', 'breakdown_started_at'],
+    ['review', 'input_token_reserve', 'output_token_reserve', 'breakdown_started_at'],
   );
   const source = normalizeDonationSafeSource(item.safe_source);
   const limits = record(

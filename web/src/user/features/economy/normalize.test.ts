@@ -58,6 +58,7 @@ const DONATION_FIXTURE = {
   review_result: { decision: 'approve', reason: 'Accepted', reviewed_at: 1_788_100_010 },
   keys: [
     {
+      review: { required: false, revision: null, material_available: false },
       id: '51',
       endpoint_key_id: '61',
       display_head: 'sk-head',
@@ -497,7 +498,7 @@ describe('economy closed-wire normalizers', () => {
       {
         ...DONATION_FIXTURE,
         status: 'rejected',
-        review_result: { ...DONATION_FIXTURE.review_result, decision: 'reject' },
+        review_result: { ...DONATION_FIXTURE.review_result, decision: 'force_reject' },
         keys: [{ ...terminalKey, ended_reason: null }],
       },
       {
