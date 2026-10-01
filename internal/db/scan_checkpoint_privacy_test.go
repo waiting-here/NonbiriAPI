@@ -31,7 +31,7 @@ func TestScanCheckpointPrivacyWithoutPublishedResults(t *testing.T) {
 					req := hostileOID("req_")
 					hostileInsertLogicalRequest(t, database, req, victim, "openai_chat_completions", 1)
 					log = hostileInsertRequestLog(t, database, req, victim, "openai_chat_completions")
-					hostileMustExec(t, database, `INSERT INTO request_source_facts VALUES(?,?,'self','192.0.2.4','direct_peer','{}',1)`, log, victim)
+					hostileMustExec(t, database, `INSERT INTO request_source_facts(request_log_id,user_id,kind,effective_ip,ip_quality,source_json,occurred_at) VALUES(?,?,'self','192.0.2.4','direct_peer','{}',1)`, log, victim)
 				}
 				checkpoint := map[string]any{"signal": "high_rpm", "config": map[string]any{"rpm": 10}, "source_at": 1, "source_id": 7}
 				if log != 0 {
@@ -60,6 +60,12 @@ func TestScanCheckpointPrivacyWithoutPublishedResults(t *testing.T) {
 				var changed int
 				if err = database.QueryRow(`SELECT state,reason,changed,checkpoint_json FROM risk_client_scans WHERE id=?`, scan).Scan(&state, &reason, &changed, &cleaned); err != nil {
 					t.Fatal(err)
+				}
+				if change == "source_retire" || change == "user_delete" {
+					if state != "running" || reason != "" || changed != 0 || cleaned != string(raw) {
+						t.Fatalf("retained source changed: %s/%s %s", state, reason, cleaned)
+					}
+					return
 				}
 				if change == "authority_change" {
 					if state != "cancelled" || reason != "permission_changed" {

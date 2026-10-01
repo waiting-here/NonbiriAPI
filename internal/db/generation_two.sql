@@ -71,9 +71,9 @@ CREATE TABLE policy_audits (
  actor_role TEXT NOT NULL CHECK(actor_role IN ('owner','admin','level5','level6','trainee5')),
  resource_type TEXT NOT NULL CHECK(resource_type IN ('endpoint_key','model','charity_model')),
  resource_id INTEGER NOT NULL CHECK(resource_id>0),
- policy TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls')),
- old_value INTEGER NOT NULL CHECK(old_value IN (0,1)),
- new_value INTEGER NOT NULL CHECK(new_value IN (0,1)),
+ policy TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls','role_policy')),
+ old_value INTEGER CHECK(old_value IN (0,1)),
+ new_value INTEGER CHECK(new_value IN (0,1)),
  created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_policy_audits_resource ON policy_audits(resource_type,resource_id,id);
@@ -5168,7 +5168,8 @@ BEGIN SELECT RAISE(ABORT,'image configuration revision is immutable'); END;
 
 
 CREATE TABLE request_source_facts (
- request_log_id INTEGER PRIMARY KEY REFERENCES request_logs(id) ON DELETE CASCADE,
+ source_id INTEGER PRIMARY KEY AUTOINCREMENT,
+ request_log_id INTEGER NOT NULL UNIQUE REFERENCES request_logs(id) ON DELETE CASCADE,
  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  kind TEXT NOT NULL CHECK(kind IN ('self','charity','unclassified','discovery')),
  effective_ip TEXT NOT NULL CHECK(length(effective_ip)<=45),
@@ -5671,7 +5672,7 @@ CREATE TABLE risk_client_scans (
  query_json TEXT NOT NULL CHECK(json_valid(query_json) AND length(CAST(query_json AS BLOB))<=4096),
  rules_json TEXT NOT NULL CHECK(json_valid(rules_json) AND json_type(rules_json)='array' AND length(CAST(rules_json AS BLOB))<=16777216),
  state TEXT NOT NULL CHECK(state IN ('queued','running','completed','cancelled','limited','failed')),
- reason TEXT NOT NULL DEFAULT '' CHECK(reason IN ('','result_limit','permission_changed','scan_failed','candidate_limit','minute_limit','source_changed')),
+ reason TEXT NOT NULL DEFAULT '' CHECK(reason IN ('','result_limit','permission_changed','scan_failed','candidate_limit','minute_limit','source_changed','window_limit')),
  from_at INTEGER NOT NULL CHECK(from_at BETWEEN 0 AND 253402300799),
  to_at INTEGER NOT NULL CHECK(to_at>from_at AND to_at-from_at<=2592000),
  call_kind TEXT NOT NULL CHECK(call_kind IN ('total','self','charity','unclassified')),
@@ -6063,7 +6064,7 @@ BEGIN SELECT RAISE(ABORT,'audit scan capacity exhausted'); END;
 CREATE TABLE risk_scan_results (
  scan_id TEXT NOT NULL REFERENCES risk_client_scans(id) ON DELETE CASCADE,
  row_no INTEGER NOT NULL CHECK(row_no BETWEEN 1 AND 100000),
- user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+ user_id INTEGER CHECK(user_id IS NULL OR user_id>0),
  request_log_id INTEGER REFERENCES request_source_facts(request_log_id) ON DELETE CASCADE,
  published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0,1)),
  result_json TEXT NOT NULL CHECK(json_valid(result_json) AND json_type(result_json)='object' AND length(CAST(result_json AS BLOB))<=16384),
@@ -6075,7 +6076,7 @@ CREATE INDEX idx_risk_scan_results_source ON risk_scan_results(request_log_id,sc
 CREATE TABLE risk_scan_result_users (
  scan_id TEXT NOT NULL,
  row_no INTEGER NOT NULL,
- user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL CHECK(user_id>0),
  PRIMARY KEY(scan_id,row_no,user_id),
  FOREIGN KEY(scan_id,row_no) REFERENCES risk_scan_results(scan_id,row_no) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
@@ -6522,6 +6523,7 @@ CREATE TABLE automatic_reason_metadata (
  kind TEXT NOT NULL CHECK(length(kind) BETWEEN 1 AND 64),
  schema_version INTEGER NOT NULL CHECK(schema_version=1),
  params_json TEXT NOT NULL CHECK(json_valid(params_json) AND json_type(params_json)='object' AND length(CAST(params_json AS BLOB))<=4096),
+ manual_text TEXT NOT NULL DEFAULT '' CHECK(length(CAST(manual_text AS BLOB))<=4096),
  PRIMARY KEY(owner_kind,owner_id)
 ) STRICT, WITHOUT ROWID;
 CREATE TABLE automatic_reason_rule_labels (
@@ -6743,3 +6745,138 @@ WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) GROUP BY key HAVING count(*)>1)
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy,'$.rules') GROUP BY key HAVING count(*)>1)
 BEGIN SELECT RAISE(ABORT,'invalid model role policy'); END;
+
+ALTER TABLE policy_audits ADD COLUMN from_revision INTEGER CHECK(from_revision IS NULL OR (typeof(from_revision)='integer' AND from_revision>=0));
+ALTER TABLE policy_audits ADD COLUMN to_revision INTEGER CHECK(to_revision IS NULL OR (typeof(to_revision)='integer' AND to_revision>=1));
+DROP TRIGGER policy_audits_no_update;
+CREATE TRIGGER policy_audits_no_update BEFORE UPDATE ON policy_audits
+WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
+ AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.actor_user_id)
+ AND OLD.id=NEW.id AND OLD.actor_role=NEW.actor_role AND OLD.resource_type=NEW.resource_type
+ AND OLD.resource_id=NEW.resource_id AND OLD.policy=NEW.policy
+ AND OLD.old_value IS NEW.old_value AND OLD.new_value IS NEW.new_value
+ AND OLD.from_revision IS NEW.from_revision AND OLD.to_revision IS NEW.to_revision
+ AND OLD.created_at=NEW.created_at)
+BEGIN SELECT RAISE(ABORT,'policy_audits is append-only'); END;
+CREATE TRIGGER policy_audits_value_insert_guard BEFORE INSERT ON policy_audits
+WHEN NOT COALESCE((NEW.policy='role_policy' AND NEW.resource_type IN ('model','charity_model')
+ AND NEW.old_value IS NULL AND NEW.new_value IS NULL
+ AND NEW.from_revision IS NOT NULL AND NEW.to_revision IS NOT NULL
+ AND NEW.from_revision<9223372036854775807 AND NEW.to_revision=NEW.from_revision+1)
+ OR (NEW.policy<>'role_policy' AND NEW.old_value IS NOT NULL AND NEW.new_value IS NOT NULL
+ AND NEW.from_revision IS NULL AND NEW.to_revision IS NULL),0)
+BEGIN SELECT RAISE(ABORT,'invalid policy audit values'); END;
+
+ALTER TABLE fatfish_level_versions ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1 CHECK(version_number>=1);
+DROP TRIGGER fatfish_content_immutable;
+WITH numbered AS (
+ SELECT id,row_number() OVER (PARTITION BY level_id ORDER BY created_at,id) AS version_number
+ FROM fatfish_level_versions
+)
+UPDATE fatfish_level_versions SET version_number=(SELECT version_number FROM numbered WHERE numbered.id=fatfish_level_versions.id);
+CREATE UNIQUE INDEX idx_fatfish_version_number ON fatfish_level_versions(level_id,version_number);
+CREATE TRIGGER fatfish_content_immutable BEFORE UPDATE ON fatfish_level_versions
+BEGIN SELECT RAISE(ABORT,'published game content is immutable'); END;
+
+UPDATE donation_usage_reservations
+SET streak_disposition=CASE WHEN state='committed' AND protocol_success=1 THEN 'success' ELSE 'neutral' END,
+ failure_origin=CASE WHEN state='committed' AND protocol_success=1 THEN 'none' ELSE 'legacy_unknown' END
+WHERE state IN ('committed','released');
+UPDATE dispatch_claims
+SET streak_disposition=CASE WHEN EXISTS(SELECT 1 FROM donation_usage_reservations u WHERE u.claim_id=dispatch_claims.id AND u.state='committed' AND u.protocol_success=1) THEN 'success' ELSE 'neutral' END,
+ failure_origin=CASE WHEN EXISTS(SELECT 1 FROM donation_usage_reservations u WHERE u.claim_id=dispatch_claims.id AND u.state='committed' AND u.protocol_success=1) THEN 'none' ELSE 'legacy_unknown' END
+WHERE state IN ('committed','released');
+CREATE TRIGGER donation_usage_reservations_outcome_insert_guard BEFORE INSERT ON donation_usage_reservations
+WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none' AND NEW.protocol_success=1)
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+CREATE TRIGGER donation_usage_reservations_outcome_update_guard BEFORE UPDATE ON donation_usage_reservations
+WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none' AND NEW.protocol_success=1)
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout') AND COALESCE(NEW.protocol_success,0)=0)
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown') AND COALESCE(NEW.protocol_success,0)=0))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+CREATE TRIGGER dispatch_claims_outcome_insert_guard BEFORE INSERT ON dispatch_claims
+WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none')
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+CREATE TRIGGER dispatch_claims_outcome_update_guard BEFORE UPDATE ON dispatch_claims
+WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
+ OR (NEW.state IN ('committed','released') AND (
+  (NEW.state='committed' AND NEW.streak_disposition='success' AND NEW.failure_origin='none')
+  OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
+  OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
+BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
+
+UPDATE request_logs SET origin_user_id=user_id WHERE user_id IS NOT NULL;
+WITH identities AS (
+ SELECT r.id,CASE WHEN u.id IS NOT NULL THEN u.discord_id ELSE d.discord_id END AS discord_id
+ FROM request_logs r LEFT JOIN users u ON u.id=r.origin_user_id
+ LEFT JOIN admin_account_deletions d ON d.former_user_id=r.origin_user_id
+ WHERE r.origin_user_id IS NOT NULL
+)
+UPDATE request_logs SET origin_discord_id=identities.discord_id FROM identities
+ WHERE request_logs.id=identities.id AND length(identities.discord_id) BETWEEN 1 AND 20
+ AND identities.discord_id NOT GLOB '*[^0-9]*' AND substr(identities.discord_id,1,1) BETWEEN '1' AND '9';
+CREATE TRIGGER request_log_origin_capture AFTER INSERT ON request_logs
+WHEN NEW.user_id IS NOT NULL AND NEW.origin_user_id IS NULL
+BEGIN
+ UPDATE request_logs SET origin_user_id=NEW.user_id,
+ origin_discord_id=(SELECT discord_id FROM users WHERE id=NEW.user_id
+  AND length(discord_id) BETWEEN 1 AND 20 AND discord_id NOT GLOB '*[^0-9]*'
+  AND substr(discord_id,1,1) BETWEEN '1' AND '9') WHERE id=NEW.id;
+END;
+CREATE TRIGGER request_log_origin_immutable BEFORE UPDATE OF origin_user_id,origin_discord_id ON request_logs
+WHEN (OLD.origin_user_id IS NOT NULL AND NEW.origin_user_id IS NOT OLD.origin_user_id)
+ OR (OLD.origin_discord_id IS NOT NULL AND NEW.origin_discord_id IS NOT OLD.origin_discord_id)
+BEGIN SELECT RAISE(ABORT,'request origin is immutable'); END;
+
+ALTER TABLE risk_client_scans ADD COLUMN upper_source_id INTEGER NOT NULL DEFAULT 0 CHECK(upper_source_id>=0);
+ALTER TABLE risk_client_scans ADD COLUMN after_source_id INTEGER NOT NULL DEFAULT 0 CHECK(after_source_id BETWEEN 0 AND upper_source_id);
+UPDATE risk_client_scans SET state='cancelled',reason='source_changed',changed=1,checkpoint_json='{}'
+ WHERE state IN ('queued','running');
+DROP INDEX idx_request_sources_scan;
+CREATE INDEX idx_request_sources_scan ON request_source_facts(occurred_at,source_id) WHERE kind IN ('self','charity','unclassified');
+DROP INDEX idx_request_sources_ip_time;
+CREATE INDEX idx_request_sources_ip_time ON request_source_facts(effective_ip,occurred_at,source_id);
+DROP TRIGGER risk_scan_source_retired;
+DROP TRIGGER risk_scan_result_source_retired;
+DROP TRIGGER risk_scan_user_retired;
+CREATE TABLE risk_scan_window_sources (
+ scan_id TEXT NOT NULL REFERENCES risk_client_scans(id) ON DELETE CASCADE,
+ request_log_id INTEGER NOT NULL REFERENCES request_source_facts(request_log_id) ON DELETE CASCADE,
+ PRIMARY KEY(scan_id,request_log_id)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX idx_risk_scan_window_source ON risk_scan_window_sources(request_log_id,scan_id);
+CREATE TRIGGER risk_scan_window_finished AFTER UPDATE OF state ON risk_client_scans
+WHEN NEW.state IN ('completed','failed','cancelled','limited')
+BEGIN
+ DELETE FROM risk_scan_window_sources WHERE scan_id=NEW.id;
+ UPDATE risk_client_scans SET checkpoint_json=json_remove(checkpoint_json,
+ '$.pending_discord','$.after_discord','$.user_ip_summary','$.pending_user','$.after_user',
+ '$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary') WHERE id=NEW.id;
+END;
+DROP TRIGGER risk_scan_result_source_deleted;
+CREATE TRIGGER risk_scan_result_source_deleted BEFORE DELETE ON request_source_facts
+BEGIN
+ UPDATE risk_client_scans SET changed=1,
+ state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
+ reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
+ checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip',
+ '$.source_at','$.source_id','$.ip_summary','$.pending_discord','$.after_discord','$.user_ip_summary')
+ WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
+ UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id
+ UNION SELECT scan_id FROM risk_scan_window_sources WHERE request_log_id=OLD.request_log_id)
+ OR (OLD.effective_ip<>'' AND (json_extract(checkpoint_json,'$.pending_ip')=OLD.effective_ip OR json_extract(checkpoint_json,'$.after_ip')=OLD.effective_ip));
+ DELETE FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
+ OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id);
+END;
+CREATE TRIGGER automatic_user_ban_reason_deleted AFTER DELETE ON users
+BEGIN DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=CAST(OLD.id AS TEXT); END;
