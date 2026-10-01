@@ -4,6 +4,7 @@ import { expect, test } from './test';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
   collectConsoleViolations,
+  mockJson,
   mockPublicConfig,
   mockRoleSession,
   userSession,
@@ -171,7 +172,13 @@ for (const role of ['user', 'admin', 'steward'] as const) {
     const row =
       role === 'user'
         ? { ...base, model: '[公益]p/m' }
-        : { ...base, user_id: '7', caller_identity: null, attempt_count: '0', usage_total_mismatch: false };
+        : {
+            ...base,
+            user_id: '7',
+            caller_identity: null,
+            attempt_count: '0',
+            usage_total_mismatch: false,
+          };
     const filters: string[] = [];
     await page.route(`**${path}**`, (route) => {
       const url = new URL(route.request().url());
@@ -215,28 +222,59 @@ test('verified banned login shows only safe fields and removes the fragment', as
   const guard = collectConsoleViolations(page);
   await mockPublicConfig(page, 'user');
   const start = Math.floor(Date.now() / 1000);
+  const restriction = {
+    kind: 'ban',
+    reason_code: 'charity_rpm',
+    reason: 'Account access restricted.',
+    started_at: start,
+    ends_at: start + 600,
+  };
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/auth/access-denied-reasons',
+    body: {
+      restricted: true,
+      items: [
+        {
+          kind: 'ban',
+          reason: restriction.reason,
+          started_at: start,
+          ends_at: start + 600,
+          automatic: restriction,
+        },
+      ],
+    },
+  });
   const restrictions = [
     {
-      kind: 'ban',
-      reason_code: 'charity_rpm',
-      reason: 'Account access restricted.',
-      started_at: start,
-      ends_at: start + 600,
+      ...restriction,
+      reason_code: 'charity_short_content',
+      reason: 'Untrusted fragment restriction.',
     },
   ];
   const fragment = Buffer.from(JSON.stringify(restrictions)).toString('base64url');
   const authenticated: string[] = [];
   page.on('request', (r) => {
-    if (/\/api\/(auth|session|me)/.test(new URL(r.url()).pathname)) authenticated.push(r.url());
+    const url = new URL(r.url());
+    if (/^\/api\/(auth(?:\/|$)|session$|me$)/.test(url.pathname)) {
+      authenticated.push(r.method() + ' ' + url.pathname + url.search);
+    }
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${USER_ORIGIN}/access-denied#restrictions=${fragment}`);
-  await expect(page.getByRole('heading', { name: 'Current automatic restrictions' })).toBeVisible();
   await expect(
-    page.getByText('Repeated charity requests exceeded the rate limit.', { exact: true }),
+    page.getByRole('heading', { name: 'Current access restriction reasons' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Community calls repeatedly exceeded the rate limit.', { exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(`${USER_ORIGIN}/access-denied`);
-  expect(authenticated).toEqual([]);
+  await expect(page.getByText('Untrusted fragment restriction.', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText('Community request content did not meet the minimum length.', { exact: true }),
+  ).toHaveCount(0);
+  expect(authenticated).toEqual(['GET /api/auth/access-denied-reasons']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   guard.assertNone();
 });
