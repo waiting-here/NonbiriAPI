@@ -268,7 +268,8 @@
       "TestV1AndV2ReplayRecoveryUsesBoundVersion",
       "TestInvalidProtocolVectors",
       "TestFinishNeedsQuotaAndRejectsPostTerminalInput",
-      "TestPayloadAndEventCountBounds"
+      "TestPayloadAndEventCountBounds",
+      "TestV3GoldenVectors"
     ]
   },
   {
@@ -331,6 +332,52 @@
     "tests": [
       "TestRunCreatesClosedCredentialFreeTemplate",
       "TestRunRejectsExistingTargetWithoutOverwrite"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/lifecycle",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestLegalHoldNumberedScaleUsesCreatedIndex"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/donation",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestSourcePagesUseCompleteIndexedCollectionsAtScale"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/linklink",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestLeaderboardHundredThousandSummariesUseWindowIndex"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/adminusers",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestAdminNumberedPagesFullCollectionsAndNestedScale"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/reports",
+    "reason": "Serial collection-size, pagination and query-index checks without competing operations; full ordinary scale coverage retained.",
+    "tests": [
+      "TestReportNumberedCasesScaleUsesOrderedIndex"
+    ]
+  },
+  {
+    "package": "github.com/waiting-here/NonbiriAPI/internal/game/linklink",
+    "reason": "Deterministic generation, geometry and failure bounds over isolated state; ordinary algorithm coverage retained.",
+    "tests": [
+      "TestConstructiveGenerationThousandSeedsPerSpec",
+      "TestGenerationGeometryMatchesLiveSearchOnArbitraryMasks",
+      "TestGenerationNearestPairFallbackVerifiesProgress",
+      "TestGenerationQualityRejectsRowAndColumnPairing",
+      "TestGenerationRandomFailuresAndBoundedDegenerateSources"
     ]
   }
 ]
