@@ -17,6 +17,13 @@ import (
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	if r.URL != nil && r.URL.EscapedPath() == r.URL.Path {
+		route := matchAutomationRoute(r.URL.Path)
+		if route.personal || len(route.methods) > 0 && route.kind != "failure_policy" && route.kind != "charity_write" && (route.kind != "donations" || r.Method != http.MethodPost) {
+			s.serveAutomation(w, r, route)
+			return
+		}
+	}
 	if r.URL == nil || r.URL.EscapedPath() != r.URL.Path || (r.URL.Path != DonationsPath && r.URL.Path != BindingsPath && r.URL.Path != FailurePolicyPath) {
 		httperr.WriteError(w, httperr.New(httperr.CodeNotFound, "not found"))
 		return
@@ -52,6 +59,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
+	s.track(identity.UserID, cancel)
 	// Bound body reads as well as business work on real HTTP connections.
 	controller := http.NewResponseController(w)
 	_ = controller.SetReadDeadline(time.Now().Add(timeout))

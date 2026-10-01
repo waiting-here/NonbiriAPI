@@ -1,6 +1,7 @@
 package resourcebridge
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -15,6 +16,38 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+// MatchEndpointSecret compares credential bodies only inside the trusted vault
+// boundary. The caller supplies a reference selected in its owner transaction.
+func (r *Runtime) MatchEndpointSecret(ctx context.Context, tx *sql.Tx, refID int64, candidate []byte) (bool, error) {
+	if err := r.begin(); err != nil {
+		return false, err
+	}
+	defer r.end()
+	if ctx == nil || tx == nil || refID <= 0 || !validCredential(candidate) {
+		return false, ErrInvalidInput
+	}
+	var contextID []byte
+	var ciphertext string
+	if err := tx.QueryRowContext(ctx, `SELECT context_id,encrypted_secret FROM endpoint_key_secrets WHERE id=?`, refID).Scan(&contextID, &ciphertext); err != nil {
+		return false, ErrUnavailable
+	}
+	defer clear(contextID)
+	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
+	if err != nil {
+		return false, ErrUnavailable
+	}
+	plaintext, err := r.vault.OpenForGenerationTwoContext(ciphertext, credentialContext)
+	ciphertext = ""
+	if err != nil {
+		return false, ErrUnavailable
+	}
+	defer clear(plaintext)
+	if ctx.Err() != nil {
+		return false, ErrInterrupted
+	}
+	return bytes.Equal(plaintext, candidate), nil
+}
 
 const (
 	contextIDBytes  = 16
