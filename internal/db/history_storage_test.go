@@ -103,3 +103,22 @@ func TestScanWindowRetiresWithSourceAndCompletion(t *testing.T) {
 		}
 	}
 }
+
+func TestMinuteScanFactsRetireWithAccount(t *testing.T) {
+	database := openGenerationTwoConstraintFixture(t)
+	actor := hostileInsertUser(t, database, "minute-owner", 1, 0)
+	subject := hostileInsertUser(t, database, "minute-subject", 0, 0)
+	scan := hostileOID("scn_")
+	hostileMustExec(t, database, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at,kind) VALUES(?,?,1,'abcdefghijklmnop','{}','[]','running',0,100,'total','',0,0,1,0,0,86400,'users')`, scan, actor)
+	hostileMustExec(t, database, "INSERT INTO risk_scan_results(scan_id,row_no,user_id,published,result_json) VALUES(?,1,?,1,'{}')", scan, subject)
+	hostileMustExec(t, database, "INSERT INTO risk_scan_result_users VALUES(?,1,?)", scan, subject)
+	hostileMustExec(t, database, "DELETE FROM users WHERE id=?", subject)
+	var state, reason string
+	if err := database.QueryRow("SELECT state,reason FROM risk_client_scans WHERE id=?", scan).Scan(&state, &reason); err != nil || state != "failed" || reason != "source_changed" {
+		t.Fatal(state, reason, err)
+	}
+	var count int
+	if err := database.QueryRow("SELECT count(*) FROM risk_scan_results WHERE scan_id=?", scan).Scan(&count); err != nil || count != 0 {
+		t.Fatal(count, err)
+	}
+}

@@ -6849,6 +6849,18 @@ CREATE INDEX idx_request_sources_ip_time ON request_source_facts(effective_ip,oc
 DROP TRIGGER risk_scan_source_retired;
 DROP TRIGGER risk_scan_result_source_retired;
 DROP TRIGGER risk_scan_user_retired;
+CREATE TRIGGER risk_scan_user_retired BEFORE DELETE ON users
+BEGIN
+ UPDATE risk_client_scans SET changed=1,
+ state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
+ reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
+ checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.source_at','$.source_id')
+ WHERE kind='users' AND (id IN (SELECT scan_id FROM risk_scan_results WHERE user_id=OLD.id
+ UNION SELECT scan_id FROM risk_scan_result_users WHERE user_id=OLD.id)
+ OR json_extract(checkpoint_json,'$.pending_user')=OLD.id OR json_extract(checkpoint_json,'$.after_user')=OLD.id);
+ DELETE FROM risk_scan_results WHERE scan_id IN (SELECT id FROM risk_client_scans WHERE kind='users')
+ AND (user_id=OLD.id OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_users WHERE user_id=OLD.id));
+END;
 CREATE TABLE risk_scan_window_sources (
  scan_id TEXT NOT NULL REFERENCES risk_client_scans(id) ON DELETE CASCADE,
  request_log_id INTEGER NOT NULL REFERENCES request_source_facts(request_log_id) ON DELETE CASCADE,
@@ -6874,6 +6886,12 @@ BEGIN
  WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
  UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id
  UNION SELECT scan_id FROM risk_scan_window_sources WHERE request_log_id=OLD.request_log_id)
+ OR (kind IN ('client_hits','shared_ips','user_ips') AND (
+ json_extract(checkpoint_json,'$.pending_user')=(SELECT origin_user_id FROM request_logs WHERE id=OLD.request_log_id)
+ OR json_extract(checkpoint_json,'$.after_user')=(SELECT origin_user_id FROM request_logs WHERE id=OLD.request_log_id)
+ OR json_extract(checkpoint_json,'$.pending_discord')=(SELECT origin_discord_id FROM request_logs WHERE id=OLD.request_log_id)
+ OR json_extract(checkpoint_json,'$.after_discord')=(SELECT origin_discord_id FROM request_logs WHERE id=OLD.request_log_id)
+ OR json_extract(checkpoint_json,'$.source_id')=OLD.source_id))
  OR (OLD.effective_ip<>'' AND (json_extract(checkpoint_json,'$.pending_ip')=OLD.effective_ip OR json_extract(checkpoint_json,'$.after_ip')=OLD.effective_ip));
  DELETE FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
  OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id);
