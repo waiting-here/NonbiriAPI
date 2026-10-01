@@ -372,6 +372,12 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
         run: npx playwright test -c playwright.audit.config.ts
+      - name: Management browser integration
+        if: matrix.suite == 'integration'
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          CGO_ENABLED: "0"
+        run: npx playwright test -c playwright.management.config.ts
       - name: Fish game browser integration
         if: matrix.suite == 'integration'
         env:
