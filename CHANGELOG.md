@@ -27,6 +27,7 @@ Changes in development.
 
 ### Fixed
 
+- Lake Notes accepts held Space from the game background without scrolling, while menus and form controls keep their normal keyboard behavior.
 - My Donations accepts current review metadata and forced rejections when opening donated keys and donation details.
 
 - Anthropic-compatible and Gateway v3 tool flattening now support complete bounded history and streaming, and OpenAI nonstream chat accepts the one supported success/data wrapper while rejecting ambiguous/error forms.
