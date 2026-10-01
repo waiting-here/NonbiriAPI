@@ -414,7 +414,11 @@ func terminal(t *testing.T, q *sql.DB, id string, at int64, a Amounts, success b
 		if err := Settle(context.Background(), tx, id, at, a, success); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE dispatch_claims SET state='committed',secret_ref_id=NULL,donor_reward_actual_milli=0,donor_reward_state='zero',terminal_at=? WHERE id=?`, at, id)
+		disposition, origin := "neutral", "client_cancel"
+		if success {
+			disposition, origin = "success", "none"
+		}
+		_, err := tx.Exec(`UPDATE dispatch_claims SET state='committed',secret_ref_id=NULL,donor_reward_actual_milli=0,donor_reward_state='zero',terminal_at=?,streak_disposition=?,failure_origin=? WHERE id=?`, at, disposition, origin, id)
 		return err
 	})
 	if err != nil {

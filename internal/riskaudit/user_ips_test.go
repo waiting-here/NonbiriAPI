@@ -2,7 +2,10 @@ package riskaudit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -156,4 +159,56 @@ func TestUserIPsCandidateLimitReportsBoundaryAndDiscardsPartialGroup(t *testing.
 		t.Fatal(windows, err)
 	}
 	assertNoScanIdentityCheckpoint(t, f, scan.ID)
+}
+
+func TestUserIPScanHTTPCreateAndResults(t *testing.T) {
+	f := newAuditFixture(t)
+	actor := Actor{Admin: true, UserID: f.admin}
+	user := f.user(1)
+	for _, ip := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3"} {
+		f.source(user, "self", ip, "direct_peer", "Example/1", "model", "success", 0)
+	}
+	create := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		out := httptest.NewRecorder()
+		serveScans(f.repository, "scan_create_v2", actor, out, httptest.NewRequest("POST", "/admin/api/abuse-audit/scans", strings.NewReader(body)))
+		return out
+	}
+	for _, kind := range []string{"", "unknown"} {
+		out := create(fmt.Sprintf(`{"kind":%q,"request_token":"http_window_create_01","lookback_hours":24}`, kind))
+		if out.Code != 400 {
+			t.Fatalf("invalid kind %q: %d %s", kind, out.Code, out.Body.String())
+		}
+	}
+	body := `{"kind":"user_ips","request_token":"http_window_create_01","lookback_hours":24}`
+	out := create(body)
+	if out.Code != 202 {
+		t.Fatalf("create: %d %s", out.Code, out.Body.String())
+	}
+	var task struct {
+		ID   string `json:"id"`
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(out.Body.Bytes(), &task); err != nil || task.ID == "" || task.Kind != "user_ips" {
+		t.Fatalf("scan projection %+v: %v", task, err)
+	}
+	replay := create(body)
+	var again struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(replay.Body.Bytes(), &again); err != nil || replay.Code != 202 || again.ID != task.ID {
+		t.Fatalf("replay: %d %s", replay.Code, replay.Body.String())
+	}
+	finishAggregateScan(t, f.repository)
+	req := httptest.NewRequest("GET", "/admin/api/abuse-audit/scans/"+task.ID+"/results?page=1&page_size=20", nil)
+	req.SetPathValue("id", task.ID)
+	result := httptest.NewRecorder()
+	serveScans(f.repository, "scan_results_v2", actor, result, req)
+	var response struct {
+		TotalItems string    `json:"total_items"`
+		Items      []UserIPs `json:"items"`
+	}
+	if err := json.Unmarshal(result.Body.Bytes(), &response); err != nil || result.Code != 200 || response.TotalItems != "1" || len(response.Items) != 1 || response.Items[0].Peak != 3 {
+		t.Fatalf("HTTP results: %d %s, %v", result.Code, result.Body.String(), err)
+	}
 }

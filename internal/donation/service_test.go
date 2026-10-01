@@ -1026,7 +1026,7 @@ VALUES(?,?,?,?,0,0,0,'reserved',?)`, claimID, donationKeyID, one, one, expires);
 		t.Fatalf("Cleanup with reserved usage = %d, %v", cleaned, err)
 	}
 	if _, err := environment.store.DB().Exec(`UPDATE donation_usage_reservations
-SET state='released',finalized_at=? WHERE claim_id=?`, expires+1, claimID); err != nil {
+SET state='released',finalized_at=?,streak_disposition='neutral',failure_origin='client_cancel' WHERE claim_id=?`, expires+1, claimID); err != nil {
 		t.Fatal(err)
 	}
 	cleaned, err = environment.service.Cleanup(context.Background(), expires+terminalRetention, 10)
