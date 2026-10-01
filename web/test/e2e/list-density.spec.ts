@@ -1043,11 +1043,13 @@ for (const role of ['admin', 'steward'] as const)
       .locator('.ops-table tbody tr')
       .filter({ has: page.getByText(donation.description, { exact: true }) });
     await expect(reviewRow).toBeVisible();
-    await expect(reviewRow.locator('td').first()).toHaveText('9');
-    await expect(
-      reviewRow.locator('td').nth(1).getByText(donation.description, { exact: true }),
-    ).toBeVisible();
-    await expect(reviewRow.locator('td').nth(1)).toContainText('https://example.test/v1');
+    const descriptionCell = reviewRow.locator('td[data-label="Donation description"]');
+    const identifier = descriptionCell.locator('details');
+    await identifier.getByText('Item ID', { exact: true }).click();
+    await expect(identifier).toHaveAttribute('open', '');
+    await expect(identifier).toHaveText('Item ID9');
+    await expect(descriptionCell.getByText(donation.description, { exact: true })).toBeVisible();
+    await expect(descriptionCell).toContainText('https://example.test/v1');
     for (const width of [320, 390, 768, 959, 960, 961, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
       await fitsPage(page);

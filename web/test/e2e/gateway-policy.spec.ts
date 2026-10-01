@@ -190,7 +190,8 @@ for (const role of ['owner', 'admin', 'steward'] as const) {
             ? '/charity'
             : '/steward?tab=charity'),
     );
-    await expect(page.getByText('Gateway policy fixture', { exact: true })).toBeVisible();
+    const donationList = role === 'owner' ? page : page.locator('.ops-table tbody');
+    await expect(donationList.getByText('Gateway policy fixture', { exact: true })).toBeVisible();
     await page
       .getByRole('button', {
         name: role === 'owner' ? userEn.user.charity.ownerPages.keys : 'Review',
