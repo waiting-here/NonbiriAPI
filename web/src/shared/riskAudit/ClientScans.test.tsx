@@ -1,4 +1,5 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { ApiError } from '@shared/query/http';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { useLocation, useNavigate } from 'react-router';
 import { renderWithProviders } from '../../../test/unit/support';
@@ -106,21 +107,66 @@ it('retains committed results while stopping a provisional scan', async () => {
     station: 'admin',
     route: '/?audit_scan=' + scan.id,
   });
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], {
+      admin: { username: 'synthetic-operator' },
+    });
+  });
   expect(await screen.findByText(/provisional until the scan completes/)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Start new scan' })).toBeDisabled();
   await view.user.click(screen.getByRole('button', { name: 'Stop scan' }));
-  await waitFor(() => expect(api.cancelScan).toHaveBeenCalledWith(scan.id));
+  await waitFor(() =>
+    expect(api.cancelScan).toHaveBeenCalledWith(scan.id, expect.any(AbortSignal)),
+  );
+  expect(api.cancelScan.mock.calls[0][1].aborted).toBe(false);
   expect(screen.getByText('Result 1')).toBeVisible();
 });
 it('retries the same creation token after an uncertain failure', async () => {
   api.recentScans.mockResolvedValue([]);
-  api.createScan.mockRejectedValueOnce(new Error('Connection interrupted'));
+  api.createScan.mockRejectedValueOnce(new ApiError('network_error', 'Connection interrupted', 0));
   const view = await renderWithProviders(<View />, { station: 'admin' });
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], {
+      admin: { username: 'synthetic-operator' },
+    });
+  });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Start new scan' })).toBeEnabled());
   await view.user.click(screen.getByRole('button', { name: 'Start new scan' }));
-  await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
+  const retry = await screen.findByRole('button', { name: 'Retry' });
+  expect(screen.getByRole('button', { name: 'Start new scan' })).toBeDisabled();
+  await view.user.click(retry);
   await waitFor(() => expect(api.createScan).toHaveBeenCalledTimes(2));
   expect(api.createScan.mock.calls[0][0]).toEqual(api.createScan.mock.calls[1][0]);
   expect(await screen.findByText('Result 1')).toBeVisible();
   expect(screen.getByTestId('location')).toHaveTextContent('audit_scan=' + scan.id);
+});
+
+it('does not select a late scan response after the administrator session is lost', async () => {
+  api.recentScans.mockResolvedValue([]);
+  let complete!: (value: ClientScan) => void;
+  api.createScan.mockImplementationOnce(
+    () =>
+      new Promise<ClientScan>((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const view = await renderWithProviders(<View />, { station: 'admin' });
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], {
+      admin: { username: 'synthetic-operator' },
+    });
+  });
+  await view.user.click(await screen.findByRole('button', { name: 'Start new scan' }));
+  await waitFor(() => expect(api.createScan).toHaveBeenCalledTimes(1));
+  const signal = api.createScan.mock.calls[0][1] as AbortSignal;
+  await act(async () => {
+    view.queryClient.setQueryData(['admin', 'session'], null);
+  });
+  expect(signal.aborted).toBe(true);
+  await act(async () => {
+    complete(scan);
+  });
+  expect(screen.getByTestId('location')).not.toHaveTextContent('audit_scan');
+  expect(screen.queryByText('Result 1')).not.toBeInTheDocument();
+  expect(api.scanResults).not.toHaveBeenCalled();
 });

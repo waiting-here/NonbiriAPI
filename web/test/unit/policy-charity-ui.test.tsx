@@ -1253,6 +1253,7 @@ describe('experimental policy and charity controls', () => {
         route_strategy: 'ordered',
         silent_retry: false,
         flatten_tool_calls: true,
+        role_policy: { default_action: 'native', rules: {} },
         expected_revision: '1',
       }),
     );
@@ -1644,7 +1645,7 @@ describe('experimental policy and charity controls', () => {
       station: 'admin',
       role: 'admin',
     });
-    await screen.findByText('review expiry fixture');
+    await screen.findByRole('cell', { name: /^review expiry fixture/ });
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await rendered.user.type(screen.getByLabelText('Reason'), 'expiry validation');
@@ -1734,7 +1735,7 @@ describe('experimental policy and charity controls', () => {
       station: 'admin',
       role: 'admin',
     });
-    await screen.findByText('detail retry fixture');
+    await screen.findByRole('cell', { name: /^detail retry fixture/ });
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await waitFor(() => expect(detailReads).toBeGreaterThan(0));
     await rendered.user.click(screen.getByRole('button', { name: 'Retry' }));
@@ -2068,7 +2069,7 @@ describe('experimental policy and charity controls', () => {
         station,
         role,
       });
-      await screen.findByText('review fixture');
+      await screen.findByRole('cell', { name: /^review fixture/ });
       await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
       await screen.findByRole('heading', { name: /sk-a…tail.*upstream\.test\/v1/i });
       expect(screen.getByText(/Original key status: enabled/i)).toBeVisible();
