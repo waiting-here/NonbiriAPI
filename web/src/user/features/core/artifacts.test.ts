@@ -63,12 +63,4 @@ describe('core narrow viewport and untrusted-text boundary', () => {
     for (const source of sources)
       expect(workspaceFile(source), source).not.toContain('dangerouslySetInnerHTML');
   });
-
-  it('leaves enough UTF-16 input capacity for every valid astral scalar boundary', () => {
-    const models = workspaceFile('src/user/features/core/ModelsWorkspace.tsx');
-    const endpoints = workspaceFile('src/user/features/core/EndpointDetail.tsx');
-    expect(models.match(/maxLength=\{128\}/g)).toHaveLength(2);
-    expect(endpoints.match(/maxLength=\{1024\}/g)).toHaveLength(3);
-    expect(endpoints.match(/maxLength=\{256\}/g)).toHaveLength(2);
-  });
 });

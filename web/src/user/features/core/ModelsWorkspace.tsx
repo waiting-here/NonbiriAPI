@@ -1029,7 +1029,6 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
           disabled={
             !bindingsKnown ||
             operation.isPending ||
-            operationStatus === 'conflict' ||
             (!replayAttempt && draft.selections.length === 0)
           }
           onClick={() => void submit()}

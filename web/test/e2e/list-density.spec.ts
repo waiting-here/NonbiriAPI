@@ -661,7 +661,10 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
       }));
       model.binding_revision = '1';
       model.binding_count = String(savedBindings.length);
-      return route.fulfill({ json: { bindings: savedBindings, binding_revision: '1' } });
+      return route.fulfill({
+        status: 201,
+        json: { bindings: savedBindings, binding_revision: '1' },
+      });
     } else if (url.pathname.endsWith('/binding-candidates')) {
       const keyId = url.searchParams.get('key_id')!;
       const endpointId = String(Math.floor(Number(keyId) / 1000));
@@ -684,17 +687,22 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   await page.route(`${USER_ORIGIN}/api/endpoints**`, async (route) => {
     const url = new URL(route.request().url());
     const keyMatch = url.pathname.match(/^\/api\/endpoints\/(\d+)\/keys$/);
+    const query = url.searchParams.get('q')?.toLowerCase() ?? '';
     if (keyMatch)
       await route.fulfill({
         json: numberedFixturePage(
-          Array.from({ length: 61 }, (_, i) => endpointKey(keyMatch[1], i + 1)),
+          Array.from({ length: 61 }, (_, i) => endpointKey(keyMatch[1], i + 1)).filter((key) =>
+            `${key.note} ${key.display_head} ${key.display_tail}`.toLowerCase().includes(query),
+          ),
           url,
         ),
       });
     else if (url.pathname === '/api/endpoints')
       await route.fulfill({
         json: numberedFixturePage(
-          Array.from({ length: 61 }, (_, i) => endpoint(i + 1)),
+          Array.from({ length: 61 }, (_, i) => endpoint(i + 1)).filter((entry) =>
+            `${entry.note} ${entry.base_url}`.toLowerCase().includes(query),
+          ),
           url,
         ),
       });
@@ -723,7 +731,8 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
     await page.setViewportSize({ width, height: 1000 });
     await fitsPage(page);
   }
-  await level.getByRole('searchbox', { name: 'Filter this page' }).fill('Endpoint 50 —');
+  await level.getByRole('searchbox', { name: 'Find a service' }).fill('Endpoint 50 —');
+  await expect(level.locator('.core-choice')).toHaveCount(1);
   await level.getByRole('button', { name: /Endpoint 50 —/ }).click();
   await level.getByRole('button', { name: 'Next', exact: true }).click();
   await level.getByRole('button', { name: /^Key 61 / }).click();
@@ -733,10 +742,15 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   await automatic.getByRole('button', { name: 'Next', exact: true }).click();
   await automatic.getByRole('button', { name: /^model-61-/ }).click();
   await page.locator('.core-selector-path button').first().click();
+  await level.getByRole('searchbox', { name: 'Find a service' }).clear();
+  await expect(level.locator('.core-choice')).toHaveCount(50);
   await level.getByRole('button', { name: 'Next', exact: true }).click();
-  await level.getByRole('searchbox', { name: 'Filter this page' }).fill('Endpoint 61 —');
+  await expect(level.locator('.core-choice')).toHaveCount(11);
+  await level.getByRole('searchbox', { name: 'Find a service' }).fill('Endpoint 61 —');
+  await expect(level.locator('.core-choice')).toHaveCount(1);
   await level.getByRole('button', { name: /Endpoint 61 —/ }).click();
-  await level.getByRole('searchbox', { name: 'Filter this page' }).fill('Key 1');
+  await level.getByRole('searchbox', { name: 'Find a service key' }).fill('Key 1');
+  await expect(level.locator('.core-choice')).toHaveCount(11);
   await level.getByRole('button', { name: /^Key 1 head/ }).click();
   await automatic.getByRole('button', { name: /^model-2-/ }).click();
   await expect(page.locator('.core-selection-list > li')).toHaveCount(3);
