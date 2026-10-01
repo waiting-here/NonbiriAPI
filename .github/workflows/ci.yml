@@ -378,6 +378,12 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
           CGO_ENABLED: "0"
         run: npx playwright test -c playwright.fatfish.config.ts
+      - name: Lake notes browser integration
+        if: matrix.suite == 'integration'
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          CGO_ENABLED: "0"
+        run: npx playwright test -c playwright.lakenotes.config.ts
 
   web:
     name: Web checks

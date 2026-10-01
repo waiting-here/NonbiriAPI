@@ -15,6 +15,7 @@ import { ApiError } from '@shared/query/http';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
+import { useLakeAdminCopy } from '../features/lakenotes/copy';
 import { useAdminSession } from '../data';
 import '@shared/limitedactivities/limited.css';
 
@@ -192,6 +193,7 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
   );
 }
 export function LimitedActivitiesPage({ children }: { readonly children?: ReactNode }) {
+  const { t: lakeText } = useLakeAdminCopy();
   const t = useActivityText(),
     session = useAdminSession();
   const query = useQuery({
@@ -210,10 +212,29 @@ export function LimitedActivitiesPage({ children }: { readonly children?: ReactN
         )}
         icon="activities"
       />
-      {session.data?.admin ? <Card><h2>{t('饲养大肥鱼', 'Fat Fish')}</h2>
-        <p>{t('配置关卡草稿、不可变版本、试玩与正式期次。', 'Manage level drafts, immutable versions, playtests and formal periods.')}</p>
-        <Link className="btn btn-primary" to="/limited-activities/fat-fish">{t('打开关卡与期次编辑器', 'Open level and period editor')}</Link>
-      </Card> : null}
+      {session.data?.admin ? (
+        <Card>
+          <h2>{lakeText('title')}</h2>
+          <p>{lakeText('description')}</p>
+          <Link className="btn btn-primary" to="/limited-activities/lake-notes">
+            {lakeText('periods')}
+          </Link>
+        </Card>
+      ) : null}
+      {session.data?.admin ? (
+        <Card>
+          <h2>{t('饲养大肥鱼', 'Fat Fish')}</h2>
+          <p>
+            {t(
+              '配置关卡草稿、不可变版本、试玩与正式期次。',
+              'Manage level drafts, immutable versions, playtests and formal periods.',
+            )}
+          </p>
+          <Link className="btn btn-primary" to="/limited-activities/fat-fish">
+            {t('打开关卡与期次编辑器', 'Open level and period editor')}
+          </Link>
+        </Card>
+      ) : null}
       {session.isPending ? (
         <LoadingState />
       ) : session.error ? (

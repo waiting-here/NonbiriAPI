@@ -17,7 +17,9 @@ export const router = createBrowserRouter([
     children: [
       {
         path: pathFor('access-denied'),
-        loader: () => { throw new ApiError('forbidden', 'Access forbidden.', 403); },
+        loader: () => {
+          throw new ApiError('forbidden', 'Access forbidden.', 403);
+        },
       },
       {
         index: true,
@@ -77,11 +79,21 @@ export const router = createBrowserRouter([
       },
       {
         path: pathFor('picture-book'),
-        lazy: async () => ({ Component: (await import('./pages/PictureBookActivityPage')).PictureBookActivityPage }),
+        lazy: async () => ({
+          Component: (await import('./pages/PictureBookActivityPage')).PictureBookActivityPage,
+        }),
+      },
+      {
+        path: pathFor('lake-notes'),
+        lazy: async () => ({
+          Component: (await import('./activities/lake-notes/LakeNotesPage')).LakeNotesPage,
+        }),
       },
       {
         path: pathFor('fat-fish'),
-        lazy: async () => ({ Component: (await import('./features/fatfish/FatFishActivity')).FatFishActivityPage }),
+        lazy: async () => ({
+          Component: (await import('./features/fatfish/FatFishActivity')).FatFishActivityPage,
+        }),
       },
       {
         path: pathFor('caller-key'),

@@ -1,0 +1,60 @@
+.lake-period-form,
+.lake-period-form fieldset {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.lake-period-form fieldset {
+  padding: 0;
+  border: 0;
+}
+.lake-period-form label {
+  display: grid;
+  gap: 0.4rem;
+}
+.lake-period-form input,
+.lake-period-form select {
+  width: 100%;
+}
+.lake-period-form .lake-period-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.lake-period-check input {
+  width: auto;
+}
+.lake-period-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.lake-period-actions,
+.lake-period-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.lake-period-actions {
+  margin-block: 1rem;
+  justify-content: flex-start;
+}
+.lake-exchange-setting,
+.lake-period-list article {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.lake-period-list {
+  display: grid;
+  gap: 1rem;
+}
+@media (max-width: 650px) {
+  .lake-period-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
