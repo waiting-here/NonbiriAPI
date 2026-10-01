@@ -677,7 +677,7 @@
     {
       "cap": 1,
       "category": "state",
-      "description": "基础 Token 和电能费用乘以 5/2 后向上取整，再计算缓存、税费、折扣和下限；得赞最终乘以 2，金币和图像费用不变。",
+      "description": "基础 token 与电能消耗各乘 3，再应用缓存、加价、折扣和下限。技能获赞在全部加减赞结算后乘 2；金币、图像额度等费用不变。期间因 token 或电能超限触发过载，持续 2 轮。Flash 资源不足仍只跳过触发。",
       "expiry": "持续有效，直到再次释放加速猛蹬并在轮末关闭；过载不会关闭",
       "id": "B34:状态",
       "kind": "SPEED_MODE",
@@ -685,7 +685,7 @@
       "n": 2,
       "name": "倍速模式",
       "overwrite": "不叠加。不可净化或驱散，只能由加速猛蹬主动关闭",
-      "p": 5,
+      "p": 3,
       "q": 2,
       "target": "持有者释放的所有技能，包括蒸馏、额外技能及触发的 Flash 连答",
       "trigger": "加速猛蹬在轮末开启，下一轮起生效"
@@ -1229,7 +1229,7 @@
     "ENERGY_FLOOR": 1,
     "ENERGY_START": 1000,
     "FOLLOWUP_CAP": 3,
-    "INITIAL_GOLD": 500,
+    "INITIAL_GOLD": 600,
     "INSERT_CAP": 1,
     "MAX_ROUNDS": 75,
     "POINT_TICKET": 5000,
@@ -1258,7 +1258,7 @@
     },
     {
       "buffId": "B35:原",
-      "description": "每种成功施加到对手的负面效果额外获得 1 赞，并保留原有狂热施加；同一效果多层只算一次，全部抵抗不触发，追加狂热不递归。此赞不受技能加减赞和倍速影响。",
+      "description": "每次成功技能每向敌方实际施加一种 Buff，再为其施加 1 层【SOTA 狂热】。溢出也算施加；狂热自身不递归触发，购物、调试和自我施加不触发。新层数下轮生效。",
       "id": "HP02",
       "kind": "SOTA_ONLY",
       "meme": "分数还能再高一点，电表也一样。",
@@ -1267,12 +1267,12 @@
       "q": 0
     },
     {
-      "description": "每次成功普攻额外得 2 赞，包括触发的 Flash；蒸馏属于特殊技能，不触发。",
+      "description": "每成功释放一次普攻类技能，额外获得 1 赞；包含触发的 Flash 连答。蒸馏本身是特殊技能，不触发。此额外收益不参与加减赞 Buff，受倍速最终倍率影响。",
       "id": "HP03",
       "kind": "PRO_EXPERIENCE",
       "meme": "Pro 的体验，Flash 的手速。",
       "name": "Pro 级体验",
-      "p": 2,
+      "p": 1,
       "q": 0
     },
     {
@@ -1303,12 +1303,12 @@
       "q": 0
     },
     {
-      "description": "轮初严格落后时，原始基础得赞大于 0 的技能基础额外 +2 赞；平局和零基础得赞不触发。",
+      "description": "若轮初自身点赞严格少于对手，本轮所有原始基础获赞大于 0 的技能基础获赞 +1。零基础获赞不增加，同赞不触发。显示原值 + 加成，并作为基础值参与加减赞 Buff 与倍速结算；本轮赞数变化不重新判定。",
       "id": "HP07",
       "kind": "STUDENT_DISCOUNT",
       "meme": "认证一下学生身份，放开了薅羊毛吧！",
       "name": "学生特惠",
-      "p": 2,
+      "p": 1,
       "q": 0
     },
     {
@@ -1419,7 +1419,7 @@
   ],
   "rules": {
     "cacheWindow": "round",
-    "imageShortage": "shortage",
+    "imageShortage": "illegal",
     "strictSamples": true,
     "uniqueSamples": true
   },
@@ -3478,8 +3478,8 @@
       "copyable": true,
       "effects": {
         "I": {
-          "buffId": "B33:状态",
-          "kind": "SELF_OVERLOAD",
+          "buffId": "B29:通用",
+          "kind": "SELF_STUN",
           "likes": 12,
           "meme": "思考得很用力，暂时不想说话。",
           "n": 1,
@@ -3487,8 +3487,8 @@
           "q": 0
         },
         "II": {
-          "buffId": "B33:状态",
-          "kind": "SELF_OVERLOAD",
+          "buffId": "B29:通用",
+          "kind": "SELF_STUN",
           "likes": 20,
           "meme": "答案写完了，下一轮让我缓缓。",
           "n": 1,
@@ -3496,8 +3496,8 @@
           "q": 0
         },
         "base": {
-          "buffId": "B33:状态",
-          "kind": "SELF_OVERLOAD",
+          "buffId": "B29:通用",
+          "kind": "SELF_STUN",
           "likes": 24,
           "meme": "正在思考……这次是真的在思考。",
           "n": 1,
@@ -3513,7 +3513,7 @@
       "maxUses": null,
       "meme": "正在思考……这次是真的在思考。",
       "name": "雷霆大思考",
-      "note": "三档均使自己从下一轮起过载 1 轮，倍速模式下为 2 轮；原版 24 赞、高阶 20 赞、低阶 12 赞。",
+      "note": "自施眩晕下轮生效，可购买净化解除；原版 24 赞、高阶 20 赞、低阶 12 赞。",
       "owner": "DeepSeek",
       "payment": "api",
       "resourceCosts": {},

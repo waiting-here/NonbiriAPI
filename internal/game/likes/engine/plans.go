@@ -115,6 +115,9 @@ func (e *Engine) quote(prepared *State, seat int, plan Plan) (PlanPreview, error
 		valid := clone(s)
 		valid.Players[seat].Used = clone(allowance.Used)
 		valid.Players[seat].Resources = clone(allowance.Resources)
+		if e.currentBalance() {
+			valid.Players[seat].Resources = clone(s.Players[seat].Resources)
+		}
 		valid.Players[seat].Gold = allowance.Gold
 		effect, _ := e.effect(&valid, choice.SkillID, seat)
 		if !validTargets(prepared, seat, effect, choice) {
@@ -129,6 +132,9 @@ func (e *Engine) quote(prepared *State, seat int, plan Plan) (PlanPreview, error
 		allowance.Gold -= v.Gold
 		allowance.Used[choice.SkillID]++
 		for key, n := range e.skills[choice.SkillID].ResourceCosts {
+			if e.currentBalance() && key == "R_IMAGE" {
+				continue
+			}
 			allowance.Resources[key] -= n
 			if allowance.Resources[key] < 0 {
 				return result, ErrPlan
@@ -144,9 +150,9 @@ func (e *Engine) quote(prepared *State, seat int, plan Plan) (PlanPreview, error
 		if stopped {
 			continue
 		}
-		if slices.Contains(v.Shortages, "token") {
+		if failedPayment(v) {
 			stopped = true
-			result.Shortages = append(result.Shortages, "token")
+			result.Shortages = append(result.Shortages, v.Shortages...)
 			continue
 		}
 		e.pay(&s, seat, a)
@@ -156,7 +162,7 @@ func (e *Engine) quote(prepared *State, seat int, plan Plan) (PlanPreview, error
 	scores := clone(*prepared)
 	removed := map[string]bool{}
 	for _, a := range result.Actions {
-		if !a.Cancelled && !slices.Contains(a.Preview.Shortages, "token") && effectMode(a.Preview.Effect, a.Choice) == "self" {
+		if !a.Cancelled && !failedPayment(a.Preview) && effectMode(a.Preview.Effect, a.Choice) == "self" {
 			for _, key := range a.Choice.Targets {
 				removed[key] = true
 			}
@@ -171,7 +177,7 @@ func (e *Engine) quote(prepared *State, seat int, plan Plan) (PlanPreview, error
 		v.BaseLikeBonus = bonus
 		v.BaseLikes, v.IntrinsicLikes = basis.Intrinsic+v.ConditionalLikes, basis.Intrinsic
 		v.Likes = e.score(&scores, seat, e.skills[a.Choice.SkillID], v.Effect, v.TemplateID, v.ConditionalLikes, false, 0, character).Final
-		if !a.Cancelled && !slices.Contains(v.Shortages, "token") {
+		if !a.Cancelled && !failedPayment(*v) {
 			consumeDecay(&scores.Players[seat], a.Choice.SkillID, v.TemplateID, v.Effect)
 			consumeDegradation(&scores, seat)
 		}

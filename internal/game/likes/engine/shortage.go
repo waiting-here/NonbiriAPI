@@ -1,5 +1,7 @@
 package engine
 
+import "slices"
+
 // Shortage describes the resources at the failed payment, before later effects
 // or replenishment. It adds presentation facts without changing payment rules.
 type Shortage struct {
@@ -46,6 +48,20 @@ func (e *Engine) tokenShortage(p Player, a Action) Shortage {
 		if p.Sub < min(due, p.Burst) {
 			add("sub", max(0, due-p.API), p.Sub)
 		}
+	}
+	return result
+}
+
+func (e *Engine) paymentShortage(p Player, a Action) Shortage {
+	result := e.tokenShortage(p, a)
+	if !failedPayment(a.Preview) {
+		return result
+	}
+	if !slices.Contains(a.Preview.Shortages, "token") {
+		result = Shortage{Payment: "image", Resources: []ResourceShortage{}}
+	}
+	if slices.Contains(a.Preview.Shortages, "image") {
+		result.Resources = append(result.Resources, ResourceShortage{"R_IMAGE", a.Preview.ResourceCosts["R_IMAGE"], p.Resources["R_IMAGE"]})
 	}
 	return result
 }

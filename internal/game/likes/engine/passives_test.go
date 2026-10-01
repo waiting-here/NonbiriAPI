@@ -180,6 +180,13 @@ func TestLayerResistanceBoundariesAndSOTASuccessChain(t *testing.T) {
 			if layers["BASE_SUPPRESS"] != test.success || layers["SOTA_FANATICISM"] != test.sota {
 				t.Fatal(layers)
 			}
+			wantLikes := int64(0)
+			if test.success > 0 {
+				wantLikes = 1
+			}
+			if next.Players[0].Likes != wantLikes {
+				t.Fatal("layer count or derived resistance changed harness gain", next.Players[0].Likes)
+			}
 			if !hasStatus(next.Players[0], "BASE_SUPPRESS") {
 				t.Fatal("own side effect was resisted")
 			}
@@ -255,6 +262,13 @@ func TestOverflowStillAttemptsAndRefreshesOnlyOnSuccess(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+		wantLikes := int64(0)
+		if success {
+			wantLikes = 1
+		}
+		if next.Players[0].Likes != wantLikes {
+			t.Fatal("cap overflow changed harness gain", next.Players[0].Likes)
 		}
 		want := 2
 		if success {

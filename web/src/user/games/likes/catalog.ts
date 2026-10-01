@@ -118,6 +118,7 @@ export interface Parameter {
   note: string;
 }
 export interface ModeCatalog {
+  designVersion: string;
   contentHash: string;
   mode: 'quick' | 'standard';
   name: string;
@@ -255,12 +256,12 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     'config',
   ]);
   safeInteger(outer.rules_version, 1, 1, 'rules');
-  enumValue(outer.design_version, ['0.17.0', '0.18.0', '0.18.1'], 'design');
+  enumValue(outer.design_version, ['0.17.0', '0.18.0', '0.18.1', '0.19.0'], 'design');
   const schema = safeInteger(outer.schema_version, 15, 16, 'schema');
   if (
     schema === 15
       ? outer.design_version !== '0.17.0'
-      : !['0.18.0', '0.18.1'].includes(outer.design_version as string)
+      : !['0.18.0', '0.18.1', '0.19.0'].includes(outer.design_version as string)
   )
     invalidResponse('catalog identity');
   const r = exactRecord(outer.config, [
@@ -287,7 +288,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     'imageShortage',
   ]);
   enumValue(rules.cacheWindow, ['round'], 'cache window');
-  enumValue(rules.imageShortage, ['illegal'], 'image shortage');
+  enumValue(rules.imageShortage, ['illegal', 'shortage'], 'image shortage');
   if (
     !booleanValue(rules.uniqueSamples, 'samples') ||
     !booleanValue(rules.strictSamples, 'samples')
@@ -329,7 +330,8 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
     !parameters.MAX_ROUNDS ||
     !parameters.TARGET_LIKES ||
     !parameters.ENERGY_CAP ||
-    parameters.TURN_SECONDS !== (outer.design_version === '0.18.1' ? 30 : 20) ||
+    parameters.TURN_SECONDS !==
+      (['0.18.1', '0.19.0'].includes(outer.design_version as string) ? 30 : 20) ||
     parameters.PREP_MAX !== 2 ||
     parameters.INSERT_CAP !== 1
   )
@@ -498,6 +500,7 @@ function modeCatalog(value: unknown, mode: 'quick' | 'standard'): ModeCatalog {
   )
     invalidResponse('catalog completeness');
   return {
+    designVersion: outer.design_version as string,
     contentHash: hashValue(outer.content_hash),
     mode,
     name: label(r.name),
@@ -519,7 +522,7 @@ export function likesCatalog(value: unknown): LikesCatalog {
     ['compatible_modes'],
   );
   safeInteger(r.rules_version, 1, 1, 'catalog rules');
-  enumValue(r.design_version, ['0.17.0', '0.18.0', '0.18.1'], 'catalog design');
+  enumValue(r.design_version, ['0.17.0', '0.18.0', '0.18.1', '0.19.0'], 'catalog design');
   safeInteger(r.schema_version, 15, 16, 'catalog schema');
   const modes = exactRecord(r.modes, ['quick', 'standard']);
   return {

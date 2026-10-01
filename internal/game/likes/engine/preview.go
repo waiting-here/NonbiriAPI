@@ -107,7 +107,11 @@ func (e *Engine) usage(s *State, seat int, choice Choice, derived bool) Preview 
 	for key, n := range sk.ResourceCosts {
 		if n > 0 {
 			if p.Resources[key] < n {
-				v.Errors = append(v.Errors, "resource:"+key)
+				if e.currentBalance() && key == "R_IMAGE" {
+					v.Shortages = append(v.Shortages, "image")
+				} else {
+					v.Errors = append(v.Errors, "resource:"+key)
+				}
 			}
 			if banned {
 				v.Errors = append(v.Errors, "subscription-banned")
@@ -131,8 +135,8 @@ func (e *Engine) usage(s *State, seat int, choice Choice, derived bool) Preview 
 	}
 	baseToken, baseEnergy := token, energy
 	if speed := e.speed(s, seat); speed != nil {
-		token *= speed.P
-		energy *= speed.P
+		token = e.speedCost(token, speed)
+		energy = e.speedCost(energy, speed)
 	}
 	for _, st := range p.Effects {
 		if st.Kind == "CACHE" && e.buffs[st.BuffID].CacheScope == e.cacheScope(s, seat, choice.SkillID) {

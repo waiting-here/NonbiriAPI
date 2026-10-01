@@ -48,7 +48,7 @@ func TestOverloadQuoteIncludesCancelledExtraAndPostShoppingCharge(t *testing.T) 
 	p := plan("PUB01")
 	p.Purchases = []Purchase{{Item: "charge"}}
 	next, _, err = e.Resolve(s, [2]Plan{p, plan("")}, nil)
-	if err != nil || next.Result != nil || hasStatus(next.Players[0], "OVERLOAD") || next.Energy != 109 || next.Players[0].Gold != 100 {
+	if err != nil || next.Result != nil || hasStatus(next.Players[0], "OVERLOAD") || next.Energy != 109 || next.Players[0].Gold != 80 {
 		t.Fatalf("charge not included before quotation: %v", err)
 	}
 }

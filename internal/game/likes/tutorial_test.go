@@ -46,9 +46,9 @@ func TestTutorialCompletesWithVictory(t *testing.T) {
 	playerSkills := []string{"GPT01", "GPT41", "GPT01", "GPT41", "GPT61", "PUB42", "GPT44", "GPT01", "GPT01", "GPT01"}
 	botSkills := []string{"CLA22", "PUB21", "CLA61", "CLA01", "CLA22", "CLA01", "PUB21", "CLA01", "CLA01", "CLA22"}
 	scores := [][2]int64{{4, 5}, {8, 13}, {12, 27}, {16, 31}, {34, 37}, {42, 41}, {42, 48}, {50, 52}, {58, 56}, {66, 61}}
-	energy := []int64{178, 151, 86, 271, 194, 154, 142, 112, 82, 30}
+	energy := []int64{178, 151, 86, 271, 194, 154, 142, 117, 92, 45}
 	api := []int64{300, 160, 160, 20, 20, 20, 20, 20, 20, 20}
-	gold := []int64{120, 120, 100, 80, 80, 60, 60, 60, 60, 60}
+	gold := []int64{100, 100, 80, 60, 60, 40, 40, 40, 40, 40}
 	start := []engine.Event{}
 	for i := range playerSkills {
 		before, err := e.Project(s, 0, false, nil)

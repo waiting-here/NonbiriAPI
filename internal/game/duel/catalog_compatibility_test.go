@@ -157,3 +157,51 @@ func TestPreviousLikesCatalogKeepsStoredDeadlineAndTwentySecondRounds(t *testing
 		t.Fatal("previous catalog's next round changed timing", next)
 	}
 }
+
+func TestPriorBalanceCatalogRecoversWithoutChangingGoldOrDeadline(t *testing.T) {
+	current, err := likes.NewRules()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, err := catalog.PublicPriorBalance("quick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior, err := current.ResolveCatalog("quick", previous.ContentHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newFixture(t, "likes", prior)
+	active := f.matched()
+	if active.Deadline == nil || *active.Deadline != 130 {
+		t.Fatal("prior balance initial timing", active.Deadline)
+	}
+	f.s.Close()
+	f.rules, f.options.Rules = current, current
+	f.s, err = duel.New(f.options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.s.ValidatePersistedState(f.ctx); err != nil {
+		t.Fatal("saved prior balance rejected", err)
+	}
+	restored := f.read(0).Current
+	if restored == nil || restored.ContentHash != previous.ContentHash || *restored.Deadline != 130 {
+		t.Fatal("saved identity changed", restored)
+	}
+	var view struct{ Players [2]struct{ Gold int64 } }
+	if json.Unmarshal(restored.View, &view) != nil || view.Players[0].Gold != 120 || view.Players[1].Gold != 120 {
+		t.Fatal("old gold reinterpreted", view)
+	}
+	f.action(0, *restored, basicPlan)
+	f.action(1, *restored, basicPlan)
+	settled := f.read(0).Current
+	if settled == nil || settled.Phase != "settlement" {
+		t.Fatal("saved rules did not settle")
+	}
+	f.clock.Store(*settled.Deadline)
+	next := f.read(0).Current
+	if next == nil || next.Round != 2 || *next.Deadline != f.clock.Load()+30 {
+		t.Fatal("prior balance next round", next)
+	}
+}

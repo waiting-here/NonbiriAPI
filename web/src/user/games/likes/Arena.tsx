@@ -472,13 +472,15 @@ export function Arena({
                   <p className="likes-step-fact" key={event.id}>
                     {event.kind === 'shop' && typeof event.data.item === 'string'
                       ? shopName(event.data.item, t)
-                      : event.kind === 'cleanse'
-                        ? t('净化完成', 'Cleansing applied')
-                        : event.kind === 'resource-gain'
-                          ? t('资源补充', 'Resources replenished')
-                          : event.kind === 'usage-reset'
-                            ? t('订阅额度恢复', 'Subscription replenished')
-                            : stageName(event.stage, t)}
+                      : event.kind === 'harness-like'
+                        ? t('Harness 额外得赞 +1', 'Harness bonus like +1')
+                        : event.kind === 'cleanse'
+                          ? t('净化完成', 'Cleansing applied')
+                          : event.kind === 'resource-gain'
+                            ? t('资源补充', 'Resources replenished')
+                            : event.kind === 'usage-reset'
+                              ? t('订阅额度恢复', 'Subscription replenished')
+                              : stageName(event.stage, t)}
                   </p>
                 ))}
               <ResourcePanel

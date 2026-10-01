@@ -9,7 +9,7 @@ import (
 func TestCustomPresetsExportAndTransactionalDeletion(t *testing.T) {
 	f := newFixture(t, "likes")
 	for _, user := range f.users {
-		if _, err := f.db.Exec(`INSERT INTO game_likes_loadouts(user_id,slot,revision,mode,loadout_json,updated_at) VALUES(?,1,1,'quick',?,100)`, user, string(f.loadouts[0])); err != nil {
+		if _, err := f.db.Exec(`INSERT INTO game_likes_loadouts(user_id,slot,revision,mode,loadout_json,updated_at,name) VALUES(?,1,1,'quick',?,100,'Private fish')`, user, string(f.loadouts[0])); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -23,7 +23,7 @@ func TestCustomPresetsExportAndTransactionalDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := exported.(duel.Export).Loadouts
-	if len(items) != 1 || items[0].Slot != 1 || items[0].Revision != "1" || string(items[0].Loadout) != string(f.loadouts[0]) {
+	if len(items) != 1 || items[0].Slot != 1 || items[0].Name != "Private fish" || items[0].Revision != "1" || string(items[0].Loadout) != string(f.loadouts[0]) {
 		_ = tx.Rollback()
 		t.Fatal(items)
 	}
