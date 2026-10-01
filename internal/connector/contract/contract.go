@@ -108,6 +108,8 @@ type Usage struct {
 // generated safe category; it must never contain an upstream body, URL,
 // request value, credential, or raw transport error.
 type AttemptResult struct {
+	StreakDisposition          StreakDisposition
+	FailureOrigin              FailureOrigin
 	GatewayUserAttributionSent *bool
 	Success                    bool
 	Committed                  bool

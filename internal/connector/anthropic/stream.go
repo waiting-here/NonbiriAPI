@@ -132,7 +132,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
 		if nextErr != nil || !ok {
 			if ctx.Err() != nil {
-				result := canceledFailure()
+				result := connectorcontract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed
 				result.ClientStatus = committedStatus(committed)
 				result.Usage = usageState.final()
@@ -141,7 +141,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			if terminalSeen && (nextErr == nil || errors.Is(nextErr, io.EOF)) {
 				return a.finalizeStream(writer, controller, response.StatusCode, committed, wireGuard, messageID, publicModel, started, stopReason, usageState.final())
 			}
-			return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream ended before completion")
+			return connectorcontract.ReadFailed(a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream ended before completion"), nextErr, ctx)
 		}
 		if len(event.Data) == 0 || len(event.Data) > a.maxSSEEventBytes {
 			return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream event exceeded protocol bounds")
@@ -493,7 +493,7 @@ func (a *Adapter) finalizeStream(writer http.ResponseWriter, controller *http.Re
 		if errors.Is(writeErr, errCallerStreamLimit) {
 			return a.streamProtocolFailure(writer, controller, committed, finalUsage, "caller stream exceeded its limit")
 		}
-		return sinkFailure(committed, finalUsage)
+		return connectorcontract.ConfirmedSuccess(sinkFailure(committed, finalUsage), upstreamStatus)
 	}
 	if finalUsage.Present {
 		visible, ok := visibleUsage(finalUsage)
@@ -510,7 +510,7 @@ func (a *Adapter) finalizeStream(writer http.ResponseWriter, controller *http.Re
 				if errors.Is(writeErr, errCallerStreamLimit) {
 					return a.streamProtocolFailure(writer, controller, committed, finalUsage, "caller stream exceeded its limit")
 				}
-				return sinkFailure(committed, finalUsage)
+				return connectorcontract.ConfirmedSuccess(sinkFailure(committed, finalUsage), upstreamStatus)
 			}
 		} else {
 			finalUsage = connectorcontract.Usage{}
@@ -526,7 +526,7 @@ func (a *Adapter) finalizeStream(writer http.ResponseWriter, controller *http.Re
 		if errors.Is(writeErr, errCallerStreamLimit) {
 			return a.streamProtocolFailure(writer, controller, committed, finalUsage, "caller stream exceeded its limit")
 		}
-		return sinkFailure(committed, finalUsage)
+		return connectorcontract.ConfirmedSuccess(sinkFailure(committed, finalUsage), upstreamStatus)
 	}
 	return connectorcontract.AttemptResult{Success: true, Committed: committed, Failure: connectorcontract.FailureNone, UpstreamStatus: upstreamStatus, ClientStatus: http.StatusOK, Usage: finalUsage}
 }
@@ -545,7 +545,7 @@ func marshalStreamFrame(envelope streamEnvelope) ([]byte, error) {
 }
 
 func (a *Adapter) streamReportedFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage connectorcontract.Usage, wireGuard, semanticGuard *sensitiveGuard, detail upstreamerror.Detail) connectorcontract.AttemptResult {
-	result := upstreamFailure("upstream stream reported an error", http.StatusOK)
+	result := connectorcontract.UpstreamFailed(upstreamFailure("upstream stream reported an error", http.StatusOK), connectorcontract.OriginUpstreamResponse)
 	result.Usage, result.ErrorDetail = usage, detail
 	if !committed {
 		return result
@@ -561,7 +561,7 @@ func (a *Adapter) streamReportedFailure(writer http.ResponseWriter, controller *
 		frame = httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
 	}
 	if _, err := a.writeStreamErrorFrame(writer, controller, frame); err != nil {
-		return sinkFailure(true, usage)
+		return connectorcontract.UpstreamFailed(sinkFailure(true, usage), connectorcontract.OriginUpstreamResponse)
 	}
 	result.Committed, result.ClientStatus = true, http.StatusOK
 	return result
@@ -576,9 +576,9 @@ func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *
 	frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
 	_, err := a.writeStreamErrorFrame(writer, controller, frame)
 	if err != nil {
-		return sinkFailure(true, usage)
+		return connectorcontract.UpstreamFailed(sinkFailure(true, usage), connectorcontract.OriginUpstreamProtocol)
 	}
-	return connectorcontract.AttemptResult{Committed: true, Failure: connectorcontract.FailureUpstream, Diagnostic: diagnostic, UpstreamStatus: http.StatusOK, ClientStatus: http.StatusOK, Usage: usage}
+	return connectorcontract.AttemptResult{StreakDisposition: connectorcontract.StreakUpstreamFailure, FailureOrigin: connectorcontract.OriginUpstreamProtocol, Committed: true, Failure: connectorcontract.FailureUpstream, Diagnostic: diagnostic, UpstreamStatus: http.StatusOK, ClientStatus: http.StatusOK, Usage: usage}
 }
 
 func (a *Adapter) writeStreamFrame(writer http.ResponseWriter, controller *http.ResponseController, frame []byte) (bool, error) {

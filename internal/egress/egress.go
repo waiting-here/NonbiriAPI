@@ -605,7 +605,8 @@ func (p *EgressPolicy) originsReady() bool {
 }
 
 func (p *EgressPolicy) dialContext(scheme, expectedHost, expectedPort string) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, network, address string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (conn net.Conn, resultErr error) {
+		defer func() { resultErr = executionFailure(FailurePlatform, resultErr) }()
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, errors.New("invalid outbound dial address")
@@ -622,14 +623,14 @@ func (p *EgressPolicy) dialContext(scheme, expectedHost, expectedPort string) fu
 			addresses, err = p.resolver.LookupNetIP(ctx, "ip", expectedHost)
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					return nil, ctxErr
+					return nil, networkFailure(ctxErr)
 				}
-				return nil, newBoundedError("resolve outbound hostname", err)
+				return nil, networkFailure(newBoundedError("resolve outbound hostname", err))
 			}
 		}
 		addresses = normalizeAddresses(addresses)
 		if len(addresses) == 0 {
-			return nil, errors.New("outbound hostname resolved to no addresses")
+			return nil, networkFailure(errors.New("outbound hostname resolved to no addresses"))
 		}
 
 		originAllowed := false
@@ -677,14 +678,14 @@ func (p *EgressPolicy) dialContext(scheme, expectedHost, expectedPort string) fu
 				return conn, nil
 			}
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return nil, ctxErr
+				return nil, networkFailure(ctxErr)
 			}
 			lastErr = dialErr
 		}
 		if !attempted {
 			return nil, errors.New("outbound hostname has no address for the requested network")
 		}
-		return nil, newBoundedError("dial outbound hostname", lastErr)
+		return nil, networkFailure(newBoundedError("dial outbound hostname", lastErr))
 	}
 }
 

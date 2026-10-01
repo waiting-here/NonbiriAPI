@@ -85,8 +85,8 @@ type AnthropicDriver interface {
 	Attempt(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult
 }
 
-// AnthropicPolicyDriver is deliberately optional and policy-blind: store and
-// flatten strategies are OpenAI-only, so the adapter ignores both fields.
+// AnthropicPolicyDriver supplies the opt-in flattening projection. Store
+// policy remains specific to the OpenAI wire protocol.
 type AnthropicPolicyDriver interface {
 	AttemptWithPolicy(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) connectorcontract.AttemptResult
 }
@@ -417,10 +417,14 @@ func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) co
 		}
 		return result
 	}
-	// Store/flatten are OpenAI-only. Do not pass an enabled bit to an
-	// Anthropic driver (including an optional policy-aware implementation),
-	// and reject before taking the short-lived credential.
-	if input.Policy.ForceStoreFalse || input.Policy.FlattenToolCalls {
+	// Store policy is specific to OpenAI; flattening requires the policy seam.
+	if input.Policy.FlattenToolCalls {
+		if _, ok := c.driver.(AnthropicPolicyDriver); !ok {
+			input.Credential.Clear()
+			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy incompatible"}
+		}
+	}
+	if input.Policy.ForceStoreFalse {
 		input.Credential.Clear()
 		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy incompatible"}
 	}

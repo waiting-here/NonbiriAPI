@@ -3,6 +3,7 @@ package claim
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -102,8 +103,11 @@ func TestMismatchPersistsAcrossRetriesAndBillsActualBucketsOnce(t *testing.T) {
 		replayed, err := f.service.CompleteAttempt(ctx, handle, AttemptOutcome{
 			Kind: ResultSynthetic, UpstreamStatus: 502, Usage: connectorcontract.Usage{},
 		})
-		if err != nil || replayed.Usage != attempt.Usage {
+		if !errors.Is(err, ErrConflict) {
 			t.Fatalf("idempotent attempt %d = %+v, %v; original %+v", seq, replayed, err, attempt)
+		}
+		if same, err := f.service.CompleteAttempt(ctx, handle, outcome); err != nil || same.Usage != attempt.Usage {
+			t.Fatalf("same replay: %+v %v", same, err)
 		}
 		return attempt
 	}

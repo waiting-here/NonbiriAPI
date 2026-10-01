@@ -34,7 +34,11 @@ func TestFailureFoldUsesLatestThresholdWithoutNewGeneration(t *testing.T) {
 			wantCount++
 		}
 		sequence := int64(i + 1)
-		if _, err := tx.Exec(`INSERT INTO donation_usage_reservations(claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,price_actual_milli,reward_actual_milli,calls_reserved,calls_actual,tokens_reserved,tokens_actual,protocol_success,usage_unknown,state,created_at,finalized_at) VALUES(?,?,?,?,0,0,0,0,0,0,0,?,0,'committed',?,?)`, mustOpaqueID(t, "clm_"), e.donationKey, db.EncodeU128(generation), u128Blob(t, sequence), success, charityTestNow, charityTestNow+sequence); err != nil {
+		disposition, origin := "upstream_failure", "upstream_protocol"
+		if c.success {
+			disposition, origin = "success", "none"
+		}
+		if _, err := tx.Exec(`INSERT INTO donation_usage_reservations(claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,price_actual_milli,reward_actual_milli,calls_reserved,calls_actual,tokens_reserved,tokens_actual,protocol_success,usage_unknown,state,created_at,finalized_at,streak_disposition,failure_origin) VALUES(?,?,?,?,0,0,0,0,0,0,0,?,0,'committed',?,?,?,?)`, mustOpaqueID(t, "clm_"), e.donationKey, db.EncodeU128(generation), u128Blob(t, sequence), success, charityTestNow, charityTestNow+sequence, disposition, origin); err != nil {
 			t.Fatal(err)
 		}
 		if err := foldStreak(context.Background(), tx, e.donationKey, generation, charityTestNow+sequence); err != nil {

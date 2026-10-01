@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -47,6 +48,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 }
 
 func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, target contract.Target, credential *contract.ShortLivedSecret, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, attribution string, policy contract.AttemptPolicy) (result contract.AttemptResult) {
+	defer func() { result = contract.NormalizeOutcome(result) }()
 	result = contract.AttemptResult{Failure: contract.FailureInternal, Diagnostic: "gateway attempt unavailable"}
 	defer credential.Clear()
 	sent := false
@@ -86,7 +88,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	}
 	client, err := a.backend.Open(target.BaseURL())
 	if err != nil {
-		return upstreamFailure("upstream endpoint was refused", 0)
+		return contract.NormalizeOutcome(contract.AttemptResult{Failure: contract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+path, bytes.NewReader(body))
 	if err != nil {
@@ -106,6 +108,36 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	errorGuard := openai.NewResponseGuard(plain, cipher, label)
 	defer guard.Clear()
 	defer errorGuard.Clear()
+	if stream && policy.FlattenToolCalls {
+		outputGuard := openai.NewResponseGuard(plain, cipher, label)
+		defer outputGuard.Clear()
+		sink := openai.NewFlattenSink(w, maxStreamBytes, maxEventBytes, outputGuard.ContainsJSON)
+		defer sink.Clear()
+		w = sink
+		defer func() {
+			if result.Success {
+				if err := sink.Complete(15 * time.Second); err != nil {
+					result.Success = false
+					if errors.Is(err, tooltext.ErrToolFlatten) || errors.Is(err, tooltext.ErrFlattenStreamRejected) {
+						result.Failure = contract.FailureUpstream
+						result.Diagnostic = "tool projection was invalid"
+						result = contract.UpstreamFailed(result, contract.OriginUpstreamProtocol)
+					} else {
+						result.Failure = contract.FailureSink
+						result.Diagnostic = "caller response failed"
+						result = contract.ProtocolSucceeded(result)
+					}
+				}
+			}
+			if sink.ProjectionError() != nil {
+				result.Success = false
+				result.Failure = contract.FailureUpstream
+				result.Diagnostic = "tool projection was rejected"
+				result = contract.UpstreamFailed(result, contract.OriginUpstreamProtocol)
+			}
+			result.Committed = sink.Committed()
+		}()
+	}
 	clear(label)
 	errorContext := upstreamerror.Context{BaseURL: target.BaseURL(), PrivateModel: target.UpstreamModel(), ContainsSecret: errorGuard.ContainsBytes}
 	if policy.HasAdaptation {
@@ -136,17 +168,18 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()
 	}
-	if ctx.Err() != nil {
-		return canceled()
-	}
 	if err != nil {
-		return upstreamFailure("upstream transport failed", 0)
+		failed := upstreamFailure("upstream transport failed", 0)
+		if ctx.Err() != nil {
+			failed = canceled()
+		}
+		return contract.TransportFailed(failed, err, ctx)
 	}
 	if response == nil || response.Body == nil {
 		return upstreamFailure("upstream response was unavailable", 0)
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 || stream && response.StatusCode != 200 {
-		result = upstreamFailure("upstream returned an error status", response.StatusCode)
+		result = contract.UpstreamFailed(upstreamFailure("upstream returned an error status", response.StatusCode), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, min(maxJSONBytes, a.backend.MaxResponseBytes()))
 		return result
 	}
@@ -163,17 +196,18 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
 	raw, err := readBounded(response.Body, min(maxJSONBytes, a.backend.MaxResponseBytes()))
-	if ctx.Err() != nil {
-		clear(raw)
-		return canceled()
-	}
 	if err != nil {
-		return upstreamFailure("upstream response exceeded its limit or was interrupted", response.StatusCode)
+		clear(raw)
+		failed := upstreamFailure("upstream response exceeded its limit or was interrupted", response.StatusCode)
+		if ctx.Err() != nil {
+			failed = canceled()
+		}
+		return contract.ReadFailed(failed, err, ctx)
 	}
 	defer clear(raw)
 	if upstreamerror.IsEvent(raw) {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
-		result = upstreamFailure("upstream response reported an error", response.StatusCode)
+		result = contract.UpstreamFailed(upstreamFailure("upstream response reported an error", response.StatusCode), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.Parse(raw)
 		return result
 	}
@@ -184,15 +218,27 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 	} else {
 		translated, usage, err = translateChat(raw, chat.Model, a.now().Unix())
 	}
-	defer clear(translated)
+	defer func() { clear(translated) }()
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
+	}
+	if chat != nil && policy.FlattenToolCalls {
+		projected, projectionErr := tooltext.FlattenCompletion(translated)
+		clear(translated)
+		translated = projected
+		if projectionErr != nil {
+			return upstreamFailure("tool projection was invalid", response.StatusCode)
+		}
 	}
 	if guard.ContainsJSON(translated, translated) {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
+	defer func() {
+		result = contract.ProtocolSucceeded(result)
+		result.UpstreamStatus = response.StatusCode
+	}()
 	if err := contract.MarkResponseStarted(w); err != nil {
 		return sinkFailure(false, usage)
 	}
@@ -248,7 +294,7 @@ func setResponseHeaders(headers http.Header, stream bool) {
 	}
 }
 func upstreamFailure(message string, status int) contract.AttemptResult {
-	return contract.AttemptResult{Failure: contract.FailureUpstream, Diagnostic: message, UpstreamStatus: status}
+	return contract.AttemptResult{StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamProtocol, Failure: contract.FailureUpstream, Diagnostic: message, UpstreamStatus: status}
 }
 func canceled() contract.AttemptResult {
 	return contract.AttemptResult{Failure: contract.FailureCanceled, Diagnostic: "request canceled"}

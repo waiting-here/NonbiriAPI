@@ -258,7 +258,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	closeBodyOnError := func(err error) (*http.Response, error) {
 		_ = req.Body.Close()
-		return nil, err
+		return nil, executionFailure(FailurePlatform, err)
 	}
 	if req.URL == nil || req.URL.Opaque != "" || req.URL.Scheme == "" || req.URL.Host == "" {
 		return closeBodyOnError(errors.New("egress request must use an absolute HTTP(S) URL"))
@@ -311,12 +311,15 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			_ = resp.Body.Close()
 		}
 		if errors.Is(err, ErrRedirectBlocked) {
-			return nil, ErrRedirectBlocked
+			return nil, executionFailure(FailurePlatform, ErrRedirectBlocked)
+		}
+		if ExecutionFailure(err) == FailurePlatform {
+			return nil, err
 		}
 		if ctxErr != nil {
-			return nil, ctxErr
+			return nil, networkFailure(ctxErr)
 		}
-		return nil, newBoundedError("egress request failed", unwrapURLError(err))
+		return nil, networkFailure(newBoundedError("egress request failed", unwrapURLError(err)))
 	}
 
 	managed := newManagedResponseBody(resp.Body, c.maxResponseBytes, ctx, cancel, permit.Release)
@@ -366,6 +369,7 @@ func (e *ResponseTooLargeError) Error() string {
 }
 
 type managedResponseBody struct {
+	ctx       context.Context
 	body      io.ReadCloser
 	remaining int64
 	limit     int64
@@ -382,6 +386,7 @@ func newManagedResponseBody(body io.ReadCloser, limit int64, ctx context.Context
 		body = io.NopCloser(strings.NewReader(""))
 	}
 	managed := &managedResponseBody{
+		ctx:       ctx,
 		body:      body,
 		remaining: limit,
 		limit:     limit,
@@ -406,6 +411,14 @@ func (b *managedResponseBody) Read(dst []byte) (int, error) {
 	if b.remaining == 0 {
 		var probe [1]byte
 		n, err := b.body.Read(probe[:])
+		if cause := b.ctx.Err(); cause != nil {
+			err = networkFailure(cause)
+		} else {
+			var network net.Error
+			if errors.As(err, &network) {
+				err = networkFailure(err)
+			}
+		}
 		if n > 0 {
 			tooLarge := &ResponseTooLargeError{Limit: b.limit}
 			b.finish()
@@ -422,6 +435,14 @@ func (b *managedResponseBody) Read(dst []byte) (int, error) {
 		readSize = b.remaining + 1
 	}
 	n, err := b.body.Read(dst[:int(readSize)])
+	if cause := b.ctx.Err(); cause != nil {
+		err = networkFailure(cause)
+	} else {
+		var network net.Error
+		if errors.As(err, &network) {
+			err = networkFailure(err)
+		}
+	}
 	if int64(n) > b.remaining {
 		allowed := int(b.remaining)
 		b.remaining = 0

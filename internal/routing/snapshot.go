@@ -15,6 +15,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 var (
@@ -50,6 +51,7 @@ type Identity struct {
 // fields are safe logical-model facts only; no binding, endpoint, key, catalog
 // row, or secret reference can be represented by this type.
 type LogicalPreflight struct {
+	rolePolicy       rolepolicy.Policy
 	modelID          int64
 	ownerUserID      int64
 	provider         string
@@ -61,6 +63,8 @@ type LogicalPreflight struct {
 	revision         int64
 	bindingRevision  int64
 }
+
+func (p LogicalPreflight) RolePolicy() rolepolicy.Policy { return p.rolePolicy.Clone() }
 
 func (p LogicalPreflight) ModelID() int64         { return p.modelID }
 func (p LogicalPreflight) OwnerUserID() int64     { return p.ownerUserID }
@@ -111,6 +115,7 @@ func (Candidate) GoString() string             { return "[redacted routing candi
 func (Candidate) LogValue() slog.Value         { return slog.StringValue("[redacted routing candidate]") }
 
 type Snapshot struct {
+	rolePolicy       rolepolicy.Policy
 	modelID          int64
 	ownerUserID      int64
 	provider         string
@@ -123,6 +128,8 @@ type Snapshot struct {
 	bindingRevision  int64
 	candidates       []Candidate
 }
+
+func (s Snapshot) RolePolicy() rolepolicy.Policy { return s.rolePolicy.Clone() }
 
 func (s Snapshot) ModelID() int64          { return s.modelID }
 func (s Snapshot) OwnerUserID() int64      { return s.ownerUserID }
@@ -141,6 +148,7 @@ func (Snapshot) GoString() string          { return "[redacted routing snapshot]
 func (Snapshot) LogValue() slog.Value      { return slog.StringValue("[redacted routing snapshot]") }
 
 type modelFacts struct {
+	rolePolicy                            rolepolicy.Policy
 	id, userID, revision, bindingRevision int64
 	provider, model, fullName, strategy   string
 	silentRetry, flattenToolCalls         int
@@ -249,7 +257,7 @@ func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identi
 		return Snapshot{}, fmt.Errorf("routing: commit snapshot read: %w", err)
 	}
 	return Snapshot{
-		modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider,
+		rolePolicy: facts.rolePolicy.Clone(), modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider,
 		model: facts.model, fullName: facts.fullName, routeStrategy: facts.strategy,
 		silentRetry: facts.silentRetry == 1, flattenToolCalls: facts.flattenToolCalls == 1,
 		revision: facts.revision, bindingRevision: facts.bindingRevision,
@@ -292,7 +300,7 @@ func resolveIdentifier(ctx context.Context, tx *sql.Tx, ownerUserID, modelID int
 
 func logicalPreflight(facts modelFacts) LogicalPreflight {
 	return LogicalPreflight{
-		modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider, model: facts.model,
+		rolePolicy: facts.rolePolicy.Clone(), modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider, model: facts.model,
 		fullName: facts.fullName, routeStrategy: facts.strategy, silentRetry: facts.silentRetry == 1,
 		flattenToolCalls: facts.flattenToolCalls == 1, revision: facts.revision,
 		bindingRevision: facts.bindingRevision,
@@ -341,20 +349,21 @@ func parseModelID(value string) (int64, bool, error) {
 
 func readModelByID(ctx context.Context, tx *sql.Tx, ownerUserID, modelID int64) (modelFacts, error) {
 	return scanModelFacts(tx.QueryRowContext(ctx, `
-SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision
+SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy
 FROM models WHERE id=? AND user_id=?`, modelID, ownerUserID))
 }
 
 func readModelByName(ctx context.Context, tx *sql.Tx, ownerUserID int64, fullName string) (modelFacts, error) {
 	return scanModelFacts(tx.QueryRowContext(ctx, `
-SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision
+SELECT id,user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,revision,binding_revision,role_policy
 FROM models WHERE full_name=? AND user_id=?`, fullName, ownerUserID))
 }
 
 func scanModelFacts(row *sql.Row) (modelFacts, error) {
 	var facts modelFacts
+	var encodedPolicy string
 	err := row.Scan(&facts.id, &facts.userID, &facts.provider, &facts.model, &facts.fullName,
-		&facts.strategy, &facts.silentRetry, &facts.flattenToolCalls, &facts.revision, &facts.bindingRevision)
+		&facts.strategy, &facts.silentRetry, &facts.flattenToolCalls, &facts.revision, &facts.bindingRevision, &encodedPolicy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return modelFacts{}, ErrNotFound
 	}
@@ -365,6 +374,10 @@ func scanModelFacts(row *sql.Row) (modelFacts, error) {
 		(facts.strategy != "ordered" && facts.strategy != "random") || facts.fullName != facts.provider+"/"+facts.model ||
 		facts.silentRetry < 0 || facts.silentRetry > 1 || facts.flattenToolCalls < 0 || facts.flattenToolCalls > 1 {
 		return modelFacts{}, errors.New("routing: invalid persisted model")
+	}
+	facts.rolePolicy, err = rolepolicy.Decode(encodedPolicy)
+	if err != nil {
+		return modelFacts{}, errors.New("routing: invalid persisted role policy")
 	}
 	return facts, nil
 }

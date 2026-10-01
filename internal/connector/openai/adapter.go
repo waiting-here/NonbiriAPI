@@ -209,8 +209,9 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 // AttemptWithPolicy applies the immutable per-attempt OpenAI strategy
 // projection. Store policy affects only the final serialized request; tool
 // flattening affects only validated OpenAI responses after the shared guards.
-func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWriter, target Target, request *ChatRequest, policy connectorcontract.AttemptPolicy) AttemptResult {
-	result := AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
+func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWriter, target Target, request *ChatRequest, policy connectorcontract.AttemptPolicy) (result AttemptResult) {
+	defer func() { result = connectorcontract.NormalizeOutcome(result) }()
+	result = AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
 	if a == nil || a.backend == nil || ctx == nil || writer == nil || request == nil {
 		return result
@@ -224,7 +225,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
-		return upstreamFailure("upstream endpoint was refused", 0)
+		return connectorcontract.NormalizeOutcome(AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
 	body, err := request.marshalUpstreamWithPolicy(target.upstreamModel, policy.SafetyIdentifier, policy)
 	if err != nil {
@@ -286,22 +287,17 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		response.Request.Header.Del("Authorization")
 	}
 	if err != nil {
+		failed := upstreamFailure(classifyTransportFailure(err), 0)
 		if ctx.Err() != nil {
-			return canceledFailure()
+			failed = canceledFailure()
 		}
-		return upstreamFailure(classifyTransportFailure(err), 0)
+		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer func() { _ = response.Body.Close() }()
-	if ctx.Err() != nil {
-		return canceledFailure()
-	}
 
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
-		result := upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+		result := connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)
-		if ctx.Err() != nil {
-			return canceledFailure()
-		}
 		return result
 	}
 	if request.Stream {
@@ -326,16 +322,17 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 	return a.nonStreamWithPolicy(ctx, writer, response, guard, connectorcontract.AttemptPolicy{}, upstreamerror.Context{})
 }
 
-func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, policy connectorcontract.AttemptPolicy, errorContext upstreamerror.Context) AttemptResult {
+func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, policy connectorcontract.AttemptPolicy, errorContext upstreamerror.Context) (result AttemptResult) {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
 	body, err := readResponseBody(response.Body, a.maxJSONResponseBytes)
 	if err != nil {
+		failed := upstreamFailure(classifyReadFailure(err), response.StatusCode)
 		if ctx.Err() != nil {
-			return canceledFailure()
+			failed = canceledFailure()
 		}
-		return upstreamFailure(classifyReadFailure(err), response.StatusCode)
+		return connectorcontract.ReadFailed(failed, err, ctx)
 	}
 	defer clear(body)
 	if !validProtocolBytes(body) {
@@ -344,11 +341,26 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 	}
 	if upstreamerror.IsEvent(body) {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
-		result := upstreamFailure("upstream response reported an error", response.StatusCode)
+		result := connectorcontract.UpstreamFailed(upstreamFailure("upstream response reported an error", response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.Parse(body)
 		return result
 	}
 	usage, err := validateCompletion(body)
+	if err != nil {
+		inner, wrapperErr := unwrapCompletion(body)
+		if wrapperErr != nil {
+			return upstreamFailure("upstream response was invalid", response.StatusCode)
+		}
+		// Scan the complete wrapper before dropping its outer representation.
+		if guard.ContainsJSON(body, body) {
+			clear(inner)
+			return upstreamFailure("upstream response was rejected", response.StatusCode)
+		}
+		clear(body)
+		body = inner
+		defer clear(body)
+		usage, err = validateCompletion(body)
+	}
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
@@ -372,6 +384,10 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 			return upstreamFailure("upstream response was rejected", response.StatusCode)
 		}
 	}
+	defer func() {
+		result = connectorcontract.ProtocolSucceeded(result)
+		result.UpstreamStatus = response.StatusCode
+	}()
 	if err := connectorcontract.MarkResponseStarted(writer); err != nil {
 		return sinkFailure(false, usage)
 	}
@@ -423,13 +439,13 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
 		if nextErr != nil || !ok {
 			if ctx.Err() != nil {
-				result := canceledFailure()
+				result := connectorcontract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed
 				result.ClientStatus = committedStatus(committed)
 				result.Usage = usage
 				return result
 			}
-			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream ended before completion")
+			return connectorcontract.ReadFailed(a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream ended before completion"), nextErr, ctx)
 		}
 		if event.Event == "error" || event.Event == "message" && upstreamerror.IsEvent([]byte(event.Data)) {
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
@@ -449,7 +465,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
 			committed = committed || wrote
 			if writeErr != nil {
-				return sinkFailureWithCommit(committed, usage)
+				return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
 			}
 			return AttemptResult{
 				Success:        true,
@@ -551,13 +567,13 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
 		if nextErr != nil || !ok {
 			if ctx.Err() != nil {
-				result := canceledFailure()
+				result := connectorcontract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed
 				result.ClientStatus = committedStatus(committed)
 				result.Usage = usage
 				return result
 			}
-			return failure("upstream stream ended before completion")
+			return connectorcontract.ReadFailed(failure("upstream stream ended before completion"), nextErr, ctx)
 		}
 		if event.Event == "error" || event.Event == "message" && upstreamerror.IsEvent([]byte(event.Data)) {
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
@@ -572,11 +588,11 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			}
 			if hasToolsSeen {
 				if firstRoot == nil {
-					return failure("upstream stream ended before completion")
+					return connectorcontract.ReadFailed(failure("upstream stream ended before completion"), nextErr, ctx)
 				}
 				body, err := streamCompletionBodyAfter(firstRoot, states)
 				if err != nil {
-					return failure("upstream stream ended before completion")
+					return connectorcontract.ReadFailed(failure("upstream stream ended before completion"), nextErr, ctx)
 				}
 				transformed, flattenErr := flattenCompletion(body)
 				clear(body)
@@ -601,7 +617,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 					if errors.Is(writeErr, errFlattenStreamRejected) {
 						return failure("upstream stream was rejected")
 					}
-					return sinkFailureWithCommit(committed, usage)
+					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
 				}
 				clear(contentFrame)
 				clear(content)
@@ -613,7 +629,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 					if errors.Is(writeErr, errFlattenStreamRejected) {
 						return failure("upstream stream was rejected")
 					}
-					return sinkFailureWithCommit(committed, usage)
+					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
 				}
 				clear(finishFrame)
 				clear(finish)
@@ -623,7 +639,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 					if errors.Is(writeErr, errFlattenStreamRejected) {
 						return failure("upstream stream was rejected")
 					}
-					return sinkFailureWithCommit(committed, usage)
+					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
 				}
 			}
 			final := []byte("data: [DONE]\n\n")
@@ -632,7 +648,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 				if errors.Is(writeErr, errFlattenStreamRejected) {
 					return failure("upstream stream was rejected")
 				}
-				return sinkFailureWithCommit(committed, usage)
+				return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
 			}
 			return AttemptResult{Success: true, Committed: committed, Failure: FailureNone, UpstreamStatus: response.StatusCode, ClientStatus: http.StatusOK, Usage: usage}
 		}
@@ -781,7 +797,7 @@ func accumulateStreamState(frames [][]byte, states map[int]*streamChoiceState) (
 }
 
 func (a *Adapter) streamReportedFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage Usage, guard *responseGuard, detail upstreamerror.Detail) AttemptResult {
-	result := upstreamFailure("upstream stream reported an error", http.StatusOK)
+	result := connectorcontract.UpstreamFailed(upstreamFailure("upstream stream reported an error", http.StatusOK), connectorcontract.OriginUpstreamResponse)
 	result.Usage, result.ErrorDetail = usage, detail
 	if !committed {
 		return result
@@ -796,7 +812,7 @@ func (a *Adapter) streamReportedFailure(writer http.ResponseWriter, controller *
 		frame = httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
 	}
 	if _, err := a.writeStreamFrame(writer, controller, frame); err != nil {
-		return sinkFailureWithCommit(true, usage)
+		return connectorcontract.UpstreamFailed(sinkFailureWithCommit(true, usage), connectorcontract.OriginUpstreamResponse)
 	}
 	result.Committed, result.ClientStatus = true, http.StatusOK
 	return result
@@ -817,9 +833,9 @@ func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *
 	frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
 	_, err := a.writeStreamFrame(writer, controller, frame)
 	if err != nil {
-		return sinkFailureWithCommit(true, usage)
+		return connectorcontract.UpstreamFailed(sinkFailureWithCommit(true, usage), connectorcontract.OriginUpstreamProtocol)
 	}
-	return AttemptResult{
+	return AttemptResult{StreakDisposition: connectorcontract.StreakUpstreamFailure, FailureOrigin: connectorcontract.OriginUpstreamProtocol,
 		Committed:      true,
 		Failure:        FailureUpstream,
 		Diagnostic:     diagnostic,
@@ -943,7 +959,7 @@ func clearUnsafeResponseHeaders(header http.Header) {
 }
 
 func upstreamFailure(diagnostic string, status int) AttemptResult {
-	return AttemptResult{
+	return AttemptResult{StreakDisposition: connectorcontract.StreakUpstreamFailure, FailureOrigin: connectorcontract.OriginUpstreamProtocol,
 		Failure:        FailureUpstream,
 		Diagnostic:     diagnostic,
 		UpstreamStatus: status,

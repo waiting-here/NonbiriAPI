@@ -40,7 +40,7 @@ func (c *gatewayConnector) Attempt(ctx context.Context, input AttemptInput) cont
 	if c == nil || c.adapter == nil || ctx == nil || input.Sink == nil || !input.validOperation() || input.Target.Type() != c.Type() {
 		return result
 	}
-	if input.Policy.ForceStoreFalse || input.Policy.FlattenToolCalls {
+	if input.Policy.ForceStoreFalse {
 		result.Diagnostic = "connector policy incompatible"
 		return result
 	}

@@ -289,6 +289,7 @@ func (environment *charityTestEnv) completeAttempt(
 	want claim.CharityActual,
 ) {
 	t.Helper()
+	input = normalizeAttemptInput(input)
 	input.RequestID, input.ClaimID = requestID, claimed.id
 	input.DonationKeyID = &environment.donationKey
 	tx := beginTestTx(t, environment.store.DB())
@@ -316,8 +317,8 @@ func (environment *charityTestEnv) completeAttempt(
 		receiver = *input.ReceiverUserID
 	}
 	if _, err := tx.Exec(`UPDATE dispatch_claims SET state='committed',secret_ref_id=NULL,
-receiver_user_id=?,donor_reward_actual_milli=?,donor_reward_state=?,terminal_at=? WHERE id=?`, receiver,
-		actual.RewardMilli, rewardState, input.CompletedAt, claimed.id); err != nil {
+receiver_user_id=?,donor_reward_actual_milli=?,donor_reward_state=?,terminal_at=?,streak_disposition=?,failure_origin=? WHERE id=?`, receiver,
+		actual.RewardMilli, rewardState, input.CompletedAt, input.StreakDisposition, input.FailureOrigin, claimed.id); err != nil {
 		t.Fatalf("terminalize dispatch claim: %v", err)
 	}
 	commitTestTx(t, tx)
@@ -782,8 +783,8 @@ failure_streak=?,failure_disabled=0 WHERE id=?`, eleven, one, u128Blob(t, 0), en
 		if _, err := tx.Exec(`INSERT INTO donation_usage_reservations(
 claim_id,donation_key_id,streak_generation,claim_seq,price_reserved_milli,price_actual_milli,
 reward_actual_milli,calls_reserved,calls_actual,tokens_reserved,tokens_actual,protocol_success,
-usage_unknown,state,created_at,finalized_at)
-VALUES(?,?,?,?,0,0,0,0,0,0,0,0,0,'committed',?,?)`, claimID, environment.donationKey, one,
+usage_unknown,state,created_at,finalized_at,streak_disposition,failure_origin)
+VALUES(?,?,?,?,0,0,0,0,0,0,0,0,0,'committed',?,?,'upstream_failure','upstream_protocol')`, claimID, environment.donationKey, one,
 			u128Blob(t, sequence), charityTestNow, charityTestNow+sequence); err != nil {
 			t.Fatalf("seed result %d: %v", sequence, err)
 		}
@@ -868,7 +869,7 @@ func TestCapacityBoundaryExpiryAndTerminalCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(`UPDATE dispatch_claims SET state='released',secret_ref_id=NULL,
-donor_reward_state='not_due',terminal_at=? WHERE id=?`, terminalAt, cleanupClaim.id); err != nil {
+donor_reward_state='not_due',terminal_at=?,streak_disposition='neutral',failure_origin='platform' WHERE id=?`, terminalAt, cleanupClaim.id); err != nil {
 		t.Fatal(err)
 	}
 	if err := cleanupEnvironment.service.CompleteRequest(context.Background(), tx, claim.CharityRequestCompletion{
