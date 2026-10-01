@@ -10,6 +10,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { contentHash, parseLevel } from '../../src/shared/fatfish/engine/canonical';
+import { ENGINE_VERSION } from '../../src/shared/fatfish/engine/types';
 import type { InputTuple } from '../../src/shared/fatfish/engine/types';
 
 type Cookie = { Name: string; Value: string };
@@ -171,7 +172,7 @@ async function returnPreplacedTool(player: Locator, toolID: number) {
     .selectOption(String(toolID));
   await player.getByRole('button', { name: 'Return tool', exact: true }).click();
 }
-async function submitCurrentResult(player: Locator) {
+async function submitCurrentResult(player: Locator, automatic = false) {
   const finish = player.getByRole('button', { name: 'Finish', exact: true });
   const submit = player.getByRole('button', { name: 'Submit for verification', exact: true });
   if (await finish.isEnabled()) {
@@ -179,42 +180,75 @@ async function submitCurrentResult(player: Locator) {
       await finish.click({ timeout: 2000 });
     } catch (error) {
       // The last fish can finish while Playwright scrolls to the button.
-      // Accept that transition only when the automatic result is ready.
-      if ((await finish.isEnabled()) || !(await submit.isVisible())) throw error;
+      // Accept that transition only when the corresponding result step is ready.
+      const ready = automatic
+        ? await player.getByText(/^Verified · /).isVisible()
+        : await submit.isVisible();
+      if ((await finish.isEnabled()) || !ready) throw error;
     }
   }
-  await submit.click();
+  if (automatic) await expect(player.getByText(/^Verified · /)).toBeVisible();
+  else await submit.click();
 }
 async function recordedInputs(page: Page, hash: string): Promise<InputTuple[]> {
   return page.evaluate(
     (expectedHash) =>
-      new Promise<InputTuple[]>((resolve, reject) => {
-        const request = indexedDB.open('nonbiri-fatfish-inputs-v1', 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-          const db = request.result;
-          const transaction = db.transaction('sessions', 'readonly');
-          const records = transaction.objectStore('sessions').getAll();
-          let inputs: InputTuple[] = [];
-          records.onsuccess = () => {
-            const match = (records.result as { content_hash: string; inputs: InputTuple[] }[]).find(
-              (record) => record.content_hash === expectedHash,
-            );
-            inputs = match?.inputs ?? [];
+      indexedDB.databases().then((databases) => {
+        if (!databases.some((database) => database.name === 'nonbiri-fatfish-inputs-v1')) return [];
+        return new Promise<InputTuple[]>((resolve, reject) => {
+          const request = indexedDB.open('nonbiri-fatfish-inputs-v1', 1);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains('sessions')) {
+              db.close();
+              reject(new Error('The durable input store is missing.'));
+              return;
+            }
+            const transaction = db.transaction('sessions', 'readonly');
+            const records = transaction.objectStore('sessions').getAll();
+            let inputs: InputTuple[] = [];
+            records.onsuccess = () => {
+              const match = (
+                records.result as { content_hash: string; inputs: InputTuple[] }[]
+              ).find((record) => record.content_hash === expectedHash);
+              inputs = match?.inputs ?? [];
+            };
+            transaction.oncomplete = () => {
+              db.close();
+              resolve(inputs);
+            };
+            transaction.onerror = () => {
+              db.close();
+              reject(transaction.error);
+            };
           };
-          transaction.oncomplete = () => {
-            db.close();
-            resolve(inputs);
-          };
-          transaction.onerror = () => {
-            db.close();
-            reject(transaction.error);
-          };
-        };
+        });
       }),
     hash,
   );
 }
+async function selectImmutableVersion(
+  page: Page,
+  version: { id: string; version_number: string; content_hash: string },
+) {
+  const read = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(base + '/versions/' + version.id) &&
+      response.request().method() === 'GET',
+  );
+  await page
+    .locator('.fatfish-shelf')
+    .getByRole('button', { name: 'Version ' + version.version_number + ' · 0★', exact: true })
+    .click();
+  const response = await read;
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toMatchObject({
+    id: version.id,
+    content_hash: version.content_hash,
+  });
+}
+
 async function importedVersion(page: Page, example: Example) {
   page.on('dialog', (dialog) => void dialog.accept());
   await page.goto(fixture().admin_url + '/limited-activities/fat-fish');
@@ -235,6 +269,10 @@ async function importedVersion(page: Page, example: Example) {
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(exported)),
   });
+  const discard = page.getByRole('alertdialog', { name: 'Discard changes', exact: true });
+  await expect(discard).toContainText('Discard unsaved draft and import?');
+  await discard.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await expect(discard).toHaveCount(0);
   const savedResponse = page.waitForResponse(
     (response) =>
       response.url().endsWith(base + '/levels') && response.request().method() === 'POST',
@@ -247,14 +285,16 @@ async function importedVersion(page: Page, example: Example) {
       response.url().endsWith('/versions') &&
       response.request().method() === 'POST',
   );
-  await page
-    .getByRole('button', { name: 'Publish immutable version from saved draft', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Publish saved draft', exact: true }).click();
   const published = await publishedResponse;
   expect(published.status()).toBe(200);
-  const version = (await published.json()) as { id: string; content_hash: string };
+  const version = (await published.json()) as {
+    id: string;
+    version_number: string;
+    content_hash: string;
+  };
   expect(version.content_hash).toBe(example.content_hash);
-  await page.getByRole('button', { name: new RegExp('^' + version.id + ' ·') }).click();
+  await selectImmutableVersion(page, version);
   await expect(page.getByRole('heading', { name: 'No-charge playtest' })).toBeVisible();
   if (example.id === examples[0].id) await capture(page, '02-version-and-playtest');
   return version;
@@ -262,7 +302,7 @@ async function importedVersion(page: Page, example: Example) {
 
 async function playExample(page: Page, example: Example) {
   const version = await importedVersion(page, example);
-  await page.getByRole('button', { name: 'Prepare playtest', exact: true }).click();
+  await page.getByRole('button', { name: 'Playtest this version', exact: true }).click();
   await page.getByRole('button', { name: 'Start playtest', exact: true }).click();
   const player = page.getByRole('region', { name: 'Fat fish play', exact: true });
   const level = parseLevel(readFileSync('public' + example.url, 'utf8'));
@@ -280,9 +320,11 @@ async function playExample(page: Page, example: Example) {
       { timeout: 45_000, message: example.id + ' reaches one-star rescue threshold' },
     )
     .toBeGreaterThanOrEqual(level.thresholds[0]);
-  await submitCurrentResult(player);
+  await submitCurrentResult(player, true);
   await expect(
-    page.getByText('Server-verified one-star proof is available.', { exact: true }),
+    page
+      .locator('.fatfish-shelf')
+      .getByText('Recent playtests with at least one star: Available', { exact: true }),
   ).toBeVisible();
   if (example.id === examples[0].id) await capture(page, '04-verified-playtest');
   const response = await adminAPI(page.context(), '/playtests?version_id=' + version.id);
@@ -380,11 +422,15 @@ test('workbench edits survive save and reload, and library deletion preserves pu
     expect(layout.draft.tools[0].placed).toBe(true);
     await page.getByText('Duration, speed and star thresholds', { exact: true }).click();
     await page.getByLabel('Duration (seconds)', { exact: true }).fill('0');
-    await expect(page.getByRole('button', { name: /Local error/ })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /^Check your input: duration_seconds is out of range$/ }),
+    ).toBeVisible();
     await expect(map).toBeVisible();
     await map.press('Control+z');
     await expect(page.getByLabel('Duration (seconds)', { exact: true })).toHaveValue('90');
-    await expect(page.getByRole('button', { name: /Local error/ })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /^Check your input: duration_seconds is out of range$/ }),
+    ).toHaveCount(0);
     await page.getByRole('button', { name: 'Enlarge field', exact: true }).click();
     await expect(page.locator('.fatfish-player__viewport[data-zoomed="true"]')).toBeVisible();
     await page.getByRole('button', { name: 'Fit screen', exact: true }).click();
@@ -392,18 +438,18 @@ test('workbench edits survive save and reload, and library deletion preserves pu
     const published = page.waitForResponse(
       (result) => result.url().endsWith('/versions') && result.request().method() === 'POST',
     );
-    await page
-      .getByRole('button', { name: 'Publish immutable version from saved draft', exact: true })
-      .click();
+    await page.getByRole('button', { name: 'Publish saved draft', exact: true }).click();
     const versionResponse = await published;
     expect(versionResponse.status()).toBe(200);
     const version = (await versionResponse.json()) as { id: string };
-    page.once('dialog', (dialog) => dialog.accept());
     const deleted = page.waitForResponse(
       (result) =>
         result.url().endsWith('/levels/' + record.id) && result.request().method() === 'DELETE',
     );
     await page.getByRole('button', { name: 'Delete level', exact: true }).click();
+    const deletion = page.getByRole('alertdialog', { name: 'Delete level', exact: true });
+    expect((await adminAPI(context, '/levels/' + record.id)).status()).toBe(200);
+    await deletion.getByRole('button', { name: 'Delete level', exact: true }).click();
     expect((await deleted).status()).toBe(200);
     await expect(page.getByRole('heading', { name: 'New level draft', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Workbench layout regression ·/ })).toHaveCount(
@@ -450,9 +496,11 @@ test('legacy rules convert only through a saved draft and retain the published v
     await page.getByRole('button', { name: 'Legacy rules conversion · r1', exact: true }).click();
     await expect(page.getByText('Draft rules version: 1 · Legacy', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Convert to new draft', exact: true }).click();
-    await expect(page.getByText('Draft rules version: 2 · Current', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(`Draft rules version: ${ENGINE_VERSION} · Current`, { exact: true }),
+    ).toBeVisible();
     const publish = page.getByRole('button', {
-      name: 'Publish immutable version from saved draft',
+      name: 'Publish saved draft',
       exact: true,
     });
     await expect(publish).toBeDisabled();
@@ -467,7 +515,7 @@ test('legacy rules convert only through a saved draft and retain the published v
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     expect((await saving).status()).toBe(200);
     const saved = await (await adminAPI(context, '/levels/' + level.id)).json();
-    expect(saved.draft).toEqual({ ...draft, engine_version: 2 });
+    expect(saved.draft).toEqual({ ...draft, engine_version: ENGINE_VERSION });
     await expect(publish).toBeEnabled();
     const publishing = page.waitForResponse(
       (response) =>
@@ -482,7 +530,7 @@ test('legacy rules convert only through a saved draft and retain the published v
       engine_version: number;
       content_hash: string;
     };
-    expect(converted.engine_version).toBe(2);
+    expect(converted.engine_version).toBe(ENGINE_VERSION);
     expect(converted.id).not.toBe(original.id);
     expect(converted.content_hash).not.toBe(original.content_hash);
     expect(await (await adminAPI(context, '/versions/' + original.id)).json()).toEqual(
@@ -542,7 +590,11 @@ for (const touch of [false, true]) {
         expected_revision: level.revision,
       });
       expect(published.status()).toBe(200);
-      const version = (await published.json()) as { id: string; content_hash: string };
+      const version = (await published.json()) as {
+        id: string;
+        version_number: string;
+        content_hash: string;
+      };
       const page = await context.newPage();
       page.on('dialog', (dialog) => void dialog.accept());
       const errors: string[] = [];
@@ -551,8 +603,9 @@ for (const touch of [false, true]) {
       await page
         .getByRole('button', { name: title + ' · r' + level.revision, exact: true })
         .click();
-      await page.getByRole('button', { name: new RegExp('^' + version.id + ' ·') }).click();
-      await page.getByRole('button', { name: 'Prepare playtest', exact: true }).click();
+      await selectImmutableVersion(page, version);
+      await page.getByRole('button', { name: 'Playtest this version', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Start playtest', exact: true })).toBeVisible();
       const player = page.getByRole('region', { name: 'Fat fish play', exact: true });
       expect(await recordedInputs(page, version.content_hash)).toEqual([]);
       await expect(player).toHaveAttribute('data-can-play', 'false');
@@ -616,17 +669,15 @@ for (const touch of [false, true]) {
       const perTick = new Map<number, number>();
       for (const input of inputs) perTick.set(input[0], (perTick.get(input[0]) ?? 0) + 1);
       expect(Math.max(...perTick.values())).toBeLessThanOrEqual(2);
-      await expect(
-        player.getByRole('button', { name: 'Submit for verification', exact: true }),
-      ).toBeVisible({ timeout: 30_000 });
-      await player.getByRole('button', { name: 'Submit for verification', exact: true }).click();
-      await expect(
-        page.getByText('This playtest did not produce a one-star pass.', { exact: true }),
-      ).toBeVisible();
+      await expect(player.getByText('Verified · 0/1 · 0★ · 0.00', { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
       const proofs = (await (
         await adminAPI(context, '/playtests?version_id=' + version.id)
       ).json()) as Proof[];
       expect(proofs).toHaveLength(1);
+      expect(proofs[0].passed).toBe(false);
+      expect(proofs[0].stars).toBe(0);
       expect(proofs[0].result.commitment_verified).toBe(true);
       expect(proofs[0].result.ticket_charge).toBe('0');
       expect(proofs[0].result.rewards).toBe('0');
@@ -704,9 +755,7 @@ test('a local season publishes explicitly and the original user tab resumes, set
     await adminPage.getByRole('button', { name: /^2\. The connected pond/ }).click();
     await expect(adminPage.getByRole('heading', { name: 'Edit node', exact: true })).toBeVisible();
     await capture(adminPage, '05-period-layout-and-conditions');
-    await adminPage
-      .getByRole('button', { name: 'Check and preview publish conditions', exact: true })
-      .click();
+    await adminPage.getByRole('button', { name: 'Preview publishing checks', exact: true }).click();
     await capture(adminPage, '06-publication-check');
     const publishing = adminPage.waitForResponse((response) =>
       response.url().endsWith('/periods/' + period.id + '/publish'),
