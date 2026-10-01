@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useDuelText } from './copy';
-
 export function DuelDialog({
   title,
   onClose,
@@ -54,7 +53,7 @@ export function DuelDialog({
       <header>
         <h2 id={titleID}>{title}</h2>
         <button type="button" className="btn btn-secondary" onClick={onClose} autoFocus>
-          {text('关闭', 'Close')}
+          {text('common.close')}
         </button>
       </header>
       <div className="duel-dialog__body">{children}</div>

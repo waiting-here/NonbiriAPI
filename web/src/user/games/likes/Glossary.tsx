@@ -7,34 +7,32 @@ import { LikesArt } from './LikesArt';
 import { artRegistry } from './art';
 import { guideLevels, knowledge, levelName, relatedEntries, type GuideLevel } from './knowledge';
 import { GuideText } from './GuideText';
-
 export function SkillCost({ skill }: { readonly skill: Skill }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <span className="likes-cost">
       <span>ϟ {skill.energy}</span>
       <span>
         {skill.token} K tokens ·{' '}
         {skill.payment === 'mix'
-          ? t('订阅／API', 'Sub / API')
+          ? text('likes.subAPI')
           : skill.payment === 'sub'
-            ? t('仅订阅', 'Subscription')
+            ? text('likes.subscription')
             : 'API'}
       </span>
       {Object.entries(skill.resourceCosts).map(([key, value]) => (
         <span key={key}>
-          {resourceName(key, t)} {value}
+          {resourceName(key, text)} {value}
         </span>
       ))}
       {!!skill.gold && (
         <span>
-          {t('金币', 'Gold')} {skill.gold}
+          {text('likes.gold')} {skill.gold}
         </span>
       )}
     </span>
   );
 }
-
 export function Glossary({
   catalog,
   initial,
@@ -44,15 +42,15 @@ export function Glossary({
   readonly initial?: string;
   readonly onClose: () => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const [path, setPath] = useState([
     { id: initial || catalog.skills[0].id, level: 'base' as GuideLevel },
   ]);
   const [search, setSearch] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const selected = path[path.length - 1];
-  const entry = knowledge(catalog, selected.id, selected.level, t);
-  const related = relatedEntries(catalog, entry, t);
+  const entry = knowledge(catalog, selected.id, selected.level, text);
+  const related = relatedEntries(catalog, entry, text);
   const skill = catalog.skills.find((s) => s.id === selected.id);
   const harness = catalog.harnesses.find((h) => h.id === selected.id);
   const cost = selected.level === 'base' ? skill : catalog.skills.find((s) => s.id === 'PUB41');
@@ -74,21 +72,18 @@ export function Glossary({
   };
   return (
     <DuelDialog
-      title={t('词条手册', 'Field guide')}
+      title={text('likes.fieldGuide')}
       onClose={onClose}
       className="likes-glossary likes-reader"
     >
       <p>
-        {catalog.mode === 'quick' ? t('快速模式', 'Quick mode') : t('标准模式', 'Standard mode')} ·{' '}
-        {t(
-          '阅读不会暂停正式对局计时。点击彩色术语查看关联规则。',
-          'Reading does not pause a live game. Select a highlighted term to read its rules.',
-        )}
+        {catalog.mode === 'quick' ? text('likes.quickMode') : text('likes.standardMode')} ·{' '}
+        {text('likes.readingDoesNotPauseALiveGame')}
       </p>
       <div className="likes-reader-grid">
-        <nav aria-label={t('词条导航', 'Guide navigation')}>
+        <nav aria-label={text('likes.guideNavigation')}>
           <label>
-            {t('搜索词条', 'Find an entry')}
+            {text('likes.findAnEntry')}
             <input value={search} onChange={(e) => setSearch(e.target.value)} maxLength={80} />
           </label>
           <div className="likes-glossary-nav">
@@ -101,7 +96,7 @@ export function Glossary({
                   aria-current={selected.id === item.id ? 'page' : undefined}
                   onClick={() => inspect(item.id)}
                 >
-                  {knowledge(catalog, item.id, 'base', t).title}
+                  {knowledge(catalog, item.id, 'base', text).title}
                 </button>
               ))}
           </div>
@@ -115,7 +110,7 @@ export function Glossary({
               focus();
             }}
           >
-            {t('← 返回上一词条', '← Back to previous entry')}
+            {text('likes.backToPreviousEntry')}
           </button>
           {harness && (
             <LikesArt
@@ -130,13 +125,13 @@ export function Glossary({
           {skill && (
             <>
               <p>
-                {skill.owner} · {kindName(skill.kind, t)}
+                {skill.owner} · {kindName(skill.kind, text)}
               </p>
               {skill.copyable && (
                 <div
                   className="likes-reader-levels"
                   role="group"
-                  aria-label={t('技能版本', 'Skill version')}
+                  aria-label={text('likes.skillVersion')}
                 >
                   {guideLevels.map((level) => (
                     <button
@@ -145,32 +140,26 @@ export function Glossary({
                       aria-pressed={level === selected.level}
                       onClick={() => setPath((p) => [...p.slice(0, -1), { ...selected, level }])}
                     >
-                      {levelName(level, t)}
+                      {levelName(level, text)}
                     </button>
                   ))}
                 </div>
               )}
-              <h4>{t('基础费用与次数', 'Base costs and uses')}</h4>
+              <h4>{text('likes.baseCostsAndUses')}</h4>
               {cost && <SkillCost skill={cost} />}
               <p>
                 {selected.level === 'base'
-                  ? t('成功次数', 'Successful uses')
-                  : t('蒸馏施放次数', 'Distillation casts')}
-                : {cost?.maxUses ?? t('不限', 'Unlimited')}
+                  ? text('likes.successfulUses')
+                  : text('likes.distillationCasts')}
+                : {cost?.maxUses ?? text('likes.unlimited')}
                 {selected.level === 'base' && !skill.copyable
-                  ? ` · ${t('不可蒸馏', 'Cannot be distilled')}`
+                  ? ` · ${text('likes.cannotBeDistilled')}`
                   : ''}
               </p>
               <p>
                 {selected.level === 'base'
-                  ? t(
-                      '以上为原始费用；当前被动、Buff、支付选择与倍速会影响实际费用和得赞。',
-                      'These are original costs. Current passives, buffs, payment choices and speed affect actual costs and likes.',
-                    )
-                  : t(
-                      '蒸馏使用上列自身费用，不继承原技能的金币、图像消耗及次数限制。',
-                      'Distillation uses its own costs above, without inheriting original gold/image costs or use limits.',
-                    )}
+                  ? text('likes.theseAreOriginalCostsCurrentPassivesBuffs')
+                  : text('likes.distillationUsesItsOwnCostsAboveWithout')}
               </p>
             </>
           )}
@@ -186,11 +175,8 @@ export function Glossary({
           )}
         </article>
         {related.length > 0 && (
-          <aside
-            className="likes-reader-related"
-            aria-label={t('关联解释', 'Related explanations')}
-          >
-            <h3>{t('关联解释', 'Related explanations')}</h3>
+          <aside className="likes-reader-related" aria-label={text('likes.relatedExplanations')}>
+            <h3>{text('likes.relatedExplanations')}</h3>
             {related.map((item) => (
               <section key={item.id}>
                 <h4>

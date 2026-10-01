@@ -7,13 +7,15 @@ import { DuelDialog } from './Dialog';
 import { DuelFeedback } from './Feedback';
 import { DuelFinance } from './Finance';
 import { outcomeText, useDuelText } from './copy';
-
 type Props<V, F, P, S, L, A> = {
   readonly codec: DuelCodec<V, F, P, S, L, A>;
   readonly renderRound: (
     round: DuelRound<V, F, S>,
     you: Seat,
-    context: { mode: string; contentHash: string },
+    context: {
+      mode: string;
+      contentHash: string;
+    },
   ) => ReactNode;
   readonly renderDetail?: (detail: DuelDetail<V, P, S, A>) => ReactNode;
 };
@@ -30,7 +32,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
   readonly you: Seat;
   readonly renderRound: (round: DuelRound<V, F, S>, you: Seat) => ReactNode;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const [cursor, setCursor] = useState<string | null>(null);
   const query = useQuery({
     queryKey: [...duelKeys.root(codec.game), 'rounds', id, active, cursor],
@@ -39,7 +41,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
   });
   return (
     <div>
-      <p>{t('阅读日志不会暂停对局计时。', 'Reading the log does not pause the game clock.')}</p>
+      <p>{text('common.readingTheLogDoesNotPauseThe')}</p>
       <DuelFeedback
         error={query.error}
         pending={query.isPending}
@@ -50,15 +52,15 @@ export function DuelRoundLog<V, F, P, S, L, A>({
       {query.data?.items.map((round) => (
         <details className="duel-round" key={round.round}>
           <summary>
-            {t('第', 'Round ')} {round.round} {t('轮', '')}
+            {text('common.round')} {round.round} {text('bidding.message')}
           </summary>
           {renderRound(round, you)}
           {round.timeouts.some(Boolean) && (
             <p>
-              {t('超时自动操作', 'Automatic timeout action')}:{' '}
+              {text('common.automaticTimeoutAction')}:{' '}
               {round.timeouts
                 .map((value, seat) =>
-                  value ? (seat === you ? t('你', 'You') : t('对手', 'Opponent')) : null,
+                  value ? (seat === you ? text('bidding.you') : text('bidding.opponent')) : null,
                 )
                 .filter(Boolean)
                 .join(' / ')}
@@ -66,7 +68,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
           )}
         </details>
       ))}
-      {query.data?.items.length === 0 && <p>{t('尚无已结算轮次。', 'No settled rounds yet.')}</p>}
+      {query.data?.items.length === 0 && <p>{text('common.noSettledRoundsYet')}</p>}
       <div className="duel-actions">
         <button
           type="button"
@@ -76,7 +78,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
             void query.refetch();
           }}
         >
-          {t('刷新／回到首页', 'Refresh / first page')}
+          {text('common.refreshFirstPage')}
         </button>
         <button
           type="button"
@@ -84,7 +86,7 @@ export function DuelRoundLog<V, F, P, S, L, A>({
           disabled={!query.data?.nextCursor || query.isFetching}
           onClick={() => setCursor(query.data?.nextCursor ?? null)}
         >
-          {t('下一页', 'Next page')}
+          {text('common.nextPage')}
         </button>
       </div>
     </div>
@@ -95,7 +97,9 @@ function HistoryDetail<V, F, P, S, L, A>({
   id,
   renderRound,
   renderDetail,
-}: Props<V, F, P, S, L, A> & { readonly id: string }) {
+}: Props<V, F, P, S, L, A> & {
+  readonly id: string;
+}) {
   const query = useQuery({
     queryKey: [...duelKeys.root(codec.game), 'history', id],
     queryFn: ({ signal }) => readDetail(codec, id, signal),
@@ -137,8 +141,10 @@ export function DuelHistory<V, F, P, S, L, A>({
   onClose,
   renderRound,
   renderDetail,
-}: Props<V, F, P, S, L, A> & { readonly onClose: () => void }) {
-  const t = useDuelText();
+}: Props<V, F, P, S, L, A> & {
+  readonly onClose: () => void;
+}) {
+  const text = useDuelText();
   const [cursor, setCursor] = useState<string | null>(null);
   const [id, setID] = useState<string | null>(null);
   const query = useQuery({
@@ -148,12 +154,12 @@ export function DuelHistory<V, F, P, S, L, A>({
     enabled: id === null,
   });
   return (
-    <DuelDialog title={t('对局记录', 'Game history')} onClose={onClose}>
-      <p>{t('保留最近30天本人的完整对局。', 'Your complete games from the last 30 days.')}</p>
+    <DuelDialog title={text('bidding.gameHistory')} onClose={onClose}>
+      <p>{text('common.yourCompleteGamesFromTheLast30')}</p>
       {id ? (
         <>
           <button type="button" className="btn btn-secondary" onClick={() => setID(null)}>
-            {t('返回列表', 'Back to list')}
+            {text('blackjack.backToList')}
           </button>
           <HistoryDetail
             key={id}
@@ -176,7 +182,7 @@ export function DuelHistory<V, F, P, S, L, A>({
             {query.data?.items.map((item) => (
               <li key={item.id}>
                 <button type="button" onClick={() => setID(item.id)}>
-                  <strong>{outcomeText(item.outcome, t)}</strong>
+                  <strong>{outcomeText(item.outcome, text)}</strong>
                   <span>{new Date(item.terminalAt * 1000).toLocaleString()}</span>
                   <span>
                     {item.scores[item.you]} : {item.scores[1 - item.you]}
@@ -185,7 +191,7 @@ export function DuelHistory<V, F, P, S, L, A>({
               </li>
             ))}
           </ul>
-          {query.data?.items.length === 0 && <p>{t('暂无对局记录。', 'No games yet.')}</p>}
+          {query.data?.items.length === 0 && <p>{text('blackjack.noGamesYet')}</p>}
           <div className="duel-actions">
             <button
               type="button"
@@ -193,7 +199,7 @@ export function DuelHistory<V, F, P, S, L, A>({
               disabled={!cursor}
               onClick={() => setCursor(null)}
             >
-              {t('首页', 'First page')}
+              {text('common.firstPage')}
             </button>
             <button
               type="button"
@@ -201,7 +207,7 @@ export function DuelHistory<V, F, P, S, L, A>({
               disabled={!query.data?.nextCursor || query.isFetching}
               onClick={() => setCursor(query.data?.nextCursor ?? null)}
             >
-              {t('下一页', 'Next page')}
+              {text('common.nextPage')}
             </button>
           </div>
         </>

@@ -97,3 +97,29 @@ describe('limited activity user experience', () => {
     expect(screen.queryByRole('link', { name: 'View activity' })).toBeNull();
   });
 });
+
+it('shows the scheduled opening window and the next step without offering premature entry', async () => {
+  const activity = {
+    ...limitedActivity(),
+    status: 'scheduled',
+    starts_at: 1900000000,
+    ends_at: 1900003600,
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/session') ? reply(session) : reply([activity]),
+    ),
+  );
+  await renderWithProviders(<LimitedActivitiesSection />, { station: 'user', role: 'user' });
+  await screen.findByText('Not started');
+  expect(
+    screen.getByText('You can enter when it opens. Check the start time.'),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/Schedule:/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'View activity: Picture book' })).toHaveAttribute(
+    'href',
+    '/activities/picture-book',
+  );
+  expect(screen.queryByRole('button', { name: 'Confirm exchange' })).not.toBeInTheDocument();
+});

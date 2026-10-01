@@ -23,14 +23,19 @@ import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
 import '@shared/limitedactivities/limited.css';
 import pictureBookCover from '@shared/limitedactivities/picture-book-cover.webp';
-
 import { LakeCover } from '../../activities/lake-notes/LakeCover';
 import { useLakeCopy } from '../../activities/lake-notes/copy';
-
 import { limitedActivityKeys } from './queries';
-
+const nextStep = {
+  scheduled: 'common.nextScheduled',
+  paused: 'common.nextPaused',
+  ended: 'common.nextEnded',
+  unavailable: 'common.nextUnavailable',
+  unconfigured: 'common.nextUnconfigured',
+  open: 'common.nextOpen',
+} as const;
 export function LimitedActivitiesSection() {
-  const t = useActivityText(),
+  const text = useActivityText(),
     { t: lakeText } = useLakeCopy(),
     session = useUserSession(),
     client = useQueryClient(),
@@ -42,15 +47,13 @@ export function LimitedActivitiesSection() {
   });
   return (
     <section aria-labelledby="limited-activities-heading">
-      <h2 id="limited-activities-heading">{t('限时活动', 'Limited-time activities')}</h2>
+      <h2 id="limited-activities-heading">{text('common.limitedTimeActivities')}</h2>
       {query.isPending ? (
         <LoadingState />
       ) : query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : null}
-      {query.data?.length === 0 ? (
-        <p>{t('暂无公开的限时活动。', 'No limited-time activities are listed.')}</p>
-      ) : null}
+      {query.data?.length === 0 ? <p>{text('common.noLimitedTimeActivitiesAreListed')}</p> : null}
       <div className="limited-grid">
         {query.data?.map((activity) => {
           const isBook = activity.key === 'picture-book',
@@ -58,8 +61,8 @@ export function LimitedActivitiesSection() {
           const name = isLake
             ? lakeText('title')
             : isBook
-              ? t('喵帕斯的绘本', 'Picture book')
-              : t('饲养大肥鱼', 'Raise a big fish');
+              ? text('common.pictureBook')
+              : text('common.raiseABigFish');
           return (
             <Card key={activity.key} className="limited-entry">
               <div className={`limited-entry__cover limited-entry__cover--${activity.cover_key}`}>
@@ -68,20 +71,14 @@ export function LimitedActivitiesSection() {
                 ) : isBook ? (
                   <img
                     src={pictureBookCover}
-                    alt={t(
-                      '莲华在纸上认真画着笨拙的小画',
-                      'Renge carefully drawing a simple picture on paper',
-                    )}
+                    alt={text('common.rengeCarefullyDrawingASimplePictureOn')}
                     width="1280"
                     height="720"
                   />
                 ) : (
                   <img
                     src="/assets/fatfish/cover.png"
-                    alt={t(
-                      '大肥鱼搬动障碍，开心地奔向大碗米饭',
-                      'Fat Fish move obstacles and happily head toward bowls of rice',
-                    )}
+                    alt={text('common.fatFishMoveObstaclesAndHappilyHead')}
                     width="1536"
                     height="1024"
                     loading="lazy"
@@ -89,24 +86,25 @@ export function LimitedActivitiesSection() {
                 )}
               </div>
               <div className="limited-entry__copy">
-                <p className="limited-entry__eyebrow">{t('限时活动', 'Limited-time activity')}</p>
+                <p className="limited-entry__eyebrow">{text('common.limitedTimeActivity')}</p>
                 <h3>{name}</h3>
                 <p>
                   {isLake
                     ? lakeText('description')
                     : isBook
-                      ? t(
-                          '翻开绘本，收集草稿纸与画笔。',
-                          'Open the picture book and collect sketch paper and brushes.',
-                        )
-                      : t(
-                          '搬动障碍，帮饥肠辘辘的大肥鱼找到米饭。',
-                          'Move obstacles and guide hungry Fat Fish to their rice.',
-                        )}
+                      ? text('common.openThePictureBookAndCollectSketch')
+                      : text('common.moveObstaclesAndGuideHungryFatFish')}
                 </p>
-                <p className="limited-entry__status">{statusLabel(activity.status, t)}</p>
+                <p className="limited-entry__status">{statusLabel(activity.status, text)}</p>
+                {activity.starts_at !== null && activity.ends_at !== null && (
+                  <p>
+                    <span>{text('common.schedule')}: </span>
+                    {formatDateTime(activity.starts_at)} — {formatDateTime(activity.ends_at)}
+                  </p>
+                )}
+                <p>{text(nextStep[activity.status])}</p>
                 <Link className="btn btn-secondary" to={'/activities/' + activity.key}>
-                  {t('查看活动', 'View activity')}: {name}
+                  {text('common.viewActivity')}: {name}
                 </Link>
               </div>
             </Card>
@@ -117,21 +115,16 @@ export function LimitedActivitiesSection() {
   );
 }
 function ActivityInformation({ detail }: { readonly detail: ActivityDetail }) {
-  const t = useActivityText();
+  const text = useActivityText();
   return (
     <div className="limited-notice" role="status">
-      <p>{statusLabel(detail.status, t)}</p>
+      <p>{statusLabel(detail.status, text)}</p>
       {detail.starts_at !== null && detail.ends_at !== null ? (
         <p>
           {formatDateTime(detail.starts_at)} — {formatDateTime(detail.ends_at)}
         </p>
       ) : null}
-      <p>
-        {t(
-          '活动再次开放时，已有余额和记录会继续保留。',
-          'Balances and records continue when the activity reopens.',
-        )}
-      </p>
+      <p>{text('common.balancesAndRecordsContinueWhenTheActivity')}</p>
     </div>
   );
 }
@@ -142,7 +135,7 @@ function ExchangePanel({
   readonly account: string;
   readonly detail: ActivityDetail;
 }) {
-  const t = useActivityText(),
+  const text = useActivityText(),
     client = useQueryClient();
   const [asset, setAsset] = useState<ActivityAsset>('sketch_paper'),
     [quantity, setQuantity] = useState('1'),
@@ -183,7 +176,7 @@ function ExchangePanel({
   };
   return (
     <Card>
-      <h2>{t('活动钱包与兑换', 'Activity wallet and exchange')}</h2>
+      <h2>{text('common.activityWalletAndExchange')}</h2>
       {wallet.isPending ? (
         <LoadingState />
       ) : wallet.error ? (
@@ -191,24 +184,19 @@ function ExchangePanel({
       ) : null}
       {wallet.data ? (
         <dl className="limited-facts">
-          <dt>{t('通用悠哉积分', 'General credits')}</dt>
+          <dt>{text('common.generalCredits')}</dt>
           <dd>{wallet.data.general}</dd>
-          <dt>{t('草稿纸', 'Sketch paper')}</dt>
+          <dt>{text('common.sketchPaper')}</dt>
           <dd>{wallet.data.sketch_paper}</dd>
-          <dt>{t('画笔', 'Paint brushes')}</dt>
+          <dt>{text('common.paintBrushes')}</dt>
           <dd>{wallet.data.sketch_brush}</dd>
         </dl>
       ) : null}
       <p>
-        {t('全站画笔剩余可兑量', 'Brushes remaining across the site')}: {supply.brush_remaining} /{' '}
+        {text('common.brushesRemainingAcrossTheSite')}: {supply.brush_remaining} /{' '}
         {supply.brush_cap}
       </p>
-      <p>
-        {t(
-          '仅可使用通用悠哉积分兑换。不可退换、反向兑换或在两种活动币之间兑换。',
-          'Exchange general credits for activity currency. Exchanges cannot be reversed or converted between activity currencies.',
-        )}
-      </p>
+      <p>{text('common.exchangeGeneralCreditsForActivityCurrencyExchanges')}</p>
       <form
         className="limited-form"
         onSubmit={(event) => {
@@ -218,17 +206,17 @@ function ExchangePanel({
       >
         <fieldset disabled={locked}>
           <label>
-            {t('兑换币种', 'Currency')}
+            {text('common.currency')}
             <select
               value={asset}
               onChange={(event) => setAsset(event.target.value as ActivityAsset)}
             >
-              <option value="sketch_paper">{currencyLabel('sketch_paper', t)}</option>
-              <option value="sketch_brush">{currencyLabel('sketch_brush', t)}</option>
+              <option value="sketch_paper">{currencyLabel('sketch_paper', text)}</option>
+              <option value="sketch_brush">{currencyLabel('sketch_brush', text)}</option>
             </select>
           </label>
           <label>
-            {t('兑换数量', 'Quantity')}
+            {text('common.quantity')}
             <input
               value={quantity}
               inputMode="numeric"
@@ -240,15 +228,10 @@ function ExchangePanel({
           </label>
         </fieldset>
         <p>
-          {t('通用积分扣减', 'General credits charged')}: <output>{cost ?? '—'}</output>
+          {text('common.generalCreditsCharged')}: <output>{cost ?? '—'}</output>
         </p>
         {uncertain ? (
-          <p role="status">
-            {t(
-              '上次兑换结果尚未确认。请重试同一次兑换，不会重复扣款。',
-              'The previous result is unconfirmed. Retry the same exchange without a duplicate charge.',
-            )}
-          </p>
+          <p role="status">{text('common.thePreviousResultIsUnconfirmedRetryThe')}</p>
         ) : null}
         {operation.error ? <ErrorState error={operation.error} /> : null}
         <button
@@ -259,15 +242,13 @@ function ExchangePanel({
             (!uncertain && (detail.status !== 'open' || cost === null || !wallet.data))
           }
         >
-          {uncertain
-            ? t('重试同一次兑换', 'Retry the same exchange')
-            : t('确认兑换', 'Confirm exchange')}
+          {uncertain ? text('common.retryTheSameExchange') : text('common.confirmExchange')}
         </button>
       </form>
       {receipt ? (
         <p role="status">
-          {t('已兑换', 'Exchanged')} {receipt.receipt.quantity}{' '}
-          {currencyLabel(receipt.receipt.asset, t)} · {t('通用积分扣减', 'General credits charged')}{' '}
+          {text('common.exchanged')} {receipt.receipt.quantity}{' '}
+          {currencyLabel(receipt.receipt.asset, text)} · {text('common.generalCreditsCharged')}{' '}
           {receipt.receipt.cost}
         </p>
       ) : null}
@@ -281,7 +262,7 @@ function PictureBookContent({
   readonly account: string;
   readonly children?: ReactNode;
 }) {
-  const t = useActivityText(),
+  const text = useActivityText(),
     client = useQueryClient();
   const query = useQuery({
     queryKey: limitedActivityKeys.detail(account),
@@ -290,10 +271,10 @@ function PictureBookContent({
   return (
     <div className="page">
       <PageHeader
-        title={t('喵帕斯的绘本', 'Picture book')}
-        eyebrow={t('限时活动', 'Limited-time activity')}
+        title={text('common.pictureBook')}
+        eyebrow={text('common.limitedTimeActivity')}
         icon="activities"
-        back={<Link to="/activities">{t('返回活动', 'Back to activities')}</Link>}
+        back={<Link to="/activities">{text('common.backToActivities')}</Link>}
       />
       {query.isPending ? (
         <LoadingState />

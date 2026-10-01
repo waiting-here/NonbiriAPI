@@ -8,7 +8,11 @@ import { CharacterPassive } from './CharacterPassive';
 import { Arena } from './Arena';
 import { EffectSummary } from './GuideText';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: string) => en }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'en') };
+});
 const catalog = likesCatalog({
   ...catalogWire({ quick: wire.partial.content_hash, standard: wire.chain.content_hash }),
   compatible_modes: legacyCatalogWire(),

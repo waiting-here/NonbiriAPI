@@ -11,7 +11,6 @@ import {
   type RandomProof,
 } from './randomness';
 import './randomness.css';
-
 function save(proof: RandomProof) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(proof, null, 2)], { type: 'application/json' }),
@@ -22,7 +21,6 @@ function save(proof: RandomProof) {
   a.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-
 export function RandomnessProof({
   game,
   id,
@@ -34,7 +32,6 @@ export function RandomnessProof({
 }) {
   return id ? <ProofPanel key={`${game}:${id}`} game={game} id={id} terminal={terminal} /> : null;
 }
-
 function ProofPanel({
   game,
   id,
@@ -44,7 +41,7 @@ function ProofPanel({
   readonly id: string;
   readonly terminal: boolean;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     client = useQueryClient();
   const key = ['user', 'games', game, 'randomness', id] as const;
   const query = useQuery({
@@ -68,7 +65,7 @@ function ProofPanel({
       return p;
     },
     retry: false,
-    staleTime: 30_000,
+    staleTime: 30000,
     refetchInterval: (q) => (q.state.data && !q.state.data.seed ? 5000 : false),
     refetchOnWindowFocus: true,
   });
@@ -108,52 +105,41 @@ function ProofPanel({
   return (
     <details className="random-proof">
       <summary>
-        {t('随机性核验', 'Verify randomness')}{' '}
+        {text('common.verifyRandomness')}{' '}
         <span>
           {p?.seed
-            ? t('种子已公开', 'Seed disclosed')
+            ? text('common.seedDisclosed')
             : p
-              ? t('开局承诺已锁定', 'Opening commitment locked')
-              : t('凭证', 'Proof')}
+              ? text('common.openingCommitmentLocked')
+              : text('common.proof')}
         </span>
       </summary>
       {query.isPending ? (
-        <p>{t('正在读取凭证…', 'Loading proof…')}</p>
+        <p>{text('common.loadingProof')}</p>
       ) : query.isError ? (
         <p role="status">
-          {t('暂时无法读取凭证。', 'The proof is temporarily unavailable.')}{' '}
+          {text('common.theProofIsTemporarilyUnavailable')}{' '}
           <button type="button" className="btn btn-secondary" onClick={() => void refetch()}>
-            {t('重试', 'Retry')}
+            {text('common.retry')}
           </button>
         </p>
       ) : p === null ? (
-        <p>
-          {t(
-            '这局开始时尚未启用随机凭证，无法追溯核验。',
-            'This game predates random proofs and cannot be verified retrospectively.',
-          )}
-        </p>
+        <p>{text('common.thisGamePredatesRandomProofsAndCannot')}</p>
       ) : p ? (
         <>
           <p>
             {p.seed
-              ? t(
-                  '服务器已结束这局。可在本机核对种子承诺与全部已记录抽样，或下载凭证独立重放。',
-                  'This game has ended. Check the seed commitment and all recorded draws locally, or download the proof for independent replay.',
-                )
-              : t(
-                  '随机种子仍由服务器保密，整局结束后才公开。现在可保存承诺，结束后对照。',
-                  'The server keeps the seed secret until the whole game ends. Save this commitment to compare it with the final proof.',
-                )}
+              ? text('common.thisGameHasEndedCheckTheSeed')
+              : text('common.theServerKeepsTheSeedSecretUntil')}
           </p>
           <dl>
-            <dt>{t('开局承诺 · SHA-256', 'Opening commitment · SHA-256')}</dt>
+            <dt>{text('common.openingCommitmentSHA256')}</dt>
             <dd>
               <code>{p.commitment}</code>
             </dd>
             {p.seed && (
               <>
-                <dt>{t('公开种子', 'Disclosed seed')}</dt>
+                <dt>{text('common.disclosedSeed')}</dt>
                 <dd>
                   <code>{p.seed}</code>
                 </dd>
@@ -168,33 +154,22 @@ function ProofPanel({
                 disabled={verification === 'busy'}
                 onClick={() => void verify()}
               >
-                {verification === 'busy'
-                  ? t('核验中…', 'Verifying…')
-                  : t('本机核验', 'Verify locally')}
+                {verification === 'busy' ? text('common.verifying') : text('common.verifyLocally')}
               </button>
             )}
             <button type="button" className="btn btn-secondary" onClick={() => save(p)}>
-              {p.seed ? t('下载随机凭证', 'Download proof') : t('保存开局承诺', 'Save commitment')}
+              {p.seed ? text('common.downloadProof') : text('common.saveCommitment')}
             </button>
           </div>
           <p role="status" className={`random-proof-status is-${verification}`}>
             {verification === 'passed'
-              ? t(
-                  `核验通过：承诺一致，${count} 次记录抽样均可复现。`,
-                  `Verified: commitment matches; all ${count} recorded draws reproduce.`,
-                )
+              ? text('common.verifiedCommitmentMatchesAllRecordedDrawsReproduce', { count: count })
               : verification === 'failed'
-                ? t(
-                    '核验失败：凭证不一致，或当前浏览器不支持安全核验。请下载后独立核对。',
-                    'Verification failed: the proof is inconsistent or secure verification is unavailable in this browser. Download it for an independent check.',
-                  )
+                ? text('common.verificationFailedTheProofIsInconsistentOr')
                 : null}
           </p>
           <p className="random-proof-note">
-            {t(
-              '凭证验证随机抽样的一致性；完整结果还需结合桌规与公开操作记录复演。',
-              'This verifies the consistency of random draws. Replaying a complete result also requires the game rules and public action log.',
-            )}
+            {text('common.thisVerifiesTheConsistencyOfRandomDraws')}
           </p>
         </>
       ) : null}

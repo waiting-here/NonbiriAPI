@@ -2,7 +2,6 @@ import type { DuelRound, Seat } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
 import { cardLabel, handSuit } from './labels';
 import type { BiddingRound, BiddingView } from './normalize';
-
 export function BiddingRoundView({
   round,
   you,
@@ -10,60 +9,58 @@ export function BiddingRoundView({
   readonly round: DuelRound<BiddingView, BiddingRound, never>;
   readonly you: Seat;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const fact = round.facts;
   return (
     <div className="bid-round-facts">
       <p>
-        {t('你／对手出牌', 'Your bid / opponent’s bid')}:{' '}
+        {text('bidding.yourBidOpponentSBid')}:{' '}
         <strong>
-          {handSuit(you, t).name} {cardLabel(fact.bids[you])} / {handSuit(1 - you, t).name}{' '}
+          {handSuit(you, text).name} {cardLabel(fact.bids[you])} / {handSuit(1 - you, text).name}{' '}
           {cardLabel(fact.bids[1 - you])}
         </strong>
       </p>
       <p>
-        {t('本轮奖励', 'Fresh reward')}: {fact.fresh} · {t('上轮累计', 'Carried in')}:{' '}
+        {text('bidding.freshReward')}: {fact.fresh} · {text('bidding.carriedIn')}:{' '}
         {fact.carryBefore}
       </p>
       {fact.joker !== null && (
         <p>
-          {fact.joker === you
-            ? t('你使用了 Joker', 'You used a joker')
-            : t('对手使用了 Joker', 'Opponent used a joker')}
+          {fact.joker === you ? text('bidding.youUsedAJoker') : text('bidding.opponentUsedAJoker')}
         </p>
       )}
       <p>
         {fact.awardedTo !== null
-          ? `${fact.awardedTo === you ? t('你赢得', 'You won') : t('对手赢得', 'Opponent won')} ${fact.awarded} ${t('分', 'points')}`
+          ? `${fact.awardedTo === you ? text('bidding.youWon') : text('bidding.opponentWon')} ${fact.awarded} ${text('bidding.points')}`
           : fact.discarded > 0
-            ? `${t('最后一轮平手，奖池丢弃', 'Final tie, pool discarded')}: ${fact.discarded}`
-            : `${t('平手，累计至下一轮', 'Tie, carried forward')}: ${fact.carryAfter}`}
+            ? `${text('bidding.finalTiePoolDiscarded')}: ${fact.discarded}`
+            : `${text('bidding.tieCarriedForward')}: ${fact.carryAfter}`}
       </p>
       <p>
-        {t('结算后比分', 'Scores after settlement')}: {fact.scores[you]} : {fact.scores[1 - you]}
+        {text('bidding.scoresAfterSettlement')}: {fact.scores[you]} : {fact.scores[1 - you]}
       </p>
     </div>
   );
 }
 export function PlayedHistory({ view, you }: { readonly view: BiddingView; readonly you: Seat }) {
-  const t = useDuelText();
+  const text = useDuelText();
   if (!view.played[0].length) return null;
   return (
     <section className="bid-played">
-      <h2>{t('已揭示出牌', 'Revealed bids')}</h2>
+      <h2>{text('bidding.revealedBids')}</h2>
       <div
         className="bid-table-scroll"
         tabIndex={0}
         role="region"
-        aria-label={t('出牌记录表，可横向滚动', 'Bid history, scroll horizontally')}
+        aria-label={text('bidding.bidHistoryScrollHorizontally')}
       >
         <table>
           <thead>
             <tr>
-              <th>{t('轮次', 'Round')}</th>
-              <th>{t('你', 'You')}</th>
-              <th>{t('对手', 'Opponent')}</th>
-              <th>{t('奖励去向', 'Reward status')}</th>
+              <th>{text('bidding.round2')}</th>
+              <th>{text('bidding.you')}</th>
+              <th>{text('bidding.opponent')}</th>
+              <th>{text('bidding.rewardStatus')}</th>
             </tr>
           </thead>
           <tbody>
@@ -74,19 +71,19 @@ export function PlayedHistory({ view, you }: { readonly view: BiddingView; reado
                 <tr key={index}>
                   <td>{index + 1}</td>
                   <td>
-                    {handSuit(you, t).name} {cardLabel(view.played[you][index])}
+                    {handSuit(you, text).name} {cardLabel(view.played[you][index])}
                   </td>
                   <td>
-                    {handSuit(1 - you, t).name} {cardLabel(view.played[1 - you][index])}
+                    {handSuit(1 - you, text).name} {cardLabel(view.played[1 - you][index])}
                   </td>
                   <td>
                     {reward?.status === 'pool'
-                      ? t('奖池累计', 'In carried pool')
+                      ? text('bidding.inCarriedPool')
                       : reward?.status === 'discarded'
-                        ? t('丢弃', 'Discarded')
+                        ? text('bidding.discarded2')
                         : reward?.owner === you
-                          ? t('归你所有', 'Awarded to you')
-                          : t('归对手所有', 'Awarded to opponent')}
+                          ? text('bidding.awardedToYou')
+                          : text('bidding.awardedToOpponent')}
                   </td>
                 </tr>
               );

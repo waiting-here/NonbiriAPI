@@ -1,3 +1,4 @@
+import type { DuelText } from '../common/duel/copy';
 import type { CSSProperties, ReactNode } from 'react';
 import type {
   BlackjackCard,
@@ -8,7 +9,6 @@ import type {
 import { useDuelText } from '../common/duel/copy';
 import { creditsFromMilli, formatCredits } from '../common/strict';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
-
 const ranks = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const suits = ['♠', '♥', '♣', '♦'];
 export function PlayingCard({
@@ -20,12 +20,15 @@ export function PlayingCard({
   readonly identity: string;
   readonly small?: boolean;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const name = card
-    ? [t('黑桃', 'Spades'), t('红心', 'Hearts'), t('梅花', 'Clubs'), t('方块', 'Diamonds')][
-        card.suit
-      ]
-    : t('庄家暗牌', 'Dealer hole card');
+    ? [
+        text('blackjack.spades'),
+        text('blackjack.hearts'),
+        text('bidding.clubs'),
+        text('bidding.diamonds'),
+      ][card.suit]
+    : text('blackjack.dealerHoleCard');
   return (
     <span
       className={`bid-reward bj-card ${small ? 'bj-card--small' : ''} ${card ? (card.suit % 2 ? 'bid-reward--0' : '') : 'bj-card--back'}`}
@@ -59,14 +62,14 @@ export function HandCards({
   readonly identity: string;
   readonly small?: boolean;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const label = hand.natural
-    ? t('自然二十一点', 'Blackjack')
+    ? text('blackjack.blackjack2')
     : hand.total.value > 21
-      ? t('爆牌', 'Bust')
+      ? text('blackjack.bust')
       : hand.stood
-        ? t('已停牌', 'Stood')
-        : t('决策中', 'Deciding');
+        ? text('blackjack.stood')
+        : text('blackjack.deciding');
   return (
     <div
       className={`bj-hand ${hand.total.value > 21 ? 'is-bust' : ''} ${hand.natural ? 'is-natural' : ''}`}
@@ -87,11 +90,11 @@ export function HandCards({
       <p className="bj-hand-score">
         <strong data-score-key={`${identity}:${hand.total.value}:${hand.stood}`}>
           {hand.total.value}
-          {hand.total.soft && <small>{t('软', 'soft')}</small>}
+          {hand.total.soft && <small>{text('blackjack.soft')}</small>}
         </strong>
         <span>{label}</span>
         {hand.units === 2 && <b>×2</b>}
-        {hand.split && <span>{t('分牌', 'Split')}</span>}
+        {hand.split && <span>{text('blackjack.split')}</span>}
       </p>
     </div>
   );
@@ -105,7 +108,7 @@ export function BlackjackBoard({
   readonly ownSeat: number | null;
   readonly controls?: ReactNode;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const cards = table.fact.cards;
   const mine = cards?.seats.find((seat) => seat.number === ownSeat);
   const myTerms = table.fact.seats.find((seat) => seat.seat === ownSeat);
@@ -119,14 +122,14 @@ export function BlackjackBoard({
   return (
     <section
       className={`bj-board bj-board--viewer-${ownSeat === null ? 'spectator' : 'participant'} bj-board--phase-${table.phase}`}
-      aria-label={t('二十一点牌桌', 'Blackjack table')}
+      aria-label={text('blackjack.blackjackTable')}
     >
       <div className="bj-table-watermark" aria-hidden="true">
         BLACKJACK <span>3 : 2</span>
       </div>
-      <section className="bj-dealer" aria-label={t('庄家', 'Dealer')}>
+      <section className="bj-dealer" aria-label={text('blackjack.dealer')}>
         <h2>
-          {t('庄家', 'Dealer')} <small>{t('软 17 停牌', 'Stands on soft 17')}</small>
+          {text('blackjack.dealer')} <small>{text('blackjack.standsOnSoft17')}</small>
         </h2>
         <div className="bj-cards">
           {cards ? (
@@ -149,37 +152,39 @@ export function BlackjackBoard({
         </div>
         <p>
           {cards?.hole_hidden ? (
-            t('全桌结束决策后翻开底牌', 'Hole card opens when everyone finishes')
+            text('blackjack.holeCardOpensWhenEveryoneFinishes')
           ) : cards ? (
             <strong data-score-key={`dealer:${cards.dealer_total.value}`}>
-              {cards.dealer_total.value} {t('点', 'points')}
+              {cards.dealer_total.value} {text('blackjack.points')}
             </strong>
           ) : (
-            t('等待发牌', 'Waiting to deal')
+            text('blackjack.waitingToDeal')
           )}
         </p>
       </section>
       {hasOwnArea && (
-        <section className="bj-mine" aria-label={t('你的手牌', 'Your hands')}>
+        <section className="bj-mine" aria-label={text('blackjack.yourHands')}>
           <h2>
-            {t('你的手牌', 'Your hands')} <small>#{ownSeat + 1}</small>
+            {text('blackjack.yourHands')} <small>#{ownSeat + 1}</small>
           </h2>
           <PublicGameIdentity
             identity={identityFor(ownSeat)}
-            anonymousLabel={t('匿名牌手', 'Anonymous card player')}
+            anonymousLabel={text('blackjack.anonymousCardPlayer')}
             isMe
-            meLabel={t('你', 'You')}
+            meLabel={text('bidding.you')}
           />
           {myTerms?.emote && (
             <span className="bj-emote" role="status">
-              {emoteText(myTerms.emote, t)}
+              {emoteText(myTerms.emote, text)}
             </span>
           )}
           <div className="bj-hands">
             {mine?.hands.map((hand, i) => (
               <section key={i}>
                 <h3>
-                  {mine.hands.length > 1 ? `${t('手牌', 'Hand')} ${i + 1}` : t('本手', 'Your hand')}
+                  {mine.hands.length > 1
+                    ? `${text('blackjack.hand')} ${i + 1}`
+                    : text('blackjack.yourHand')}
                 </h3>
                 <HandCards hand={hand} identity={`${table.id}:seat:${mine.number}:hand:${i}`} />
               </section>
@@ -190,7 +195,7 @@ export function BlackjackBoard({
       {controls}
       <div
         className={`bj-seats ${hasOwnArea ? 'bj-seats--eight' : 'bj-seats--nine'}`}
-        aria-label={t('同桌玩家', 'Other seats')}
+        aria-label={text('blackjack.otherSeats')}
       >
         {Array.from({ length: 9 }, (_, number) => {
           if (number === ownSeat && hasOwnArea) return null;
@@ -200,21 +205,21 @@ export function BlackjackBoard({
             <section
               key={number}
               className={`bj-seat ${terms ? 'is-occupied' : ''} ${number === ownSeat ? 'is-own' : ''}`}
-              aria-label={`${t('座位', 'Seat')} ${number + 1}`}
+              aria-label={`${text('blackjack.seat')} ${number + 1}`}
             >
               <header>
                 <strong>
                   #{number + 1}
-                  {number === ownSeat && ` · ${t('你', 'You')}`}
+                  {number === ownSeat && ` · ${text('bidding.you')}`}
                 </strong>
-                <span>{terms ? formatCredits(terms.stake) : t('空位', 'Open')}</span>
+                <span>{terms ? formatCredits(terms.stake) : text('blackjack.open')}</span>
               </header>
               {terms && (
                 <PublicGameIdentity
                   identity={identityFor(number)}
-                  anonymousLabel={t('匿名牌手', 'Anonymous card player')}
+                  anonymousLabel={text('blackjack.anonymousCardPlayer')}
                   isMe={number === ownSeat}
-                  meLabel={t('你', 'You')}
+                  meLabel={text('bidding.you')}
                   size={24}
                 />
               )}
@@ -228,16 +233,16 @@ export function BlackjackBoard({
                   />
                 ))
               ) : terms ? (
-                <p>{t('已落座', 'Seated')}</p>
+                <p>{text('blackjack.seated')}</p>
               ) : (
                 <span className="bj-empty-seat" aria-hidden="true">
                   ♧
                 </span>
               )}
-              {terms?.stopped && <small>{t('自动停牌', 'Auto stand')}</small>}
+              {terms?.stopped && <small>{text('blackjack.autoStand')}</small>}
               {terms?.emote && (
                 <span className="bj-emote" role="status">
-                  {emoteText(terms.emote, t)}
+                  {emoteText(terms.emote, text)}
                 </span>
               )}
             </section>
@@ -247,28 +252,28 @@ export function BlackjackBoard({
     </section>
   );
 }
-export function emoteText(emote: string, t: (zh: string, en: string) => string) {
+export function emoteText(emote: string, text: DuelText) {
   return (
     (
       {
-        hello: t('👋 你好', '👋 Hello'),
-        nice: t('👏 好牌', '👏 Nice'),
-        wow: t('😮 哇', '😮 Wow'),
-        good_luck: t('🍀 好运', '🍀 Good luck'),
-        thanks: t('🙏 谢谢', '🙏 Thanks'),
-        gg: t('🤝 好局', '🤝 GG'),
+        hello: text('blackjack.hello'),
+        nice: text('blackjack.nice'),
+        wow: text('blackjack.wow'),
+        good_luck: text('blackjack.goodLuck'),
+        thanks: text('blackjack.thanks'),
+        gg: text('blackjack.gG'),
       } as Record<string, string>
     )[emote] ?? ''
   );
 }
-export function outcomeText(outcome: string, t: (zh: string, en: string) => string) {
+export function outcomeText(outcome: string, text: DuelText) {
   return (
     (
       {
-        win: t('获胜', 'Win'),
-        loss: t('失败', 'Loss'),
-        push: t('平局', 'Push'),
-        natural: t('自然二十一点', 'Blackjack'),
+        win: text('blackjack.win'),
+        loss: text('blackjack.loss'),
+        push: text('blackjack.push'),
+        natural: text('blackjack.blackjack2'),
       } as Record<string, string>
     )[outcome] ?? ''
   );
@@ -281,54 +286,54 @@ export function BlackjackSettlement({
   readonly fact: BlackjackFact;
   readonly seat: number | null;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const settlements =
     seat === null ? fact.settlements : fact.settlements.filter((s) => s.seat === seat);
   return (
     <section
       className="bj-settlement"
-      aria-label={t('结算明细', 'Settlement details')}
+      aria-label={text('blackjack.settlementDetails')}
       data-settlement
     >
-      <h2>{seat === null ? t('本桌结算', 'Table results') : t('你的结算', 'Your results')}</h2>
+      <h2>{seat === null ? text('blackjack.tableResults') : text('blackjack.yourResults')}</h2>
       {settlements.map((s) => (
         <div key={s.seat} className="bj-settled-seat">
           {seat === null && (
             <h3>
-              {t('座位', 'Seat')} #{s.seat + 1}
+              {text('blackjack.seat')} #{s.seat + 1}
             </h3>
           )}
           {s.hands.map((h, i) => (
             <article key={i} className={`bj-payout bj-payout--${h.outcome}`}>
               <header>
                 <span>
-                  {t('手牌', 'Hand')} {i + 1}
+                  {text('blackjack.hand')} {i + 1}
                 </span>
-                <strong>{outcomeText(h.outcome, t)}</strong>
+                <strong>{outcomeText(h.outcome, text)}</strong>
               </header>
               <dl>
                 <div>
-                  <dt>{t('投入', 'Stake')}</dt>
+                  <dt>{text('blackjack.stake')}</dt>
                   <dd>{milli(h.stake_milli)}</dd>
                 </div>
                 <div>
-                  <dt>{t('应返总额', 'Gross return')}</dt>
+                  <dt>{text('blackjack.grossReturn')}</dt>
                   <dd>{milli(h.gross_milli)}</dd>
                 </div>
                 <div>
-                  <dt>{t('平台费用', 'Platform fee')}</dt>
+                  <dt>{text('blackjack.platformFee')}</dt>
                   <dd>−{milli(h.platform_milli)}</dd>
                 </div>
                 <div>
-                  <dt>{t('低保池', 'Welfare pool')}</dt>
+                  <dt>{text('blackjack.welfarePool')}</dt>
                   <dd>−{milli(h.welfare_milli)}</dd>
                 </div>
                 <div>
-                  <dt>{t('周四池', 'Thursday pool')}</dt>
+                  <dt>{text('blackjack.thursdayPool')}</dt>
                   <dd>−{milli(h.thursday_milli)}</dd>
                 </div>
                 <div className="bj-net">
-                  <dt>{t('通用积分到账', 'General credits paid')}</dt>
+                  <dt>{text('blackjack.generalCreditsPaid')}</dt>
                   <dd data-payout={h.net_milli}>{milli(h.net_milli)}</dd>
                 </div>
               </dl>
@@ -336,12 +341,7 @@ export function BlackjackSettlement({
           ))}
         </div>
       ))}
-      <p>
-        {t(
-          '正常返还全部发为通用积分，已包含本金及逐手费用。',
-          'All normal returns are general credits, including principal after per-hand fees.',
-        )}
-      </p>
+      <p>{text('blackjack.allNormalReturnsAreGeneralCreditsIncluding')}</p>
     </section>
   );
 }

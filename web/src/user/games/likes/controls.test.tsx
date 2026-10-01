@@ -11,7 +11,11 @@ import { planControls } from './planControls';
 import type { DuelState } from '../common/duel/types';
 import type { LikesEvent, LikesView, Presentation, Status } from './types';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: string) => en }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'en') };
+});
 vi.mock('./Glossary', () => ({ SkillCost: () => null }));
 
 const config = structuredClone(rawCatalog) as unknown as Record<string, unknown>;

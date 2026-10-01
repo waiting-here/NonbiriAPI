@@ -22,7 +22,6 @@ import { CastImpact } from './CastImpact';
 import { CharacterPassive } from './CharacterPassive';
 import { EffectSummary } from './GuideText';
 import { overloadResources, type ResourceShortage } from './shortage';
-
 export function CompactScores({
   view,
   resolution,
@@ -38,31 +37,27 @@ export function CompactScores({
   readonly reduced: boolean;
   readonly you: Seat;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     { motion } = arenaMotion(view, resolution, roundStart, now, reduced);
   const other = (1 - you) as Seat;
   const scores = [scoreMotion(motion, 0, reduced), scoreMotion(motion, 1, reduced)];
   return (
-    <div
-      className="likes-compact-scores"
-      aria-label={t('实时比分与电能', 'Live scores and energy')}
-    >
+    <div className="likes-compact-scores" aria-label={text('likes.liveScoresAndEnergy')}>
       <span>
-        {t('你', 'You')} ♥{' '}
+        {text('bidding.you')} ♥{' '}
         <strong>{interpolate(scores[you].from, scores[you].to, scores[you].progress)}</strong>
       </span>
       <span>
-        {t('电能', 'Energy')} ϟ{' '}
+        {text('likes.energy')} ϟ{' '}
         <strong>{interpolate(motion.from.energy, motion.to.energy, motion.progress)}</strong>
       </span>
       <span>
-        {t('对手', 'Opponent')} ♥{' '}
+        {text('bidding.opponent')} ♥{' '}
         <strong>{interpolate(scores[other].from, scores[other].to, scores[other].progress)}</strong>
       </span>
     </div>
   );
 }
-
 function ScoreParts({
   score,
   catalog,
@@ -72,11 +67,11 @@ function ScoreParts({
   readonly catalog: ModeCatalog;
   readonly onInspect: (id: string) => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <div className="likes-score-parts">
       <span>
-        {t('基础', 'Base')} {score.original}
+        {text('likes.base')} {score.original}
       </span>
       {score.parts.map((part, i) => (
         <button
@@ -91,32 +86,32 @@ function ScoreParts({
             : part.key === 'harness'
               ? 'Harness'
               : part.key === 'character'
-                ? t('角色被动', 'Character passive')
+                ? text('likes.characterPassive')
                 : part.key === 'skill-decay'
-                  ? t('技能衰减', 'Skill decay')
+                  ? text('likes.skillDecay')
                   : part.key === 'counter'
-                    ? t('反制', 'Counter')
+                    ? text('likes.counter')
                     : part.key === 'condition'
-                      ? t('条件修正', 'Conditional')
-                      : t('得赞修正', 'Likes adjustment')}{' '}
+                      ? text('likes.conditional')
+                      : text('likes.likesAdjustment')}{' '}
           {part.amount >= 0 ? '+' : ''}
           {part.amount}
         </button>
       ))}
       {score.conditional !== 0 && !score.parts.some((part) => part.key === 'condition') && (
         <span>
-          {t('条件修正', 'Conditional')} {score.conditional >= 0 ? '+' : ''}
+          {text('likes.conditional')} {score.conditional >= 0 ? '+' : ''}
           {score.conditional}
         </span>
       )}
       {score.multiplier !== 1 && <span>×{score.multiplier}</span>}
       {score.passive !== 0 && (
         <span>
-          {t('被动', 'Passive')} +{score.passive}
+          {text('likes.passive')} +{score.passive}
         </span>
       )}
       <strong>
-        {t('实得', 'Awarded')} {score.final} ♥
+        {text('likes.awarded')} {score.final} ♥
       </strong>
     </div>
   );
@@ -138,11 +133,15 @@ function ResourcePanel({
   readonly reduced: boolean;
   readonly catalog: ModeCatalog;
   readonly identity: string;
-  readonly score?: { from: number; to: number; progress: number };
+  readonly score?: {
+    from: number;
+    to: number;
+    progress: number;
+  };
   readonly shortages?: readonly ResourceShortage[];
   readonly shortagePulse?: boolean;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const meters = [
     {
       key: 'likes',
@@ -209,7 +208,7 @@ function ResourcePanel({
   const renderMeter = (m: (typeof meters)[number]) => (
     <ResourceMeter
       key={`${identity}:${m.key}`}
-      label={resourceName(m.key, t)}
+      label={resourceName(m.key, text)}
       from={m.from}
       to={m.to}
       cap={m.cap}
@@ -225,7 +224,7 @@ function ResourcePanel({
     <div className="likes-resource-grid">
       {meters.filter((m) => m.key === 'likes').map(renderMeter)}
       <fieldset className="likes-subscription">
-        <legend>{t('订阅用量', 'SUBSCRIPTION USAGE')}</legend>
+        <legend>{text('likes.sUBSCRIPTIONUSAGE')}</legend>
         <div>{meters.filter((m) => isSubscription(m.key)).map(renderMeter)}</div>
       </fieldset>
       {meters.filter((m) => m.key !== 'likes' && !isSubscription(m.key)).map(renderMeter)}
@@ -257,7 +256,7 @@ export function Arena({
   readonly reduced: boolean;
   readonly onInspect: (id: string) => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const { running, starting, motion } = arenaMotion(view, resolution, roundStart, now, reduced);
   const visibleFrame = motion.progress >= 0.35 ? motion.to : motion.from;
   const overloadedNow =
@@ -273,7 +272,7 @@ export function Arena({
   return (
     <section
       className={`likes-arena ${impact ? `likes-impact--${impact}` : ''}`}
-      aria-label={t('双侧对战', 'Both players')}
+      aria-label={text('likes.bothPlayers')}
       data-stage={motion.stage}
       data-step={motion.stepIndex}
       data-presenting={running}
@@ -281,14 +280,14 @@ export function Arena({
     >
       {running && (
         <div className="likes-presentation-progress">
-          <span>{stageName(motion.stage, t)}</span>
+          <span>{stageName(motion.stage, text)}</span>
           <span>
             {motion.stepIndex + 1} / {motion.stepCount}
           </span>
           <progress
             max={motion.stepCount}
             value={motion.stepIndex + motion.stepProgress}
-            aria-label={t('演出进度', 'Presentation progress')}
+            aria-label={text('likes.presentationProgress')}
           />
         </div>
       )}
@@ -296,19 +295,19 @@ export function Arena({
         <div className="likes-battery-heading">
           <span>
             {running
-              ? stageName(motion.stage, t)
+              ? stageName(motion.stage, text)
               : starting
-                ? stageName('round-start', t)
-                : t('共同电池', 'SHARED BATTERY')}
+                ? stageName('round-start', text)
+                : text('likes.sHAREDBATTERY')}
           </span>
           {impact && (
             <strong>
-              {impact === 'overload' ? t('过载', 'OVERLOAD') : t('资源补充', 'RECHARGING')}
+              {impact === 'overload' ? text('likes.oVERLOAD') : text('likes.rECHARGING')}
             </strong>
           )}
         </div>
         <ResourceMeter
-          label={resourceName('energy', t)}
+          label={resourceName('energy', text)}
           from={motion.from.energy}
           to={motion.to.energy}
           cap={catalog.parameters.ENERGY_CAP}
@@ -371,10 +370,10 @@ export function Arena({
                 <DuelProfile profile={profiles[seat]} you={seat === you} />
                 <span className="likes-lock">
                   {running
-                    ? t('结算中', 'Resolving')
+                    ? text('likes.resolving')
                     : locked[seat]
-                      ? t('已锁定', 'Locked')
-                      : t('选择中', 'Choosing')}
+                      ? text('bidding.locked')
+                      : text('bidding.choosing')}
                 </span>
               </header>
               <div className="likes-character">
@@ -420,11 +419,9 @@ export function Arena({
                     </button>
                   )}
                   {overloaded && (
-                    <span className="likes-state-warning">{t('过载', 'OVERLOAD')}</span>
+                    <span className="likes-state-warning">{text('likes.oVERLOAD')}</span>
                   )}
-                  {stunned && (
-                    <span className="likes-state-warning">{t('眩晕Buff', 'STUN BUFF')}</span>
-                  )}
+                  {stunned && <span className="likes-state-warning">{text('likes.sTUNBUFF')}</span>}
                 </div>
               </div>
               <CharacterPassive
@@ -456,13 +453,13 @@ export function Arena({
                 >
                   <strong>
                     {resisted === 0
-                      ? t('效果施加', 'EFFECT APPLIED')
+                      ? text('likes.eFFECTAPPLIED')
                       : applied
-                        ? t('部分抵抗', 'PARTLY RESISTED')
-                        : t('全部抵抗', 'FULLY RESISTED')}
+                        ? text('likes.pARTLYRESISTED')
+                        : text('likes.fULLYRESISTED')}
                   </strong>
                   <span>
-                    {t('施加', 'Applied')} {applied} · {t('抵抗', 'Resisted')} {resisted}
+                    {text('likes.applied')} {applied} · {text('likes.resisted')} {resisted}
                   </span>
                 </div>
               )}
@@ -471,16 +468,16 @@ export function Arena({
                 .map((event) => (
                   <p className="likes-step-fact" key={event.id}>
                     {event.kind === 'shop' && typeof event.data.item === 'string'
-                      ? shopName(event.data.item, t)
+                      ? shopName(event.data.item, text)
                       : event.kind === 'harness-like'
-                        ? t('Harness 额外得赞 +1', 'Harness bonus like +1')
+                        ? text('likes.harnessBonusLike1')
                         : event.kind === 'cleanse'
-                          ? t('净化完成', 'Cleansing applied')
+                          ? text('likes.cleansingApplied')
                           : event.kind === 'resource-gain'
-                            ? t('资源补充', 'Resources replenished')
+                            ? text('likes.resourcesReplenished')
                             : event.kind === 'usage-reset'
-                              ? t('订阅额度恢复', 'Subscription replenished')
-                              : stageName(event.stage, t)}
+                              ? text('likes.subscriptionReplenished')
+                              : stageName(event.stage, text)}
                   </p>
                 ))}
               <ResourcePanel
@@ -502,16 +499,16 @@ export function Arena({
                     <div key={event.id}>
                       <strong>
                         {skillName(catalog, event.cast!.skillId)}{' '}
-                        {event.cast!.derived ? t('连答', 'Follow-up') : ''} · +{event.cast!.likes} ♥
+                        {event.cast!.derived ? text('likes.followUp') : ''} · +{event.cast!.likes} ♥
                       </strong>
                       {event.score && (
                         <ScoreParts score={event.score} catalog={catalog} onInspect={onInspect} />
                       )}
                       {event.cast?.applications?.map((effect, index) => (
                         <p className="likes-application-result" key={index}>
-                          {buffName(catalog, effect.buffID)} · {t('成功', 'Applied')}{' '}
-                          {effect.success} / {t('抵抗', 'Resisted')} {effect.resisted}
-                          {effect.derived ? ` · ${t('追加效果', 'Derived effect')}` : ''}
+                          {buffName(catalog, effect.buffID)} · {text('likes.applied2')}{' '}
+                          {effect.success} / {text('likes.resisted')} {effect.resisted}
+                          {effect.derived ? ` · ${text('likes.derivedEffect')}` : ''}
                         </p>
                       ))}
                     </div>
@@ -522,17 +519,17 @@ export function Arena({
                 <p className="likes-warning" key={event.id}>
                   {typeof event.data.skillId === 'string'
                     ? skillName(catalog, event.data.skillId)
-                    : t('追加技能', 'Follow-up')}
+                    : text('likes.followUp2')}
                   :{' '}
                   {typeof event.data.reason === 'string'
-                    ? reasonName(event.data.reason, t)
-                    : t('未成功施放', 'Not cast')}
+                    ? reasonName(event.data.reason, text)
+                    : text('likes.notCast')}
                 </p>
               ))}
               {running && resolution && (
                 <PlanSummary catalog={catalog} plan={resolution.summary.plans[seat]} />
               )}
-              <div className="likes-buffs" aria-label={t('Buff与状态', 'Buffs and states')}>
+              <div className="likes-buffs" aria-label={text('likes.buffsAndStates')}>
                 {effects.map((effect) => (
                   <button
                     type="button"
@@ -540,21 +537,21 @@ export function Arena({
                     key={effect.key}
                     onClick={() => onInspect(effect.buff_id)}
                   >
-                    {effectName(catalog, effect, t)}
+                    {effectName(catalog, effect, text)}
                     <EffectSummary catalog={catalog} id={effect.buff_id} />
-                    {effect.layers > 0 ? <span>{effectLayers(effect, t)}</span> : null}
+                    {effect.layers > 0 ? <span>{effectLayers(effect, text)}</span> : null}
                     <small>
                       {effect.active_from > round
-                        ? t('下轮生效', 'Next round')
+                        ? text('likes.nextRound')
                         : effect.remaining > 0
-                          ? `${effect.remaining} ${t('轮', 'rounds')}`
+                          ? `${effect.remaining} ${text('likes.rounds')}`
                           : ''}
                     </small>
                   </button>
                 ))}
               </div>
               <details className="likes-loadout-detail">
-                <summary>{t('技能槽与资源时钟', 'Skill slots and resource clocks')}</summary>
+                <summary>{text('likes.skillSlotsAndResourceClocks')}</summary>
                 <div className="likes-slots">
                   {player.slots.map((id, index) =>
                     id ? (
@@ -568,26 +565,26 @@ export function Arena({
                       </button>
                     ) : (
                       <span className="likes-unknown-slot" key={index}>
-                        {player.fog ? t('未揭示', 'Hidden') : t('空槽', 'Empty')}
+                        {player.fog ? text('likes.hidden') : text('likes.empty')}
                       </span>
                     ),
                   )}
                 </div>
                 <p>
-                  {t('订阅瞬发重置', 'Burst resets')}:{' '}
+                  {text('likes.burstResets')}:{' '}
                   {player.subscription.burstResetAt === null
-                    ? t('未开始计时', 'Clock idle')
-                    : `${Math.max(0, player.subscription.burstResetAt - player.normalTurns)} ${t('轮后', 'rounds from now')}`}{' '}
-                  · {t('总量／图像重置', 'Total / image resets')}:{' '}
+                    ? text('likes.clockIdle')
+                    : `${Math.max(0, player.subscription.burstResetAt - player.normalTurns)} ${text('likes.roundsFromNow')}`}{' '}
+                  · {text('likes.totalImageResets')}:{' '}
                   {player.subscription.totalResetAt === null
-                    ? t('未开始计时', 'Clock idle')
-                    : `${Math.max(0, player.subscription.totalResetAt - player.normalTurns)} ${t('轮后', 'rounds from now')}`}
+                    ? text('likes.clockIdle')
+                    : `${Math.max(0, player.subscription.totalResetAt - player.normalTurns)} ${text('likes.roundsFromNow')}`}
                 </p>
                 {player.distill && (
                   <p>
-                    {t('蒸馏', 'Distill')}:{' '}
+                    {text('likes.distill')}:{' '}
                     {player.distill.template ? skillName(catalog, player.distill.template) : '—'}{' '}
-                    {player.distill.level} · {t('进度', 'Progress')} {player.distill.learning}
+                    {player.distill.level} · {text('likes.progress')} {player.distill.learning}
                   </p>
                 )}
               </details>
@@ -607,11 +604,11 @@ export function FrameChanges({
   readonly after: Frame;
   readonly catalog: ModeCatalog;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <div className="likes-frame-changes">
       <ResourceMeter
-        label={resourceName('energy', t)}
+        label={resourceName('energy', text)}
         from={before.energy}
         to={after.energy}
         reduced
@@ -619,7 +616,7 @@ export function FrameChanges({
       {([0, 1] as const).map((seat) => (
         <section key={seat}>
           <h4>
-            {t('席位', 'Seat')} {seat + 1}
+            {text('likes.seat')} {seat + 1}
           </h4>
           <ResourcePanel
             from={before.players[seat]}
@@ -630,7 +627,7 @@ export function FrameChanges({
             identity={`log-${seat}`}
           />
           <details>
-            <summary>{t('Buff与状态前后', 'Buffs and states before / after')}</summary>
+            <summary>{text('likes.buffsAndStatesBeforeAfter')}</summary>
             {(
               [
                 ['before', before],
@@ -638,20 +635,20 @@ export function FrameChanges({
               ] as const
             ).map(([phase, value]) => (
               <section key={phase}>
-                <strong>{phase === 'before' ? t('变化前', 'Before') : t('变化后', 'After')}</strong>
+                <strong>{phase === 'before' ? text('likes.before') : text('likes.after')}</strong>
                 {value.players[seat].effects.length === 0 ? (
-                  <p>{t('无', 'None')}</p>
+                  <p>{text('likes.none')}</p>
                 ) : (
                   <ul>
                     {value.players[seat].effects.map((effect) => (
                       <li key={effect.key}>
-                        {effectName(catalog, effect, t)} · {effectLayers(effect, t)} ·{' '}
+                        {effectName(catalog, effect, text)} · {effectLayers(effect, text)} ·{' '}
                         {effect.kind !== 'CACHE' ? (
                           <>
-                            {t('剩余轮数', 'Rounds left')} {effect.remaining} ·{' '}
+                            {text('likes.roundsLeft')} {effect.remaining} ·{' '}
                           </>
                         ) : null}{' '}
-                        {t('生效轮', 'Active from round')} {effect.active_from}
+                        {text('likes.activeFromRound')} {effect.active_from}
                       </li>
                     ))}
                   </ul>

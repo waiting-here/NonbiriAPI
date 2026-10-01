@@ -19,7 +19,6 @@ import { tutorialData } from './data';
 import { tutorialSteps } from './steps';
 import { GuidedSurface } from './GuidedSurface';
 import { saveTutorialStatus } from './storage';
-
 const profiles = [
   { kind: 'public', displayName: 'You' },
   { kind: 'public', displayName: '教学机器人 · Tutorial bot' },
@@ -63,7 +62,6 @@ export function sameTeachingPlan(actual: Plan, expected: Plan) {
   });
   return JSON.stringify(canonical(actual)) === JSON.stringify(canonical(expected));
 }
-
 function TutorialResolution({
   round,
   catalog,
@@ -136,7 +134,6 @@ function TutorialResolution({
     </>
   );
 }
-
 export default function Tutorial({
   catalog,
   sound,
@@ -147,14 +144,17 @@ export default function Tutorial({
 }: {
   readonly catalog: ModeCatalog;
   readonly sound: ArcadeSoundControl;
-  readonly music: { readonly enabled: boolean; readonly toggle: () => void };
+  readonly music: {
+    readonly enabled: boolean;
+    readonly toggle: () => void;
+  };
   readonly unavailable: boolean;
   readonly onScene: (scene: MusicScene) => void;
   readonly onExit: (status: 'completed' | 'skipped', selection?: Selection) => void;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     reduced = useReducedMotion();
-  const steps = useMemo(() => tutorialSteps(t), [t]);
+  const steps = useMemo(() => tutorialSteps(text), [text]);
   const [index, setIndex] = useState(0);
   const [selection, setSelection] = useState<Selection>({
     role: 'ChatGPT',
@@ -223,24 +223,19 @@ export default function Tutorial({
   const close = () => onExit(finished ? 'completed' : 'skipped');
   return (
     <DuelDialog
-      title={t('新手引导 · 本地练习', 'Tutorial · Local practice')}
+      title={text('likes.tutorialLocalPractice')}
       onClose={close}
       className="likes-tutorial likes-game"
     >
       <div className="likes-tutorial-toolbar">
-        <span>{t('不会扣除或获得站点积分', 'No site credits spent or earned')}</span>
+        <span>{text('likes.noSiteCreditsSpentOrEarned')}</span>
         <ArcadeAudioControls sound={sound} music={music} unavailable={unavailable} />
         <button type="button" onClick={close}>
-          {t('跳过教学', 'Skip tutorial')}
+          {text('likes.skipTutorial')}
         </button>
       </div>
       {catalog.contentHash !== tutorialData.contentHash ? (
-        <p role="alert">
-          {t(
-            '教学与当前规则不一致，请刷新后重试。',
-            'This tutorial does not match the current rules. Refresh to try again.',
-          )}
-        </p>
+        <p role="alert">{text('likes.thisTutorialDoesNotMatchTheCurrent')}</p>
       ) : (
         <>
           <section
@@ -251,15 +246,15 @@ export default function Tutorial({
           >
             <small>
               {step.round
-                ? t(`第 ${step.round} / 10 轮`, `Round ${step.round} / 10`)
-                : t('准备阶段', 'Preparation')}{' '}
+                ? text('likes.round10', { round: step.round })
+                : text('likes.preparation')}{' '}
               · {index + 1}/{steps.length}
             </small>
             <h3>{step.title}</h3>
             <p>{step.body}</p>
             {step.target === 'continue' && !finished && (
               <button type="button" className="likes-primary" data-tutorial-next onClick={next}>
-                {t('继续', 'Continue')}
+                {text('likes.continue')}
               </button>
             )}
             {finished && (
@@ -269,10 +264,10 @@ export default function Tutorial({
                   className="likes-primary"
                   onClick={() => onExit('completed', tutorialData.selection)}
                 >
-                  {t('使用教学配装', 'Use teaching loadout')}
+                  {text('likes.useTeachingLoadout')}
                 </button>
                 <button type="button" onClick={close}>
-                  {t('返回大厅', 'Return to lobby')}
+                  {text('likes.returnToLobby')}
                 </button>
               </div>
             )}
@@ -300,7 +295,7 @@ export default function Tutorial({
               <div className="likes-matched">
                 <LikesArt slot={characterSlot('ChatGPT', 'portrait')} label="ChatGPT" />
                 <span>
-                  {t('教学匹配成功', 'TEACHING MATCH FOUND')}
+                  {text('likes.tEACHINGMATCHFOUND')}
                   <small>ChatGPT × Claude</small>
                 </span>
                 <LikesArt slot={characterSlot('Claude', 'portrait')} label="Claude" />
@@ -309,11 +304,11 @@ export default function Tutorial({
             {data && step.kind !== 'resolution' && (
               <>
                 <div className="likes-phase">
-                  <strong>{t('快速模式 · 教学', 'QUICK · TUTORIAL')}</strong>
+                  <strong>{text('likes.qUICKTUTORIAL')}</strong>
                   <span>
                     {step.kind === 'plan'
-                      ? t('等待你的操作，无倒计时', 'Waiting for you · no countdown')
-                      : t('本轮结算完成', 'Round resolved')}
+                      ? text('likes.waitingForYouNoCountdown')
+                      : text('likes.roundResolved')}
                   </span>
                 </div>
                 <Arena
@@ -362,12 +357,7 @@ export default function Tutorial({
             )}
           </GuidedSurface>
           {planError && (
-            <p role="alert">
-              {t(
-                '请按高亮步骤完成本轮教学方案。',
-                'Complete the highlighted steps for this teaching plan.',
-              )}
-            </p>
+            <p role="alert">{text('likes.completeTheHighlightedStepsForThisTeaching')}</p>
           )}
         </>
       )}

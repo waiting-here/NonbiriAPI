@@ -1,3 +1,5 @@
+import { duelCopyKeys } from '../common/duel/copy';
+import { testDuelText } from '../common/duel/copy.test-support';
 import { expect, it } from 'vitest';
 import oldQuick from '../../../../../internal/game/likes/catalog/prior-balance/quick.json' with { type: 'json' };
 import oldStandard from '../../../../../internal/game/likes/catalog/prior-balance/standard.json' with { type: 'json' };
@@ -6,7 +8,7 @@ import { catalogWire, testCatalog } from './testCatalog';
 import { knowledge } from './knowledge';
 import { shortageValue } from './shortage';
 
-const text = (_zh: string, en: string) => en;
+const text = testDuelText(duelCopyKeys);
 it('explains the new rules while preserving the prior balance explanations', () => {
   const wire = catalogWire();
   wire.design_version = '0.18.1';

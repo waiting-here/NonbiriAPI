@@ -10,11 +10,10 @@ import { formatCredits } from '../common/strict';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { isNetProfitBoard, loadRanking, type RankBoard, type RankWindow } from './api';
 import './ranking.css';
-
 function CharityPrivacy() {
   const session = useUserSession(false),
     client = useQueryClient(),
-    t = useDuelText();
+    text = useDuelText();
   const save = useRetainedOperation(
     (isPublic: boolean, key) =>
       stationSessionWrite(client, 'steward', () =>
@@ -38,19 +37,13 @@ function CharityPrivacy() {
           disabled={save.isPending}
           onChange={(event) => save.mutate(!event.target.checked)}
         />
-        {t('在真·慈善榜中匿名', 'Stay anonymous on the True Charity leaderboard')}
+        {text('ranking.stayAnonymousOnTheTrueCharityLeaderboard')}
       </label>
-      <p className="table-note">
-        {t(
-          '此选择仅用于真·慈善榜，与游戏榜的匿名设置独立。封禁期间始终匿名，解除后恢复你的选择。',
-          'This choice applies only to True Charity, independently of game privacy. Banned accounts stay anonymous and regain their saved choice when the restriction ends.',
-        )}
-      </p>
+      <p className="table-note">{text('ranking.thisChoiceAppliesOnlyToTrueCharity')}</p>
       {save.error && <ErrorState error={save.error} />}
     </div>
   );
 }
-
 export function Leaderboard({
   board,
   enabled = true,
@@ -69,7 +62,6 @@ export function Leaderboard({
     />
   );
 }
-
 function RankingPanel({
   board,
   owner,
@@ -79,7 +71,7 @@ function RankingPanel({
   readonly owner?: string;
   readonly enabled: boolean;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const [selectedWindow, setWindow] = useState<RankWindow>('7d');
   const [page, setPage] = useState('1');
   const window =
@@ -92,49 +84,40 @@ function RankingPanel({
     queryKey: ['user', 'games', 'rankings', owner, board, window, page],
     queryFn: ({ signal }) => loadRanking(board, window, page, signal),
     enabled: enabled && !!owner,
-    staleTime: 10_000,
+    staleTime: 10000,
   });
   const names = {
-    charity: [t('真·慈善榜', 'True Charity'), t('匿名真·慈善家', 'Anonymous true philanthropist')],
-    game_charity: [t('游戏慈善榜', 'Game Charity'), t('匿名慈善家', 'Anonymous philanthropist')],
-    bidding: [t('竞标利润榜', 'Bidding profits'), t('匿名竞标者', 'Anonymous bidder')],
-    blackjack: [t('利润榜', 'Profit leaderboard'), t('匿名牌手', 'Anonymous card player')],
-    game_net_profit: [
-      t('游戏暴富榜', 'Game fortune leaderboard'),
-      t('匿名土豪', 'Anonymous tycoon'),
-    ],
-    fishing_net_profit: [t('锦鲤榜', 'Lucky catch leaderboard'), t('匿名钓友', 'Anonymous angler')],
+    charity: [text('ranking.trueCharity'), text('ranking.anonymousTruePhilanthropist')],
+    game_charity: [text('ranking.gameCharity'), text('ranking.anonymousPhilanthropist')],
+    bidding: [text('bidding.biddingProfits'), text('ranking.anonymousBidder')],
+    blackjack: [text('blackjack.profitLeaderboard'), text('blackjack.anonymousCardPlayer')],
+    game_net_profit: [text('ranking.gameFortuneLeaderboard'), text('ranking.anonymousTycoon')],
+    fishing_net_profit: [text('ranking.luckyCatchLeaderboard'), text('ranking.anonymousAngler')],
     blackjack_net_profit: [
-      t('赌神榜', 'Card master leaderboard'),
-      t('匿名牌手', 'Anonymous card player'),
+      text('blackjack.cardMasterLeaderboard'),
+      text('blackjack.anonymousCardPlayer'),
     ],
-    bidding_net_profit: [t('竞标高手榜', 'Bidding masters'), t('匿名竞标者', 'Anonymous bidder')],
+    bidding_net_profit: [text('bidding.biddingMasters'), text('ranking.anonymousBidder')],
   };
   const help =
     board === 'charity'
-      ? t(
-          '按全部历史捐赠积分排名，包含管理员调整。只展示正值，每页20人。',
-          'All-time donation credits, including administrator adjustments. Positive totals only, twenty people per page.',
-        )
+      ? text('ranking.allTimeDonationCreditsIncludingAdministratorAdjustments')
       : isNetProfitBoard(board)
-        ? t(
-            `最近7×24小时，${board === 'game_net_profit' ? '六游戏' : board === 'fishing_net_profit' ? '池塘垂钓' : board === 'bidding_net_profit' ? '竞标对决' : '二十一点'}实际返还减实际投入，输赢相抵并计入抽水与入场费。两种积分等值计算，排除奖励、网贷和调账等非对局收支。仅正净盈利入榜。`,
-            `Over the last 7×24 hours: returns minus spending ${board === 'game_net_profit' ? 'across all six games' : board === 'fishing_net_profit' ? 'in pond fishing' : board === 'bidding_net_profit' ? 'in Bidding Duel' : 'in blackjack'}, including fees and entry costs. Losses offset wins and both credit types count equally. Rewards, loans and other non-game transactions are excluded. Positive net profits only.`,
-          )
+        ? text('ranking.overTheLast724HoursReturns', {
+            value:
+              board === 'game_net_profit'
+                ? text('ranking.acrossAllSixGames')
+                : board === 'fishing_net_profit'
+                  ? text('ranking.inPondFishing')
+                  : board === 'bidding_net_profit'
+                    ? text('ranking.inBiddingDuel')
+                    : text('ranking.inBlackjack'),
+          })
         : board === 'game_charity'
-          ? t(
-              '最近7×24小时，六游戏实际支出减去抽水后返还，输赢相抵。两种积分等值计算，不含新人奖励和贷款。仅正净亏损入榜。',
-              'Over the last 7×24 hours: spending minus after-fee returns across all six games. Wins offset losses and both credit types count equally. Newcomer rewards and loans are excluded. Positive net losses only.',
-            )
+          ? text('ranking.overTheLast724HoursSpending')
           : board === 'bidding'
-            ? t(
-                '三档合计抽水前的正利润，不含本金，亏损不抵扣。',
-                'Positive profits before fees across all three tiers. Principal is excluded and losses do not offset profits.',
-              )
-            : t(
-                '每手抽水前利润分别取正值再累加，包含分牌和加倍；不以整局净赚为门槛。',
-                'Positive profits before fees are added separately for each hand, including split and doubled hands. The whole round need not be profitable.',
-              );
+            ? text('ranking.positiveProfitsBeforeFeesAcrossAllThree')
+            : text('ranking.positiveProfitsBeforeFeesAreAddedSeparately');
   const data = !query.error && owner ? query.data : undefined;
   const rows = [...(data?.rows ?? []), ...(data?.me ? [data.me] : [])];
   return (
@@ -144,14 +127,14 @@ function RankingPanel({
       <div className="rank-actions">
         {board === 'bidding' || board === 'blackjack' ? (
           <label>
-            {t('统计窗口', 'Period')}
+            {text('ranking.period')}
             <select
               value={window}
               onChange={(event) => setWindow(event.target.value as RankWindow)}
             >
-              <option value="7d">{t('滚动7天', 'Rolling 7 days')}</option>
-              <option value="30d">{t('滚动30天', 'Rolling 30 days')}</option>
-              <option value="history">{t('历史', 'All time')}</option>
+              <option value="7d">{text('ranking.rolling7Days')}</option>
+              <option value="30d">{text('ranking.rolling30Days')}</option>
+              <option value="history">{text('ranking.allTime')}</option>
             </select>
           </label>
         ) : null}
@@ -161,31 +144,28 @@ function RankingPanel({
           disabled={!owner || query.isFetching}
           onClick={() => void query.refetch()}
         >
-          {t('刷新榜单', 'Refresh leaderboard')}
+          {text('ranking.refreshLeaderboard')}
         </button>
       </div>
       {enabled && query.isPending && <LoadingState />}
       {query.error && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
       {data && board === 'bidding_net_profit' && data.rebuildStatus !== 'completed' && (
         <p role="status" className="table-note">
-          {t(
-            '正在重建竞标高手榜，历史数据尚未完整，请稍后刷新。',
-            'Rebuilding the Bidding masters board. Historical results are not complete yet; refresh shortly.',
-          )}
+          {text('ranking.rebuildingTheBiddingMastersBoardHistoricalResults')}
         </p>
       )}
       {data && board === 'bidding_net_profit' && data.rebuildStatus === 'completed' && (
         <p className="table-note">
-          {t('可核验历史起点', 'Verifiable history starts')}:{' '}
+          {text('ranking.verifiableHistoryStarts')}:{' '}
           {data.historyCoverageStart === null
-            ? t('未知', 'Unknown')
+            ? text('ranking.unknown')
             : new Date(data.historyCoverageStart * 1000).toLocaleString()}{' '}
-          · {t('已知缺失事件', 'Known missing events')}: {data.missingEvents}
+          · {text('ranking.knownMissingEvents')}: {data.missingEvents}
         </p>
       )}
       {data && window === 'history' && board !== 'charity' && (
         <p className="table-note">
-          {t('统计起点：', 'Statistics started: ')}
+          {text('ranking.statisticsStarted')}
           <time dateTime={new Date(data.statisticsStart * 1000).toISOString()}>
             {new Date(data.statisticsStart * 1000).toLocaleString()}
           </time>
@@ -195,17 +175,15 @@ function RankingPanel({
         rows.length === 0 &&
         data.rebuildStatus !== 'scanning' &&
         data.rebuildStatus !== 'publishing' &&
-        data.rebuildStatus !== 'pending' && (
-          <p>{t('暂无符合条件的排名。', 'No qualifying rankings yet.')}</p>
-        )}
+        data.rebuildStatus !== 'pending' && <p>{text('ranking.noQualifyingRankingsYet')}</p>}
       {rows.length > 0 && (
         <div className="rank-table-scroll">
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t('排名', 'Rank')}</th>
-                <th>{t('玩家', 'Player')}</th>
-                <th>{t('积分', 'Credits')}</th>
+                <th>{text('ranking.rank')}</th>
+                <th>{text('ranking.player')}</th>
+                <th>{text('ranking.credits')}</th>
               </tr>
             </thead>
             <tbody>
@@ -221,7 +199,7 @@ function RankingPanel({
                       identity={row.identity}
                       anonymousLabel={names[board][1]}
                       isMe={row.isMe}
-                      meLabel={t('我', 'Me')}
+                      meLabel={text('ranking.me')}
                     />
                   </td>
                   <td>{formatCredits(row.amount)}</td>
@@ -232,14 +210,14 @@ function RankingPanel({
         </div>
       )}
       {data?.pagination && (
-        <nav className="rank-actions" aria-label={t('慈善榜分页', 'Charity leaderboard pages')}>
+        <nav className="rank-actions" aria-label={text('ranking.charityLeaderboardPages')}>
           <button
             type="button"
             className="btn btn-secondary"
             disabled={data.pagination.page === '1' || query.isFetching}
             onClick={() => setPage((BigInt(data.pagination!.page) - 1n).toString())}
           >
-            {t('上一页', 'Previous')}
+            {text('blackjack.previous')}
           </button>
           <span>
             {data.pagination.page} / {data.pagination.total_pages}
@@ -250,19 +228,14 @@ function RankingPanel({
             disabled={data.pagination.page === data.pagination.total_pages || query.isFetching}
             onClick={() => setPage((BigInt(data.pagination!.page) + 1n).toString())}
           >
-            {t('下一页', 'Next')}
+            {text('blackjack.next')}
           </button>
         </nav>
       )}
       {board === 'charity' ? (
         <CharityPrivacy />
       ) : (
-        <p className="table-note">
-          {t(
-            '所有游戏榜共用游戏匿名设置。封禁期间保留排名并强制匿名。',
-            'All game leaderboards share your game privacy setting. Banned accounts remain ranked and anonymous.',
-          )}
-        </p>
+        <p className="table-note">{text('ranking.allGameLeaderboardsShareYourGamePrivacy')}</p>
       )}
     </Card>
   );
