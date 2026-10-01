@@ -2,6 +2,16 @@
 
 NonbiriAPI separates **startup security roots** from **runtime site settings**. Startup values are read only when the process starts; `site_config` values are administrator-controlled and applied without rebuilding the binary.
 
+## Current source additions
+
+Unreleased rc.5 adds per-model `role_policy` through model APIs, not a global site switch. Native/empty rules preserve each connector's previous behavior. Personal automation uses the existing CallerKey and creates no startup token or additional charge configuration.
+
+Administrator risk-audit configuration adds `user_ip_window_hours` (integer 1–720, default 24) and `user_ip_min_ips` (2–1000, default 3), alongside existing thresholds/revision. It flags one Discord identity using at least that many trusted API addresses in a rolling window across old/current accounts. Shared-IP counts deduplicate Discord identities. Full stewards can read the settings; only administrators change them. Scans never impose a penalty.
+
+Lake Notes uses the existing limited-activity configuration envelope with empty `module_config:{}`. Separate finite period APIs set an explicit fee before publication and four exact exchange directions. Fresh and upgraded instances start the new activity hidden without an open schedule and every exchange disabled. [Activity configuration](limited-activities.md#lake-notes) describes units and fields. Role policies, periods and UI preferences do not introduce environment variables.
+
+Preserve the database's stable encrypted renewed-review matching material with the master key. Resetting it would bypass cross-account secret-text review requirements and is not a supported repair or configuration edit.
+
 ## Gateway cost attribution
 
 The runtime administrator setting `gateway_user_attribution_enabled` is a boolean, off by default (site-config JSON `false|true`). Enabling it includes a server-generated user-and-gateway-origin pseudonym in subsequent Gateway v3 chat and embedding requests for cost attribution. Disabling it omits the tag. It can correlate requests from the same user; it is not anonymous and does not claim upstream safety processing. The caller cannot override it. Existing OpenAI and Anthropic settings remain independent. It uses the ordinary configuration catalog, administrator authorization, revision and audit rules; no startup environment variable or rebuild is required.
@@ -65,7 +75,7 @@ boards. Ranking windows and retention are fixed behavior, not new site settings.
 Current effective abuse windows persist across restarts; changing their settings
 keeps the existing bounded trimming and one-penalty-per-window behavior.
 
-Embeddings add no startup variable, model-purpose field, or separate price configuration. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Other shared limits remain active.
+Embeddings add no startup variable, model-purpose field, or separate price configuration. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Force-store-false remains OpenAI-compatible only; tool flattening also supports Anthropic-compatible and Gateway v3 chat. Other shared limits remain active.
 
 The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-rc.2` prerelease. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 

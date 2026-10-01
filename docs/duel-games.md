@@ -55,7 +55,7 @@ mode-specific skill, buff, harness, resource and upgrade values.
 
 You can save up to 10 private Custom presets to your account and use them across
 devices. Each preset stores the mode, character, optional harness and ordered
-skills. Saving over an occupied slot requires explicit confirmation. Loading a
+skills and an optional private name of up to 20 Unicode code points. Names may repeat; an empty name uses the slot label. Renaming or clearing a name does not load or change a loadout, mode or harness. Saving over an occupied slot requires explicit confirmation. Loading a
 preset fills those pre-match choices only; it does not join a queue or spend
 credits. Only you can use your presets. If a saved loadout no longer follows the
 current rules, the service explains the problem instead of silently changing it.
@@ -107,6 +107,12 @@ Reduced-motion mode retains every final number, before/after change and reason.
 Final results and wallet settlement commit immediately; the outcome illustration
 appears after the last round's remaining presentation time.
 
+## Current battle rules
+
+New quick/standard matches start with 100/500 in-match coins; entry-credit prices are unchanged. Speed mode rounds token and energy costs up after multiplying by 5/2 (1→3, 3→8, 0→0), doubles final skill likes and changes a one-turn overload into two turns. Image and coin costs do not gain that multiplier. Every Thunder rank and distilled version self-inflicts overload; its 24/20/12-like values stay unchanged. Stun remains a separate buff.
+
+Claude Code gains an independent +1 like for each distinct enemy negative buff actually applied by a main/extra/Flash cast, alongside its original SOTA attempt. Multiple layers or a repeated buff count once per application; a fully resisted effect does not count, and a derived SOTA effect cannot recurse. This like is not doubled as a skill like. Antigravity adds +2 to normal attacks. Copilot adds +2 only when strictly behind at round start and the skill's original base likes are positive. The field guide and server preview apply all existing ordering and limits. Saved previous matches and replays retain their saved catalog and algorithms.
+
 ## Character passives and resistance
 
 Every character has one always-active passive, separate from equipped skills. ChatGPT retains its image quota and DeepSeek its subscription-free resources. Claude gains one base like on an executed main skill with a positive nominal base when strictly ahead at the start of that step. Extra skills and follow-ups do not trigger it. Gemini gains one base like on executed normal attacks, including Flash follow-ups; distilled PUB41 remains a special skill. Existing decay and subsequent modifiers still apply.
@@ -144,7 +150,7 @@ Overload highlights the resource shortage recorded at the failed payment: shared
 battery, mixed burst/API, API-only, or the deficient subscription quotas. A total
 quota bottleneck is also marked. API remains a numeric balance. Highlights follow
 the settlement timeline; old records without details use a generic explanation.
-Gold and image shortages remain invalid plans, rather than becoming overload.
+Gold shortage remains an invalid plan. Image shortage follows the token-shortage warning: you may deliberately confirm it, but the failed action pays no cost, awards no likes and applies no effect, and overload/cancellation follows the normal rules. Image balances never become negative.
 
 ## History and privacy
 
@@ -167,7 +173,13 @@ and filters while continuing; expired recent records are counted as skipped.
 Completion is reported only after the final page. Cancelled or failed downloads
 can resume from the last completed page, while the signed cursor is valid.
 
+Current presets have optional private names, included only in the owner's export and deleted with the account. Current changes are Unreleased source behavior; availability depends on the deployed build.
+
 ## 双人游戏
+
+当前新局快速／标准模式初始金币为100／500，站内门票价格不变。倍速的Token与电能费用乘5/2后向上取整，技能最终得赞翻倍，1轮过载变2轮；图像与金币不乘倍速费用。各档雷霆及蒸馏版改为自身过载，24／20／12赞保持，眩晕仍是独立状态。Claude Code每次成功施加一种敌方负面Buff独立得1赞，同Buff多层／重复不多计，完全抵抗不计，衍生SOTA不递归且此赞不按技能翻倍。Antigravity普攻加2；Copilot仅在轮初严格落后且技能原始基础赞为正时加2。旧局与回放保留原规则。
+
+自定义预设可填写最长20个Unicode码点的私人名称，可重名、可清空；改名不加载或修改配装／模式。名称随本人预设导出并在删号时移除。以上为未发布源码变更，实例是否可用取决于实际部署。
 
 每个角色的固有被动持续生效，不占配装。ChatGPT 保留图像额度，DeepSeek 保留无订阅资源。Claude 在步骤开始严格领先、主技能自身标称基础得赞大于零且实际施放时，基础得赞加 1；额外技能和连答不触发。Gemini 的普攻类技能基础加 1，包含 Flash 连答，蒸馏 PUB41 仍属特殊技能。原有衰减及后续增减、倍率继续生效。
 
@@ -181,7 +193,7 @@ GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%�
 
 竞标固定使用双方各 A～K 十三个牌位，共 13 轮，前 12 轮双方各当 6 次庄家。持有 Joker 的庄家有 10 秒决定使用或保留；Joker 只加倍本轮自己的奖励牌，不加倍此前累积奖励。双方的暗选只对本人可见；已揭示出牌置灰。红方手牌使用红桃 ♥、奖励使用方块 ♦，黑方手牌使用黑桃 ♠、奖励使用梅花 ♣；花色由阵营决定，不随观看视角或主题翻转，牌背堆可查看按点数排序的剩余集合，但不代表未来顺序。随后双方在 20 秒内暗中锁定一张手牌，全部锁定或超时才同时揭牌；超时使用最小剩余牌。大牌获得本轮奖励和累积奖励，同点数累积至下轮，最后一轮仍平则丢弃。总分高者获胜，同分平局。进行中不公开未抽取奖励牌的顺序；终局公开的随机性凭证允许参与者重建完整抽取顺序。
 
-回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。你可以在账号中保存最多 10 个“自定义预设”并在不同设备上使用；每个预设记录模式、角色、可选 Harness 和有序技能。覆盖已保存槽位前须明确确认。加载预设只填入赛前选项，不会自动排队或扣费，且仅供本人使用。所存配装不再符合当前规则时，系统会明确提示，不会静默替换。新对局每轮有完整 30 秒选择购物和出招；既有对局后续回合及历史回放继续沿用原先 20 秒规则。未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
+回合制对战小游戏（测试）在入队前选择角色、可选 Harness 和合法技能组。快速模式目标 60 赞、最多 25 轮；标准模式目标 300 赞、最多 75 轮，完整技能数值以游戏内图鉴为准。你可以在账号中保存最多 10 个“自定义预设”并在不同设备上使用；每个预设记录模式、角色、可选 Harness、有序技能及可选私人名称。覆盖已保存槽位前须明确确认。加载预设只填入赛前选项，不会自动排队或扣费，且仅供本人使用。所存配装不再符合当前规则时，系统会明确提示，不会静默替换。新对局每轮有完整 30 秒选择购物和出招；既有对局后续回合及历史回放继续沿用原先 20 秒规则。未眩晕必须选主招才能确认。拟购且买得起的物品仍不能解除眩晕时，唯一按钮为“跳过出招”；若能解除眩晕，则必须选招，按钮恢复“确认方案”。系统超时仍依照自动规则处理。
 
 竞标按顺序展示奖励抽取、双方亮牌、整个奖池的归属，滚动页面时演出仍保持可见；减少动态模式保留静态牌面和结果。回合制对战中，本人的倍速模式使用全页加速光线，过载使用独立警示，过载优先；对手状态不影响本人的全页效果，减少动态模式保留静态提示。
 
@@ -201,6 +213,6 @@ GLM 常驻抵抗 25%，严格落后时为 50%；DeepSeek 常驻效果命中 25%�
 
 正式对局本人仍需确认时，不足五秒会强调倒计时和操作区；开启音效后每秒最多一次短提示。提交、锁定、超时或自动过载跳过后停止；后台不播放，返回不补播，减少动态模式保留静态强调。
 
-过载按失败付款时记录的事实高亮共享电能、混合支付的瞬发与 API、仅 API 或实际不足的订阅额度；总量构成瓶颈时也标出总量。API 保持数值显示，提示随结算时间轴出现并保留到本次演出结束。旧记录缺少细分信息时只显示通用说明；金币和图像不足仍是非法方案，不改为过载。
+过载按失败付款时记录的事实高亮共享电能、混合支付的瞬发与 API、仅 API 或实际不足的订阅额度；总量构成瓶颈时也标出总量。API 保持数值显示，提示随结算时间轴出现并保留到本次演出结束。旧记录缺少细分信息时只显示通用说明；金币不足仍是非法方案。图像不足与 Token 不足一样提示风险，允许确认后故意释放；失败动作不付款、不得赞、不施加效果，并按原规则过载／取消后续动作，图像余额不会为负。
 
 本人和管理员可查看近 30 天完整结果；回合制对战小游戏（测试）局中对手未用配装保持隐藏，终局开放。到期后仅管理员可访问去身份的长期存档，保留完整规则与过程，移除用户、原始局／账务标识、绝对时间、付款来源和跨局身份关联。协管没有该管理权限。管理员下载可跨页继续，页面到期记录会计入跳过数，只有完整结束才显示成功。
