@@ -144,8 +144,8 @@ func TestInteractionUpgradePreservesExistingScanResults(t *testing.T) {
 	}
 	hostileMustExec(t, database, `UPDATE request_source_facts SET user_id=NULL WHERE request_log_id=?`, logs[0])
 	var count, changed int
-	if err := database.QueryRow(`SELECT (SELECT count(*) FROM risk_scan_results WHERE scan_id=?),changed FROM risk_client_scans WHERE id=?`, scan, scan).Scan(&count, &changed); err != nil || count != 1 || changed != 1 {
-		t.Fatal("retained result missed privacy invalidation", count, changed, err)
+	if err := database.QueryRow(`SELECT (SELECT count(*) FROM risk_scan_results WHERE scan_id=?),changed FROM risk_client_scans WHERE id=?`, scan, scan).Scan(&count, &changed); err != nil || count != 2 || changed != 0 {
+		t.Fatal("account detachment changed historical scan results", count, changed, err)
 	}
 }
 
