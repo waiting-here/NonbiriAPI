@@ -83,6 +83,23 @@ describe('useDetailNavigation', () => {
     }
   });
 
+  it('still navigates when disabling the connected trigger blurs it to body', async () => {
+    const view = render(<NavigationProbe selection="" ready />);
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    trigger.focus();
+    view.rerender(<NavigationProbe selection="selected" ready={false} />);
+
+    // jsdom cannot blur an already disabled button; simulate the browser's focus loss first.
+    trigger.blur();
+    trigger.setAttribute('disabled', '');
+    expect(trigger.isConnected).toBe(true);
+    expect(document.activeElement).toBe(document.body);
+
+    view.rerender(<NavigationProbe selection="selected" ready />);
+    const detail = screen.getByTestId('detail');
+    await waitFor(() => expect(document.activeElement).toBe(detail));
+  });
+
   it('still navigates when the original trigger was replaced and focus fell to body', async () => {
     const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
     const scrollIntoView = vi.fn();

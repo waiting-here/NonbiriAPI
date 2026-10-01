@@ -53,10 +53,9 @@ export function useDetailNavigation<
       active instanceof HTMLElement && active !== document.body && active.isConnected
         ? active
         : null;
-    if (
-      (pendingFocus.current?.isConnected && currentFocus !== pendingFocus.current) ||
-      (!pendingFocus.current?.isConnected && currentFocus)
-    ) {
+    // Loading can disable the trigger and blur it to body. Only a different
+    // focused element should cancel the pending navigation.
+    if (currentFocus && currentFocus !== pendingFocus.current) {
       pendingNavigation.current = null;
       pendingFocus.current = null;
       return;
