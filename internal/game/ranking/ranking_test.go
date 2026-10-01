@@ -262,6 +262,7 @@ func TestWindowsProfitRetentionAndRandomLossConservation(t *testing.T) {
 	u := f.user(false)
 	e := f.epoch
 	f.add(u, e, 80, 100, "blackjack")
+	f.advance(e + week)
 	f.add(u, e+week, 10, 200, "bidding")
 	if v, _, _ := f.total(u, "blackjack", "7d"); v != "0" {
 		t.Fatal(v)
