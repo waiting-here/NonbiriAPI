@@ -532,7 +532,7 @@ export function likesCatalog(value: unknown): LikesCatalog {
         ? []
         : unique(
             r.compatible_modes,
-            4,
+            Number.POSITIVE_INFINITY,
             (value) => {
               const snapshot = exactRecord(value, [
                 'rules_version',
