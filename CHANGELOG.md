@@ -4,6 +4,34 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## [Unreleased]
+
+Changes in development.
+
+### Added
+
+- Per-model ordinary message-role policies for personal and charity models, with native compatibility, explicit passthrough/mapping/rejection and independent tool-message handling.
+- Personal CallerKey reads, partial batch key imports and model-connection appends with owned-secret deduplication, default manual or strict fresh-discovery mode, fixed 24-hour recovery and shared automation admission. L6 CallerKeys gain bounded charity resource/catalog/model/connection reads; L5 retains personal automation and existing scoped browser permissions.
+- Lake Notes as a separate server-backed limited activity: full fishing progression, one recoverable cast, per-period once-only general-credit entry, exact four-way coin/general/game-credit exchanges and administrator periods. The activity and all exchanges start disabled; profiles persist across devices and periods.
+- Current denied-sign-in explanations after verified Discord identity, immutable historical request identity and rolling multi-address auditing across accounts of the same Discord identity. Retained logs survive all account-deletion sources until their original deadline or hold; re-registration never grants old-log access.
+- Forced rejection of automatically approved mainstream donations, stable secret-text renewed-review requirements and managed donation-member manual model candidates.
+- Fat Fish v3 motion, explicit source-bound offline legacy cleanup, current-playtest recovery/abandonment, automatic terminal submission and visual polygon/period-graph editing. Private battle presets gain optional names and readable summaries.
+
+### Changed
+
+- New battles use 100/500 starting coins, 2.5× rounded-up token/energy speed costs, 2× skill likes, one/two-turn overload, Thunder self-overload and deliberate image-shortage submission. Harness changes include Claude Code's independent successful-debuff likes, Antigravity's +2 normal attack and Copilot's conditional +2. Saved older games/replays retain their exact rules.
+- Account export schema 12 adds safe Lake Notes progress/receipts, model-role policies, private preset names and retained automation outcomes, keeping existing whole-file limits and secret exclusions. Instance legal overrides remain an operator publication action.
+- Optional connection onboarding can stop and resume without blocking charity or deleting completed resources. Resource, account, diagnostic and management workflows use shared operation/confirmation behavior, structured fields and bilingual guidance.
+- Free width/height image choices with no fallback price use only valid exact priced pairs; stale choices require reselection without losing other input.
+- Risk-based checks retain full final-candidate coverage while browser integration reuses one compiled backend fixture and race selection follows actual concurrency boundaries.
+
+### Fixed
+
+- Anthropic-compatible and Gateway v3 tool flattening now support complete bounded history and streaming, and OpenAI nonstream chat accepts the one supported success/data wrapper while rejecting ambiguous/error forms.
+- Donation failure streaks count confirmed upstream failures and reset on protocol success; cancellation, downstream failure, platform rejection and unknown recovery are neutral. Accounting remains independent.
+- Fat Fish playtest recovery and submission no longer leave a completed local game blocking a new preparation.
+- Resource conflict recovery, Debug structured-message rendering and browser regression fixtures preserve authoritative response fields and current page/filter restoration.
+
 ## [1.0.0-rc.4] - 2026-09-28
 
 This entry describes the rc.4 source prerelease dated 2026-09-28 UTC for Linux/amd64. No official prebuilt binaries are provided. Source publication does not by itself deploy an instance.
