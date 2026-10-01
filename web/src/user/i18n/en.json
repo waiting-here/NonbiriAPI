@@ -1129,6 +1129,531 @@
       "account.checkAuthority": "Check account status",
       "account.deleteStillActive": "The account is still active. Verify your Discord identity again before another deletion attempt.",
       "account.authorityCheckFailed": "Account status could not be checked. The deletion request was not repeated."
+    },
+    "lakeNotes": {
+      "back": "Back to activities",
+      "intro": "Hold Space or the fishing button to rise; release to fall. Keep the fish inside the catch bar.",
+      "entryHeading": "Entry for this period",
+      "entryFee": "Entry fee for this period: {{amount}} general credits",
+      "entryScope": "The entry fee covers the whole period. Enter again when a new period opens; your progress and coins carry over.",
+      "paid": "Entry confirmed for this period",
+      "enter": "Confirm fee and join",
+      "closed": "The activity is closed. Your coins, basket and saved progress remain available when it reopens.",
+      "entryUnknown": "Entry is unconfirmed. Try entering again.",
+      "retry": "Retry the same action",
+      "saved": "Saved",
+      "saving": "Saving",
+      "reconnecting": "Connection interrupted; fishing is paused. Resume from the last saved point.",
+      "checkSaved": "Check saved progress",
+      "controllerLost": "This cast is active on another page. You can continue on this device.",
+      "start": "Start fishing",
+      "again": "Fish again",
+      "pause": "Pause and save",
+      "resume": "Resume this cast",
+      "takeOver": "Continue on this device",
+      "hold": "Hold to rise",
+      "track": "Fishing track: hold to rise, release to fall",
+      "progress": "Catch progress",
+      "idle": "Ready to fish",
+      "waiting": "Waiting for a bite",
+      "playing": "Fish on the hook",
+      "success": "Catch confirmed",
+      "failed": "The fish escaped",
+      "paused": "Paused",
+      "confirming": "Confirming the result",
+      "unknownFish": "An unidentified fish",
+      "caught": "Total catches: {{count}}",
+      "streak": "Success streak: {{count}}",
+      "clock": "Day {{day}} · {{time}} · {{period}} · {{weather}}",
+      "level": "Fishing Lv.{{level}}",
+      "xp": "{{xp}} / {{next}} XP",
+      "maxLevel": "Maximum level · {{xp}} XP",
+      "loadout": "Equipment: {{gear}} · Next bait: {{bait}}",
+      "none": "None",
+      "empty": "Empty",
+      "skills": "Skills",
+      "shop": "Equipment shop",
+      "basket": "Fish basket",
+      "locations": "Choose a fishing spot",
+      "contracts": "Contract board",
+      "rest": "Rest until the next period",
+      "close": "Close",
+      "pausedMenus": "This cast is unfinished. You may browse menus, but equipment, sales, locations and skills stay unchanged until it ends.",
+      "skillIntro": "Skills unlock at levels 5, 10, 15 and 20. Choose one at each tier; level-10 options follow your level-5 route.",
+      "skillTier": "Lv.{{level}}",
+      "selected": "Selected",
+      "locked": "Locked",
+      "skillPrerequisite": "Choose your level-5 route first.",
+      "respec": "Reset all skills · {{cost}} coins",
+      "respecHelp": "Choose again at your unlocked tiers; your level and experience remain.",
+      "rods": "Rods",
+      "tackle": "Tackle",
+      "baits": "Bait",
+      "presets": "Equipment presets · three slots",
+      "owned": "{{count}} owned",
+      "equipped": "Equipped",
+      "buy": "Buy · {{cost}} coins",
+      "claim": "Claim",
+      "equip": "Equip",
+      "tackleSlot": "Slot {{slot}}",
+      "unequip": "Unequip",
+      "equipSlot": "Equip in slot {{slot}}",
+      "savePreset": "Save current",
+      "applyPreset": "Apply preset",
+      "preset": "Preset {{slot}}",
+      "stock": "Stock: {{count}}",
+      "useBait": "Use next cast",
+      "disableBait": "Stop using",
+      "previewStats": "Catch bar {{height}} px · Miss loss {{loss}}%/s · Wait about {{min}}–{{max}} seconds",
+      "shopHelp": "Rods determine bait and tackle slots. Tackle can stack, with at most two copies each. Free equipment requires its unlock condition.",
+      "basketHelp": "{{count}}/80 fish. Locked fish cannot be sold or delivered. New fish are sold at their normal value when the basket is full.",
+      "basketEmpty": "Your basket is empty. Try a cast.",
+      "sell": "Sell · {{value}} coins",
+      "sellAll": "Sell unlocked fish · {{value}} coins",
+      "lockFish": "Lock",
+      "unlockFish": "Unlock",
+      "catchDetail": "{{length}} cm · {{quality}} quality{{perfect}}",
+      "perfect": " · Perfect catch",
+      "debris": "Debris bag",
+      "recycle": "Recycle · {{value}} coins",
+      "recycleAll": "Recycle all · {{value}} coins",
+      "debrisSummary": "{{trash}} debris recovered · {{treasure}} chests opened",
+      "catalogSummary": "{{found}}/54 species discovered · {{caught}} catches · {{perfect}} perfect catches",
+      "undiscovered": "??? · Undiscovered",
+      "conditions": "Found in: {{location}} · {{periods}} · {{weather}}",
+      "allPeriods": "All periods",
+      "allWeather": "All weather",
+      "record": "{{count}} catches · Longest {{length}} cm · Best {{quality}} quality · {{perfect}} perfect",
+      "locationFound": "{{count}}/18 species discovered",
+      "currentLocation": "Current spot",
+      "contractsHelp": "The board refreshes each game day. Accepted contracts never expire; cancel any time, with up to three active. Delivery uses unlocked lower-value fish; other tasks count from acceptance.",
+      "contractSummary": "{{active}}/3 active · {{completed}} completed",
+      "available": "Available",
+      "active": "Active",
+      "completed": "Reward claimed",
+      "deliveryContract": "Deliver {{target}} {{fish}}",
+      "catchContract": "Catch {{target}} fish in {{location}}",
+      "perfectContract": "Make {{target}} perfect catches",
+      "cleanupContract": "Recover {{target}} debris",
+      "contractReward": "Reward: {{coins}} coins · {{bait}} ×{{count}}",
+      "acceptContract": "Accept contract",
+      "cancelContract": "Cancel contract",
+      "claimContract": "Complete and claim reward",
+      "treasureCollect": "Collect the chest with the catch bar",
+      "treasureSecured": "Chest secured; catch the fish to bring it back",
+      "rewardSummary": "{{fish}} · {{length}} cm · {{quality}} quality · +{{xp}} XP",
+      "overflow": "Basket full; this fish was sold at its normal value.",
+      "treasureReward": "Chest reward: {{coins}} coins · {{bait}} ×{{count}}",
+      "debrisReward": "Recovered {{item}}",
+      "exchangeHeading": "Exchange coins and site credits",
+      "exchangeHelp": "Choose the number of batches to preview the cost and amount received.",
+      "direction": "Direction",
+      "batches": "Number of batches",
+      "quote": "Preview exchange",
+      "quoteAmounts": "Pay {{source}} {{sourceUnit}} and receive {{target}} {{targetUnit}}",
+      "exchangeConfirm": "Confirm exchange",
+      "exchangeUnknown": "The exchange is unconfirmed. Try again.",
+      "exchangeSaved": "Exchange completed.",
+      "exchangeConflict": "Settings or balances changed. Preview again before confirming.",
+      "batchInvalid": "Enter a valid number of complete batches.",
+      "saveUnknown": "The action is unconfirmed. Try again or check saved progress.",
+      "actionSaved": "Action saved.",
+      "catalog": {
+        "fish": {
+          "gold": {
+            "name": "Crucian carp",
+            "description": "A gentle, familiar lake fish and often a fisher’s first catch."
+          },
+          "lake_carp": {
+            "name": "Common carp",
+            "description": "A sturdy fish that suddenly dives into deep water when startled."
+          },
+          "lake_yellowcat": {
+            "name": "Yellow catfish",
+            "description": "Long whiskers help it search the lake bed for food."
+          },
+          "sky": {
+            "name": "Bream",
+            "description": "Wide and flat, it cruises slowly through the upper water."
+          },
+          "lake_grasscarp": {
+            "name": "Grass carp",
+            "description": "A hungry plant eater with a heavier pull than it seems."
+          },
+          "mud": {
+            "name": "Catfish",
+            "description": "A hunter of the dark lake bed; its whiskers sense movement."
+          },
+          "silver": {
+            "name": "Largemouth bass",
+            "description": "It waits beside water plants, then strikes without warning."
+          },
+          "violet": {
+            "name": "Mandarin fish",
+            "description": "A boldly patterned ambush hunter with quick movements."
+          },
+          "lake_snakehead": {
+            "name": "Snakehead",
+            "description": "It hides in shallow water and fights toward the weeds when hooked."
+          },
+          "lake_silvercarp": {
+            "name": "Silver carp",
+            "description": "Its broad body rises slowly, but a shake of its head is powerful."
+          },
+          "lake_bighead": {
+            "name": "Bighead carp",
+            "description": "Its enormous head makes this uncommon big fish easy to recognize."
+          },
+          "star": {
+            "name": "Black carp",
+            "description": "A dark shape in deep water that challenges experienced fishers."
+          },
+          "lake_bitterling": {
+            "name": "Bitterling",
+            "description": "Pink-blue sides shimmer as it swims among plants in shallow water."
+          },
+          "lake_icefish": {
+            "name": "Icefish",
+            "description": "Translucent fish swim in schools and are easiest to see in slanting daylight."
+          },
+          "lake_tench": {
+            "name": "Tench",
+            "description": "Its olive body moves slowly along the lake bed, feeding more in gloomy weather."
+          },
+          "lake_topmouth": {
+            "name": "Topmouth culter",
+            "description": "An upturned mouth pursues small surface fish with a silver-fast strike."
+          },
+          "lake_swamp_eel": {
+            "name": "Swamp eel",
+            "description": "After dark it leaves its mud hole to hunt along the weeds."
+          },
+          "lake_sturgeon": {
+            "name": "Sturgeon",
+            "description": "An ancient armored fish that sometimes approaches shore when rain stirs the lake bed."
+          },
+          "teal": {
+            "name": "Pale chub",
+            "description": "A small, fast stream fish that gathers in bright shallows."
+          },
+          "river_zacco": {
+            "name": "Zacco",
+            "description": "Bright fins flash as it darts through gaps in the stones."
+          },
+          "river_loach": {
+            "name": "Loach",
+            "description": "A patterned bottom dweller that burrows into gravel."
+          },
+          "river_gudgeon": {
+            "name": "Gudgeon",
+            "description": "A quiet small fish sheltering beside stones in slower currents."
+          },
+          "river_ayu": {
+            "name": "Sweetfish",
+            "description": "Its silver body moves lightly through swift water."
+          },
+          "river_perch": {
+            "name": "River perch",
+            "description": "A spiny-backed fish that patrols river bends and water plants."
+          },
+          "red": {
+            "name": "Rainbow trout",
+            "description": "A colorful stripe marks a fish that turns sharply when startled."
+          },
+          "river_browntrout": {
+            "name": "Brown trout",
+            "description": "Brown spots cover a fish that accelerates with the current."
+          },
+          "river_pike": {
+            "name": "Pike",
+            "description": "A long ambush hunter whose sudden dash leaves little time to react."
+          },
+          "frost": {
+            "name": "European eel",
+            "description": "Its long body rests in river-bed shadows and becomes active at night."
+          },
+          "river_salmon": {
+            "name": "Atlantic salmon",
+            "description": "A strong migratory fish that keeps its speed even against the current."
+          },
+          "abyss": {
+            "name": "Yellowcheek",
+            "description": "A huge predator of deep channels, sprinting like a shadow."
+          },
+          "river_spined_loach": {
+            "name": "Spined loach",
+            "description": "A small patterned fish weaving through stones and gravel on the river bed."
+          },
+          "river_grayling": {
+            "name": "Grayling",
+            "description": "Its tall dorsal fin resembles a flag as it swims against cool, swift water."
+          },
+          "river_red_eye": {
+            "name": "Red-eye trout",
+            "description": "Its red eye-ring is striking as it searches for food at slower river bends."
+          },
+          "river_yamame": {
+            "name": "Yamame",
+            "description": "An oval-spotted stream trout that darts across shallows at dawn."
+          },
+          "river_burbot": {
+            "name": "Burbot",
+            "description": "A river-bed hunter with one chin barbel that prefers dark, cold currents."
+          },
+          "river_hilsa": {
+            "name": "Hilsa",
+            "description": "A silver migratory fish that sometimes enters this channel as rain raises the water."
+          },
+          "coast_sardine": {
+            "name": "Sardine",
+            "description": "Silver fish gather in schools that glitter near the surface."
+          },
+          "coast_anchovy": {
+            "name": "Anchovy",
+            "description": "Small and agile, the whole school flashes when it turns."
+          },
+          "coast_herring": {
+            "name": "Herring",
+            "description": "A schooling fish of the middle waters near the coast."
+          },
+          "coast_horsemackerel": {
+            "name": "Horse mackerel",
+            "description": "A powerful tail keeps it moving steadily through sea currents."
+          },
+          "coast_mackerel": {
+            "name": "Mackerel",
+            "description": "Wavy markings cover its back as it darts like an arrow."
+          },
+          "coast_seabass": {
+            "name": "Sea bass",
+            "description": "It moves around reefs, pulling in an uneven rhythm."
+          },
+          "coast_flounder": {
+            "name": "Flounder",
+            "description": "Its flat body blends with the sandy sea floor."
+          },
+          "coast_seabream": {
+            "name": "Red sea bream",
+            "description": "Warm-colored scales gleam as it searches near reefs."
+          },
+          "coast_grouper": {
+            "name": "Grouper",
+            "description": "A thick reef fish that likes to dive into rocky gaps."
+          },
+          "coast_yellowtail": {
+            "name": "Yellowtail",
+            "description": "A flash of yellow tail reveals a very fast swimmer."
+          },
+          "coast_tuna": {
+            "name": "Bluefin tuna",
+            "description": "An ocean traveler with astonishing strength and speed."
+          },
+          "coast_swordfish": {
+            "name": "Swordfish",
+            "description": "Its sword-shaped bill marks a rare, powerful opponent."
+          },
+          "coast_pomfret": {
+            "name": "Silver pomfret",
+            "description": "A flat silver fish appearing in schools with the coastal current."
+          },
+          "coast_flyingfish": {
+            "name": "Flying fish",
+            "description": "Broad pectoral fins support short glides; it is easiest to spot in bright weather."
+          },
+          "coast_cutlassfish": {
+            "name": "Cutlassfish",
+            "description": "A long silver-white ribbon casts a cold gleam in dark sea water."
+          },
+          "coast_conger": {
+            "name": "Conger eel",
+            "description": "It hides in reef gaps by day and feeds along the sea floor on rainy nights."
+          },
+          "coast_skipjack": {
+            "name": "Skipjack tuna",
+            "description": "A very fast schooling hunter with distinct dark stripes on its silver belly."
+          },
+          "coast_anglerfish": {
+            "name": "Anglerfish",
+            "description": "A glowing lure sways above its head; it approaches shore only on stormy nights."
+          }
+        },
+        "locations": {
+          "lake": {
+            "name": "Lake",
+            "scene": "A peaceful lake, ideal for fishing.",
+            "description": "Calm fresh water, from small crucian carp to enormous black carp."
+          },
+          "river": {
+            "name": "River",
+            "scene": "The current crosses a stony bank; fish shelter between fast and slow water.",
+            "description": "Changing currents with more fast stream fish and migrating species."
+          },
+          "coast": {
+            "name": "Coast",
+            "scene": "Sea breezes cross the pier as waves touch the shore.",
+            "description": "A saltwater pier and nearby sea, with schooling small fish and ocean travelers."
+          }
+        },
+        "gear": {
+          "trainingRod": {
+            "name": "Training rod",
+            "description": "Raises the catch bar to 136 px when smaller and reduces miss loss to 2/3. Only ordinary-quality fish below difficulty 50."
+          },
+          "bambooPole": {
+            "name": "Bamboo pole",
+            "description": "A basic rod without bait or tackle."
+          },
+          "fiberglassRod": {
+            "name": "Fiberglass rod",
+            "description": "Allows bait."
+          },
+          "iridiumRod": {
+            "name": "Iridium rod",
+            "description": "Allows bait and one tackle slot."
+          },
+          "advancedRod": {
+            "name": "Advanced iridium rod",
+            "description": "Allows bait and two tackle slots, including duplicate tackle."
+          },
+          "corkBobber": {
+            "name": "Cork bobber",
+            "description": "Catch bar height +24 px."
+          },
+          "leadBobber": {
+            "name": "Lead bobber",
+            "description": "Bottom bounce speed becomes 1/10 of normal."
+          },
+          "trapBobber": {
+            "name": "Trap bobber",
+            "description": "Miss loss drops from 0.003 to 0.002 per tick; two reduce it to 0.0015."
+          },
+          "barbedHook": {
+            "name": "Barbed hook",
+            "description": "The catch bar gently follows fish inside it; darting fish still need control."
+          },
+          "qualityBobber": {
+            "name": "Quality bobber",
+            "description": "Quality +1 tier. Claim the first after 3 perfect catches and the second after 10."
+          },
+          "curiosityLure": {
+            "name": "Curiosity lure",
+            "description": "Legendary fish weight ×2. Claim after catching a legendary fish."
+          },
+          "spinner": {
+            "name": "Spinner",
+            "description": "Maximum bite wait decreases by 3.75 game seconds."
+          },
+          "dressedSpinner": {
+            "name": "Dressed spinner",
+            "description": "Maximum bite wait decreases by 7.5 game seconds."
+          },
+          "sonarBobber": {
+            "name": "Sonar bobber",
+            "description": "Reveals the fish species after the bite."
+          }
+        },
+        "skills": {
+          "steady": {
+            "name": "Steady hand",
+            "description": "Catch bar +8 px."
+          },
+          "tracker": {
+            "name": "Fish tracker",
+            "description": "Rare-or-better fish weight +20%; catch XP +8%."
+          },
+          "calm": {
+            "name": "Calm reeling",
+            "description": "Miss loss decreases by 10%."
+          },
+          "control": {
+            "name": "Rod control",
+            "description": "Catch bar rising and falling acceleration +8%."
+          },
+          "legendHunter": {
+            "name": "Legend hunter",
+            "description": "Epic and legendary fish weight +25%."
+          },
+          "brawler": {
+            "name": "Fish brawler",
+            "description": "Hit progress +8% against rare-or-better fish."
+          },
+          "patience": {
+            "name": "Patient reeling",
+            "description": "Miss loss decreases by another 6%."
+          },
+          "reader": {
+            "name": "Current reader",
+            "description": "Fish target changes slow by 8%."
+          },
+          "master": {
+            "name": "Master angler",
+            "description": "Catch bar +8 px."
+          },
+          "deepSeeker": {
+            "name": "Deep seeker",
+            "description": "Epic and legendary weight +20%; hit progress +5% against rare-or-better fish."
+          }
+        },
+        "baits": {
+          "basic": {
+            "name": "Basic bait",
+            "description": "Halves the bite wait for the next cast."
+          },
+          "glimmer": {
+            "name": "Glimmer bait",
+            "description": "Rare-or-better weight +45% and halves the bite wait for the next cast."
+          },
+          "abyss": {
+            "name": "Deep-water bait",
+            "description": "Epic and legendary weight ×2; halves bite wait; fish speed +4% and miss loss +8%."
+          },
+          "deluxe": {
+            "name": "Deluxe bait",
+            "description": "Bite wait decreases by 67%; catch bar +12 px."
+          }
+        },
+        "debris": {
+          "driftwood": {
+            "name": "Driftwood"
+          },
+          "bottle": {
+            "name": "Broken bottle"
+          },
+          "boot": {
+            "name": "Old boot"
+          },
+          "line": {
+            "name": "Tangled fishing line"
+          }
+        },
+        "periods": {
+          "dawn": "Dawn",
+          "day": "Day",
+          "dusk": "Dusk",
+          "night": "Night"
+        },
+        "weathers": {
+          "sunny": "Sunny",
+          "cloudy": "Cloudy",
+          "rain": "Rain"
+        },
+        "rarities": {
+          "common": "Common",
+          "uncommon": "Uncommon",
+          "rare": "Rare",
+          "epic": "Epic",
+          "legendary": "Legendary"
+        },
+        "quality": {
+          "q0": "Normal",
+          "q1": "Silver",
+          "q2": "Gold",
+          "q3": "Iridium"
+        }
+      },
+      "catalogTitle": "Fish catalog",
+      "ledgerEntry": "Lake Notes: period entry",
+      "ledgerExchange": "Lake Notes: coin and credit exchange"
     }
   },
   "games": {

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useLakeCopy } from '../../activities/lake-notes/copy';
 import type { HistoryEntry, HistoryKind } from './data';
 
 const en = {
@@ -115,7 +116,7 @@ const zh: typeof en = {
   admin: '管理员调整',
   penalty: '过短请求惩罚',
 };
-const reasons: Record<HistoryKind, [string, string]> = {
+const reasons: Record<Exclude<HistoryKind, 'lake_entry' | 'lake_exchange'>, [string, string]> = {
   admin_user_adjustment: ['管理员调整', 'Administrator adjustment'],
   admin_pool_adjustment: ['资金池调整', 'Pool adjustment'],
   account_delete_zero: ['账号余额结清', 'Account balance cleared'],
@@ -162,11 +163,14 @@ const reasons: Record<HistoryKind, [string, string]> = {
   fatfish_refund: ['大肥鱼：门票退还', 'Fat fish: ticket refunded'],
 };
 export function useCreditCopy() {
+  const { t:lakeText } = useLakeCopy();
   const { i18n } = useTranslation();
   const chinese = !i18n.language.startsWith('en');
   return {
-    copy: chinese ? zh : en,
+    copy: { ...(chinese ? zh : en), lake_notes: lakeText('title') },
     reason: (entry: HistoryEntry) => {
+      if (entry.kind === 'lake_entry') return lakeText('ledgerEntry');
+      if (entry.kind === 'lake_exchange') return lakeText('ledgerExchange');
       if (
         (entry.kind === 'charity_settle' || entry.kind === 'forward_settle') &&
         !entry.delta.startsWith('-')

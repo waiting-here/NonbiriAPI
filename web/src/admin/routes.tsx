@@ -14,7 +14,10 @@ export const router = createBrowserRouter([
     hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage station="admin" />,
     children: [
-{ path: pathFor('admin-blacklist'), lazy: async () => ({Component: (await import('./pages/BlacklistPage')).BlacklistPage}) },
+      {
+        path: pathFor('admin-blacklist'),
+        lazy: async () => ({ Component: (await import('./pages/BlacklistPage')).BlacklistPage }),
+      },
       {
         index: true,
         lazy: async () => ({ Component: (await import('./pages/DashboardPage')).DashboardPage }),
@@ -25,11 +28,21 @@ export const router = createBrowserRouter([
       },
       {
         path: pathFor('admin-inactivity-policy'),
-        lazy: async () => ({ Component: (await import('@shared/inactivity/InactivityPolicyPage')).InactivityPolicyPage }),
+        lazy: async () => ({
+          Component: (await import('@shared/inactivity/InactivityPolicyPage')).InactivityPolicyPage,
+        }),
       },
       {
         path: pathFor('admin-limited-activities'),
-        lazy: async () => ({ Component: (await import('./pages/PictureBookSettingsPage')).PictureBookSettingsPage }),
+        lazy: async () => ({
+          Component: (await import('./pages/PictureBookSettingsPage')).PictureBookSettingsPage,
+        }),
+      },
+      {
+        path: pathFor('admin-lake-notes'),
+        lazy: async () => ({
+          Component: (await import('./features/lakenotes/LakePeriodsPage')).LakePeriodsPage,
+        }),
       },
       {
         path: pathFor('admin-fat-fish'),
