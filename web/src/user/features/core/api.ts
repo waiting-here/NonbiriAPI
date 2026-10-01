@@ -1,3 +1,4 @@
+import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import { ApiError, isApiError } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
 import {
@@ -914,6 +915,14 @@ export async function getModel(modelId: string, signal?: AbortSignal): Promise<M
   return model;
 }
 
+function rolePolicyInput(value: unknown): RolePolicy {
+  try {
+    return normalizeRolePolicy(value);
+  } catch {
+    throw new ApiError('invalid_request', 'Invalid message role policy.', 400);
+  }
+}
+
 export async function createModel(
   input: ModelCreateInput,
   operation: OperationIdentity,
@@ -922,7 +931,7 @@ export async function createModel(
   const record = exactInput(
     input,
     ['provider', 'model'],
-    ['route_strategy', 'silent_retry', 'flatten_tool_calls'],
+    ['route_strategy', 'silent_retry', 'flatten_tool_calls', 'role_policy'],
     'logical model creation input',
   );
   const routeStrategy = record.route_strategy;
@@ -938,6 +947,9 @@ export async function createModel(
       : {}),
     ...(Object.hasOwn(record, 'flatten_tool_calls')
       ? { flatten_tool_calls: exactBooleanInput(record.flatten_tool_calls, 'tool call setting') }
+      : {}),
+    ...(Object.hasOwn(record, 'role_policy')
+      ? { role_policy: rolePolicyInput(record.role_policy) }
       : {}),
   };
   const response = await coreRequest('/api/models', {
@@ -959,13 +971,18 @@ export async function patchModel(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['provider', 'model', 'route_strategy', 'silent_retry', 'flatten_tool_calls'],
+    ['provider', 'model', 'route_strategy', 'silent_retry', 'flatten_tool_calls', 'role_policy'],
     'logical model update input',
   );
   if (
-    !['provider', 'model', 'route_strategy', 'silent_retry', 'flatten_tool_calls'].some((key) =>
-      Object.hasOwn(record, key),
-    )
+    ![
+      'provider',
+      'model',
+      'route_strategy',
+      'silent_retry',
+      'flatten_tool_calls',
+      'role_policy',
+    ].some((key) => Object.hasOwn(record, key))
   ) {
     throw new ApiError('invalid_request', 'Invalid logical model update input.', 400);
   }
@@ -992,6 +1009,9 @@ export async function patchModel(
       : {}),
     ...(Object.hasOwn(record, 'flatten_tool_calls')
       ? { flatten_tool_calls: exactBooleanInput(record.flatten_tool_calls, 'tool call setting') }
+      : {}),
+    ...(Object.hasOwn(record, 'role_policy')
+      ? { role_policy: rolePolicyInput(record.role_policy) }
       : {}),
   };
   const response = await coreRequest(`/api/models/${pathID(modelId, 'model id')}`, {

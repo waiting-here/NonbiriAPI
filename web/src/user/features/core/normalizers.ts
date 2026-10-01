@@ -1,3 +1,4 @@
+import { normalizeRolePolicy } from '@shared/rolePolicy';
 import { normalizeAnnouncementSummary } from '../operations/data';
 import { oneOf } from '@shared/operations/wire';
 import { automaticRestrictions } from '@shared/operations/restrictions';
@@ -1319,7 +1320,7 @@ export function normalizeModel(value: unknown): Model {
     created_at: createdAt,
     updated_at: updatedAt,
     ...(browse ? { browse } : {}),
-    ...(record.role_policy ? { role_policy: record.role_policy as Model['role_policy'] } : {}),
+    role_policy: normalizeRolePolicy(record.role_policy),
   };
 }
 

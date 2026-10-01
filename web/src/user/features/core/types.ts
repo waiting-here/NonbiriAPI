@@ -1,3 +1,5 @@
+import type { RolePolicy } from '@shared/rolePolicy';
+export type { RoleAction, RolePolicy } from '@shared/rolePolicy';
 import type { AutomaticRestriction } from '@shared/operations/restrictions';
 
 export const CONNECTOR_TYPES = [
@@ -205,12 +207,6 @@ export interface CatalogView {
   next_cursor: string | null;
 }
 
-export type RoleAction = 'native' | 'passthrough' | 'system' | 'user' | 'assistant' | 'reject';
-export interface RolePolicy {
-  default_action: RoleAction;
-  rules: Record<string, RoleAction>;
-}
-
 export interface Model {
   id: string;
   provider: string;
@@ -328,6 +324,7 @@ export interface ModelCreateInput {
   route_strategy?: RouteStrategy;
   silent_retry?: boolean;
   flatten_tool_calls?: boolean;
+  role_policy?: RolePolicy;
 }
 
 export interface ModelPatchInput {
@@ -336,6 +333,7 @@ export interface ModelPatchInput {
   route_strategy?: RouteStrategy;
   silent_retry?: boolean;
   flatten_tool_calls?: boolean;
+  role_policy?: RolePolicy;
   expected_revision: string;
 }
 
