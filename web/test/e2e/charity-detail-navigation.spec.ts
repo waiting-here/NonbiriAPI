@@ -478,7 +478,7 @@ async function installManagementRoutes(
 
 function donationListRow(page: Page, id = DETAIL_DONATION_ID): Locator {
   return page.locator('.ops-table tbody tr').filter({
-    has: page.getByText(id, { exact: true }),
+    has: page.getByText('Reviewable donation ' + id, { exact: true }),
   });
 }
 
@@ -589,9 +589,7 @@ async function exerciseDonationNavigation(
   await expect
     .poll(() => new URL(page.url()).searchParams.get('donation_id'))
     .toBe(DETAIL_DONATION_ID);
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   const detailTarget = page.locator('.ops-detail-target');
   await expect(detailTarget).toHaveCount(1);
   await assertDetailFocusAndViewport(page, detailTarget);
@@ -606,9 +604,7 @@ async function exerciseDonationNavigation(
   await saveScreenshot(page, setup.station + '-donation-detail-1280-light-en');
 
   await page.reload();
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   // A reload must preserve the selected detail and focus. The browser keeps its
   // scroll restoration position, so viewport entry is asserted on the actual
   // list-to-detail actions below rather than treating refresh as a new action.
@@ -625,9 +621,7 @@ async function exerciseDonationNavigation(
   await expect(mobileListButton).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await mobileListButton.click();
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   const mobileDetailTarget = page.locator('.ops-detail-target');
   await expect(mobileDetailTarget).toHaveCount(1);
   await assertDetailFocusAndViewport(page, mobileDetailTarget);
@@ -649,9 +643,7 @@ async function exerciseDonationNavigation(
   });
 
   await page.goForward();
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await assertDetailFocusAndViewport(page, page.locator('.ops-detail-target'));
   await assertURLState(page, {
     pageParam: 'donations_page',
@@ -708,14 +700,15 @@ async function exerciseSourceToDonationNavigation(
     await expect.poll(() => state.listReads.length).toBeGreaterThan(0);
     await expect(donationListRow(page)).toHaveCount(0);
     await expect(
-      detailTarget.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+      detailTarget.getByRole('heading', { name: 'Donation review', exact: true }),
     ).toBeVisible();
     state.listGate!.release();
   }
 
   await expect(donationListRow(page)).toBeVisible();
   const donationHeading = detailTarget.getByRole('heading', {
-    name: 'Donation #' + DETAIL_DONATION_ID,
+    name: 'Donation review',
+    exact: true,
   });
   const returnToList = detailTarget.getByRole('button', {
     name: 'Return to list',
@@ -772,14 +765,10 @@ async function exerciseSourceToDonationNavigation(
   );
   await expect(page).toHaveURL(/charity_section=donations/);
   await expect(page).toHaveURL(/donation_id=20/);
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
 
   await page.reload();
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await assertDetailFocusAndViewport(page, page.locator('.ops-detail-target'), {
     requireViewport: false,
   });
@@ -1222,12 +1211,13 @@ for (const station of ['admin', 'user'] as const) {
       await manageKey.click();
       await expect(page).toHaveURL(/charity_section=donations/);
       await expect(page).toHaveURL(/donation_keys_page=2/);
+      await expect.poll(() => new URL(page.url()).searchParams.get('donation_key')).toBe('1020');
       const selectedKey = page.locator('section.ops-subcard.is-selected');
       await expect(
-        selectedKey.getByRole('heading', { name: 'Key 1020 · detail-head…21', exact: true }),
+        selectedKey.getByRole('heading', { name: 'Service key detail-head…21', exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByRole('heading', { name: 'Key 1000 · detail-head…1', exact: true }),
+        page.getByRole('heading', { name: 'Service key detail-head…1', exact: true }),
       ).toHaveCount(0);
       await selectedKey.scrollIntoViewIfNeeded();
       if (EVIDENCE_DIR) {
@@ -1236,7 +1226,7 @@ for (const station of ['admin', 'user'] as const) {
       }
       await page.reload();
       await expect(
-        selectedKey.getByRole('heading', { name: 'Key 1020 · detail-head…21', exact: true }),
+        selectedKey.getByRole('heading', { name: 'Service key detail-head…21', exact: true }),
       ).toBeVisible();
       await page
         .getByRole('button', { name: 'Return to model configuration', exact: true })
@@ -1252,7 +1242,7 @@ for (const station of ['admin', 'user'] as const) {
       expect(params.has('donation_id')).toBe(false);
       await page.goBack();
       await expect(
-        selectedKey.getByRole('heading', { name: 'Key 1020 · detail-head…21', exact: true }),
+        selectedKey.getByRole('heading', { name: 'Service key detail-head…21', exact: true }),
       ).toBeVisible();
       await assertStationClean(page, setup);
     },
@@ -1275,9 +1265,14 @@ for (const station of ['admin', 'user'] as const) {
         await donationListRow(page, id)
           .getByRole('button', { name: 'Review', exact: true })
           .click();
-        await expect(page.getByRole('heading', { name: 'Donation #' + id })).toBeVisible();
+        await expect.poll(() => new URL(page.url()).searchParams.get('donation_id')).toBe(id);
+        await expect(
+          page.getByRole('heading', { name: 'Donation review', exact: true }),
+        ).toBeVisible();
         await page.reload();
-        await expect(page.getByRole('heading', { name: 'Donation #' + id })).toBeVisible();
+        await expect(
+          page.getByRole('heading', { name: 'Donation review', exact: true }),
+        ).toBeVisible();
         await page.goBack();
         await expect(donationListRow(page, id)).toBeVisible();
       }
@@ -1353,11 +1348,11 @@ test('semantic donation detail navigation leaves the trigger and enters the view
   const openButton = donationListRow(page).getByRole('button', { name: 'Review', exact: true });
   await expect(openButton).toBeVisible();
   await openButton.click();
-  const heading = page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID });
+  const heading = page.getByRole('heading', { name: 'Donation review', exact: true });
   await expect(heading).toBeVisible();
   const behavior = await page.evaluate(() => {
     const matchingHeading = Array.from(document.querySelectorAll('h1, h2, h3, h4')).find(
-      (element) => element.textContent?.trim() === 'Donation #20',
+      (element) => element.textContent?.trim() === 'Donation review',
     );
     const rect = matchingHeading?.getBoundingClientRect();
     const active = document.activeElement;
@@ -1402,9 +1397,7 @@ test('slow detail loading defers focus until the complete detail layout is ready
     .poll(() => detailTarget.evaluate((element) => document.activeElement === element))
     .toBe(false);
   state.detailGate!.release();
-  await expect(
-    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await assertDetailFocusAndViewport(page, detailTarget);
   await assertStationClean(page, setup);
 });
@@ -1425,7 +1418,7 @@ test('detail errors remain reachable and retry can recover the selected resource
   state.detailMode = 'ok';
   await detailTarget.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(
-    detailTarget.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+    detailTarget.getByRole('heading', { name: 'Donation review', exact: true }),
   ).toBeVisible();
   await assertDetailFocusAndViewport(page, detailTarget, { requireFocus: false });
   await assertStationClean(page, setup);
@@ -1458,9 +1451,7 @@ test('steward detail permission loss clears the visible private projection', asy
   await donationListRow(page).getByRole('button', { name: 'Review', exact: true }).click();
   await expect.poll(() => state.detailReads.length).toBeGreaterThan(0);
   await expect(page).toHaveURL(/tab=logs/);
-  await expect(page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await expect(page.getByText('Synthetic detail note', { exact: true })).toHaveCount(0);
   await assertNoSensitiveBrowserPersistence(page, [setup.marker]);
   expect(forbiddenResponses).toEqual(['/api/steward/donations/20']);

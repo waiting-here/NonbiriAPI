@@ -713,7 +713,8 @@ test('reachable admin charity opens the corrected pending review query without i
   await page.goto(`${ADMIN_ORIGIN}/charity`);
   await expect(page.getByRole('heading', { name: '公益与捐赠管理' })).toBeVisible();
   await page.getByRole('button', { name: '审核' }).click();
-  await expect(page.getByRole('heading', { name: '捐赠 #9' })).toBeVisible();
+  await expect(page).toHaveURL(/donation_id=9(?:&|$)/);
+  await expect(page.getByRole('heading', { name: '捐赠审核', exact: true })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'sk-a…tail · https://upstream.test/v1' }),
   ).toBeVisible();
@@ -906,7 +907,8 @@ test('reachable level-6 steward page keeps its bounded log projection usable', a
   await page.getByRole('tab', { name: 'Charity management' }).click();
   await expect(page.getByRole('tab', { name: 'Donation review queue' })).toBeVisible();
   await page.getByRole('button', { name: 'Review' }).click();
-  await expect(page.getByRole('heading', { name: 'Donation #9' })).toBeVisible();
+  await expect(page).toHaveURL(/donation_id=9(?:&|$)/);
+  await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'sk-a…tail · https://upstream.test/v1' }),
   ).toBeVisible();

@@ -719,7 +719,7 @@ async function exerciseManagedSourceBrowser(
   expect(new URL(page.url()).searchParams.get('donation_keys_page_size')).toBeNull();
   expect(fixture.donationKeyReads.at(-1)).toContain('page=2');
   expect(fixture.donationKeyReads.at(-1)).toContain('page_size=20');
-  await expect(page.getByRole('heading', { name: /捐赠 #7|Donation #7/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(捐赠审核|Donation review)$/ })).toBeVisible();
   const note = page.getByLabel(setup.safeNote, { exact: true });
   await expect(note).toHaveValue(ORIGINAL_NOTE);
   await expect(page.getByText('Synthetic donor', { exact: false })).toBeVisible();
