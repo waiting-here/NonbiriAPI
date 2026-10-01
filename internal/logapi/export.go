@@ -73,7 +73,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(normalized.Phase)
 	if normalized.UserID != nil {
-		query += ` AND l.user_id=?`
+		query += ` AND l.origin_user_id=?`
 		args = append(args, *normalized.UserID)
 	}
 	if normalized.EndpointBaseURL != nil {
@@ -130,6 +130,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			return nil, usageErr
 		}
 		result = append(result, AdminLogRow{
+			OriginIdentity:  record.origin,
 			RejectionFields: rejectionFields(record), ID: record.id, RouteKind: RouteKind(record.routeKind),
 			CallerResultClass: resultClassPointer(record.callerResultClass),
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
@@ -174,6 +175,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 		"output_tokens", "total_tokens", "usage_unknown", "usage_total_mismatch", "charge",
 		"caller_discord_nickname", "caller_discord_id",
 		"phase", "rejection_stage", "rejection_reason", "request_method", "request_path", "charity_model",
+		"origin_user_id", "origin_discord_id", "origin_deleted", "origin_unknown", "history_record_id",
 	}
 	if err := writer.Write(header); err != nil {
 		return nil, ErrUnavailable
@@ -192,6 +194,7 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 			strconv.FormatBool(row.UsageTotalMismatch), row.Usage.Charge,
 			csvString(nickname), csvString(discordID),
 			csvSafe(row.Phase), csvString(row.RejectionStage), csvString(row.RejectionReason), csvString(row.RequestMethod), csvString(row.RequestPath), csvString(row.CharityModel),
+			csvString(row.OriginIdentity.UserID), csvString(row.OriginIdentity.DiscordID), strconv.FormatBool(row.Deleted), strconv.FormatBool(row.Unknown), csvString(row.HistoryRecordID),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, ErrUnavailable

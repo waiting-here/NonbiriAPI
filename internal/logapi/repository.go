@@ -357,6 +357,7 @@ func optionalInt64(value *int64) string {
 }
 
 type commonLogRecord struct {
+	origin                                                      OriginIdentity
 	charityModel                                                *string
 	rejectionStage, rejectionReason, requestMethod, requestPath sql.NullString
 	rowID                                                       int64

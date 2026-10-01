@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 )
 
@@ -87,17 +88,21 @@ func TestInteractionAggregateScanSourceRemoval(t *testing.T) {
 			req := hostileOID("req_")
 			hostileInsertLogicalRequest(t, database, req, user, "openai_chat_completions", 1)
 			log := hostileInsertRequestLog(t, database, req, user, "openai_chat_completions")
-			hostileMustExec(t, database, `INSERT INTO request_source_facts VALUES(?,?,'self','192.0.2.1','direct_peer','{}',1)`, log, user)
+			hostileMustExec(t, database, `INSERT INTO request_source_facts(request_log_id,user_id,kind,effective_ip,ip_quality,source_json,occurred_at) VALUES(?,?,'self','192.0.2.1','direct_peer','{}',1)`, log, user)
 			scan := hostileOID("scn_")
 			hostileMustExec(t, database, `INSERT INTO risk_client_scans(id,user_id,admin,request_token,query_json,rules_json,state,from_at,to_at,call_kind,model,upper_log_id,after_at,candidates,created_at,updated_at,expires_at,kind) VALUES(?,?,1,'abcdefghijklmnop','{}','[]','completed',0,100,'total','',?,0,1,0,0,86400,'shared_ips')`, scan, user, log)
 			hostileMustExec(t, database, `INSERT INTO risk_scan_results(scan_id,row_no,user_id,request_log_id,published,result_json) VALUES(?,1,?,NULL,1,'{"ip":"192.0.2.1"}')`, scan, user)
 			hostileMustExec(t, database, `INSERT INTO risk_scan_result_sources VALUES(?,1,?)`, scan, log)
 			hostileMustExec(t, database, remove, log)
 			var count, changed int
-			if err := database.QueryRow(`SELECT count(*) FROM risk_scan_results`).Scan(&count); err != nil || count != 0 {
+			wantCount, wantChanged := 0, 1
+			if strings.HasPrefix(remove, "UPDATE") {
+				wantCount, wantChanged = 1, 0
+			}
+			if err := database.QueryRow(`SELECT count(*) FROM risk_scan_results`).Scan(&count); err != nil || count != wantCount {
 				t.Fatal(count, err)
 			}
-			if err := database.QueryRow(`SELECT changed FROM risk_client_scans WHERE id=?`, scan).Scan(&changed); err != nil || changed != 1 {
+			if err := database.QueryRow(`SELECT changed FROM risk_client_scans WHERE id=?`, scan).Scan(&changed); err != nil || changed != wantChanged {
 				t.Fatal(changed, err)
 			}
 		})

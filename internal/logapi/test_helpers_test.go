@@ -91,6 +91,7 @@ func newLogFixture(t *testing.T) *logFixture {
 	database.SetMaxOpenConns(1)
 	statements := []string{
 		`CREATE TABLE users(id INTEGER PRIMARY KEY,discord_id TEXT,username TEXT NOT NULL DEFAULT '',guild_nick TEXT NOT NULL DEFAULT '',is_admin INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE admin_account_deletions(alert_id INTEGER PRIMARY KEY,former_user_id INTEGER UNIQUE)`,
 		`CREATE TABLE request_logs(
  id INTEGER PRIMARY KEY, logical_request_id TEXT NOT NULL, user_id INTEGER, model TEXT NOT NULL,
  route_kind TEXT NOT NULL, caller_result_class TEXT, caller_status INTEGER, caller_error_code TEXT,
@@ -100,7 +101,7 @@ func newLogFixture(t *testing.T) *logFixture {
  usage_total_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(usage_total_mismatch IN (0,1)),
  attempt_count INTEGER NOT NULL,
  raw_body TEXT, authorization TEXT, cookie TEXT, discord_id TEXT, private_note TEXT, ciphertext TEXT,
- rejection_stage TEXT,rejection_reason TEXT,request_method TEXT,request_path TEXT)`,
+ rejection_stage TEXT,rejection_reason TEXT,request_method TEXT,request_path TEXT,origin_user_id INTEGER,origin_discord_id TEXT)`,
 		`CREATE TABLE request_attempts(
  claim_id TEXT PRIMARY KEY, request_log_id INTEGER NOT NULL, attempt_seq INTEGER NOT NULL,
  endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, canonical_base_url TEXT NOT NULL,
@@ -187,6 +188,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		usage[0], usage[1], usage[2], usage[3], unknown, attempts,
 		"RAW-REQUEST-BODY-SENTINEL", "Bearer RAW-AUTH-SENTINEL", "RAW-COOKIE-SENTINEL",
 		"RAW-DISCORD-SENTINEL", "RAW-PRIVATE-NOTE-SENTINEL", "RAW-CIPHERTEXT-SENTINEL")
+	fixture.mustExec(`UPDATE request_logs SET origin_user_id=user_id WHERE id=?`, rowID)
 }
 
 func (fixture *logFixture) insertAttempt(

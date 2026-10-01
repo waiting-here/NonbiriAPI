@@ -413,6 +413,9 @@ revision=?,updated_at=MAX(updated_at,?) WHERE id=? AND is_admin=0`, banSeconds, 
 	if banSeconds == 0 {
 		return nil
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=CAST(? AS TEXT)`, userID); err != nil {
+		return err
+	}
 	if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
 		return err
 	}

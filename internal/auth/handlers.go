@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -245,6 +244,7 @@ func memberFor(ctx context.Context, login DiscordLogin, guild string) (GuildMemb
 }
 
 func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login DiscordLogin, target string) {
+	r.revokeDenial(req)
 	userID, exists, err := r.findDiscordUser(req.Context(), login.Identity.ID)
 	if err != nil {
 		writeAuthFailure(w, err)
@@ -267,6 +267,7 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 			r.writeSessionFailure(w, err)
 			return
 		}
+		clearDenialCookie(w)
 		setUserSessionCookie(w, token, timeFromUnix(expiry), r.now(), secureCookieForRequest(req, r.siteOrigin))
 		clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
 		noStoreRedirect(w, req, target)
@@ -308,6 +309,7 @@ func (r *Runtime) completeLogin(w http.ResponseWriter, req *http.Request, login 
 		writeAuthFailure(w, err)
 		return
 	}
+	clearDenialCookie(w)
 	setUserSessionCookie(w, token, timeFromUnix(expiry), r.now(), secureCookieForRequest(req, r.siteOrigin))
 	clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
 	noStoreRedirect(w, req, target)
@@ -323,12 +325,15 @@ func (r *Runtime) redirectForbiddenLogin(w http.ResponseWriter, req *http.Reques
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	target := "/access-denied"
 	var verified *verifiedLoginDenial
-	if errors.As(err, &verified) && len(verified.restrictions) > 0 {
-		// A fragment is display data, not a credential or user lookup key. It
-		// stays out of server requests and is cleared by the receiving page.
-		if body, encodeErr := json.Marshal(verified.restrictions); encodeErr == nil && len(body) <= 4096 {
-			target += "#restrictions=" + base64.RawURLEncoding.EncodeToString(body)
+	if errors.As(err, &verified) {
+		token, issueErr := r.issueDenial(req.Context(), verified.discordID)
+		if issueErr != nil {
+			writeAuthFailure(w, issueErr)
+			return true
 		}
+		http.SetCookie(w, sessionCookie(DenialCookieName, token, denialCookiePath, true, 300, r.now().Add(5*time.Minute)))
+	} else {
+		clearDenialCookie(w)
 	}
 	noStoreRedirect(w, req, target)
 	return true
@@ -460,6 +465,8 @@ func (r *Runtime) userLogout(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
+	r.revokeDenial(req)
+	clearDenialCookie(w)
 	if raw, ok := cookieValue(req, UserSessionCookieName); ok {
 		deleted, err := r.deleteSession(req.Context(), raw)
 		if err != nil {

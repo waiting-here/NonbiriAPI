@@ -231,13 +231,13 @@ type SourceRequest struct {
 
 func sourcesTx(ctx context.Context, tx *sql.Tx, w Window, user int64) (Page[SourceRequest], error) {
 	page := Page[SourceRequest]{Items: make([]SourceRequest, 0), From: w.From, To: w.To, Coverage: "source_page"}
-	query := `SELECT s.request_log_id,s.user_id,l.logical_request_id,s.kind,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,l.model,COALESCE(l.caller_result_class,'running'),EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),l.error_code,COALESCE(l.rejection_reason,''),l.duration_ms,l.completed_at FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.user_id IS NOT NULL AND s.occurred_at>=? AND s.occurred_at<? AND s.request_log_id>? AND s.kind IN ('self','charity','unclassified')`
+	query := `SELECT s.request_log_id,l.origin_user_id,l.logical_request_id,s.kind,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,l.model,COALESCE(l.caller_result_class,'running'),EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),l.error_code,COALESCE(l.rejection_reason,''),l.duration_ms,l.completed_at FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE l.origin_user_id IS NOT NULL AND s.occurred_at>=? AND s.occurred_at<? AND s.request_log_id>? AND s.kind IN ('self','charity','unclassified')`
 	args := []any{w.From, w.To, w.After}
 	if user > 0 {
-		query += ` AND s.user_id=?`
+		query += ` AND l.origin_user_id=?`
 		args = append(args, user)
 	} else if user < 0 {
-		query += ` AND s.user_id<>?`
+		query += ` AND l.origin_user_id<>?`
 		args = append(args, -user)
 	}
 	if w.Model != "" {
@@ -570,7 +570,7 @@ func (r *Repository) SharedIPs(ctx context.Context, actor Actor, window Window, 
 		}
 	}
 	page := SharedIPPage{Items: make([]SharedIP, 0), From: w.From, To: w.To, Coverage: "authenticated_logical_calls"}
-	rows, err := tx.QueryContext(ctx, `SELECT effective_ip,COUNT(DISTINCT user_id),COUNT(*),MIN(occurred_at),MAX(occurred_at) FROM request_source_facts WHERE occurred_at>=? AND occurred_at<? AND user_id IS NOT NULL AND kind IN ('self','charity','unclassified') AND ip_quality IN ('direct_peer','trusted_forwarded') AND effective_ip>? GROUP BY effective_ip HAVING COUNT(DISTINCT user_id)>=? ORDER BY effective_ip LIMIT ?`, w.From, w.To, after, config.SharedIPUsers, w.Limit+1)
+	rows, err := tx.QueryContext(ctx, `SELECT effective_ip,COUNT(DISTINCT l.origin_discord_id),COUNT(*),MIN(occurred_at),MAX(occurred_at) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE occurred_at>=? AND occurred_at<? AND l.origin_user_id IS NOT NULL AND l.origin_discord_id IS NOT NULL AND kind IN ('self','charity','unclassified') AND ip_quality IN ('direct_peer','trusted_forwarded') AND effective_ip>? GROUP BY effective_ip HAVING COUNT(DISTINCT l.origin_discord_id)>=? ORDER BY effective_ip LIMIT ?`, w.From, w.To, after, config.SharedIPUsers, w.Limit+1)
 	if err != nil {
 		return page, ErrUnavailable
 	}
@@ -600,7 +600,7 @@ func (r *Repository) SharedIPs(ctx context.Context, actor Actor, window Window, 
 	}
 	for i := range page.Items {
 		item := &page.Items[i]
-		rows, err := tx.QueryContext(ctx, `SELECT s.user_id,s.kind,MIN(s.occurred_at),MAX(s.occurred_at),COUNT(*),SUM(CASE WHEN EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL) THEN 1 ELSE 0 END),SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL) AND l.caller_result_class='failed' THEN 1 ELSE 0 END) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.effective_ip=? AND s.occurred_at>=? AND s.occurred_at<? AND s.user_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND s.ip_quality IN ('direct_peer','trusted_forwarded') GROUP BY s.user_id,s.kind ORDER BY s.user_id,s.kind LIMIT 101`, item.IP, w.From, w.To)
+		rows, err := tx.QueryContext(ctx, `SELECT l.origin_user_id,s.kind,MIN(s.occurred_at),MAX(s.occurred_at),COUNT(*),SUM(CASE WHEN EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL) THEN 1 ELSE 0 END),SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL) AND l.caller_result_class='failed' THEN 1 ELSE 0 END) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.effective_ip=? AND s.occurred_at>=? AND s.occurred_at<? AND l.origin_user_id IS NOT NULL AND l.origin_discord_id IS NOT NULL AND s.kind IN ('self','charity','unclassified') AND s.ip_quality IN ('direct_peer','trusted_forwarded') GROUP BY l.origin_user_id,s.kind ORDER BY l.origin_user_id,s.kind LIMIT 101`, item.IP, w.From, w.To)
 		if err != nil {
 			return page, ErrUnavailable
 		}

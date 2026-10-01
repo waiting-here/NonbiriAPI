@@ -710,13 +710,13 @@ func TestGenerationTwoHostileScalarBoundaries(t *testing.T) {
 				claim = hostileOID("clm_")[:len(hostileOID("clm_"))-1] + "g"
 			}
 			hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(?,?,?,'self',0,'released',0,'not_applicable')`, claim, req, tc.seq)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,?,'self',0,'released',0,'not_applicable','neutral','platform')`, claim, req, tc.seq)
 		})
 	}
 	hostileMustFail(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(?,?,101,'self',0,'released',0,'not_applicable')`, hostileBadOID("clm_"), req)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,101,'self',0,'released',0,'not_applicable','neutral','platform')`, hostileBadOID("clm_"), req)
 
 	hostileMustExec(t, db, `INSERT INTO worker_checkpoints(worker_key,cursor_text,generation,attempt_count,next_attempt_at,last_error_class,updated_at) VALUES('time-max','',0,2147483647,?, '',?)`, hostileTimeMax, hostileTimeMax)
 
@@ -1170,14 +1170,14 @@ INSERT INTO logical_requests(
 
 	claim := hostileOID("clm_")
 	hostileMustFail(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(NULL,?,1,'self',0,'released',0,'not_applicable')`, req)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(NULL,?,1,'self',0,'released',0,'not_applicable','neutral','platform')`, req)
 	hostileMustFail(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(?, ?,1,'self',0,'released',0,'not_applicable')`, hostileBadOID("clm_"), req)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?, ?,1,'self',0,'released',0,'not_applicable','neutral','platform')`, hostileBadOID("clm_"), req)
 	hostileMustFail(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(?, ?,1,'self',0,'released',0,'not_applicable')`, claim, hostileBadOID("req_"))
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?, ?,1,'self',0,'released',0,'not_applicable','neutral','platform')`, claim, hostileBadOID("req_"))
 
 	// Source identities are a closed prefix map, not a generic OID slot.
 	otherOperation := hostileOID("op_")[:24] + "g"
@@ -1289,20 +1289,20 @@ INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,secret_ref
 INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,secret_ref_id,claim_now,state,dispatched_at,donor_reward_state)
 		VALUES(?,?,2,'self',?,0,'dispatched',1,'not_applicable')`, hostileOIDVariant("clm_", 'b', 'Q'), claimRequest, secretID)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_state)
-		VALUES(?,?,3,'self',0,'committed',1,2,'not_applicable')`, hostileOIDVariant("clm_", 'c', 'Q'), claimRequest)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,3,'self',0,'committed',1,2,'not_applicable','neutral','platform')`, hostileOIDVariant("clm_", 'c', 'Q'), claimRequest)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-		VALUES(?,?,4,'self',0,'released',2,'not_applicable')`, hostileOIDVariant("clm_", 'd', 'Q'), claimRequest)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,4,'self',0,'released',2,'not_applicable','neutral','platform')`, hostileOIDVariant("clm_", 'd', 'Q'), claimRequest)
 	hostileMustFail(t, db, `
 INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
 		VALUES(?,?,5,'self',0,'claimed',NULL,'not_applicable')`, hostileOIDVariant("clm_", 'e', 'Q'), claimRequest)
 	hostileMustFail(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,secret_ref_id,claim_now,state,terminal_at,donor_reward_state)
-		VALUES(?,?,6,'self',?,0,'committed',2,'not_applicable')`, hostileOIDVariant("clm_", 'f', 'Q'), claimRequest, secretID)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,secret_ref_id,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,6,'self',?,0,'committed',2,'not_applicable','neutral','platform')`, hostileOIDVariant("clm_", 'f', 'Q'), claimRequest, secretID)
 	hostileMustFail(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(?,?,101,'self',0,'released',2,'not_applicable')`, hostileOIDVariant("clm_", 'g', 'Q'), claimRequest)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,101,'self',0,'released',2,'not_applicable','neutral','platform')`, hostileOIDVariant("clm_", 'g', 'Q'), claimRequest)
 	hostileMustFail(t, db, `
 INSERT INTO logical_requests(
  id,user_id,route_kind,state,attempt_limit,accounting_state,settlement_destination,
@@ -1360,17 +1360,17 @@ INSERT INTO logical_requests(
 INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,secret_ref_id,claim_now,state,donor_reward_state)
 		VALUES(?,?,1,'charity',?,0,'claimed','pending')`, hostileOIDVariant("clm_", 'g', 'Q'), charityReq, secretID)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,receiver_user_id,donor_reward_actual_milli,donor_reward_state)
-		VALUES(?,?,2,'charity',0,'committed',1,2,?,?, 'posted')`, hostileOIDVariant("clm_", 'h', 'Q'), charityReq, uid, 1)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,receiver_user_id,donor_reward_actual_milli,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,2,'charity',0,'committed',1,2,?,?, 'posted','neutral','platform')`, hostileOIDVariant("clm_", 'h', 'Q'), charityReq, uid, 1)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_actual_milli,donor_reward_state)
-		VALUES(?,?,3,'charity',0,'committed',1,2,0,'zero')`, hostileOIDVariant("clm_", 'i', 'Q'), charityReq)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_actual_milli,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,3,'charity',0,'committed',1,2,0,'zero','neutral','platform')`, hostileOIDVariant("clm_", 'i', 'Q'), charityReq)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_actual_milli,donor_reward_state)
-		VALUES(?,?,4,'charity',0,'committed',1,2,1,'receiver_deleted')`, hostileOIDVariant("clm_", 'j', 'Q'), charityReq)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_actual_milli,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,4,'charity',0,'committed',1,2,1,'receiver_deleted','neutral','platform')`, hostileOIDVariant("clm_", 'j', 'Q'), charityReq)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-		VALUES(?,?,5,'charity',0,'released',2,'not_due')`, hostileOIDVariant("clm_", 'k', 'Q'), charityReq)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,5,'charity',0,'released',2,'not_due','neutral','platform')`, hostileOIDVariant("clm_", 'k', 'Q'), charityReq)
 	hostileMustFail(t, db, `
 INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,secret_ref_id,claim_now,state,donor_reward_state)
 		VALUES(?,?,6,'charity',?,0,'claimed','not_applicable')`, hostileOIDVariant("clm_", 'l', 'Q'), charityReq, secretID)
@@ -1521,11 +1521,11 @@ WHERE id=?`, requestID)
 	claimStateRequestID := hostileOIDVariant("req_", 'S', 'Q')
 	hostileInsertLogicalRequest(t, db, claimStateRequestID, uid, "openai_chat_completions", 2)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_state)
-VALUES(?,?,1,'self',0,'committed',1,2,'not_applicable')`, hostileOIDVariant("clm_", 'c', 'Q'), claimStateRequestID)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,dispatched_at,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,1,'self',0,'committed',1,2,'not_applicable','neutral','platform')`, hostileOIDVariant("clm_", 'c', 'Q'), claimStateRequestID)
 	hostileMustExec(t, db, `
-INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state)
-VALUES(?,?,2,'self',0,'released',1,'not_applicable')`, hostileOIDVariant("clm_", 'd', 'Q'), claimStateRequestID)
+INSERT INTO dispatch_claims(id,logical_request_id,attempt_seq,purpose,claim_now,state,terminal_at,donor_reward_state,streak_disposition,failure_origin)
+VALUES(?,?,2,'self',0,'released',1,'not_applicable','neutral','platform')`, hostileOIDVariant("clm_", 'd', 'Q'), claimStateRequestID)
 	hostileMustFail(t, db, `UPDATE dispatch_claims SET state='released' WHERE id=?`, hostileOIDVariant("clm_", 'c', 'Q'))
 	hostileMustFail(t, db, `UPDATE dispatch_claims SET state='committed' WHERE id=?`, hostileOIDVariant("clm_", 'd', 'Q'))
 	completedOperationID := hostileOIDVariant("op_", 'T', 'Q')

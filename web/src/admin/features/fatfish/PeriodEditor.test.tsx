@@ -6,10 +6,11 @@ import { PeriodManager } from './PeriodEditor';
 const api = vi.hoisted(() => ({
   listPeriods: vi.fn(), getPeriod: vi.fn(), getNode: vi.fn(),
   validatePeriod: vi.fn(), savePeriod: vi.fn(), saveNode: vi.fn(),
-  changePeriodState: vi.fn(), getVersion: vi.fn(), listLevels: vi.fn(), listVersions: vi.fn(),
+  getGraphLayout: vi.fn(), saveGraphLayout: vi.fn(), changePeriodState: vi.fn(), getVersion: vi.fn(), listLevels: vi.fn(), listVersions: vi.fn(),
 }));
 vi.mock('./api', () => ({ ...api }));
-vi.mock('./useDraftGuard', () => ({ useDraftGuard: () => () => true }));
+vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
+vi.mock('./playtestApi', () => ({ currentPlaytest: async () => null }));
 
 const period = {
   id: 'ffp_period', title: 'Autumn', description: 'Description', state: 'draft' as const,
@@ -28,6 +29,7 @@ describe('Fat Fish period editor', () => {
     api.getNode.mockResolvedValue({ ...period.nodes[0], condition: {}, amounts: { unlock_cost: '0', ticket_price: '0', first_clear_reward: '0', star_rewards: ['0', '0', '0'] } });
     api.validatePeriod.mockResolvedValue({ publishable: false, reachable: ['ffn_one'], unreachable: [], missing_playtests: ['ffn_one'] });
     api.changePeriodState.mockReset();
+    api.getGraphLayout.mockResolvedValue({ revision: '0', nodes: [{ node_id: 'ffn_one', map_x: 200, map_y: 200 }] });
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).endsWith('/time-context')) return new Response(JSON.stringify({ mode: 'site', offset_minutes: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       throw new Error(`Unexpected fetch: ${String(input)}`);
@@ -38,7 +40,7 @@ describe('Fat Fish period editor', () => {
     const view = await renderWithProviders(<PeriodManager />, { station: 'admin', role: 'admin' });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
     await view.user.click(await screen.findByRole('button', { name: /Autumn · draft/ }));
-    await view.user.click(await screen.findByRole('button', { name: 'Check and preview publish conditions' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Preview publishing checks' }));
     expect(await screen.findByText(/Missing one-star playtest.*First node/)).toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Publish period' }));
     expect(api.changePeriodState).not.toHaveBeenCalled();

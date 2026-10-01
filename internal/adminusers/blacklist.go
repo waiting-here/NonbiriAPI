@@ -189,6 +189,9 @@ func (s *Service) setBlacklist(ctx context.Context, adminID int64, role manageme
 			if n, err := result.RowsAffected(); err != nil || n != 1 {
 				return empty, ErrConflict
 			}
+			if _, err = tx.ExecContext(ctx, `DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=?`, strconv.FormatInt(targetID, 10)); err != nil {
+				return empty, err
+			}
 			if err = useractivity.RescheduleTx(ctx, tx, targetID); err != nil {
 				return empty, err
 			}

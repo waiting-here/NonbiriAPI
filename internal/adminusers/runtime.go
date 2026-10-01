@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
 )
 
@@ -204,6 +205,14 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		effective = value
 	}
 	activeBan := row.isBanned == 1 && (!row.bannedUntil.Valid || row.bannedUntil.Int64 > now)
+	var automaticReason *observability.AutomaticReason
+	if activeBan {
+		var err error
+		automaticReason, err = observability.ReadAutomaticReasonTx(ctx, tx, "user_ban", strconv.FormatInt(row.id, 10))
+		if err != nil {
+			return AdminUser{}, err
+		}
+	}
 	bannedReason := ""
 	var bannedUntil *int64
 	if activeBan {
@@ -217,7 +226,7 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		ID: strconv.FormatInt(row.id, 10), DiscordID: nullStringPointer(row.discordID),
 		Username: row.username, AvatarURL: discordAvatarURL(row.discordID.String, row.avatar),
 		GuildNick: stringPointer(row.guildNick), GuildAvatarURL: stringPointer(row.guildAvatarURL),
-		IsAdmin: false, IsBanned: activeBan, BannedReason: bannedReason, BannedUntil: bannedUntil,
+		IsAdmin: false, IsBanned: activeBan, BannedReason: bannedReason, BannedUntil: bannedUntil, AutomaticReason: automaticReason,
 		CharitySuspendedUntil: futurePointer(row.charityUntil, now),
 		EndpointLimit:         nullableIntString(row.endpointLimit), EffectiveEndpointLimit: effectiveLimit(row.endpointLimit, config.endpointDefault),
 		RPMLimit: nullableIntString(row.rpmLimit), EffectiveRPMLimit: effectiveLimit(row.rpmLimit, config.rpmDefault),
@@ -1041,6 +1050,9 @@ WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row
 	updated, err := result.RowsAffected()
 	if err != nil || updated != 1 {
 		return MutationResult[struct{}]{}, ErrConflict
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=?`, strconv.FormatInt(userID, 10)); err != nil {
+		return MutationResult[struct{}]{}, err
 	}
 	if err := useractivity.RescheduleTx(ctx, tx, userID); err != nil {
 		return MutationResult[struct{}]{}, err
