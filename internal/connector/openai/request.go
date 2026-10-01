@@ -45,12 +45,13 @@ type jsonField struct {
 // and safety_identifier values are replaced at dispatch time. Values are
 // private so they cannot accidentally enter a metadata hook or formatter.
 type ChatRequest struct {
-	bodyLimit    int64
-	fields       []jsonField
-	excluded     []string
-	requirements CapabilityRequirements
-	Model        string
-	Stream       bool
+	extraRolesPassthrough bool
+	bodyLimit             int64
+	fields                []jsonField
+	excluded              []string
+	requirements          CapabilityRequirements
+	Model                 string
+	Stream                bool
 }
 
 // CapabilityRequirements is the immutable, read-only projection used before
@@ -242,9 +243,10 @@ func (r *ChatRequest) CloneForAttempt() *ChatRequest {
 		return nil
 	}
 	clone := &ChatRequest{
-		bodyLimit: r.bodyLimit,
-		fields:    make([]jsonField, len(r.fields)),
-		excluded:  append([]string(nil), r.excluded...),
+		bodyLimit:             r.bodyLimit,
+		extraRolesPassthrough: r.extraRolesPassthrough,
+		fields:                make([]jsonField, len(r.fields)),
+		excluded:              append([]string(nil), r.excluded...),
 		requirements: CapabilityRequirements{
 			capabilities: r.requirements.capabilities,
 			topLevel:     append([]string(nil), r.requirements.topLevel...),

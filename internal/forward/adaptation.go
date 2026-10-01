@@ -163,6 +163,9 @@ func prepareAdaptedAttempt(request *validatedRequest, connectorType connectorcon
 		prepared.clear()
 		return nil, err
 	}
+	if prepared.request.chat != nil {
+		prepared.request.chat.InheritRoleRequirements(request.chat)
+	}
 	if len(request.excluded) != 0 {
 		if err := prepared.request.excludeFields(request.excluded); err != nil {
 			prepared.clear()

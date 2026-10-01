@@ -23,6 +23,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 const (
@@ -118,6 +119,14 @@ func (s *Service) CreateSteward(ctx context.Context, actorUserID int64, mutation
 }
 
 func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, mutation resources.ControlMutation, input ModelCreate) (resources.MutationResult[AdminCharityModel], error) {
+	policy := rolepolicy.Default()
+	if input.RolePolicy != nil {
+		policy = input.RolePolicy.Clone()
+	}
+	encodedPolicy, policyErr := policy.Canonical()
+	if policyErr != nil {
+		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+	}
 	prices, err := validateModelCreate(input)
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
@@ -158,14 +167,14 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,
 uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
-discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,
+discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,role_policy,
 created_by_user_id,revision,binding_revision,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 		input.Provider, input.Model, fullName, boolInt(input.Enabled), input.Pricing.Mode,
 		prices.requestUser, prices.requestReward, prices.user[0], prices.user[1], prices.user[2], prices.user[3],
 		prices.reward[0], prices.reward[1], prices.reward[2], prices.reward[3], input.Discount.Percent,
 		input.Discount.StartAt, input.Discount.EndAt, boolInt(input.Discount.Enabled), boolInt(input.FlattenToolCalls),
-		actorID, now, now)
+		encodedPolicy, actorID, now, now)
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, classifyWrite("create charity model", err)
 	}
@@ -195,6 +204,12 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	}
 	if input.FlattenToolCalls {
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, false, true, now); err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+	}
+	defaultPolicy, _ := rolepolicy.Default().Canonical()
+	if encodedPolicy != defaultPolicy {
+		if err := rolepolicy.RecordAudit(ctx, tx, actorID, string(role), "charity_model", modelID, 0, 1, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
@@ -247,7 +262,15 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
+	actorID := scope.ActorID
+	if err == nil && scope.Trainee {
+		onlyRole := input.RolePolicy != nil && input.Provider == nil && input.Model == nil && input.Enabled == nil && input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil
+		if !onlyRole {
+			tx.Rollback()
+			return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
+		}
+	}
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
@@ -327,6 +350,13 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 		}
 	}
+	if input.RolePolicy != nil {
+		encoded, err := input.RolePolicy.Canonical()
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+		}
+		updated.rolePolicy = encoded
+	}
 	if input.FlattenToolCalls != nil {
 		updated.flatten = boolInt(*input.FlattenToolCalls)
 	}
@@ -352,12 +382,12 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 provider=?,model=?,full_name=?,enabled=?,pricing_mode=?,request_user_price=?,request_donor_reward=?,
 uncached_user_price=?,cache_write_user_price=?,cache_read_user_price=?,output_user_price=?,
 uncached_donor_reward=?,cache_write_donor_reward=?,cache_read_donor_reward=?,output_donor_reward=?,
-discount_percent=?,discount_start_at=?,discount_end_at=?,discount_enabled=?,flatten_tool_calls=?,
+discount_percent=?,discount_start_at=?,discount_end_at=?,discount_enabled=?,flatten_tool_calls=?,role_policy=?,
 revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 		updated.provider, updated.model, fullName, updated.enabled, updated.mode, updated.requestUser, updated.requestReward,
 		updated.user[0], updated.user[1], updated.user[2], updated.user[3], updated.reward[0], updated.reward[1],
 		updated.reward[2], updated.reward[3], updated.discountPercent, nullableSQL(updated.discountStart),
-		nullableSQL(updated.discountEnd), updated.discountEnabled, updated.flatten, now, modelID, expected)
+		nullableSQL(updated.discountEnd), updated.discountEnabled, updated.flatten, updated.rolePolicy, now, modelID, expected)
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, classifyWrite("patch charity model", err)
 	}
@@ -397,6 +427,11 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 	}
 	if err := updateRoutingSettings(ctx, tx, modelID, strategyChanged, input.AffinityTTLSeconds); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
+	}
+	if updated.rolePolicy != current.rolePolicy {
+		if err := rolepolicy.RecordAudit(ctx, tx, actorID, scope.AuditRole(role == roleAdmin), "charity_model", modelID, current.revision, current.revision+1, now); err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
 	}
 	value, err := getAdminModelTx(ctx, tx, modelID)
 	if err != nil {
@@ -599,6 +634,7 @@ func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, en
 }
 
 type storedModel struct {
+	rolePolicy                       string
 	isMainstream                     bool
 	excludedFields                   string
 	allowedMask                      int
@@ -619,16 +655,19 @@ request_user_price,request_donor_reward,uncached_user_price,cache_write_user_pri
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
 discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision,
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),
-(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields
+(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy
 FROM charity_models WHERE id=?`, modelID).Scan(&value.id, &value.provider, &value.model, &value.enabled, &value.mode,
 		&value.requestUser, &value.requestReward, &value.user[0], &value.user[1], &value.user[2], &value.user[3],
 		&value.reward[0], &value.reward[1], &value.reward[2], &value.reward[3], &value.discountPercent,
-		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields)
+		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedModel{}, ErrNotFound
 	}
 	if err != nil {
 		return storedModel{}, fmt.Errorf("charity routing: read stored model: %w", err)
+	}
+	if _, err := rolepolicy.Decode(value.rolePolicy); err != nil {
+		return storedModel{}, ErrInvariant
 	}
 	return value, nil
 }
@@ -652,7 +691,7 @@ COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expi
 (SELECT affinity_ttl_seconds FROM charity_routing_settings WHERE model_id=cm.id),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
 (SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
-(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields
+(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -668,17 +707,21 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	var affinityTTL sql.NullInt64
 	var samples, successes int
 	var mask int
-	var excluded string
+	var excluded, encodedPolicy string
 	err := row.Scan(&id, &value.Provider, &value.Model, &value.FullName, &enabled, &mode,
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
 	if err != nil {
 		return AdminCharityModel{}, fmt.Errorf("charity routing: scan model: %w", err)
+	}
+	value.RolePolicy, err = rolepolicy.Decode(encodedPolicy)
+	if err != nil {
+		return AdminCharityModel{}, ErrInvariant
 	}
 	value.ID = strconv.FormatInt(id, 10)
 	value.ExcludedRequestFields, err = decodeExcludedFields(excluded)
@@ -756,6 +799,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		}
 	}
 	return StewardCharityModel{
+		RolePolicy:   value.RolePolicy.Clone(),
 		IsMainstream: value.IsMainstream, ExcludedRequestFields: append([]string{}, value.ExcludedRequestFields...),
 		TokenReserveCredits: copyString(value.TokenReserveCredits),
 		AllowedLevels:       append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
@@ -813,7 +857,7 @@ func validateModelPatch(input ModelPatch) bool {
 		return false
 	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.RolePolicy == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||

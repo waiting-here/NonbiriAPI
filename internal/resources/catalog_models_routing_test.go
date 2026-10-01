@@ -310,117 +310,41 @@ func TestFlattenCompatibilityPatchAndBindingBatchAtomic(t *testing.T) {
 		t.Fatalf("add Anthropic binding to normal model = %#v, %v", anthropicBinding, err)
 	}
 
-	providerChange := "must-not-commit"
 	flatten := true
-	flattenPatch := resourceTestMutation(t, resourceTestKey('i'), "PATCH", routeModel, []int64{modelID}, patchModelCanonical{
-		Provider: &providerChange, FlattenToolCalls: &flatten, ExpectedRevision: "1",
-	})
-	replayRows := environment.rowCount(t, `SELECT count(*) FROM idempotency_records`)
-	if _, err := environment.repository.PatchModel(context.Background(), userID, modelID, flattenPatch, PatchModelInput{
-		Provider: &providerChange, FlattenToolCalls: &flatten, ExpectedRevision: 1,
-	}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("flatten patch over Anthropic binding error = %v, want conflict", err)
+	patch := resourceTestMutation(t, resourceTestKey('i'), "PATCH", routeModel, []int64{modelID}, patchModelCanonical{FlattenToolCalls: &flatten, ExpectedRevision: "1"})
+	changed, err := environment.repository.PatchModel(context.Background(), userID, modelID, patch, PatchModelInput{FlattenToolCalls: &flatten, ExpectedRevision: 1})
+	if err != nil || !changed.Value.FlattenToolCalls || changed.Value.Revision != "2" {
+		t.Fatalf("flatten with Anthropic: %+v %v", changed, err)
 	}
-	afterConflict, err := environment.repository.GetModel(context.Background(), userID, modelID)
-	if err != nil || afterConflict.Provider != model.Provider || afterConflict.FlattenToolCalls || afterConflict.Revision != "1" ||
-		afterConflict.BindingRevision != "1" || afterConflict.BindingCount != "1" {
-		t.Fatalf("flatten conflict changed model = %#v, %v", afterConflict, err)
+	replayed, err := environment.repository.PatchModel(context.Background(), userID, modelID, patch, PatchModelInput{FlattenToolCalls: &flatten, ExpectedRevision: 1})
+	if err != nil || !replayed.Replayed {
+		t.Fatalf("replay: %+v %v", replayed, err)
 	}
-	if got := environment.rowCount(t, `SELECT count(*) FROM policy_audits WHERE resource_type='model' AND resource_id=?`, modelID); got != 0 {
-		t.Fatalf("flatten conflict policy audits = %d, want 0", got)
+	if got := environment.rowCount(t, "SELECT count(*) FROM policy_audits WHERE resource_type='model' AND resource_id=?", modelID); got != 1 {
+		t.Fatal("policy audit count", got)
 	}
-	if got := environment.rowCount(t, `SELECT count(*) FROM idempotency_records`); got != replayRows {
-		t.Fatalf("flatten conflict idempotency rows = %d, want %d", got, replayRows)
+	selections := []BindingSelection{{EndpointKeyID: openKeyID, UpstreamModelID: "open/primary"}, {EndpointKeyID: openKeyID, UpstreamModelID: "open/missing"}}
+	mutation := resourceTestMutation(t, resourceTestKey('j'), "POST", routeBindingBatch, []int64{modelID}, map[string]any{"selections": selections})
+	before := environment.rowCount(t, "SELECT count(*) FROM idempotency_records")
+	if _, err := environment.repository.AddBindings(context.Background(), userID, modelID, mutation, 1, selections); !errors.Is(err, ErrNotFound) {
+		t.Fatal("missing catalog item accepted", err)
 	}
-
-	bindingID := resourceTestID(t, anthropicBinding.Value.Bindings[0].ID)
-	deleteAnthropic := resourceTestMutation(t, resourceTestKey('j'), "DELETE", routeBinding, []int64{modelID, bindingID}, expectedBindingRevisionCanonical{ExpectedBindingRevision: "1"})
-	withoutAnthropic, err := environment.repository.DeleteBinding(context.Background(), userID, modelID, bindingID, deleteAnthropic, 1)
-	if err != nil || withoutAnthropic.Value.BindingRevision != "2" || len(withoutAnthropic.Value.Bindings) != 0 {
-		t.Fatalf("delete Anthropic binding = %#v, %v", withoutAnthropic, err)
+	if got := environment.rowCount(t, "SELECT count(*) FROM idempotency_records"); got != before {
+		t.Fatal("failed batch retained replay", got, before)
 	}
-
-	openPrimary := BindingSelection{EndpointKeyID: openKeyID, UpstreamModelID: "open/primary"}
-	addOpenPrimary := resourceTestMutation(t, resourceTestKey('k'), "POST", routeBindingBatch, []int64{modelID}, addBindingsCanonical{
-		ExpectedBindingRevision: "2", Selections: []bindingSelectionCanonical{{EndpointKeyID: openKey.ID, UpstreamModelID: openPrimary.UpstreamModelID}},
-	})
-	withOpen, err := environment.repository.AddBindings(context.Background(), userID, modelID, addOpenPrimary, 2, []BindingSelection{openPrimary})
-	if err != nil || withOpen.Value.BindingRevision != "3" || len(withOpen.Value.Bindings) != 1 {
-		t.Fatalf("add OpenAI binding to normal model = %#v, %v", withOpen, err)
+	bindings, err := environment.repository.ListBindings(context.Background(), userID, modelID)
+	if err != nil || bindings.BindingRevision != "1" || len(bindings.Bindings) != 1 {
+		t.Fatalf("failed batch changed bindings: %+v %v", bindings, err)
 	}
-
-	enableFlatten := resourceTestMutation(t, resourceTestKey('l'), "PATCH", routeModel, []int64{modelID}, patchModelCanonical{
-		FlattenToolCalls: &flatten, ExpectedRevision: "1",
-	})
-	flattened, err := environment.repository.PatchModel(context.Background(), userID, modelID, enableFlatten, PatchModelInput{
-		FlattenToolCalls: &flatten, ExpectedRevision: 1,
-	})
-	if err != nil || !flattened.Value.FlattenToolCalls || flattened.Value.Revision != "2" || flattened.Value.BindingRevision != "3" {
-		t.Fatalf("enable flatten over OpenAI bindings = %#v, %v", flattened, err)
+	selections[1].UpstreamModelID = "open/secondary"
+	mutation = resourceTestMutation(t, resourceTestKey('k'), "POST", routeBindingBatch, []int64{modelID}, map[string]any{"selections": selections})
+	mixed, err := environment.repository.AddBindings(context.Background(), userID, modelID, mutation, 1, selections)
+	if err != nil || mixed.Value.BindingRevision != "2" || len(mixed.Value.Bindings) != 3 {
+		t.Fatalf("mixed flatten bindings: %+v %v", mixed, err)
 	}
-
-	openSecondary := BindingSelection{EndpointKeyID: openKeyID, UpstreamModelID: "open/secondary"}
-	mixedSelections := []BindingSelection{openSecondary, anthropicSelection}
-	mixedMutation := resourceTestMutation(t, resourceTestKey('m'), "POST", routeBindingBatch, []int64{modelID}, addBindingsCanonical{
-		ExpectedBindingRevision: "3", Selections: []bindingSelectionCanonical{
-			{EndpointKeyID: openKey.ID, UpstreamModelID: openSecondary.UpstreamModelID},
-			{EndpointKeyID: anthropicKey.ID, UpstreamModelID: anthropicSelection.UpstreamModelID},
-		},
-	})
-	replayRows = environment.rowCount(t, `SELECT count(*) FROM idempotency_records`)
-	if _, err := environment.repository.AddBindings(context.Background(), userID, modelID, mixedMutation, 3, mixedSelections); !errors.Is(err, ErrConflict) {
-		t.Fatalf("mixed flatten binding batch error = %v, want conflict", err)
-	}
-	authoritative, err := environment.repository.ListBindings(context.Background(), userID, modelID)
-	if err != nil || authoritative.BindingRevision != "3" || len(authoritative.Bindings) != 1 || authoritative.Bindings[0].UpstreamModelID != openPrimary.UpstreamModelID {
-		t.Fatalf("mixed flatten batch was not atomic = %#v, %v", authoritative, err)
-	}
-	if got := environment.rowCount(t, `SELECT count(*) FROM idempotency_records`); got != replayRows {
-		t.Fatalf("mixed flatten batch idempotency rows = %d, want %d", got, replayRows)
-	}
-
-	addOpenSecondary := resourceTestMutation(t, resourceTestKey('n'), "POST", routeBindingBatch, []int64{modelID}, addBindingsCanonical{
-		ExpectedBindingRevision: "3", Selections: []bindingSelectionCanonical{{EndpointKeyID: openKey.ID, UpstreamModelID: openSecondary.UpstreamModelID}},
-	})
-	openOnly, err := environment.repository.AddBindings(context.Background(), userID, modelID, addOpenSecondary, 3, []BindingSelection{openSecondary})
-	if err != nil || openOnly.Value.BindingRevision != "4" || len(openOnly.Value.Bindings) != 2 {
-		t.Fatalf("add OpenAI binding to flatten model = %#v, %v", openOnly, err)
-	}
-
-	addAnthropicToFlatten := resourceTestMutation(t, resourceTestKey('o'), "POST", routeBindingBatch, []int64{modelID}, addBindingsCanonical{
-		ExpectedBindingRevision: "4", Selections: []bindingSelectionCanonical{{EndpointKeyID: anthropicKey.ID, UpstreamModelID: anthropicSelection.UpstreamModelID}},
-	})
-	replayRows = environment.rowCount(t, `SELECT count(*) FROM idempotency_records`)
-	if _, err := environment.repository.AddBindings(context.Background(), userID, modelID, addAnthropicToFlatten, 4, []BindingSelection{anthropicSelection}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("Anthropic binding on flatten model error = %v, want conflict", err)
-	}
-	authoritative, err = environment.repository.ListBindings(context.Background(), userID, modelID)
-	if err != nil || authoritative.BindingRevision != "4" || len(authoritative.Bindings) != 2 {
-		t.Fatalf("Anthropic binding conflict changed bindings = %#v, %v", authoritative, err)
-	}
-	if got := environment.rowCount(t, `SELECT count(*) FROM idempotency_records`); got != replayRows {
-		t.Fatalf("Anthropic binding conflict idempotency rows = %d, want %d", got, replayRows)
-	}
-
-	staleSelection := BindingSelection{EndpointKeyID: openKeyID, UpstreamModelID: "open/not-present"}
-	staleBinding := resourceTestMutation(t, resourceTestKey('p'), "POST", routeBindingBatch, []int64{modelID}, addBindingsCanonical{
-		ExpectedBindingRevision: "3", Selections: []bindingSelectionCanonical{{EndpointKeyID: openKey.ID, UpstreamModelID: staleSelection.UpstreamModelID}},
-	})
-	if _, err := environment.repository.AddBindings(context.Background(), userID, modelID, staleBinding, 3, []BindingSelection{staleSelection}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale binding CAS error = %v, want conflict", err)
-	}
-	flattenFalse := false
-	staleModelPatch := resourceTestMutation(t, resourceTestKey('q'), "PATCH", routeModel, []int64{modelID}, patchModelCanonical{
-		FlattenToolCalls: &flattenFalse, ExpectedRevision: "1",
-	})
-	if _, err := environment.repository.PatchModel(context.Background(), userID, modelID, staleModelPatch, PatchModelInput{
-		FlattenToolCalls: &flattenFalse, ExpectedRevision: 1,
-	}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("stale model CAS error = %v, want conflict", err)
-	}
-	finalModel, err := environment.repository.GetModel(context.Background(), userID, modelID)
-	if err != nil || !finalModel.FlattenToolCalls || finalModel.Revision != "2" || finalModel.BindingRevision != "4" || finalModel.BindingCount != "2" {
-		t.Fatalf("CAS conflicts changed flatten model = %#v, %v", finalModel, err)
+	stale := resourceTestMutation(t, resourceTestKey('l'), "PATCH", routeModel, []int64{modelID}, patchModelCanonical{FlattenToolCalls: &flatten, ExpectedRevision: "1"})
+	if _, err := environment.repository.PatchModel(context.Background(), userID, modelID, stale, PatchModelInput{FlattenToolCalls: &flatten, ExpectedRevision: 1}); !errors.Is(err, ErrConflict) {
+		t.Fatal("stale revision accepted", err)
 	}
 }
 

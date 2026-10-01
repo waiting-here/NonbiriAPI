@@ -284,8 +284,8 @@ func TestDispatchRailPersistsBeforeCredentialAndSeparatesAttemptFromCaller(t *te
 		UpstreamStatus:  200,
 		ProtocolSuccess: true,
 		ResponseStarted: true,
-	}); err != nil {
-		t.Fatalf("idempotent attempt completion: %v", err)
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("contradictory attempt completion: %v", err)
 	}
 
 	fixture.clock.Store(1_002)

@@ -17,15 +17,16 @@ func embeddingsURL(baseURL string) string {
 
 // AttemptEmbedding makes one non-streaming attempt through the same outbound
 // boundary as chat. Chat-only policies never alter embedding parameters.
-func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWriter, target Target, request *EmbeddingRequest, policy connectorcontract.AttemptPolicy) AttemptResult {
-	result := AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
+func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWriter, target Target, request *EmbeddingRequest, policy connectorcontract.AttemptPolicy) (result AttemptResult) {
+	defer func() { result = connectorcontract.NormalizeOutcome(result) }()
+	result = AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
 	if a == nil || a.backend == nil || ctx == nil || writer == nil || request == nil {
 		return result
 	}
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
-		return upstreamFailure("upstream endpoint was refused", 0)
+		return connectorcontract.NormalizeOutcome(AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
 	body, err := request.marshalUpstream(target.upstreamModel, policy.SafetyIdentifier)
 	if err != nil {
@@ -67,21 +68,16 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 		response.Request.Header.Del("Authorization")
 	}
 	if err != nil {
+		failed := upstreamFailure(classifyTransportFailure(err), 0)
 		if ctx.Err() != nil {
-			return canceledFailure()
+			failed = canceledFailure()
 		}
-		return upstreamFailure(classifyTransportFailure(err), 0)
+		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer response.Body.Close()
-	if ctx.Err() != nil {
-		return canceledFailure()
-	}
 	if response.StatusCode != http.StatusOK {
-		result = upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+		result = connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxEmbeddingResponseBytes)
-		if ctx.Err() != nil {
-			return canceledFailure()
-		}
 		return result
 	}
 	if !validResponseMediaType(response, "application/json") {
@@ -93,10 +89,11 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	}
 	raw, err := readResponseBody(response.Body, a.maxEmbeddingResponseBytes)
 	if err != nil {
+		failed := upstreamFailure(classifyReadFailure(err), response.StatusCode)
 		if ctx.Err() != nil {
-			return canceledFailure()
+			failed = canceledFailure()
 		}
-		return upstreamFailure(classifyReadFailure(err), response.StatusCode)
+		return connectorcontract.ReadFailed(failed, err, ctx)
 	}
 	defer clear(raw)
 	projected, usage, err := projectEmbeddingResponse(raw, request)
@@ -104,6 +101,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 		result = upstreamFailure("upstream response was invalid", response.StatusCode)
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), raw)
 		result.ErrorDetail = errorContext.Parse(raw)
+		if upstreamerror.IsEvent(raw) {
+			result = connectorcontract.UpstreamFailed(result, connectorcontract.OriginUpstreamResponse)
+		}
 		return result
 	}
 	defer clear(projected)
@@ -111,9 +111,10 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	if int64(len(projected)) > a.maxEmbeddingResponseBytes || guard.containsEmbeddingProjection(projected) {
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
-	if ctx.Err() != nil {
-		return canceledFailure()
-	}
+	defer func() {
+		result = connectorcontract.ProtocolSucceeded(result)
+		result.UpstreamStatus = response.StatusCode
+	}()
 	if err := connectorcontract.MarkResponseStarted(writer); err != nil {
 		return sinkFailure(false, usage)
 	}

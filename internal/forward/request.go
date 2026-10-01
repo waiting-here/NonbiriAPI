@@ -7,6 +7,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 // validatedRequest owns exactly one protocol snapshot. Metadata and capability
@@ -17,6 +18,8 @@ type validatedRequest struct {
 	embedding         *openai.EmbeddingRequest
 	Model             string
 	Stream            bool
+	roleSnapshot      *rolepolicy.Policy
+	policyRevision    int64
 	policyModelID     int64
 	policyDecisionNow int64
 	excluded          []string
@@ -87,6 +90,11 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 		result = embeddingRequest(r.embedding.CloneForAttempt())
 	}
 	result.policyModelID, result.policyDecisionNow = r.policyModelID, r.policyDecisionNow
+	if r.roleSnapshot != nil {
+		policy := r.roleSnapshot.Clone()
+		result.roleSnapshot = &policy
+	}
+	result.policyRevision = r.policyRevision
 	result.excluded = append([]string(nil), r.excluded...)
 	return result
 }
@@ -108,7 +116,7 @@ func (r *validatedRequest) excludeFields(fields []string) error {
 }
 
 func (r *validatedRequest) supports(registry *connector.Registry, kind contract.Type) bool {
-	return r.valid() && registry.SupportsOperationRequest(kind, r.operation, r.chat, r.embedding)
+	return r.valid() && (r.chat == nil || r.chat.SupportsRolePassthrough(string(kind))) && registry.SupportsOperationRequest(kind, r.operation, r.chat, r.embedding)
 }
 
 func (r *validatedRequest) bodyLimit() int64 {

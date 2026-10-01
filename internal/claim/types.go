@@ -289,16 +289,20 @@ func (*Dispatch) LogValue() slog.Value {
 }
 
 type AttemptOutcome struct {
-	Kind            ResultKind
-	UpstreamStatus  int
-	UpstreamCode    string
-	Diagnostic      string
-	Usage           connectorcontract.Usage
-	ProtocolSuccess bool
-	ResponseStarted bool
+	StreakDisposition connectorcontract.StreakDisposition
+	FailureOrigin     connectorcontract.FailureOrigin
+	Kind              ResultKind
+	UpstreamStatus    int
+	UpstreamCode      string
+	Diagnostic        string
+	Usage             connectorcontract.Usage
+	ProtocolSuccess   bool
+	ResponseStarted   bool
 }
 
 type Attempt struct {
+	StreakDisposition connectorcontract.StreakDisposition
+	FailureOrigin     connectorcontract.FailureOrigin
 	ClaimID           string
 	RequestID         string
 	AttemptSeq        int
@@ -475,6 +479,7 @@ type CharityReservation struct {
 }
 
 type CharityRelease struct {
+	FailureOrigin connectorcontract.FailureOrigin
 	RequestID     string
 	ClaimID       string
 	DonationKeyID *int64
@@ -491,16 +496,18 @@ type CharityDispatch struct {
 }
 
 type CharityAttemptInput struct {
-	RequestID       string
-	ClaimID         string
-	DonationKeyID   *int64
-	ReceiverUserID  *int64
-	SuppressReward  bool
-	Usage           connectorcontract.Usage
-	ProtocolSuccess bool
-	ResponseStarted bool
-	UsageUnknown    bool
-	CompletedAt     int64
+	StreakDisposition connectorcontract.StreakDisposition
+	FailureOrigin     connectorcontract.FailureOrigin
+	RequestID         string
+	ClaimID           string
+	DonationKeyID     *int64
+	ReceiverUserID    *int64
+	SuppressReward    bool
+	Usage             connectorcontract.Usage
+	ProtocolSuccess   bool
+	ResponseStarted   bool
+	UsageUnknown      bool
+	CompletedAt       int64
 }
 
 type CharityActual struct {

@@ -74,7 +74,7 @@ func (adapter *PersonalRoutingAdapter) Preflight(ctx context.Context, userID int
 		return PersonalPreflight{}, err
 	}
 	return PersonalPreflight{
-		ModelID: value.ModelID(), OwnerUserID: value.OwnerUserID(), Provider: value.Provider(),
+		RolePolicy: value.RolePolicy(), ModelID: value.ModelID(), OwnerUserID: value.OwnerUserID(), Provider: value.Provider(),
 		Model: value.Model(), FullName: value.FullName(), RouteStrategy: value.RouteStrategy(),
 		SilentRetry: value.SilentRetry(), FlattenToolCalls: value.FlattenToolCalls(),
 		Revision: value.Revision(), BindingRevision: value.BindingRevision(),
@@ -94,7 +94,7 @@ func (adapter *PersonalRoutingAdapter) Snapshot(ctx context.Context, userID int6
 		return PersonalSnapshot{}, err
 	}
 	out := PersonalSnapshot{PersonalPreflight: PersonalPreflight{
-		ModelID: value.ModelID(), OwnerUserID: value.OwnerUserID(), Provider: value.Provider(),
+		RolePolicy: value.RolePolicy(), ModelID: value.ModelID(), OwnerUserID: value.OwnerUserID(), Provider: value.Provider(),
 		Model: value.Model(), FullName: value.FullName(), RouteStrategy: value.RouteStrategy(),
 		SilentRetry: value.SilentRetry(), FlattenToolCalls: value.FlattenToolCalls(),
 		Revision: value.Revision(), BindingRevision: value.BindingRevision(),
@@ -146,7 +146,7 @@ func (adapter *CharityRoutingAdapter) Preflight(ctx context.Context, userID int6
 		return CharityPreflight{}, err
 	}
 	return CharityPreflight{
-		ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
+		RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, nil
 }
@@ -160,7 +160,7 @@ func (adapter *CharityRoutingAdapter) PreflightEmbedding(ctx context.Context, us
 		return CharityPreflight{}, err
 	}
 	return CharityPreflight{
-		ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
+		RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, nil
 }
@@ -173,7 +173,7 @@ func (adapter *CharityRoutingAdapter) RequestPolicy(ctx context.Context, userID 
 	if err != nil {
 		return CharityRequestPolicy{}, err
 	}
-	return CharityRequestPolicy{ModelID: policy.ModelID, FullName: policy.FullName, ExcludedRequestFields: append([]string(nil), policy.ExcludedRequestFields...)}, nil
+	return CharityRequestPolicy{RolePolicy: policy.RolePolicy.Clone(), Revision: policy.Revision, ModelID: policy.ModelID, FullName: policy.FullName, ExcludedRequestFields: append([]string(nil), policy.ExcludedRequestFields...)}, nil
 }
 
 func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, modelID, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
@@ -185,7 +185,7 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, userID, mode
 		return CharitySnapshot{}, err
 	}
 	out := CharitySnapshot{CharityPreflight: CharityPreflight{
-		ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
+		RolePolicy: value.RolePolicy.Clone(), Revision: value.Revision, ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
 	}, RouteStrategy: value.RouteStrategy}
 	for index, candidate := range value.Candidates() {

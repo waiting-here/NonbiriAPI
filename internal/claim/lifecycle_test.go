@@ -651,7 +651,7 @@ func TestDiscoveryRecoveryUsesAcceptedCallerProjectionAcrossCrashWindows(t *test
 			t.Fatalf("recover dispatched discovery: %v", err)
 		}
 		requireReport(t, report, 0, 1)
-		attempt, err := fixture.service.CompleteAttempt(ctx, handle, AttemptOutcome{Kind: ResultSynthetic})
+		attempt, err := fixture.service.CompleteAttempt(ctx, handle, AttemptOutcome{Kind: ResultSynthetic, UpstreamStatus: 502, Diagnostic: "dispatch outcome unavailable after restart", StreakDisposition: connectorcontract.StreakNeutral, FailureOrigin: connectorcontract.OriginRecoveryUnknown})
 		if err != nil {
 			t.Fatalf("read recovered synthetic attempt: %v", err)
 		}
@@ -698,7 +698,7 @@ func TestDiscoveryRecoveryUsesAcceptedCallerProjectionAcrossCrashWindows(t *test
 			t.Fatalf("recover discovery after attempt commit: %v", err)
 		}
 		requireReport(t, report, 0, 0)
-		replayedAttempt, err := fixture.service.CompleteAttempt(ctx, handle, AttemptOutcome{Kind: ResultSynthetic})
+		replayedAttempt, err := fixture.service.CompleteAttempt(ctx, handle, outcome)
 		if err != nil {
 			t.Fatalf("replay real discovery attempt: %v", err)
 		}

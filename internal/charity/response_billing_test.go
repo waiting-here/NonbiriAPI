@@ -170,7 +170,7 @@ func testResponseBillingRecovery(t *testing.T, route claim.RouteKind) {
 					assertU128(t, reservedPrice, 0, "reserved price")
 					assertU128(t, reservedCalls, 0, "reserved calls")
 					assertU128(t, reservedTokens, 0, "reserved tokens")
-					assertU128(t, streak, 1, "real dispatched failure")
+					assertU128(t, streak, 0, "unknown dispatched outcome remains neutral")
 				})
 			}
 		}

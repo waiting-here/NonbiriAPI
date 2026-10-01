@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 func TestCanonicalResourceDTOFixtures(t *testing.T) {
@@ -54,7 +56,8 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 			}},
 			AffectedModels: []AffectedModel{{
 				Model: Model{
-					ID: "41", Provider: "logical", Model: "primary", FullName: "logical/primary", RouteStrategy: "ordered",
+					RolePolicy: rolepolicy.Default(),
+					ID:         "41", Provider: "logical", Model: "primary", FullName: "logical/primary", RouteStrategy: "ordered",
 					SilentRetry: true, FlattenToolCalls: false, Revision: "2", BindingRevision: "6", BindingCount: "1",
 					CreatedAt: 1_700_000_004, UpdatedAt: 1_700_000_014,
 				},

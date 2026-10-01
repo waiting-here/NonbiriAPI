@@ -57,8 +57,9 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (Attem
 
 // CompleteAttempt writes the connector-neutral actual attempt projection and
 // terminalizes one dispatched claim. ProtocolSuccess is explicit: an HTTP 200
-// or clean EOF with ProtocolSuccess=false remains a failed attempt fact.
+// or clean EOF does not establish success; streak disposition is independent.
 func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome AttemptOutcome) (Attempt, error) {
+	outcome = normalizeAttemptOutcome(outcome)
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || !validAttemptOutcome(outcome) {
 		return Attempt{}, ErrInvalidInput
 	}
@@ -80,7 +81,25 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	}
 	switch record.state {
 	case StateCommitted:
-		return readAttemptTx(ctx, tx, record.claimID)
+		if record.purpose == PurposeCharity && outcome.ResponseStarted {
+			started, err := responseStartedTx(ctx, tx, record.claimID)
+			if err != nil {
+				return Attempt{}, err
+			}
+			if !started {
+				return Attempt{}, ErrConflict
+			}
+		}
+		prior, err := readAttemptTx(ctx, tx, record.claimID)
+		if err != nil {
+			return Attempt{}, err
+		}
+		if prior.Kind != outcome.Kind || prior.UpstreamStatus != outcome.UpstreamStatus ||
+			prior.UpstreamCode != safeUpstreamCode(outcome.UpstreamCode) || prior.Diagnostic != diagnostic.Bound(outcome.Diagnostic) ||
+			prior.Usage != outcome.Usage || prior.StreakDisposition != outcome.StreakDisposition || prior.FailureOrigin != outcome.FailureOrigin {
+			return Attempt{}, ErrConflict
+		}
+		return prior, nil
 	case StateReleased:
 		return Attempt{}, ErrTerminal
 	case StateClaimed:
@@ -142,24 +161,25 @@ func (s *Service) CompleteRequest(ctx context.Context, input CompleteRequestInpu
 }
 
 type claimRecord struct {
-	claimID         string
-	requestID       string
-	attemptSeq      int
-	purpose         Purpose
-	state           ClaimState
-	endpointKeyID   sql.NullInt64
-	secretRefID     sql.NullInt64
-	donationKeyID   sql.NullInt64
-	receiverUserID  sql.NullInt64
-	dispatchedAt    sql.NullInt64
-	terminalAt      sql.NullInt64
-	rewardActual    sql.NullInt64
-	rewardState     RewardState
-	requestLogID    int64
-	connectorType   connectorcontract.Type
-	baseURL         string
-	upstreamModel   string
-	currentEndpoint sql.NullInt64
+	streakDisposition, failureOrigin sql.NullString
+	claimID                          string
+	requestID                        string
+	attemptSeq                       int
+	purpose                          Purpose
+	state                            ClaimState
+	endpointKeyID                    sql.NullInt64
+	secretRefID                      sql.NullInt64
+	donationKeyID                    sql.NullInt64
+	receiverUserID                   sql.NullInt64
+	dispatchedAt                     sql.NullInt64
+	terminalAt                       sql.NullInt64
+	rewardActual                     sql.NullInt64
+	rewardState                      RewardState
+	requestLogID                     int64
+	connectorType                    connectorcontract.Type
+	baseURL                          string
+	upstreamModel                    string
+	currentEndpoint                  sql.NullInt64
 }
 
 type candidateSnapshot struct {
@@ -178,7 +198,7 @@ func loadClaimTx(ctx context.Context, tx *sql.Tx, claimID string) (claimRecord, 
 	err := tx.QueryRowContext(ctx, `SELECT
 c.id,c.logical_request_id,c.attempt_seq,c.purpose,c.state,c.endpoint_key_id,c.secret_ref_id,
 c.donation_key_id,c.receiver_user_id,c.dispatched_at,c.terminal_at,c.donor_reward_actual_milli,
-c.donor_reward_state,l.id,s.connector_type,s.canonical_base_url,l.upstream_model_id,e.id
+c.donor_reward_state,l.id,s.connector_type,s.canonical_base_url,l.upstream_model_id,e.id,c.streak_disposition,c.failure_origin
 FROM dispatch_claims c
 JOIN request_logs l ON l.logical_request_id=c.logical_request_id
 LEFT JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
@@ -188,7 +208,7 @@ WHERE c.id=?`, claimID).Scan(
 		&record.claimID, &record.requestID, &record.attemptSeq, &purposeText, &stateText,
 		&record.endpointKeyID, &record.secretRefID, &record.donationKeyID, &record.receiverUserID,
 		&record.dispatchedAt, &record.terminalAt, &record.rewardActual, &rewardText,
-		&record.requestLogID, &connectorText, &baseURL, &upstreamModel, &record.currentEndpoint)
+		&record.requestLogID, &connectorText, &baseURL, &upstreamModel, &record.currentEndpoint, &record.streakDisposition, &record.failureOrigin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return claimRecord{}, ErrNotFound
@@ -246,6 +266,9 @@ func verifyHandle(record claimRecord, handle Handle) error {
 }
 
 func (s *Service) releaseClaimTx(ctx context.Context, tx *sql.Tx, record claimRecord, at int64) (Attempt, error) {
+	return s.releaseClaimWithOriginTx(ctx, tx, record, at, connectorcontract.OriginPlatform)
+}
+func (s *Service) releaseClaimWithOriginTx(ctx context.Context, tx *sql.Tx, record claimRecord, at int64, origin connectorcontract.FailureOrigin) (Attempt, error) {
 	if record.state != StateClaimed || !record.secretRefID.Valid {
 		return Attempt{}, ErrConflict
 	}
@@ -263,6 +286,7 @@ WHERE attempt_id=? AND state='reserved'`, record.claimID); err != nil {
 				ClaimID:       record.claimID,
 				DonationKeyID: nullableInt64(record.donationKeyID),
 				ReleasedAt:    at,
+				FailureOrigin: origin,
 			}); err != nil {
 				return fmt.Errorf("claim: release charity attempt: %w", err)
 			}
@@ -273,8 +297,8 @@ WHERE attempt_id=? AND state='reserved'`, record.claimID); err != nil {
 		result, err := callbackTx.ExecContext(callbackCtx, `UPDATE dispatch_claims
 SET state='released',secret_ref_id=NULL,donor_reward_actual_milli=NULL,
 donor_reward_state=CASE WHEN purpose='charity' THEN 'not_due' ELSE 'not_applicable' END,
-terminal_at=?
-WHERE id=? AND state='claimed'`, at, record.claimID)
+terminal_at=?,streak_disposition='neutral',failure_origin=?
+WHERE id=? AND state='claimed'`, at, origin, record.claimID)
 		if err != nil {
 			return fmt.Errorf("claim: persist undispatched release: %w", err)
 		}
@@ -360,13 +384,14 @@ func (s *Service) completeAttemptTx(
 		}
 		suppressReward := !outcome.Usage.Present || isAdmin
 		charityInput = CharityAttemptInput{
-			RequestID:       record.requestID,
-			ClaimID:         record.claimID,
-			DonationKeyID:   nullableInt64(record.donationKeyID),
-			ReceiverUserID:  nullableInt64(record.receiverUserID),
-			SuppressReward:  suppressReward,
-			Usage:           outcome.Usage,
-			ProtocolSuccess: outcome.ProtocolSuccess,
+			RequestID:         record.requestID,
+			ClaimID:           record.claimID,
+			DonationKeyID:     nullableInt64(record.donationKeyID),
+			ReceiverUserID:    nullableInt64(record.receiverUserID),
+			SuppressReward:    suppressReward,
+			Usage:             outcome.Usage,
+			ProtocolSuccess:   outcome.ProtocolSuccess,
+			StreakDisposition: outcome.StreakDisposition, FailureOrigin: outcome.FailureOrigin,
 			ResponseStarted: outcome.ResponseStarted,
 			UsageUnknown:    !outcome.Usage.Present,
 			CompletedAt:     at,
@@ -433,8 +458,8 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			return fmt.Errorf("claim: persist request attempt: %w", err)
 		}
 		result, err := callbackTx.ExecContext(callbackCtx, `UPDATE dispatch_claims
-SET state='committed',secret_ref_id=NULL,donor_reward_actual_milli=?,donor_reward_state=?,terminal_at=?
-WHERE id=? AND state='dispatched'`, nullableSQLInt64(rewardActual), rewardState, at, record.claimID)
+SET state='committed',secret_ref_id=NULL,donor_reward_actual_milli=?,donor_reward_state=?,terminal_at=?,streak_disposition=?,failure_origin=?
+WHERE id=? AND state='dispatched'`, nullableSQLInt64(rewardActual), rewardState, at, outcome.StreakDisposition, outcome.FailureOrigin, record.claimID)
 		if err != nil {
 			return fmt.Errorf("claim: persist attempt terminal state: %w", err)
 		}
@@ -688,13 +713,13 @@ func readAttemptTx(ctx context.Context, tx *sql.Tx, claimID string) (Attempt, er
 	err := tx.QueryRowContext(ctx, `SELECT a.claim_id,c.logical_request_id,a.attempt_seq,c.state,a.result_kind,
 a.upstream_status,a.upstream_code,a.diag,a.input_tokens,a.cache_write_input_tokens,
 a.cache_read_input_tokens,a.output_tokens,a.usage_unknown,a.usage_total_mismatch,a.started_at,a.completed_at,
-c.donor_reward_actual_milli,c.donor_reward_state
+c.donor_reward_actual_milli,c.donor_reward_state,c.streak_disposition,c.failure_origin
 FROM request_attempts a JOIN dispatch_claims c ON c.id=a.claim_id WHERE a.claim_id=?`, claimID).Scan(
 		&attempt.ClaimID, &attempt.RequestID, &attempt.AttemptSeq, &stateText, &kindText,
 		&upstreamStatus, &code, &diag, &attempt.Usage.UncachedInputTokens,
 		&attempt.Usage.CacheWriteInputTokens, &attempt.Usage.CacheReadInputTokens,
 		&attempt.Usage.OutputTokens, &usageUnknown, &usageTotalMismatch, &attempt.StartedAt, &attempt.CompletedAt,
-		&rewardActual, &rewardText)
+		&rewardActual, &rewardText, &attempt.StreakDisposition, &attempt.FailureOrigin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Attempt{}, ErrInvariant
@@ -730,6 +755,7 @@ func releasedAttempt(record claimRecord) Attempt {
 		completedAt = record.terminalAt.Int64
 	}
 	return Attempt{
+		StreakDisposition: connectorcontract.StreakDisposition(record.streakDisposition.String), FailureOrigin: connectorcontract.FailureOrigin(record.failureOrigin.String),
 		ClaimID:     record.claimID,
 		RequestID:   record.requestID,
 		AttemptSeq:  record.attemptSeq,
@@ -943,7 +969,22 @@ func validCallerResult(result CallerResult) bool {
 	}
 }
 
+func normalizeAttemptOutcome(outcome AttemptOutcome) AttemptOutcome {
+	if outcome.StreakDisposition == "" && outcome.FailureOrigin == "" {
+		outcome.StreakDisposition = connectorcontract.StreakNeutral
+		outcome.FailureOrigin = connectorcontract.OriginPlatform
+		if outcome.ProtocolSuccess {
+			outcome.StreakDisposition = connectorcontract.StreakSuccess
+			outcome.FailureOrigin = connectorcontract.OriginNone
+		}
+	}
+	return outcome
+}
 func validAttemptOutcome(outcome AttemptOutcome) bool {
+	if !connectorcontract.ValidOutcome(outcome.StreakDisposition, outcome.FailureOrigin) ||
+		outcome.ProtocolSuccess != (outcome.StreakDisposition == connectorcontract.StreakSuccess) {
+		return false
+	}
 	if outcome.Kind != ResultResponse && outcome.Kind != ResultSynthetic {
 		return false
 	}
@@ -953,7 +994,7 @@ func validAttemptOutcome(outcome AttemptOutcome) bool {
 	if outcome.Kind == ResultResponse && outcome.UpstreamStatus == 0 {
 		return false
 	}
-	if outcome.ProtocolSuccess && (outcome.Kind != ResultResponse || !outcome.ResponseStarted ||
+	if outcome.ProtocolSuccess && (outcome.Kind != ResultResponse ||
 		outcome.UpstreamStatus < 200 || outcome.UpstreamStatus > 399) {
 		return false
 	}

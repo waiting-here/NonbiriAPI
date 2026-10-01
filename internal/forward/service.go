@@ -32,6 +32,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
@@ -69,6 +70,8 @@ type Service struct {
 }
 
 type logicalAdmission struct {
+	rolePolicy    rolepolicy.Policy
+	modelRevision int64
 	charity       bool
 	modelID       int64
 	fullName      string
@@ -437,9 +440,13 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 			return logicalAdmission{charity: true}, request, nil, charityrouting.ErrNotFound
 		}
 		admission := logicalAdmission{
-			charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
+			rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
 			silentRetry: true, flatten: value.FlattenToolCalls, reservedMilli: value.ReservedMilli,
 			decisionNow: now,
+		}
+		if request.roleSnapshot != nil {
+			admission.rolePolicy = request.roleSnapshot.Clone()
+			admission.modelRevision = request.policyRevision
 		}
 		return prepareModelPolicy(request, admission)
 	}
@@ -448,8 +455,12 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		return logicalAdmission{}, request, nil, err
 	}
 	admission := logicalAdmission{
-		modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
+		rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
 		silentRetry: value.SilentRetry, flatten: value.FlattenToolCalls,
+	}
+	if request.roleSnapshot != nil {
+		admission.rolePolicy = request.roleSnapshot.Clone()
+		admission.modelRevision = request.policyRevision
 	}
 	return prepareModelPolicy(request, admission)
 }
@@ -458,14 +469,31 @@ func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (
 	if !validAdmission(admission) {
 		return admission, request, nil, ErrInternal
 	}
-	if !admission.flatten || request.operation != connectorcontract.OperationChatCompletions {
+	if request.operation != connectorcontract.OperationChatCompletions {
 		return admission, request, nil, nil
 	}
-	transformed, err := request.chat.ReverseFlatten()
+	var restored *openai.ChatRequest
+	var err error
+	if admission.flatten {
+		restored, err = request.chat.ReverseFlatten()
+	} else {
+		restored = request.chat.CloneForAttempt()
+	}
+	if err != nil || restored == nil {
+		return admission, request, nil, openai.ErrInvalidRequest
+	}
+	transformed, err := restored.ApplyRolePolicy(admission.rolePolicy)
+	restored.Clear()
 	if err != nil || transformed == nil {
 		return admission, request, nil, openai.ErrInvalidRequest
 	}
-	return admission, chatRequest(transformed), transformed.Clear, nil
+	copy := chatRequest(transformed)
+	copy.policyModelID, copy.policyDecisionNow = request.policyModelID, request.policyDecisionNow
+	copy.policyRevision = admission.modelRevision
+	policy := admission.rolePolicy.Clone()
+	copy.roleSnapshot = &policy
+	copy.excluded = append([]string(nil), request.excluded...)
+	return admission, copy, copy.Clear, nil
 }
 
 func (service *Service) snapshot(
@@ -519,10 +547,6 @@ func (service *Service) snapshot(
 	capabilityByType := make(map[connectorcontract.Type]bool, len(service.connectors))
 	for _, candidate := range plan.candidates {
 		if !service.validCandidate(candidate, admission.charity) {
-			plan.clearPrepared()
-			return executionPlan{}, ErrInternal
-		}
-		if request.chat != nil && admission.flatten && candidate.ConnectorType != connectorcontract.TypeOpenAICompatible {
 			plan.clearPrepared()
 			return executionPlan{}, ErrInternal
 		}
@@ -585,7 +609,7 @@ func (service *Service) supportedCharityConnectorTypes(request *validatedRequest
 	}
 	connectorTypes := make([]connectorcontract.Type, 0, len(service.connectors))
 	for connectorType, instance := range service.connectors {
-		if instance == nil || request.chat != nil && flatten && connectorType != connectorcontract.TypeOpenAICompatible {
+		if instance == nil || request.chat != nil && !request.chat.SupportsRolePassthrough(string(connectorType)) {
 			continue
 		}
 		if service.adaptations != nil {
@@ -823,7 +847,7 @@ func (service *Service) runAttempts(
 		if responseStart != nil && responseStart.started {
 			run.responseStarted = true
 		}
-		if executionContext.Err() != nil && !result.Success && !result.Committed && !run.responseStarted {
+		if executionContext.Err() != nil && !result.Success && !result.Committed && !run.responseStarted && !connectorcontract.ValidOutcome(result.StreakDisposition, result.FailureOrigin) {
 			result = endedExecutionResult(parent, executionContext)
 		}
 		if !validAttemptResult(result) {
@@ -1154,14 +1178,16 @@ func charityModelID(plan executionPlan) int64 {
 }
 
 func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome {
+	result = connectorcontract.NormalizeOutcome(result)
 	kind := claim.ResultSynthetic
 	if result.UpstreamStatus != 0 {
 		kind = claim.ResultResponse
 	}
 	return claim.AttemptOutcome{
+		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
 		UpstreamCode: result.ErrorDetail.Code(),
-		Usage:        result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
+		Usage:        result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess, ResponseStarted: result.Committed,
 	}
 }
 

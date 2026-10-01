@@ -59,6 +59,9 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 	if err == nil && charity {
 		err = request.excludeFields(policy.ExcludedRequestFields)
 		request.policyModelID, request.policyDecisionNow = policy.ModelID, now
+		role := policy.RolePolicy.Clone()
+		request.roleSnapshot = &role
+		request.policyRevision = policy.Revision
 	}
 	if err != nil {
 		if request != nil {
@@ -85,6 +88,9 @@ func (s *Service) bindDirectPolicy(ctx context.Context, user int64, request *val
 	}
 	copy := request.CloneForAttempt()
 	copy.policyModelID, copy.policyDecisionNow = policy.ModelID, now
+	role := policy.RolePolicy.Clone()
+	copy.roleSnapshot = &role
+	copy.policyRevision = policy.Revision
 	if err = copy.excludeFields(policy.ExcludedRequestFields); err != nil {
 		copy.Clear()
 		return nil, nil, nil, err

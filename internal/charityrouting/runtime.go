@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
 const (
@@ -94,20 +95,25 @@ WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gat
 	}
 
 	var preflight RuntimePreflight
+	var encodedPolicy string
 	var enabled, discount, discountEnabled int
 	var pricingMode string
 	var requestPrice int64
 	var discountStart, discountEnd sql.NullInt64
 	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision
 FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &preflight.Provider, &preflight.Model,
 		&preflight.FullName, &enabled, &preflight.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &preflight.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimePreflight{}, ErrNotFound
 	}
 	if err != nil {
 		return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight model: %w", err)
+	}
+	preflight.RolePolicy, err = rolepolicy.Decode(encodedPolicy)
+	if err != nil {
+		return RuntimePreflight{}, ErrInvariant
 	}
 	if enabled != 1 {
 		return RuntimePreflight{}, ErrNotFound
@@ -298,6 +304,7 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 // second transaction or materializing expiry inside a browse request.
 func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, callerID int64) (RuntimeSnapshot, error) {
 	var snapshot RuntimeSnapshot
+	var encodedPolicy string
 	var enabled int
 	var pricingMode string
 	var requestPrice int64
@@ -314,15 +321,19 @@ func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decis
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
-pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at,role_policy,revision
 FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Provider, &snapshot.Model,
 		&snapshot.FullName, &enabled, &snapshot.FlattenToolCalls, &pricingMode, &requestPrice,
-		&discount, &discountEnabled, &discountStart, &discountEnd)
+		&discount, &discountEnabled, &discountStart, &discountEnd, &encodedPolicy, &snapshot.Revision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime model: %w", err)
+	}
+	snapshot.RolePolicy, err = rolepolicy.Decode(encodedPolicy)
+	if err != nil {
+		return RuntimeSnapshot{}, ErrInvariant
 	}
 	if enabled != 1 {
 		return RuntimeSnapshot{}, ErrNotFound

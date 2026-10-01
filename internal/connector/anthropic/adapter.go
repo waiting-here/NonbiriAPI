@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
@@ -164,15 +165,14 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 	return a.attempt(ctx, writer, target, request, connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier})
 }
 
-// AttemptWithPolicy is additive for the connector registry. Anthropic never
-// receives OpenAI-only store or flatten semantics; only the safety identifier
-// is forwarded to its existing translator.
+// AttemptWithPolicy translates a prepared logical request and its response.
 func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
 	return a.attempt(ctx, writer, target, request, policy)
 }
 
-func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
-	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
+func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) (result connectorcontract.AttemptResult) {
+	defer func() { result = connectorcontract.NormalizeOutcome(result) }()
+	result = connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
 	if a == nil || backend.IsNil(a.backend) || ctx == nil || writer == nil || request == nil {
 		return result
@@ -209,7 +209,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	}
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
-		return upstreamFailure("upstream endpoint was refused", 0)
+		return connectorcontract.NormalizeOutcome(connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, MessagesURL(client.BaseURL()), bytes.NewReader(body))
 	if err != nil {
@@ -234,6 +234,36 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	semanticGuard := wireGuard.clone()
 	defer wireGuard.Clear()
 	defer semanticGuard.Clear()
+	if request.Stream && policy.FlattenToolCalls {
+		outputGuard := openai.NewResponseGuard(target.credential.apiKey, target.credential.ciphertext, []byte(policy.SafetyIdentifier))
+		defer outputGuard.Clear()
+		sink := openai.NewFlattenSink(writer, min(a.maxStreamBytes, MaxCallerStreamBytes), MaxCallerSSEEventBytes, outputGuard.ContainsJSON)
+		defer sink.Clear()
+		writer = sink
+		defer func() {
+			if result.Success {
+				if err := sink.Complete(a.streamWriteTimeout); err != nil {
+					result.Success = false
+					if errors.Is(err, tooltext.ErrToolFlatten) || errors.Is(err, tooltext.ErrFlattenStreamRejected) {
+						result.Failure = connectorcontract.FailureUpstream
+						result.Diagnostic = "tool projection was invalid"
+						result = connectorcontract.UpstreamFailed(result, connectorcontract.OriginUpstreamProtocol)
+					} else {
+						result.Failure = connectorcontract.FailureSink
+						result.Diagnostic = "caller response failed"
+						result = connectorcontract.ProtocolSucceeded(result)
+					}
+				}
+			}
+			if sink.ProjectionError() != nil {
+				result.Success = false
+				result.Failure = connectorcontract.FailureUpstream
+				result.Diagnostic = "tool projection was rejected"
+				result = connectorcontract.UpstreamFailed(result, connectorcontract.OriginUpstreamProtocol)
+			}
+			result.Committed = sink.Committed()
+		}()
+	}
 	errorContext := upstreamerror.Context{
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
@@ -255,21 +285,16 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		response.Request.Header.Del("X-Api-Key")
 	}
 	if err != nil {
+		failed := upstreamFailure(classifyTransportFailure(err), 0)
 		if ctx.Err() != nil {
-			return canceledFailure()
+			failed = canceledFailure()
 		}
-		return upstreamFailure(classifyTransportFailure(err), 0)
+		return connectorcontract.TransportFailed(failed, err, ctx)
 	}
 	defer func() { _ = response.Body.Close() }()
-	if ctx.Err() != nil {
-		return canceledFailure()
-	}
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
-		result := upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+		result := connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)
-		if ctx.Err() != nil {
-			return canceledFailure()
-		}
 		return result
 	}
 	if request.Stream {
@@ -283,24 +308,25 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		_ = errorContext.ReadResponse(ctx, response)
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext)
+	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext, policy.FlattenToolCalls)
 }
 
-func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, attemptStarted time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context) connectorcontract.AttemptResult {
+func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, attemptStarted time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context, flatten bool) (result connectorcontract.AttemptResult) {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
 	body, err := readResponseBody(response.Body, a.maxJSONResponseBytes)
 	if err != nil {
+		failed := upstreamFailure(classifyReadFailure(err), response.StatusCode)
 		if ctx.Err() != nil {
-			return canceledFailure()
+			failed = canceledFailure()
 		}
-		return upstreamFailure(classifyReadFailure(err), response.StatusCode)
+		return connectorcontract.ReadFailed(failed, err, ctx)
 	}
 	defer clear(body)
 	if upstreamerror.IsEvent(body) {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
-		result := upstreamFailure("upstream response reported an error", response.StatusCode)
+		result := connectorcontract.UpstreamFailed(upstreamFailure("upstream response reported an error", response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.Parse(body)
 		return result
 	}
@@ -319,10 +345,22 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 		clear(translated)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
+	if flatten {
+		projected, err := tooltext.FlattenCompletion(translated)
+		clear(translated)
+		if err != nil {
+			return upstreamFailure("tool projection was invalid", response.StatusCode)
+		}
+		translated = projected
+	}
 	defer clear(translated)
 	if wireGuard.Contains(translated) {
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
+	defer func() {
+		result = connectorcontract.ProtocolSucceeded(result)
+		result.UpstreamStatus = response.StatusCode
+	}()
 	if err := connectorcontract.MarkResponseStarted(writer); err != nil {
 		return sinkFailure(false, usage)
 	}
@@ -393,7 +431,7 @@ func clearUnsafeResponseHeaders(header http.Header) {
 }
 
 func upstreamFailure(diagnostic string, status int) connectorcontract.AttemptResult {
-	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: diagnostic, UpstreamStatus: status}
+	return connectorcontract.AttemptResult{StreakDisposition: connectorcontract.StreakUpstreamFailure, FailureOrigin: connectorcontract.OriginUpstreamProtocol, Failure: connectorcontract.FailureUpstream, Diagnostic: diagnostic, UpstreamStatus: status}
 }
 
 func canceledFailure() connectorcontract.AttemptResult {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
@@ -104,7 +105,7 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 	}
 	switch record.state {
 	case StateClaimed:
-		if _, err := s.releaseClaimTx(ctx, tx, record, at); err != nil {
+		if _, err := s.releaseClaimWithOriginTx(ctx, tx, record, at, connectorcontract.OriginRecoveryUnknown); err != nil {
 			return "", err
 		}
 	case StateDispatched:
@@ -115,6 +116,7 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 			baseURL:       record.baseURL,
 			upstreamModel: record.upstreamModel,
 		}, AttemptOutcome{
+			StreakDisposition: connectorcontract.StreakNeutral, FailureOrigin: connectorcontract.OriginRecoveryUnknown,
 			Kind:            ResultSynthetic,
 			UpstreamStatus:  502,
 			Diagnostic:      "dispatch outcome unavailable after restart",

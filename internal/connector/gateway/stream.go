@@ -84,7 +84,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		if committed {
 			result.ClientStatus = 200
 			if err := write(httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed")), true); err != nil {
-				return sinkFailure(true, usage)
+				return contract.UpstreamFailed(sinkFailure(true, usage), contract.OriginUpstreamProtocol)
 			}
 		}
 		return result
@@ -126,7 +126,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		var event egress.SSEEvent
 		select {
 		case <-ctx.Done():
-			result := canceled()
+			result := contract.ReadFailed(canceled(), ctx.Err(), ctx)
 			result.Committed, result.Usage = committed, usage
 			if committed {
 				result.ClientStatus = 200
@@ -138,7 +138,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				continue
 			}
 			if err != nil {
-				return failure("upstream stream was interrupted", upstreamerror.Detail{})
+				return contract.ReadFailed(failure("upstream stream was interrupted", upstreamerror.Detail{}), err, ctx)
 			}
 			continue
 		case value, ok := <-events:
@@ -273,7 +273,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 			terminal = true
 		case "error":
 			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), []byte(event.Data))
-			return failure("upstream stream reported an error", errorContext.Parse([]byte(event.Data)))
+			return contract.UpstreamFailed(failure("upstream stream reported an error", errorContext.Parse([]byte(event.Data))), contract.OriginUpstreamResponse)
 		default:
 			return failure("upstream stream contained an unsupported event", upstreamerror.Detail{})
 		}
@@ -287,7 +287,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		}
 	}
 	if ctx.Err() != nil {
-		result := canceled()
+		result := contract.ReadFailed(canceled(), ctx.Err(), ctx)
 		result.Committed, result.Usage = committed, usage
 		if committed {
 			result.ClientStatus = 200
@@ -298,7 +298,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		return failure("upstream stream ended without a finish", upstreamerror.Detail{})
 	}
 	if err := emit(map[string]any{}, finish, false); err != nil {
-		return sinkFailure(committed, usage)
+		return contract.ConfirmedSuccess(sinkFailure(committed, usage), response.StatusCode)
 	}
 	options, _ := request.RawField("stream_options")
 	defer clear(options)
@@ -308,11 +308,11 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 	_ = json.Unmarshal(options, &streamOptions)
 	if streamOptions.IncludeUsage && usage.Present {
 		if err := emit(map[string]any{}, nil, true); err != nil {
-			return sinkFailure(committed, usage)
+			return contract.ConfirmedSuccess(sinkFailure(committed, usage), response.StatusCode)
 		}
 	}
 	if err := write([]byte("data: [DONE]\n\n"), false); err != nil {
-		return sinkFailure(committed, usage)
+		return contract.ConfirmedSuccess(sinkFailure(committed, usage), response.StatusCode)
 	}
 	return contract.AttemptResult{Success: true, Committed: committed, Failure: contract.FailureNone, UpstreamStatus: response.StatusCode, ClientStatus: 200, Usage: usage}
 }

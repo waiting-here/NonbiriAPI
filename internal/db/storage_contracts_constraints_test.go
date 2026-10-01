@@ -135,10 +135,10 @@ func TestStorageContractsEngineExpansionKeepsContentImmutable(t *testing.T) {
 	hostileMustExec(t, database, "INSERT INTO fatfish_levels VALUES(?,'Level','','{}',1,NULL,0,0)", level)
 	for _, version := range []int{1, 2, 3} {
 		id := fmt.Sprintf("ffv_%021dA", version)
-		hostileMustExec(t, database, "INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),?,1,'{}',10,3,0)", id, level, version)
+		hostileMustExec(t, database, "INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),?,1,'{}',10,3,0,?)", id, level, version, version)
 		hostileMustFail(t, database, "UPDATE fatfish_level_versions SET engine_version=1 WHERE id=?", id)
 	}
-	hostileMustFail(t, database, "INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),4,1,'{}',10,3,0)", hostileOID("ffv_"), level)
+	hostileMustFail(t, database, "INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),4,1,'{}',10,3,0,4)", hostileOID("ffv_"), level)
 }
 
 func TestStorageContractsCredentialReviewIdentityAllowsOnlyInitialBackfill(t *testing.T) {

@@ -141,8 +141,17 @@ func TestAttemptUnreadableErrorFallsBackAndCancellationStopsRead(t *testing.T) {
 	cancel()
 	select {
 	case r := <-result:
-		if r.Failure != FailureCanceled || r.Committed || r.ErrorDetail.Message() != "" {
+		if r.Committed || r.ErrorDetail.Message() != "" {
 			t.Fatalf("result=%+v", r)
+		}
+		// Cancellation can race header delivery. A received HTTP failure stays
+		// definitive; cancellation before delivery has no upstream outcome.
+		if r.Failure == FailureUpstream {
+			if r.UpstreamStatus != 503 || r.StreakDisposition != connectorcontract.StreakUpstreamFailure || r.FailureOrigin != connectorcontract.OriginUpstreamResponse {
+				t.Fatalf("HTTP error lost: %+v", r)
+			}
+		} else if r.Failure != FailureCanceled || r.StreakDisposition != connectorcontract.StreakNeutral || r.FailureOrigin != connectorcontract.OriginClientCancel {
+			t.Fatalf("cancellation lost: %+v", r)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("error read ignored cancellation")
