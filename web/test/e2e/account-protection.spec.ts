@@ -123,16 +123,39 @@ test('deletion alerts can be filtered and resolved in a selected batch', async (
   errors.assertNone();
 });
 
-test('all alert filters and retained details accept current deletion snapshots and reject partial metadata', async ({ page }) => {
+test('all alert filters and retained details accept current deletion snapshots and reject partial metadata', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await setup(page);
   let resolved = false;
   let malformed = false;
-  const rows = () => [
-    { id: '9', kind: 'fetch_failed', message: 'Other synthetic alert', resolved: false },
-    { id: '8', kind: 'account_deleted', message: 'Account deleted.', resolved: true, account_deletion: deletionSnapshots.v2 },
-    { id: '7', kind: 'account_deleted', message: 'Account deleted.', resolved, account_deletion: malformed ? { ...deletionSnapshots.legacy, snapshot_version: 1 } : deletionSnapshots.v1 },
-  ].map((row) => ({ ...row, ref: null, subject_user_id: null, created_at: 1_700_000_000, resolved_at: row.resolved ? 1_700_000_001 : null }));
+  const rows = () =>
+    [
+      { id: '9', kind: 'fetch_failed', message: 'Other synthetic alert', resolved: false },
+      {
+        id: '8',
+        kind: 'account_deleted',
+        message: 'Account deleted.',
+        resolved: true,
+        account_deletion: deletionSnapshots.v2,
+      },
+      {
+        id: '7',
+        kind: 'account_deleted',
+        message: 'Account deleted.',
+        resolved,
+        account_deletion: malformed
+          ? { ...deletionSnapshots.legacy, snapshot_version: 1 }
+          : deletionSnapshots.v1,
+      },
+    ].map((row) => ({
+      ...row,
+      ref: null,
+      subject_user_id: null,
+      created_at: 1_700_000_000,
+      resolved_at: row.resolved ? 1_700_000_001 : null,
+    }));
   await page.route('**/admin/api/alerts**', async (route) => {
     const url = new URL(route.request().url());
     if (route.request().method() === 'POST') {
@@ -144,11 +167,19 @@ test('all alert filters and retained details accept current deletion snapshots a
     }
     const focused = rows().find((row) => url.pathname === `/admin/api/alerts/${row.id}`);
     if (focused) {
-      await route.fulfill({ json: {
-        alert: focused, context_version: 0, occurred_facts: [],
-        targets: [{ kind: 'deleted_account', id: focused.id, available: true, status: 'retained' }],
-        current_state: [], related_logs: null, resolution_kind: 'legacy',
-      } });
+      await route.fulfill({
+        json: {
+          alert: focused,
+          context_version: 0,
+          occurred_facts: [],
+          targets: [
+            { kind: 'deleted_account', id: focused.id, available: true, status: 'retained' },
+          ],
+          current_state: [],
+          related_logs: null,
+          resolution_kind: 'legacy',
+        },
+      });
       return;
     }
     expect(url.pathname).toBe('/admin/api/alerts');
@@ -158,27 +189,41 @@ test('all alert filters and retained details accept current deletion snapshots a
     const kindFilter = url.searchParams.get('kind');
     expect([null, 'true', 'false']).toContain(resolutionFilter);
     expect([null, 'account_deleted']).toContain(kindFilter);
-    const data = rows().filter((row) =>
-      (resolutionFilter === null || row.resolved === (resolutionFilter === 'true')) &&
-      (kindFilter === null || row.kind === kindFilter),
+    const data = rows().filter(
+      (row) =>
+        (resolutionFilter === null || row.resolved === (resolutionFilter === 'true')) &&
+        (kindFilter === null || row.kind === kindFilter),
     );
-    await route.fulfill({ json: {
-      data, next_cursor: null,
-      pagination: { page: '1', page_size: 20, total_items: String(data.length), total_pages: '1' },
-    } });
+    await route.fulfill({
+      json: {
+        data,
+        next_cursor: null,
+        pagination: {
+          page: '1',
+          page_size: 20,
+          total_items: String(data.length),
+          total_pages: '1',
+        },
+      },
+    });
   });
   await page.goto(`${ADMIN_ORIGIN}/alerts?resolved=all`);
   for (const width of [1280, 1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
     await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+      .toBe(true);
   }
   await page.setViewportSize({ width: 1280, height: 1000 });
   await expect(page.getByText('Other synthetic alert')).toBeVisible();
   await page.getByLabel('Alert type').selectOption('account_deleted');
   await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
-  for (const [id, snapshot] of [['7', deletionSnapshots.v1], ['8', deletionSnapshots.v2]] as const) {
+  for (const [id, snapshot] of [
+    ['7', deletionSnapshots.v1],
+    ['8', deletionSnapshots.v2],
+  ] as const) {
     const row = page.getByRole('row').filter({ hasText: snapshot.discord_id });
     await row.getByRole('button', { name: 'Details', exact: true }).click();
     await expect(page.getByRole('heading', { name: `Alert details #${id}` })).toBeVisible();
@@ -200,7 +245,9 @@ test('all alert filters and retained details accept current deletion snapshots a
   await expect(page.getByText('Other synthetic alert')).toBeVisible();
   malformed = true;
   await page.reload();
-  await expect(page.getByText('The service returned an invalid response.', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('The service returned an invalid response.', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('Other synthetic alert')).toHaveCount(0);
   errors.assertNone();
 });
@@ -251,6 +298,11 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
   await page.getByLabel('Discord ID', { exact: true }).fill('123456789012345678');
   await page.getByLabel('Reason', { exact: true }).fill(reason);
   await page.getByRole('button', { name: 'Add and permanently ban' }).click();
+  expect(listed).toBe(false);
+  const confirmation = page.getByRole('alertdialog');
+  await expect(confirmation).toContainText('123456789012345678');
+  await expect(confirmation).toContainText(reason);
+  await confirmation.getByRole('button', { name: 'Add and permanently ban' }).click();
   await expect(page.getByRole('link', { name: '42', exact: true })).toBeVisible();
   const reasonNote = page.locator('.ops-blacklist-note');
   await expect(reasonNote).toBeVisible();
@@ -263,22 +315,43 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
   errors.assertNone();
 });
 
-test('administrator can inspect an old deleted account without mutation controls', async ({ page }) => {
+test('administrator can inspect an old deleted account without mutation controls', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await setup(page);
   const discordID = '123456789012345678';
   const deleted = {
-    record_id: '7', former_user_id: '42', discord_id: discordID, snapshot_version: 1,
-    registered_at: null, deleted_at: 1_800_000_000, effective_level: null,
+    record_id: '7',
+    former_user_id: '42',
+    discord_id: discordID,
+    snapshot_version: 1,
+    registered_at: null,
+    deleted_at: 1_800_000_000,
+    effective_level: null,
     ban: { state: 'unknown', active_at_deletion: null, reason: null, until: null },
     charity_pause: { state: 'unknown', active_at_deletion: null, reason: null, until: null },
-    source: 'unknown', actor_user_id: null, blacklist_action: 'unknown', blacklist_reason_codes: [],
-    general_balance: '-2', game_balance: null, donation_credit: null,
-    sketch_paper: null, sketch_brush: null, alert_id: '7',
+    source: 'unknown',
+    actor_user_id: null,
+    blacklist_action: 'unknown',
+    blacklist_reason_codes: [],
+    general_balance: '-2',
+    game_balance: null,
+    donation_credit: null,
+    sketch_paper: null,
+    sketch_brush: null,
+    alert_id: '7',
   };
-  const pageBody = (data: unknown[]) => ({ data, next_cursor: null, pagination: {
-    page: '1', page_size: 20, total_items: String(data.length), total_pages: '1',
-  } });
+  const pageBody = (data: unknown[]) => ({
+    data,
+    next_cursor: null,
+    pagination: {
+      page: '1',
+      page_size: 20,
+      total_items: String(data.length),
+      total_pages: '1',
+    },
+  });
   await page.route('**/admin/api/users**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/admin/api/users') {
@@ -295,15 +368,19 @@ test('administrator can inspect an old deleted account without mutation controls
   });
   await page.goto(`${ADMIN_ORIGIN}/users`);
   await page.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Deleted account #7' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Deleted account', exact: true })).toBeVisible();
   expect(await page.getByText('Unknown', { exact: true }).count()).toBeGreaterThan(0);
   await expect(page.getByText('No retained match cancellations')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'All accounts for this Discord ID' })).toHaveAttribute('href', /discord_id=123456789012345678/);
+  await expect(
+    page.getByRole('link', { name: 'All accounts for this Discord ID' }),
+  ).toHaveAttribute('href', /discord_id=123456789012345678/);
   await expect(page.getByRole('button', { name: /ban|unban|delete|restore/i })).toHaveCount(0);
   errors.assertNone();
 });
 
-test('level six can read administrator-origin blacklist events without a removal control', async ({ page }) => {
+test('level six can read administrator-origin blacklist events without a removal control', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await mockRoleSession(page, 'user', 'level6');
   await mockPublicConfig(page, 'user');
@@ -312,17 +389,39 @@ test('level six can read administrator-origin blacklist events without a removal
   await page.route('**/api/steward/blacklist**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/events')) {
-      await route.fulfill({ json: {
-        data: [{ id: '1', actor_kind: 'admin', actor_user_id: '9', reason_codes: [], safe_note: note, created_at: 1_800_000_000 }],
-        next_cursor: null,
-        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-      } });
+      await route.fulfill({
+        json: {
+          data: [
+            {
+              id: '1',
+              actor_kind: 'admin',
+              actor_user_id: '9',
+              reason_codes: [],
+              safe_note: note,
+              created_at: 1_800_000_000,
+            },
+          ],
+          next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+        },
+      });
     } else {
-      await route.fulfill({ json: {
-        data: [{ discord_id: discordID, reason: note, created_at: 1_800_000_000, user_id: null, first_actor_kind: 'admin', first_actor_user_id: '9' }],
-        next_cursor: null,
-        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-      } });
+      await route.fulfill({
+        json: {
+          data: [
+            {
+              discord_id: discordID,
+              reason: note,
+              created_at: 1_800_000_000,
+              user_id: null,
+              first_actor_kind: 'admin',
+              first_actor_user_id: '9',
+            },
+          ],
+          next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+        },
+      });
     }
   });
   await page.goto(`${USER_ORIGIN}/steward?tab=blacklist`);
@@ -333,9 +432,10 @@ test('level six can read administrator-origin blacklist events without a removal
   expect(await reasonNote.textContent()).toBe(note);
   await expect(reasonNote.locator('img')).toHaveCount(0);
   await page.getByRole('button', { name: 'Events' }).click();
-  const eventNote = page.locator('.ops-blacklist-note').nth(1);
+  const event = page.getByRole('listitem').filter({ hasText: 'Additional note:' });
+  const eventNote = event.getByText(note, { exact: true });
   await expect(eventNote).toBeVisible();
-  await expect(eventNote.locator('..')).toContainText('Additional note:');
+  await expect(event).toContainText('Administrator #9');
   expect(await eventNote.textContent()).toBe(note);
   await expect(eventNote.locator('img')).toHaveCount(0);
   await layout(page, 'steward-blacklist', eventNote);

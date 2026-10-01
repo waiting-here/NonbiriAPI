@@ -56,7 +56,7 @@ it('shows a former account to a steward without management actions or administra
   );
   await screen.findByRole('button', { name: 'View' });
   await view.user.click(screen.getByRole('button', { name: 'View' }));
-  await screen.findByRole('heading', { name: 'Deleted account', exact: true });
+  await screen.findByRole('heading', { name: 'Deleted account' });
   expect(screen.getByText('Former user ID').nextElementSibling).toHaveTextContent('7');
   expect(screen.getAllByText('Unknown').length).toBeGreaterThan(0);
   expect(screen.queryByRole('button', { name: 'Ban' })).toBeNull();
@@ -77,7 +77,7 @@ it('links the exact deletion alert with the administrator list state but hides i
       route: '/users?account_state=deleted&page=3&page_size=50&deleted=42',
     },
   );
-  const target = screen.getByRole('link', { name: 'Related alert', exact: true });
+  const target = screen.getByRole('link', { name: 'Related alert' });
   const destination = new URL(target.getAttribute('href')!, window.location.origin);
   expect(destination.pathname).toBe('/alerts');
   expect(destination.searchParams.get('alert_id')).toBe('77');
@@ -94,5 +94,5 @@ it('links the exact deletion alert with the administrator list state but hides i
       route: '/steward?tab=users&deleted=42',
     },
   );
-  expect(screen.queryByRole('link', { name: 'Related alert', exact: true })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Related alert' })).toBeNull();
 });

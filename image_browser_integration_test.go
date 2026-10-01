@@ -442,7 +442,7 @@ func (f *imageBrowserFixture) seedUser(index, level int, admin int64, discordIDs
 	if err != nil {
 		t.Fatal(err)
 	}
-	discordID := fmt.Sprintf("image-fixture-%d", index)
+	discordID := fmt.Sprintf("910000000000%06d", index)
 	if len(discordIDs) > 0 {
 		discordID = discordIDs[0]
 	}
