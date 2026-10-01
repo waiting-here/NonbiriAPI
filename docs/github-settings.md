@@ -28,8 +28,9 @@ Pull requests run a conservative routine CI scope. Manual dispatch defaults to f
 race preparation, and every dynamically scheduled risk race shard.
 `Web checks` requires unit/types/lint, an independent station build, and both
 browser suites. Browser jobs consume the immutable build artifact ID and can
-start while unit checks continue. Their three integration suites compile one
-shared test binary, then start separate processes and databases.
+start while unit checks continue. The picture-book, audit, management, Fat Fish
+and Lake Notes integration suites reuse one compiled test binary, with separate
+processes and databases.
 
 Routine PR runs use a conservative live dependency closure. Unknown input
 falls back to full verification; manual dispatch defaults to full. Full
