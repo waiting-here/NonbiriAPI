@@ -7,7 +7,7 @@ import (
 
 // verifiedLoginDenial carries only the same safe owner projection, after
 // Discord identity verification. It grants no session or other authority.
-type verifiedLoginDenial struct{ restrictions []AutomaticRestriction }
+type verifiedLoginDenial struct{ discordID string }
 
 func (*verifiedLoginDenial) Error() string { return "account access restricted" }
 func (*verifiedLoginDenial) Unwrap() error { return errSessionForbidden }

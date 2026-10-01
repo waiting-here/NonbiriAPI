@@ -50,7 +50,7 @@ func (r *Repository) RecordSourceTx(ctx context.Context, tx *sql.Tx, requestID s
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO request_source_facts(request_log_id,user_id,kind,effective_ip,ip_quality,source_json,occurred_at)
-		SELECT id,user_id,?,?,?,?,? FROM request_logs WHERE logical_request_id=? AND user_id=?
+		SELECT id,user_id,?,?,?,?,? FROM request_logs WHERE logical_request_id=? AND origin_user_id=?
 		ON CONFLICT(request_log_id) DO UPDATE SET kind=excluded.kind WHERE request_source_facts.kind='unclassified'`, kind, source.EffectiveIP, source.IPQuality, string(encoded), at, requestID, userID)
 	return err
 }

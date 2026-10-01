@@ -181,6 +181,7 @@ func (r *Runtime) registerBuiltins() error {
 		handler      http.HandlerFunc
 	}{
 		{http.MethodGet, "/api/auth/discord/start", r.oauthStart}, {http.MethodGet, "/api/auth/discord/callback", r.oauthCallback},
+		{http.MethodGet, "/api/auth/access-denied-reasons", r.accessDeniedReasons},
 		{http.MethodGet, "/api/session", r.userSession}, {http.MethodPost, "/api/auth/elevate", r.userElevate}, {http.MethodPost, "/api/auth/logout", r.userLogout},
 		{http.MethodGet, "/api/me", r.userMe}, {http.MethodPatch, "/api/me", r.patchMe}, {http.MethodGet, "/api/me/usage", r.userUsage},
 		{http.MethodPost, "/admin/api/login", r.adminLogin}, {http.MethodPost, "/admin/api/logout", r.adminLogout}, {http.MethodGet, "/admin/api/session", r.adminSession}, {http.MethodPost, "/admin/api/auth/elevate", r.adminElevate},
@@ -192,7 +193,7 @@ func (r *Runtime) registerBuiltins() error {
 				return err
 			}
 		} else {
-			anonymous := route.path == "/api/auth/discord/start" || route.path == "/api/auth/discord/callback"
+			anonymous := route.path == "/api/auth/discord/start" || route.path == "/api/auth/discord/callback" || route.path == "/api/auth/access-denied-reasons"
 			maintenanceExempt := route.method == http.MethodPost && route.path == "/api/auth/logout"
 			if err := r.registerUserInternal(route.method, route.path, route.handler, anonymous, maintenanceExempt); err != nil {
 				return err
