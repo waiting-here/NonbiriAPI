@@ -184,7 +184,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(filter.Phase)
 	if filter.UserID != nil {
-		query += ` AND l.user_id=?`
+		query += ` AND l.origin_user_id=?`
 		args = append(args, *filter.UserID)
 	}
 	if filter.EndpointKeyID != nil {
@@ -250,6 +250,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		}
 		if len(page.Data) < filter.Limit {
 			page.Data = append(page.Data, AdminLogRow{
+				OriginIdentity:  record.origin,
 				RejectionFields: rejectionFields(record),
 				ID:              record.id, RouteKind: RouteKind(record.routeKind),
 				CallerResultClass: resultClassPointer(record.callerResultClass),
@@ -321,7 +322,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(filter.Phase)
 	if filter.UserID != nil {
-		query += ` AND l.user_id=?`
+		query += ` AND l.origin_user_id=?`
 		args = append(args, *filter.UserID)
 	}
 	if filter.EndpointKeyID != nil {
@@ -390,6 +391,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			// Construct directly into the independent Steward type. No Admin DTO
 			// exists on this path, including transiently.
 			page.Data = append(page.Data, StewardLogRow{
+				OriginIdentity:  record.origin,
 				RejectionFields: rejectionFields(record),
 				ID:              record.id, RouteKind: RouteKind(record.routeKind),
 				CallerResultClass: resultClassPointer(record.callerResultClass),

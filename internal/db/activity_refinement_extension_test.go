@@ -175,8 +175,8 @@ func TestActivityRefinementUpgradePreservesDataAndRepairsOrder(t *testing.T) {
 		}
 	}
 	newVersion := hostileOIDVariant("ffv_", 'B', 'Q')
-	hostileMustExec(t, database, `INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),2,1,'{}',30,3,2)`, newVersion, level)
-	hostileMustFail(t, database, `INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),4,1,'{}',30,3,2)`, hostileOIDVariant("ffv_", 'C', 'Q'), level)
+	hostileMustExec(t, database, `INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),2,1,'{}',30,3,2,2)`, newVersion, level)
+	hostileMustFail(t, database, `INSERT INTO fatfish_level_versions VALUES(?,?,zeroblob(32),4,1,'{}',30,3,2,3)`, hostileOIDVariant("ffv_", 'C', 'Q'), level)
 	hostileMustFail(t, database, `UPDATE fatfish_level_versions SET engine_version=2 WHERE id=?`, version)
 	if err := foreignKeyCheck(context.Background(), database); err != nil {
 		t.Fatal(err)

@@ -329,6 +329,20 @@ func TestHundredRuleEvidenceFitsManagementReasonBudget(t *testing.T) {
 	if f.scalar(`SELECT json_array_length(rules_json) FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx)) != 100 {
 		t.Fatal("full rule evidence missing from receipt")
 	}
+	f.exec(`DELETE FROM client_rule_ban_receipts WHERE request_id=?`, requestattempt.CurrentID(ctx))
+	if f.scalar(`SELECT count(*) FROM automatic_reason_rule_labels WHERE owner_kind='user_ban' AND owner_id=CAST(? AS TEXT)`, f.user) != 100 {
+		t.Fatal("current rule facts expired with the receipt")
+	}
+	var firstName, lastName string
+	if err := f.store.DB().QueryRow(`SELECT name_snapshot FROM automatic_reason_rule_labels WHERE owner_kind='user_ban' AND owner_id=CAST(? AS TEXT) ORDER BY name_snapshot LIMIT 1`, f.user).Scan(&firstName); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.DB().QueryRow(`SELECT name_snapshot FROM automatic_reason_rule_labels WHERE owner_kind='user_ban' AND owner_id=CAST(? AS TEXT) ORDER BY name_snapshot DESC LIMIT 1`, f.user).Scan(&lastName); err != nil {
+		t.Fatal(err)
+	}
+	if firstName != "000-"+strings.Repeat("名称", 58) || lastName != "099-"+strings.Repeat("名称", 58) {
+		t.Fatal("current labels were truncated", firstName, lastName)
+	}
 }
 
 func TestAutomaticBanReasonUsesFinalRuleNameAndKeepsReceipt(t *testing.T) {

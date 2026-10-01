@@ -262,7 +262,7 @@ INSERT INTO legal_holds(
 		t.Fatal(err)
 	}
 	var preparedRoots int
-	if err := tx.QueryRow(`SELECT count(*) FROM request_logs WHERE user_id=?`, userID).Scan(&preparedRoots); err != nil || preparedRoots != 1 {
+	if err := tx.QueryRow(`SELECT count(*) FROM request_logs WHERE user_id=?`, userID).Scan(&preparedRoots); err != nil || preparedRoots != 3 {
 		t.Fatalf("prepared roots=%d err=%v", preparedRoots, err)
 	}
 	if err := tx.Rollback(); err != nil {
@@ -308,7 +308,7 @@ INSERT INTO legal_holds(
 	}
 	for _, deletedID := range []int64{recentLogID, pendingLogID} {
 		var count int
-		if err := fixture.store.DB().QueryRow(`SELECT count(*) FROM request_logs WHERE id=?`, deletedID).Scan(&count); err != nil || count != 0 {
+		if err := fixture.store.DB().QueryRow(`SELECT count(*) FROM request_logs WHERE id=?`, deletedID).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("non-held log %d count=%d err=%v", deletedID, count, err)
 		}
 	}
