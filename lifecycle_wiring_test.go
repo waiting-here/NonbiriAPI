@@ -40,11 +40,12 @@ func TestProductionRetirementBoundaryExcludesDeletingRequestAndRestoresOnAbort(t
 	if err != nil {
 		t.Fatalf("admit competing request: %v", err)
 	}
-	drained := make(chan struct{})
+	cleanupDone := make(chan struct{})
 	go func() {
 		<-otherContext.Done()
+		// Request cleanup completes before releasing its lifecycle lease.
+		close(cleanupDone)
 		releaseOther()
-		close(drained)
 	}()
 
 	retirement, err := boundary.BeginUserRetirement(deleteContext, userID)
@@ -55,9 +56,9 @@ func TestProductionRetirementBoundaryExcludesDeletingRequestAndRestoresOnAbort(t
 		t.Fatalf("deleting request was cancelled: %v", err)
 	}
 	select {
-	case <-drained:
+	case <-cleanupDone:
 	default:
-		t.Fatal("competing request was not drained before retirement returned")
+		t.Fatal("competing request cleanup did not finish before retirement returned")
 	}
 	if _, _, err := gate.Admit(context.Background(), userID, "late-session", validate); !errors.Is(err, lifecyclegate.ErrRetiring) {
 		t.Fatalf("late lifecycle admission error = %v, want ErrRetiring", err)
