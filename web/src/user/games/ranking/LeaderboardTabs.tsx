@@ -1,24 +1,26 @@
 import { useId, useState, type ReactNode } from 'react';
 import { useDuelText } from '../common/duel/copy';
 import './ranking.css';
-
-type RankingTab = { id: string; label: string; content: ReactNode };
-
+type RankingTab = {
+  id: string;
+  label: string;
+  content: ReactNode;
+};
 export function LeaderboardTabs({
   items,
 }: {
   readonly items: readonly [RankingTab, ...RankingTab[]];
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const prefix = useId();
   const [selected, setSelected] = useState(items[0].id);
   const active = items.find((item) => item.id === selected) ?? items[0];
   return (
-    <section className="rank-switcher" aria-label={t('排行榜', 'Leaderboards')}>
+    <section className="rank-switcher" aria-label={text('ranking.leaderboards')}>
       <div
         className="rank-tabs"
         role="tablist"
-        aria-label={t('选择排行榜', 'Choose a leaderboard')}
+        aria-label={text('ranking.chooseALeaderboard')}
         onKeyDown={(event) => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();

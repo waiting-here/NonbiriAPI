@@ -28,7 +28,6 @@ import '../games.css';
 import '../common/duel/duel.css';
 import '../bidding/bidding.css';
 import './blackjack.css';
-
 function useTableMotion(home: BlackjackState | undefined) {
   const surface = useRef<HTMLDivElement>(null);
   const previous = useRef<{
@@ -94,56 +93,25 @@ function useTableMotion(home: BlackjackState | undefined) {
   }, [home, client]);
   return surface;
 }
-
 function Rules({ close }: { readonly close: () => void }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
-    <DuelDialog title={t('二十一点 · 桌规', 'Blackjack · Table rules')} onClose={close}>
-      <h3>{t('每30秒一局，最多九人', 'One round every 30 seconds, up to nine seats')}</h3>
-      <p>
-        {t(
-          '每30秒开始一局，前5秒落座，随后20秒同时决策，最后5秒展示结果。全桌提前结束会延长展示，下一局仍按原定时间开始。无人不产生牌局。',
-          'Every 30 seconds: 5 seconds for seating, 20 for simultaneous decisions and 5 for results. An early finish extends the result display; the next round keeps its scheduled start. An empty table creates no game.',
-        )}
-      </p>
-      <p>
-        {t(
-          '入队立即预留基础投入，游戏积分优先，通用积分补足。按服务器受理顺序落座前九人；候补跨轮保留，随时退出原币退款。落座后在发牌前仍可退出并递补。玩完后需主动重新加入队尾，不保座、不自动续投。',
-          'Joining reserves your stake, using game credits first and general credits for the remainder. The first nine accepted requests take seats. Waiting players keep their place across rounds and may leave for an original-asset refund. Seated players may leave before dealing. After playing, join the tail again explicitly; there is no automatic re-entry.',
-        )}
-      </p>
-      <h3>{t('六副牌与庄家', 'Six decks and the dealer')}</h3>
-      <p>
-        {t(
-          '每局重新洗完整六副牌。A按1或11，J/Q/K按10；庄家软17停牌。美式底牌预查：庄家自然二十一点会立即结束。原始两张A加10点牌为自然二十一点，优先普通21。没有保险、投降、五龙或旁注。',
-          'Six complete decks are shuffled anew each round. Aces count as 1 or 11; face cards count as 10. The dealer stands on soft 17 and peeks for blackjack. An original ace plus a ten-value card is a natural blackjack and beats an ordinary 21. No insurance, surrender, five-card bonus or side bets.',
-        )}
-      </p>
-      <h3>{t('要牌、停牌、加倍、分牌', 'Hit, stand, double and split')}</h3>
-      <p>
-        {t(
-          '最多分一次为两手，同点值牌可分。普通分牌后可加倍；分A各补一张即停。加倍补同额投入，只再拿一张牌。分牌所得21按普通胜局处理。每秒每席处理一个动作，同批按座位顺序发牌，首座逐局轮换。其他人操作不会改变你的手牌版本。截止时未结束的手自动停牌。',
-          'Split equal-value cards once into two hands. Doubling after a normal split is allowed; split aces receive one card each and stand. Doubling reserves an equal stake and draws exactly one card. A split 21 is an ordinary win. One action per seat is processed each second, in rotating seat order. Other players do not change your hand revision. Unfinished hands stand at the deadline.',
-        )}
-      </p>
-      <h3>{t('返还与费用', 'Returns and fees')}</h3>
-      <p>
-        {t(
-          '失败返还0，平局返还本金，普通胜局返还2倍，自然二十一点返还2.5倍。每手应返总额分别扣平台、低保池、周四池费用，再全部发为通用积分；费率在入队时冻结。默认三项各1%，投入1000时，平局到账970、普通胜局1940、自然二十一点2425。长期游玩的预期收益为负。',
-          'Gross returns are zero for a loss, the stake for a push, twice the stake for a win and 2.5 times the stake for a natural. Platform, welfare and Thursday fees are each deducted per hand; all net proceeds are general credits. Rates freeze when you queue. At the default 1% each, a stake of 1,000 returns 970 on a push, 1,940 on a win and 2,425 on a natural. Long-term expected returns are negative.',
-        )}
-      </p>
-      <p>
-        {t(
-          '断线或关页仍正常推进。服务器重启只取消尚未结算的当前局，按原积分组成全额退款；候补继续排队。已提交的正常结果不回滚。近期记录保留30天，随后只保留去身份的牌局事实。',
-          'Disconnection does not pause the game. A restart cancels only the current unsettled table and refunds every original payment; waiting players keep their queue. Committed results stay final. Personal history is available for 30 days, followed by anonymous game facts.',
-        )}
-      </p>
+    <DuelDialog title={text('blackjack.blackjackTableRules')} onClose={close}>
+      <h3>{text('blackjack.oneRoundEvery30SecondsUpTo')}</h3>
+      <p>{text('blackjack.every30Seconds5SecondsForSeating')}</p>
+      <p>{text('blackjack.joiningReservesYourStakeUsingGameCredits')}</p>
+      <h3>{text('blackjack.sixDecksAndTheDealer')}</h3>
+      <p>{text('blackjack.sixCompleteDecksAreShuffledAnewEach')}</p>
+      <h3>{text('blackjack.hitStandDoubleAndSplit')}</h3>
+      <p>{text('blackjack.splitEqualValueCardsOnceIntoTwo')}</p>
+      <h3>{text('blackjack.returnsAndFees')}</h3>
+      <p>{text('blackjack.grossReturnsAreZeroForALoss')}</p>
+      <p>{text('blackjack.disconnectionDoesNotPauseTheGameA')}</p>
     </DuelDialog>
   );
 }
 function History({ close }: { readonly close: () => void }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [selected, setSelected] = useState<string | null>(null);
   const cursor = cursors.at(-1) ?? null;
@@ -159,17 +127,12 @@ function History({ close }: { readonly close: () => void }) {
     retry: false,
   });
   return (
-    <DuelDialog title={t('二十一点 · 对局记录', 'Blackjack · History')} onClose={close}>
-      <p>
-        {t(
-          '可查看本人最近30天的已结算牌局。阅读记录不暂停当前牌桌。',
-          'Your settled tables from the last 30 days. Reading history does not pause the live table.',
-        )}
-      </p>
+    <DuelDialog title={text('blackjack.blackjackHistory')} onClose={close}>
+      <p>{text('blackjack.yourSettledTablesFromTheLast30')}</p>
       {selected ? (
         <>
           <button className="btn btn-secondary" onClick={() => setSelected(null)}>
-            {t('返回列表', 'Back to list')}
+            {text('blackjack.backToList')}
           </button>
           {detail.isPending ? (
             <LoadingState />
@@ -185,12 +148,7 @@ function History({ close }: { readonly close: () => void }) {
                   seat={detail.data.summary.seat}
                 />
               ) : (
-                <p>
-                  {t(
-                    '系统取消，全部投入已原币退款。',
-                    'System cancellation: all original payments refunded.',
-                  )}
-                </p>
+                <p>{text('blackjack.systemCancellationAllOriginalPaymentsRefunded')}</p>
               )}
             </div>
           )}
@@ -213,22 +171,22 @@ function History({ close }: { readonly close: () => void }) {
                     <span>{new Date(h.started_at * 1000).toLocaleString()}</span>
                     <span>
                       {h.phase === 'cancelled'
-                        ? t('已原退', 'Refunded')
-                        : `${t('通用到账', 'General paid')} ${formatCredits(h.net)}`}
+                        ? text('blackjack.refunded')
+                        : `${text('blackjack.generalPaid')} ${formatCredits(h.net)}`}
                     </span>
                   </button>
                 ))}
               </div>
-              {!page.data.items.length && <p>{t('暂无对局记录。', 'No games yet.')}</p>}
+              {!page.data.items.length && <p>{text('blackjack.noGamesYet')}</p>}
             </>
           )}
-          <nav className="duel-actions" aria-label={t('历史翻页', 'History pages')}>
+          <nav className="duel-actions" aria-label={text('blackjack.historyPages')}>
             <button
               className="btn btn-secondary"
               disabled={cursors.length === 1}
               onClick={() => setCursors((v) => v.slice(0, -1))}
             >
-              {t('上一页', 'Previous')}
+              {text('blackjack.previous')}
             </button>
             <button
               className="btn btn-secondary"
@@ -237,7 +195,7 @@ function History({ close }: { readonly close: () => void }) {
                 if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
               }}
             >
-              {t('下一页', 'Next')}
+              {text('blackjack.next')}
             </button>
           </nav>
         </>
@@ -245,7 +203,6 @@ function History({ close }: { readonly close: () => void }) {
     </DuelDialog>
   );
 }
-
 function QueueForm({
   config,
   blocked,
@@ -257,7 +214,7 @@ function QueueForm({
   readonly accepting: boolean;
   readonly onQueue: (stake: string) => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const [stake, setStake] = useState(config.default_stake);
   let selected: bigint | null = null;
   let valid = false;
@@ -282,7 +239,7 @@ function QueueForm({
       }}
     >
       <label>
-        {t('基础投入', 'Base stake')}
+        {text('blackjack.baseStake')}
         <input
           type="number"
           inputMode="decimal"
@@ -300,13 +257,13 @@ function QueueForm({
         type="submit"
         disabled={blocked || !accepting || !valid || !current}
       >
-        {accepting ? t('加入队列', 'Join queue') : t('游戏未开放', 'Game closed')}
+        {accepting ? text('blackjack.joinQueue') : text('blackjack.gameClosed')}
       </button>
       {!!config.quick_stakes?.length && (
         <div
           className="bj-quick-stakes"
           role="group"
-          aria-label={t('快捷选择投入', 'Quick stake selection')}
+          aria-label={text('blackjack.quickStakeSelection')}
         >
           {config.quick_stakes.map((amount) => (
             <button
@@ -322,18 +279,13 @@ function QueueForm({
           ))}
         </div>
       )}
-      {!current && <p role="status">{t('正在刷新投入配置…', 'Refreshing stake configuration…')}</p>}
-      {!valid && (
-        <p role="status">
-          {t('请按当前限额和步长选择投入。', 'Choose a stake within the current limits and step.')}
-        </p>
-      )}
+      {!current && <p role="status">{text('blackjack.refreshingStakeConfiguration')}</p>}
+      {!valid && <p role="status">{text('blackjack.chooseAStakeWithinTheCurrentLimits')}</p>}
     </form>
   );
 }
-
 export function BlackjackGame() {
-  const t = useDuelText();
+  const text = useDuelText();
   const game = useBlackjack();
   const snapshot = useGamesSnapshot();
   const home = game.query.data;
@@ -359,19 +311,19 @@ export function BlackjackGame() {
     own?.state === 'playing' && own.session_id === home?.table?.id ? own.legal_actions : {};
   const actionLabel = (action: BlackjackAction) =>
     ({
-      hit: t('要牌', 'Hit'),
-      stand: t('停牌', 'Stand'),
-      double: t('加倍', 'Double'),
-      split: t('分牌', 'Split'),
+      hit: text('blackjack.hit'),
+      stand: text('blackjack.stand'),
+      double: text('blackjack.double'),
+      split: text('blackjack.split'),
     })[action];
   const controls = home && own?.state === 'playing' && (
-    <section className="bj-controls" aria-label={t('出牌操作', 'Hand actions')}>
+    <section className="bj-controls" aria-label={text('blackjack.handActions')}>
       {Object.entries(actions)
         .filter(([, legal]) => legal.length > 0)
         .map(([hand, legal]) => (
           <div key={hand}>
             <strong>
-              {t('手牌', 'Hand')} {Number(hand) + 1}
+              {text('blackjack.hand')} {Number(hand) + 1}
             </strong>
             <div className="duel-actions">
               {BLACKJACK_ACTIONS.filter((a) => legal.includes(a)).map((action) => (
@@ -406,16 +358,10 @@ export function BlackjackGame() {
         ))}
       <p aria-live="polite">
         {own.pending
-          ? t('操作已受理，等待本秒发牌。', 'Action accepted; waiting for this second’s deal.')
+          ? text('blackjack.actionAcceptedWaitingForThisSecondS')
           : Object.values(actions).every((a) => !a.length)
-            ? t(
-                '你已结束决策，等待同桌玩家。',
-                'Your decisions are complete. Waiting for the table.',
-              )
-            : t(
-                '每秒处理一个动作，超时自动停牌。',
-                'One action per second. Unfinished hands stand at timeout.',
-              )}
+            ? text('blackjack.yourDecisionsAreCompleteWaitingForThe')
+            : text('blackjack.oneActionPerSecondUnfinishedHandsStand')}
       </p>
     </section>
   );
@@ -425,18 +371,18 @@ export function BlackjackGame() {
         <header className="bid-heading">
           <div>
             <span className="bid-eyebrow">BLACKJACK · ONE TABLE · 30s</span>
-            <h1>{t('二十一点', 'Blackjack')}</h1>
-            <p>{t('同桌决策，各自与庄家比点。', 'One table. Your own hand against the dealer.')}</p>
+            <h1>{text('blackjack.blackjack')}</h1>
+            <p>{text('blackjack.oneTableYourOwnHandAgainstThe')}</p>
           </div>
           <div className="duel-actions">
             <Link className="btn btn-secondary" to="/games">
-              {t('游戏中心', 'Game center')}
+              {text('blackjack.gameCenter')}
             </Link>
             <button className="btn btn-secondary" onClick={() => setPanel('rules')}>
-              {t('游戏规则', 'Rules')}
+              {text('bidding.rules')}
             </button>
             <button className="btn btn-secondary" onClick={() => setPanel('history')}>
-              {t('对局记录', 'History')}
+              {text('blackjack.history')}
             </button>
             <ArcadeAudioControls sound={sound} unavailable={audio.unavailable} />
           </div>
@@ -457,7 +403,7 @@ export function BlackjackGame() {
         ) : null}
         {home && (
           <>
-            <section className="bj-timing" aria-label={t('牌局阶段', 'Round phase')}>
+            <section className="bj-timing" aria-label={text('blackjack.roundPhase')}>
               <ol>
                 {(['seating', 'decision', 'result'] as const).map((phase, i) => (
                   <li
@@ -470,9 +416,11 @@ export function BlackjackGame() {
                   >
                     <span>0{i + 1}</span>
                     {
-                      [t('落座', 'Seating'), t('共同决策', 'Decisions'), t('展示结果', 'Results')][
-                        i
-                      ]
+                      [
+                        text('blackjack.seating'),
+                        text('blackjack.decisions'),
+                        text('blackjack.results'),
+                      ][i]
                     }
                     <small>{[5, 20, 5][i]}s</small>
                   </li>
@@ -481,28 +429,24 @@ export function BlackjackGame() {
               <strong
                 className={`bid-clock ${remaining !== null && remaining <= 5 ? 'is-urgent' : ''}`}
                 role="timer"
-                aria-label={t('本阶段剩余秒数', 'Seconds remaining')}
+                aria-label={text('blackjack.secondsRemaining')}
               >
                 {remaining ?? '—'}
                 <small>s</small>
               </strong>
             </section>
             <p className="bid-hint">
-              {t('下一局', 'Next round')} {new Date(home.next_round_at * 1000).toLocaleTimeString()}{' '}
-              · {t('候补', 'Waiting')} {home.queue_count}
+              {text('blackjack.nextRound')}{' '}
+              {new Date(home.next_round_at * 1000).toLocaleTimeString()} ·{' '}
+              {text('blackjack.waiting')} {home.queue_count}
             </p>
             {home.table ? (
               <BlackjackBoard table={home.table} ownSeat={home.your_seat} controls={controls} />
             ) : (
               <div className="bj-idle">
                 <span aria-hidden="true">A ♠</span>
-                <h2>{t('牌桌等待入席', 'The table is waiting')}</h2>
-                <p>
-                  {t(
-                    '一人即可开局，最多九席。其余玩家旁观并保留队列。',
-                    'One player is enough; nine seats maximum. Others watch and keep their queue position.',
-                  )}
-                </p>
+                <h2>{text('blackjack.theTableIsWaiting')}</h2>
+                <p>{text('blackjack.onePlayerIsEnoughNineSeatsMaximum')}</p>
               </div>
             )}
             {home.table?.phase === 'result' && (
@@ -510,34 +454,29 @@ export function BlackjackGame() {
             )}
             {home.table?.phase === 'cancelled' && (
               <section className="bj-settlement" data-settlement>
-                <h2>{t('本局已取消', 'Table cancelled')}</h2>
-                <p>
-                  {t(
-                    '全部投入按原积分组成无抽水退款；未落座的候补仍保留排位。',
-                    'Every stake was refunded in its original assets without fees. Unseated waiters keep their position.',
-                  )}
-                </p>
+                <h2>{text('blackjack.tableCancelled')}</h2>
+                <p>{text('blackjack.everyStakeWasRefundedInItsOriginal')}</p>
               </section>
             )}
-            <section className="bj-queue" aria-label={t('入队与落座', 'Queue and seating')}>
+            <section className="bj-queue" aria-label={text('blackjack.queueAndSeating')}>
               {own ? (
                 <>
                   <h2>
                     {own.state === 'waiting'
-                      ? `${t('候补排位', 'Queue position')} #${own.position}`
+                      ? `${text('blackjack.queuePosition')} #${own.position}`
                       : own.state === 'seated'
-                        ? `${t('已落座', 'Seated')} #${(own.seat ?? 0) + 1}`
-                        : t('本局进行中', 'Playing this round')}
+                        ? `${text('blackjack.seated')} #${(own.seat ?? 0) + 1}`
+                        : text('blackjack.playingThisRound')}
                   </h2>
                   <p>
-                    {t('基础投入', 'Base stake')} {formatCredits(own.stake)} ·{' '}
-                    {t('已付游戏积分', 'Game credits held')} {formatCredits(own.payment.game)} ·{' '}
-                    {t('通用积分', 'General credits')} {formatCredits(own.payment.general)}
+                    {text('blackjack.baseStake')} {formatCredits(own.stake)} ·{' '}
+                    {text('blackjack.gameCreditsHeld')} {formatCredits(own.payment.game)} ·{' '}
+                    {text('blackjack.generalCredits')} {formatCredits(own.payment.general)}
                   </p>
                   <p>
-                    {t('冻结费用', 'Frozen fees')} {t('平台', 'Platform')}{' '}
-                    {own.rake_bp.platform / 100}% · {t('低保', 'Welfare')}{' '}
-                    {own.rake_bp.welfare / 100}% · {t('周四', 'Thursday')}{' '}
+                    {text('blackjack.frozenFees')} {text('blackjack.platform')}{' '}
+                    {own.rake_bp.platform / 100}% · {text('blackjack.welfare')}{' '}
+                    {own.rake_bp.welfare / 100}% · {text('blackjack.thursday')}{' '}
                     {own.rake_bp.thursday / 100}%
                   </p>
                   {own.state !== 'playing' && (
@@ -547,24 +486,18 @@ export function BlackjackGame() {
                       disabled={game.blocked || (own.state === 'seated' && remaining === 0)}
                       onClick={() => game.run({ kind: 'leave', id: own.id })}
                     >
-                      {t('退出并原币退款', 'Leave and refund original credits')}
+                      {text('blackjack.leaveAndRefundOriginalCredits')}
                     </button>
                   )}
                   <p className="bid-hint">
                     {own.state === 'waiting'
-                      ? t(
-                          '候补持续有效，空位按顺序递补。下一局可能自动落座；可随时退出。',
-                          'Your place remains valid across rounds. You may be seated next round automatically; leave at any time.',
-                        )
-                      : t(
-                          '本局结束后须主动重新排队，不会自动续投。',
-                          'Join the queue again after this table settles. No automatic re-entry.',
-                        )}
+                      ? text('blackjack.yourPlaceRemainsValidAcrossRoundsYou')
+                      : text('blackjack.joinTheQueueAgainAfterThisTable')}
                   </p>
                 </>
               ) : (
                 <>
-                  <h2>{t('下一手，由你决定', 'Your next hand is your choice')}</h2>
+                  <h2>{text('blackjack.yourNextHandIsYourChoice')}</h2>
                   <QueueForm
                     config={home.config}
                     blocked={game.blocked}
@@ -575,8 +508,8 @@ export function BlackjackGame() {
                   />
                   <p>
                     {formatCredits(home.config.min_stake)}–{formatCredits(home.config.max_stake)} ·{' '}
-                    {t('步长', 'Step')} {formatCredits(home.config.stake_step)} ·{' '}
-                    {t('每手返还费用合计', 'Total fees on each return')}{' '}
+                    {text('blackjack.step')} {formatCredits(home.config.stake_step)} ·{' '}
+                    {text('blackjack.totalFeesOnEachReturn')}{' '}
                     {(home.config.rake_bp.platform +
                       home.config.rake_bp.welfare +
                       home.config.rake_bp.thursday) /
@@ -584,16 +517,13 @@ export function BlackjackGame() {
                     %
                   </p>
                   <p className="bid-hint">
-                    {t(
-                      '入队即预留投入，游戏积分优先。每次只参加一局；候补可随时退款退出。',
-                      'Joining reserves your stake, game credits first. Each entry plays once. Waiting players may leave for a refund at any time.',
-                    )}
+                    {text('blackjack.joiningReservesYourStakeGameCreditsFirst')}
                   </p>
                 </>
               )}
             </section>
             {home.your_seat !== null && home.table && home.phase !== 'cancelled' && (
-              <div className="bj-emotes" role="group" aria-label={t('预设表情', 'Preset emotes')}>
+              <div className="bj-emotes" role="group" aria-label={text('blackjack.presetEmotes')}>
                 {BLACKJACK_EMOTES.map((emote) => (
                   <button
                     className="btn btn-secondary"
@@ -603,7 +533,7 @@ export function BlackjackGame() {
                       if (home.table) game.run({ kind: 'emote', id: home.table.id, emote });
                     }}
                   >
-                    {emoteText(emote, t)}
+                    {emoteText(emote, text)}
                   </button>
                 ))}
               </div>
@@ -613,7 +543,7 @@ export function BlackjackGame() {
         {!!game.error && <ErrorState error={game.error} />}
         {game.uncertain && (
           <button className="btn btn-primary" disabled={game.pending} onClick={game.retry}>
-            {t('确认上次操作结果', 'Confirm previous action')}
+            {text('blackjack.confirmPreviousAction')}
           </button>
         )}
         {panel === 'rules' && <Rules close={close} />}
@@ -622,12 +552,12 @@ export function BlackjackGame() {
           items={[
             {
               id: 'net-profit',
-              label: t('赌神榜', 'Card master leaderboard'),
+              label: text('blackjack.cardMasterLeaderboard'),
               content: <Leaderboard board="blackjack_net_profit" />,
             },
             {
               id: 'profit',
-              label: t('利润榜', 'Profit leaderboard'),
+              label: text('blackjack.profitLeaderboard'),
               content: <Leaderboard board="blackjack" />,
             },
           ]}

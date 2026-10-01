@@ -1,0 +1,10 @@
+.charity-quick-use {
+  margin-bottom: var(--space-4, 1rem);
+}
+.charity-quick-use h2 {
+  margin-top: 0;
+}
+.charity-quick-use p {
+  margin-bottom: 0;
+  max-width: 65ch;
+}

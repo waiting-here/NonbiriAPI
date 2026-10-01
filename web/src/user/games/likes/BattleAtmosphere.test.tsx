@@ -2,7 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { BattleAtmosphere } from './BattleAtmosphere';
 
-vi.mock('../common/duel/copy', () => ({ useDuelText: () => (_zh: string, en: string) => en }));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'en') };
+});
 
 describe('page atmosphere lifecycle', () => {
   it('uses a page-level decoration, updates the state and removes it on exit', () => {

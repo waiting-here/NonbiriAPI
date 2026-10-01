@@ -45,9 +45,7 @@ import './likes.css';
 import './effects.css';
 import './desktop.css';
 import './guidance.css';
-
 const Tutorial = lazy(() => import('./tutorial/Tutorial'));
-
 function Rules({
   catalog,
   onClose,
@@ -55,77 +53,45 @@ function Rules({
   readonly catalog: ModeCatalog;
   readonly onClose: () => void;
 }) {
-  const t = useDuelText(),
+  const text = useDuelText(),
     p = catalog.parameters;
   return (
     <DuelDialog
-      title={t('回合制对战小游戏（测试） · 对战规则', 'Turn-based Battle Minigame (Test) · Rules')}
+      title={text('likes.turnBasedBattleMinigameTestRules')}
       onClose={onClose}
       className="likes-glossary"
     >
-      <h3>{t('同时出招，争取点赞', 'Choose together. Compete for likes.')}</h3>
+      <h3>{text('likes.chooseTogetherCompeteForLikes')}</h3>
       <p>
-        {t('每轮双方有', 'Both players have')} {p.TURN_SECONDS}{' '}
-        {t(
-          '秒选择购物、主技能和允许的额外技能。必须选择主招；只有购物后仍眩晕才可跳过。确认后不可更改，双方锁定或超时后共同揭示；未锁定的一方自动跳过出招。',
-          'seconds to choose purchases, a main skill and any permitted extra skill. A main skill is required unless you remain stunned after shopping. Confirming locks your plan. Plans are revealed when both lock or time expires; an unlocked player automatically skips casting.',
-        )}
+        {text('likes.bothPlayersHave')} {p.TURN_SECONDS}{' '}
+        {text('likes.secondsToChoosePurchasesAMainSkill')}
       </p>
       <p>
-        {t('先达到', 'Reach')} {p.TARGET_LIKES}{' '}
-        {t('赞争取胜利，最多', 'likes to compete for victory, with at most')} {p.MAX_ROUNDS}{' '}
-        {t(
-          '轮。双方同轮达标按实际总赞数比较；达到轮数上限也比较总赞数，相同为平局。',
-          'rounds. If both reach the target together, their final totals decide the winner. The round limit also compares totals; equal totals draw.',
-        )}
+        {text('likes.reach')} {p.TARGET_LIKES} {text('likes.likesToCompeteForVictoryWithAt')}{' '}
+        {p.MAX_ROUNDS} {text('likes.roundsIfBothReachTheTargetTogether')}
       </p>
-      <h3>{t('逐步结算演出', 'Step-by-step resolution')}</h3>
-      <p>
-        {t(
-          '方案揭示 → 购物充电 → 费用与过载 → 净化与Buff → 得赞 → 追加效果 → 轮末变化。每一步按内容留出阅读时间，连续技能逐个展示，总时长不限。双方同步展示，全部结束后开始新的完整30秒。资源补充与结果均以服务端记录为准。',
-          'Plans → shopping and charge → payment and overload → cleansing and buffs → likes → follow-ups → round end. Each step has its own reading time. Consecutive casts play one by one, with no overall time cap. Both sides display together; the next full thirty seconds starts when every step finishes. Changes and results follow server records.',
-        )}
-      </p>
-      <h3>{t('共享电能与过载', 'Shared energy and overload')}</h3>
-      <p>
-        {t(
-          '共同购物结束后比较双方冻结方案的总耗电与电池余量。总需求超过余量时，仅耗电大于零的一方获得过载；另一方若零耗电，仍正常执行。双方都耗电则双方过载。恰好耗尽不算过载。Flash连答独立检查，不因失败额外施加过载。',
-          'After both players shop, their frozen energy quotes are compared with the battery. When demand exceeds the battery, only players quoting positive energy overload. A zero-energy player still acts normally. If both quote positive energy, both overload. Using exactly the remaining energy is allowed. Flash follow-ups are checked separately; a failed follow-up does not add overload.',
-        )}
-      </p>
-      <h3>{t('角色与配装', 'Characters and loadouts')}</h3>
-      <p>
-        {t(
-          '每位角色拥有自身技能与公共技能。基础四槽，Harness可改变额外槽与固定被动；空槽可保留，至少携带一项可持续得赞的稳定技能。对手未使用的技能在对局中隐藏，终局完整公开。角色、模型、API、token与资源均为游戏设定。',
-          'Each character has their own skills and public skills. Start with four slots; harnesses add slots or fixed passives. Empty slots are allowed, but include a sustainable stable scoring skill. Unused opponent skills stay concealed until the game ends. Characters, models, APIs, tokens and resources here are game mechanics.',
-        )}
-      </p>
+      <h3>{text('likes.stepByStepResolution')}</h3>
+      <p>{text('likes.plansShoppingAndChargePaymentAndOverload')}</p>
+      <h3>{text('likes.sharedEnergyAndOverload')}</h3>
+      <p>{text('likes.afterBothPlayersShopTheirFrozenEnergy')}</p>
+      <h3>{text('likes.charactersAndLoadouts')}</h3>
+      <p>{text('likes.eachCharacterHasTheirOwnSkillsAnd')}</p>
       {catalog.roles.some((role) => role.passive) && (
-        <h3>{t('角色常驻被动', 'Always-active character passives')}</h3>
+        <h3>{text('likes.alwaysActiveCharacterPassives')}</h3>
       )}
       {catalog.roles.map((role) => (
         <CharacterPassive key={role.id} role={role} />
       ))}
       {catalog.roles.some((role) => role.passive) && (
-        <p>
-          {t(
-            '角色加赞在基础阶段生效，继续参与减益和倍率。效果命中与抵抗只影响向敌方施加的减益，逐层独立判断；状态和自身副作用不判定。成功率 min(1, (100＋命中)/(100＋抵抗))，必中不抽样。抵抗不取消技能得赞。',
-            'Character bonuses enter the base stage before debuffs and multipliers. Hit and resistance check each hostile debuff layer separately; states and self-inflicted effects are excluded. Success chance is min(1, (100 + hit)/(100 + resistance)); guaranteed hits consume no draw. Resistance does not cancel skill likes.',
-          )}
-        </p>
+        <p>{text('likes.characterBonusesEnterTheBaseStageBefore')}</p>
       )}
-      <h3>{t('订阅、图像与API', 'Subscriptions, images and API reserve')}</h3>
-      <p>
-        {t(
-          '订阅瞬发和总量使用各自重置时钟，图像额度与订阅总量同步补充；API余量不自动重置。升级订阅可以扩充额度。每轮开始符合条件的补充会直接显示，阅读词条与日志不暂停计时。',
-          'Subscription burst and total quota have separate reset clocks; image quota replenishes with the total quota. API reserve does not reset automatically. Subscription upgrades expand quotas. Eligible replenishment appears at round start. Reading the guide or log never pauses the clock.',
-        )}
-      </p>
+      <h3>{text('likes.subscriptionsImagesAndAPIReserve')}</h3>
+      <p>{text('likes.subscriptionBurstAndTotalQuotaHaveSeparate')}</p>
     </DuelDialog>
   );
 }
 function Outcomes({ result }: { readonly result: DuelResult<LikesView, Presentation> }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
     <section className="likes-outcome">
       <div className="likes-outcome-art">
@@ -142,7 +108,7 @@ function Outcomes({ result }: { readonly result: DuelResult<LikesView, Presentat
             <div key={seat}>
               <LikesArt
                 slot={characterSlot(player.role, pose)}
-                label={`${player.role} ${pose === 'win' ? t('胜利', 'Victory') : pose === 'loss' ? t('失败', 'Defeat') : pose === 'draw' ? t('平局', 'Draw') : ''}`}
+                label={`${player.role} ${pose === 'win' ? text('common.victory') : pose === 'loss' ? text('likes.defeat') : pose === 'draw' ? text('common.draw') : ''}`}
               />
               <strong>{player.role}</strong>
             </div>
@@ -176,7 +142,7 @@ function Lobby({
   readonly onInspect: (id: string) => void;
   readonly onEdit: () => void;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const mode = context.config.modes[catalog.mode],
     enough =
       creditsToMilli(spendableGameCredits(context.wallets).total) >=
@@ -204,9 +170,9 @@ function Lobby({
       {mode && <DuelTerms mode={mode} />}
       <div className="likes-enqueue">
         <span>
-          {catalog.mode === 'quick' ? t('快速模式', 'Quick mode') : t('标准模式', 'Standard mode')}{' '}
-          · {catalog.parameters.TARGET_LIKES} ♥ · {catalog.parameters.MAX_ROUNDS}{' '}
-          {t('轮上限', 'round limit')}
+          {catalog.mode === 'quick' ? text('likes.quickMode') : text('likes.standardMode')} ·{' '}
+          {catalog.parameters.TARGET_LIKES} ♥ · {catalog.parameters.MAX_ROUNDS}{' '}
+          {text('likes.roundLimit')}
         </span>
         <button
           type="button"
@@ -215,17 +181,17 @@ function Lobby({
           onClick={() => onQueue(selection)}
         >
           {unavailable
-            ? entryMessage(unavailable, t)
+            ? entryMessage(unavailable, text)
             : !enough
-              ? t('可用积分不足', 'Insufficient credits')
-              : t('支付票价并匹配', 'Pay entry and find a match')}
+              ? text('bidding.insufficientCredits')
+              : text('bidding.payEntryAndFindAMatch')}
         </button>
       </div>
     </>
   );
 }
 export function LikesGame(context: DuelLobbyContext) {
-  const t = useDuelText();
+  const text = useDuelText();
   const duel = useDuel(likesCodec, context.refreshWallets);
   const catalogQuery = useQuery({
     queryKey: ['user', 'games', 'likes', 'catalog'],
@@ -346,7 +312,7 @@ export function LikesGame(context: DuelLobbyContext) {
       <header className="likes-heading">
         <div>
           <span className="likes-eyebrow">LIKES // DUEL</span>
-          <h1>{t('回合制对战小游戏（测试）', 'Turn-based Battle Minigame (Test)')}</h1>
+          <h1>{text('likes.turnBasedBattleMinigameTest')}</h1>
           <BattleAtmosphere
             reduced={reduced}
             mode={
@@ -356,12 +322,7 @@ export function LikesGame(context: DuelLobbyContext) {
                 : null
             }
           />
-          <p>
-            {t(
-              '共享电池，独立选择，同时爆发。',
-              'One battery. Independent choices. A simultaneous reveal.',
-            )}
-          </p>
+          <p>{text('likes.oneBatteryIndependentChoicesASimultaneousReveal')}</p>
         </div>
         <div className="duel-actions">
           <ArcadeAudioControls
@@ -370,16 +331,16 @@ export function LikesGame(context: DuelLobbyContext) {
             unavailable={audio.unavailable}
           />
           <button type="button" disabled={!c} onClick={() => setRules(true)}>
-            {t('规则', 'Rules')}
+            {text('likes.rules')}
           </button>
           <button type="button" disabled={!c} onClick={() => setGuide('')}>
-            {t('词条手册', 'Field guide')}
+            {text('likes.fieldGuide')}
           </button>
           <button type="button" disabled={!c} onClick={() => setHistory(true)}>
-            {t('对局记录', 'Game history')}
+            {text('bidding.gameHistory')}
           </button>
           <button type="button" disabled={!canTeach} onClick={() => setTutorial(true)}>
-            {t('新手引导', 'Tutorial')}
+            {text('likes.tutorial')}
           </button>
         </div>
       </header>
@@ -387,19 +348,14 @@ export function LikesGame(context: DuelLobbyContext) {
       {context.onboarding && <OnboardingCard game="likes" progress={context.onboarding} />}
       {!tutorialSeen && canTeach && (
         <section className="likes-tutorial-invite">
-          <h2>{t('第一次来？一起练习一局', 'New here? Try a guided match')}</h2>
-          <p>
-            {t(
-              '从配装到险胜，跟随提示熟悉玩法。只在此浏览器练习，不扣积分，随时可跳过。',
-              'Learn the game from loadout to a narrow victory. Practice only in this browser, with no credit cost, and skip at any time.',
-            )}
-          </p>
+          <h2>{text('likes.newHereTryAGuidedMatch')}</h2>
+          <p>{text('likes.learnTheGameFromLoadoutToA')}</p>
           <div className="duel-actions">
             <button type="button" className="likes-primary" onClick={() => setTutorial(true)}>
-              {t('开始新手引导', 'Start tutorial')}
+              {text('likes.startTutorial')}
             </button>
             <button type="button" onClick={() => exitTutorial('skipped')}>
-              {t('暂时跳过', 'Skip for now')}
+              {text('likes.skipForNow')}
             </button>
           </div>
         </section>
@@ -424,30 +380,24 @@ export function LikesGame(context: DuelLobbyContext) {
               }
         }
       />
-      {!compatible && (
-        <p role="alert">
-          {t(
-            '规则内容尚未同步。请刷新后继续；对局计时仍在进行。',
-            'The rules have not synced. Refresh to continue; the game clock is still running.',
-          )}
-        </p>
-      )}
+      {!compatible && <p role="alert">{text('likes.theRulesHaveNotSyncedRefreshTo')}</p>}
       {c && compatible && (
         <>
           {current ? (
             <>
               <div className={`likes-phase ${urgent ? 'likes-action-urgent' : ''}`}>
                 <strong>
-                  {t('第', 'Round')} {current.round}/{c.parameters.MAX_ROUNDS} {t('轮', '')}
+                  {text('bidding.round')} {current.round}/{c.parameters.MAX_ROUNDS}{' '}
+                  {text('bidding.message')}
                 </strong>
                 <span>
                   {current.phase === 'settlement'
-                    ? t('共同结算', 'Settlement')
-                    : t('共同选招', 'Choose skills')}
+                    ? text('likes.settlement')
+                    : text('likes.chooseSkills')}
                 </span>
                 <strong className={urgent ? 'is-urgent' : ''}>{remaining ?? '—'}s</strong>
                 <button type="button" onClick={() => setLog(true)}>
-                  {t('结算日志', 'Round log')}
+                  {text('likes.roundLog')}
                 </button>
                 <CompactScores
                   view={current.view}
@@ -464,7 +414,7 @@ export function LikesGame(context: DuelLobbyContext) {
                     <LikesArt key={seat} slot={characterSlot(p.role, 'portrait')} label={p.role} />
                   ))}
                   <span>
-                    {t('匹配成功', 'MATCH FOUND')}
+                    {text('likes.mATCHFOUND')}
                     <small>
                       {current.view.players[0].role} × {current.view.players[1].role}
                     </small>
@@ -488,7 +438,7 @@ export function LikesGame(context: DuelLobbyContext) {
                 <div className={urgent ? 'likes-action-urgent' : ''}>
                   {urgent && (
                     <p className="likes-time-warning" role="status">
-                      {t('即将超时，请确认方案！', 'Time is almost up. Confirm your plan!')}
+                      {text('likes.timeIsAlmostUpConfirmYourPlan')}
                     </p>
                   )}
                   <PlanEditor
@@ -511,16 +461,16 @@ export function LikesGame(context: DuelLobbyContext) {
               )}
               <div className="duel-actions">
                 <button type="button" disabled={duel.blocked} onClick={() => setSurrender(true)}>
-                  {t('认输', 'Surrender')}
+                  {text('bidding.surrender')}
                 </button>
                 <span>
-                  {t('本局投入', 'Your entry')}: <GamePayment payment={current.payment} />
+                  {text('bidding.yourEntry')}: <GamePayment payment={current.payment} />
                 </span>
               </div>
             </>
           ) : queue ? (
             <section className="likes-queue">
-              <h2>{t('正在匹配对手', 'Finding your opponent')}</h2>
+              <h2>{text('likes.findingYourOpponent')}</h2>
               {queue.loadout && (
                 <>
                   <LikesArt
@@ -532,27 +482,22 @@ export function LikesGame(context: DuelLobbyContext) {
                 </>
               )}
               <p>
-                {t('排队剩余', 'Queue time left')}: {remaining ?? '—'}s
+                {text('bidding.queueTimeLeft')}: {remaining ?? '—'}s
               </p>
               <GamePayment payment={queue.payment} />
-              <p>
-                {t(
-                  '排队期间配装已冻结；取消后可修改。',
-                  'Your loadout is frozen while queued. Cancel to edit it.',
-                )}
-              </p>
+              <p>{text('likes.yourLoadoutIsFrozenWhileQueuedCancel')}</p>
               <button
                 type="button"
                 disabled={duel.blocked}
                 onClick={() => duel.run({ kind: 'cancel', id: queue.id, revision: queue.revision })}
               >
-                {t('取消排队并退款', 'Cancel queue and refund')}
+                {text('bidding.cancelQueueAndRefund')}
               </button>
             </section>
           ) : terminalPresentation && result?.view && result.resolution ? (
             <>
               <div className="likes-phase">
-                <strong>{t('最后一轮结算', 'Final settlement')}</strong>
+                <strong>{text('likes.finalSettlement')}</strong>
                 <span>{Math.max(0, Math.ceil(result.resolution.endsAt - now))}s</span>
               </div>
               <Arena
@@ -575,11 +520,11 @@ export function LikesGame(context: DuelLobbyContext) {
                 <>
                   <Outcomes result={result} />
                   <button type="button" onClick={() => setLog(true)}>
-                    {t('查看结算日志', 'View round log')}
+                    {text('likes.viewRoundLog')}
                   </button>
                 </>
               )}
-              <div className="likes-modes" role="group" aria-label={t('模式', 'Mode')}>
+              <div className="likes-modes" role="group" aria-label={text('likes.mode')}>
                 {(['quick', 'standard'] as const).map((m) => (
                   <button
                     key={m}
@@ -591,10 +536,10 @@ export function LikesGame(context: DuelLobbyContext) {
                       editLobby();
                     }}
                   >
-                    <strong>{m === 'quick' ? t('快速', 'Quick') : t('标准', 'Standard')}</strong>
+                    <strong>{m === 'quick' ? text('likes.quick') : text('likes.standard')}</strong>
                     <span>
                       {catalogQuery.data!.modes[m].parameters.TARGET_LIKES} ♥ ·{' '}
-                      {catalogQuery.data!.modes[m].parameters.MAX_ROUNDS} {t('轮', 'rounds')}
+                      {catalogQuery.data!.modes[m].parameters.MAX_ROUNDS} {text('likes.rounds')}
                     </span>
                   </button>
                 ))}
@@ -631,7 +576,7 @@ export function LikesGame(context: DuelLobbyContext) {
       )}
       {rules && c && <Rules catalog={c} onClose={closeRules} />}
       {tutorial && !current && !queue && !duel.uncertain && catalogQuery.data && (
-        <Suspense fallback={<p role="status">{t('正在准备教学…', 'Preparing the tutorial…')}</p>}>
+        <Suspense fallback={<p role="status">{text('likes.preparingTheTutorial')}</p>}>
           <Tutorial
             catalog={catalogQuery.data.modes.quick}
             sound={audio.sound}
@@ -654,9 +599,7 @@ export function LikesGame(context: DuelLobbyContext) {
             return catalog ? (
               <LikesRoundLog round={round} you={you} catalog={catalog} />
             ) : (
-              <p>
-                {t('无法取得匹配版本的规则词条。', 'The matching rule catalog is unavailable.')}
-              </p>
+              <p>{text('likes.theMatchingRuleCatalogIsUnavailable')}</p>
             );
           }}
           renderDetail={(detail) => {
@@ -666,9 +609,7 @@ export function LikesGame(context: DuelLobbyContext) {
               detail.contentHash,
             );
             return !catalog ? (
-              <p>
-                {t('无法取得匹配版本的规则词条。', 'The matching rule catalog is unavailable.')}
-              </p>
+              <p>{text('likes.theMatchingRuleCatalogIsUnavailable')}</p>
             ) : (
               <div className="likes-history-loadouts">
                 {detail.result.view?.players.map((player, seat) => (
@@ -684,18 +625,14 @@ export function LikesGame(context: DuelLobbyContext) {
         />
       )}
       {log && logSession && c && (
-        <DuelDialog
-          title={t('结算日志', 'Round log')}
-          onClose={closeLog}
-          className="likes-glossary"
-        >
+        <DuelDialog title={text('likes.roundLog')} onClose={closeLog} className="likes-glossary">
           <div className="likes-log-return">
             <span>
-              {current ? t('对局继续计时', 'The game clock continues') : t('已结束', 'Completed')}{' '}
+              {current ? text('likes.theGameClockContinues') : text('likes.completed')}{' '}
               {current ? `${remaining ?? '—'}s` : ''}
             </span>
             <button type="button" onClick={closeLog}>
-              {t('返回对战', 'Return to battle')}
+              {text('likes.returnToBattle')}
             </button>
           </div>
           <DuelRoundLog
@@ -710,13 +647,10 @@ export function LikesGame(context: DuelLobbyContext) {
       )}
       <ConfirmDialog
         open={surrender && !!current}
-        title={t('确认认输', 'Confirm surrender')}
-        description={t(
-          '认输将立即判负，入场积分不退还。',
-          'Surrender immediately concedes the game without an entry refund.',
-        )}
-        confirmLabel={t('确认认输', 'Surrender')}
-        cancelLabel={t('继续对战', 'Keep playing')}
+        title={text('bidding.confirmSurrender')}
+        description={text('likes.surrenderImmediatelyConcedesTheGameWithoutAn')}
+        confirmLabel={text('bidding.surrender2')}
+        cancelLabel={text('likes.keepPlaying')}
         danger
         busy={duel.pending}
         onCancel={() => setSurrender(false)}

@@ -81,9 +81,13 @@ export async function fetchCustomPresets(signal?: AbortSignal): Promise<CustomPr
   return customPresetList(result.data);
 }
 
-export async function saveCustomPreset(intent: SavePresetIntent): Promise<SavedPreset> {
+export async function saveCustomPreset(
+  intent: SavePresetIntent,
+  signal?: AbortSignal,
+): Promise<SavedPreset> {
   const result = await gameRequest<unknown>(`/api/games/likes/loadouts/${intent.slot}`, {
     method: 'PUT',
+    signal,
     json: {
       expected_revision: intent.expectedRevision,
       ...(intent.name === undefined ? {} : { name: presetName(intent.name) }),
@@ -116,9 +120,13 @@ export interface RenamePresetIntent {
   readonly key: string;
 }
 
-export async function renameCustomPreset(intent: RenamePresetIntent): Promise<SavedPreset> {
+export async function renameCustomPreset(
+  intent: RenamePresetIntent,
+  signal?: AbortSignal,
+): Promise<SavedPreset> {
   const result = await gameRequest<unknown>(`/api/games/likes/loadouts/${intent.slot}`, {
     method: 'PATCH',
+    signal,
     json: { expected_revision: intent.expectedRevision, name: presetName(intent.name) },
     idempotencyKey: intent.key,
     expectedStatuses: [200],

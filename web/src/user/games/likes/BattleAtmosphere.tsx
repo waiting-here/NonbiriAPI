@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDuelText } from '../common/duel/copy';
 import './atmosphere.css';
-
 export function BattleAtmosphere({
   mode,
   reduced,
@@ -10,7 +9,7 @@ export function BattleAtmosphere({
   readonly mode: 'accelerated' | 'danger' | null;
   readonly reduced: boolean;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const [hidden, setHidden] = useState(() => document.visibilityState !== 'visible');
   useEffect(() => {
     const visibility = () => setHidden(document.visibilityState !== 'visible');
@@ -22,9 +21,7 @@ export function BattleAtmosphere({
     <>
       <span className={`likes-atmosphere-status is-${mode}`} role="status">
         <span aria-hidden="true">{mode === 'danger' ? '⚠' : 'ϟ'}</span>
-        {mode === 'danger'
-          ? t('过载', 'OVERLOAD')
-          : t('倍速模式 · 全力加速', 'SPEED MODE · FULL THROTTLE')}
+        {mode === 'danger' ? text('likes.oVERLOAD') : text('likes.sPEEDMODEFULLTHROTTLE')}
       </span>
       {createPortal(
         <div

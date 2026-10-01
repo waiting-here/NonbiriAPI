@@ -28,39 +28,18 @@ import { BiddingPresentation } from './BiddingPresentation';
 import '../games.css';
 import '../common/duel/duel.css';
 import './bidding.css';
-
 function BiddingRules({ onClose }: { readonly onClose: () => void }) {
-  const t = useDuelText();
+  const text = useDuelText();
   return (
-    <DuelDialog title={t('竞标对决 · 规则', 'Bidding Duel · Rules')} onClose={onClose}>
-      <h3>{t('十三轮，把握每一张牌', 'Thirteen rounds. Make every card count.')}</h3>
-      <p>
-        {t(
-          '红方手牌为红桃♥，奖励为方块♦；黑方手牌为黑桃♠，奖励为梅花♣。双方各有A至K共13张出价牌，点数为1至13；每张整局只能使用一次。每轮翻开双方奖励各一张，同时暗选出价。较大者取得整个奖池的分数，出价牌本身不计分。',
-          'The red side bids with hearts ♥ and has diamond ♦ rewards; the black side bids with spades ♠ and has club ♣ rewards. Each player has thirteen bidding cards, A through K, valued 1–13, used once each. Every round reveals one reward from each side. Both players bid privately; the higher bid claims the entire pool. Bidding cards do not score points themselves.',
-        )}
-      </p>
-      <h3>{t('平手与累计', 'Ties and carry')}</h3>
-      <p>
-        {t(
-          '平手时奖励留在奖池，下一轮继续争夺。第13轮仍平手，奖池全部丢弃。最终总分更高的一方获胜，总分相同则平局。',
-          'A tied bid carries the rewards into the next round. A tie in round thirteen discards the remaining pool. The higher final total wins; equal totals draw.',
-        )}
-      </p>
-      <h3>{t('Joker 的时机', 'When to use your joker')}</h3>
-      <p>
-        {t(
-          '前12轮轮流拥有 Joker 的决策权，每人6次机会。每人整局只能使用一次 Joker，使本轮己方花色奖励翻倍。决策阶段10秒，超时视为保留；第13轮没有 Joker 阶段。出价阶段双方各有完整20秒，超时未锁定时自动使用剩余最小牌。',
-          'During the first twelve rounds, joker decisions alternate, giving each player six opportunities. Each player may use their joker once to double their suit’s current reward. The decision lasts ten seconds; timeout saves the joker. Round thirteen has no joker decision. Each bidding phase lasts twenty seconds; an unlocked player times out with their lowest remaining card.',
-        )}
-      </p>
-      <h3>{t('匹配与结算', 'Matching and settlement')}</h3>
-      <p>
-        {t(
-          '排队最多120秒，可随时取消；匹配后入场条款固定。认输立即判负。费用只在胜负局从输家投入扣取，胜者本金原币返还并获得通用积分奖金；平局或系统取消双方原额退款。完整对局记录保留30天。',
-          'Queue for up to 120 seconds and cancel at any time before matching. Entry terms are fixed once queued. Surrender immediately concedes the game. Fees are charged from the losing entry; the winner gets their original principal and a general-credit prize. Draws and system cancellations refund both players. Complete game records are kept for thirty days.',
-        )}
-      </p>
+    <DuelDialog title={text('bidding.biddingDuelRules')} onClose={onClose}>
+      <h3>{text('bidding.thirteenRoundsMakeEveryCardCount')}</h3>
+      <p>{text('bidding.theRedSideBidsWithHeartsAnd')}</p>
+      <h3>{text('bidding.tiesAndCarry')}</h3>
+      <p>{text('bidding.aTiedBidCarriesTheRewardsInto')}</p>
+      <h3>{text('bidding.whenToUseYourJoker')}</h3>
+      <p>{text('bidding.duringTheFirstTwelveRoundsJokerDecisions')}</p>
+      <h3>{text('bidding.matchingAndSettlement')}</h3>
+      <p>{text('bidding.queueForUpTo120SecondsAnd')}</p>
     </DuelDialog>
   );
 }
@@ -71,7 +50,7 @@ export function BiddingGame({
   accepting,
   refreshWallets,
 }: DuelLobbyContext) {
-  const t = useDuelText();
+  const text = useDuelText();
   const duel = useDuel(biddingCodec, refreshWallets);
   const [mode, setMode] = useState<string>(
     BIDDING_MODES.find((key) => !entryProblem({ config, accepting }, key)) ?? 'tier1',
@@ -108,16 +87,16 @@ export function BiddingGame({
       <header className="bid-heading">
         <div>
           <span className="bid-eyebrow">A — K · 13</span>
-          <h1>{t('竞标对决', 'Bidding Duel')}</h1>
-          <p>{t('留一手，赢下整个奖池。', 'Hold your nerve. Take the whole pool.')}</p>
+          <h1>{text('bidding.biddingDuel')}</h1>
+          <p>{text('bidding.holdYourNerveTakeTheWholePool')}</p>
         </div>
         <div className="duel-actions">
           <ArcadeAudioControls sound={audio.sound} unavailable={audio.unavailable} />
           <button type="button" className="btn btn-secondary" onClick={() => setRules(true)}>
-            {t('游戏规则', 'Rules')}
+            {text('bidding.rules')}
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => setHistory(true)}>
-            {t('对局记录', 'Game history')}
+            {text('bidding.gameHistory')}
           </button>
         </div>
       </header>
@@ -141,16 +120,16 @@ export function BiddingGame({
         <>
           <div className="bid-phase">
             <strong>
-              {t('第', 'Round')} {current.round} / 13 {t('轮', '')}
+              {text('bidding.round')} {current.round} / 13 {text('bidding.message')}
             </strong>
             <span>
               {current.phase === 'joker'
-                ? t('Joker 的选择', 'Joker decision')
-                : t('共同暗选', 'Simultaneous bidding')}
+                ? text('bidding.jokerDecision')
+                : text('bidding.simultaneousBidding')}
             </span>
             <span
               className={`bid-clock ${(remaining ?? 0) <= 5 ? 'is-urgent' : ''}`}
-              aria-label={t('剩余秒数', 'Seconds remaining')}
+              aria-label={text('bidding.secondsRemaining')}
             >
               {remaining ?? '—'}
               <small>s</small>
@@ -162,28 +141,25 @@ export function BiddingGame({
                 <DuelProfile profile={current.profiles[seat]} you={seat === current.you} />
                 <strong key={`${current.round}:${current.view.scores[seat]}`}>
                   {current.view.scores[seat]}
-                  <small>{t('分', 'pts')}</small>
+                  <small>{text('bidding.pts')}</small>
                 </strong>
                 <span>
                   {current.view.jokers[seat]
-                    ? `♛ ${t('Joker 可用', 'Joker available')}`
-                    : `♛ ${t('Joker 已用', 'Joker used')}`}
+                    ? `♛ ${text('bidding.jokerAvailable')}`
+                    : `♛ ${text('bidding.jokerUsed')}`}
                 </span>
                 <span className="bid-lock">
-                  {current.locked[seat] ? t('已锁定', 'Locked') : t('选择中', 'Choosing')}
+                  {current.locked[seat] ? text('bidding.locked') : text('bidding.choosing')}
                 </span>
               </section>
             ))}
           </div>
           {current.round === 1 && (
             <p className="bid-matched">
-              {t(
-                '匹配成功。双方独立选择，同时揭晓。',
-                'Match found. Choose independently; reveal together.',
-              )}
+              {text('bidding.matchFoundChooseIndependentlyRevealTogether')}
             </p>
           )}
-          <section className="bid-table" aria-label={t('本轮奖励与奖池', 'Round rewards and pool')}>
+          <section className="bid-table" aria-label={text('bidding.roundRewardsAndPool')}>
             <RewardDeck
               view={current.view}
               side={current.you}
@@ -205,15 +181,13 @@ export function BiddingGame({
               you={current.you}
             />
             <div className="bid-pool">
-              <span>{t('当前奖池', 'CURRENT POOL')}</span>
+              <span>{text('bidding.cURRENTPOOL')}</span>
               <strong key={`${current.round}:${current.view.pool}`}>{current.view.pool}</strong>
-              <small>{t('分 · 出价更高者全取', 'points · winner takes all')}</small>
+              <small>{text('bidding.pointsWinnerTakesAll')}</small>
               {current.view.rewards.some(
                 (card) => card.round < current.round && card.status === 'pool',
               ) && (
-                <p className="bid-carry">
-                  {t('包含此前平手累计奖励', 'Includes rewards carried from earlier ties')}
-                </p>
+                <p className="bid-carry">{text('bidding.includesRewardsCarriedFromEarlierTies')}</p>
               )}
             </div>
           </section>
@@ -235,19 +209,19 @@ export function BiddingGame({
               disabled={duel.blocked}
               onClick={() => setSurrender(true)}
             >
-              {t('认输', 'Surrender')}
+              {text('bidding.surrender')}
             </button>
             <small>
-              {t('本局投入', 'Your entry')}: <GamePayment payment={current.payment} />
+              {text('bidding.yourEntry')}: <GamePayment payment={current.payment} />
             </small>
           </div>
         </>
       ) : queue ? (
         <section className="bid-lobby">
-          <span className="bid-eyebrow">{t('寻找对手', 'FINDING A MATCH')}</span>
-          <h2>{t('牌桌已就绪', 'Your seat is ready')}</h2>
+          <span className="bid-eyebrow">{text('bidding.fINDINGAMATCH')}</span>
+          <h2>{text('bidding.yourSeatIsReady')}</h2>
           <p>
-            {t('排队剩余', 'Queue time left')}: <strong>{remaining ?? '—'}s</strong>
+            {text('bidding.queueTimeLeft')}: <strong>{remaining ?? '—'}s</strong>
           </p>
           <GamePayment payment={queue.payment} />
           <div className="duel-actions">
@@ -257,7 +231,7 @@ export function BiddingGame({
               disabled={duel.blocked}
               onClick={() => duel.run({ kind: 'cancel', id: queue.id, revision: queue.revision })}
             >
-              {t('取消排队并退款', 'Cancel queue and refund')}
+              {text('bidding.cancelQueueAndRefund')}
             </button>
           </div>
         </section>
@@ -270,21 +244,16 @@ export function BiddingGame({
                 <>
                   <PlayedHistory view={home.latestResult.view} you={home.latestResult.you} />
                   {home.latestResult.view.rewards.some((card) => card.status === 'discarded') && (
-                    <p className="bid-carry">
-                      {t(
-                        '最后一轮平手，剩余奖池已丢弃。',
-                        'The final round tied. The remaining pool was discarded.',
-                      )}
-                    </p>
+                    <p className="bid-carry">{text('bidding.theFinalRoundTiedTheRemainingPool')}</p>
                   )}
                 </>
               )}
             </section>
           )}
           <section className="bid-lobby">
-            <span className="bid-eyebrow">{t('选择牌桌', 'CHOOSE YOUR TABLE')}</span>
-            <h2>{t('十三张牌，一次对决', 'Thirteen cards. One duel.')}</h2>
-            <div className="bid-modes" role="group" aria-label={t('入场档位', 'Entry tier')}>
+            <span className="bid-eyebrow">{text('bidding.cHOOSEYOURTABLE')}</span>
+            <h2>{text('bidding.thirteenCardsOneDuel')}</h2>
+            <div className="bid-modes" role="group" aria-label={text('bidding.entryTier')}>
               {BIDDING_MODES.map((key, index) => (
                 <button
                   key={key}
@@ -296,13 +265,13 @@ export function BiddingGame({
                   onClick={() => setMode(key)}
                 >
                   <span>
-                    {t('第', 'Tier ')} {index + 1} {t('档', '')}
+                    {text('bidding.tier')} {index + 1} {text('bidding.message2')}
                   </span>
                   <strong>{formatCredits(config.modes[key]?.ticket ?? '0')}</strong>
                   <small>
                     {!entryProblem({ config, accepting }, key)
-                      ? t('开放', 'Open')
-                      : t('暂未开放', 'Unavailable')}
+                      ? text('bidding.open')
+                      : text('bidding.unavailable')}
                   </small>
                 </button>
               ))}
@@ -315,10 +284,10 @@ export function BiddingGame({
               onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
             >
               {unavailable
-                ? entryMessage(unavailable, t)
+                ? entryMessage(unavailable, text)
                 : !enough
-                  ? t('可用积分不足', 'Insufficient credits')
-                  : t('支付票价并匹配', 'Pay entry and find a match')}
+                  ? text('bidding.insufficientCredits')
+                  : text('bidding.payEntryAndFindAMatch')}
             </button>
           </section>
         </>
@@ -328,12 +297,12 @@ export function BiddingGame({
         items={[
           {
             id: 'net-profit',
-            label: t('竞标高手榜', 'Bidding masters'),
+            label: text('bidding.biddingMasters'),
             content: <Leaderboard board="bidding_net_profit" />,
           },
           {
             id: 'profit',
-            label: t('竞标利润榜', 'Bidding profits'),
+            label: text('bidding.biddingProfits'),
             content: <Leaderboard board="bidding" />,
           },
         ]}
@@ -347,13 +316,10 @@ export function BiddingGame({
       )}
       <ConfirmDialog
         open={surrender && !!current}
-        title={t('确认认输', 'Confirm surrender')}
-        description={t(
-          '认输将立即判负，入场积分不退还。',
-          'Surrender immediately concedes the game. Your entry will not be refunded.',
-        )}
-        confirmLabel={t('确认认输', 'Surrender')}
-        cancelLabel={t('继续对局', 'Keep playing')}
+        title={text('bidding.confirmSurrender')}
+        description={text('bidding.surrenderImmediatelyConcedesTheGameYourEntry')}
+        confirmLabel={text('bidding.surrender2')}
+        cancelLabel={text('bidding.keepPlaying')}
         danger
         busy={duel.pending}
         onCancel={() => setSurrender(false)}

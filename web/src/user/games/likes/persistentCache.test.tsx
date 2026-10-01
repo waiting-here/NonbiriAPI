@@ -1,3 +1,5 @@
+import { testDuelText } from '../common/duel/copy.test-support';
+import { duelCopyKeys } from '../common/duel/copy';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Arena, FrameChanges } from './Arena';
@@ -10,9 +12,14 @@ import wire from './testdata/authority.json';
 import type { EffectCue, Status } from './types';
 
 const language = vi.hoisted(() => ({ value: 'en' }));
-vi.mock('../common/duel/copy', () => ({
-  useDuelText: () => (zh: string, en: string) => (language.value === 'zh' ? zh : en),
-}));
+vi.mock('../common/duel/copy', async () => {
+  const actual = await vi.importActual<typeof import('../common/duel/copy')>('../common/duel/copy');
+  const { testDuelText } = await import('../common/duel/copy.test-support');
+  return {
+    ...actual,
+    useDuelText: () => testDuelText(actual.duelCopyKeys, language.value === 'zh' ? 'zh' : 'en'),
+  };
+});
 const catalog = testCatalog.modes.quick;
 const status: Status = {
   key: 'B07:原版',
@@ -71,8 +78,8 @@ describe('persistent cache presentation', () => {
     delete legacy.persistent_layers;
     const old = presentationValue(summary(legacy)).after.players[0].effects[0];
     expect(old.persistent_layers).toBeUndefined();
-    expect(effectName(catalog, old, (zh) => zh)).toBe('短效缓存·Flash');
-    expect(effectLayers(old, (zh) => zh)).toBe('层数: 3');
+    expect(effectName(catalog, old, testDuelText(duelCopyKeys, 'zh'))).toBe('短效缓存·Flash');
+    expect(effectLayers(old, testDuelText(duelCopyKeys, 'zh'))).toBe('层数: 3');
     for (const n of [-1, 4, 1.5]) {
       expect(() => presentationValue(summary({ ...cue, persistent_layers: n }))).toThrow();
     }

@@ -1,3 +1,5 @@
+import { testDuelText } from '../../src/user/games/common/duel/copy.test-support';
+import { duelCopyKeys } from '../../src/user/games/common/duel/copy';
 import { expect, test, type Page } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
@@ -69,7 +71,7 @@ for (const mobile of [false, true])
     const dialog = page.locator('.likes-tutorial');
     await expect(dialog).toBeVisible();
     await page.clock.install();
-    const steps = tutorialSteps((_zh, en) => en);
+    const steps = tutorialSteps(testDuelText(duelCopyKeys));
     for (const [index, step] of steps.entries()) {
       await expect(dialog.locator('.likes-tutorial-tip h3')).toHaveText(step.title);
       if (step.kind === 'finish') break;

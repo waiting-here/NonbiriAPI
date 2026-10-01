@@ -1,7 +1,6 @@
 import { useDuelText } from '../common/duel/copy';
 import { interpolate } from './motion';
 import type { LikesEvent } from './types';
-
 export function CastImpact({
   events,
   from,
@@ -21,7 +20,7 @@ export function CastImpact({
   readonly overloaded?: boolean;
   readonly followUpCount?: number;
 }) {
-  const t = useDuelText();
+  const text = useDuelText();
   const count = events.filter((event) => event.cast?.success).length;
   const gain = to - from;
   const reached = from < target && to >= target;
@@ -31,8 +30,8 @@ export function CastImpact({
       {count === 0 && overloaded && (
         <div className="likes-overload-signal">
           <span aria-hidden="true">ϟ</span>
-          <strong>{t('过载', 'OVERLOAD')}</strong>
-          <small>{t('释放受阻', 'CAST INTERRUPTED')}</small>
+          <strong>{text('likes.oVERLOAD')}</strong>
+          <small>{text('likes.cASTINTERRUPTED')}</small>
         </div>
       )}
       {count > 0 && (
@@ -51,23 +50,20 @@ export function CastImpact({
           <div className="likes-hit-label">
             <strong>
               {reached
-                ? t('目标达成', 'TARGET REACHED')
+                ? text('likes.tARGETREACHED')
                 : surge
-                  ? t('得赞爆发', 'LIKES SURGE')
-                  : t('技能释放', 'SKILL CAST')}
+                  ? text('likes.lIKESSURGE')
+                  : text('likes.sKILLCAST')}
             </strong>
             <span>
               {followUpCount > 0
-                ? `${t('连答', 'FOLLOW-UP')} ×${followUpCount}`
+                ? `${text('likes.fOLLOWUP')} ×${followUpCount}`
                 : count > 1
-                  ? `×${count} ${t('施放', 'CASTS')}`
-                  : t('实得赞', 'LIKES AWARDED')}
+                  ? `×${count} ${text('likes.cASTS')}`
+                  : text('likes.lIKESAWARDED')}
             </span>
           </div>
-          <strong
-            className="likes-hit-value"
-            aria-label={`${t('得赞变化', 'Likes change')}: ${gain}`}
-          >
+          <strong className="likes-hit-value" aria-label={`${text('likes.likesChange')}: ${gain}`}>
             <span aria-hidden="true">
               {gain >= 0 ? '+' : ''}
               {reduced ? gain : interpolate(0, gain, progress)}
