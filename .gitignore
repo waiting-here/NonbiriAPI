@@ -110,6 +110,8 @@ i18n.json
 !web/public/assets/fatfish/svg/*.svg
 !web/public/assets/fatfish/character/walk.png
 !web/public/assets/fatfish/character/expressions.png
+!web/public/assets/lake-notes/*.webp
+!web/public/assets/lake-notes/cover.png
 
 # ===== Go =====
 

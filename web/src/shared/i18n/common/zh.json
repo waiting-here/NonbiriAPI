@@ -637,6 +637,18 @@
         "reselect": "请重新选择可用尺寸；提示词和其他输入已保留。",
         "pairHelp": "每个选项是一组可用的宽度和高度。"
       }
+    },
+    "lakeNotes": {
+      "title": "垂钓手记",
+      "coverAlt": "湖边的鲤鱼跃起，浮漂在平静的水面轻晃",
+      "description": "在湖边垂钓，搭配渔具，收集不同水域的鱼。",
+      "coins": "金币",
+      "general": "通用悠哉积分",
+      "game": "游戏悠哉积分",
+      "coins_to_general": "金币 → 通用积分",
+      "general_to_coins": "通用积分 → 金币",
+      "coins_to_game": "金币 → 游戏积分",
+      "game_to_coins": "游戏积分 → 金币"
     }
   },
   "logs": {

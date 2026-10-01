@@ -637,6 +637,18 @@
         "reselect": "Choose an available size again; your prompt and other inputs have been kept.",
         "pairHelp": "Each option is an available width and height pair."
       }
+    },
+    "lakeNotes": {
+      "title": "Lake notes",
+      "coverAlt": "A carp leaps beside a fishing float on a peaceful lake",
+      "description": "Fish by the water, collect equipment and discover fish across three waters.",
+      "coins": "Coins",
+      "general": "General credits",
+      "game": "Game credits",
+      "coins_to_general": "Coins → general credits",
+      "general_to_coins": "General credits → coins",
+      "coins_to_game": "Coins → game credits",
+      "game_to_coins": "Game credits → coins"
     }
   },
   "logs": {

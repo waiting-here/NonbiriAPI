@@ -1129,6 +1129,531 @@
       "account.checkAuthority": "检查账号状态",
       "account.deleteStillActive": "账号仍处于活动状态；再次尝试删除前，请重新验证 Discord 身份。",
       "account.authorityCheckFailed": "暂时无法检查账号状态；删除请求未被重复提交。"
+    },
+    "lakeNotes": {
+      "back": "返回活动",
+      "intro": "按住空格或钓鱼按钮上浮，松开下落，让鱼儿留在捕捉条中。",
+      "entryHeading": "本期参与资格",
+      "entryFee": "本期入场费：{{amount}} 通用积分",
+      "entryScope": "入场费覆盖整个期次。新一期需重新入场，档案与金币保留。",
+      "paid": "已取得本期资格",
+      "enter": "确认费用并参与",
+      "closed": "当前未开放。已有金币、鱼篓和进度已保留；开放后可继续。",
+      "entryUnknown": "入场结果尚未确认，请重试入场。",
+      "retry": "重试同一次操作",
+      "saved": "已保存",
+      "saving": "保存中",
+      "reconnecting": "连接中断，已暂停。将从最后保存的进度接续。",
+      "checkSaved": "查看已保存进度",
+      "controllerLost": "这根竿已在其他页面接续。可在此设备继续。",
+      "start": "开始钓鱼",
+      "again": "再钓一竿",
+      "pause": "暂停并保存",
+      "resume": "接续这根竿",
+      "takeOver": "在此设备接续",
+      "hold": "按住上浮",
+      "track": "钓鱼轨道，按住上浮，松开下落",
+      "progress": "捕获进度",
+      "idle": "等待开竿",
+      "waiting": "等待咬钩",
+      "playing": "鱼儿上钩",
+      "success": "钓获成功",
+      "failed": "鱼儿逃走",
+      "paused": "暂停中",
+      "confirming": "正在确认结果",
+      "unknownFish": "尚未辨认的鱼儿",
+      "caught": "累计钓获：{{count}}",
+      "streak": "连续成功：{{count}}",
+      "clock": "第 {{day}} 天 · {{time}} · {{period}} · {{weather}}",
+      "level": "钓鱼 Lv.{{level}}",
+      "xp": "{{xp}} / {{next}} XP",
+      "maxLevel": "满级 · {{xp}} XP",
+      "loadout": "装备：{{gear}} · 下竿鱼饵：{{bait}}",
+      "none": "无",
+      "empty": "空",
+      "skills": "技能树",
+      "shop": "渔具铺",
+      "basket": "鱼篓",
+      "locations": "选择钓点",
+      "contracts": "委托告示",
+      "rest": "休息到下一时段",
+      "close": "关闭",
+      "pausedMenus": "这根竿尚未结束，菜单可查看；结束前不能改装备、卖鱼、换地点或调整技能。",
+      "skillIntro": "技能在 5、10、15、20 级解锁。每级节点选择一项，10 级选项跟随 5 级路线。",
+      "skillTier": "Lv.{{level}}",
+      "selected": "已选",
+      "locked": "未解锁",
+      "skillPrerequisite": "先选择 5 级路线。",
+      "respec": "重置全部技能 · {{cost}} 金币",
+      "respecHelp": "重置后按已解锁等级重新选择，等级与经验保留。",
+      "rods": "鱼竿",
+      "tackle": "渔具",
+      "baits": "鱼饵",
+      "presets": "配装方案 · 三格",
+      "owned": "已拥有 {{count}} 件",
+      "equipped": "已装备",
+      "buy": "购买 · {{cost}} 金币",
+      "claim": "领取",
+      "equip": "装备",
+      "tackleSlot": "第 {{slot}} 格",
+      "unequip": "卸下",
+      "equipSlot": "装到第 {{slot}} 格",
+      "savePreset": "保存当前",
+      "applyPreset": "应用方案",
+      "preset": "方案 {{slot}}",
+      "stock": "库存 {{count}}",
+      "useBait": "下一竿使用",
+      "disableBait": "停用",
+      "previewStats": "捕捉条 {{height}} 像素 · 脱离流失 {{loss}}%/秒 · 等待约 {{min}}–{{max}} 秒",
+      "shopHelp": "鱼竿决定鱼饵与渔具格；渔具可叠加，但每件最多拥有两份。免费装备须先完成领取条件。",
+      "basketHelp": "已装 {{count}}/80 条。锁定的鱼不会被出售或交付；鱼篓满时新鱼按原价自动出售。",
+      "basketEmpty": "鱼篓还是空的，去钓一竿吧。",
+      "sell": "出售 · {{value}} 金币",
+      "sellAll": "卖出未锁定鱼 · {{value}} 金币",
+      "lockFish": "锁定",
+      "unlockFish": "解锁",
+      "catchDetail": "{{length}} 厘米 · {{quality}}品质{{perfect}}",
+      "perfect": " · 完美捕获",
+      "debris": "杂物袋",
+      "recycle": "回收 · {{value}} 金币",
+      "recycleAll": "全部回收 · {{value}} 金币",
+      "debrisSummary": "累计清理 {{trash}} 份 · 打开宝箱 {{treasure}} 个",
+      "catalogSummary": "已发现 {{found}}/54 种 · 累计钓获 {{caught}} 条 · 完美捕获 {{perfect}} 次",
+      "undiscovered": "？？？ · 未发现",
+      "conditions": "出没：{{location}} · {{periods}} · {{weather}}",
+      "allPeriods": "所有时段",
+      "allWeather": "所有天气",
+      "record": "钓获 {{count}} 次 · 最长 {{length}} 厘米 · 最高 {{quality}}品质 · 完美 {{perfect}} 次",
+      "locationFound": "已发现 {{count}}/18 种",
+      "currentLocation": "当前钓点",
+      "contractsHelp": "告示每日更新，已接委托无期限，可随时取消，最多同时三份。交付消耗未锁定且价值较低的鱼；其它任务从接取后计数。",
+      "contractSummary": "进行中 {{active}}/3 · 已完成 {{completed}} 份",
+      "available": "可接取",
+      "active": "进行中",
+      "completed": "奖励已领取",
+      "deliveryContract": "交付 {{target}} 条{{fish}}",
+      "catchContract": "在{{location}}钓获 {{target}} 条鱼",
+      "perfectContract": "完成 {{target}} 次完美捕获",
+      "cleanupContract": "捞起 {{target}} 份杂物",
+      "contractReward": "奖励：{{coins}} 金币 · {{bait}} ×{{count}}",
+      "acceptContract": "接取委托",
+      "cancelContract": "取消委托",
+      "claimContract": "交付并领取奖励",
+      "treasureCollect": "用捕捉条收集宝箱",
+      "treasureSecured": "宝箱已收集，钓到鱼才能带回",
+      "rewardSummary": "{{fish}} · {{length}} 厘米 · {{quality}}品质 · +{{xp}} XP",
+      "overflow": "鱼篓已满，新鱼已按原价自动出售。",
+      "treasureReward": "宝箱奖励：{{coins}} 金币 · {{bait}} ×{{count}}",
+      "debrisReward": "捞起{{item}}",
+      "exchangeHeading": "金币与站内积分兑换",
+      "exchangeHelp": "填写兑换份数，预览所需金额和可获得的数量。",
+      "direction": "兑换方向",
+      "batches": "兑换份数",
+      "quote": "预览兑换",
+      "quoteAmounts": "支付 {{source}} {{sourceUnit}}，获得 {{target}} {{targetUnit}}",
+      "exchangeConfirm": "确认兑换",
+      "exchangeUnknown": "兑换结果尚未确认，请重试。",
+      "exchangeSaved": "兑换已完成。",
+      "exchangeConflict": "配置或余额已改变，请重新预览后确认。",
+      "batchInvalid": "请输入有效的完整批次数量。",
+      "saveUnknown": "操作结果尚未确认，请重试或查看已保存进度。",
+      "actionSaved": "操作已保存。",
+      "catalog": {
+        "fish": {
+          "gold": {
+            "name": "鲫鱼",
+            "description": "常见的湖鱼，游动温和，是许多钓手的第一条收获。"
+          },
+          "lake_carp": {
+            "name": "鲤鱼",
+            "description": "身形厚实，受惊时会突然往水底深处钻去。"
+          },
+          "lake_yellowcat": {
+            "name": "黄颡鱼",
+            "description": "嘴边有长须，常贴着湖底寻找食物。"
+          },
+          "sky": {
+            "name": "鳊鱼",
+            "description": "体形宽扁，喜欢在中上层水域慢慢巡游。"
+          },
+          "lake_grasscarp": {
+            "name": "草鱼",
+            "description": "食量很大的草食鱼，拉力比看起来更沉。"
+          },
+          "mud": {
+            "name": "鲶鱼",
+            "description": "夜色里的湖底猎手，嘴边的触须能感知动静。"
+          },
+          "silver": {
+            "name": "大口黑鲈",
+            "description": "伏在水草边等待猎物，突然发力时很难预判。"
+          },
+          "violet": {
+            "name": "鳜鱼",
+            "description": "斑纹鲜明的伏击者，追逐小鱼时动作很急。"
+          },
+          "lake_snakehead": {
+            "name": "乌鳢",
+            "description": "能够在浅水中潜伏很久，一上钩就拼命往草里钻。"
+          },
+          "lake_silvercarp": {
+            "name": "白鲢",
+            "description": "宽大的身体在水中缓缓上浮，甩头时力量惊人。"
+          },
+          "lake_bighead": {
+            "name": "鳙鱼",
+            "description": "巨大的头部很好辨认，是湖中难得的大鱼。"
+          },
+          "star": {
+            "name": "青鱼",
+            "description": "深水里的黑影，只有经验丰富的钓手才敢与它周旋。"
+          },
+          "lake_bitterling": {
+            "name": "鳑鲏",
+            "description": "体侧泛着粉蓝光泽，喜欢在浅水的水草间穿梭。"
+          },
+          "lake_icefish": {
+            "name": "银鱼",
+            "description": "半透明的小鱼成群游动，在斜照的天光下才容易看见。"
+          },
+          "lake_tench": {
+            "name": "丁鱥",
+            "description": "橄榄色的身体贴着湖底缓行，阴暗天气更愿意觅食。"
+          },
+          "lake_topmouth": {
+            "name": "翘嘴鲌",
+            "description": "上翘的嘴适合追逐水面小鱼，出击时快得像一道银光。"
+          },
+          "lake_swamp_eel": {
+            "name": "黄鳝",
+            "description": "夜色降临后离开泥洞，沿着水草边缘寻找猎物。"
+          },
+          "lake_sturgeon": {
+            "name": "鲟鱼",
+            "description": "古老的硬鳞鱼，雨水搅动湖底时才偶尔靠近岸边。"
+          },
+          "teal": {
+            "name": "马口鱼",
+            "description": "溪流中的小型快鱼，常在明亮的浅滩结伴游动。"
+          },
+          "river_zacco": {
+            "name": "宽鳍鱲",
+            "description": "鳍色醒目，在石缝间乱窜得非常灵活。"
+          },
+          "river_loach": {
+            "name": "泥鳅",
+            "description": "喜欢贴着河底钻进砂砾，身上有细小的斑纹。"
+          },
+          "river_gudgeon": {
+            "name": "棒花鱼",
+            "description": "安静的小型底栖鱼，常躲在缓流的石块旁。"
+          },
+          "river_ayu": {
+            "name": "香鱼",
+            "description": "银亮的身体顺着急流穿梭，动作轻快。"
+          },
+          "river_perch": {
+            "name": "河鲈",
+            "description": "背鳍带刺，在河湾和水草边巡游。"
+          },
+          "red": {
+            "name": "虹鳟",
+            "description": "身侧有彩色光带，受惊时会迅速折返。"
+          },
+          "river_browntrout": {
+            "name": "褐鳟",
+            "description": "褐色斑点铺满身体，善于借水流突然加速。"
+          },
+          "river_pike": {
+            "name": "狗鱼",
+            "description": "细长的伏击者，突然冲刺时几乎不给人反应。"
+          },
+          "frost": {
+            "name": "欧洲鳗",
+            "description": "弯曲的长身藏在河底阴影里，夜间更显活跃。"
+          },
+          "river_salmon": {
+            "name": "大西洋鲑",
+            "description": "强壮的洄游鱼，逆流而上时也能保持速度。"
+          },
+          "abyss": {
+            "name": "鳡鱼",
+            "description": "河道深处的庞大掠食者，冲刺如同一道暗影。"
+          },
+          "river_spined_loach": {
+            "name": "花鳅",
+            "description": "小巧的花纹鱼，贴着河床的石缝和砂砾穿行。"
+          },
+          "river_grayling": {
+            "name": "茴鱼",
+            "description": "高耸的背鳍像一面小旗，爱在清凉急流中逆水游动。"
+          },
+          "river_red_eye": {
+            "name": "赤眼鳟",
+            "description": "红色眼圈很醒目，常在河湾的缓流边寻找食物。"
+          },
+          "river_yamame": {
+            "name": "山女鳟",
+            "description": "带着椭圆斑纹的溪流鳟鱼，清晨在浅滩边迅速掠过。"
+          },
+          "river_burbot": {
+            "name": "江鳕",
+            "description": "有一根下颌须的河底猎手，偏爱昏暗寒冷的流水。"
+          },
+          "river_hilsa": {
+            "name": "鲥鱼",
+            "description": "银鳞洄游鱼，雨后水流上涨时偶尔进入这段河道。"
+          },
+          "coast_sardine": {
+            "name": "沙丁鱼",
+            "description": "成群聚集的银色小鱼，海面上常见闪亮鱼群。"
+          },
+          "coast_anchovy": {
+            "name": "鳀鱼",
+            "description": "小而敏捷，鱼群转向时会一同闪光。"
+          },
+          "coast_herring": {
+            "name": "鲱鱼",
+            "description": "喜欢集群行动，常在海岸附近的中层水域游动。"
+          },
+          "coast_horsemackerel": {
+            "name": "竹荚鱼",
+            "description": "尾部有力，能沿着海流稳定前进。"
+          },
+          "coast_mackerel": {
+            "name": "鲭鱼",
+            "description": "背上有波浪纹，冲刺时几乎像一支箭。"
+          },
+          "coast_seabass": {
+            "name": "海鲈",
+            "description": "游走于礁石边缘，拉扯节奏忽快忽慢。"
+          },
+          "coast_flounder": {
+            "name": "鲽鱼",
+            "description": "扁平的身体伏在海底，颜色与沙地很接近。"
+          },
+          "coast_seabream": {
+            "name": "真鲷",
+            "description": "鳞片带着暖色光泽，常在礁石附近觅食。"
+          },
+          "coast_grouper": {
+            "name": "石斑鱼",
+            "description": "体型厚实的礁区鱼，惯于往岩缝里钻。"
+          },
+          "coast_yellowtail": {
+            "name": "黄尾鰤",
+            "description": "黄色尾鳍一闪而过，游速很快。"
+          },
+          "coast_tuna": {
+            "name": "蓝鳍金枪鱼",
+            "description": "远游的大型鱼，力量和速度都让人吃惊。"
+          },
+          "coast_swordfish": {
+            "name": "剑鱼",
+            "description": "细长的剑状吻部是它的标志，海上罕见的强敌。"
+          },
+          "coast_pomfret": {
+            "name": "银鲳",
+            "description": "银亮的扁平鱼，常随近岸潮流成群出现。"
+          },
+          "coast_flyingfish": {
+            "name": "飞鱼",
+            "description": "宽大的胸鳍能托着它短暂滑翔，海面明亮时最容易发现。"
+          },
+          "coast_cutlassfish": {
+            "name": "带鱼",
+            "description": "银白色的长带状身体，在昏暗海水里映出冷光。"
+          },
+          "coast_conger": {
+            "name": "海鳗",
+            "description": "白天藏在礁石缝里，阴雨夜晚才沿海底出来觅食。"
+          },
+          "coast_skipjack": {
+            "name": "鲣鱼",
+            "description": "游速极快的成群猎手，银腹上的深色条纹很有辨识度。"
+          },
+          "coast_anglerfish": {
+            "name": "鮟鱇",
+            "description": "头顶的发光诱饵在黑暗里晃动，暴雨夜才接近海岸。"
+          }
+        },
+        "locations": {
+          "lake": {
+            "name": "湖泊",
+            "scene": "湖面很安静，适合钓鱼。",
+            "description": "宽阔平静的淡水，从小型鲫鱼到巨大的青鱼。"
+          },
+          "river": {
+            "name": "河流",
+            "scene": "水流穿过石滩，鱼儿藏在急缓交界处。",
+            "description": "水流多变的河道，游速快的溪鱼与洄游鱼更多。"
+          },
+          "coast": {
+            "name": "海岸",
+            "scene": "海风吹过栈桥，浪花轻拍岸边。",
+            "description": "咸水栈桥与近海，既有成群的小鱼，也有远游的大鱼。"
+          }
+        },
+        "gear": {
+          "trainingRod": {
+            "name": "训练竿",
+            "description": "不足 136 像素时提升捕捉条；脱离流失降为 2/3。只能钓难度低于 50 的普通品质鱼。"
+          },
+          "bambooPole": {
+            "name": "竹竿",
+            "description": "基础鱼竿，不使用鱼饵或渔具。"
+          },
+          "fiberglassRod": {
+            "name": "玻璃纤维竿",
+            "description": "可以使用鱼饵。"
+          },
+          "iridiumRod": {
+            "name": "铱金鱼竿",
+            "description": "可以使用鱼饵和 1 件渔具。"
+          },
+          "advancedRod": {
+            "name": "进阶铱金鱼竿",
+            "description": "可以使用鱼饵和 2 件渔具，允许相同渔具叠加。"
+          },
+          "corkBobber": {
+            "name": "软木浮漂",
+            "description": "捕捉条高度 +24 像素。"
+          },
+          "leadBobber": {
+            "name": "铅制浮漂",
+            "description": "触底反弹速度变为原来的 1/10。"
+          },
+          "trapBobber": {
+            "name": "陷阱浮漂",
+            "description": "脱离捕捉条时，进度流失从每帧 0.003 降至 0.002；两件叠加降至 0.0015。"
+          },
+          "barbedHook": {
+            "name": "倒刺鱼钩",
+            "description": "鱼在捕捉条内时，捕捉条会轻微追随鱼；乱窜鱼仍需手动控制。"
+          },
+          "qualityBobber": {
+            "name": "品质浮漂",
+            "description": "鱼的品质提升一级；累计 3 次完美捕获可领第一件，10 次可领第二件。"
+          },
+          "curiosityLure": {
+            "name": "好奇心鱼钩",
+            "description": "传说鱼的出现权重 ×2；钓获首条传说鱼后可领取。"
+          },
+          "spinner": {
+            "name": "旋转式亮片",
+            "description": "上钩等待时间的上限减少 3.75 游戏秒。"
+          },
+          "dressedSpinner": {
+            "name": "精装旋转亮片",
+            "description": "上钩等待时间的上限减少 7.5 游戏秒。"
+          },
+          "sonarBobber": {
+            "name": "声呐浮漂",
+            "description": "上钩后显示鱼的种类。"
+          }
+        },
+        "skills": {
+          "steady": {
+            "name": "稳竿手",
+            "description": "捕捉条额外增加 8 像素。"
+          },
+          "tracker": {
+            "name": "寻鱼人",
+            "description": "稀有及以上鱼出现权重 +20%，钓获经验 +8%。"
+          },
+          "calm": {
+            "name": "沉着收线",
+            "description": "鱼脱离捕捉条时，进度流失降低 10%。"
+          },
+          "control": {
+            "name": "控竿专家",
+            "description": "捕捉条的上浮和下落加速度提高 8%。"
+          },
+          "legendHunter": {
+            "name": "传奇猎手",
+            "description": "史诗与传说鱼出现权重 +25%。"
+          },
+          "brawler": {
+            "name": "搏鱼专家",
+            "description": "追踪稀有及以上鱼时，命中进度增加 8%。"
+          },
+          "patience": {
+            "name": "耐心收线",
+            "description": "鱼脱离捕捉条时，进度流失再降低 6%。"
+          },
+          "reader": {
+            "name": "识流者",
+            "description": "鱼改变移动目标的节奏放慢 8%。"
+          },
+          "master": {
+            "name": "老练竿法",
+            "description": "捕捉条额外增加 8 像素。"
+          },
+          "deepSeeker": {
+            "name": "深水行者",
+            "description": "史诗与传说鱼出现权重 +20%，稀有及以上鱼的命中进度 +5%。"
+          }
+        },
+        "baits": {
+          "basic": {
+            "name": "普通鱼饵",
+            "description": "下一竿等待上钩时间减半。"
+          },
+          "glimmer": {
+            "name": "闪鳞鱼饵",
+            "description": "下一竿稀有及以上鱼出现权重 +45%，等待时间减半。"
+          },
+          "abyss": {
+            "name": "深水鱼饵",
+            "description": "下一竿史诗与传说鱼出现权重 ×2，等待时间减半；鱼速度 +4%、脱钩流失 +8%。"
+          },
+          "deluxe": {
+            "name": "豪华鱼饵",
+            "description": "等待上钩时间减少 67%，捕捉条 +12 像素。"
+          }
+        },
+        "debris": {
+          "driftwood": {
+            "name": "漂流木"
+          },
+          "bottle": {
+            "name": "碎玻璃瓶"
+          },
+          "boot": {
+            "name": "旧靴子"
+          },
+          "line": {
+            "name": "缠绕的废鱼线"
+          }
+        },
+        "periods": {
+          "dawn": "清晨",
+          "day": "白天",
+          "dusk": "黄昏",
+          "night": "夜晚"
+        },
+        "weathers": {
+          "sunny": "晴",
+          "cloudy": "阴",
+          "rain": "雨"
+        },
+        "rarities": {
+          "common": "常见",
+          "uncommon": "少见",
+          "rare": "稀有",
+          "epic": "史诗",
+          "legendary": "传说"
+        },
+        "quality": {
+          "q0": "普通",
+          "q1": "银星",
+          "q2": "金星",
+          "q3": "铱星"
+        }
+      },
+      "catalogTitle": "图鉴",
+      "ledgerEntry": "垂钓手记：期次入场",
+      "ledgerExchange": "垂钓手记：金币与积分兑换"
     }
   },
   "games": {

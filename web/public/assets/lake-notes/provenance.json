@@ -1,0 +1,338 @@
+{
+  "license": "AGPL-3.0",
+  "source": "Original Lake Notes prototype; all content transferred for project publication.",
+  "prototype_sha256": "0111446f88d42e9dae1a215159fd230e3cc0e2a612512500e06bcfb92108eca2",
+  "cover": "Generated from original lake and carp art; selected unmodified master.",
+  "assets": [
+    {
+      "file": "scene-lake.webp",
+      "bytes": 125294,
+      "sha256": "12b09d1df4bea4f49b773b89c10e3302509d14aff76cf484217f2e289e953c50"
+    },
+    {
+      "file": "scene-river.webp",
+      "bytes": 187442,
+      "sha256": "59ebaeb7bd6337571da0065b2c5bcc722920f70297cf49a663c7e15f288715d7"
+    },
+    {
+      "file": "scene-coast.webp",
+      "bytes": 148492,
+      "sha256": "911c3fedf42af020ca675ab22f15dce3c57fbb1b16cc011d4f51f7c24ae09cfc"
+    },
+    {
+      "file": "scene-lake-night.webp",
+      "bytes": 90816,
+      "sha256": "4d7c5bf8a53647f9b8d278f450331c894aac37274eae1f0971a6552ad2d8eadf"
+    },
+    {
+      "file": "scene-river-night.webp",
+      "bytes": 143814,
+      "sha256": "11589cd549deb72e9c64435033e05784758078066d5ad0b1967d21c2d2702d42"
+    },
+    {
+      "file": "scene-coast-night.webp",
+      "bytes": 124508,
+      "sha256": "f74d8f354317d48d7f040b0c8fbf7535a98c8016f7a2a36cb2f998341ae1a736"
+    },
+    {
+      "file": "fish-gold.webp",
+      "bytes": 62566,
+      "sha256": "5c6ae73b3fda0db77c71c75809ec391ab0bc841337ef17ef239e836e62c37e82"
+    },
+    {
+      "file": "fish-lake_carp.webp",
+      "bytes": 59276,
+      "sha256": "004121b3a04042a4e1dda4f62ba63050afe8623ca63462007e3cf67b113f4722"
+    },
+    {
+      "file": "fish-lake_yellowcat.webp",
+      "bytes": 63396,
+      "sha256": "5f12a5d8d493c225a6c053ed4f6e024473829bbcaf458964cfafbc906590831d"
+    },
+    {
+      "file": "fish-sky.webp",
+      "bytes": 70718,
+      "sha256": "47a47e54f1c8bc3e2eec01f8f60c03b2b3c042d1f3ad2a3e912be02b7473ca56"
+    },
+    {
+      "file": "fish-lake_grasscarp.webp",
+      "bytes": 47944,
+      "sha256": "2f284da6ee5d7ac5c5258da378c10b782ae7ba1b67b744bd9ab1d551f5adf8a2"
+    },
+    {
+      "file": "fish-mud.webp",
+      "bytes": 56102,
+      "sha256": "bae5f876756fa9a07bcb154b1535628c306b3ff8fab871fcfbca08c6b71506a6"
+    },
+    {
+      "file": "fish-silver.webp",
+      "bytes": 63714,
+      "sha256": "838a5b24f61367f264b26ae75958c2e1098a172c21eaba5170cf51f42071a704"
+    },
+    {
+      "file": "fish-violet.webp",
+      "bytes": 77106,
+      "sha256": "fa47a74522cfbd5d37173fe07d6887b8ceb504c416c5ea1026fd347942c4a652"
+    },
+    {
+      "file": "fish-lake_snakehead.webp",
+      "bytes": 56906,
+      "sha256": "f62aa6f70ccc1b7976e207f5e93a7354170da19da9aadf67bb597d1fe7b51e19"
+    },
+    {
+      "file": "fish-lake_silvercarp.webp",
+      "bytes": 67258,
+      "sha256": "5517713d7771bff0adcc0fdd9e08a055e06df73a53cd0fecbdb894b9b59d37a9"
+    },
+    {
+      "file": "fish-lake_bighead.webp",
+      "bytes": 63700,
+      "sha256": "f37942e2320e2b68f4cb564a7de44183b65910794f3fa82050452c69718c63aa"
+    },
+    {
+      "file": "fish-star.webp",
+      "bytes": 54102,
+      "sha256": "3fbaab1c590e49ff4a4d0b7915f5a25ec060c4986ef6a54efcdfeef6850c72ae"
+    },
+    {
+      "file": "fish-lake_bitterling.webp",
+      "bytes": 79236,
+      "sha256": "c5212072b975566b615b5d6c34dffe1706779ad752b552895d0a056bb0f84f93"
+    },
+    {
+      "file": "fish-lake_icefish.webp",
+      "bytes": 43722,
+      "sha256": "b34b3d54966421076a059d270efa75d886ef7db8805483405e039d61f4920851"
+    },
+    {
+      "file": "fish-lake_tench.webp",
+      "bytes": 68772,
+      "sha256": "8cf4f351792100beb9fb90fc6b9afb1f3a4a6ef96d4ed0d29e17901021e29da0"
+    },
+    {
+      "file": "fish-lake_topmouth.webp",
+      "bytes": 59446,
+      "sha256": "b81ebf7ce3060a612f12e0517f36bf25dae77ada36f24d4fb58e1b1c3ff593e9"
+    },
+    {
+      "file": "fish-lake_swamp_eel.webp",
+      "bytes": 46270,
+      "sha256": "f3ac1ff87303e271b52cf2ac12ec9c590d205cb76646244535319511c9fcc1bf"
+    },
+    {
+      "file": "fish-lake_sturgeon.webp",
+      "bytes": 46636,
+      "sha256": "9af0312bbe8affbadf8d405c2213e5de27a6ddc34c8e49b98121ff736568f77d"
+    },
+    {
+      "file": "fish-teal.webp",
+      "bytes": 55964,
+      "sha256": "37b1f2400638a6a847f04f05d63630999df80e4f3aa21da10d7e96367f2921ee"
+    },
+    {
+      "file": "fish-river_zacco.webp",
+      "bytes": 57402,
+      "sha256": "73ed9f734c277d6c69917a17d3bbf4562f8fdb265778b3adc0e8ed5ca802d215"
+    },
+    {
+      "file": "fish-river_loach.webp",
+      "bytes": 45008,
+      "sha256": "6cf713900cc3ae9bd6d4c88e1466971ecd1637d6232a024e753248511130507e"
+    },
+    {
+      "file": "fish-river_gudgeon.webp",
+      "bytes": 58716,
+      "sha256": "70b3b75190dee3d32c09a95e875e0c6ca770d1ea33839fdad43ba5f9f057c42f"
+    },
+    {
+      "file": "fish-river_ayu.webp",
+      "bytes": 53438,
+      "sha256": "897b770387d8802982d998782a6e9b9e088c257ddcbab9274fb85ac031ed689d"
+    },
+    {
+      "file": "fish-river_perch.webp",
+      "bytes": 72238,
+      "sha256": "c0dc528695d147592d4261336b79f216403ba53a366b4d7e26779c8b1e9e37b2"
+    },
+    {
+      "file": "fish-red.webp",
+      "bytes": 64606,
+      "sha256": "0f3b09ffec2864c6e57b547d1a1cf1b69552a913e8c7949ce7436487e4fed7ed"
+    },
+    {
+      "file": "fish-river_browntrout.webp",
+      "bytes": 57276,
+      "sha256": "fb3eb1118a02018775d31af5aeaa5149a8a5c1ccc051e04c3eb8718d1e2a87e9"
+    },
+    {
+      "file": "fish-river_pike.webp",
+      "bytes": 45692,
+      "sha256": "b6807b0868f660f0af06bfed07d9cd118d3460beb4f1631356e13b26c0b08218"
+    },
+    {
+      "file": "fish-frost.webp",
+      "bytes": 44594,
+      "sha256": "b8246512d65284fcef7d42235a5e6b99bbece6be5511a63eee5ce046e6513d6d"
+    },
+    {
+      "file": "fish-river_salmon.webp",
+      "bytes": 58408,
+      "sha256": "4b03c07b8ec07b3b81ef82405ffe00e53a975d08c79cd514f94f649c4528bd52"
+    },
+    {
+      "file": "fish-abyss.webp",
+      "bytes": 52380,
+      "sha256": "9cf1f00ad96464c512a317bcc65ce0ad4620c6f0d2082c17e093901a9d686f2c"
+    },
+    {
+      "file": "fish-river_spined_loach.webp",
+      "bytes": 57120,
+      "sha256": "e79d5201db712f1b694d1f1040ca7e617897c1798d3264b78226f2f5c2f26e93"
+    },
+    {
+      "file": "fish-river_grayling.webp",
+      "bytes": 74198,
+      "sha256": "225fbc9f520c305a083d8ccab2e8d600f76ba1fd9ee0ee65fd9cd3d670824457"
+    },
+    {
+      "file": "fish-river_red_eye.webp",
+      "bytes": 67446,
+      "sha256": "cbde2d3084f75717e8afec1e9cc73f2797be2db696b829e4c1b8c4b9115bf9f5"
+    },
+    {
+      "file": "fish-river_yamame.webp",
+      "bytes": 64942,
+      "sha256": "050f2c29a2829841483d90412d4eca42240a7ed71693619e9dee4cc8e6e714fd"
+    },
+    {
+      "file": "fish-river_burbot.webp",
+      "bytes": 64814,
+      "sha256": "9622d5eb00f18201c7529dd535c6a1b5402651a76bc8de6a02d302696784915a"
+    },
+    {
+      "file": "fish-river_hilsa.webp",
+      "bytes": 69544,
+      "sha256": "e5b3496417951e12ad0982742621bfc4f90f71dbfeaff87445ee41ca25ba08c1"
+    },
+    {
+      "file": "fish-coast_sardine.webp",
+      "bytes": 49490,
+      "sha256": "b0f6f91b95b706574f8667ca034396492698e66cae652cbad3aafb4e6014aa66"
+    },
+    {
+      "file": "fish-coast_anchovy.webp",
+      "bytes": 42786,
+      "sha256": "18479c51f2d0f49e03ff1ac5f4266f0981270d7ebb1a567296cb04802444dfef"
+    },
+    {
+      "file": "fish-coast_herring.webp",
+      "bytes": 49172,
+      "sha256": "57ddcea1669923cf72165a1da73243d2d1016f344fb1fbb768dfe4d6c574a5d6"
+    },
+    {
+      "file": "fish-coast_horsemackerel.webp",
+      "bytes": 63520,
+      "sha256": "114c634ffc13adb8f3675086a3ea69e2ab67f1426ca7f3970b10cc8e84b00b99"
+    },
+    {
+      "file": "fish-coast_mackerel.webp",
+      "bytes": 50782,
+      "sha256": "48df521c57bbfbe2daef91955975fc0eca0b3e2d6aa83f1c0aff2c356af4ef42"
+    },
+    {
+      "file": "fish-coast_seabass.webp",
+      "bytes": 63666,
+      "sha256": "1764e4867869f80c1fd0156480049e266e98bd30d7b28aeb067bac8c1efcceab"
+    },
+    {
+      "file": "fish-coast_flounder.webp",
+      "bytes": 65814,
+      "sha256": "1fb050b41cdfc03d1ab502dc962f74029ef8b6f92eb5b2a47e1c3320bda6d402"
+    },
+    {
+      "file": "fish-coast_seabream.webp",
+      "bytes": 77628,
+      "sha256": "512a221ab37527aa752f6f72f28fb92640ddab86fcbeabf4b0140ac23aef160f"
+    },
+    {
+      "file": "fish-coast_grouper.webp",
+      "bytes": 63702,
+      "sha256": "8c58e1ff028b3b9f14a51d772e8e15303420c49556b0520b782e8ac4e15ff734"
+    },
+    {
+      "file": "fish-coast_yellowtail.webp",
+      "bytes": 58394,
+      "sha256": "8831bf49468747c2fc3befa84552417fcef178fab436eb3684a0f77192817551"
+    },
+    {
+      "file": "fish-coast_tuna.webp",
+      "bytes": 63626,
+      "sha256": "8412c9d6aabec52e0e29636b6ad17006e299431c3f14e786fb6be325b6e2875d"
+    },
+    {
+      "file": "fish-coast_swordfish.webp",
+      "bytes": 46792,
+      "sha256": "a6592b5880214f65b59588d0c4b28d5bfe73aad8d5657511f69e8c3bbb167d7c"
+    },
+    {
+      "file": "fish-coast_pomfret.webp",
+      "bytes": 85646,
+      "sha256": "03dc675c9759c723f8abe20c42b427d2aca9ed46bbbd13e03ebf82775d991060"
+    },
+    {
+      "file": "fish-coast_flyingfish.webp",
+      "bytes": 80688,
+      "sha256": "39cc99b788018a41a6cccc2ad824b9dfe7dfed5168b967c89110d202677a3740"
+    },
+    {
+      "file": "fish-coast_cutlassfish.webp",
+      "bytes": 55192,
+      "sha256": "0404fddff240462167b56bc9301cf62305438efb738e2db891b969d7a3bd7a2e"
+    },
+    {
+      "file": "fish-coast_conger.webp",
+      "bytes": 44692,
+      "sha256": "7a9d637346d6bf9088a3a87ea0adc4adf7b428a4ccd1b869cca2dc81605a2d0a"
+    },
+    {
+      "file": "fish-coast_skipjack.webp",
+      "bytes": 73824,
+      "sha256": "f46ed8b72efd07171efb82f2cdf068f8ffd5d33a7b34c71f3f9d971713227cb1"
+    },
+    {
+      "file": "fish-coast_anglerfish.webp",
+      "bytes": 92156,
+      "sha256": "52a610c76e39f8a3e54cdda7e4d2861d2416cae53ede95ee657be336e673a5b3"
+    },
+    {
+      "file": "item-treasure.webp",
+      "bytes": 33908,
+      "sha256": "0c170934f5b043a8434b010ba9ba94af68773756c9fa444afed58756caece8a6"
+    },
+    {
+      "file": "item-driftwood.webp",
+      "bytes": 22648,
+      "sha256": "e8b80a4fbec02827f64347b21a4e363e25792a3232722a70be5a8176e0a89ab3"
+    },
+    {
+      "file": "item-bottle.webp",
+      "bytes": 19300,
+      "sha256": "a7e44c32d61550eb90194843b044cccf55b7c9d193f0751be525a6399aa74bdc"
+    },
+    {
+      "file": "item-boot.webp",
+      "bytes": 33558,
+      "sha256": "aef8360ee2245c01704af7811c0780bdfb61e3918f8bcfe70a3a20931c5bae95"
+    },
+    {
+      "file": "item-line.webp",
+      "bytes": 36158,
+      "sha256": "0798301f460416161a45679fb436653e352ebc32c123853c3ca109f80f77f95f"
+    },
+    {
+      "file": "cover.png",
+      "bytes": 2593610,
+      "sha256": "755fbe01f7ef724d40166ba88e662681d36d54c5615a1a86219b7cb2bdded07a"
+    }
+  ]
+}

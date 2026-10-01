@@ -130,6 +130,13 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'lake-notes',
+    path: '/activities/lake-notes',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'fat-fish',
     path: '/activities/fat-fish',
     access: 'user',
@@ -280,6 +287,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'common.activities.limited',
   }),
   admin({
+    id: 'admin-lake-notes',
+    path: '/limited-activities/lake-notes',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
+  }),
+  admin({
     id: 'admin-fat-fish',
     path: '/limited-activities/fat-fish',
     access: 'admin',
@@ -321,7 +335,17 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.navigation.overview',
     fallbackLabelKey: 'admin.dashboard.nav',
   }),
-  admin({id: 'admin-blacklist', path: '/blacklist', access: 'admin', layout: 'wide', nav: true, navGroup: 'users', icon: 'users', labelKey: 'admin.blacklist.title', registered: true}),
+  admin({
+    id: 'admin-blacklist',
+    path: '/blacklist',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    navGroup: 'users',
+    icon: 'users',
+    labelKey: 'admin.blacklist.title',
+    registered: true,
+  }),
   admin({
     id: 'admin-users',
     path: '/users',
