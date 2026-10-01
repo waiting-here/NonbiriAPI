@@ -179,12 +179,9 @@ async function submitCurrentResult(player: Locator, automatic = false) {
     try {
       await finish.click({ timeout: 2000 });
     } catch (error) {
-      // The last fish can finish while Playwright scrolls to the button.
-      // Accept that transition only when the corresponding result step is ready.
-      const ready = automatic
-        ? await player.getByText(/^Verified · /).isVisible()
-        : await submit.isVisible();
-      if ((await finish.isEnabled()) || !ready) throw error;
+      // Play can end while the click scrolls into view. The result assertion
+      // below waits for asynchronous verification after that transition.
+      if (await finish.isEnabled()) throw error;
     }
   }
   if (automatic) await expect(player.getByText(/^Verified · /)).toBeVisible();
