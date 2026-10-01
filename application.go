@@ -31,6 +31,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
 
 type application struct {
@@ -39,6 +40,7 @@ type application struct {
 	bridge          *resourcebridge.Runtime
 	claims          *claim.Service
 	resourceRepo    *resources.Repository
+	automation      *stewardautomation.Service
 	discoveryWorker *resources.DiscoveryWorkerPool
 	donations       *donation.Service
 	charity         *charity.Service

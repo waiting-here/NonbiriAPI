@@ -24,6 +24,10 @@ func TestNewRequiresEveryClosedAdapterFamily(t *testing.T) {
 		{"cursor keys", func(config *Config) { config.CursorKeys = nil }},
 		{"retirement", func(config *Config) { config.Retirement = nil }},
 		{"ledger", func(config *Config) { config.Ledger = nil }},
+		{"automation export", func(config *Config) { config.Export.PersonalAutomation = nil }},
+		{"automation delete", func(config *Config) { config.Delete.PersonalAutomation = nil }},
+		{"automation recovery", func(config *Config) { config.Recovery.PersonalAutomation = nil }},
+		{"automation retention", func(config *Config) { config.Retention.PersonalAutomation = nil }},
 		{"export", func(config *Config) { config.Export.RPS = nil }},
 		{"ranking export", func(config *Config) { config.Export.Rankings = nil }},
 		{"penalty export", func(config *Config) { config.Export.Penalties = nil }},
@@ -71,7 +75,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "randomness", "identity", "resources", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties", "governance", "request_adaptation", "continuity"}
+	wantOrder := []string{"fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "randomness", "identity", "resources", "personal_automation", "issues", "ledger", "activities", "donations", "charity", "rankings", "penalties", "governance", "request_adaptation", "continuity"}
 	if !reflect.DeepEqual(fixture.exports.calls, wantOrder) {
 		t.Fatalf("export order = %v, want %v", fixture.exports.calls, wantOrder)
 	}
@@ -85,7 +89,7 @@ func TestExportUsesOneTransactionFrozenOrderAndEmptyArrays(t *testing.T) {
 	if document.SchemaVersion != SchemaVersion || document.GeneratedAt != 100 {
 		t.Fatalf("export header = version %d at %d", document.SchemaVersion, document.GeneratedAt)
 	}
-	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.Issues == nil ||
+	if document.Endpoints == nil || document.CatalogPairs == nil || document.Models == nil || document.PersonalAutomation == nil || document.Issues == nil ||
 		document.CreditLedger == nil || document.WelfareClaims == nil || document.Thursday == nil || document.Donations == nil ||
 		document.Fishing.Pending == nil || document.Fishing.Terminal == nil || document.LinkLink.Summaries == nil || document.RPS.Summaries == nil ||
 		document.GameOnboardingHolds == nil || document.Loans == nil || document.Penalties == nil || document.GameRankings.Totals == nil || document.GameRankings.Events == nil {
@@ -181,6 +185,9 @@ func TestPersonalExportCollectionsFailRatherThanTruncate(t *testing.T) {
 		{"request adaptations", func(a *testExportAdapter, n int) {
 			a.interaction.RequestAdaptations = make([]RequestAdaptationExport, n)
 		}},
+		{"automation batches and results", func(a *testExportAdapter, n int) {
+			a.personalAutomation = []PersonalAutomationBatchExport{{Results: make([]PersonalAutomationStepExport, n-1)}}
+		}},
 		{"continuity", func(a *testExportAdapter, n int) { a.interaction.Continuity = make([]ContinuityEligibilityExport, n) }},
 		{"combined fish records", func(a *testExportAdapter, n int) {
 			a.interaction.FatFish.Summaries = make([]FatFishSummaryExport, n/2)
@@ -259,6 +266,7 @@ func configuredDeleteAdapters(calls *[]string, finalizers []*testFinalizer, fail
 		return adapter
 	}
 	return DeleteAdapters{
+		PersonalAutomation:   makeAdapter(19, "personal_automation"),
 		FatFish:              makeAdapter(18, "fat_fish"),
 		RequestAdaptation:    makeAdapter(17, "request_adaptation"),
 		Continuity:           makeAdapter(16, "continuity"),
@@ -275,7 +283,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-success", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 19)
+	finalizers := make([]*testFinalizer, 20)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -295,7 +303,7 @@ func TestDeleteAccountCommitsDatabaseBeforeRetirementAndFinalizers(t *testing.T)
 	if err := coordinator.DeleteAccount(context.Background(), userID, 100); err != nil {
 		t.Fatalf("DeleteAccount: %v", err)
 	}
-	wantOrder := []string{"continuity", "auth", "request_adaptation", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "debug", "governance", "charity_routing", "ledger"}
+	wantOrder := []string{"continuity", "auth", "personal_automation", "request_adaptation", "resources", "claim_log", "issues", "donations", "activities", "reports", "fishing", "linklink", "rps", "bidding", "likes", "blackjack", "fat_fish", "debug", "governance", "charity_routing", "ledger"}
 	if !reflect.DeepEqual(calls, wantOrder) {
 		t.Fatalf("delete order = %v, want %v", calls, wantOrder)
 	}
@@ -320,7 +328,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, 100)
 	userID := seedLifecycleUser(t, fixture.store.DB(), "delete-rollback", false, 100)
 	calls := []string{}
-	finalizers := make([]*testFinalizer, 19)
+	finalizers := make([]*testFinalizer, 20)
 	for index := range finalizers {
 		finalizers[index] = &testFinalizer{}
 	}
@@ -344,7 +352,7 @@ func TestDeleteAccountFailureRollsBackAndAbortsPreparedState(t *testing.T) {
 		t.Fatalf("retirement commits=%d aborts=%d", retirement.commits, retirement.aborts)
 	}
 	for index, finalizer := range finalizers {
-		if index < 6 || index == 16 || index == 17 {
+		if index < 6 || index == 16 || index == 17 || index == 19 {
 			if finalizer.aborts != 1 || finalizer.commits != 0 {
 				t.Fatalf("prepared finalizer %d commits=%d aborts=%d", index, finalizer.commits, finalizer.aborts)
 			}

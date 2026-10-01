@@ -186,6 +186,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	var authRuntime *auth.Runtime
 	var activityEvents *accountstream.Hub
 	var lifecycleCoordinator *lifecycle.Coordinator
+	var automationService *stewardautomation.Service
 	var debugHub *debug.Hub
 	var accountConnections *accountEventConnections
 	var forwardRuntime *publicForwardRuntime
@@ -201,7 +202,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 			games: gameRuntimes, forward: forwardRuntime, audits: audits,
 			activityEvents: activityEvents, authRuntime: authRuntime, elevation: elevationManager,
 			discoveryWorker: discoveryWorker, bridge: bridgeRuntime, egress: outbound,
-			workerCancel: workerCancel,
+			workerCancel: workerCancel, automation: automationService,
 		}
 		if err := partial.CloseContext(startupContext); err != nil {
 			var pending *applicationCleanupError
@@ -532,12 +533,16 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := audits.attachAccess(resourceRepository); err != nil {
 		return nil, fmt.Errorf("attach auxiliary access observations: %w", err)
 	}
+	automationService, err = stewardautomation.New(stewardautomation.Config{Database: store.DB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService, Now: gameNow})
+	if err != nil {
+		return nil, fmt.Errorf("create automation service: %w", err)
+	}
 	lifecycleCoordinator, err = newLifecycleCoordinator(
 		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
 		claimService, resourceRepository, issueService, logRepository,
 		activityService, activityRepository, donationService, charityService,
 		reportRepository, announcementRepository, maintenanceService,
-		activityEvents, debugHub, gameNow, audits, activityEngines,
+		activityEvents, debugHub, gameNow, audits, activityEngines, automationService,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
@@ -655,11 +660,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}
 
-	automationService, err := stewardautomation.New(stewardautomation.Config{Database: store.DB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService})
-	if err != nil {
-		return nil, fmt.Errorf("create steward automation service: %w", err)
-	}
-	automationHandler, err := newStewardAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
+	automationHandler, err := newAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
 	if err != nil {
 		return nil, err
 	}
@@ -703,6 +704,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		bridge:          bridgeRuntime,
 		claims:          claimService,
 		resourceRepo:    resourceRepository,
+		automation:      automationService,
 		discoveryWorker: discoveryWorker,
 		donations:       donationService,
 		charity:         charityService,

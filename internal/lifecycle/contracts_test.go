@@ -52,7 +52,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 		"bidding", "likes", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
 		"fishing", "generated_at", "issues", "linklink", "log_summary", "models", "rps",
-		"schema_version", "thursday", "usage", "user", "welfare_claims",
+		"schema_version", "thursday", "usage", "user", "welfare_claims", "personal_automation",
 	}
 	sort.Strings(want)
 	if !reflect.DeepEqual(got, want) {
@@ -61,6 +61,8 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 }
 
 func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
+	assertClosedJSONKeys(t, PersonalAutomationBatchExport{}, "id", "kind", "target_id", "item_count", "created_at", "expires_at", "results")
+	assertClosedJSONKeys(t, PersonalAutomationStepExport{Outcome: "imported", EndpointKeyID: "key", BindingID: "binding", Code: "code", Message: "message"}, "index", "status", "outcome", "endpoint_key_id", "binding_id", "code", "message")
 	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes")
 	assertClosedJSONKeys(t, testLakeNotesExport(), "rules_id", "profile_revision", "profile", "casts", "entries", "exchanges")
 	assertClosedJSONKeys(t, ImageTaskExport{}, "id", "status", "n", "created_at", "dispatched_at", "completed_at", "billing_state", "charge", "refund", "actual_images")

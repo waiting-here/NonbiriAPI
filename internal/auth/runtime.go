@@ -533,6 +533,10 @@ func (r *Runtime) writeSessionFailure(w http.ResponseWriter, err error) {
 }
 
 func (r *Runtime) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if _, ok := authz.PersonalCallerFromContext(ctx); ok {
+		_, err := r.authorizer.AuthorizePersonalCaller(ctx, tx, userID)
+		return err
+	}
 	if _, ok := authz.StewardCallerFromContext(ctx); ok {
 		_, err := r.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
 		return err
