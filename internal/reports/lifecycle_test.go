@@ -90,7 +90,7 @@ WHERE scope='account' AND scope_hash=?`, rateHash[:]); got != 1 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := environment.repository.DetachUserForDeletion(context.Background(), tx, owner.UserID, environment.clock.Load()); err == nil {
+	if err = environment.repository.DetachUserForDeletion(context.Background(), tx, owner.UserID, environment.clock.Load()); err == nil {
 		_, err = tx.Exec(`DELETE FROM users WHERE id=?`, owner.UserID)
 	} else {
 		_ = tx.Rollback()
@@ -248,7 +248,7 @@ func TestDetachAtDeadlineFinishesExpiredPendingIndexingWithoutPostDeadlineCaptur
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := environment.repository.DetachUserForDeletion(context.Background(), tx, owner.UserID, deadline); err == nil {
+	if err = environment.repository.DetachUserForDeletion(context.Background(), tx, owner.UserID, deadline); err == nil {
 		_, err = tx.Exec(`DELETE FROM users WHERE id=?`, owner.UserID)
 	} else {
 		_ = tx.Rollback()
