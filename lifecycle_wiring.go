@@ -35,6 +35,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
 
 var (
@@ -339,6 +340,7 @@ func newLifecycleCoordinator(
 	now func() time.Time,
 	audits *auditRuntime,
 	activityEngines *activityRuntime,
+	automation *stewardautomation.Service,
 ) (*lifecycle.Coordinator, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
 		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil || forwardRuntime.adaptations == nil ||
@@ -346,7 +348,7 @@ func newLifecycleCoordinator(
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
 		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
 		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
-		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil || activityEngines.fish == nil {
+		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil || activityEngines.fish == nil || automation == nil {
 		return nil, lifecycle.ErrInvalid
 	}
 
@@ -412,11 +414,12 @@ func newLifecycleCoordinator(
 		},
 		Ledger: ledgerAdapter,
 		Export: lifecycle.ExportAdapters{
-			RequestAdaptation: forwardRuntime.adaptations,
-			Continuity:        authRuntime.IdentityContinuity(),
-			FatFish:           fatFishAdapter,
-			Governance:        activityEngines,
-			Identity:          accountResources, Resources: accountResources, Issues: accountResources,
+			PersonalAutomation: automation,
+			RequestAdaptation:  forwardRuntime.adaptations,
+			Continuity:         authRuntime.IdentityContinuity(),
+			FatFish:            fatFishAdapter,
+			Governance:         activityEngines,
+			Identity:           accountResources, Resources: accountResources, Issues: accountResources,
 			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
 			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
@@ -424,6 +427,7 @@ func newLifecycleCoordinator(
 			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
 		},
 		Delete: lifecycle.DeleteAdapters{
+			PersonalAutomation:   automation,
 			FatFish:              fatFishAdapter,
 			RequestAdaptation:    forwardRuntime.adaptations,
 			Continuity:           authRuntime.IdentityContinuity(),
@@ -437,36 +441,38 @@ func newLifecycleCoordinator(
 			DebugAccountStream: runtimeMemory,
 		},
 		Recovery: lifecycle.RecoveryAdapters{
-			FatFish:        fatFishAdapter,
-			CharityRouting: routingLifecycle,
-			Governance:     activityEngines,
-			Idempotency:    idempotencyAdapter,
-			Discovery:      lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
-			Claims:         lifecycleadapters.NewClaimRecovery(claimService),
-			Thursday:       lifecycleadapters.NewThursdayRecovery(activityService),
-			Reports:        reportAdapter,
-			Fishing:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
-			LinkLink:       lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
-			RPS:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
-			Bidding:        lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
-			Likes:          lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
-			Blackjack:      lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
-			Donations:      lifecycleadapters.NewDonationRecovery(donationService),
-			Secrets:        secretAdapter,
+			PersonalAutomation: automation,
+			FatFish:            fatFishAdapter,
+			CharityRouting:     routingLifecycle,
+			Governance:         activityEngines,
+			Idempotency:        idempotencyAdapter,
+			Discovery:          lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
+			Claims:             lifecycleadapters.NewClaimRecovery(claimService),
+			Thursday:           lifecycleadapters.NewThursdayRecovery(activityService),
+			Reports:            reportAdapter,
+			Fishing:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
+			LinkLink:           lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
+			RPS:                lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
+			Bidding:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
+			Likes:              lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
+			Blackjack:          lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
+			Donations:          lifecycleadapters.NewDonationRecovery(donationService),
+			Secrets:            secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
-			FatFish:           fatFishAdapter,
-			RequestAdaptation: forwardRuntime.adaptations,
-			Continuity:        authRuntime.IdentityContinuity(),
-			CharityRouting:    routingLifecycle,
-			Governance:        activityEngines,
-			Sessions:          lifecycleadapters.NewAuthSessionRetention(authRuntime),
-			RequestLogs:       lifecycleadapters.NewRequestLogRetention(logRepository),
-			Audits:            lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
-			Observability:     diagnosticRetention{audits.observations},
-			RiskAudit:         riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
-			Issues:            lifecycleadapters.NewIssueRetention(issueService),
-			Fishing:           fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			PersonalAutomation: automation,
+			FatFish:            fatFishAdapter,
+			RequestAdaptation:  forwardRuntime.adaptations,
+			Continuity:         authRuntime.IdentityContinuity(),
+			CharityRouting:     routingLifecycle,
+			Governance:         activityEngines,
+			Sessions:           lifecycleadapters.NewAuthSessionRetention(authRuntime),
+			RequestLogs:        lifecycleadapters.NewRequestLogRetention(logRepository),
+			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Observability:      diagnosticRetention{audits.observations},
+			RiskAudit:          riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
+			Issues:             lifecycleadapters.NewIssueRetention(issueService),
+			Fishing:            fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
 			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
 			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
 			Idempotency: idempotencyAdapter, Secrets: secretAdapter,

@@ -180,7 +180,7 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	automation, err := newStewardAutomationHandler(service, repository, f.app.forward.lifecycle, f.app.gate)
+	automation, err := newAutomationHandler(service, repository, f.app.forward.lifecycle, f.app.gate)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestStewardAutomationBoundsDefaultsAndEntryAuthority(t *testing.T) {
 		want                                    int
 	}{
 		{stewardautomation.DonationsPath, "POST", auditUserHost, "", `{}`, 401},
-		{stewardautomation.DonationsPath, "GET", auditUserHost, f.caller, `{}`, 405},
+		{stewardautomation.DonationsPath, "PATCH", auditUserHost, f.caller, `{}`, 405},
 		{stewardautomation.DonationsPath, "POST", auditAdminHost, f.caller, `{}`, 404},
 		{"/api/steward/automation/%64onations", "POST", auditUserHost, f.caller, `{}`, 404},
 		{stewardautomation.DonationsPath + "?x=1", "POST", auditUserHost, f.caller, `{}`, 400},
@@ -550,6 +550,15 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 	if models.Code != 200 || !strings.Contains(models.Body.String(), "[公益]fixture/automation") {
 		t.Fatalf("created bindings unavailable: %d %s", models.Code, models.Body.String())
 	}
+	// The personal batch shares the existing key and remains a separate receipt
+	// collection in the normal account export and deletion path.
+	batchPath := "/api/automation/endpoints/" + created.EndpointID + "/keys/batch-import"
+	batchBody := `{"ownership_confirmed":true,"keys":[{"secret":"donated-fixture-0"}]}`
+	batch := testApplicationRequest(t, f.app.handler, http.MethodPost, auditUserHost, batchPath, batchBody, nil, map[string]string{
+		"Authorization": "Bearer " + f.caller, "Content-Type": "application/json", "Idempotency-Key": strings.Repeat("P", 22)})
+	if batch.Code != 200 || !strings.Contains(batch.Body.String(), `"outcome":"existing"`) {
+		t.Fatalf("personal batch before export: %d %s", batch.Code, batch.Body.String())
+	}
 	// Seed only the external login result; the normal session, elevation,
 	// export and deletion handlers remain in the production path.
 	rawSession := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x72}, 32))
@@ -579,6 +588,9 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 		len(document.Donations[0].Keys) != 2 || len(document.Donations[0].Keys[0].RecurringLimits) != 1 || len(document.CatalogPairs) != 2 {
 		t.Fatal("automation resources are missing from the existing export")
 	}
+	if len(document.PersonalAutomation) != 1 || len(document.PersonalAutomation[0].Results) != 1 || document.PersonalAutomation[0].Results[0].Outcome != "existing" {
+		t.Fatalf("personal receipts missing from account export: %+v", document.PersonalAutomation)
+	}
 	for _, key := range input["keys"].([]map[string]any) {
 		if strings.Contains(exported.Body.String(), key["secret"].(string)) {
 			t.Fatal("export leaked the complete upstream key")
@@ -588,7 +600,7 @@ func TestStewardAutomationResourcesFollowExportAndAccountDeletion(t *testing.T) 
 	if deleted.Code != 204 {
 		t.Fatalf("delete: %d %s", deleted.Code, deleted.Body.String())
 	}
-	for _, table := range []string{"endpoints", "endpoint_keys", "model_catalog_entries", "model_discovery_evidence", "model_pair_catalog", "donation_key_memberships", "charity_model_bindings"} {
+	for _, table := range []string{"endpoints", "endpoint_keys", "model_catalog_entries", "model_discovery_evidence", "model_pair_catalog", "donation_key_memberships", "charity_model_bindings", "personal_automation_batches", "personal_automation_steps"} {
 		if f.count(t, table) != 0 {
 			t.Fatalf("account deletion retained private or active resources in %s", table)
 		}

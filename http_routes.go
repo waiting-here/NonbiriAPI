@@ -101,10 +101,12 @@ func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Run
 	mux.Handle("/api", userAuth)
 	mux.Handle("/api/", userAuth)
 	if len(automationHandlers) > 1 || len(automationHandlers) == 1 && automationHandlers[0] == nil {
-		return nil, errors.New("invalid steward automation handler")
+		return nil, errors.New("invalid automation handler")
 	}
 	if len(automationHandlers) == 1 {
 		automation := httpmw.API(automationHandlers[0])
+		mux.Handle(stewardautomation.PersonalPrefix, automation)
+		mux.Handle(stewardautomation.StewardPrefix, automation)
 		mux.Handle(stewardautomation.DonationsPath, automation)
 		mux.Handle(stewardautomation.BindingsPath, automation)
 		mux.Handle(stewardautomation.FailurePolicyPath, automation)
