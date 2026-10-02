@@ -24,13 +24,13 @@ func TestManualCatalogUnionRevisionBindingAndRefresh(t *testing.T) {
 	if _, err := e.service.MutateManualCatalog(ctx, true, 0, did, kid, 0, routingMutation(t, 'z', http.MethodPost, routeAdminManual, []int64{did, kid}, invalid), invalid); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("unbindable name accepted: %v", err)
 	}
-	input := ManualCatalogInput{Entries: []string{"manual-only", "automatic", "manual-only"}, ExpectedManualCatalogRevision: "1"}
+	input := ManualCatalogInput{Entries: []string{"automatic", "manual-only", "manual-only"}, ExpectedManualCatalogRevision: "1"}
 	mutation := routingMutation(t, 'b', http.MethodPost, routeAdminManual, []int64{did, kid}, input)
 	added, err := e.service.MutateManualCatalog(ctx, true, 0, did, kid, 0, mutation, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if added.Value.ManualCatalogRevision != "2" || len(added.Value.Entries) != 2 || added.Value.Entries[0].Verified || added.Value.Entries[0].Source != "manual" || added.Value.Entries[1].Source != "both" {
+	if added.Value.ManualCatalogRevision != "2" || len(added.Value.Entries) != 2 || added.Value.Entries[1].Verified || added.Value.Entries[1].Source != "manual" || added.Value.Entries[0].Source != "both" {
 		t.Fatalf("candidate result %+v", added.Value)
 	}
 	replay, err := e.service.MutateManualCatalog(ctx, true, 0, did, kid, 0, mutation, input)
@@ -46,6 +46,12 @@ func TestManualCatalogUnionRevisionBindingAndRefresh(t *testing.T) {
 	page, _, err := e.service.keyModelPages(ctx, roleAdmin, 0, did, kid, 0, pagination.Default(), "manual-")
 	if err != nil || len(page.Candidates) != 1 || page.CandidatesPagination.TotalItems != "1" || page.ManualCatalogRevision != "2" {
 		t.Fatalf("filtered union %+v %v", page, err)
+	}
+	listed := page.Candidates[0]
+	if listed.ManualEntryID == nil || listed.ManualEntryRevision == nil ||
+		*listed.ManualEntryID != *added.Value.Entries[1].ManualEntryID || *listed.ManualEntryRevision != "1" ||
+		*listed.ManualEntryID == *listed.ManualEntryRevision {
+		t.Fatalf("listed candidate lost its identity: %+v", listed)
 	}
 	model := e.createModel(t, 'd')
 	mid, _ := parsePositiveID(model.ID)
@@ -65,7 +71,7 @@ func TestManualCatalogUnionRevisionBindingAndRefresh(t *testing.T) {
 	if err != nil || len(snapshot.candidates) != 1 {
 		t.Fatalf("manual runtime snapshot %+v %v", snapshot, err)
 	}
-	entry, _ := parsePositiveID(*added.Value.Entries[0].ManualEntryID)
+	entry, _ := parsePositiveID(*listed.ManualEntryID)
 	remove := ManualCatalogInput{ExpectedManualCatalogRevision: "2"}
 	if _, err = e.service.MutateManualCatalog(ctx, true, 0, did, kid, entry, routingMutation(t, 'f', http.MethodDelete, routeAdminManual+"/{entryId}", []int64{did, kid, entry}, remove), remove); !errors.Is(err, ErrConflict) {
 		t.Fatalf("bound unique support removed: %v", err)
@@ -85,6 +91,10 @@ func TestManualCatalogUnionRevisionBindingAndRefresh(t *testing.T) {
 	deleted, err := e.service.MutateManualCatalog(ctx, true, 0, did, kid, entry, routingMutation(t, 'h', http.MethodDelete, routeAdminManual+"/{entryId}", []int64{did, kid, entry}, remove), remove)
 	if err != nil || deleted.Value.ManualCatalogRevision != "3" {
 		t.Fatalf("delete %+v %v", deleted, err)
+	}
+	remaining, _, err := e.service.keyModelPages(ctx, roleAdmin, 0, did, kid, 0, pagination.Default(), "")
+	if err != nil || len(remaining.Candidates) != 1 || remaining.Candidates[0].UpstreamModelID != "automatic" {
+		t.Fatalf("deleting a listed candidate removed another model: %+v %v", remaining, err)
 	}
 	if _, err = e.store.DB().Exec(`UPDATE donation_keys SET enabled=0 WHERE id=?`, kid); err != nil {
 		t.Fatal(err)

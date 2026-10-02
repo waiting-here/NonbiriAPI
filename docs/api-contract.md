@@ -24,6 +24,8 @@ Account export/deletion and selected administrator legal-hold/user actions requi
 
 An incorrect password at `POST /admin/api/auth/elevate` returns `403 elevated_required`; the active session remains valid. A missing or expired session returns `401 unauthorized`.
 
+`DELETE /admin/api/users/{id}` requires a fresh administrator capability, an `Idempotency-Key`, and `{"expected_revision":"<user revision>","confirmation":"DELETE"}`. It rejects administrator targets and stale revisions, drains accepted requests, and runs the account cleanup workflow. Success returns `204`; an identical retry with fresh verification replays that result without repeating deletion. Reusing the key for another target or revision returns `409 conflict`.
+
 #### Browser cross-origin access
 
 The three exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.

@@ -86,10 +86,9 @@ func readManualCandidatesTx(ctx context.Context, tx *sql.Tx, keyID int64, q stri
 		}
 		item.Verified = automatic > 0
 		if id.Valid {
-			value := strconv.FormatInt(id.Int64, 10)
-			item.ManualEntryID = &value
-			value = strconv.FormatInt(rev.Int64, 10)
-			item.ManualEntryRevision = &value
+			idText, revisionText := strconv.FormatInt(id.Int64, 10), strconv.FormatInt(rev.Int64, 10)
+			item.ManualEntryID = &idText
+			item.ManualEntryRevision = &revisionText
 		}
 		out = append(out, item)
 	}
