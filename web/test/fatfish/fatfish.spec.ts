@@ -711,7 +711,13 @@ test('a local season publishes explicitly and the original user tab resumes, set
       await adminAPI(administrator, '/levels/' + level.id + '/versions?page=1')
     ).json()) as { items: { id: string }[] };
     const now = Math.floor(Date.now() / 1000);
-    const created = await adminAPI(administrator, '/periods', 'POST', {
+    const adminPage = await administrator.newPage();
+    adminPage.on('dialog', (dialog) => void dialog.accept());
+    await adminPage.goto(fixture().admin_url + '/limited-activities/fat-fish');
+    await adminPage.getByRole('button', { name: 'Periods and nodes', exact: true }).click();
+    await adminPage.getByRole('button', { name: 'New period', exact: true }).click();
+    const periodEditor = adminPage.locator('.fatfish-period-editor');
+    const periodInput = {
       title: 'Rice garden season',
       description:
         'Guide the fish to a meal, unlock connected ponds, and improve your personal best.',
@@ -720,12 +726,38 @@ test('a local season publishes explicitly and the original user tab resumes, set
       past_public: true,
       starts_at: now - 60,
       ends_at: now + 3600,
-    });
+    };
+    await periodEditor.getByLabel('Title', { exact: true }).fill(periodInput.title);
+    await periodEditor.getByLabel('Description', { exact: true }).fill(periodInput.description);
+    await periodEditor.getByLabel('Visible in directory', { exact: true }).check();
+    await periodEditor.getByLabel('Pause challenges', { exact: true }).uncheck();
+    await periodEditor.getByLabel('Public after close', { exact: true }).check();
+    await periodEditor
+      .getByLabel('Start time', { exact: true })
+      .fill(new Date(periodInput.starts_at * 1000).toISOString().slice(0, 19));
+    await periodEditor
+      .getByLabel('Closing time', { exact: true })
+      .fill(new Date(periodInput.ends_at * 1000).toISOString().slice(0, 19));
+    const creating = adminPage.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === base + '/periods' &&
+        response.request().method() === 'POST',
+    );
+    await periodEditor.getByRole('button', { name: 'Save period', exact: true }).click();
+    const created = await creating;
     expect(created.status()).toBe(200);
+    expect(created.request().postDataJSON()).toEqual(periodInput);
     let period = (await created.json()) as { id: string; revision: string };
+    expect(await (await adminAPI(administrator, '/periods/' + period.id)).json()).toMatchObject({
+      ...periodInput,
+      state: 'draft',
+    });
+    await expect(
+      periodEditor.getByRole('heading', { name: 'Edit period', exact: true }),
+    ).toBeVisible();
     const nodes: { id: string; revision: string }[] = [];
     for (let index = 0; index < 3; index++) {
-      const saved = await adminAPI(administrator, '/periods/' + period.id + '/nodes', 'POST', {
+      const nodeInput = {
         title: ['Rice introduction', 'The connected pond', 'A second helping'][index],
         description: 'Rescue at least five fish.',
         version_id: versions.items[0].id,
@@ -741,18 +773,61 @@ test('a local season publishes explicitly and the original user tab resumes, set
           star_rewards: ['1', '1', '1'],
         },
         expected_period_revision: period.revision,
-      });
+      };
+      await periodEditor.getByRole('button', { name: 'Add node', exact: true }).click();
+      const nodeEditor = periodEditor.locator('.fatfish-node-editor');
+      await nodeEditor.getByLabel('Title', { exact: true }).fill(nodeInput.title);
+      await nodeEditor.getByLabel('Description', { exact: true }).fill(nodeInput.description);
+      await nodeEditor.getByLabel('Map X', { exact: true }).fill(String(nodeInput.map_x));
+      await nodeEditor.getByLabel('Map Y', { exact: true }).fill(String(nodeInput.map_y));
+      await nodeEditor.getByLabel('Order', { exact: true }).fill(String(index));
+      await nodeEditor.getByRole('combobox', { name: /^Level/ }).selectOption(level.id);
+      await nodeEditor
+        .getByRole('combobox', { name: /^Published version/ })
+        .selectOption(nodeInput.version_id);
+      await nodeEditor.getByLabel('Hide until eligible', { exact: true }).uncheck();
+      await nodeEditor
+        .getByRole('combobox', { name: /^Condition/ })
+        .selectOption(index ? 'passed' : 'none');
+      if (index)
+        await nodeEditor.getByRole('combobox', { name: /^Node/ }).selectOption(nodes[index - 1].id);
+      await nodeEditor.getByLabel('Unlock cost', { exact: true }).fill('1');
+      await nodeEditor.getByLabel('Ticket price', { exact: true }).fill('1');
+      await nodeEditor.getByLabel('First-clear reward', { exact: true }).fill('2');
+      for (let stars = 1; stars <= 3; stars++)
+        await nodeEditor.getByLabel(`${stars}★ reward`, { exact: true }).fill('1');
+      const saving = adminPage.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === base + '/periods/' + period.id + '/nodes' &&
+          response.request().method() === 'POST',
+      );
+      const refreshing = adminPage.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === base + '/periods/' + period.id &&
+          response.request().method() === 'GET',
+      );
+      await nodeEditor.getByRole('button', { name: 'Save node', exact: true }).click();
+      const saved = await saving;
       expect(saved.status()).toBe(200);
+      expect(saved.request().postDataJSON()).toEqual(nodeInput);
       nodes.push(await saved.json());
-      period = await (await adminAPI(administrator, '/periods/' + period.id)).json();
+      period = await (await refreshing).json();
+      expect(
+        await (
+          await adminAPI(administrator, '/periods/' + period.id + '/nodes/' + nodes[index].id)
+        ).json(),
+      ).toMatchObject({
+        title: nodeInput.title,
+        description: nodeInput.description,
+        version_id: nodeInput.version_id,
+        map_x: nodeInput.map_x,
+        map_y: nodeInput.map_y,
+        order: index,
+        condition: nodeInput.condition,
+        amounts: nodeInput.amounts,
+      });
+      await expect(nodeEditor.getByLabel('Title', { exact: true })).toHaveValue(nodeInput.title);
     }
-    const adminPage = await administrator.newPage();
-    adminPage.on('dialog', (dialog) => void dialog.accept());
-    await adminPage.goto(fixture().admin_url + '/limited-activities/fat-fish');
-    await adminPage.getByRole('button', { name: 'Periods and nodes', exact: true }).click();
-    await adminPage
-      .getByRole('button', { name: 'Rice garden season · draft', exact: true })
-      .click();
     await adminPage.getByRole('button', { name: /^2\. The connected pond/ }).click();
     await expect(adminPage.getByRole('heading', { name: 'Edit node', exact: true })).toBeVisible();
     await capture(adminPage, '05-period-layout-and-conditions');
