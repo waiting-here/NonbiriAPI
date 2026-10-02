@@ -298,9 +298,10 @@
         "authorityRevision": "Current configuration: version {{revision}}. The page reloads the latest status after an action and does not automatically repeat one whose response is unclear.",
         "stewardCannotDisable": "Stewards cannot disable maintenance.",
         "reasonLabel": "Reason",
-        "reasonInvalid": "Enter a non-blank reason no larger than 4,096 UTF-8 bytes.",
+        "reasonInvalid": "Enter a reason. Shorten it if it is too long.",
         "enableConfirmTitle": "Enable maintenance?",
-        "disableConfirmTitle": "Disable maintenance?"
+        "disableConfirmTitle": "Disable maintenance?",
+        "reasonHelp": "Explain why service is being paused or restored so other administrators can follow up."
       },
       "logs": {
         "stewardTitle": "Request logs",
@@ -390,7 +391,7 @@
           "boundOnly": "Bound only",
           "searchSources": "Search sources",
           "searchKeys": "Search keys",
-          "searchInvalid": "Use at most 128 Unicode characters and 512 UTF-8 bytes; control characters are not allowed.",
+          "searchInvalid": "Shorten the search or remove special control characters, then try again.",
           "applySearch": "Search",
           "clearSearch": "Clear search",
           "chooseSource": "Select a source",
@@ -453,8 +454,8 @@
         "charityStateLabel": "State: {{state}}",
         "candidateSourceFilter": "Connection source",
         "candidateSourceAny": "All connection sources",
-        "searchInvalid": "Use up to 128 Unicode characters and 512 bytes; control characters are not allowed.",
-        "candidateSearchInvalid": "Use up to 512 Unicode characters and 2048 bytes; control characters are not allowed.",
+        "searchInvalid": "Shorten the search or remove special control characters, then try again.",
+        "candidateSearchInvalid": "Shorten the search or remove special control characters, then try again.",
         "chooseKey": "2 · Choose key",
         "chooseModels": "3 · Choose models",
         "donationNumber": "Donation #{{id}}",
@@ -521,7 +522,7 @@
         "keys": "Keys",
         "leaveUnchanged": "Leave unchanged",
         "manage": "Manage",
-        "modelSummary": "Configuration version {{revision}} · {{bindings}} service connections · {{success}}",
+        "modelSummary": "{{bindings}} connections · {{success}}",
         "moveDown": "Down",
         "moveUp": "Up",
         "noBindingsBody": "Add one or more candidates below.",
@@ -580,7 +581,7 @@
         "validation": {
           "affinityTTLSeconds": "Association duration must be a whole number from 1 to 86400 seconds.",
           "priceLimit": "Price limit must be an exact non-negative credit amount with at most three decimal places.",
-          "countLimits": "Call and token limits must be canonical integers no greater than 9,000,000,000,000,000.",
+          "countLimits": "Call and token limits must be whole numbers up to 9,000,000,000,000,000.",
           "tokenReserve": "Token reserve must be an integer from 0 through 2,147,483,647.",
           "safeNote": "Reviewer-safe note must be at most 256 characters and contain no control characters.",
           "reviewReason": "Review reason is required and must be at most 1,024 characters.",
@@ -589,12 +590,23 @@
           "completeSettings": "Approval requires a complete setting for every surviving key.",
           "modelIdentity": "Provider and model are required, limited to 64 characters, and cannot reuse the [公益] prefix.",
           "modelLevels": "Choose zero or more levels from L1 through L5.",
-          "publicDescription": "Public description must be at most 1,024 characters and 4,096 UTF-8 bytes, with no control characters except line breaks and tabs.",
+          "publicDescription": "Use up to 1,024 characters for the public description. Shorten long text; newlines and tabs are allowed.",
           "modelPrices": "Every price must be an exact non-negative credit amount with at most three decimal places.",
           "tokenReserveCredits": "Reserve 0.001–9,000,000,000,000 credits, with up to three decimal places.",
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
           "discountDates": "Discount dates must be valid and the end must be later than the start."
-        }
+        },
+        "discountSummary": "Enabled at {{percent}}% of the regular price"
+      },
+      "management": {
+        "details": "Technical details",
+        "optionalPrices": "Optional size prices",
+        "sizePricesSummary": "{{tiers}} tiers, {{sizes}} exact sizes",
+        "loanTier": "Loan amount (credits)",
+        "feeHelp": "The three fees must total less than 100%; 0 means no fee for that item.",
+        "periodActions": "Change period status",
+        "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating.",
+        "loanExample": "For example, an amount of 10,000 with A = 0.9 and B = 1.3 gives 9,000 game credits and costs 13,000 general credits to repay."
       }
     },
     "failureReset": {
@@ -691,7 +703,8 @@
         "count": "Each model can have up to 32 role rules."
       },
       "saved": "Message role settings saved.",
-      "stewardScope": "Edit the mainstream community models you manage."
+      "stewardScope": "Edit the mainstream community models you manage.",
+      "summary": "Default: {{action}}; {{count}} role rules"
     },
     "donationReview": {
       "forceTitle": "Reject an automatically approved donation",
@@ -1271,7 +1284,8 @@
         "nextUnconfigured": "Not open yet. Opening details will appear here.",
         "nextOpen": "Check the activity rules, eligibility and costs before joining."
       }
-    }
+    },
+    "remove": "Remove"
   },
   "logs": {
     "charityModel": "Requested charity model",
@@ -1393,7 +1407,7 @@
     "announcements": {
       "nav": "Announcements",
       "all": "All",
-      "chineseMarkdown": "Chinese Markdown · {{bytes}} / 65,536 bytes",
+      "chineseMarkdown": "Chinese body",
       "chineseTitle": "Chinese title",
       "closeCreator": "Close creator",
       "createDraft": "Create draft",
@@ -1439,7 +1453,7 @@
       "emptyBody": "No announcements match the current filters.",
       "emptyDraft": "(empty draft)",
       "emptyTitle": "No announcements",
-      "englishMarkdown": "English Markdown · {{bytes}} / 65,536 bytes",
+      "englishMarkdown": "English body",
       "englishTitle": "English title",
       "expiry": "Expiry",
       "expiryOptional": "Expiry (optional)",
@@ -1469,7 +1483,77 @@
         "updated": "Updated"
       },
       "title": "Announcements",
-      "validation": "Each language must contain both title and body or neither; each body is limited to 65,536 UTF-8 bytes, and expiry must be valid."
+      "validation": "Fill in both title and body for each language, or leave both blank. Shorten long bodies and check the expiry time."
+    }
+  },
+  "gatewayCapabilities": {
+    "title": "Gateway model capabilities",
+    "description": "Declare verified capabilities for an exact Gateway URL and upstream model. Changes apply to new requests immediately, including normal and flattened calls.",
+    "add": "Add model capabilities",
+    "edit": "Edit model capabilities",
+    "editTarget": "Edit capabilities for {{model}}",
+    "deleteTarget": "Delete capabilities for {{model}}",
+    "emptyTitle": "No model capabilities declared",
+    "emptyBody": "Add a verified target when it needs reasoning, output, storage or cache controls.",
+    "target": "Upstream target",
+    "baseUrl": "Gateway base URL",
+    "model": "Complete upstream model name",
+    "targetHint": "Copy the URL and complete model name from the binding. Both must match; trailing URL slashes are removed when saved.",
+    "adapter": "Verified adapter",
+    "adapterHint": "Choose the adapter used by this upstream model. Saving a declaration does not test the provider or prove that it honored a request.",
+    "adapters": {
+      "openai_chat": "OpenAI Chat Completions",
+      "openai_responses": "OpenAI Responses",
+      "anthropic_effort": "Anthropic effort",
+      "anthropic_adaptive": "Anthropic adaptive reasoning",
+      "anthropic_always_adaptive": "Anthropic always-adaptive reasoning"
+    },
+    "efforts": "Supported reasoning efforts",
+    "effortsHint": "Select only verified levels. No selection rejects explicit reasoning-effort controls.",
+    "effort": {
+      "none": "None",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Maximum"
+    },
+    "noEfforts": "Explicit reasoning efforts are rejected",
+    "output": "Maximum output tokens",
+    "outputHint": "Tokens. 0 means no declared ceiling. A positive ceiling keeps the requested output budget and rejects larger requests; it does not replace the caller's budget.",
+    "outputAnthropicHint": "Tokens. Anthropic requires a positive ceiling. It keeps the requested output budget and rejects larger requests; it does not replace the caller's budget.",
+    "noCeiling": "No declared ceiling",
+    "tokenCount": "{{count, number}} tokens",
+    "advanced": "Storage and cache controls",
+    "storage": "Storage control",
+    "storageHint": "The default rejects an explicit store control. OpenAI mapping forwards it to the verified OpenAI adapter.",
+    "storageOptions": {
+      "reject": "Reject store controls (default)",
+      "openai": "Forward to OpenAI",
+      "omit_false": "Omit store:false for compatibility"
+    },
+    "omitWarning": "Omitting store:false sends no storage instruction upstream. It does not guarantee that the provider will avoid retention.",
+    "cache": "Prompt cache control",
+    "cacheHint": "The default rejects cache controls. Anthropic mapping preserves explicit cache locations and TTLs; it does not add automatic caching or guarantee a hit.",
+    "cacheOptions": {
+      "reject": "Reject cache controls (default)",
+      "anthropic": "Anthropic prompt caching"
+    },
+    "absent": "No capabilities declared for this target; explicit capability controls may be rejected.",
+    "deleteTitle": "Delete model capabilities?",
+    "deleteDescription": "Remove the declaration for {{model}} at {{baseUrl}}. New requests lose these declared capabilities; requests already running keep their settings."
+  },
+  "requestAdaptation": {
+    "cache": {
+      "label": "Automatic cache default",
+      "off": "Off (default)",
+      "keep": "Keep saved default",
+      "fiveMinutes": "5 minutes",
+      "oneHour": "1 hour",
+      "help": "For Gateway only. Caller cache marks on the request, text or tools take priority. The provider decides cache hits. Saved defaults stay hidden; keep them or choose again.",
+      "inherited": "The cache default inherits with the body defaults. Choosing “Set here” replaces the entire defaults section.",
+      "custom": "Custom field below"
     }
   }
 }

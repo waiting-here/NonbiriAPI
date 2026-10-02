@@ -81,6 +81,10 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
       <p>{text('common.hidingRemovesTheDirectoryEntryDirectLinks')}</p>
       <form
         className="limited-form"
+        onChange={() => {
+          setSaved(false);
+          setFormError(null);
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           submit();

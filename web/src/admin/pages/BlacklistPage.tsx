@@ -229,7 +229,14 @@ export function BlacklistManagement({
       <PageHeader title={label.title} description={label.description} />
       <Card>
         <h2>{label.addTitle}</h2>
-        <form onSubmit={submit} className="ops-toolbar">
+        <form
+          onSubmit={submit}
+          className="ops-toolbar"
+          onChange={() => {
+            setNotice('');
+            setValidation('');
+          }}
+        >
           <label className="ops-form-field">
             <span>Discord ID</span>
             <input

@@ -6,6 +6,7 @@ import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
+import GatewayCapabilitiesSection from '../features/gateway/GatewayCapabilitiesSection';
 import {
   adminCoreKeys,
   getSiteConfigBundle,
@@ -287,9 +288,7 @@ function SettingField({
           disabled={busy || draft.isNull}
           onChange={(event) => change(String(event.target.checked))}
         />
-        <span>
-          {draft.text === 'true' ? t('common.enabled') : t('common.disabled')}
-        </span>
+        <span>{draft.text === 'true' ? t('common.enabled') : t('common.disabled')}</span>
       </label>
     ) : entry.type === 'boolean' || entry.type === 'enum' ? (
       <select
@@ -342,6 +341,19 @@ function SettingField({
           <label htmlFor={inputID}>{entry.title[locale]}</label>
         </h3>
         <p>{entry.description[locale]}</p>
+        <p className="muted">
+          {entry.unit ? entry.unit[locale] + ' · ' : ''}
+          {t('admin.settings.catalogDefault')}{' '}
+          {entry.raw_default === null
+            ? t('admin.settings.notConfigured')
+            : entry.type === 'boolean'
+              ? t(entry.raw_default ? 'common.enabled' : 'common.disabled')
+              : entry.type === 'enum'
+                ? enumValueLabel(t, String(entry.raw_default))
+                : entry.raw_default === ''
+                  ? t('admin.settings.enumValues.empty')
+                  : scalar(entry.raw_default)}
+        </p>
         {entry.independent_gates.length ? (
           <p className="muted">
             {t('admin.settings.catalogIndependentGate')}:{' '}
@@ -371,6 +383,11 @@ function SettingField({
                 : ''}
             </p>
           ) : null}
+          {entry.type === 'text' ? (
+            <p className="muted">
+              {t('admin.settings.legalBytes', { count: utf8Bytes(draft.text), max: entry.maximum })}
+            </p>
+          ) : null}
         </details>
       </div>
       <div className="ops-setting-control">
@@ -388,11 +405,6 @@ function SettingField({
         ) : null}
         {value === null && !entry.null_writable ? (
           <p className="muted">{t('admin.settings.notConfigured')}</p>
-        ) : null}
-        {entry.type === 'text' ? (
-          <p className="muted">
-            {t('admin.settings.legalBytes', { count: utf8Bytes(draft.text), max: entry.maximum })}
-          </p>
         ) : null}
         {preview ? <p className="muted">{preview}</p> : null}
         {draft.text === '0' ? <p className="muted">{entry.zero_semantics[locale]}</p> : null}
@@ -426,21 +438,38 @@ function SettingField({
 function Group({
   name,
   entries,
+  searching,
   ...editor
-}: EditorProps & { name: string; entries: SiteConfigCatalogEntry[] }) {
+}: EditorProps & { name: string; entries: SiteConfigCatalogEntry[]; searching: boolean }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(name === 'identity');
+  const edited = entries.some((entry) => Boolean(editor.drafts[entry.key]));
+  const open = expanded || searching || edited;
+  const nondefault = entries.filter((entry) => editor.values[entry.key] !== entry.raw_default);
+  const locale = catalogLocale(editor.language);
   return (
     <Card>
       <button
         className="btn btn-link ops-disclosure"
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() => setExpanded(!expanded)}
       >
         <span>{groupLabel(t, name)}</span>
         <span>{t('admin.settings.groupCount', { count: entries.length })}</span>
       </button>
+      {nondefault.length ? (
+        <p className="muted">
+          {t('admin.settings.customizedCount', { count: nondefault.length })}:{' '}
+          {nondefault
+            .slice(0, 3)
+            .map((entry) => entry.title[locale])
+            .join(' · ')}
+          {nondefault.length > 3 ? ' …' : ''}
+        </p>
+      ) : (
+        <p className="muted">{t('admin.settings.groupDefaults')}</p>
+      )}
       {open ? (
         <div className="ops-stack">
           {entries.map((entry) => (
@@ -461,10 +490,12 @@ export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, SettingDraft>>({});
-  const resetField = (key: string) =>
+  const resetField = (key: string) => {
+    save.reset();
     setDrafts((current) =>
       Object.fromEntries(Object.entries(current).filter(([name]) => name !== key)),
     );
+  };
   const editField = (key: string, draft: SettingDraft) => {
     save.reset();
     setDrafts((current) => ({ ...current, [key]: draft }));
@@ -591,7 +622,12 @@ export function SettingsPage() {
             <div className="ops-toolbar">
               <label>
                 <span>{t('common.search')}</span>
-                <input value={search} onChange={(event) => setSearch(event.target.value)} />
+                <input
+                  type="search"
+                  value={search}
+                  placeholder={t('admin.settings.searchHelp')}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
               </label>
               <div className="ops-actions">
                 <Link to="/activities">{t('admin.activities.nav')}</Link>
@@ -662,6 +698,7 @@ export function SettingsPage() {
                     key={name}
                     name={name}
                     entries={entries}
+                    searching={Boolean(search.trim())}
                     values={authority.data.values}
                     drafts={drafts}
                     busy={save.isPending}
@@ -687,6 +724,7 @@ export function SettingsPage() {
                     key={name}
                     name={name}
                     entries={entries}
+                    searching={Boolean(search.trim())}
                     values={authority.data.values}
                     drafts={drafts}
                     busy={save.isPending}
@@ -706,6 +744,7 @@ export function SettingsPage() {
           </div>
         </>
       ) : null}
+      <GatewayCapabilitiesSection />
       <MaintenancePanel role="admin" />
       <LegalHoldPanel />
     </div>

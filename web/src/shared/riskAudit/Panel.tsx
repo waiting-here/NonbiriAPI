@@ -1216,24 +1216,29 @@ function ConfigForm({
         save(draft);
       }}
     >
-      {fields.map(([field, label, min, max]) => (
-        <label key={field}>
-          {label}
-          <input
-            type="number"
-            required
-            min={min}
-            max={max}
-            step={1}
-            disabled={readonly || busy}
-            value={draft[field]}
-            onChange={(e) => setDraft((v) => ({ ...v, [field]: Number(e.target.value) }))}
-          />
-        </label>
-      ))}
-      <p>
-        {c.policyRevision}: {value.revision}
-      </p>
+      <div className="ops-field-grid">
+        {fields.map(([field, label, min, max]) => (
+          <label key={field}>
+            {label}
+            <input
+              type="number"
+              required
+              min={min}
+              max={max}
+              step={1}
+              disabled={readonly || busy}
+              value={draft[field]}
+              onChange={(e) => setDraft((v) => ({ ...v, [field]: Number(e.target.value) }))}
+            />
+          </label>
+        ))}
+      </div>
+      <details>
+        <summary>{t('common.operations.management.details')}</summary>
+        <p>
+          {c.policyRevision}: {value.revision}
+        </p>
+      </details>
       {readonly ? (
         <p>{c.adminOnly}</p>
       ) : (

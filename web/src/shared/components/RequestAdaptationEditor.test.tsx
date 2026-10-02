@@ -24,6 +24,215 @@ function response(value: unknown): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('RequestAdaptationEditor', () => {
+  it('keeps a manually entered cache path visible until its value is complete or an explicit TTL is chosen', async () => {
+    let sent: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, options?: RequestInit) => {
+        if (options?.method === 'PUT')
+          sent = JSON.parse(String(options.body)) as Record<string, unknown>;
+        return response(
+          options?.method === 'PUT'
+            ? {
+                ...projection(),
+                body_defaults: {
+                  mode: 'replace',
+                  values: { '/cache_control': { has_value: true, mask: '••••' } },
+                },
+              }
+            : projection(),
+        );
+      }),
+    );
+    const view = await renderWithProviders(
+      <RequestAdaptationEditor
+        url="/api/endpoints/11/request-adaptation"
+        scope="endpoint"
+        connectorType="ai-sdk-gateway-v3"
+        editable
+      />,
+      { station: 'user', role: 'user' },
+    );
+    const defaults = await screen.findByRole('group', { name: 'Body defaults (only when absent)' });
+    await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
+    const path = within(defaults).getByRole('textbox', { name: 'Header or path' });
+    await view.user.type(path, '/cache_control');
+    expect(path).toHaveValue('/cache_control');
+    expect(screen.getByLabelText('Automatic cache default')).toHaveValue('custom');
+    await view.user.selectOptions(within(defaults).getByLabelText('Edit'), 'clear');
+    expect(screen.getByLabelText('Automatic cache default')).toHaveValue('custom');
+    await view.user.selectOptions(within(defaults).getByLabelText('Edit'), 'replace');
+    const value = within(defaults).getByRole('textbox', { name: 'Value' });
+    await view.user.click(value);
+    await view.user.paste('{ "type": "ephemeral", "ttl": "1h" }');
+    expect(value).toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+    await screen.findByText('Request adaptation saved.');
+    expect(sent?.body_defaults).toEqual({
+      mode: 'replace',
+      values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '1h' } } },
+    });
+    await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
+    await view.user.type(
+      within(defaults).getByRole('textbox', { name: 'Header or path' }),
+      '/cache_control',
+    );
+    await view.user.selectOptions(screen.getByLabelText('Automatic cache default'), '5m');
+    expect(within(defaults).queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+    await screen.findByText('Request adaptation saved.');
+    expect(sent?.body_defaults).toEqual({
+      mode: 'replace',
+      values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '5m' } } },
+    });
+  });
+  it.each(['5m', '1h'] as const)(
+    'sets the Gateway cache default to %s without JSON editing and clears it explicitly',
+    async (ttl) => {
+      const bodies: Record<string, unknown>[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, options?: RequestInit) => {
+          const current = projection();
+          current.body_defaults.values = { '/temperature': { has_value: true, mask: '••••' } };
+          if (options?.method === 'PUT') {
+            bodies.push(JSON.parse(String(options.body)) as Record<string, unknown>);
+            current.body_defaults.values = {
+              ...current.body_defaults.values,
+              '/cache_control': { has_value: true, mask: '••••' },
+            };
+          }
+          return response(current);
+        }),
+      );
+      const view = await renderWithProviders(
+        <RequestAdaptationEditor
+          url="/admin/api/charity-models/8/request-adaptation"
+          scope="charity-model"
+          gatewayCacheDefaults
+          editable
+        />,
+        { station: 'admin', role: 'admin' },
+      );
+      const cache = await screen.findByLabelText('Automatic cache default');
+      expect(cache).toHaveValue('off');
+      await view.user.selectOptions(cache, ttl);
+      await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+      await screen.findByText('Request adaptation saved.');
+      expect(bodies[0].body_defaults).toEqual({
+        mode: 'replace',
+        values: {
+          '/temperature': { action: 'keep' },
+          '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl } },
+        },
+      });
+      expect(screen.getByLabelText('Automatic cache default')).toHaveValue('keep');
+      await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+      await waitFor(() => expect(bodies).toHaveLength(2));
+      expect(
+        (bodies[1].body_defaults as { values: Record<string, unknown> }).values['/cache_control'],
+      ).toEqual({ action: 'keep' });
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Save request adaptation' })).toBeEnabled(),
+      );
+      await view.user.selectOptions(screen.getByLabelText('Automatic cache default'), 'off');
+      expect(screen.queryByText('Request adaptation saved.')).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+      await waitFor(() => expect(bodies).toHaveLength(3));
+      expect(
+        (bodies[2].body_defaults as { values: Record<string, unknown> }).values['/cache_control'],
+      ).toEqual({ action: 'clear' });
+    },
+  );
+
+  it('retains a chosen Gateway TTL after failure and preserves inherited binding defaults until overridden', async () => {
+    let fail = true;
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, options?: RequestInit) => {
+        if (options?.method === 'PUT') {
+          bodies.push(JSON.parse(String(options.body)) as Record<string, unknown>);
+          if (fail)
+            return new Response(
+              JSON.stringify({ error: { code: 'invalid_request', message: 'Rejected' } }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } },
+            );
+        }
+        return response({
+          ...projection(),
+          body_defaults: { mode: 'inherit', values: {} },
+          effective: {
+            ...projection('1/1'),
+            body_defaults: {
+              mode: 'replace',
+              values: { '/cache_control': { has_value: true, mask: '••••' } },
+              source: 'charity_model',
+            },
+          },
+        });
+      }),
+    );
+    const view = await renderWithProviders(
+      <RequestAdaptationEditor
+        url="/admin/api/charity-models/8/bindings/31/request-adaptation"
+        scope="binding"
+        connectorType="ai-sdk-gateway-v3"
+        editable
+      />,
+      { station: 'admin', role: 'admin' },
+    );
+    await screen.findByText(/The cache default inherits with the body defaults/);
+    expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
+    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+    await screen.findByText(/Could not save request adaptation/);
+    expect(bodies[0].body_defaults).toEqual({ mode: 'inherit', values: {} });
+    const defaults = screen.getByRole('group', { name: 'Body defaults (only when absent)' });
+    await view.user.selectOptions(
+      within(defaults).getByLabelText('Configuration source'),
+      'replace',
+    );
+    await view.user.selectOptions(screen.getByLabelText('Automatic cache default'), '1h');
+    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+    await screen.findByText(/Could not save request adaptation/);
+    expect(screen.getByLabelText('Automatic cache default')).toHaveValue('1h');
+    expect(bodies[1].body_defaults).toEqual({
+      mode: 'replace',
+      values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '1h' } } },
+    });
+    fail = false;
+    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+    await screen.findByText('Request adaptation saved.');
+  });
+
+  it('shows the Gateway cache control read-only in Chinese without exposing the saved value', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response({
+          ...projection(),
+          body_defaults: {
+            mode: 'replace',
+            values: { '/cache_control': { has_value: true, mask: '••••' } },
+          },
+        }),
+      ),
+    );
+    await renderWithProviders(
+      <RequestAdaptationEditor
+        url="/api/steward/charity-models/8/bindings/31/request-adaptation"
+        scope="binding"
+        connectorType="ai-sdk-gateway-v3"
+        editable={false}
+      />,
+      { station: 'user', role: 'level4', locale: 'zh' },
+    );
+    const control = await screen.findByLabelText('自动缓存默认值');
+    expect(control).toBeDisabled();
+    expect(control).toHaveValue('keep');
+    expect(screen.queryByRole('textbox', { name: '值' })).not.toBeInTheDocument();
+  });
+
   it('sends keep for hidden values and JSON for a forced output limit', async () => {
     let sent: Record<string, unknown> | undefined;
     const fetch = vi.fn(async (_url: string, options?: RequestInit) => {
@@ -47,6 +256,7 @@ describe('RequestAdaptationEditor', () => {
       { station: 'user', role: 'user' },
     );
     const forced = await screen.findByRole('group', { name: 'Forced body values' });
+    expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
     await rendered.user.click(within(forced).getByRole('button', { name: 'Add field' }));
     await rendered.user.type(
       within(forced).getByRole('textbox', { name: 'Header or path' }),
@@ -63,6 +273,9 @@ describe('RequestAdaptationEditor', () => {
       (sent?.body_forced as { values: Record<string, unknown> }).values['/max_tokens'],
     ).toEqual({ action: 'replace', value: 333 });
     expect(screen.getByText('Request adaptation saved.')).toBeInTheDocument();
+    const forwarded = screen.getByRole('group', { name: 'Client headers to forward' });
+    await rendered.user.type(within(forwarded).getByRole('textbox'), '\nX-Other');
+    expect(screen.queryByText('Request adaptation saved.')).not.toBeInTheDocument();
   });
 
   it('renders an inherited read-only connection projection without revealing values', async () => {
@@ -105,9 +318,7 @@ describe('RequestAdaptationEditor', () => {
     const fetch = vi.fn(async (_url: string, options?: RequestInit) => {
       if (options?.method === 'PUT') throw new Error('Unexpected save');
       getCount += 1;
-      return response(
-        getCount === 1 ? projection() : projection('2', ['X-Authoritative']),
-      );
+      return response(getCount === 1 ? projection() : projection('2', ['X-Authoritative']));
     });
     vi.stubGlobal('fetch', fetch);
     const rendered = await renderWithProviders(
@@ -121,15 +332,16 @@ describe('RequestAdaptationEditor', () => {
     );
 
     const forwardedHeaders = () =>
-      within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole(
-        'textbox',
-      );
+      within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole('textbox');
     await screen.findByRole('group', { name: 'Client headers to forward' });
     const headers = forwardedHeaders();
     await rendered.user.clear(headers);
     await rendered.user.type(headers, 'X-Dirty');
     const fixed = screen.getByRole('group', { name: 'Fixed outbound headers' });
-    await rendered.user.selectOptions(within(fixed).getByRole('combobox', { name: 'Edit' }), 'replace');
+    await rendered.user.selectOptions(
+      within(fixed).getByRole('combobox', { name: 'Edit' }),
+      'replace',
+    );
     const secret = within(fixed).getByLabelText('Value');
     await rendered.user.type(secret, 'unsaved-secret');
     await rendered.i18n.changeLanguage('zh-CN');
@@ -161,9 +373,7 @@ describe('RequestAdaptationEditor', () => {
     );
 
     const forwardedHeaders = () =>
-      within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole(
-        'textbox',
-      );
+      within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole('textbox');
     await screen.findByRole('group', { name: 'Client headers to forward' });
     const headers = forwardedHeaders();
     await rendered.user.clear(headers);

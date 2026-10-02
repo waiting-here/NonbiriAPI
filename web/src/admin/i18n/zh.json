@@ -69,7 +69,7 @@
       "emptyBody": "管理员 API 没有返回端点概览记录。",
       "searchPlaceholder": "按基础 URL 子串筛选",
       "searchAria": "按基础 URL 筛选端点",
-      "queryTooLong": "查询不得超过 512 个 UTF-8 字节（当前 {{bytes}} 个）。",
+      "queryTooLong": "搜索内容过长，请缩短后再试。",
       "noProbeNotice": "此页面绝不会发送 ping、HEAD、空请求、付费请求或后台健康检查请求。"
     },
     "alerts": {
@@ -124,7 +124,7 @@
       "numberValue": "数字参数",
       "textValue": "文本参数",
       "notConfigured": "未配置（null）",
-      "catalogDefault": "原始默认值",
+      "catalogDefault": "默认",
       "catalogEffective": "有效回退值",
       "catalogRange": "硬范围",
       "catalogStep": "步长",
@@ -178,11 +178,11 @@
         "boolean": "使用 true 或 false",
         "canonical": "请输入符合以下要求的规范{{type}}值：{{detail}}。",
         "integerSyntax": "不包含空白、小数、指数或前导零",
-        "maxUtf8Bytes": "不超过 {{maximum}} 个 UTF-8 字节",
+        "maxUtf8Bytes": "内容过长，请缩短",
         "noControlCharacters": "不包含控制字符",
         "notNull": "不可为 null",
         "rangeStep": "处于 {{minimum}}–{{maximum}} 范围内且步长为 {{step}}",
-        "unicodeLength": "包含 {{minimum}}–{{maximum}} 个 Unicode 字符"
+        "unicodeLength": "包含 {{minimum}}–{{maximum}} 个字符"
       },
       "fieldDetails": "默认值与范围",
       "pendingChanges": "待保存 {{count}} 项修改",
@@ -196,14 +196,17 @@
         "checkinBounds": "签到奖励的最小值不能大于最大值。",
         "levels": "已启用的等级门槛必须按 2 至 4 级依次递增。",
         "timezoneLocked": "已有每日活动记录，站点时区已锁定，无法修改。"
-      }
+      },
+      "customizedCount": "{{count}} 项已调整",
+      "groupDefaults": "使用默认设置",
+      "searchHelp": "按名称或用途查找设置"
     },
     "games": {
       "nav": "游戏",
       "title": "游戏配置",
       "masterEnabled": "游戏总开关",
       "fishingEnabled": "启用池塘垂钓",
-      "fishingRake": "每条渔获的{{pump}}抽水（基点）",
+      "fishingRake": "{{pump}}费用（%）",
       "worm": "蚯蚓鱼饵",
       "lure": "拟饵",
       "premium": "高级鱼饵",
@@ -246,7 +249,7 @@
       "restoreAuthorityValues": "恢复权威值",
       "rps": {
         "base": "{{mode}}基础金额（积分）",
-        "cut": "{{mode}}{{pump}}抽成（基点）",
+        "cut": "{{mode}} · {{pump}}费用（%）",
         "deadline": "{{mode}}{{deadline}}",
         "deadlines": {
           "dealer": "庄家时限",
@@ -332,15 +335,15 @@
         "entry": "参与金额（积分）",
         "literature": "活动文案",
         "lockedHint": "当前周期已经开放或正在结算，冻结配置和当前配置不能编辑。",
-        "nextPoolBp": "下一池分配（基点）",
+        "nextPoolBp": "下期奖池费用（%）",
         "scheduleHint": "下次活动固定在北京时间下一个周四 00:00 开放，持续 24 小时。填写文案和参与规则后保存即可。",
         "windowBeijing": "活动时间（北京时间）",
         "perUserLimit": "每位用户上限",
-        "platformBp": "平台分配（基点）",
+        "platformBp": "平台费用（%）",
         "save": "保存下一活动周期",
         "updateTitle": "更新已配置的下一周期",
-        "welfareBp": "公益分配（基点）",
-        "literatureInvalid": "文案最多 1024 个字符、4096 字节；可换行或使用制表符，不能包含其他控制字符。"
+        "welfareBp": "低保池费用（%）",
+        "literatureInvalid": "文案过长或含特殊控制字符，请修改后再试；可使用换行和制表符。"
       },
       "pools": {
         "allStates": "全部奖池状态",
@@ -382,7 +385,7 @@
         "entryLimit": "参与金额 / 上限",
         "literature": "活动文案",
         "payoutRollover": "发放 / 结转",
-        "periodRevision": "周期 / 修订",
+        "periodRevision": "期次",
         "processed": "已处理",
         "resume": "恢复现有结算检查点",
         "title": "星期四活动权威状态"
@@ -395,7 +398,7 @@
     "mainstreamChannels": {
       "nav": "主流渠道",
       "title": "主流渠道权威管理",
-      "description": "维护创建端点时使用的冻结渠道模板。渠道后续编辑或退休不会改写既有端点的来源快照。",
+      "description": "维护用户添加服务时可选的渠道。修改或停用渠道不会改变已添加的服务。",
       "category": {
         "subscription": "主流订阅",
         "apiPlatform": "主流 API 平台"
@@ -433,7 +436,8 @@
         "category": "类别",
         "connector": "连接器",
         "baseUrl": "规范基础 URL",
-        "enabled": "允许用于创建新端点"
+        "enabled": "允许用于创建新端点",
+        "baseUrlHelp": "填写服务的 API 基础地址，例如 https://api.example.com/v1。"
       },
       "validation": {
         "invalid": "请输入有效名称与规范 URL，且不得包含控制字符。"
@@ -494,7 +498,6 @@
         "authorityTitle": "案件权威状态",
         "back": "返回举报收件箱",
         "canonicalUrl": "规范 URL",
-        "confirmApprovalCheckbox": "我了解批准处理会删除匹配的端点密钥。",
         "confirmApproveBody": "此操作将接受针对当前材料和目标修订的不可逆删除工作。",
         "confirmApproveTitle": "批准删除受保护密钥？",
         "confirmRejectBody": "此操作将解除所有目标的保护，并记录审核原因。",
@@ -506,7 +509,7 @@
         "decisionBody": "批准会通过统一生命周期永久删除匹配的受保护端点密钥；驳回会解除保护。两种操作都必须填写原因，发生冲突或结果未知后均不会自动重试。",
         "decisionTitle": "审核裁决",
         "deidentified": "已去标识",
-        "description": "请在作出一次终态裁决前审核有界证据和稳定的目标快照。",
+        "description": "查看证据和举报目标，再决定是否处理。",
         "endpoint": "端点",
         "id": "ID",
         "keySnapshot": "密钥快照",
@@ -727,12 +730,11 @@
         "createDescription": "此保留将在 {{days}} 天后到期，且不能延期、复制、重新开启或重新创建。",
         "createTitle": "创建此法律保留？",
         "releaseAction": "解除保留",
-        "releaseDescription": "解除操作不可撤销；原始截止时间到达后，常规清理可以立即继续。",
+        "releaseDescription": "解除操作不可撤销，该对象不能再次保全；原始截止时间到达后，常规清理可以立即继续。",
         "releaseTitle": "解除此法律保留？"
       },
       "create": {
         "basis": "依据",
-        "confirmation": "我确认此精确聚合对象、到期时间以及不可逆的一次性保留限制。",
         "days": "天数（1–365）",
         "objectKind": "对象类型",
         "objectReference": "精确对象引用",
@@ -773,7 +775,6 @@
         "requestLog": "请求日志"
       },
       "release": {
-        "confirmation": "解除操作不可撤销；此对象不能再次设置法律保留。",
         "password": "管理员密码（重新验证）",
         "reason": "解除原因"
       },
@@ -1068,6 +1069,19 @@
       "discountRemaining": "剩余 {{time}}",
       "requestUnit": "每次请求；实际结算由服务端完成。",
       "tokenUnit": "每百万 token；四档由服务端结算。"
+    }
+  },
+  "recurringLimits": {
+    "exact": {
+      "alignment": "指定刷新时间",
+      "anchor": "刷新日期与时间",
+      "help": "按 {{zone}} 填写刷新时间。首次刷新在未来时，本次保存起开始计量；短月份使用月末，之后恢复原日期。",
+      "preview": "接下来三次刷新",
+      "loading": "正在计算刷新时间…",
+      "unavailable": "请检查刷新日期与时间后重试。",
+      "period": "按规则时区中保存的日期与时刻刷新。",
+      "gap_shifted": "已按夏令时向后顺延",
+      "fold_later": "采用重复当地时间的较晚一次"
     }
   }
 }

@@ -81,7 +81,10 @@ export function FailurePolicyControl({
       {threshold === '0' && draft !== '0' ? <FailurePolicyWarning /> : null}
       <FailureThresholdInput
         value={draft}
-        onChange={setDraft}
+        onChange={(value) => {
+          save.reset();
+          setDraft(value);
+        }}
         disabled={save.isPending || unknown}
       />
       <p className="muted">{t('common.failurePolicy.recalculate')}</p>

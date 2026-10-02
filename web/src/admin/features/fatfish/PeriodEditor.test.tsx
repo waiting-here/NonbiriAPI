@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { PeriodManager } from './PeriodEditor';
@@ -44,8 +44,11 @@ describe('Fat Fish period editor', () => {
     expect(await screen.findByText(/Missing one-star playtest.*First node/)).toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Publish period' }));
     expect(api.changePeriodState).not.toHaveBeenCalled();
+    await view.user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish period' }));
+    expect(api.changePeriodState).not.toHaveBeenCalled();
     api.validatePeriod.mockResolvedValue({ publishable: true, reachable: ['ffn_one'], unreachable: [], missing_playtests: [] });
     await view.user.click(screen.getByRole('button', { name: 'Publish period' }));
+    await view.user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish period' }));
     await waitFor(() => expect(api.changePeriodState).toHaveBeenCalledTimes(1));
     expect(api.changePeriodState.mock.calls[0].slice(0, 3)).toEqual(['ffp_period', 'publish', '1']);
   });

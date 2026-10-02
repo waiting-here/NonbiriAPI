@@ -295,16 +295,19 @@ export function AnnouncementEditor({
       <Card>
         <div className="ops-toolbar">
           <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
-          <span>
-            {t('management.announcements.detail.authorityRevision', { revision: item.revision })}
-          </span>
-          {item.published ? (
+          <details>
+            <summary>{t('common.operations.management.details')}</summary>
             <span>
-              {t('management.announcements.detail.publishedRevision', {
-                revision: item.published.revision,
-              })}
+              {t('management.announcements.detail.authorityRevision', { revision: item.revision })}
             </span>
-          ) : null}
+            {item.published ? (
+              <span>
+                {t('management.announcements.detail.publishedRevision', {
+                  revision: item.published.revision,
+                })}
+              </span>
+            ) : null}
+          </details>
         </div>
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />

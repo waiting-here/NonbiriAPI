@@ -27,7 +27,7 @@ import {
   BlackjackConfiguration,
   validateBlackjackConfiguration,
 } from '../features/games/BlackjackConfiguration';
-import { validateDuelConfigurations } from '../features/games/config';
+import { percentBP, validateDuelConfigurations } from '../features/games/config';
 import { fishingChanceFromPercent, fishingChanceValid } from '../features/games/fishing';
 import { gameLabel, modeLabel, useGameAdminText } from '../features/games/copy';
 import '@shared/operations/operations.css';
@@ -446,9 +446,9 @@ function GamesEditor({
               <input
                 type="number"
                 min="0"
-                max="9999"
-                step="1"
-                value={numberInput(draft.fishing.rake_bp[pump])}
+                max="99.99"
+                step="0.01"
+                value={numberInput(draft.fishing.rake_bp[pump] / 100)}
                 disabled={save.isPending}
                 onChange={(event) =>
                   edit((current) => ({
@@ -457,7 +457,7 @@ function GamesEditor({
                       ...current.fishing,
                       rake_bp: {
                         ...current.fishing.rake_bp,
-                        [pump]: numberFromInput(event.target.value),
+                        [pump]: percentBP(event.target.value),
                       },
                     },
                   }))
@@ -620,15 +620,15 @@ function GamesEditor({
                       <input
                         type="number"
                         min="0"
-                        max="9999"
-                        step="1"
-                        value={numberInput(value.pumps_bp[pump])}
+                        max="99.99"
+                        step="0.01"
+                        value={numberInput(value.pumps_bp[pump] / 100)}
                         disabled={save.isPending}
                         onChange={(event) =>
                           setRPSMode(mode, {
                             pumps_bp: {
                               ...value.pumps_bp,
-                              [pump]: numberFromInput(event.target.value),
+                              [pump]: percentBP(event.target.value),
                             },
                           })
                         }
