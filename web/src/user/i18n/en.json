@@ -2446,7 +2446,7 @@
       "keys.rotate": "Replace API key",
       "keys.rotateTitle": "Replace the account API key?",
       "keys.rotateBody": "The previous key stops working immediately. Update every client that uses it.",
-      "keys.display": "Key identifier (cannot be used for calls)",
+      "keys.display": "Key identifier (calls require the full key)",
       "keys.oneTimeTitle": "Copy this API key now",
       "keys.oneTimeBody": "It will never be shown again after you close it or leave this page.",
       "keys.closeReveal": "I have saved it — close",
