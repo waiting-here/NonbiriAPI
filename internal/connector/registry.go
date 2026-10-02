@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/anthropic"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 )
 
 // ResponseSink is the existing caller response boundary. Connectors may write
@@ -108,6 +109,7 @@ type Descriptor struct {
 	Discoverer        ModelDiscoverer
 	Supports          func(*openai.ChatRequest) bool
 	SupportsEmbedding func(*openai.EmbeddingRequest) bool
+	CheckTarget       func(connectorcontract.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) error
 }
 
 type Registry struct {
@@ -146,7 +148,11 @@ func NewRegistry(descriptors ...Descriptor) (*Registry, error) {
 }
 
 func NewDefaultRegistry() *Registry {
-	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptor())
+	return NewDefaultRegistryWithGatewayModels(gatewaypolicy.Config{})
+}
+
+func NewDefaultRegistryWithGatewayModels(models gatewaypolicy.Config) *Registry {
+	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor(), gatewayDescriptorWithModels(models))
 	if err != nil {
 		panic(err)
 	}
@@ -308,6 +314,8 @@ func openAICapabilities() connectorcontract.CapabilitySet {
 			connectorcontract.CapabilityStream |
 			connectorcontract.CapabilitySampling |
 			connectorcontract.CapabilityUnknownOpenAIFields |
+			connectorcontract.CapabilityReasoningEffort |
+			connectorcontract.CapabilityStorage |
 			connectorcontract.CapabilityEmbeddings |
 			connectorcontract.CapabilityModelDiscovery,
 	)
@@ -508,4 +516,33 @@ func nilInterface(value any) bool {
 	default:
 		return false
 	}
+}
+
+// CheckTargetRequest checks exact model policy after adaptation and before any
+// reservation or credential access. It is also safe for mixed-provider routes.
+func (r *Registry) CheckTargetRequest(target connectorcontract.Target, operation connectorcontract.Operation, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest, policy connectorcontract.AttemptPolicy) error {
+	reject := func(stage, reason string) error {
+		return &connectorcontract.RequestRejection{Stage: stage, Field: "request", Reason: reason}
+	}
+	descriptor, ok := r.Descriptor(target.Type())
+	if !ok || !(AttemptInput{Operation: operation, Ingress: chat, Embedding: embedding}).validOperation() {
+		return reject("capability preflight", "unsupported operation")
+	}
+	if operation == connectorcontract.OperationChatCompletions {
+		if !descriptor.Capabilities.HasAll(chat.Requirements().Capabilities()) {
+			return reject("capability preflight", "unsupported request feature or unknown field")
+		}
+		if descriptor.CheckTarget != nil {
+			err := descriptor.CheckTarget(target, chat, policy)
+			var rejected *connectorcontract.RequestRejection
+			if err == nil || errors.As(err, &rejected) {
+				return err
+			}
+			return reject("protocol preflight", "request cannot be represented by this connector")
+		}
+	}
+	if !r.SupportsOperationRequest(target.Type(), operation, chat, embedding) {
+		return reject("protocol preflight", "request cannot be represented by this connector")
+	}
+	return nil
 }

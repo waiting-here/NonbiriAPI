@@ -23,6 +23,7 @@ func TestPatchRejectsAmbiguousOrUnsafeConfiguration(t *testing.T) {
 		`{"expected_revision":"0","body_forced":{"mode":"replace","values":{"/messages":{"action":"replace","value":[]}}}}`,
 		`{"expected_revision":"0","body_forced":{"mode":"replace","values":{"/temperature":{"action":"replace","value":1},"/temperature/x":{"action":"replace","value":2}}}}`,
 		`{"expected_revision":"0","native_extension_paths":{"mode":"replace","values":["/max_tokens"]}}`,
+		`{"expected_revision":"0","native_extension_paths":{"mode":"replace","values":["/reasoning_effort"]}}`,
 		`{"expected_revision":"0","body_forced":{"mode":"replace","values":{"/max_tokens":{"action":"replace","value":0}}}}`,
 		`{"expected_revision":"0","body_forced":{"mode":"replace","values":{"/max_tokens":{"action":"replace","value":"128"}}}}`,
 		`{"expected_revision":"0","body_forced":{"mode":"replace","values":{"/temperature":{"action":"replace","value":"0.5"}}}}`,

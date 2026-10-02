@@ -26,6 +26,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -77,6 +78,7 @@ type Config struct {
 	AdminHost         string
 	TrustedProxyCIDRs []netip.Prefix
 	SMTP              SMTPConfig
+	GatewayModels     gatewaypolicy.Config
 }
 
 // SMTPConfig is reserved (alpha has no email alerts); it is parsed and
@@ -112,6 +114,11 @@ func Load() (*Config, error) {
 	var errs []string
 	if timeoutErr != nil {
 		errs = append(errs, timeoutErr.Error())
+	}
+	var gatewayErr error
+	c.GatewayModels, gatewayErr = gatewaypolicy.Parse(os.Getenv("NONBIRI_GATEWAY_MODEL_CAPABILITIES"))
+	if gatewayErr != nil {
+		errs = append(errs, "NONBIRI_GATEWAY_MODEL_CAPABILITIES: "+gatewayErr.Error())
 	}
 
 	// Master key: exactly one non-empty source is required. Parsing produces a

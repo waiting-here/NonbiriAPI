@@ -27,6 +27,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - 回合制对战小游戏（测试）每个账号可保存最多 10 个私有“自定义预设”，并可跨设备使用。覆盖前须明确确认；加载只填入赛前选项，不会排队或扣费。快速与标准模式的新对局每轮计划时间均为 30 秒。
 - 被封禁账号通过 Discord 登录后显示本站自定义 403 页面；公益目录不再重复显示完整模型名已包含的提供方与模型信息。
 - 捐赠者、管理员和协管可逐密钥配置连续失败阈值，默认 10；0 表示永不因报错下架，页面持续显示醒目警示。保存保留计数并立即重算报错下架状态；协管 CallerKey 可通过[自动化接口](docs/steward-automation.md)读写。
+- Gateway 保留两种 OpenAI 输出预算字段，并支持按模型配置推理强度与存储策略，详见[配置说明](docs/gateway-model-controls.md)。
 - Gateway 费用归因由管理员配置，默认不发送；开启后发送按用户及最终网关 origin 生成的伪名，调试只显示是否发送。严格兼容矩阵及已验证的 Runable 向量接口限制见 [API 契约](docs/api-contract.md#24-native-ai-sdk-gateway-v3-compatibility)。
 - OpenAI-compatible `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings` 入站接口。聊天支持 OpenAI-compatible、Anthropic-compatible 和原生 AI SDK Gateway v3 上游连接器；向量嵌入支持 OpenAI-compatible 和 Gateway 的严格文本子集。
 - Discord OAuth 普通用户登录，以及独立的管理员站点。

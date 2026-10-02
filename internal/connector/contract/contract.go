@@ -52,6 +52,8 @@ const (
 	CapabilityUnknownOpenAIFields
 	CapabilityModelDiscovery
 	CapabilityEmbeddings
+	CapabilityReasoningEffort
+	CapabilityStorage
 )
 
 const KnownCapabilities = CapabilityText |
@@ -65,7 +67,9 @@ const KnownCapabilities = CapabilityText |
 	CapabilitySampling |
 	CapabilityUnknownOpenAIFields |
 	CapabilityModelDiscovery |
-	CapabilityEmbeddings
+	CapabilityEmbeddings |
+	CapabilityReasoningEffort |
+	CapabilityStorage
 
 // CapabilitySet is an immutable bit set in a registry descriptor.
 type CapabilitySet uint64
