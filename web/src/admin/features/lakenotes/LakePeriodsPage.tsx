@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -34,7 +35,7 @@ function Availability({ detail, text }: { detail: LakeDirectory; text: LakeText 
     [paused, setPaused] = useState(detail.paused),
     [start, setStart] = useState(() => createTimeDraft(detail.starts_at, 'second')),
     [end, setEnd] = useState(() => createTimeDraft(detail.ends_at, 'second')),
-    [error, setError] = useState<unknown>(null);
+    [error, setError] = useState<string | null>(null);
   const operation = useRetainedOperation(
     async (input: LakeConfigInput, key, context) => {
       const value = await updateLakeConfig(input, key, { signal: context.signal });
@@ -63,7 +64,7 @@ function Availability({ detail, text }: { detail: LakeDirectory; text: LakeText 
       (starts === null) !== (ends === null) ||
       (starts !== null && ends !== null && starts >= ends)
     ) {
-      setError(new Error(text('invalid')));
+      setError(text('invalid'));
       return;
     }
     operation.mutate({
@@ -126,7 +127,13 @@ function Availability({ detail, text }: { detail: LakeDirectory; text: LakeText 
           </div>
           <p>{text('umbrellaHelp')}</p>
         </fieldset>
-        {error || operation.error ? <ErrorState error={error ?? operation.error} /> : null}
+        {error ? (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        ) : operation.error ? (
+          <ErrorState error={operation.error} />
+        ) : null}
         {unknown ? (
           <p role="status">{text('unknown')}</p>
         ) : operation.isSuccess ? (
@@ -169,7 +176,8 @@ function PeriodEditor({
         ? ''
         : unitsToNatural(period.entry_fee_milli, 'general'),
     ),
-    [error, setError] = useState<unknown>(null);
+    [error, setError] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<PeriodInput | null>(null);
   const [settings, setSettings] = useState(
     () =>
       Object.fromEntries(
@@ -245,7 +253,7 @@ function PeriodEditor({
           ];
         }),
       ) as PeriodInput['exchanges'];
-      operation.mutate({
+      const input: PeriodInput = {
         expected_revision: period?.revision ?? '0',
         name,
         status,
@@ -253,9 +261,15 @@ function PeriodEditor({
         ends_at: ends,
         entry_fee_milli: entryFee,
         exchanges,
-      });
-    } catch (e) {
-      setError(e);
+      };
+      if (
+        (status === 'published' && period?.status !== 'published') ||
+        (period?.status === 'published' && status !== 'published')
+      )
+        setConfirmation(input);
+      else operation.mutate(input);
+    } catch {
+      setError(text('invalid'));
     }
   };
   const change = (
@@ -375,7 +389,13 @@ function PeriodEditor({
             })}
           </div>
         </fieldset>
-        {error || operation.error ? <ErrorState error={error ?? operation.error} /> : null}
+        {error ? (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        ) : operation.error ? (
+          <ErrorState error={operation.error} />
+        ) : null}
         {unknown ? (
           <p role="status">{text('unknown')}</p>
         ) : operation.isSuccess ? (
@@ -404,6 +424,19 @@ function PeriodEditor({
           </button>
         </div>
       </form>
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation?.name ?? name}
+        description={text(confirmation?.status === 'published' ? 'publishHelp' : 'withdrawalHelp')}
+        confirmLabel={text(confirmation?.status === 'published' ? 'publish' : 'savePeriod')}
+        danger={confirmation?.status !== 'published'}
+        busy={operation.isPending}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (confirmation) operation.mutate(confirmation);
+          setConfirmation(null);
+        }}
+      />
     </Card>
   );
 }

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import {
   Card,
   EmptyState,
@@ -234,8 +235,8 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     direction: 'increase' as 'increase' | 'decrease',
     amount: '',
     reason: '',
-    confirmed: false,
   });
+  const [confirmAdjustment, setConfirmAdjustment] = useState(false);
   const period = thursday.data?.period ?? null;
   const scheduledPeriod =
     period && ['configured', 'open', 'settling'].includes(period.state) ? period : null;
@@ -257,8 +258,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       : configDraft?.thursday.enabled && !period
         ? t('admin.activities.config.periodRequired')
         : null;
-  const adjustmentConfirmed =
-    adjustment.confirmed && adjustment.authorityRevision === authorityPeriodRevision;
   const reconcile = async () => {
     await Promise.all([config.refetch(), thursday.refetch(), pools.refetch()]);
   };
@@ -317,7 +316,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
         key,
       ),
     async () => {
-      setAdjustment((current) => ({ ...current, confirmed: false }));
       await reconcile();
     },
   );
@@ -330,11 +328,17 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     thursdayMutationRevision(config.data, period) !== null &&
     (!periodNeedsConfigRevision || (!config.error && !config.isFetching));
   const poolAuthorityBlocked = !scopeReady || Boolean(pools.error) || pools.isFetching;
+  const adjustmentBlocked =
+    poolAuthorityBlocked ||
+    adjust.isPending ||
+    !validPositiveAmount(adjustment.amount) ||
+    !adjustment.reason.trim();
   const currentPoolDecreaseBlocked =
     adjustment.direction === 'decrease' &&
     period?.current_pool_id === adjustment.poolId &&
     (period.state === 'open' || period.state === 'settling');
   const editPeriod = (patch: Partial<PeriodDraft>) => {
+    savePeriod.reset();
     setPeriodOverride((current) => ({ ...(current ?? periodDraft), ...patch }));
   };
   const submitPeriod = () => {
@@ -354,7 +358,27 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     );
   };
   const editConfig = (next: ActivitiesConfig) => {
+    saveConfig.reset();
     setConfigOverride(next);
+  };
+  const editAdjustment = (patch: Partial<typeof adjustment>) => {
+    adjust.reset();
+    setConfirmAdjustment(false);
+    setAdjustment((current) => ({ ...current, ...patch }));
+  };
+  const submitAdjustment = () => {
+    setConfirmAdjustment(false);
+    adjust.mutate(adjustment, {
+      onSuccess: () =>
+        setAdjustment({
+          poolId: '',
+          revision: '',
+          authorityRevision: '',
+          direction: 'increase',
+          amount: '',
+          reason: '',
+        }),
+    });
   };
   const periodStateLabels: Record<Period['state'], string> = {
     configured: t('admin.activities.states.period.configured'),
@@ -371,6 +395,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     open: t('admin.activities.states.pool.open'),
     closed: t('admin.activities.states.pool.closed'),
   };
+  const selectedPool = pools.data?.data.find((pool) => pool.id === adjustment.poolId);
   useEffect(() => {
     if (
       isUnauthorized(config.error) ||
@@ -384,6 +409,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     }
   }, [client, config.error, pools.error, thursday.error]);
   const commitPoolFilters = (nextType: '' | Pool['pool_type'], nextState: '' | Pool['state']) => {
+    setConfirmAdjustment(false);
     setAdjustment({
       poolId: '',
       revision: '',
@@ -391,7 +417,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       direction: 'increase',
       amount: '',
       reason: '',
-      confirmed: false,
     });
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
@@ -795,7 +820,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     <th>{t('admin.activities.pools.typeState')}</th>
                     <th>{t('admin.activities.pools.period')}</th>
                     <th>{t('admin.activities.pools.balance')}</th>
-                    <th>{t('admin.activities.pools.revision')}</th>
                     <th>{t('admin.activities.pools.adjust')}</th>
                   </tr>
                 </thead>
@@ -816,13 +840,14 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                       <td data-label={t('admin.activities.pools.balance')}>
                         {pool.balance} {t('admin.activities.units.credits')}
                       </td>
-                      <td data-label={t('admin.activities.pools.revision')}>{pool.revision}</td>
                       <td className="ops-cell-wide" data-label={t('admin.activities.pools.adjust')}>
                         <button
                           className="btn btn-secondary"
                           type="button"
                           disabled={!scopeReady || pool.state !== 'open'}
-                          onClick={() =>
+                          onClick={() => {
+                            adjust.reset();
+                            setConfirmAdjustment(false);
                             setAdjustment({
                               poolId: pool.id,
                               revision: pool.revision,
@@ -830,9 +855,8 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                               direction: 'increase',
                               amount: '',
                               reason: '',
-                              confirmed: false,
-                            })
-                          }
+                            });
+                          }}
                         >
                           {t('admin.activities.pools.select')}
                         </button>
@@ -856,13 +880,17 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       </Card>
       {scopeReady && adjustment.poolId ? (
         <Card className={adjustment.direction === 'decrease' ? 'ops-danger' : ''}>
-          <h2>{t('admin.activities.adjustment.title')}</h2>
-          <p>
-            {t('admin.activities.adjustment.selected', {
-              poolId: adjustment.poolId,
-              revision: adjustment.revision,
-            })}
-          </p>
+          <h2>
+            {t('admin.activities.adjustment.title')}
+            {selectedPool ? ` · ${poolTypeLabels[selectedPool.pool_type]}` : ''}
+          </h2>
+          {selectedPool ? (
+            <p>
+              {t('admin.activities.pools.balance')}: {selectedPool.balance}{' '}
+              {t('admin.activities.units.credits')}
+            </p>
+          ) : null}
+          <p>{t('admin.activities.adjustment.selected')}</p>
           {currentPoolDecreaseBlocked ? (
             <p className="inline-notice" role="status">
               {t('admin.activities.adjustment.decreaseBlocked')}
@@ -873,12 +901,10 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               <span>{t('admin.activities.adjustment.direction')}</span>
               <select
                 value={adjustment.direction}
+                disabled={adjust.isPending}
                 onChange={(event) =>
-                  setAdjustment({
-                    ...adjustment,
-                    authorityRevision: authorityPeriodRevision,
+                  editAdjustment({
                     direction: event.target.value as typeof adjustment.direction,
-                    confirmed: false,
                   })
                 }
               >
@@ -898,7 +924,8 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               <span>{t('admin.activities.adjustment.amount')}</span>
               <input
                 value={adjustment.amount}
-                onChange={(event) => setAdjustment({ ...adjustment, amount: event.target.value })}
+                disabled={adjust.isPending}
+                onChange={(event) => editAdjustment({ amount: event.target.value })}
               />
             </label>
             <label>
@@ -906,59 +933,28 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               <input
                 value={adjustment.reason}
                 maxLength={1024}
-                onChange={(event) => setAdjustment({ ...adjustment, reason: event.target.value })}
+                disabled={adjust.isPending}
+                onChange={(event) => editAdjustment({ reason: event.target.value })}
               />
             </label>
           </div>
-          {adjustment.direction === 'decrease' ? (
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={adjustmentConfirmed}
-                onChange={(event) =>
-                  setAdjustment({
-                    ...adjustment,
-                    authorityRevision: authorityPeriodRevision,
-                    confirmed: event.target.checked,
-                  })
-                }
-              />
-              <span>{t('admin.activities.adjustment.confirmDecrease')}</span>
-            </label>
-          ) : null}
           {adjust.error ? <ErrorState error={adjust.error} /> : null}
           <div className="ops-actions">
             <button
               className={adjustment.direction === 'decrease' ? 'btn btn-danger' : 'btn btn-primary'}
               type="button"
-              disabled={
-                poolAuthorityBlocked ||
-                currentPoolDecreaseBlocked ||
-                adjust.isPending ||
-                !validPositiveAmount(adjustment.amount) ||
-                !adjustment.reason.trim() ||
-                (adjustment.direction === 'decrease' && !adjustmentConfirmed)
-              }
-              onClick={() =>
-                adjust.mutate(adjustment, {
-                  onSuccess: () =>
-                    setAdjustment({
-                      poolId: '',
-                      revision: '',
-                      authorityRevision: '',
-                      direction: 'increase',
-                      amount: '',
-                      reason: '',
-                      confirmed: false,
-                    }),
-                })
-              }
+              disabled={adjustmentBlocked || currentPoolDecreaseBlocked}
+              onClick={() => {
+                setAdjustment({ ...adjustment, authorityRevision: authorityPeriodRevision });
+                setConfirmAdjustment(true);
+              }}
             >
               {t('admin.activities.adjustment.apply')}
             </button>
             <button
               className="btn btn-link"
               type="button"
+              disabled={adjust.isPending}
               onClick={() =>
                 setAdjustment({
                   poolId: '',
@@ -967,7 +963,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                   direction: 'increase',
                   amount: '',
                   reason: '',
-                  confirmed: false,
                 })
               }
             >
@@ -975,6 +970,31 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
             </button>
           </div>
         </Card>
+      ) : null}
+      {confirmAdjustment ? (
+        <ConfirmDialog
+          open
+          danger={adjustment.direction === 'decrease'}
+          title={t('admin.activities.adjustment.confirmTitle')}
+          description={t(
+            adjustment.direction === 'decrease'
+              ? 'admin.activities.adjustment.confirmDecrease'
+              : 'admin.activities.adjustment.confirmIncrease',
+            {
+              amount: adjustment.amount,
+              reason: adjustment.reason,
+              pool: selectedPool ? poolTypeLabels[selectedPool.pool_type] : '',
+            },
+          )}
+          confirmLabel={t('admin.activities.adjustment.apply')}
+          confirmDisabled={
+            adjustmentBlocked ||
+            currentPoolDecreaseBlocked ||
+            adjustment.authorityRevision !== authorityPeriodRevision
+          }
+          onCancel={() => setConfirmAdjustment(false)}
+          onConfirm={submitAdjustment}
+        />
       ) : null}
     </div>
   );

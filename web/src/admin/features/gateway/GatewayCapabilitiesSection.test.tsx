@@ -173,6 +173,7 @@ describe('Gateway capability management', () => {
       screen.getByLabelText(i18n.t('gatewayCapabilities.adapter')),
       'openai_chat',
     );
+    expect(form.querySelector('details')).toHaveAttribute('open');
     expect(
       within(form).queryByRole('checkbox', { name: i18n.t('gatewayCapabilities.effort.max') }),
     ).not.toBeInTheDocument();

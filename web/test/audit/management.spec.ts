@@ -139,10 +139,13 @@ test('level 5 saves only message-role fields for its mainstream model and cannot
       state.user_url + '/steward?tab=charity&charity_model=' + state.management.charity_model_id,
     );
     const fallback = page.getByLabel('Default action for unlisted roles');
+    await page.locator('details').filter({ has: fallback }).locator('summary').click();
+    await expect(fallback).toBeVisible();
     await expect(fallback).toHaveValue('native');
     await page.getByRole('button', { name: 'Add a role rule', exact: true }).click();
     await expect(page.getByLabel('Role name', { exact: true })).toBeFocused();
     await page.keyboard.type('developer');
+    await expect(page.getByLabel('Role name', { exact: true })).toBeVisible();
     await page.getByRole('combobox', { name: 'Handling action', exact: true }).selectOption('user');
     await fallback.selectOption('reject');
     const saved = page.waitForResponse(

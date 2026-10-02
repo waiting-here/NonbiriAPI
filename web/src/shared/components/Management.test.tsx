@@ -116,6 +116,63 @@ afterEach(() => {
 });
 
 describe('shared account management', () => {
+  it.each(['admin', 'steward'] as const)(
+    'confirms one credit adjustment and sends nothing on cancel for %s',
+    async (role) => {
+      const base = role === 'admin' ? '/admin/api/users' : '/api/steward/users';
+      let target = userFixture();
+      const calls = install((call) => {
+        if (call.path === '/admin/api/session') return { admin: { username: 'fixture-admin' } };
+        if (call.path === '/api/session') return session();
+        if (call.path.startsWith(base + '?')) return page([target]);
+        if (call.path === base + '/7' && call.method === 'GET') return target;
+        if (call.path === base + '/7' && call.method === 'PATCH') {
+          target = { ...target, balance: '-1.5', revision: '2' };
+          return target;
+        }
+        throw new Error('Unexpected request ' + call.path);
+      });
+      const view = await renderWithProviders(role === 'admin' ? <UsersPage /> : <StewardPage />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'user',
+        route: role === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7',
+      });
+      view.queryClient.setQueryData(
+        role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
+        role === 'admin' ? { admin: { username: 'fixture-admin' } } : session(),
+      );
+      const amount = await screen.findByLabelText('Positive amount');
+      await view.user.selectOptions(screen.getByLabelText('Direction'), 'decrease');
+      await view.user.type(amount, '1.5');
+      await view.user.type(screen.getByLabelText('Reason (required)'), 'Correct duplicate reward');
+      await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      let dialog = screen.getByRole('alertdialog');
+      expect(dialog).toHaveTextContent('member-7');
+      expect(dialog).toHaveTextContent('General credits');
+      expect(dialog).toHaveTextContent('Decrease');
+      expect(dialog).toHaveTextContent('1.5');
+      expect(dialog).toHaveTextContent('Correct duplicate reward');
+      expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
+      await view.user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
+      expect(amount).toHaveValue('1.5');
+      await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      dialog = screen.getByRole('alertdialog');
+      await view.user.click(within(dialog).getByRole('button', { name: 'Apply adjustment' }));
+      await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+      const write = calls.find((call) => call.method === 'PATCH')!;
+      expect(write.body).toEqual({
+        mode: 'economy',
+        target: 'balance',
+        direction: 'decrease',
+        amount: '1.5',
+        reason: 'Correct duplicate reward',
+        expected_revision: '1',
+      });
+      expect(write.headers.get('Idempotency-Key')).toBeTruthy();
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    },
+  );
   it.each([
     ['admin', 1],
     ['steward', 1],
@@ -228,7 +285,10 @@ describe('shared account management', () => {
     await view.user.selectOptions(level, '4');
     await waitFor(() =>
       expect(
-        calls.some((call) => call.path === '/api/steward/users?account_state=all&level=4&page=1&page_size=20'),
+        calls.some(
+          (call) =>
+            call.path === '/api/steward/users?account_state=all&level=4&page=1&page_size=20',
+        ),
       ).toBe(true),
     );
     expect(screen.getByTestId('location')).toHaveTextContent('level=4');
@@ -333,7 +393,7 @@ describe('shared announcement editor', () => {
     view.queryClient.setQueryData(['user', 'session'], session());
     await screen.findByLabelText('English title');
     await view.user.click(screen.getByRole('button', { name: 'Preview' }));
-    expect(await screen.findByRole('heading', { name: 'Server preview · 1' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Publication preview' })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Publish' }));
     await view.user.click(
       within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish' }),

@@ -179,6 +179,7 @@ function draftValidationError(
   rules: readonly DraftRule[],
   zones: readonly string[] | undefined,
   copy: RecurringLimitsCopy,
+  anchorRequired: string,
 ): string | undefined {
   if (rules.length > MAX_RULES) return copy.maxRules;
   for (const rule of rules) {
@@ -187,6 +188,13 @@ function draftValidationError(
       return copy.invalidLimit;
     }
     if (zones && !validTimeZone(rule.time_zone, zones)) return copy.invalidTimeZone;
+    if (
+      rule.mode === 'reset' &&
+      !isHourlyInterval(rule.interval) &&
+      rule.alignment === 'exact_time' &&
+      !rule.anchor_local
+    )
+      return anchorRequired;
     if (!validCombination(rule)) return copy.invalidCombination;
   }
   return undefined;
@@ -568,7 +576,8 @@ function RuleCard({
                 <ol>
                   {preview.data.map((transition) => (
                     <li key={transition.instant}>
-                      {transition.local} ({transition.time_zone} UTC
+                      {transition.local.replace('T', ' ')} (
+                      {transition.time_zone === 'UTC' ? '' : `${transition.time_zone} `}UTC
                       {formatOffset(transition.offset_seconds)})
                       {transition.adjustment !== 'none'
                         ? ` · ${transition.adjustment === 'gap_shifted' ? t('recurringLimits.exact.gap_shifted') : t('recurringLimits.exact.fold_later')}`
@@ -1100,7 +1109,12 @@ export function RecurringLimits({
       : false;
   const currentZones = zones.data?.zones ?? [];
   const validationError = draftRules
-    ? draftValidationError(draftRules, zones.data?.zones, copy)
+    ? draftValidationError(
+        draftRules,
+        zones.data?.zones,
+        copy,
+        t('recurringLimits.exact.anchorRequired'),
+      )
     : undefined;
   const structureMessages =
     baseline && draftRules

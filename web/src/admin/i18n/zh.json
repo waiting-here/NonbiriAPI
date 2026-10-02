@@ -96,7 +96,7 @@
         "registrationRejected": "注册被拒绝",
         "maintenanceEnabled": "维护模式已开启",
         "donationFailureDisabled": "捐赠因连续失败停用",
-        "issueProjectionIncomplete": "问题投影不完整",
+        "issueProjectionIncomplete": "问题详情不完整",
         "reportRetryExhausted": "举报重试已耗尽",
         "fishingRetryExhausted": "钓鱼恢复重试已耗尽",
         "rpsTerminalRetrying": "猜拳终局恢复正在重试",
@@ -176,7 +176,7 @@
         "allowedChoice": "取自允许选项",
         "amountRangeStep": "处于 {{minimum}}–{{maximum}} 积分范围内且步长为 {{step}}",
         "boolean": "使用 true 或 false",
-        "canonical": "请输入符合以下要求的规范{{type}}值：{{detail}}。",
+        "canonical": "请填写符合以下要求的{{type}}：{{detail}}。",
         "integerSyntax": "不包含空白、小数、指数或前导零",
         "maxUtf8Bytes": "内容过长，请缩短",
         "noControlCharacters": "不包含控制字符",
@@ -215,10 +215,11 @@
       "bottle": "漂流瓶",
       "clover": "幸运草",
       "shell": "珍珠贝",
-      "saved": "游戏配置已按服务端权威响应更新。",
+      "saved": "游戏设置已保存。",
       "save": "保存游戏配置",
       "controls": {
-        "globalGate": "全局门禁",
+        "globalGate": "小游戏总开关",
+        "settings": "游戏设置",
         "priceCredits": "{{field}}价格（积分）",
         "revisionTerms": "可同时调整多项，保存后生效；已经开始的游戏继续使用开始时的设置。"
       },
@@ -230,7 +231,7 @@
         "mode": "模式：{{value}}",
         "phase": "阶段：{{value}}",
         "spec": "规格：{{value}}",
-        "title": "实时权威数量"
+        "title": "当前游戏与队列"
       },
       "enums": {
         "unknown": "未知值（{{value}}）"
@@ -246,7 +247,7 @@
         }
       },
       "operationsDescription": "配置后续游戏准入，同时监控独立的进行中对局与排队数量。",
-      "restoreAuthorityValues": "恢复权威值",
+      "restoreAuthorityValues": "恢复已保存设置",
       "rps": {
         "base": "{{mode}}基础金额（积分）",
         "cut": "{{mode}} · {{pump}}费用（%）",
@@ -277,9 +278,7 @@
           "platform": "平台",
           "thursday": "星期四池",
           "welfare": "福利池"
-        },
-        "queueCapacity": "{{mode}}队列容量",
-        "queueCapacityHint": "只读运行时容量；PATCH 不包含此字段。"
+        }
       },
       "sections": {
         "fishing": "池塘垂钓",
@@ -287,14 +286,15 @@
         "rps": "三人猜拳"
       },
       "validation": {
-        "amountMinimum": "{{field}}必须是至少 {{minimum}} 的规范积分金额。",
-        "amountNonNegative": "{{field}}必须是规范的非负积分金额。",
+        "amountMinimum": "{{field}}必须是至少 {{minimum}} 的积分金额。",
+        "amountNonNegative": "{{field}}必须是大于或等于 0 的积分金额。",
         "integerRange": "{{field}}必须是 {{minimum}} 到 {{maximum}} 之间的整数。",
-        "totalCuts": "{{mode}}各项资金池抽成合计必须小于 {{maximum}} 基点。",
+        "totalCuts": "{{mode}}的费用合计须小于 {{maximum}}%。",
         "masterRequired": "请开启游戏总开关，或同时关闭各游戏。",
         "specRequiresPrice": "启用 {{spec}} 棋盘需要开启连连看，并设置大于 0 的价格。",
         "modeRequiresStake": "启用{{mode}}需要开启三人猜拳，并设置大于 0 的基础投入。",
-        "changedElsewhere": "游戏设置已在其他位置修改。你的输入仍保留，请恢复最新设置后重新编辑。"
+        "changedElsewhere": "游戏设置已在其他位置修改。你的输入仍保留，请恢复最新设置后重新编辑。",
+        "feeRange": "{{field}}须为 0 至 99.99%，最多两位小数。"
       }
     },
     "activities": {
@@ -303,19 +303,21 @@
         "amount": "金额（积分）",
         "apply": "应用调整",
         "cancel": "取消",
-        "confirmDecrease": "我了解此操作会强制从共享池中扣除积分。",
+        "confirmTitle": "确认调整奖池",
+        "confirmIncrease": "向{{pool}}奖池增加 {{amount}} 积分。原因：{{reason}}。",
+        "confirmDecrease": "从{{pool}}奖池扣除 {{amount}} 积分，减少可用余额。原因：{{reason}}。",
         "decrease": "减少",
         "decreaseBlocked": "当前星期四活动池进入自然开放窗口后不能被强制扣减。",
         "direction": "调整方向",
         "increase": "增加",
         "reason": "原因",
-        "selected": "已选择共享池 {{poolId}}，权威修订为 {{revision}}。增加操作会注入积分；减少操作需要明确的危险确认。",
+        "selected": "增加会向奖池补充积分；减少会从可用余额中扣除积分。",
         "title": "共享池调整"
       },
       "config": {
         "masterEnabled": "启用活动总开关",
-        "revisionHint": "可同时调整活动开关和领取规则。开启前请在站点参数中设置时区；疯狂星期四还需要先填写下方的活动周期。已经开放的周期继续使用原有规则。",
-        "save": "保存原子配置",
+        "revisionHint": "统一保存活动开关与领取规则。启用星期四活动前，请先在下方配置活动。已经开放的活动保留原有规则。",
+        "save": "保存活动设置",
         "thursdayEnabled": "启用星期四活动",
         "title": "活动配置",
         "welfareCap": "公益上限（积分）",
@@ -334,7 +336,7 @@
         "createTitle": "创建下一活动周期",
         "entry": "参与金额（积分）",
         "literature": "活动文案",
-        "lockedHint": "当前周期已经开放或正在结算，冻结配置和当前配置不能编辑。",
+        "lockedHint": "活动已开放或正在结算，当前规则无法修改。",
         "nextPoolBp": "下期奖池费用（%）",
         "scheduleHint": "下次活动固定在北京时间下一个周四 00:00 开放，持续 24 小时。填写文案和参与规则后保存即可。",
         "windowBeijing": "活动时间（北京时间）",
@@ -350,14 +352,13 @@
         "allTypes": "全部奖池类型",
         "adjust": "调整",
         "balance": "余额",
-        "emptyBody": "权威读取没有返回任何共享池。",
+        "emptyBody": "当前没有共享池。",
         "emptyTitle": "没有共享池",
         "filterState": "奖池状态",
         "filterType": "奖池类型",
         "period": "周期",
-        "revision": "修订",
         "select": "选择",
-        "singleton": "单例池",
+        "singleton": "长期共用",
         "unboundPeriod": "尚未绑定周期",
         "title": "共享池",
         "typeState": "类型 / 状态"
@@ -380,7 +381,7 @@
         }
       },
       "thursday": {
-        "emptyBody": "请基于当前活动配置修订创建下一个 24 小时周期。",
+        "emptyBody": "请配置下一个 24 小时活动周期。",
         "emptyTitle": "没有已配置或可恢复的周期",
         "entryLimit": "参与金额 / 上限",
         "literature": "活动文案",
@@ -388,7 +389,7 @@
         "periodRevision": "期次",
         "processed": "已处理",
         "resume": "恢复现有结算检查点",
-        "title": "星期四活动权威状态"
+        "title": "星期四活动状态"
       },
       "title": "活动与共享池",
       "units": {
@@ -397,7 +398,7 @@
     },
     "mainstreamChannels": {
       "nav": "主流渠道",
-      "title": "主流渠道权威管理",
+      "title": "主流渠道管理",
       "description": "维护用户添加服务时可选的渠道。修改或停用渠道不会改变已添加的服务。",
       "category": {
         "subscription": "主流订阅",
@@ -409,8 +410,8 @@
       },
       "state": {
         "all": "全部状态",
-        "active": "活动",
-        "retired": "已退休"
+        "active": "未归档",
+        "retired": "已归档"
       },
       "filters": {
         "state": "渠道状态"
@@ -418,10 +419,9 @@
       "table": {
         "name": "名称",
         "category": "类别",
-        "connector": "连接器",
-        "baseUrl": "规范基础 URL",
-        "enabled": "启用",
-        "revision": "修订",
+        "connector": "API 类型",
+        "baseUrl": "API 基础地址",
+        "enabled": "可用于添加服务",
         "updated": "更新时间",
         "actions": "操作"
       },
@@ -429,49 +429,50 @@
         "create": "创建渠道",
         "view": "查看",
         "save": "保存修改",
-        "retire": "退休渠道"
+        "retire": "归档渠道"
       },
       "form": {
         "name": "渠道名称",
         "category": "类别",
-        "connector": "连接器",
-        "baseUrl": "规范基础 URL",
-        "enabled": "允许用于创建新端点",
+        "connector": "API 类型",
+        "baseUrl": "API 基础地址",
+        "enabled": "可用于添加服务",
         "baseUrlHelp": "填写服务的 API 基础地址，例如 https://api.example.com/v1。"
       },
       "validation": {
-        "invalid": "请输入有效名称与规范 URL，且不得包含控制字符。"
+        "invalid": "请填写渠道名称和有效的 API 基础地址。"
       },
       "create": {
         "title": "创建主流渠道",
-        "description": "保存值会在使用该渠道创建端点时成为不可变来源快照。"
+        "description": "用户选择此渠道添加服务时，会使用这里的 API 类型和基础地址。日后修改渠道不会改变已添加的服务。"
       },
       "detail": {
-        "title": "渠道权威状态",
-        "idRevision": "ID / 修订",
+        "title": "渠道详情",
+        "technicalDetails": "技术信息",
+        "idRevision": "渠道编号 / 版本",
         "category": "类别",
-        "connector": "连接器",
-        "baseUrl": "规范基础 URL",
-        "enabled": "创建可用性",
-        "state": "生命周期状态",
+        "connector": "API 类型",
+        "baseUrl": "API 基础地址",
+        "enabled": "可用于添加服务",
+        "state": "状态",
         "created": "创建时间",
         "updated": "更新时间",
-        "retired": "退休时间",
-        "retiredImmutable": "已退休渠道不可修改，仅作为历史来源快照保留。"
+        "retired": "归档时间",
+        "retiredImmutable": "已归档渠道不能再编辑或重新启用。既有服务和捐赠保留原渠道信息。"
       },
       "edit": {
-        "title": "编辑活动渠道"
+        "title": "编辑渠道"
       },
       "retire": {
-        "title": "退休渠道",
-        "description": "退休后不再用于创建新端点，既有端点与捐赠来源快照继续保留。",
-        "confirmTitle": "退休此渠道？",
-        "confirmDescription": "“{{name}}”退休后不能再编辑或重新启用。"
+        "title": "归档渠道",
+        "description": "归档后，用户不能再选用此渠道添加服务；既有服务和捐赠保留原渠道信息。",
+        "confirmTitle": "归档此渠道？",
+        "confirmDescription": "“{{name}}”归档后不能再编辑或重新启用。"
       },
-      "authorityChanged": "渠道权威状态已变化或响应结果不确定；已载入最新状态供你复核。",
+      "authorityChanged": "渠道已变更或结果暂不明确，请核对最新详情后重试。",
       "empty": {
         "title": "没有主流渠道",
-        "body": "当前生命周期筛选下没有渠道。"
+        "body": "当前状态筛选下没有渠道。"
       }
     },
     "reports": {
@@ -495,10 +496,10 @@
         "actor": "操作者",
         "anonymous": "匿名",
         "approveDeletion": "批准删除",
-        "authorityTitle": "案件权威状态",
+        "authorityTitle": "案件详情",
         "back": "返回举报收件箱",
-        "canonicalUrl": "规范 URL",
-        "confirmApproveBody": "此操作将接受针对当前材料和目标修订的不可逆删除工作。",
+        "canonicalUrl": "API 基础地址",
+        "confirmApproveBody": "确认后将永久删除本案列出的受保护密钥，无法恢复。",
         "confirmApproveTitle": "批准删除受保护密钥？",
         "confirmRejectBody": "此操作将解除所有目标的保护，并记录审核原因。",
         "confirmRejectTitle": "驳回此举报？",
@@ -506,7 +507,7 @@
         "continuationBody": "此状态不能重新裁决或解除保护；恢复操作只会使用同一目标版本重启现有检查点。",
         "continuationTitle": "继续处理",
         "deadline": "截止时间",
-        "decisionBody": "批准会通过统一生命周期永久删除匹配的受保护端点密钥；驳回会解除保护。两种操作都必须填写原因，发生冲突或结果未知后均不会自动重试。",
+        "decisionBody": "批准将永久删除本案匹配的受保护密钥。驳回将解除保护。两项操作都需要填写原因；发生冲突或结果不明确时不会自动重试。",
         "decisionTitle": "审核裁决",
         "deidentified": "已去标识",
         "description": "查看证据和举报目标，再决定是否处理。",
@@ -555,7 +556,7 @@
           }
         },
         "materialTargetRevision": "材料 / 目标修订",
-        "materialsEmptyBody": "此权威页面不包含审核材料。",
+        "materialsEmptyBody": "本案暂无审核材料。",
         "materialsEmptyTitle": "没有审核材料",
         "materialsTitle": "审核材料",
         "noReporterNote": "举报人未填写备注。",
@@ -574,7 +575,7 @@
         "state": "状态",
         "status": "案件状态",
         "submitted": "提交时间",
-        "targetsEmptyBody": "索引尚未在此权威页面中生成目标。",
+        "targetsEmptyBody": "尚未找到本案对应的目标。",
         "targetsEmptyTitle": "没有目标",
         "targetsTitle": "目标",
         "title": "举报案件"
@@ -588,7 +589,7 @@
         "status": "状态"
       },
       "privacy": {
-        "body": "此收件箱只接收案件元数据、有界审核材料和受保护的目标快照；用户提交的凭据秘密绝不会显示。",
+        "body": "在此查看案件详情、提交的材料和被举报资源。用户提交的密钥原文不会显示。",
         "title": "隐私边界"
       },
       "progress": {
@@ -609,7 +610,7 @@
         "rejected": "已驳回"
       },
       "table": {
-        "connectorUrl": "连接器 / 规范 URL",
+        "connectorUrl": "API 类型 / 基础地址",
         "counts": "数量",
         "deadline": "截止时间",
         "materials": "材料 {{count}}",
@@ -641,8 +642,8 @@
         "mainstreamSubscription": "【主流订阅】{{name}}",
         "mainstreamApiPlatform": "【主流 API 平台】{{name}}",
         "connector": "连接器",
-        "baseUrl": "规范基础 URL",
-        "channelRevision": "冻结渠道修订",
+        "baseUrl": "API 基础地址",
+        "channelRevision": "添加时的渠道版本",
         "keyHeading": "密钥 {{id}} · {{head}}…{{tail}}",
         "donation": "捐赠",
         "physical": "物理密钥",
@@ -835,7 +836,9 @@
       "empty": "尚无期次。新增期次默认为草稿，兑换保持关闭。",
       "previous": "上一页",
       "next": "下一页",
-      "cancelHelp": "取消会停止本期玩法和兑换，保留已付资格、收据和档案。"
+      "cancelHelp": "取消会停止本期玩法和兑换，保留已付资格、收据和档案。",
+      "publishHelp": "发布后，用户可在期次开放时间内参与，并按设置支付入场费用。",
+      "withdrawalHelp": "停止发布后，该期次的游玩与兑换将停止，已有入场记录、回执和档案会保留。"
     },
     "fatfish": {
       "workspace": {
@@ -1054,6 +1057,9 @@
         "tool_cup": "缓存圆墩",
         "move_selected_hole": "拖动顶点时移动整个洞"
       }
+    },
+    "picturebook": {
+      "saveSelectedModels": "保存选中模型"
     }
   },
   "user": {
@@ -1081,7 +1087,8 @@
       "unavailable": "请检查刷新日期与时间后重试。",
       "period": "按规则时区中保存的日期与时刻刷新。",
       "gap_shifted": "已按夏令时向后顺延",
-      "fold_later": "采用重复当地时间的较晚一次"
+      "fold_later": "采用重复当地时间的较晚一次",
+      "anchorRequired": "请填写刷新日期与时间。"
     }
   }
 }

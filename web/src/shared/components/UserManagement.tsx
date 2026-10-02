@@ -51,6 +51,22 @@ interface UserDraft {
   banDuration: string;
 }
 
+interface EconomyIntent {
+  revision: string;
+  body: {
+    mode: 'economy';
+    target: UserDraft['economyTarget'];
+    direction: UserDraft['economyDirection'];
+    amount: string;
+    reason: string;
+  };
+}
+const economyTargetLabels = {
+  balance: 'management.users.creditsBalance',
+  game_balance: 'management.users.gameBalance',
+  donation_credit: 'management.users.donationBalance',
+} as const;
+
 const draftFor = (user: AdminUser): UserDraft => ({
   endpointLimit: user.endpoint_limit ?? '',
   rpmLimit: user.rpm_limit ?? '',
@@ -93,6 +109,7 @@ function UserAuthority({
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const [confirm, setConfirm] = useState<'ban' | 'unban' | null>(null);
+  const [economyConfirm, setEconomyConfirm] = useState<EconomyIntent | null>(null);
   const editable = role === 'admin' || (user.id !== account && user.level.effective < 6);
   const root = managementRoot(role);
   const reconcile = async () => {
@@ -127,6 +144,7 @@ function UserAuthority({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfirm(null);
+    setEconomyConfirm(null);
   }, [user.revision]);
   const endpoint = nullableLimit(draft.endpointLimit, 0, 10_000);
   const rpm = nullableLimit(draft.rpmLimit, 1, 4_096);
@@ -376,21 +394,16 @@ function UserAuthority({
                 !draft.economyReason.trim()
               }
               onClick={() =>
-                patch.mutate(
-                  {
-                    revision: user.revision,
-                    body: {
-                      mode: 'economy',
-                      target: draft.economyTarget,
-                      direction: draft.economyDirection,
-                      amount: draft.economyAmount,
-                      reason: draft.economyReason.trim(),
-                    },
+                setEconomyConfirm({
+                  revision: user.revision,
+                  body: {
+                    mode: 'economy',
+                    target: draft.economyTarget,
+                    direction: draft.economyDirection,
+                    amount: draft.economyAmount,
+                    reason: draft.economyReason.trim(),
                   },
-                  {
-                    onSuccess: () => setDraft({ ...draft, economyAmount: '', economyReason: '' }),
-                  },
-                )
+                })
               }
             >
               {t('management.users.economySubmit')}
@@ -443,7 +456,7 @@ function UserAuthority({
               )}
               {renderDeletion?.(user, refresh)}
             </div>
-            {mutationError ? <ErrorState error={mutationError} /> : null}
+            {mutationError && !economyConfirm ? <ErrorState error={mutationError} /> : null}
           </Card>
         </>
       ) : (
@@ -490,6 +503,43 @@ function UserAuthority({
               unban.mutate({ revision: user.revision }, { onSuccess: () => setConfirm(null) });
           }}
         />
+      ) : null}
+      {economyConfirm ? (
+        <ConfirmDialog
+          open
+          danger={economyConfirm.body.direction === 'decrease'}
+          title={t('management.users.economyConfirmTitle')}
+          description={t('management.users.economyConfirmBody', { user: user.username })}
+          confirmLabel={t('management.users.economySubmit')}
+          busy={patch.isPending}
+          onCancel={() => setEconomyConfirm(null)}
+          onConfirm={() =>
+            patch.mutate(economyConfirm, {
+              onSuccess: () => {
+                setEconomyConfirm(null);
+                setDraft((value) => ({ ...value, economyAmount: '', economyReason: '' }));
+              },
+            })
+          }
+        >
+          <dl className="ops-kv">
+            <dt>{t('management.users.economyTarget')}</dt>
+            <dd>{t(economyTargetLabels[economyConfirm.body.target])}</dd>
+            <dt>{t('management.users.economyDirection')}</dt>
+            <dd>
+              {t(
+                economyConfirm.body.direction === 'increase'
+                  ? 'management.users.economyIncrease'
+                  : 'management.users.economyDecrease',
+              )}
+            </dd>
+            <dt>{t('management.users.economyPositiveAmount')}</dt>
+            <dd>{economyConfirm.body.amount}</dd>
+            <dt>{t('management.users.economyReason')}</dt>
+            <dd>{economyConfirm.body.reason}</dd>
+          </dl>
+          {patch.error ? <ErrorState error={patch.error} /> : null}
+        </ConfirmDialog>
       ) : null}
     </div>
   );

@@ -295,9 +295,12 @@ describe('authoritative site-config frontend', () => {
     expect(checkbox).not.toBeChecked();
     await rendered.user.click(checkbox);
     await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
-    await waitFor(() => expect(server.patches).toContainEqual({
-      path: '/admin/api/site-config/checkin_mutually_exclusive', value: true,
-    }));
+    await waitFor(() =>
+      expect(server.patches).toContainEqual({
+        path: '/admin/api/site-config/checkin_mutually_exclusive',
+        value: true,
+      }),
+    );
     expect(checkbox).toBeChecked();
 
     await rendered.user.click(checkbox);
@@ -899,8 +902,17 @@ describe('admin per-user limit explanations', () => {
 });
 
 const initialGameConfig: GamesConfig = {
-  blackjack: { enabled: false, min_stake: '1000', max_stake: '50000', stake_step: '1000', default_stake: '5000', rake_bp: { platform: 100, welfare: 100, thursday: 100 }, quick_stakes: ['1000', '5000', '10000', '50000'] },
-  bidding: duelConfigFixture('bidding'), likes: duelConfigFixture('likes'),
+  blackjack: {
+    enabled: false,
+    min_stake: '1000',
+    max_stake: '50000',
+    stake_step: '1000',
+    default_stake: '5000',
+    rake_bp: { platform: 100, welfare: 100, thursday: 100 },
+    quick_stakes: ['1000', '5000', '10000', '50000'],
+  },
+  bidding: duelConfigFixture('bidding'),
+  likes: duelConfigFixture('likes'),
   revision: '7',
   master_enabled: true,
   fishing: {
@@ -1018,7 +1030,8 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
     const previous = state;
     state = {
       blackjack: structuredClone(mutable.blackjack),
-      bidding: structuredClone(previous.bidding), likes: structuredClone(previous.likes),
+      bidding: structuredClone(previous.bidding),
+      likes: structuredClone(previous.likes),
       revision: String(BigInt(state.revision) + 1n),
       master_enabled: mutable.master_enabled,
       fishing: structuredClone(mutable.fishing),
@@ -1054,20 +1067,62 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
 }
 
 describe('standalone Admin Games feature', () => {
+  test('keeps game switches and errors visible while preserving the chosen settings disclosure', async () => {
+    installGameServer();
+    const rendered = await renderWithProviders(
+      <AdminSessionFixture>
+        <GamesPage />
+      </AdminSessionFixture>,
+      { station: 'admin', locale: 'en', role: 'admin' },
+    );
+    const worm = await screen.findByLabelText(/worm bait price/i);
+    const fishing = worm.closest('details')!;
+    expect(fishing).not.toHaveAttribute('open');
+    expect(worm).not.toBeVisible();
+    expect(screen.getByLabelText('Fishing enabled')).toBeVisible();
+    expect(screen.getByLabelText(/quick base/i).closest('details')).toHaveAttribute('open');
+    expect(screen.queryByText('1024')).not.toBeInTheDocument();
+    await rendered.user.click(within(fishing).getByText('Game settings'));
+    expect(worm).toBeVisible();
+    fireEvent.change(within(fishing).getByLabelText('Platform fee (%)'), {
+      target: { value: '98' },
+    });
+    expect(screen.getByText(/Fishing fees must total less than 100%/)).toBeVisible();
+    fireEvent.change(within(fishing).getByLabelText('Platform fee (%)'), {
+      target: { value: '1' },
+    });
+    expect(screen.queryByText(/Fishing fees must total less than 100%/)).not.toBeInTheDocument();
+    expect(worm).toBeVisible();
+    await rendered.user.click(within(fishing).getByText('Game settings'));
+    expect(worm).not.toBeVisible();
+    await rendered.user.click(screen.getByLabelText('Fishing enabled'));
+    expect(fishing).not.toHaveAttribute('open');
+  });
+
   test('validates the combined fishing deductions and submits one revision', async () => {
     const server = installGameServer();
-    const rendered = await renderWithProviders(<AdminSessionFixture><GamesPage /></AdminSessionFixture>,
-      { station: 'admin', locale: 'en', role: 'admin' });
+    const rendered = await renderWithProviders(
+      <AdminSessionFixture>
+        <GamesPage />
+      </AdminSessionFixture>,
+      { station: 'admin', locale: 'en', role: 'admin' },
+    );
     const save = await screen.findByRole('button', { name: 'Save game configuration' });
-    const platform = screen.getByLabelText(/platform deduction from each catch/i);
-    fireEvent.change(platform, { target: { value: '9800' } });
+    const platform = within(
+      screen.getByLabelText(/worm bait price/i).closest('details')!,
+    ).getByLabelText('Platform fee (%)');
+    await rendered.user.click(within(platform.closest('details')!).getByText('Game settings'));
+    fireEvent.change(platform, { target: { value: '98' } });
     await rendered.user.click(save);
     expect(server.patches).toHaveLength(0);
-    expect(screen.getByText(/Fishing pool cuts must total less than 10000/)).toBeVisible();
-    fireEvent.change(platform, { target: { value: '9799' } });
+    expect(screen.getByText(/Fishing fees must total less than 100%/)).toBeVisible();
+    fireEvent.change(platform, { target: { value: '97.99' } });
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
-    expect(server.patches[0]).toMatchObject({ expected_revision: '7', fishing: { rake_bp: { platform: 9799, welfare: 100, thursday: 100 } } });
+    expect(server.patches[0]).toMatchObject({
+      expected_revision: '7',
+      fishing: { rake_bp: { platform: 9799, welfare: 100, thursday: 100 } },
+    });
   });
 
   test('sends the frozen full mutable PATCH, excludes queue capacity, and renders exact active counts', async () => {
@@ -1094,6 +1149,7 @@ describe('standalone Admin Games feature', () => {
     expect(queues).toHaveTextContent('Deathmatch: 7');
 
     const worm = screen.getByLabelText(/worm bait price/i);
+    await rendered.user.click(within(worm.closest('details')!).getByText('Game settings'));
     fireEvent.change(worm, { target: { value: '3' } });
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
@@ -1144,7 +1200,7 @@ describe('standalone Admin Games feature', () => {
     expect(JSON.stringify(server.patches[0])).not.toContain('queue_capacity');
     await waitFor(() => expect(save).toBeDisabled());
     expect(screen.getByLabelText(/worm bait price/i)).toHaveValue(3);
-    expect(screen.getByText('1024')).toBeVisible();
+    expect(screen.queryByText('1024')).not.toBeInTheDocument();
   });
 
   test('blocks local range violations but leaves full economy compilation authoritative', async () => {
@@ -1160,14 +1216,15 @@ describe('standalone Admin Games feature', () => {
       },
     );
     const save = await screen.findByRole('button', { name: 'Save game configuration' });
-    const quickPlatform = screen.getByLabelText(/quick platform cut/i);
-    fireEvent.change(quickPlatform, { target: { value: '9999' } });
+    const quickPlatform = screen.getByLabelText(/quick.*platform fee/i);
+    fireEvent.change(quickPlatform, { target: { value: '99' } });
     await rendered.user.click(save);
-    expect(screen.getByRole('alert')).toHaveTextContent(/must total less than 10000 basis points/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/must total less than 100%/i);
     expect(server.patches).toHaveLength(0);
 
-    fireEvent.change(quickPlatform, { target: { value: '100' } });
+    fireEvent.change(quickPlatform, { target: { value: '1' } });
     const input = screen.getByLabelText('Standard bait RTP');
+    await rendered.user.click(within(input.closest('details')!).getByText('Game settings'));
     fireEvent.change(input, { target: { value: '100' } });
     await rendered.user.click(save);
     expect(await screen.findByText('Invalid fishing economy.')).toBeVisible();
@@ -1218,6 +1275,7 @@ describe('standalone Admin Games feature', () => {
       },
     );
     const worm = await screen.findByLabelText(/worm bait price/i);
+    await rendered.user.click(within(worm.closest('details')!).getByText('Game settings'));
     fireEvent.change(worm, { target: { value: '3' } });
     await rendered.user.click(screen.getByRole('button', { name: 'Save game configuration' }));
     expect(worm).toBeDisabled();
@@ -1225,7 +1283,9 @@ describe('standalone Admin Games feature', () => {
     expect(screen.getByLabelText(/6×8 entry price/i)).toBeDisabled();
     expect(screen.getByLabelText(/quick base/i)).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Restore authority values' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: rendered.i18n.t('admin.games.restoreAuthorityValues') }),
+    ).toBeDisabled();
 
     state = {
       ...state,

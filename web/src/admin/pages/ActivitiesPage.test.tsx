@@ -1,7 +1,7 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
-import type { Period } from '../features/operations/economy';
+import type { Period, Pool } from '../features/operations/economy';
 import { ActivitiesPage } from './ActivitiesPage';
 
 const previousPeriod: Period = {
@@ -22,7 +22,18 @@ const previousPeriod: Period = {
   terminal_at: null,
 };
 
-function installActivities(initialPeriod: Period | null, rejectWrite = false) {
+const welfarePool: Pool = {
+  id: `pol_${'C'.repeat(21)}A`,
+  pool_type: 'welfare',
+  period_id: null,
+  state: 'open',
+  revision: '3',
+  balance: '50',
+  created_at: 1_700_000_000,
+  closed_at: null,
+};
+
+function installActivities(initialPeriod: Period | null, rejectWrite = false, pool?: Pool) {
   let period = initialPeriod;
   const writes: Record<string, unknown>[] = [];
   const reply = (body: unknown) =>
@@ -54,10 +65,21 @@ function installActivities(initialPeriod: Period | null, rejectWrite = false) {
         return reply({ period });
       if (method === 'GET' && url.pathname === '/admin/api/pools')
         return reply({
-          data: [],
+          data: pool ? [pool] : [],
           next_cursor: null,
-          pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          pagination: { page: '1', page_size: 20, total_items: pool ? '1' : '0', total_pages: '1' },
         });
+      if (pool && method === 'POST' && url.pathname === `/admin/api/pools/${pool.id}/adjustments`) {
+        writes.push(JSON.parse(String(init?.body)));
+        if (rejectWrite)
+          return new Response(
+            JSON.stringify({
+              error: { code: 'invalid_request', message: 'Pool adjustment rejected.' },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          );
+        return reply(pool);
+      }
       if (method === 'PUT' && url.pathname === '/admin/api/activities/thursday/next') {
         const body = JSON.parse(String(init?.body)) as Pick<
           Period,
@@ -225,12 +247,68 @@ describe('automatic activity schedules', () => {
           : null,
     });
     const view = await renderActivities();
-    await screen.findByText(
-      'The period is open or settling; frozen/current configuration cannot be edited.',
-    );
+    await screen.findByText('The activity is open or settling; its rules cannot be edited.');
     expect(view.entry).toBeDisabled();
     expect(screen.getByLabelText('Literature')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save next period' })).toBeDisabled();
     expect(writes).toHaveLength(0);
   });
+});
+
+describe('pool adjustment confirmation', () => {
+  it('keeps a current open Thursday pool protected from decreases', async () => {
+    const writes = installActivities({ ...previousPeriod, state: 'open' }, false, {
+      ...welfarePool,
+      id: previousPeriod.current_pool_id,
+      pool_type: 'thursday',
+      period_id: previousPeriod.id,
+    });
+    const view = await renderActivities();
+    await view.user.click(await screen.findByRole('button', { name: 'Select' }));
+    expect(screen.getByRole('option', { name: 'Decrease' })).toBeDisabled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(writes).toHaveLength(0);
+  });
+
+  it.each(['increase', 'decrease'] as const)(
+    'confirms %s once, sends nothing on cancel, and retains failed input',
+    async (direction) => {
+      const writes = installActivities(null, true, welfarePool);
+      const view = await renderActivities();
+      expect(screen.queryByRole('columnheader', { name: 'Revision' })).not.toBeInTheDocument();
+      await view.user.click(await screen.findByRole('button', { name: 'Select' }));
+      await view.user.selectOptions(screen.getByLabelText('Direction'), direction);
+      await view.user.type(screen.getByLabelText('Amount (credits)'), '2.5');
+      await view.user.type(screen.getByLabelText('Reason'), 'Correct pool balance');
+      expect(screen.queryByRole('checkbox', { name: /forcibly removes/ })).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      let dialog = screen.getByRole('alertdialog');
+      expect(dialog).toHaveTextContent('2.5');
+      expect(dialog).toHaveTextContent('Correct pool balance');
+      expect(dialog).toHaveTextContent(direction === 'decrease' ? 'Remove' : 'Add');
+      expect(writes).toHaveLength(0);
+      await view.user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(writes).toHaveLength(0);
+      expect(screen.getByLabelText('Amount (credits)')).toHaveValue('2.5');
+      await view.user.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      dialog = screen.getByRole('alertdialog');
+      await view.user.click(within(dialog).getByRole('button', { name: 'Apply adjustment' }));
+      await screen.findByText('Pool adjustment rejected.');
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(writes).toEqual([
+        {
+          expected_revision: '3',
+          direction,
+          amount: '2.5',
+          reason: 'Correct pool balance',
+          confirmation: direction === 'decrease' ? 'DECREASE' : '',
+        },
+      ]);
+      expect(screen.getByLabelText('Amount (credits)')).toHaveValue('2.5');
+      expect(screen.getByLabelText('Reason')).toHaveValue('Correct pool balance');
+      await view.user.type(screen.getByLabelText('Reason'), ' again');
+      expect(screen.queryByText('Pool adjustment rejected.')).not.toBeInTheDocument();
+    },
+  );
 });

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -42,6 +42,12 @@ export default function GatewayCapabilitiesSection() {
   const [draft, setDraft] = useState<GatewayCapabilityEntry>(() => entryFor());
   const [outputText, setOutputText] = useState('0');
   const [deleteTarget, setDeleteTarget] = useState<GatewayCapabilityRecord | null>(null);
+  const advanced = useRef<HTMLDetailsElement>(null);
+  const hasAdvanced = draft.storage !== 'reject' || draft.cache !== 'reject';
+  useEffect(() => {
+    if (hasAdvanced && advanced.current) advanced.current.open = true;
+  }, [hasAdvanced, editor]);
+
   const list = useQuery({
     queryKey: gatewayCapabilityKeys.root,
     queryFn: ({ signal }) => getGatewayCapabilities(signal),
@@ -283,10 +289,7 @@ export default function GatewayCapabilitiesSection() {
               )}
             </small>
           </label>
-          <details
-            className="ops-advanced"
-            open={draft.storage !== 'reject' || draft.cache !== 'reject'}
-          >
+          <details className="ops-advanced" ref={advanced}>
             <summary>{t('gatewayCapabilities.advanced')}</summary>
             <fieldset className="ops-field-grid" disabled={operation.isPending}>
               <label>

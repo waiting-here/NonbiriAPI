@@ -3212,7 +3212,8 @@
       "unavailable": "Check the reset date and time, then try again.",
       "period": "Resets follow the saved date and clock in the rule’s time zone.",
       "gap_shifted": "Moved forward for daylight saving time",
-      "fold_later": "Later occurrence of repeated local time"
+      "fold_later": "Later occurrence of repeated local time",
+      "anchorRequired": "Enter the reset date and time."
     }
   }
 }

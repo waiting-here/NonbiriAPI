@@ -23,6 +23,7 @@ import {
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import { DuelConfiguration } from '../features/games/Configuration';
+import { GameConfigurationDetails } from '../features/games/ConfigurationDetails';
 import {
   BlackjackConfiguration,
   validateBlackjackConfiguration,
@@ -129,10 +130,8 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
   }
   for (const pump of ['platform', 'welfare', 'thursday'] as const) {
     if (!validInteger(draft.fishing.rake_bp[pump], 0, 9_999))
-      return t('admin.games.validation.integerRange', {
+      return t('admin.games.validation.feeRange', {
         field: t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) }),
-        minimum: 0,
-        maximum: 9_999,
       });
   }
   if (
@@ -143,7 +142,7 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
   )
     return t('admin.games.validation.totalCuts', {
       mode: t('admin.games.sections.fishing'),
-      maximum: 10_000,
+      maximum: 100,
     });
   for (const treasure of ['bottle', 'clover', 'shell'] as const) {
     if (!validInteger(draft.fishing.treasure_multipliers[treasure], 0, 1_000_000)) {
@@ -175,19 +174,17 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
       });
     for (const pump of ['platform', 'welfare', 'thursday'] as const) {
       if (!validInteger(value.pumps_bp[pump], 0, 9_999))
-        return t('admin.games.validation.integerRange', {
+        return t('admin.games.validation.feeRange', {
           field: t('admin.games.rps.cut', {
             mode: t(RPS_MODE_LABEL_KEYS[mode]),
             pump: t(RPS_PUMP_LABEL_KEYS[pump]),
           }),
-          minimum: 0,
-          maximum: 9_999,
         });
     }
     if (value.pumps_bp.platform + value.pumps_bp.welfare + value.pumps_bp.thursday >= 10_000) {
       return t('admin.games.validation.totalCuts', {
         mode: t(RPS_MODE_LABEL_KEYS[mode]),
-        maximum: 10_000,
+        maximum: 100,
       });
     }
     if (!validInteger(value.queue_seconds, 30, 120))
@@ -357,140 +354,142 @@ function GamesEditor({
           />
           <span>{t('admin.games.fishingEnabled')}</span>
         </label>
-        <div className="ops-field-grid">
-          {(['worm', 'lure', 'premium'] as const).map((bait) => (
-            <label key={bait}>
+        <GameConfigurationDetails enabled={draft.fishing.enabled}>
+          <div className="ops-field-grid">
+            {(['worm', 'lure', 'premium'] as const).map((bait) => (
+              <label key={bait}>
+                <span>
+                  {t('admin.games.controls.priceCredits', { field: t(BAIT_LABEL_KEYS[bait]) })}
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0.001"
+                  max="9000000000000"
+                  step="0.001"
+                  value={draft.fishing.bait_prices[bait]}
+                  disabled={save.isPending}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      fishing: {
+                        ...current.fishing,
+                        bait_prices: { ...current.fishing.bait_prices, [bait]: event.target.value },
+                      },
+                    }))
+                  }
+                />
+              </label>
+            ))}
+            {(['standard', 'premium'] as const).map((mode) => (
+              <label key={mode}>
+                <span>{t(FISHING_RTP_LABEL_KEYS[mode])}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={numberInput(draft.fishing.rtp_percent[mode])}
+                  disabled={save.isPending}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      fishing: {
+                        ...current.fishing,
+                        rtp_percent: {
+                          ...current.fishing.rtp_percent,
+                          [mode]: numberFromInput(event.target.value),
+                        },
+                      },
+                    }))
+                  }
+                />
+              </label>
+            ))}
+            <label>
               <span>
-                {t('admin.games.controls.priceCredits', { field: t(BAIT_LABEL_KEYS[bait]) })}
+                {duelText(
+                  '传奇鱼变为蓝色大肥鱼的概率（%）',
+                  'Blue-fish probability after a legendary catch (%)',
+                )}
               </span>
               <input
                 type="number"
                 inputMode="decimal"
-                min="0.001"
-                max="9000000000000"
-                step="0.001"
-                value={draft.fishing.bait_prices[bait]}
-                disabled={save.isPending}
-                onChange={(event) =>
-                  edit((current) => ({
-                    ...current,
-                    fishing: {
-                      ...current.fishing,
-                      bait_prices: { ...current.fishing.bait_prices, [bait]: event.target.value },
-                    },
-                  }))
-                }
-              />
-            </label>
-          ))}
-          {(['standard', 'premium'] as const).map((mode) => (
-            <label key={mode}>
-              <span>{t(FISHING_RTP_LABEL_KEYS[mode])}</span>
-              <input
-                type="number"
                 min="0"
                 max="100"
-                step="1"
-                value={numberInput(draft.fishing.rtp_percent[mode])}
-                disabled={save.isPending}
-                onChange={(event) =>
-                  edit((current) => ({
-                    ...current,
-                    fishing: {
-                      ...current.fishing,
-                      rtp_percent: {
-                        ...current.fishing.rtp_percent,
-                        [mode]: numberFromInput(event.target.value),
-                      },
-                    },
-                  }))
-                }
-              />
-            </label>
-          ))}
-          <label>
-            <span>
-              {duelText(
-                '传奇鱼变为蓝色大肥鱼的概率（%）',
-                'Blue-fish probability after a legendary catch (%)',
-              )}
-            </span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="100"
-              step="0.01"
-              value={numberInput(draft.fishing.blue_fish_chance_bps / 100)}
-              disabled={save.isPending}
-              onChange={(event) =>
-                edit((current) => ({
-                  ...current,
-                  fishing: {
-                    ...current.fishing,
-                    blue_fish_chance_bps: fishingChanceFromPercent(event.target.value),
-                  },
-                }))
-              }
-            />
-            <small>
-              {duelText(
-                '只影响新受理的批次；0%关闭，100%必定变为蓝色大肥鱼。原鱼种奖励与长度分布保持不变。',
-                'Applies to newly accepted batches. 0% disables it; 100% always decorates a legendary catch. Original species rewards and length distribution remain unchanged.',
-              )}
-            </small>
-          </label>
-          {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
-            <label key={pump}>
-              <span>{t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}</span>
-              <input
-                type="number"
-                min="0"
-                max="99.99"
                 step="0.01"
-                value={numberInput(draft.fishing.rake_bp[pump] / 100)}
+                value={numberInput(draft.fishing.blue_fish_chance_bps / 100)}
                 disabled={save.isPending}
                 onChange={(event) =>
                   edit((current) => ({
                     ...current,
                     fishing: {
                       ...current.fishing,
-                      rake_bp: {
-                        ...current.fishing.rake_bp,
-                        [pump]: percentBP(event.target.value),
-                      },
+                      blue_fish_chance_bps: fishingChanceFromPercent(event.target.value),
                     },
                   }))
                 }
               />
+              <small>
+                {duelText(
+                  '只影响新受理的批次；0%关闭，100%必定变为蓝色大肥鱼。原鱼种奖励与长度分布保持不变。',
+                  'Applies to newly accepted batches. 0% disables it; 100% always decorates a legendary catch. Original species rewards and length distribution remain unchanged.',
+                )}
+              </small>
             </label>
-          ))}
-          {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
-            <label key={treasure}>
-              <span>{t(TREASURE_LABEL_KEYS[treasure])}</span>
-              <input
-                type="number"
-                min="0"
-                max="1000000"
-                step="1"
-                value={numberInput(draft.fishing.treasure_multipliers[treasure])}
-                disabled={save.isPending}
-                onChange={(event) =>
-                  edit((current) => ({
-                    ...current,
-                    fishing: {
-                      ...current.fishing,
-                      treasure_multipliers: {
-                        ...current.fishing.treasure_multipliers,
-                        [treasure]: numberFromInput(event.target.value),
+            {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
+              <label key={pump}>
+                <span>{t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="99.99"
+                  step="0.01"
+                  value={numberInput(draft.fishing.rake_bp[pump] / 100)}
+                  disabled={save.isPending}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      fishing: {
+                        ...current.fishing,
+                        rake_bp: {
+                          ...current.fishing.rake_bp,
+                          [pump]: percentBP(event.target.value),
+                        },
                       },
-                    },
-                  }))
-                }
-              />
-            </label>
-          ))}
-        </div>
+                    }))
+                  }
+                />
+              </label>
+            ))}
+            {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
+              <label key={treasure}>
+                <span>{t(TREASURE_LABEL_KEYS[treasure])}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="1"
+                  value={numberInput(draft.fishing.treasure_multipliers[treasure])}
+                  disabled={save.isPending}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      fishing: {
+                        ...current.fishing,
+                        treasure_multipliers: {
+                          ...current.fishing.treasure_multipliers,
+                          [treasure]: numberFromInput(event.target.value),
+                        },
+                      },
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        </GameConfigurationDetails>
       </Card>
       <Card>
         <h2>{t('admin.games.sections.linklink')}</h2>
@@ -503,67 +502,69 @@ function GamesEditor({
           />
           <span>{t('admin.games.linklink.enabled')}</span>
         </label>
-        <div className="ops-field-grid">
-          {(['6x8', '8x8', '10x10'] as const).map((spec) => (
-            <div key={spec} className="ops-subcard">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={draft.linklink.specs[spec].enabled}
-                  disabled={save.isPending}
-                  onChange={(event) =>
-                    edit((current) => ({
-                      ...current,
-                      linklink: {
-                        ...current.linklink,
-                        specs: {
-                          ...current.linklink.specs,
-                          [spec]: {
-                            ...current.linklink.specs[spec],
-                            enabled: event.target.checked,
+        <GameConfigurationDetails enabled={draft.linklink.enabled}>
+          <div className="ops-field-grid">
+            {(['6x8', '8x8', '10x10'] as const).map((spec) => (
+              <div key={spec} className="ops-subcard">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={draft.linklink.specs[spec].enabled}
+                    disabled={save.isPending}
+                    onChange={(event) =>
+                      edit((current) => ({
+                        ...current,
+                        linklink: {
+                          ...current.linklink,
+                          specs: {
+                            ...current.linklink.specs,
+                            [spec]: {
+                              ...current.linklink.specs[spec],
+                              enabled: event.target.checked,
+                            },
                           },
                         },
-                      },
-                    }))
-                  }
-                />
-                <span>
-                  {t('admin.games.linklink.specEnabled', {
-                    spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
-                  })}
-                </span>
-              </label>
-              <label>
-                <span>
-                  {t('admin.games.linklink.entryPrice', {
-                    spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
-                  })}
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  max="9000000000000"
-                  step="0.001"
-                  value={draft.linklink.specs[spec].price}
-                  disabled={save.isPending}
-                  onChange={(event) =>
-                    edit((current) => ({
-                      ...current,
-                      linklink: {
-                        ...current.linklink,
-                        specs: {
-                          ...current.linklink.specs,
-                          [spec]: { ...current.linklink.specs[spec], price: event.target.value },
+                      }))
+                    }
+                  />
+                  <span>
+                    {t('admin.games.linklink.specEnabled', {
+                      spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
+                    })}
+                  </span>
+                </label>
+                <label>
+                  <span>
+                    {t('admin.games.linklink.entryPrice', {
+                      spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
+                    })}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max="9000000000000"
+                    step="0.001"
+                    value={draft.linklink.specs[spec].price}
+                    disabled={save.isPending}
+                    onChange={(event) =>
+                      edit((current) => ({
+                        ...current,
+                        linklink: {
+                          ...current.linklink,
+                          specs: {
+                            ...current.linklink.specs,
+                            [spec]: { ...current.linklink.specs[spec], price: event.target.value },
+                          },
                         },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          ))}
-        </div>
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        </GameConfigurationDetails>
       </Card>
       <Card>
         <h2>{t('admin.games.sections.rps')}</h2>
@@ -576,113 +577,110 @@ function GamesEditor({
           />
           <span>{t('admin.games.rps.enabled')}</span>
         </label>
-        <div className="ops-stack">
-          {RPS_MODES.map((mode) => {
-            const value = draft.rps.modes[mode];
-            return (
-              <section key={mode} className="ops-subcard">
-                <h3>{t(RPS_MODE_LABEL_KEYS[mode])}</h3>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={value.enabled}
-                    disabled={save.isPending}
-                    onChange={(event) => setRPSMode(mode, { enabled: event.target.checked })}
-                  />
-                  <span>
-                    {t('admin.games.rps.modeEnabled', {
-                      mode: t(RPS_MODE_LABEL_KEYS[mode]),
-                    })}
-                  </span>
-                </label>
-                <div className="ops-field-grid">
-                  <label>
-                    <span>{t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}</span>
+        <GameConfigurationDetails enabled={draft.rps.enabled}>
+          <div className="ops-stack">
+            {RPS_MODES.map((mode) => {
+              const value = draft.rps.modes[mode];
+              return (
+                <section key={mode} className="ops-subcard">
+                  <h3>{t(RPS_MODE_LABEL_KEYS[mode])}</h3>
+                  <label className="checkbox-label">
                     <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      max="9000000000000"
-                      step="0.001"
-                      value={value.base}
+                      type="checkbox"
+                      checked={value.enabled}
                       disabled={save.isPending}
-                      onChange={(event) => setRPSMode(mode, { base: event.target.value })}
+                      onChange={(event) => setRPSMode(mode, { enabled: event.target.checked })}
                     />
+                    <span>
+                      {t('admin.games.rps.modeEnabled', {
+                        mode: t(RPS_MODE_LABEL_KEYS[mode]),
+                      })}
+                    </span>
                   </label>
-                  {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
-                    <label key={pump}>
+                  <div className="ops-field-grid">
+                    <label>
                       <span>
-                        {t('admin.games.rps.cut', {
-                          mode: t(RPS_MODE_LABEL_KEYS[mode]),
-                          pump: t(RPS_PUMP_LABEL_KEYS[pump]),
-                        })}
+                        {t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}
                       </span>
                       <input
                         type="number"
+                        inputMode="decimal"
                         min="0"
-                        max="99.99"
-                        step="0.01"
-                        value={numberInput(value.pumps_bp[pump] / 100)}
+                        max="9000000000000"
+                        step="0.001"
+                        value={value.base}
                         disabled={save.isPending}
-                        onChange={(event) =>
-                          setRPSMode(mode, {
-                            pumps_bp: {
-                              ...value.pumps_bp,
-                              [pump]: percentBP(event.target.value),
-                            },
-                          })
-                        }
+                        onChange={(event) => setRPSMode(mode, { base: event.target.value })}
                       />
                     </label>
-                  ))}
-                  {(
-                    [
-                      'queue_seconds',
-                      'gesture_seconds',
-                      'dealer_seconds',
-                      'follower_seconds',
-                    ] as const
-                  ).map((field: RPSSeconds) => {
-                    const bounds =
-                      field === 'queue_seconds'
-                        ? [30, 120]
-                        : field === 'gesture_seconds'
-                          ? [5, 20]
-                          : [5, 15];
-                    return (
-                      <label key={field}>
+                    {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
+                      <label key={pump}>
                         <span>
-                          {t('admin.games.rps.deadline', {
+                          {t('admin.games.rps.cut', {
                             mode: t(RPS_MODE_LABEL_KEYS[mode]),
-                            deadline: t(RPS_DEADLINE_LABEL_KEYS[field]),
+                            pump: t(RPS_PUMP_LABEL_KEYS[pump]),
                           })}
                         </span>
                         <input
                           type="number"
-                          min={bounds[0]}
-                          max={bounds[1]}
-                          step="1"
-                          value={numberInput(value[field])}
+                          min="0"
+                          max="99.99"
+                          step="0.01"
+                          value={numberInput(value.pumps_bp[pump] / 100)}
                           disabled={save.isPending}
                           onChange={(event) =>
-                            setRPSMode(mode, { [field]: numberFromInput(event.target.value) })
+                            setRPSMode(mode, {
+                              pumps_bp: {
+                                ...value.pumps_bp,
+                                [pump]: percentBP(event.target.value),
+                              },
+                            })
                           }
                         />
                       </label>
-                    );
-                  })}
-                  <div className="ops-readonly-field">
-                    <span>
-                      {t('admin.games.rps.queueCapacity', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}
-                    </span>
-                    <strong>{value.queue_capacity}</strong>
-                    <small>{t('admin.games.rps.queueCapacityHint')}</small>
+                    ))}
+                    {(
+                      [
+                        'queue_seconds',
+                        'gesture_seconds',
+                        'dealer_seconds',
+                        'follower_seconds',
+                      ] as const
+                    ).map((field: RPSSeconds) => {
+                      const bounds =
+                        field === 'queue_seconds'
+                          ? [30, 120]
+                          : field === 'gesture_seconds'
+                            ? [5, 20]
+                            : [5, 15];
+                      return (
+                        <label key={field}>
+                          <span>
+                            {t('admin.games.rps.deadline', {
+                              mode: t(RPS_MODE_LABEL_KEYS[mode]),
+                              deadline: t(RPS_DEADLINE_LABEL_KEYS[field]),
+                            })}
+                          </span>
+                          <input
+                            type="number"
+                            min={bounds[0]}
+                            max={bounds[1]}
+                            step="1"
+                            value={numberInput(value[field])}
+                            disabled={save.isPending}
+                            onChange={(event) =>
+                              setRPSMode(mode, { [field]: numberFromInput(event.target.value) })
+                            }
+                          />
+                        </label>
+                      );
+                    })}
                   </div>
-                </div>
-              </section>
-            );
-          })}
-        </div>
+                </section>
+              );
+            })}
+          </div>
+        </GameConfigurationDetails>
       </Card>
       {(['bidding', 'likes'] as const).map(
         (game) =>

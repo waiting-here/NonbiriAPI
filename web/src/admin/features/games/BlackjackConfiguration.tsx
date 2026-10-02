@@ -2,6 +2,7 @@ import { Card } from '@shared/components/States';
 import type { BlackjackConfig } from '@shared/games/blackjack';
 import { useGameAdminText } from './copy';
 import { percentBP } from './config';
+import { GameConfigurationDetails } from './ConfigurationDetails';
 
 export function validateBlackjackConfiguration(
   config: { master_enabled: boolean; blackjack: BlackjackConfig },
@@ -75,12 +76,6 @@ export function BlackjackConfiguration({
   return (
     <Card>
       <h2>{t('二十一点', 'Blackjack')}</h2>
-      <p>
-        {t(
-          '单桌九席，每30秒按5秒落座、20秒决策、5秒展示轮转。提前结束延长展示，下一局不提前。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
-          'Nine seats, every 30 seconds: 5 for seating, 20 for decisions and 5 for results. Early finishes extend the display without starting the next round early. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
-        )}
-      </p>
       <label className="checkbox-label">
         <input
           type="checkbox"
@@ -90,116 +85,124 @@ export function BlackjackConfiguration({
         />
         {t('开启二十一点', 'Enable Blackjack')}
       </label>
-      <div className="ops-field-grid">
-        {(['min_stake', 'max_stake', 'stake_step', 'default_stake'] as const).map((field) => (
-          <label key={field}>
-            <span>
-              {
-                {
-                  min_stake: t('最小基础投入', 'Minimum base stake'),
-                  max_stake: t('最大基础投入', 'Maximum base stake'),
-                  stake_step: t('投入步长', 'Stake step'),
-                  default_stake: t('默认基础投入', 'Default base stake'),
-                }[field]
-              }
-            </span>
-            <input
-              type="text"
-              inputMode="decimal"
-              maxLength={20}
-              value={value[field]}
-              disabled={disabled}
-              onChange={(e) => onChange({ ...value, [field]: e.target.value })}
-            />
-          </label>
-        ))}
-        {(['platform', 'welfare', 'thursday'] as const).map((field) => (
-          <label key={field}>
-            <span>
-              {
-                {
-                  platform: t('平台费用（%）', 'Platform fee (%)'),
-                  welfare: t('低保池费用（%）', 'Welfare pool fee (%)'),
-                  thursday: t('周四池费用（%）', 'Thursday pool fee (%)'),
-                }[field]
-              }
-            </span>
-            <input
-              type="number"
-              min="0"
-              max="99.99"
-              step="0.01"
-              value={Number.isNaN(value.rake_bp[field]) ? '' : value.rake_bp[field] / 100}
-              disabled={disabled}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  rake_bp: { ...value.rake_bp, [field]: percentBP(e.target.value) },
-                })
-              }
-            />
-          </label>
-        ))}
-      </div>
-      <fieldset disabled={disabled}>
-        <legend>{t('快捷投入金额（0–8个）', 'Quick stake amounts (0–8)')}</legend>
+      <GameConfigurationDetails enabled={value.enabled}>
         <p>
           {t(
-            '按钮只选择金额，用户仍需点击加入队列。保存后按金额升序排列；修改限额或步长时请同时调整不再合法的金额。',
-            'Buttons select an amount; players still choose Join queue. Amounts are sorted on save. Update any invalid amounts when changing limits or the step.',
+            '单桌九席，每30秒按5秒落座、20秒决策、5秒展示轮转。提前结束延长展示，下一局不提前。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
+            'Nine seats, every 30 seconds: 5 for seating, 20 for decisions and 5 for results. Early finishes extend the display without starting the next round early. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
           )}
         </p>
         <div className="ops-field-grid">
-          {value.quick_stakes.map((amount, index) => (
-            <div key={index}>
-              <label>
-                {t('快捷金额', 'Quick amount')} {index + 1}
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  maxLength={20}
-                  value={amount}
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      quick_stakes: value.quick_stakes.map((v, i) =>
-                        i === index ? e.target.value : v,
-                      ),
-                    })
-                  }
-                />
-              </label>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
-                onClick={() =>
+          {(['min_stake', 'max_stake', 'stake_step', 'default_stake'] as const).map((field) => (
+            <label key={field}>
+              <span>
+                {
+                  {
+                    min_stake: t('最小基础投入', 'Minimum base stake'),
+                    max_stake: t('最大基础投入', 'Maximum base stake'),
+                    stake_step: t('投入步长', 'Stake step'),
+                    default_stake: t('默认基础投入', 'Default base stake'),
+                  }[field]
+                }
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                maxLength={20}
+                value={value[field]}
+                disabled={disabled}
+                onChange={(e) => onChange({ ...value, [field]: e.target.value })}
+              />
+            </label>
+          ))}
+          {(['platform', 'welfare', 'thursday'] as const).map((field) => (
+            <label key={field}>
+              <span>
+                {
+                  {
+                    platform: t('平台费用（%）', 'Platform fee (%)'),
+                    welfare: t('低保池费用（%）', 'Welfare pool fee (%)'),
+                    thursday: t('周四池费用（%）', 'Thursday pool fee (%)'),
+                  }[field]
+                }
+              </span>
+              <input
+                type="number"
+                min="0"
+                max="99.99"
+                step="0.01"
+                value={Number.isNaN(value.rake_bp[field]) ? '' : value.rake_bp[field] / 100}
+                disabled={disabled}
+                onChange={(e) =>
                   onChange({
                     ...value,
-                    quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
+                    rake_bp: { ...value.rake_bp, [field]: percentBP(e.target.value) },
                   })
                 }
-              >
-                {t('移除', 'Remove')}
-              </button>
-            </div>
+              />
+            </label>
           ))}
         </div>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={disabled || value.quick_stakes.length >= 8}
-          onClick={() => onChange({ ...value, quick_stakes: [...value.quick_stakes, ''] })}
-        >
-          {t('添加快捷金额', 'Add quick amount')}
-        </button>
-      </fieldset>
-      <p className="table-note">
-        {t(
-          '费用逐手从应返总额扣取；正常返还全部为通用积分，包含平局和本金。服务器重启取消则按实际原币种退款。',
-          'Fees apply to each hand’s gross return. Normal returns are all general credits, including pushes and principal. Restart cancellations refund the original payment assets.',
-        )}
-      </p>
+        <fieldset disabled={disabled}>
+          <legend>{t('快捷投入金额（0–8个）', 'Quick stake amounts (0–8)')}</legend>
+          <p>
+            {t(
+              '按钮只选择金额，用户仍需点击加入队列。保存后按金额升序排列；修改限额或步长时请同时调整不再合法的金额。',
+              'Buttons select an amount; players still choose Join queue. Amounts are sorted on save. Update any invalid amounts when changing limits or the step.',
+            )}
+          </p>
+          <div className="ops-field-grid">
+            {value.quick_stakes.map((amount, index) => (
+              <div key={index}>
+                <label>
+                  {t('快捷金额', 'Quick amount')} {index + 1}
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    maxLength={20}
+                    value={amount}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        quick_stakes: value.quick_stakes.map((v, i) =>
+                          i === index ? e.target.value : v,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  {t('移除', 'Remove')}
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={disabled || value.quick_stakes.length >= 8}
+            onClick={() => onChange({ ...value, quick_stakes: [...value.quick_stakes, ''] })}
+          >
+            {t('添加快捷金额', 'Add quick amount')}
+          </button>
+        </fieldset>
+        <p className="table-note">
+          {t(
+            '费用逐手从应返总额扣取；正常返还全部为通用积分，包含平局和本金。服务器重启取消则按实际原币种退款。',
+            'Fees apply to each hand’s gross return. Normal returns are all general credits, including pushes and principal. Restart cancellations refund the original payment assets.',
+          )}
+        </p>
+      </GameConfigurationDetails>
     </Card>
   );
 }

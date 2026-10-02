@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
@@ -43,6 +44,7 @@ const Catalog = forwardRef<
   { account, onDirty, onLocked, upstreamDirty, upstreamLocked, onRefreshed },
   ref,
 ) {
+  const { t: copy } = useTranslation();
   const t = usePictureBookText(),
     client = useQueryClient();
   const [filter, setFilter] = useState<CatalogFilter>({
@@ -493,7 +495,7 @@ const Catalog = forwardRef<
             >
               {batch.uncertain
                 ? t('重试同一次批量保存', 'Retry the same batch save')
-                : t('一次事务保存选中模型', 'Save selected models atomically')}
+                : copy('admin.picturebook.saveSelectedModels')}
             </button>
             {batch.error ? <ErrorState error={batch.error} /> : null}
             {batchResult?.issues.length ? (

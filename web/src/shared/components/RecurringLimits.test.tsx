@@ -181,6 +181,7 @@ describe('RecurringLimits', () => {
     });
     await renderAdmin();
     await screen.findByText('Next three resets');
+    await screen.findByText('2027-01-31 03:00:01 (UTC+00:00)');
     await waitFor(() =>
       expect(requests.some(({ path }) => path.includes('/admin/api/time/recurrence?'))).toBe(true),
     );
@@ -199,6 +200,29 @@ describe('RecurringLimits', () => {
       week_starts_on: null,
     });
   });
+
+  it.each(['en', 'zh'] as const)(
+    'asks for the reset date and time when exact alignment has no anchor (%s)',
+    async (locale) => {
+      const { requests } = installQuotaFetch({
+        reads: [response({ rules: [rule({ interval: 'month' })] })],
+      });
+      await renderAdmin({}, { locale });
+      fireEvent.change(await screen.findByLabelText(locale === 'en' ? 'Starts at' : '起算方式'), {
+        target: { value: 'exact_time' },
+      });
+      await screen.findByText(
+        locale === 'en' ? 'Enter the reset date and time.' : '请填写刷新日期与时间。',
+      );
+      expect(
+        screen.getByRole('button', {
+          name: locale === 'en' ? 'Save recurring limits' : '保存循环限量',
+        }),
+      ).toBeDisabled();
+      expect(putRequests(requests)).toHaveLength(0);
+      expect(requests.some(({ path }) => path.includes('/time/recurrence?'))).toBe(false);
+    },
+  );
 
   it('shows an exact recurrence preview to the read-only key owner', async () => {
     const { requests } = installQuotaFetch({
