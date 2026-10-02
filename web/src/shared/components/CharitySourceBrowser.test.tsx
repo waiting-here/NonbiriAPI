@@ -346,7 +346,7 @@ describe('CharitySourceBrowser', () => {
       await view.user.click(within(view.container).getByRole('button', { name: 'Search' }));
       expect(
         await screen.findByText(
-          'Use at most 128 Unicode characters and 512 UTF-8 bytes; control characters are not allowed.',
+          'Shorten the search or remove special control characters, then try again.',
         ),
       ).toBeVisible();
       expect(requests).toHaveLength(requestCount);

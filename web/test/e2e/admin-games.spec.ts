@@ -270,7 +270,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     },
   });
   expect(JSON.stringify(config.patches[0])).not.toContain('queue_capacity');
-  await expect(page.getByRole('status')).toContainText('Game configuration updated');
+  await expect(page.getByRole('status')).toContainText('Game settings saved');
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -300,6 +300,11 @@ test('admin validates quick amount count, duplicates and limits before saving th
   };
   const errors = await prepare(context, page, config);
   await page.goto(`${ADMIN_ORIGIN}/games`);
+  await page
+    .getByRole('heading', { name: 'Blackjack', exact: true })
+    .locator('..')
+    .getByText('Game settings', { exact: true })
+    .click();
   const group = page.getByRole('group', { name: 'Quick stake amounts (0–8)' });
   const save = page.getByRole('button', { name: 'Save game configuration' });
   await expect(group.getByRole('textbox')).toHaveCount(4);

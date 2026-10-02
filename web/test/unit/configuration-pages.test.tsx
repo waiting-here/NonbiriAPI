@@ -408,16 +408,21 @@ describe('authoritative site-config frontend', () => {
       [siteName, limit],
     );
     const rendered = await renderSettings();
-    await rendered.user.click(
-      (await screen.findByText('Identity and appearance')).closest('button')!,
-    );
+    const identityGroup = await screen.findByRole('button', { name: /Identity and appearance/ });
+    expect(identityGroup).toHaveAttribute('aria-expanded', 'true');
+    await rendered.user.click(identityGroup);
+    expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
+    await rendered.user.click(identityGroup);
     fireEvent.change(screen.getByLabelText('Site name'), { target: { value: 'After' } });
-    await rendered.user.click(screen.getByText('Identity and appearance').closest('button')!);
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Endpoint' } });
-    await rendered.user.click(screen.getByText('Limits').closest('button')!);
+    expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Limits/ })).toHaveAttribute('aria-expanded', 'true');
     fireEvent.change(screen.getByLabelText('Endpoint limit'), { target: { value: '8' } });
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: '' } });
-    await rendered.user.click(screen.getByText('Identity and appearance').closest('button')!);
+    expect(screen.getByRole('button', { name: /Identity and appearance/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
     expect(screen.getByLabelText('Site name')).toHaveValue('After');
     await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() => expect(server.state.revision).toBe('13'));
@@ -471,7 +476,9 @@ describe('authoritative site-config frontend', () => {
     for (const invalid of ['1e3', '0', '1.5', '01']) {
       fireEvent.change(anthropicInput, { target: { value: invalid } });
       expect(within(anthropicForm!).getByRole('alert')).toHaveTextContent(
-        /canonical numeric setting value/i,
+        invalid === '0'
+          ? /within 1–2147483647 at step 1/i
+          : /no whitespace, fractions, exponents, or leading zeroes/i,
       );
       expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     }
@@ -501,7 +508,7 @@ describe('authoritative site-config frontend', () => {
     const patchCount = server.patches.length;
     fireEvent.change(timezoneInput, { target: { value: '345' } });
     expect(within(timezoneForm!).getByRole('alert')).toHaveTextContent(
-      /canonical numeric setting value/i,
+      /within -720–840 at step 30/i,
     );
     expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(server.patches).toHaveLength(patchCount);
@@ -602,6 +609,7 @@ describe('authoritative site-config frontend', () => {
     let textarea = screen.getByLabelText('Terms override (English)');
     let form = textarea.closest<HTMLElement>('.ops-setting');
     expect(form).not.toBeNull();
+    await rendered.user.click(within(form!).getByText('Defaults and limits'));
     expect(within(form!).getByText('65536 / 65536 UTF-8 bytes')).toBeVisible();
     let save = screen.getByRole('button', { name: 'Save all changes' });
     expect(save).toBeDisabled();
@@ -622,7 +630,7 @@ describe('authoritative site-config frontend', () => {
     form = textarea.closest<HTMLElement>('.ops-setting');
     fireEvent.change(textarea, { target: { value: 'x'.repeat(65_537) } });
     expect(within(form!).getByText('65537 / 65536 UTF-8 bytes')).toBeVisible();
-    expect(within(form!).getByRole('alert')).toHaveTextContent(/no larger than 65536 UTF-8 bytes/i);
+    expect(within(form!).getByRole('alert')).toHaveTextContent(/too long; shorten it/i);
     expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(server.patches).toHaveLength(1);
   });

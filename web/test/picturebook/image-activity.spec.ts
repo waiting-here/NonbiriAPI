@@ -633,6 +633,8 @@ test('real linked size editors preserve drafts and quote all four modes without 
       await editor.getByLabel('Sketch paper per image').fill('2');
       await editor.getByLabel('Brushes per image', { exact: true }).fill('1');
       await editor.getByLabel('Make this model available').check();
+      if (!(await editor.getByRole('button', { name: 'Add tier price', exact: true }).isVisible()))
+        await editor.getByText('Optional size prices', { exact: true }).click();
       if (hasTier) {
         await page.getByRole('button', { name: 'Add tier price', exact: true }).click();
         await editor.getByLabel('Tier sketch paper 1').fill('4');

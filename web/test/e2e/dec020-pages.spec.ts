@@ -252,7 +252,7 @@ function endpointKeySummary(id: string, endpointID: string, displayHead = `key-$
   };
 }
 
-test('administrator mainstream channel CRUD keeps the channel authority and retirement state visible', async ({
+test('administrator mainstream channel CRUD keeps channel details and archive consequences visible', async ({
   context,
   page,
 }) => {
@@ -375,14 +375,14 @@ test('administrator mainstream channel CRUD keeps the channel authority and reti
   });
 
   await page.goto(`${ADMIN_ORIGIN}/mainstream-channels`);
-  await expect(page.getByRole('heading', { name: 'Mainstream channel authority' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mainstream channel management' })).toBeVisible();
   await page.getByLabel('Channel name').fill('Fixture channel');
   await page.getByLabel('Category').selectOption('api_platform');
-  await page.getByLabel('Connector').selectOption('anthropic-compatible');
-  await page.getByLabel('Canonical base URL').fill('https://channel.example.test/v1');
+  await page.getByLabel('API type').selectOption('anthropic-compatible');
+  await page.getByLabel('API base URL').fill('https://channel.example.test/v1');
   await page.getByRole('button', { name: 'Create channel' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Channel authority' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Channel details' })).toBeVisible();
   expect(requests.find((request) => request.method === 'POST')?.body).toEqual({
     name: 'Fixture channel',
     category: 'api_platform',
@@ -399,11 +399,13 @@ test('administrator mainstream channel CRUD keeps the channel authority and reti
     name: 'Renamed channel',
   });
 
-  await page.getByRole('button', { name: 'Retire channel' }).click();
+  await page.getByRole('button', { name: 'Archive channel' }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Retire channel' }).click();
-  await expect(page.getByText('Retired channels are immutable')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Archive channel' }).click();
+  await expect(
+    page.getByText('Archived channels cannot be edited or re-enabled.', { exact: false }),
+  ).toBeVisible();
   expect(requests.find((request) => request.method === 'DELETE')?.body).toEqual({
     expected_revision: '2',
     confirmation: 'retire',

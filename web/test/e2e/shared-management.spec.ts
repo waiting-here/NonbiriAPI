@@ -155,7 +155,7 @@ for (const scenario of [
       .getByLabel(copy.announcements.englishTitle, { exact: true })
       .fill('Shared editor notice');
     await page
-      .getByLabel(/^English Markdown|^英文 Markdown/)
+      .getByLabel(copy.announcements.englishMarkdown, { exact: true })
       .fill('Managed from the shared editor.');
     await page
       .getByRole('button', { name: copy.announcements.createPrivateDraft, exact: true })

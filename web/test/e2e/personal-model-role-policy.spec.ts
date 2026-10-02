@@ -72,6 +72,7 @@ for (const locale of ['en', 'zh'] as const) {
         await page
           .getByRole('button', { name: copy.core['models.editModel'], exact: true })
           .click();
+        await page.locator('summary').filter({ hasText: roles.title }).click();
         const editor = page.getByRole('group', { name: roles.title });
         await editor.getByRole('combobox', { name: roles.defaultAction }).selectOption('reject');
         await editor.getByRole('button', { name: roles.addRule }).click();
