@@ -2446,7 +2446,7 @@
       "keys.rotate": "更换 API 密钥",
       "keys.rotateTitle": "更换账户 API 密钥？",
       "keys.rotateBody": "旧密钥会立即失效，请更新所有使用它的程序。",
-      "keys.display": "密钥标识（不能用于调用）",
+      "keys.display": "密钥标识（调用需要使用完整密钥）",
       "keys.oneTimeTitle": "请立即复制此 API 密钥",
       "keys.oneTimeBody": "关闭或离开此页面后将永不再次显示。",
       "keys.closeReveal": "我已保存，关闭明文",

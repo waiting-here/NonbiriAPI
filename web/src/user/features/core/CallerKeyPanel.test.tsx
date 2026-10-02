@@ -65,7 +65,7 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
     await screen.findByText('No account API key');
     await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     expect(await screen.findByText(secret)).toBeInTheDocument();
-    expect(screen.getByText('Key identifier (cannot be used for calls)')).toBeInTheDocument();
+    expect(screen.getByText('Key identifier (calls require the full key)')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy key identifier/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Replace API key' })).toBeDisabled();
     expect(assertNoSensitiveQueryCache(rendered.queryClient, [secret]).hitSurfaces).toEqual([]);
@@ -158,7 +158,7 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
     });
 
-    await screen.findByText('Key identifier (cannot be used for calls)');
+    await screen.findByText('Key identifier (calls require the full key)');
     await rendered.user.click(screen.getByRole('button', { name: 'Replace API key' }));
     expect(screen.getByRole('alertdialog')).toBeVisible();
     await rendered.user.click(
@@ -576,7 +576,7 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       ),
     ).toBeVisible();
     expect(screen.queryByText(secret)).not.toBeInTheDocument();
-    expect(await screen.findByText('Key identifier (cannot be used for calls)')).toBeVisible();
+    expect(await screen.findByText('Key identifier (calls require the full key)')).toBeVisible();
     expect(rendered.queryClient.getQueryData(coreKeys.callerKey('1'))).toEqual({
       generation: '1',
       metadata: refreshedMetadata,
