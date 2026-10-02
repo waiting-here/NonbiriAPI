@@ -4,15 +4,16 @@ import { LakeController, type CastTransport } from './controller';
 import { initialProfile, RULES_ID, start, step } from './rules';
 import type { CastResult, CastView, CheckpointInput } from './api';
 
-function fixture(): CastResult {
+function fixture(ticks = 0): CastResult {
   const state = start(initialProfile(), () => 0, 1);
+  for (let i = 0; i < ticks; i++) step(state.profile, state.cast, false);
   const cast: CastView = {
     id: 'lnc_AAAAAAAAAAAAAAAAAAAAAA',
     source_period_id: 'lnp_AAAAAAAAAAAAAAAAAAAAAA',
     rules_id: RULES_ID,
     generation: '1',
     revision: '1',
-    ack_tick: 0,
+    ack_tick: state.cast.tick,
     phase: state.cast.phase as CastView['phase'],
     paused: false,
     readonly: false,
@@ -123,6 +124,94 @@ describe('Lake cast control', () => {
     controller.setHeld(true);
     controller.tick();
     expect(controller.projection()?.cast.tick).toBe(tick);
+  });
+  it.each(['resume', 'closed'] as const)(
+    'adopts a stopped checkpoint with no accepted ticks and recovery action %s',
+    async (action) => {
+      const result = fixture(19),
+        recovery = structuredClone(result),
+        server = transport(result),
+        saved = vi.fn(),
+        controller = new LakeController(server, saved);
+      recovery.cast.paused = true;
+      recovery.cast.readonly = true;
+      recovery.cast.state.paused = true;
+      recovery.cast.state.held = false;
+      recovery.cast.revision = String(BigInt(result.cast.revision) + 1n);
+      recovery.cast.recovery_action = action;
+      recovery.profile.readonly = action === 'closed';
+      let finish!: (value: CastResult) => void;
+      server.checkpoint = vi.fn(
+        () =>
+          new Promise<CastResult>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      controller.adopt(result, true);
+      controller.setHeld(true);
+      for (let i = 0; i < 19; i++) controller.tick();
+      const pending = controller.flush();
+      for (let i = 0; i < 7; i++) controller.tick();
+      expect(vi.mocked(server.checkpoint).mock.calls[0][1]).toMatchObject({
+        from_tick: 20,
+        to_tick: 38,
+      });
+      expect(controller.queuedTicks()).toBe(26);
+      finish(recovery);
+      await pending;
+      expect(controller.snapshot()).toEqual({ result: recovery, status: 'paused', error: null });
+      expect(saved).toHaveBeenCalledExactlyOnceWith(recovery);
+      expect(controller.queuedTicks()).toBe(0);
+      expect(controller.projection()?.cast).toEqual(recovery.cast.state);
+      controller.setHeld(true);
+      controller.tick();
+      await controller.flush();
+      await controller.pause();
+      await controller.retry();
+      expect(controller.projection()?.cast).toEqual(recovery.cast.state);
+      expect(server.checkpoint).toHaveBeenCalledOnce();
+      expect(server.pause).not.toHaveBeenCalled();
+      if (action === 'resume') {
+        const resumed = structuredClone(recovery);
+        resumed.cast.generation = '2';
+        resumed.cast.revision = String(BigInt(recovery.cast.revision) + 1n);
+        resumed.cast.paused = resumed.cast.readonly = resumed.cast.state.paused = false;
+        delete resumed.cast.recovery_action;
+        server.checkpoint = vi.fn(async (_id, input) => replay(resumed, input));
+        controller.adopt(resumed, true);
+        controller.tick();
+        await controller.flush();
+        expect(vi.mocked(server.checkpoint).mock.calls[0][1]).toMatchObject({
+          generation: '2',
+          expected_revision: resumed.cast.revision,
+          from_tick: 20,
+          to_tick: 20,
+          initial_held: false,
+          edges: [],
+        });
+        expect(controller.snapshot().result?.cast.ack_tick).toBe(20);
+        expect(controller.snapshot().status).toBe('running');
+      }
+    },
+  );
+  it.each([
+    { paused: false, tick: 19 },
+    { paused: true, tick: 18 },
+    { paused: true, tick: 21 },
+  ])('rejects an invalid checkpoint acknowledgement %j', async ({ paused, tick }) => {
+    const result = fixture(19),
+      invalid = structuredClone(result),
+      server = transport(result),
+      saved = vi.fn(),
+      controller = new LakeController(server, saved);
+    invalid.cast.ack_tick = tick;
+    invalid.cast.paused = invalid.cast.readonly = invalid.cast.state.paused = paused;
+    server.checkpoint = vi.fn(async () => invalid);
+    controller.adopt(result, true);
+    controller.tick();
+    await expect(controller.flush()).rejects.toMatchObject({ code: 'invalid_response' });
+    expect(controller.snapshot().result).toEqual(result);
+    expect(saved).not.toHaveBeenCalled();
   });
   it('keeps one request in flight and caps unconfirmed input at 480 ticks', async () => {
     const result = fixture(),

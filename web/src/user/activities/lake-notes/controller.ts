@@ -143,7 +143,8 @@ export class LakeController {
         const oldTick = this.confirmed?.cast.ack_tick ?? 0;
         if (
           attempt.kind === 'checkpoint' &&
-          (result.cast.ack_tick < attempt.input.from_tick ||
+          (result.cast.ack_tick <
+            (result.cast.paused || result.cast.readonly ? oldTick : attempt.input.from_tick) ||
             result.cast.ack_tick > attempt.input.to_tick)
         )
           throw new ApiError('invalid_response', 'Invalid confirmed segment.', 200);
