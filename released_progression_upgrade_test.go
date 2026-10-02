@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -62,6 +63,11 @@ func TestReleasedProgressionUpgrade(t *testing.T) {
 			}
 			if err := prior.Close(); err != nil {
 				t.Fatal(err)
+			}
+			if name == "BLACKJACK" {
+				// Freeze outside admission so background workers cannot seat the
+				// preserved waiter while the recovery assertions are running.
+				now = max(now, now-now%engine.RoundSeconds+engine.SeatingSeconds)
 			}
 			vault, err := secret.New(bytes.Repeat([]byte{0x53}, secret.MasterKeyBytes))
 			if err != nil {
