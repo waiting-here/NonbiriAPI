@@ -38,6 +38,7 @@ type recurringRuleWire struct {
 	Mode         requiredField[string] `json:"mode"`
 	Interval     requiredField[string] `json:"interval"`
 	Alignment    nullableField[string] `json:"alignment"`
+	AnchorLocal  nullableField[string] `json:"anchor_local"`
 	TimeZone     requiredField[string] `json:"time_zone"`
 	WeekStartsOn nullableField[int]    `json:"week_starts_on"`
 	Metric       requiredField[string] `json:"metric"`
@@ -80,7 +81,7 @@ func (api *httpAPI) replaceRecurringRole(w http.ResponseWriter, r *http.Request,
 			writeDonationError(w, ErrInvalidRequest)
 			return
 		}
-		rule := donationquota.RuleInput{ID: v.ID.Value, Mode: v.Mode.Value, Interval: v.Interval.Value, Alignment: v.Alignment.Value, TimeZone: v.TimeZone.Value, WeekStartsOn: v.WeekStartsOn.Value, Metric: v.Metric.Value, Limit: v.Limit.Value}
+		rule := donationquota.RuleInput{ID: v.ID.Value, Mode: v.Mode.Value, Interval: v.Interval.Value, Alignment: v.Alignment.Value, AnchorLocal: v.AnchorLocal.Value, TimeZone: v.TimeZone.Value, WeekStartsOn: v.WeekStartsOn.Value, Metric: v.Metric.Value, Limit: v.Limit.Value}
 		if donationquota.Validate(rule) != nil {
 			writeDonationError(w, ErrInvalidRequest)
 			return
