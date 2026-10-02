@@ -516,6 +516,47 @@ describe('charity model wire', () => {
   );
 
   it.each(['admin', 'steward'] as const)(
+    'accepts absent, null and declared Gateway policies through %s binding reads',
+    async (role) => {
+      const policy = {
+        adapter: 'anthropic_always_adaptive',
+        efforts: ['low', 'max'],
+        max_output_tokens: 128000,
+        storage: 'omit_false',
+        cache: 'anthropic',
+      };
+      const binding = bindingDTO([]);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(
+          async () =>
+            new Response(
+              JSON.stringify({
+                bindings: [
+                  binding,
+                  { ...binding, id: '32', ord: 1, gateway_capabilities: null },
+                  {
+                    ...binding,
+                    id: '33',
+                    ord: 2,
+                    source: { ...bindingSourceFixture, connector_type: 'ai-sdk-gateway-v3' },
+                    gateway_capabilities: policy,
+                  },
+                ],
+                binding_revision: '2',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+        ),
+      );
+      const result = await getManagedBindings(role, '1');
+      expect(result.bindings[0]).not.toHaveProperty('gateway_capabilities');
+      expect(result.bindings[1]?.gateway_capabilities).toBeNull();
+      expect(result.bindings[2]?.gateway_capabilities).toEqual(policy);
+    },
+  );
+
+  it.each(['admin', 'steward'] as const)(
     'continues to reject unknown source types in %s bindings',
     async (role) => {
       const binding = bindingDTO(['catalogue-v3']);
