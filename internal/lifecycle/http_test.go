@@ -36,7 +36,7 @@ func TestRegisterRoutesAndAccountLifecycleHTTP(t *testing.T) {
 	if err := RegisterRoutes(routes, routes, coordinator); err != nil {
 		t.Fatalf("RegisterRoutes: %v", err)
 	}
-	if len(routes.users) != 2 || len(routes.admins) != 4 {
+	if len(routes.users) != 2 || len(routes.admins) != 5 {
 		t.Fatalf("registered routes users=%v admins=%v", routes.users, routes.admins)
 	}
 
