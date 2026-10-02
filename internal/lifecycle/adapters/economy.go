@@ -303,7 +303,7 @@ func mapRecurringLimits(values []donationquota.RuleView) []lifecycle.RecurringLi
 			week = &n
 		}
 		out[index] = lifecycle.RecurringLimitExport{ID: id, Mode: v.Mode, Interval: v.Interval,
-			Alignment: cloneString(v.Alignment), TimeZone: v.TimeZone, WeekStartsOn: week, Metric: v.Metric,
+			Alignment: cloneString(v.Alignment), AnchorLocal: cloneString(v.AnchorLocal), TimeZone: v.TimeZone, WeekStartsOn: week, Metric: v.Metric,
 			Limit: v.Limit, Used: v.Used, Reserved: v.Reserved, Remaining: v.Remaining, State: v.State,
 			PeriodStart: cloneInt64(v.PeriodStart), PeriodEnd: cloneInt64(v.PeriodEnd), NextTransitionAt: cloneInt64(v.NextTransitionAt)}
 	}

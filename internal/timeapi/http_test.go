@@ -458,6 +458,7 @@ func TestRegisterRoutesRegistersExactGETRoutes(t *testing.T) {
 	wantUsers := []string{
 		http.MethodGet + " " + routeTimeZones,
 		http.MethodGet + " " + routeTimeResolve,
+		http.MethodGet + " /api/time/recurrence",
 	}
 	if len(users.routes) != len(wantUsers) || users.calls != len(wantUsers) {
 		t.Fatalf("user routes=%+v calls=%d, want %v", users.routes, users.calls, wantUsers)
@@ -470,6 +471,7 @@ func TestRegisterRoutesRegistersExactGETRoutes(t *testing.T) {
 	wantAdmins := []string{
 		http.MethodGet + " " + routeAdminTimeZones,
 		http.MethodGet + " " + routeAdminTimeResolve,
+		http.MethodGet + " /admin/api/time/recurrence",
 	}
 	if len(admins.routes) != len(wantAdmins) || admins.calls != len(wantAdmins) {
 		t.Fatalf("admin routes=%+v calls=%d, want %v", admins.routes, admins.calls, wantAdmins)

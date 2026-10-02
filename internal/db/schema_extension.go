@@ -49,6 +49,7 @@ type GenerationTwoCompatibility struct {
 }
 
 var generationTwoSourceManifestHashes = [...]string{
+	preRecurrenceManifestHash,
 	preStorageContractsManifestHash,
 	preRoutingManifestHash,
 	preKeyLimitsManifestHash,
@@ -186,7 +187,9 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest == preStorageContractsManifestHash {
+	if digest == preRecurrenceManifestHash {
+		// The immediate predecessor needs only exact recurrence and runtime capabilities.
+	} else if digest == preStorageContractsManifestHash {
 		// The deployed predecessor already includes every historical extension.
 	} else if digest == preActivityRefinementManifestHash {
 		// The immediate predecessor already includes all earlier extensions.
@@ -310,12 +313,17 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	if digest != preStorageContractsManifestHash {
+	if digest != preStorageContractsManifestHash && digest != preRecurrenceManifestHash {
 		if err := applyActivityRefinementExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if err := applyStorageContractsExtension(ctx, tx); err != nil {
+	if digest != preRecurrenceManifestHash {
+		if err := applyStorageContractsExtension(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if err := applyRecurrenceExtension(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

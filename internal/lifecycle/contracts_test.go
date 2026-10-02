@@ -92,7 +92,7 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "review", "manual_models")
 	assertClosedJSONKeys(t, DonationKeyReviewExport{}, "required", "revision", "material_available")
 	assertClosedJSONKeys(t, DonationManualModelExport{}, "upstream_model_id", "display_name")
-	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")
+	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "anchor_local", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")
 	assertClosedJSONKeys(t, DonationSafeSourceExport{Kind: "custom"},
 		"kind", "connector_type", "base_url")
 	channelID, name := "mch_safe", "Safe channel"

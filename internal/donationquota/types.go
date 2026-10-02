@@ -36,6 +36,7 @@ type RuleInput struct {
 	Mode         string  `json:"mode"`
 	Interval     string  `json:"interval"`
 	Alignment    *string `json:"alignment"`
+	AnchorLocal  *string `json:"anchor_local"`
 	TimeZone     string  `json:"time_zone"`
 	WeekStartsOn *int    `json:"week_starts_on"`
 	Metric       string  `json:"metric"`
@@ -74,6 +75,11 @@ func Validate(input RuleInput) error {
 	if !calendar.ValidZone(input.TimeZone) {
 		return ErrInvalid
 	}
+	if input.Alignment == nil || *input.Alignment != "exact_time" {
+		if input.AnchorLocal != nil {
+			return ErrInvalid
+		}
+	}
 	switch input.Interval {
 	case "1h", "5h", "day", "week", "month":
 	default:
@@ -102,6 +108,14 @@ func Validate(input RuleInput) error {
 					return ErrInvalid
 				}
 			} else if input.WeekStartsOn != nil {
+				return ErrInvalid
+			}
+		case "exact_time":
+			if input.AnchorLocal == nil || input.WeekStartsOn != nil || input.Interval == "1h" || input.Interval == "5h" {
+				return ErrInvalid
+			}
+			resolved, err := calendar.Resolve(*input.AnchorLocal, input.TimeZone)
+			if err != nil || resolved.Instant < 0 {
 				return ErrInvalid
 			}
 		default:
@@ -205,7 +219,7 @@ func validNow(now int64) bool { return now >= 0 && now <= calendar.MaxInstant }
 
 func sameStructure(a, b RuleInput) bool {
 	return a.Mode == b.Mode && a.Interval == b.Interval && a.TimeZone == b.TimeZone && a.Metric == b.Metric &&
-		sameOptional(a.Alignment, b.Alignment) && sameOptional(a.WeekStartsOn, b.WeekStartsOn)
+		sameOptional(a.Alignment, b.Alignment) && sameOptional(a.AnchorLocal, b.AnchorLocal) && sameOptional(a.WeekStartsOn, b.WeekStartsOn)
 }
 
 func sameOptional[T comparable](a, b *T) bool {

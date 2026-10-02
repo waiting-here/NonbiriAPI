@@ -7,6 +7,7 @@ const RULE_STRUCTURAL_FIELDS = [
   'mode',
   'interval',
   'alignment',
+  'anchor_local',
   'time_zone',
   'week_starts_on',
   'metric',
@@ -27,5 +28,7 @@ export function recurringLimitRuleStructureChanged(
   baseline: RecurringLimitRuleInput,
   draft: RecurringLimitRuleInput,
 ): boolean {
-  return RULE_STRUCTURAL_FIELDS.some((field) => baseline[field] !== draft[field]);
+  return RULE_STRUCTURAL_FIELDS.some(
+    (field) => (baseline[field] ?? null) !== (draft[field] ?? null),
+  );
 }

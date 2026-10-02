@@ -21,7 +21,8 @@ WITH token_budget AS MATERIALIZED (
  CASE WHEN q.mode='sliding' THEN nbi_calendar_subtract(q.observed_now,q.interval,q.time_zone) END AS window_start,
  CASE WHEN q.mode='reset' THEN
    CASE WHEN p.start_at<=q.observed_now AND q.observed_now<p.end_at THEN p.start_at
-        WHEN q.alignment='calendar' THEN nbi_calendar_start(q.observed_now,q.interval,q.time_zone,COALESCE(q.week_starts_on,0)) END
+        WHEN q.alignment='calendar' THEN nbi_calendar_start(q.observed_now,q.interval,q.time_zone,COALESCE(q.week_starts_on,0))
+        WHEN q.alignment='exact_time' THEN nbi_recurrence_start(q.observed_now,q.effective_at,q.anchor_local,q.interval,q.time_zone) END
  END AS period_start
  FROM live_quota q LEFT JOIN donation_quota_periods p
    ON p.rule_id=q.rule_id AND p.epoch=q.epoch AND p.start_at=q.current_period_start

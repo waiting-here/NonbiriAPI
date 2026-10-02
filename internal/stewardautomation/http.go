@@ -153,7 +153,7 @@ func validateNulls(value any) error {
 		for key, child := range v {
 			if child == nil {
 				switch key {
-				case "authorized_expires_at", "expires_at", "price_limit", "calls_limit", "tokens_limit", "id", "alignment", "week_starts_on":
+				case "authorized_expires_at", "expires_at", "price_limit", "calls_limit", "tokens_limit", "id", "alignment", "anchor_local", "week_starts_on":
 					continue
 				default:
 					return errInvalid

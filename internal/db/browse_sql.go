@@ -50,6 +50,18 @@ func init() {
 		return period.Start, err
 	})
 	sqlite.MustRegisterDeterministicScalarFunction("nbi_donation_source", 3, sqlDonationSource)
+	sqlite.MustRegisterDeterministicScalarFunction("nbi_recurrence_start", 5, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		now, ok := args[0].(int64)
+		effective, eok := args[1].(int64)
+		anchor, aok := args[2].(string)
+		interval, iok := args[3].(string)
+		zone, zok := args[4].(string)
+		if !ok || !eok || !aok || !iok || !zok {
+			return nil, errBrowseSQLValue
+		}
+		period, err := calendar.RecurrencePeriod(now, effective, anchor, interval, zone)
+		return period.Start, err
+	})
 }
 
 func sqlWideValue(value driver.Value) (*big.Int, error) {
