@@ -9,6 +9,7 @@ import { downloadAccountExport, writePendingElevation } from './sensitive';
 import type { AccountLifecycleAdapter } from './types';
 
 const navigate = vi.hoisted(() => vi.fn());
+const ELEVATION_TOKEN = `synthetic-capability-${'a'.repeat(300)}`;
 vi.mock('react-router', async (original) => ({
   ...(await original<typeof import('react-router')>()),
   useNavigate: () => navigate,
@@ -48,7 +49,7 @@ function adapter(
 }
 function returned(intent: 'export' | 'delete', id = '1') {
   writePendingElevation(intent, id);
-  document.cookie = 'nb_elevated=synthetic-capability; Path=/; SameSite=Lax';
+  document.cookie = `nb_elevated=${ELEVATION_TOKEN}; Path=/; SameSite=Lax`;
 }
 describe('account operation consumers', () => {
   it('automatically downloads the original export once after verified return without another confirmation', async () => {
@@ -61,7 +62,7 @@ describe('account operation consumers', () => {
     await waitFor(() => expect(downloadAccountExport).toHaveBeenCalledOnce());
     expect(actions.exportAccount).toHaveBeenCalledWith({
       accountId: '1',
-      elevatedToken: 'synthetic-capability',
+      elevatedToken: ELEVATION_TOKEN,
       signal: expect.any(AbortSignal),
     });
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
@@ -170,7 +171,7 @@ describe('account operation consumers', () => {
     await waitFor(() => expect(actions.deleteAccount).toHaveBeenCalledOnce());
     expect(actions.deleteAccount).toHaveBeenCalledWith({
       accountId: '1',
-      elevatedToken: 'synthetic-capability',
+      elevatedToken: ELEVATION_TOKEN,
       confirmation: 'DELETE',
       signal: expect.any(AbortSignal),
     });

@@ -64,6 +64,7 @@ export function EmptyState({ title, body, action }: EmptyStateProps) {
 
 function errorMessage(error: unknown, translate: (key: string) => string): string {
   if (isUnauthorized(error)) return translate('common.authRequired');
+  if (isApiError(error) && error.code === 'elevated_required') return translate('common.elevationRequired');
   if (isForbidden(error)) return translate('common.forbidden');
   if (isApiError(error)) {
     switch (error.code) {

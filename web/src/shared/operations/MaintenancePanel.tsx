@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -11,6 +11,7 @@ import {
   maintenanceKeys,
   type MaintenanceAction,
   type MaintenanceRole,
+  type MaintenanceState,
 } from './maintenance';
 import { useRetainedOperation } from './useRetainedOperation';
 
@@ -28,6 +29,7 @@ export function MaintenancePanel({
   onAuthorityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const state = useQuery({
     queryKey: maintenanceKeys.state(role),
     queryFn: () => getMaintenanceState(role),
@@ -39,18 +41,29 @@ export function MaintenancePanel({
     action: MaintenanceAction;
     expectedRevision: string;
     reason: string;
-  }, unknown>(
-    (input, key) => input.action === 'enable'
-      ? enableMaintenance(role, input.expectedRevision, input.reason, key)
-      : disableAdminMaintenance(input.expectedRevision, input.reason, key),
-    async (input) => {
+  }, MaintenanceState>(
+    async (input, key, context) => {
+      const result = await (input.action === 'enable'
+        ? enableMaintenance(role, input.expectedRevision, input.reason, key)
+        : disableAdminMaintenance(input.expectedRevision, input.reason, key));
+      context.commit(() => {
+        client.setQueryData(maintenanceKeys.state(role), result);
+        setConfirmation(null);
+        setReason('');
+      });
+      return result;
+    },
+    async (input, error, context) => {
+      if (!error) return;
       const refreshed = await state.refetch();
       const reached = input.action === 'enable'
         ? refreshed.data?.enabled === true
         : refreshed.data?.enabled === false;
       if (reached) {
-        setConfirmation(null);
-        setReason('');
+        context.commit(() => {
+          setConfirmation(null);
+          setReason('');
+        });
       }
       return refreshed;
     },

@@ -438,10 +438,7 @@ describe('administrator account deletion', () => {
     await view.user.click(screen.getByRole('button', { name: 'Delete' }));
     const dialog = within(screen.getByRole('alertdialog'));
     await view.user.type(dialog.getByLabelText('Administrator password'), 'synthetic-password');
-    await view.user.type(
-      dialog.getByLabelText('Type DELETE to confirm immediate account deletion'),
-      'DELETE',
-    );
+    expect(dialog.queryByRole('textbox')).toBeNull();
     await view.user.click(dialog.getByRole('button', { name: 'Delete user permanently' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     view.rerender(<UserDeletion user={{ ...userFixture(), revision: '2' }} refresh={refresh} />);

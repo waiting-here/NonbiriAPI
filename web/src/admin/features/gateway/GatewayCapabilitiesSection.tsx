@@ -110,7 +110,7 @@ export default function GatewayCapabilitiesSection() {
   );
   return (
     <Card className="ops-stack">
-      <div className="card-title-row">
+      <div className="card-title-row ops-toolbar">
         <h2>{t('gatewayCapabilities.title')}</h2>
         <button
           className="btn btn-secondary"
@@ -130,8 +130,8 @@ export default function GatewayCapabilitiesSection() {
         <div className="ops-stack">
           {list.data.map((row) => (
             <div className="ops-subcard" key={row.id}>
-              <div className="card-title-row">
-                <div>
+              <div className="card-title-row ops-toolbar">
+                <div className="gateway-capability-target">
                   <h3 className="ops-wrap">{row.model}</h3>
                   <p className="muted ops-wrap">{row.base_url}</p>
                 </div>

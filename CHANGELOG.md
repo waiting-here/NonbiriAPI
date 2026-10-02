@@ -37,6 +37,8 @@ Changes in development.
 ### Fixed
 
 - Accepted streaming chat requests send idle SSE comments during upstream waits and retries, without counting them as output or consumption. Final failures after headers use one SSE error.
+- Incorrect administrator re-verification passwords preserve the current form, and successful steward maintenance actions show their saved state immediately.
+- Re-verification accepts the server's session-bound tokens for legal holds, exports and account deletion.
 
 - Lake Notes accepts paused checkpoint recovery at the last saved tick when a control lease expires or the activity closes.
 - Lake Notes accepts held Space from the game background without scrolling, while menus and form controls keep their normal keyboard behavior.

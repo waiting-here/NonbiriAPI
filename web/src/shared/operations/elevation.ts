@@ -2,7 +2,7 @@ export type ElevationIntent = 'export' | 'delete';
 const ELEVATION_COOKIE = 'nb_elevated';
 const PENDING_INTENT_KEY = 'nb.pending.elevation';
 const PENDING_ACCOUNT_KEY = 'nb.pending.elevation.account';
-const TOKEN_PATTERN = /^[A-Za-z0-9._-]{8,512}$/;
+const TOKEN_PATTERN = /^[A-Za-z0-9._-]{8,4096}$/;
 
 export function clearElevatedCapabilityCookie(): void {
   if (typeof document !== 'undefined')

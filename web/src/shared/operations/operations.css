@@ -23,6 +23,12 @@ form.ops-toolbar > label {
   gap: var(--space-4, 1rem);
 }
 
+.gateway-capability-target {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .ops-page .card,
 .ops-subcard {
   display: grid;

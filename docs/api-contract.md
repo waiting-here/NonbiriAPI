@@ -22,6 +22,8 @@ User and administrator session cookies are host-only, HttpOnly, SameSite=Lax, an
 
 Account export/deletion and selected administrator legal-hold/user actions require a short-lived, single-use elevation capability bound to the active session. Current administrator/session authority and steward level are revalidated in sensitive read/write transactions. Levels 1–4 may be automatic; level 5 is a manually appointed trainee and level 6 a full steward. Administrators appoint or remove level 6; administrators and full stewards appoint or remove level 5. Full stewards cannot manage themselves, other level-6 users or administrators. Trainees have only the scoped charity permissions in §6.4.
 
+An incorrect password at `POST /admin/api/auth/elevate` returns `403 elevated_required`; the active session remains valid. A missing or expired session returns `401 unauthorized`.
+
 #### Browser cross-origin access
 
 The three exact public model routes support CORS: `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Responses, including authentication, maintenance, validation, rate-limit and upstream errors and streaming responses, carry `Access-Control-Allow-Origin: *`. Browser clients supply their CallerKey explicitly in `Authorization` and use the default fetch credentials mode or `credentials: 'omit'`; `credentials: 'include'` is not supported. `Access-Control-Allow-Credentials` is never enabled. `Retry-After` is exposed to browser code.

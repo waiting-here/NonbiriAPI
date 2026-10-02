@@ -737,9 +737,10 @@ function LegalHoldSessionPanel({
                       type="password"
                       autoComplete="current-password"
                       value={releaseDraft.password}
-                      onChange={(event) =>
-                        setReleaseDraft({ ...releaseDraft, password: event.target.value })
-                      }
+                      onChange={(event) => {
+                        setReleaseDraft({ ...releaseDraft, password: event.target.value });
+                        setElevationError(null);
+                      }}
                     />
                   </label>
                   <button
@@ -816,7 +817,10 @@ function LegalHoldSessionPanel({
               type="password"
               autoComplete="current-password"
               value={createDraft.password}
-              onChange={(event) => setCreateDraft({ ...createDraft, password: event.target.value })}
+              onChange={(event) => {
+                setCreateDraft({ ...createDraft, password: event.target.value });
+                setElevationError(null);
+              }}
             />
           </label>
         </div>

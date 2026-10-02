@@ -19,7 +19,6 @@ export function UserDeletion({
   const passwordHintId = useId();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
   const [elevating, setElevating] = useState(false);
   const [elevationError, setElevationError] = useState<unknown>(null);
   const token = useRef<string | null>(null);
@@ -38,7 +37,6 @@ export function UserDeletion({
     setOpen(false);
     setElevating(false);
     setPassword('');
-    setConfirmation('');
     setElevationError(null);
     return () => {
       revision.current = '';
@@ -46,11 +44,10 @@ export function UserDeletion({
     };
   }, [user.revision]);
   const submit = async () => {
-    if (!password || confirmation !== 'DELETE') return;
+    if (!password) return;
     const expected = user.revision;
     const submitted = password;
     setPassword('');
-    setConfirmation('');
     setElevationError(null);
     setElevating(true);
     try {
@@ -75,15 +72,14 @@ export function UserDeletion({
           <ConfirmDialog
             open
             title={t('management.users.deleteTitle')}
-            description={t('management.users.deleteRefreshOnlyBody')}
+            description={t('management.users.deleteRefreshOnlyBody', { user: user.username })}
             confirmLabel={t('management.users.deleteConfirm')}
-            confirmDisabled={!password || confirmation !== 'DELETE'}
+            confirmDisabled={!password}
             danger
             busy={elevating || deletion.isPending}
             onCancel={() => {
               setOpen(false);
               setPassword('');
-              setConfirmation('');
               setElevationError(null);
             }}
             onConfirm={() => void submit()}
@@ -95,24 +91,18 @@ export function UserDeletion({
                 autoComplete="current-password"
                 aria-describedby={passwordHintId}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setElevationError(null);
+                }}
               />
             </label>
             <small id={passwordHintId}>{t('management.users.elevatedPasswordHint')}</small>
-            <label className="ops-form-field">
-              <span>{t('management.users.deleteTypeConfirmation', { token: 'DELETE' })}</span>
-              <input
-                autoComplete="off"
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-              />
-            </label>
+            {elevationError ? <ErrorState error={elevationError} /> : null}
           </ConfirmDialog>
         </>
       ) : null}
-      {deletion.error || elevationError ? (
-        <ErrorState error={deletion.error ?? elevationError} />
-      ) : null}
+      {deletion.error ? <ErrorState error={deletion.error} /> : null}
     </>
   );
 }
