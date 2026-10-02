@@ -29,6 +29,7 @@ Changes in development.
 
 ### Fixed
 
+- Lake Notes accepts paused checkpoint recovery at the last saved tick when a control lease expires or the activity closes.
 - Lake Notes accepts held Space from the game background without scrolling, while menus and form controls keep their normal keyboard behavior.
 - My Donations accepts current review metadata and forced rejections when opening donated keys and donation details.
 
