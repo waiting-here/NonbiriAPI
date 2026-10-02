@@ -177,7 +177,7 @@ func TestSiteConfigCatalogFrozenOptionalAndGameSemantics(t *testing.T) {
 	} {
 		entry := byKey[key]
 		if entry.Minimum != "0.001" ||
-			!strings.Contains(entry.ZeroSemantics.En, "at least one") {
+			!strings.Contains(entry.ZeroSemantics.En, "at least 0.001 credits") {
 			t.Fatalf("%s zero/minimum semantics=%+v", key, entry)
 		}
 	}
@@ -347,14 +347,14 @@ func TestSiteConfigCatalogSemanticsMatchTypedValidatorsForEveryKnownKey(t *testi
 			if !ok {
 				t.Fatal("catalog entry missing")
 			}
-			if strings.TrimSpace(entry.EmptySemantics.En) == "" ||
+			if strings.TrimSpace(entry.EmptySemantics.En) == "" || strings.TrimSpace(entry.NullSemantics.En) == "" ||
 				strings.Contains(entry.EmptySemantics.En, "see the description") ||
 				strings.Contains(entry.NullSemantics.En, "see the description") {
 				t.Fatalf("empty/null semantics are not concrete: %+v", entry)
 			}
 			if key == KeyAnthropicDefaultMaxTokens {
 				if !entry.NullWritable || !entry.Nullable ||
-					!strings.Contains(entry.EmptySemantics.En, "sends JSON null") {
+					!strings.Contains(entry.EmptySemantics.En, "restore the default of 65536 tokens") {
 					t.Fatalf("anthropic reset semantics=%+v", entry)
 				}
 			} else if strings.TrimSpace(entry.ZeroSemantics.En) == "" ||
@@ -397,9 +397,6 @@ func TestSiteConfigCatalogSemanticsMatchTypedValidatorsForEveryKnownKey(t *testi
 			wantNullableRaw := spec.kind == kindTimezoneOffset || spec.kind == kindOptionalAmount || spec.kind == kindOptionalInt
 			if entry.Nullable != wantNullableRaw {
 				t.Fatalf("raw nullable=%v, want %v", entry.Nullable, wantNullableRaw)
-			}
-			if wantNullableRaw && !strings.Contains(entry.NullSemantics.En, "null") {
-				t.Fatalf("nullable raw field does not explain null: %+v", entry.NullSemantics)
 			}
 		})
 	}
@@ -456,6 +453,21 @@ func TestSiteConfigCatalogJSONCoreAndStableEmptyArrays(t *testing.T) {
 		}
 		if len(item) != 19 {
 			t.Fatalf("catalog entry has %d fields, want frozen 19: %#v", len(item), item)
+		}
+	}
+}
+
+func TestSiteConfigCatalogAmountUnitsMatchWireValues(t *testing.T) {
+	entries, err := buildSiteConfigCatalog(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if knownSiteConfig[entry.Key].kind == kindAmount || knownSiteConfig[entry.Key].kind == kindOptionalAmount {
+			if entry.Key != KeyActivityLoanA && entry.Key != KeyActivityLoanB &&
+				(entry.Unit == nil || entry.Unit.En != "credits" || entry.Unit.Zh != "积分") {
+				t.Fatalf("%s amount has incorrect display unit: %+v", entry.Key, entry.Unit)
+			}
 		}
 	}
 }

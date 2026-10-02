@@ -122,7 +122,7 @@
     },
     "failurePolicy": {
       "label": "连续失败下架阈值",
-      "help": "默认 10。请输入 0 至 340282366920938463463374607431768211455 的整数，不带前导零。",
+      "help": "默认 10。设为 0 后，密钥不会因连续报错自动下架。",
       "zeroWarning": "永不因报错自动下架：这把密钥发生连续错误时仍可能被调用。手动禁用、到期、封禁及配额限制仍然有效。",
       "saved": "当前下架阈值：{{value}}",
       "recalculate": "保存后保留已有失败次数并立即重算报错下架状态。此操作不会启用密钥或重置失败次数。",
@@ -229,6 +229,7 @@
     "userSignInBody": "使用 Discord 登录，管理属于你的端点和模型。",
     "adminSignInBody": "使用服务运营方配置的管理员账号登录。",
     "forbidden": "当前账号没有权限执行此操作。",
+    "elevationRequired": "请重新验证身份后再试。",
     "forbiddenBody": "当前会话无权访问此页面。",
     "enabled": "已启用",
     "disabled": "已停用",
@@ -298,9 +299,10 @@
         "authorityRevision": "当前配置为第 {{revision}} 版。操作后页面会重新读取最新状态；响应不明确时不会自动重复提交。",
         "stewardCannotDisable": "协管员不能关闭维护模式。",
         "reasonLabel": "原因",
-        "reasonInvalid": "请输入非空原因，且不得超过 4,096 个 UTF-8 字节。",
+        "reasonInvalid": "请填写原因；内容过长时请缩短后再试。",
         "enableConfirmTitle": "确定开启维护模式？",
-        "disableConfirmTitle": "确定关闭维护模式？"
+        "disableConfirmTitle": "确定关闭维护模式？",
+        "reasonHelp": "说明暂停或恢复服务的原因，便于其他管理员接手。"
       },
       "logs": {
         "stewardTitle": "请求日志",
@@ -390,7 +392,7 @@
           "boundOnly": "仅已绑定",
           "searchSources": "搜索来源",
           "searchKeys": "搜索密钥",
-          "searchInvalid": "搜索内容最多 128 个 Unicode 字符、512 个 UTF-8 字节，且不能包含控制字符。",
+          "searchInvalid": "搜索内容过长或含特殊控制字符，请修改后再试。",
           "applySearch": "搜索",
           "clearSearch": "清空搜索",
           "chooseSource": "请选择来源",
@@ -453,8 +455,8 @@
         "charityStateLabel": "状态：{{state}}",
         "candidateSourceFilter": "连接来源类型",
         "candidateSourceAny": "全部连接来源类型",
-        "searchInvalid": "搜索词最多 128 个 Unicode 字符、512 字节，不能包含控制字符。",
-        "candidateSearchInvalid": "搜索词最多 512 个 Unicode 字符、2048 字节，不能包含控制字符。",
+        "searchInvalid": "搜索内容过长或含特殊控制字符，请修改后再试。",
+        "candidateSearchInvalid": "搜索内容过长或含特殊控制字符，请修改后再试。",
         "chooseKey": "2 · 选择密钥",
         "chooseModels": "3 · 选择模型",
         "donationNumber": "捐赠 #{{id}}",
@@ -521,7 +523,7 @@
         "keys": "密钥数",
         "leaveUnchanged": "保持不变",
         "manage": "管理",
-        "modelSummary": "配置第 {{revision}} 版 · {{bindings}} 个服务连接 · {{success}}",
+        "modelSummary": "{{bindings}} 个连接 · {{success}}",
         "moveDown": "下移",
         "moveUp": "上移",
         "noBindingsBody": "请从下方添加一个或多个候选项。",
@@ -580,7 +582,7 @@
         "validation": {
           "affinityTTLSeconds": "关联有效时长须为 1–86400 秒的整数。",
           "priceLimit": "金额上限必须是精确的非负积分金额，最多三位小数。",
-          "countLimits": "调用次数与 Token 上限必须是规范整数，且不得超过 9,000,000,000,000,000。",
+          "countLimits": "调用和 token 限额须为整数，且不超过 9,000,000,000,000,000。",
           "tokenReserve": "Token 预留量必须是 0 至 2,147,483,647 的整数。",
           "safeNote": "审核安全备注最多 256 个字符，且不得包含控制字符。",
           "reviewReason": "必须填写审核原因，且最多 1,024 个字符。",
@@ -589,12 +591,23 @@
           "completeSettings": "批准操作要求为每个仍存续的密钥提供完整设置。",
           "modelIdentity": "Provider 与模型均为必填项，最多 64 个字符，且不能复用 [公益] 前缀。",
           "modelLevels": "请选择 L1 至 L5 中的任意等级，也可以全部清空。",
-          "publicDescription": "公开说明最多 1,024 个字符、4,096 个 UTF-8 字节，除换行和制表符外不能包含控制字符。",
+          "publicDescription": "公开说明最多 1,024 个字符；请缩短过长内容，换行和制表符可保留。",
           "modelPrices": "每项价格都必须是精确的非负积分金额，最多三位小数。",
           "tokenReserveCredits": "预留积分范围：0.001～9,000,000,000,000，最多三位小数。",
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
-        }
+        },
+        "discountSummary": "已启用，价格为原价的 {{percent}}%"
+      },
+      "management": {
+        "details": "技术详情",
+        "optionalPrices": "可选尺寸价格",
+        "sizePricesSummary": "{{tiers}} 个档位，{{sizes}} 个精确尺寸",
+        "loanTier": "借款额度（积分）",
+        "feeHelp": "三项合计须小于 100%；0 表示不收取该项费用。",
+        "periodActions": "更改期次状态",
+        "periodActionHelp": "确认对该期次执行“{{action}}”。这会改变用户是否可以开始或继续参与。",
+        "loanExample": "例如额度 10,000、A 为 0.9、B 为 1.3：到账 9,000 游戏积分，还款 13,000 通用积分。"
       }
     },
     "failureReset": {
@@ -691,7 +704,8 @@
         "count": "每个模型最多配置32条角色规则。"
       },
       "saved": "角色处理设置已保存。",
-      "stewardScope": "可修改你有权管理的主流公益模型。"
+      "stewardScope": "可修改你有权管理的主流公益模型。",
+      "summary": "默认：{{action}}；{{count}} 条角色规则"
     },
     "donationReview": {
       "forceTitle": "强制驳回自动批准的捐赠",
@@ -1149,7 +1163,7 @@
         "saveSettings": "保存配置",
         "limitedTimeActivities": "限时活动",
         "configureThePictureBookScheduleAndCurrency": "配置喵帕斯的绘本开放时间与活动币兑换。",
-        "manageLevelDraftsImmutableVersionsPlaytestsAnd": "配置关卡草稿、不可变版本、试玩与正式期次。",
+        "manageLevelDraftsImmutableVersionsPlaytestsAnd": "编辑和试玩关卡，安排活动期次。",
         "openLevelAndPeriodEditor": "打开关卡与期次编辑器",
         "spaceKeycap": "空格键帽",
         "memoryModule": "内存条",
@@ -1271,7 +1285,8 @@
         "nextUnconfigured": "尚未开放，开放安排会在这里显示。",
         "nextOpen": "查看活动规则、资格和费用后参加。"
       }
-    }
+    },
+    "remove": "删除"
   },
   "logs": {
     "charityModel": "调用的公益模型",
@@ -1340,7 +1355,7 @@
       "deleteTitle": "删除这个用户？",
       "deleteConfirm": "永久删除用户",
       "elevatedPassword": "管理员密码",
-      "elevatedPasswordHint": "只用于本次确认，通过同源会话请求发送，不会保存。",
+      "elevatedPasswordHint": "验证身份后确认本次操作，页面不会保存密码。",
       "endpointLimit": "端点上限",
       "rpmLimit": "RPM 上限",
       "concurrencyLimit": "在途并发上限",
@@ -1359,6 +1374,8 @@
       "economyTitle": "积分调整",
       "economyReason": "原因（必填）",
       "economySubmit": "提交调整",
+      "economyConfirmTitle": "确认调整积分？",
+      "economyConfirmBody": "为 {{user}} 提交以下调整，所选余额会立即变更。",
       "levelSectionTitle": "等级",
       "levelManualNone": "无（跟随自动）",
       "levelControl": "设定等级",
@@ -1368,8 +1385,7 @@
       "banPermanent": "永久封禁",
       "banPresetLabel": "{{days}} 天",
       "banDurationDays": "封禁时长（天；留空为永久）",
-      "deleteRefreshOnlyBody": "输入管理员密码后确认。如果用户资料已变更或结果暂不明确，页面会刷新，你需要重新确认。",
-      "deleteTypeConfirmation": "输入 {{token}} 以确认立即删除账号",
+      "deleteRefreshOnlyBody": "永久删除 {{user}} 及其账号数据，既有记录按留存规则处理。请输入管理员密码后确认。",
       "userId": "站内 ID",
       "userIdInvalid": "请输入不大于 9223372036854775807 的正整数用户 ID。",
       "discordId": "Discord ID",
@@ -1378,10 +1394,10 @@
       "economyDirection": "方向",
       "economyIncrease": "增加",
       "economyPositiveAmount": "正数金额",
-      "economyPositiveHint": "服务端账本会按所选方向处理规范的正数积分金额；必须填写原因。",
+      "economyPositiveHint": "选择增加或减少，填写金额和原因。",
       "economyTarget": "目标账户",
       "levelEffectiveTag": "有效",
-      "revisionGuard": "所有写入都会比较修订号 {{revision}}。",
+      "revisionGuard": "保存前账号资料若有变化，请重新载入后再修改。",
       "updated": "更新时间",
       "gameBalance": "游戏积分",
       "language": "语言",
@@ -1393,12 +1409,12 @@
     "announcements": {
       "nav": "公告",
       "all": "全部",
-      "chineseMarkdown": "中文 Markdown · {{bytes}} / 65,536 字节",
+      "chineseMarkdown": "中文正文",
       "chineseTitle": "中文标题",
       "closeCreator": "关闭创建表单",
       "createDraft": "创建草稿",
       "createPrivateDraft": "创建私有草稿",
-      "description": "草稿内容在明确执行发布或发布更新操作之前始终保持私有。",
+      "description": "草稿在发布前仅管理人员可见。后续修改也需要发布更新才会对用户显示。",
       "detail": {
         "authorityRevision": "当前修订 {{revision}}",
         "back": "返回公告列表",
@@ -1406,18 +1422,18 @@
         "confirmDelete": "永久删除",
         "confirmDeleteBody": "内容将被永久移除且无法从回收站恢复；系统仅保留不含内容的最小审计记录。",
         "confirmDeleteTitle": "永久删除此公告？",
-        "confirmPublishBody": "当前已保存草稿将原子地成为用户可见版本。",
+        "confirmPublishBody": "当前已保存草稿将对用户显示。",
         "confirmPublishTitle": "发布此公告？",
         "confirmUpdateTitle": "发布此次更新？",
         "confirmWithdrawBody": "当前用户可见版本将立即消失。",
         "confirmWithdrawTitle": "撤回此公告？",
         "conflict": "公告已变更或结果暂不明确。你的修改已保留，请与修订 {{revision}} 比较后重新确认。",
-        "currentProjection": "当前用户可见版本",
-        "description": "预览与正式发布使用相同的服务端有界渲染器。",
+        "currentProjection": "已发布的公告",
+        "description": "预览发布后的显示效果。",
         "discard": "放弃本地修改",
         "editorTitle": "草稿编辑器",
         "english": "英文",
-        "lifecycleTitle": "发布生命周期",
+        "lifecycleTitle": "发布与撤回",
         "loadingDescription": "编辑并发布公告。",
         "loadingTitle": "公告",
         "permanentlyDelete": "永久删除",
@@ -1429,7 +1445,7 @@
         "reason": "原因（撤回或删除时必填）",
         "republish": "重新发布",
         "saveDraft": "保存私有草稿",
-        "serverPreview": "服务端预览 · {{version}}",
+        "serverPreview": "发布效果预览",
         "untitled": "未命名公告",
         "withdraw": "撤回"
       },
@@ -1439,7 +1455,7 @@
       "emptyBody": "没有符合当前筛选条件的公告。",
       "emptyDraft": "（空草稿）",
       "emptyTitle": "没有公告",
-      "englishMarkdown": "英文 Markdown · {{bytes}} / 65,536 字节",
+      "englishMarkdown": "英文正文",
       "englishTitle": "英文标题",
       "expiry": "到期时间",
       "expiryOptional": "到期时间（可选）",
@@ -1469,7 +1485,77 @@
         "updated": "更新时间"
       },
       "title": "公告",
-      "validation": "每种语言必须同时包含标题和正文，或两者均为空；每份正文最多 65,536 个 UTF-8 字节，且到期时间必须有效。"
+      "validation": "每种语言的标题和正文需同时填写或同时留空；正文过长时请缩短，并检查到期时间。"
+    }
+  },
+  "gatewayCapabilities": {
+    "title": "Gateway 模型能力",
+    "description": "为精确的 Gateway 地址和上游模型声明已验证能力。保存后立即用于新请求，普通调用和工具压平调用共用。",
+    "add": "添加模型能力",
+    "edit": "编辑模型能力",
+    "editTarget": "编辑 {{model}} 的能力",
+    "deleteTarget": "删除 {{model}} 的能力",
+    "emptyTitle": "尚未声明模型能力",
+    "emptyBody": "需要推理、输出、存储或缓存控制时，添加已验证的目标。",
+    "target": "上游目标",
+    "baseUrl": "Gateway 基础地址",
+    "model": "完整上游模型名",
+    "targetHint": "从绑定复制地址和完整模型名，两项均须匹配。保存时会去掉地址末尾的斜杠。",
+    "adapter": "已验证的适配器",
+    "adapterHint": "选择该上游模型实际使用的适配器。保存声明不会测试提供方，也不能证明上游执行了请求选项。",
+    "adapters": {
+      "openai_chat": "OpenAI Chat Completions",
+      "openai_responses": "OpenAI Responses",
+      "anthropic_effort": "Anthropic 推理强度",
+      "anthropic_adaptive": "Anthropic 自适应推理",
+      "anthropic_always_adaptive": "Anthropic 始终自适应推理"
+    },
+    "efforts": "支持的推理强度",
+    "effortsHint": "只勾选已验证的级别。不勾选时，拒绝请求中指定的推理强度。",
+    "effort": {
+      "none": "无",
+      "minimal": "极低",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "极高",
+      "max": "最高"
+    },
+    "noEfforts": "拒绝指定推理强度",
+    "output": "输出上限（Token）",
+    "outputHint": "0 表示未声明上限。正数上限保留请求原有的输出预算，超出时拒绝请求，不会替换调用方的预算。",
+    "outputAnthropicHint": "Anthropic 必须填写正数上限。保留请求原有的输出预算，超出时拒绝请求，不会替换调用方的预算。",
+    "noCeiling": "未声明上限",
+    "tokenCount": "{{count, number}} Token",
+    "advanced": "存储与缓存控制",
+    "storage": "存储控制",
+    "storageHint": "默认拒绝请求中的 store 控制。OpenAI 映射会将它转给已验证的 OpenAI 适配器。",
+    "storageOptions": {
+      "reject": "拒绝 store 控制（默认）",
+      "openai": "转发给 OpenAI",
+      "omit_false": "为兼容省略 store:false"
+    },
+    "omitWarning": "省略 store:false 后，上游不会收到存储指令。这不能保证提供方不留存数据。",
+    "cache": "提示词缓存控制",
+    "cacheHint": "默认拒绝缓存控制。Anthropic 映射保留请求指定的缓存位置和有效期；不会自动加缓存，也不保证命中。",
+    "cacheOptions": {
+      "reject": "拒绝缓存控制（默认）",
+      "anthropic": "Anthropic 提示词缓存"
+    },
+    "absent": "该目标尚未声明能力，请求中指定的能力控制可能被拒绝。",
+    "deleteTitle": "删除模型能力？",
+    "deleteDescription": "删除 {{baseUrl}} 上 {{model}} 的声明。新请求将失去这些已声明能力，进行中的请求保留原设置。"
+  },
+  "requestAdaptation": {
+    "cache": {
+      "label": "自动缓存默认值",
+      "off": "关闭（默认）",
+      "keep": "保留已存默认值",
+      "fiveMinutes": "5 分钟",
+      "oneHour": "1 小时",
+      "help": "仅用于 Gateway。调用者的根、文本或工具缓存标记优先；缓存是否命中由上游决定。保存后默认值不再显示，可保留或重新选择。",
+      "inherited": "自动缓存默认值随主体缺省值一起继承；选择“在此设置”会替换整个缺省值分区。",
+      "custom": "下方自定义条目"
     }
   }
 }

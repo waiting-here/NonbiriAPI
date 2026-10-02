@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"log/slog"
 	"net/http"
 	"time"
@@ -183,8 +184,9 @@ func newPublicForwardRuntime(
 		connectors = append(connectors, instance)
 	}
 	forwardConfig := forward.Config{
-		Adaptations: adaptations,
-		Personal:    personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
+		Adaptations:   adaptations,
+		GatewayModels: gatewaypolicy.NewStore(store.DB()),
+		Personal:      personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
 		CharityGuard: clientGuard,
 	}

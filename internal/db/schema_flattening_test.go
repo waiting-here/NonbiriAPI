@@ -12,7 +12,7 @@ func TestCanonicalSchemaPreservesDeployedDDLBytes(t *testing.T) {
 	if got := fmt.Sprintf("%x", sha256.Sum256([]byte(deployedGenerationTwoSchema))); got != deployedHash {
 		t.Fatalf("deployed schema identity changed: %s", got)
 	}
-	prefix, _, ok := strings.Cut(generationTwoSchema, storageContractsMarker)
+	prefix, _, ok := strings.Cut(preRecurrenceSchema(), storageContractsMarker)
 	if !ok {
 		t.Fatal("canonical additive schema marker is missing")
 	}

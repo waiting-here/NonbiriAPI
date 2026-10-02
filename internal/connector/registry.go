@@ -315,7 +315,7 @@ func openAICapabilities() connectorcontract.CapabilitySet {
 			connectorcontract.CapabilitySampling |
 			connectorcontract.CapabilityUnknownOpenAIFields |
 			connectorcontract.CapabilityReasoningEffort |
-			connectorcontract.CapabilityStorage |
+			connectorcontract.CapabilityStorage | connectorcontract.CapabilityPromptCache |
 			connectorcontract.CapabilityEmbeddings |
 			connectorcontract.CapabilityModelDiscovery,
 	)

@@ -107,12 +107,16 @@ export function LegalHoldPanel() {
   /* eslint-disable react-hooks/set-state-in-effect -- Reset deep links when the authoritative account changes, before mounting its private panel. */
   useEffect(() => {
     if (observedAccount === account) return;
-    if (observedAccount !== undefined) setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete(ID_PARAM);
-      next.delete(PAGE_PARAM);
-      return next;
-    }, { replace: true });
+    if (observedAccount !== undefined)
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete(ID_PARAM);
+          next.delete(PAGE_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
     setObservedAccount(account);
   }, [account, observedAccount, setSearchParams]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -177,10 +181,9 @@ function LegalHoldSessionPanel({
     basis: '',
     days: '30',
     password: '',
-    confirmed: false,
   });
   const [createExpiry, setCreateExpiry] = useState<number | null>(null);
-  const [releaseDraft, setReleaseDraft] = useState({ reason: '', password: '', confirmed: false });
+  const [releaseDraft, setReleaseDraft] = useState({ reason: '', password: '' });
   const [confirmation, setConfirmation] = useState<'create' | 'release' | null>(null);
   const [elevating, setElevating] = useState(false);
   const [elevationError, setElevationError] = useState<unknown>(null);
@@ -327,10 +330,9 @@ function LegalHoldSessionPanel({
         basis: '',
         days: '30',
         password: '',
-        confirmed: false,
       });
       setCreateExpiry(null);
-      setReleaseDraft({ reason: '', password: '', confirmed: false });
+      setReleaseDraft({ reason: '', password: '' });
       setConfirmation(null);
       setElevationError(null);
       setAuthorityError(null);
@@ -376,10 +378,9 @@ function LegalHoldSessionPanel({
       basis: '',
       days: '30',
       password: '',
-      confirmed: false,
     });
     setCreateExpiry(null);
-    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setReleaseDraft({ reason: '', password: '' });
     setConfirmation(null);
     setElevationError(null);
     resetCreate();
@@ -408,11 +409,11 @@ function LegalHoldSessionPanel({
       },
       { replace: true },
     );
-    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setReleaseDraft({ reason: '', password: '' });
     setConfirmation(null);
   }, [detail.error, selected, setSearchParams]);
   useEffect(() => {
-    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setReleaseDraft({ reason: '', password: '' });
     setConfirmation(null);
     releaseElevationToken.current = null;
     resetRelease();
@@ -449,7 +450,7 @@ function LegalHoldSessionPanel({
       expires_at: createExpiry,
     };
     setConfirmation(null);
-    setCreateDraft((current) => ({ ...current, password: '', confirmed: false }));
+    setCreateDraft((current) => ({ ...current, password: '' }));
     setElevationError(null);
     setElevating(true);
     try {
@@ -467,12 +468,12 @@ function LegalHoldSessionPanel({
             basis: '',
             days: '30',
             password: '',
-            confirmed: false,
           });
         },
       });
     } catch (error) {
-      if (epoch === authorityEpoch.current && stationSessionMatches(client, 'admin', snapshot)) setElevationError(error);
+      if (epoch === authorityEpoch.current && stationSessionMatches(client, 'admin', snapshot))
+        setElevationError(error);
     } finally {
       if (epoch === authorityEpoch.current) setElevating(false);
     }
@@ -500,7 +501,7 @@ function LegalHoldSessionPanel({
       reason: releaseDraft.reason.trim(),
     };
     setConfirmation(null);
-    setReleaseDraft((current) => ({ ...current, password: '', confirmed: false }));
+    setReleaseDraft((current) => ({ ...current, password: '' }));
     setElevationError(null);
     setElevating(true);
     try {
@@ -509,10 +510,11 @@ function LegalHoldSessionPanel({
       releaseElevationToken.current = elevation.token;
       releaseSession.current = snapshot;
       release.mutate(input, {
-        onSuccess: () => setReleaseDraft({ reason: '', password: '', confirmed: false }),
+        onSuccess: () => setReleaseDraft({ reason: '', password: '' }),
       });
     } catch (error) {
-      if (epoch === authorityEpoch.current && stationSessionMatches(client, 'admin', snapshot)) setElevationError(error);
+      if (epoch === authorityEpoch.current && stationSessionMatches(client, 'admin', snapshot))
+        setElevationError(error);
     } finally {
       if (epoch === authorityEpoch.current) setElevating(false);
     }
@@ -554,7 +556,7 @@ function LegalHoldSessionPanel({
       next.delete(ID_PARAM);
       return next;
     });
-    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setReleaseDraft({ reason: '', password: '' });
     setConfirmation(null);
   };
   const pageData = list.data;
@@ -735,20 +737,11 @@ function LegalHoldSessionPanel({
                       type="password"
                       autoComplete="current-password"
                       value={releaseDraft.password}
-                      onChange={(event) =>
-                        setReleaseDraft({ ...releaseDraft, password: event.target.value })
-                      }
+                      onChange={(event) => {
+                        setReleaseDraft({ ...releaseDraft, password: event.target.value });
+                        setElevationError(null);
+                      }}
                     />
-                  </label>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={releaseDraft.confirmed}
-                      onChange={(event) =>
-                        setReleaseDraft({ ...releaseDraft, confirmed: event.target.checked })
-                      }
-                    />
-                    <span>{t('admin.legalHolds.release.confirmation')}</span>
                   </label>
                   <button
                     className="btn btn-danger"
@@ -756,7 +749,6 @@ function LegalHoldSessionPanel({
                     disabled={
                       !releaseDraft.reason.trim() ||
                       !releaseDraft.password ||
-                      !releaseDraft.confirmed ||
                       release.isPending ||
                       create.isPending ||
                       elevating ||
@@ -825,7 +817,10 @@ function LegalHoldSessionPanel({
               type="password"
               autoComplete="current-password"
               value={createDraft.password}
-              onChange={(event) => setCreateDraft({ ...createDraft, password: event.target.value })}
+              onChange={(event) => {
+                setCreateDraft({ ...createDraft, password: event.target.value });
+                setElevationError(null);
+              }}
             />
           </label>
         </div>
@@ -839,16 +834,6 @@ function LegalHoldSessionPanel({
               setCreateDraft({ ...createDraft, basis: event.target.value });
             }}
           />
-        </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={createDraft.confirmed}
-            onChange={(event) =>
-              setCreateDraft({ ...createDraft, confirmed: event.target.checked })
-            }
-          />
-          <span>{t('admin.legalHolds.create.confirmation')}</span>
         </label>
         {create.error ? (
           <ErrorState error={create.error} />
@@ -864,7 +849,6 @@ function LegalHoldSessionPanel({
             !createDraft.object_ref.trim() ||
             !createDraft.basis.trim() ||
             !createDraft.password ||
-            !createDraft.confirmed ||
             !validDays ||
             create.isPending ||
             release.isPending ||
@@ -902,15 +886,26 @@ function LegalHoldSessionPanel({
           busy={create.isPending || release.isPending || elevating}
           onCancel={() => {
             setConfirmation(null);
-            setCreateDraft((current) => ({ ...current, password: '', confirmed: false }));
-            setReleaseDraft((current) => ({ ...current, password: '', confirmed: false }));
+            setCreateDraft((current) => ({ ...current, password: '' }));
+            setReleaseDraft((current) => ({ ...current, password: '' }));
             setElevationError(null);
           }}
           onConfirm={() => {
             if (confirmation === 'create') void submitCreate();
             else void submitRelease();
           }}
-        />
+        >
+          <dl className="ops-kv">
+            <dt>{t('admin.legalHolds.table.object')}</dt>
+            <dd>{confirmation === 'create' ? createDraft.object_ref : detail.data?.object_ref}</dd>
+            <dt>
+              {confirmation === 'create'
+                ? t('admin.legalHolds.create.basis')
+                : t('admin.legalHolds.release.reason')}
+            </dt>
+            <dd>{confirmation === 'create' ? createDraft.basis : releaseDraft.reason}</dd>
+          </dl>
+        </ConfirmDialog>
       ) : null}
     </div>
   );

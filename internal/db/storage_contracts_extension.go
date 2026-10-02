@@ -43,7 +43,7 @@ func applyStorageContractsExtension(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	_, additive, ok := strings.Cut(generationTwoSchema, storageContractsMarker)
+	_, additive, ok := strings.Cut(preRecurrenceSchema(), storageContractsMarker)
 	if !ok {
 		return errors.New("canonical storage contracts are missing")
 	}

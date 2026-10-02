@@ -136,7 +136,7 @@ function elevatedTokenForPath(path: string): string | undefined {
     .filter((part) => part.startsWith('nb_elevated='));
   if (matches.length !== 1) return undefined;
   const token = matches[0].slice('nb_elevated='.length);
-  if (token.length === 0 || token.length > 256) return undefined;
+  if (token.length === 0 || token.length > 4096) return undefined;
   for (const character of token) {
     const codePoint = character.codePointAt(0) ?? 0;
     if (codePoint < 32 || codePoint === 127) return undefined;

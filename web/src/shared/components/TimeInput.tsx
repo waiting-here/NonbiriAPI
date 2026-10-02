@@ -79,7 +79,17 @@ export function TimeInput({
           context.isSuccess && timeContext ? timeContext.offset_minutes : null,
         ),
       );
-  }, [browserZone, context.isSuccess, station, timeContext, zones]);
+  }, [
+    browserZone,
+    context.isSuccess,
+    station,
+    timeContext,
+    zones,
+    draft.mode,
+    draft.zone,
+    draft.browserZone,
+    draft.siteOffsetMinutes,
+  ]);
 
   const key = timeDraftKey(draft);
   const local = timeDraftLocal(draft);

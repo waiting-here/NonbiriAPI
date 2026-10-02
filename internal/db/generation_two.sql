@@ -3915,7 +3915,8 @@ CREATE TABLE donation_quota_epochs (
  epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
  mode TEXT NOT NULL CHECK(mode IN ('reset','sliding')),
  interval TEXT NOT NULL CHECK(interval IN ('1h','5h','day','week','month')),
- alignment TEXT CHECK(alignment IS NULL OR alignment IN ('first_success','calendar')),
+ alignment TEXT CHECK(alignment IS NULL OR alignment IN ('first_success','calendar','exact_time')),
+ anchor_local TEXT CHECK(anchor_local IS NULL OR (typeof(anchor_local)='text' AND length(anchor_local)=19 AND anchor_local GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]')),
  time_zone TEXT NOT NULL CHECK(typeof(time_zone)='text' AND length(CAST(time_zone AS BLOB)) BETWEEN 1 AND 64 AND time_zone NOT GLOB '*[^ -~]*'),
  week_starts_on INTEGER CHECK(week_starts_on IS NULL OR (typeof(week_starts_on)='integer' AND week_starts_on BETWEEN 1 AND 7)),
  metric TEXT NOT NULL CHECK(metric IN ('calls','tokens','credits','input_tokens','output_tokens')),
@@ -3931,14 +3932,15 @@ CREATE TABLE donation_quota_epochs (
  pending_reserved BLOB NOT NULL CHECK(typeof(pending_reserved)='blob' AND length(pending_reserved)=16),
  PRIMARY KEY(rule_id, epoch),
  FOREIGN KEY(rule_id,epoch,current_period_start) REFERENCES donation_quota_periods(rule_id,epoch,start_at) DEFERRABLE INITIALLY DEFERRED,
+ CHECK((alignment IS 'exact_time' AND anchor_local IS NOT NULL) OR (alignment IS NOT 'exact_time' AND anchor_local IS NULL)),
  CHECK((window_left IS NULL AND window_at IS NULL AND window_used IS NULL AND window_reserved IS NULL)
    OR (window_left IS NOT NULL AND window_at IS NOT NULL AND window_used IS NOT NULL AND window_reserved IS NOT NULL AND window_left<window_at)),
  CHECK(retired_at IS NULL OR retired_at>=effective_at),
  CHECK(
   (mode='sliding' AND alignment IS NULL AND week_starts_on IS NULL AND current_period_start IS NULL)
   OR
-  (mode='reset' AND alignment IS NOT NULL AND alignment IN ('first_success','calendar')
-   AND NOT (alignment='calendar' AND interval IN ('1h','5h'))
+  (mode='reset' AND alignment IS NOT NULL AND alignment IN ('first_success','calendar','exact_time')
+   AND NOT (alignment IN ('calendar','exact_time') AND interval IN ('1h','5h'))
    AND ((alignment='calendar' AND interval='week' AND week_starts_on IS NOT NULL)
      OR ((alignment<>'calendar' OR interval<>'week') AND week_starts_on IS NULL))
    AND window_left IS NULL AND window_at IS NULL AND window_used IS NULL AND window_reserved IS NULL)
@@ -6898,3 +6900,17 @@ BEGIN
 END;
 CREATE TRIGGER automatic_user_ban_reason_deleted AFTER DELETE ON users
 BEGIN DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=CAST(OLD.id AS TEXT); END;
+-- Runtime capability storage
+CREATE TABLE gateway_model_capabilities (
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
+ base_url TEXT NOT NULL,
+ model TEXT NOT NULL,
+ policy_json TEXT NOT NULL,
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9223372036854775807),
+ updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at BETWEEN 0 AND 253402300799),
+ UNIQUE(base_url,model)
+);
+CREATE TABLE gateway_model_capabilities_state (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+ initialized_at INTEGER NOT NULL CHECK(typeof(initialized_at)='integer' AND initialized_at BETWEEN 0 AND 253402300799)
+);

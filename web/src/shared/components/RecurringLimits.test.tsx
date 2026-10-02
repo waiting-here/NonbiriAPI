@@ -34,6 +34,7 @@ function rule(overrides: Record<string, unknown> = {}) {
     mode: 'reset',
     interval: '5h',
     alignment: 'first_success',
+    anchor_local: null,
     time_zone: 'UTC',
     week_starts_on: null,
     metric: 'calls',
@@ -102,6 +103,19 @@ function installQuotaFetch({
     if (path === '/admin/api/session' && method === 'GET') {
       return jsonResponse({ admin: { username: 'fixture-admin' } });
     }
+    if (path.includes('/time/recurrence?') && method === 'GET') {
+      return jsonResponse({
+        transitions: ['2027-01-31T03:00:01', '2027-02-28T03:00:01', '2027-03-31T03:00:01'].map(
+          (local) => ({
+            instant: Date.parse(`${local}Z`) / 1000,
+            local,
+            time_zone: 'UTC',
+            offset_seconds: 0,
+            adjustment: 'none',
+          }),
+        ),
+      });
+    }
     if (path === `${base}/time-zones` && method === 'GET') {
       const value = zoneReads[Math.min(zoneReadIndex++, zoneReads.length - 1)];
       if (value instanceof Response) return value;
@@ -151,6 +165,90 @@ async function renderAdmin(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('RecurringLimits', () => {
+  it('previews exact resets in the rule zone and saves the original second-precision anchor', async () => {
+    const { requests } = installQuotaFetch({
+      reads: [
+        response({
+          rules: [
+            rule({
+              interval: 'month',
+              alignment: 'exact_time',
+              anchor_local: '2027-01-31T03:00:01',
+            }),
+          ],
+        }),
+      ],
+    });
+    await renderAdmin();
+    await screen.findByText('Next three resets');
+    await screen.findByText('2027-01-31 03:00:01 (UTC+00:00)');
+    await waitFor(() =>
+      expect(requests.some(({ path }) => path.includes('/admin/api/time/recurrence?'))).toBe(true),
+    );
+    const anchor = screen.getByLabelText('Reset date and time');
+    expect((anchor as HTMLInputElement).value).toMatch(/^2027-01-31T03:00:01(?:\.000)?$/);
+    fireEvent.change(screen.getByLabelText('Limit', { selector: 'input' }), {
+      target: { value: '101' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save recurring limits' }));
+    await waitFor(() => expect(putRequests(requests)).toHaveLength(1));
+    const payload = JSON.parse(String(putRequests(requests)[0]?.init?.body));
+    expect(payload.rules[0]).toMatchObject({
+      alignment: 'exact_time',
+      anchor_local: '2027-01-31T03:00:01',
+      time_zone: 'UTC',
+      week_starts_on: null,
+    });
+  });
+
+  it.each(['en', 'zh'] as const)(
+    'asks for the reset date and time when exact alignment has no anchor (%s)',
+    async (locale) => {
+      const { requests } = installQuotaFetch({
+        reads: [response({ rules: [rule({ interval: 'month' })] })],
+      });
+      await renderAdmin({}, { locale });
+      fireEvent.change(await screen.findByLabelText(locale === 'en' ? 'Starts at' : '起算方式'), {
+        target: { value: 'exact_time' },
+      });
+      await screen.findByText(
+        locale === 'en' ? 'Enter the reset date and time.' : '请填写刷新日期与时间。',
+      );
+      expect(
+        screen.getByRole('button', {
+          name: locale === 'en' ? 'Save recurring limits' : '保存循环限量',
+        }),
+      ).toBeDisabled();
+      expect(putRequests(requests)).toHaveLength(0);
+      expect(requests.some(({ path }) => path.includes('/time/recurrence?'))).toBe(false);
+    },
+  );
+
+  it('shows an exact recurrence preview to the read-only key owner', async () => {
+    const { requests } = installQuotaFetch({
+      role: 'owner',
+      reads: [
+        response({
+          rules: [
+            rule({
+              interval: 'month',
+              alignment: 'exact_time',
+              anchor_local: '2027-01-31T03:00:01',
+            }),
+          ],
+        }),
+      ],
+    });
+    await renderWithProviders(
+      <RecurringLimits role="owner" donationId="7" keyId="8" accountId="account-a" />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    await screen.findByText('Next three resets');
+    await waitFor(() =>
+      expect(requests.some(({ path }) => path.includes('/api/time/recurrence?'))).toBe(true),
+    );
+    expect(screen.queryByRole('button', { name: 'Save recurring limits' })).toBeNull();
+  });
   it('renders U128 usage and limit strings without numeric truncation', async () => {
     installQuotaFetch({
       role: 'owner',
@@ -302,6 +400,7 @@ describe('RecurringLimits', () => {
           mode: 'reset',
           interval: '1h',
           alignment: 'first_success',
+          anchor_local: null,
           time_zone: 'UTC',
           week_starts_on: null,
           metric: 'calls',
@@ -468,6 +567,7 @@ describe('RecurringLimits', () => {
             mode: 'reset',
             interval: '5h',
             alignment: 'first_success',
+            anchor_local: null,
             time_zone: 'UTC',
             week_starts_on: null,
             metric: 'calls',
@@ -483,6 +583,7 @@ describe('RecurringLimits', () => {
             mode: 'reset',
             interval: '5h',
             alignment: 'first_success',
+            anchor_local: null,
             time_zone: 'UTC',
             week_starts_on: null,
             metric: 'calls',

@@ -9,20 +9,23 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
-const epochColumns = `r.id,e.epoch,r.donation_key_id,COALESCE(r.display_order,0),e.mode,e.interval,e.alignment,e.time_zone,e.week_starts_on,e.metric,e.limit_mag,e.effective_at,e.retired_at,e.last_observed_at,e.current_period_start,e.window_left,e.window_at,e.window_used,e.window_reserved,e.pending_reserved`
+const epochColumns = `r.id,e.epoch,r.donation_key_id,COALESCE(r.display_order,0),e.mode,e.interval,e.alignment,e.anchor_local,e.time_zone,e.week_starts_on,e.metric,e.limit_mag,e.effective_at,e.retired_at,e.last_observed_at,e.current_period_start,e.window_left,e.window_at,e.window_used,e.window_reserved,e.pending_reserved`
 
 type scanner interface{ Scan(...any) error }
 
 func scanEpoch(row scanner) (epoch, error) {
 	var e epoch
 	var limit, used, reserved, pending []byte
-	var alignment sql.NullString
+	var alignment, anchor sql.NullString
 	var week sql.NullInt64
-	err := row.Scan(&e.id, &e.number, &e.keyID, &e.order, &e.rule.Mode, &e.rule.Interval, &alignment, &e.rule.TimeZone, &week, &e.rule.Metric, &limit, &e.effective, &e.retired, &e.observed, &e.period, &e.left, &e.at, &used, &reserved, &pending)
+	err := row.Scan(&e.id, &e.number, &e.keyID, &e.order, &e.rule.Mode, &e.rule.Interval, &alignment, &anchor, &e.rule.TimeZone, &week, &e.rule.Metric, &limit, &e.effective, &e.retired, &e.observed, &e.period, &e.left, &e.at, &used, &reserved, &pending)
 	if err != nil {
 		return e, err
 	}
 	e.rule.ID = &e.id
+	if anchor.Valid {
+		e.rule.AnchorLocal = &anchor.String
+	}
 	if alignment.Valid {
 		e.rule.Alignment = &alignment.String
 	}
@@ -175,6 +178,17 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 					return ErrInvalid
 				}
 				left, at, used, reserved = l, effective, zero, zero
+			} else if *rule.Alignment == "exact_time" {
+				previous := byID[id].rule.Alignment
+				if previous == nil || *previous != "exact_time" {
+					first, err := calendar.Resolve(*rule.AnchorLocal, rule.TimeZone)
+					if err != nil || first.Instant <= effective {
+						return ErrInvalid
+					}
+				}
+				if _, err := calendar.RecurrencePeriod(effective, effective, *rule.AnchorLocal, rule.Interval, rule.TimeZone); err != nil {
+					return ErrInvalid
+				}
 			} else if *rule.Alignment == "calendar" {
 				week := 0
 				if rule.WeekStartsOn != nil {
@@ -186,7 +200,7 @@ func Replace(ctx context.Context, tx *sql.Tx, keyID, now int64, input []RuleInpu
 			} else if _, err := calendar.Add(effective, rule.Interval, rule.TimeZone); err != nil {
 				return ErrInvalid
 			}
-			_, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_epochs(rule_id,epoch,mode,interval,alignment,time_zone,week_starts_on,metric,limit_mag,effective_at,last_observed_at,window_left,window_at,window_used,window_reserved,pending_reserved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, number, rule.Mode, rule.Interval, rule.Alignment, rule.TimeZone, rule.WeekStartsOn, rule.Metric, db.EncodeU128(limit), effective, effective, left, at, used, reserved, zero)
+			_, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_epochs(rule_id,epoch,mode,interval,alignment,anchor_local,time_zone,week_starts_on,metric,limit_mag,effective_at,last_observed_at,window_left,window_at,window_used,window_reserved,pending_reserved) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, number, rule.Mode, rule.Interval, rule.Alignment, rule.AnchorLocal, rule.TimeZone, rule.WeekStartsOn, rule.Metric, db.EncodeU128(limit), effective, effective, left, at, used, reserved, zero)
 			if err != nil {
 				return err
 			}

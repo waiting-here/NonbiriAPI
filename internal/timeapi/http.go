@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -61,6 +62,12 @@ func RegisterRoutes(users resources.UserRouteRegistrar, admins resources.AdminRo
 		return err
 	}
 	if err := admins.RegisterAdminRoute(http.MethodGet, routeAdminTimeResolve, adminResolveTime); err != nil {
+		return err
+	}
+	if err := users.RegisterUserRoute(http.MethodGet, "/api/time/recurrence", func(w http.ResponseWriter, r *http.Request, _ resources.UserPrincipal) { writeRecurrence(w, r) }); err != nil {
+		return err
+	}
+	if err := admins.RegisterAdminRoute(http.MethodGet, "/admin/api/time/recurrence", func(w http.ResponseWriter, r *http.Request, _ resources.AdminPrincipal) { writeRecurrence(w, r) }); err != nil {
 		return err
 	}
 	if len(resolvers) > 1 {
@@ -240,6 +247,44 @@ func requireNoBody(writer http.ResponseWriter, request *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func writeRecurrence(w http.ResponseWriter, r *http.Request) {
+	if !requireNoBody(w, r) {
+		return
+	}
+	if r.URL == nil || r.URL.ForceQuery || strings.Contains(r.URL.RawQuery, ";") {
+		writeInvalid(w)
+		return
+	}
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(query) != 4 || strings.HasPrefix(r.URL.RawQuery, "&") || strings.HasSuffix(r.URL.RawQuery, "&") || strings.Contains(r.URL.RawQuery, "&&") {
+		writeInvalid(w)
+		return
+	}
+	for _, key := range []string{"anchor_local", "interval", "time_zone", "after"} {
+		if len(query[key]) != 1 {
+			writeInvalid(w)
+			return
+		}
+	}
+	after, err := strconv.ParseInt(query.Get("after"), 10, 64)
+	if err != nil || strconv.FormatInt(after, 10) != query.Get("after") {
+		writeInvalid(w)
+		return
+	}
+	results, err := calendar.NextRecurrences(query.Get("anchor_local"), query.Get("interval"), query.Get("time_zone"), after)
+	if err != nil {
+		writeInvalid(w)
+		return
+	}
+	transitions := make([]resolveResponse, len(results))
+	for i, result := range results {
+		transitions[i] = resolveResponse{result.Instant, result.Local, result.TimeZone, result.OffsetSeconds, result.Adjustment}
+	}
+	httperr.WriteJSON(w, http.StatusOK, struct {
+		Transitions []resolveResponse `json:"transitions"`
+	}{transitions})
 }
 
 func requireEmptyQuery(writer http.ResponseWriter, request *http.Request) bool {

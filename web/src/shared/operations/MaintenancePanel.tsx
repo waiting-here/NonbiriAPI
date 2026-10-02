@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -11,6 +11,7 @@ import {
   maintenanceKeys,
   type MaintenanceAction,
   type MaintenanceRole,
+  type MaintenanceState,
 } from './maintenance';
 import { useRetainedOperation } from './useRetainedOperation';
 
@@ -28,6 +29,7 @@ export function MaintenancePanel({
   onAuthorityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const state = useQuery({
     queryKey: maintenanceKeys.state(role),
     queryFn: () => getMaintenanceState(role),
@@ -39,18 +41,29 @@ export function MaintenancePanel({
     action: MaintenanceAction;
     expectedRevision: string;
     reason: string;
-  }, unknown>(
-    (input, key) => input.action === 'enable'
-      ? enableMaintenance(role, input.expectedRevision, input.reason, key)
-      : disableAdminMaintenance(input.expectedRevision, input.reason, key),
-    async (input) => {
+  }, MaintenanceState>(
+    async (input, key, context) => {
+      const result = await (input.action === 'enable'
+        ? enableMaintenance(role, input.expectedRevision, input.reason, key)
+        : disableAdminMaintenance(input.expectedRevision, input.reason, key));
+      context.commit(() => {
+        client.setQueryData(maintenanceKeys.state(role), result);
+        setConfirmation(null);
+        setReason('');
+      });
+      return result;
+    },
+    async (input, error, context) => {
+      if (!error) return;
       const refreshed = await state.refetch();
       const reached = input.action === 'enable'
         ? refreshed.data?.enabled === true
         : refreshed.data?.enabled === false;
       if (reached) {
-        setConfirmation(null);
-        setReason('');
+        context.commit(() => {
+          setConfirmation(null);
+          setReason('');
+        });
       }
       return refreshed;
     },
@@ -85,12 +98,12 @@ export function MaintenancePanel({
         <div><h2>{title}</h2><p>{description}</p></div>
         {authority ? <StatusBadge active={!authority.enabled} danger={authority.enabled} label={authority.enabled ? t('common.operations.maintenance.enabledStatus') : t('common.operations.maintenance.disabledStatus')} /> : null}
       </div>
-      {authority ? <p className="muted">{t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}</p> : null}
+      {authority ? <details><summary>{t('common.operations.management.details')}</summary><p className="muted">{t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}</p></details> : null}
       {role === 'steward' && authority?.enabled ? <p>{t('common.operations.maintenance.stewardCannotDisable')}</p> : null}
       {state.error && state.data ? <ErrorState error={state.error} onRetry={() => void state.refetch()} /> : null}
       {transition.error ? <ErrorState error={transition.error} /> : null}
       {mayAct ? <>
-        <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+        <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => { if (transition.isSuccess) transition.reset(); setReason(event.target.value); }} /><small>{t('common.operations.maintenance.reasonHelp')}</small></label>
         {!reasonOK && reason.length > 0 ? <p className="field-error" role="alert">{t('common.operations.maintenance.reasonInvalid')}</p> : null}
         <button className="btn btn-danger" type="button" disabled={!reasonOK || transition.isPending} onClick={() => { transition.reset(); setConfirmation(action); }}>{actionLabel}</button>
       </> : null}

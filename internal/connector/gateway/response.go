@@ -145,7 +145,7 @@ func callerUsage(value contract.Usage) any {
 	}
 	total, _ := usageTotal(value)
 	return map[string]any{"prompt_tokens": total - value.OutputTokens, "completion_tokens": value.OutputTokens, "total_tokens": total,
-		"prompt_tokens_details": map[string]int64{"cached_tokens": value.CacheReadInputTokens, "cache_creation_tokens": value.CacheWriteInputTokens}}
+		"prompt_tokens_details": map[string]int64{"cached_tokens": value.CacheReadInputTokens, "cache_creation_tokens": value.CacheWriteInputTokens, "cache_write_tokens": value.CacheWriteInputTokens}}
 }
 
 func finishReason(raw []byte) (string, error) {

@@ -386,6 +386,7 @@ for (const width of [1440, 390]) {
         await editor.getByLabel('Brushes per image').fill('1');
         await editor.getByLabel('Make this model available').check();
         if (index === 0) {
+          await editor.getByText('Optional size prices', { exact: true }).click();
           await editor.getByRole('button', { name: 'Add tier price' }).click();
           await editor.getByLabel('Tier sketch paper 1').fill('3');
           await editor.getByRole('button', { name: 'Add size price' }).click();

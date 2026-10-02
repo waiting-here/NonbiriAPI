@@ -10,6 +10,10 @@ Changes in development.
 
 ### Added
 
+- Online administrator Gateway capability configuration, exact-target matching and request snapshots, with a one-time import of existing environment settings.
+- Gateway V3 prompt-cache markers at request, text-block and tool positions, explicit lifetime mapping, adaptation defaults and the `cache_write_tokens` usage field.
+- Exact daily, weekly and monthly charity reset times with rule-zone previews, month-end recovery and preserved in-flight accounting.
+
 - Gateway V3 preserves `max_completion_tokens` and `max_tokens`, validates conflicting budgets, and supports administrator-configured model reasoning and storage policies. Unsupported controls reject before reservation, with field and stage diagnostics.
 
 - Per-model ordinary message-role policies for personal and charity models, with native compatibility, explicit passthrough/mapping/rejection and independent tool-message handling.
@@ -21,6 +25,9 @@ Changes in development.
 
 ### Changed
 
+- Administrator and steward forms group optional controls, explain defaults and units, use percentages for fees, and clear old save notices when edited. Consequential actions use one confirmation.
+- Caller-key hints now explain that calls require the full key.
+
 - New battles use 100/500 starting coins, 2.5× rounded-up token/energy speed costs, 2× skill likes, one/two-turn overload, Thunder self-overload and deliberate image-shortage submission. Harness changes include Claude Code's independent successful-debuff likes, Antigravity's +2 normal attack and Copilot's conditional +2. Saved older games/replays retain their exact rules.
 - Account export schema 12 adds safe Lake Notes progress/receipts, model-role policies, private preset names and retained automation outcomes, keeping existing whole-file limits and secret exclusions. Instance legal overrides remain an operator publication action.
 - Optional connection onboarding can stop and resume without blocking charity or deleting completed resources. Resource, account, diagnostic and management workflows use shared operation/confirmation behavior, structured fields and bilingual guidance.
@@ -28,6 +35,11 @@ Changes in development.
 - Risk-based checks retain full final-candidate coverage while browser integration reuses one compiled backend fixture and race selection follows actual concurrency boundaries.
 
 ### Fixed
+
+- Accepted streaming chat requests send idle SSE comments during upstream waits and retries, without counting them as output or consumption. Final failures after headers use one SSE error.
+- Incorrect administrator re-verification passwords preserve the current form, and successful steward maintenance actions show their saved state immediately.
+- Re-verification accepts the server's session-bound tokens for legal holds, exports and account deletion.
+- Administrator account deletion reaches the existing cleanup workflow with revision and retry protection. Manual model candidates retain their own identifiers when listed and removed.
 
 - Lake Notes accepts paused checkpoint recovery at the last saved tick when a control lease expires or the activity closes.
 - Lake Notes accepts held Space from the game background without scrolling, while menus and form controls keep their normal keyboard behavior.

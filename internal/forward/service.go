@@ -52,6 +52,8 @@ type Service struct {
 	lifecycle  sync.RWMutex
 	closed     bool
 
+	heartbeatInterval time.Duration
+
 	personal       PersonalRouter
 	charity        CharityRouter
 	claims         ClaimRail
@@ -63,6 +65,7 @@ type Service struct {
 	safety         *SafetyIdentifierFactory
 	observer       *connector.SafeObserver
 	adaptations    AdaptationReader
+	gatewayModels  GatewayModelReader
 	now            func() time.Time
 	timeout        time.Duration
 	settlement     time.Duration
@@ -152,8 +155,9 @@ func NewService(config Config) (*Service, error) {
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
 		charityGuard: config.CharityGuard,
 		connectors:   instances, safety: config.Safety, observer: config.Observer,
-		adaptations: config.Adaptations,
-		now:         config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
+		adaptations:   config.Adaptations,
+		gatewayModels: config.GatewayModels,
+		now:           config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
 		backoff: config.Backoff.normalized(),
 	}, nil
 }
@@ -364,7 +368,22 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	// must not create a second rejection record for a later execution failure.
 	requestattempt.Handled(parent)
 
+	var stream *streamWriter
+	if request.Stream && suppressor == nil {
+		if _, ok := writer.(http.Flusher); ok {
+			interval := service.heartbeatInterval
+			if interval == 0 {
+				interval = streamHeartbeatInterval
+			}
+			stream, executionContext = newStreamWriter(executionContext, writer, interval)
+			writer = stream
+			defer stream.cancel()
+		}
+	}
 	run := service.runAttempts(parent, executionContext, writer, suppressor, decision.Trace, userID, attemptRequest, plan, accepted)
+	if stream != nil {
+		stream.stopHeartbeat()
+	}
 	disposition := claim.AccountingRelease
 	if run.dispatched {
 		disposition = claim.AccountingCommit
@@ -384,6 +403,13 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	}
 
 	caller, failure := service.classifyCaller(parent, executionContext, plan, run)
+	if stream != nil && parent.Err() == nil && run.hasResult &&
+		run.result.Failure == connectorcontract.FailureCanceled && run.result.FailureOrigin == connectorcontract.OriginTimeout {
+		result := run.result
+		result.ClientStatus = http.StatusGatewayTimeout
+		value := failureForAttempt(result, plan.charity)
+		caller, failure = callerFromFailure(value), &value
+	}
 	if decision.Active && run.dispatched {
 		caller, failure = service.completeDebugTrace(parent, decision, plan.route, run, actualCharge, caller, failure)
 	} else if decision.Active {
@@ -411,17 +437,26 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		service.writeDebugTerminal(parent, suppressor, decision, run, caller, failure)
 		return
 	}
-	// Cancellation and an already committed response both forbid a second
-	// terminal write, including an error after streaming bytes were sent.
-	if parent.Err() != nil || caller.Class == claim.ResultCancelled || run.hasResult && run.result.Committed {
+	if parent.Err() != nil || caller.Class == claim.ResultCancelled {
+		return
+	}
+	if stream == nil && run.hasResult && run.result.Committed {
 		return
 	}
 	if run.err != nil {
-		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
+		value := platformFailure(httperr.CodeInternal, "internal error")
+		if stream == nil || !stream.finishFailure(value) {
+			writeFailure(writer, value)
+		}
 		return
 	}
 	if failure != nil {
-		writeFailure(writer, *failure)
+		if stream != nil && stream.finishFailure(*failure) {
+			return
+		}
+		if !run.hasResult || !run.result.Committed {
+			writeFailure(writer, *failure)
+		}
 	}
 }
 
@@ -555,6 +590,9 @@ func (service *Service) snapshot(
 		return executionPlan{}, ErrInternal
 	}
 
+	if err := service.freezeGatewayModels(ctx, &plan); err != nil {
+		return executionPlan{}, err
+	}
 	if err := service.freezeAdaptations(ctx, request, &plan, inbound); err != nil {
 		plan.clearPrepared()
 		return executionPlan{}, err
@@ -801,6 +839,7 @@ func (service *Service) runAttempts(
 			break
 		}
 		policy := dispatch.Policy()
+		policy.GatewayModel = candidate.Policy.GatewayModel
 		policy.SafetyIdentifier = safety
 		if prepared != nil {
 			policy.AdditionalHeaders = prepared.headers.Clone()

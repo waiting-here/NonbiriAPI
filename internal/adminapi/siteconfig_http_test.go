@@ -111,6 +111,10 @@ func TestRegisterSiteConfigRoutesIsIndependentAndExact(t *testing.T) {
 		t.Fatalf("register routes: %v", err)
 	}
 	want := []string{
+		"GET " + RouteAdminGatewayModels,
+		"POST " + RouteAdminGatewayModels,
+		"PUT " + RouteAdminGatewayModel,
+		"DELETE " + RouteAdminGatewayModel,
 		"GET " + RouteAdminBootstrapConfig,
 		"GET " + RouteAdminSiteConfig,
 		"GET " + RouteAdminSiteConfigCatalog,
@@ -124,7 +128,7 @@ func TestRegisterSiteConfigRoutesIsIndependentAndExact(t *testing.T) {
 		t.Fatal("duplicate route registration unexpectedly succeeded")
 	}
 	failing := newSiteConfigMuxRegistrar()
-	failing.failAt = 2
+	failing.failAt = 6
 	if err := RegisterSiteConfigRoutes(failing, runtime); err == nil || !strings.Contains(err.Error(), RouteAdminSiteConfigCatalog) {
 		t.Fatalf("registration failure=%v, want catalog route context", err)
 	}

@@ -146,6 +146,7 @@ function ChannelForm({
   return (
     <form
       className="ops-stack"
+      onChange={() => setInvalid(false)}
       onSubmit={(event) => {
         event.preventDefault();
         const valid = validDraft(draft);
@@ -200,11 +201,14 @@ function ChannelForm({
           <span>{t('admin.mainstreamChannels.form.baseUrl')}</span>
           <input
             value={draft.base_url}
+            type="url"
+            placeholder="https://api.example.com/v1"
             maxLength={4_096}
             autoComplete="off"
             disabled={!canEdit || busy}
             onChange={(event) => setDraft({ ...draft, base_url: event.target.value })}
           />
+          <small>{t('admin.mainstreamChannels.form.baseUrlHelp')}</small>
         </label>
       </div>
       <label className="checkbox-label">
@@ -244,32 +248,39 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   return (
-    <dl className="ops-kv">
-      <dt>{t('admin.mainstreamChannels.detail.idRevision')}</dt>
-      <dd>
-        {channel.id} / {channel.revision}
-      </dd>
-      <dt>{t('admin.mainstreamChannels.detail.category')}</dt>
-      <dd>{t(CATEGORY_LABEL_KEYS[channel.category])}</dd>
-      <dt>{t('admin.mainstreamChannels.detail.connector')}</dt>
-      <dd>{t(CONNECTOR_LABEL_KEYS[channel.connector_type])}</dd>
-      <dt>{t('admin.mainstreamChannels.detail.baseUrl')}</dt>
-      <dd className="ops-wrap">{channel.base_url}</dd>
-      <dt>{t('admin.mainstreamChannels.detail.enabled')}</dt>
-      <dd>{t(channel.enabled ? 'common.enabled' : 'common.disabled')}</dd>
-      <dt>{t('admin.mainstreamChannels.detail.state')}</dt>
-      <dd>{t(STATE_LABEL_KEYS[channel.state])}</dd>
-      <dt>{t('admin.mainstreamChannels.detail.created')}</dt>
-      <dd>{formatDateTime(channel.created_at)}</dd>
-      <dt>{t('admin.mainstreamChannels.detail.updated')}</dt>
-      <dd>{formatDateTime(channel.updated_at)}</dd>
-      {channel.retired_at !== null ? (
-        <>
-          <dt>{t('admin.mainstreamChannels.detail.retired')}</dt>
-          <dd>{formatDateTime(channel.retired_at)}</dd>
-        </>
-      ) : null}
-    </dl>
+    <>
+      <dl className="ops-kv">
+        <dt>{t('admin.mainstreamChannels.detail.category')}</dt>
+        <dd>{t(CATEGORY_LABEL_KEYS[channel.category])}</dd>
+        <dt>{t('admin.mainstreamChannels.detail.connector')}</dt>
+        <dd>{t(CONNECTOR_LABEL_KEYS[channel.connector_type])}</dd>
+        <dt>{t('admin.mainstreamChannels.detail.baseUrl')}</dt>
+        <dd className="ops-wrap">{channel.base_url}</dd>
+        <dt>{t('admin.mainstreamChannels.detail.enabled')}</dt>
+        <dd>{t(channel.enabled ? 'common.enabled' : 'common.disabled')}</dd>
+        <dt>{t('admin.mainstreamChannels.detail.state')}</dt>
+        <dd>{t(STATE_LABEL_KEYS[channel.state])}</dd>
+        <dt>{t('admin.mainstreamChannels.detail.created')}</dt>
+        <dd>{formatDateTime(channel.created_at)}</dd>
+        <dt>{t('admin.mainstreamChannels.detail.updated')}</dt>
+        <dd>{formatDateTime(channel.updated_at)}</dd>
+        {channel.retired_at !== null ? (
+          <>
+            <dt>{t('admin.mainstreamChannels.detail.retired')}</dt>
+            <dd>{formatDateTime(channel.retired_at)}</dd>
+          </>
+        ) : null}
+      </dl>
+      <details>
+        <summary>{t('admin.mainstreamChannels.detail.technicalDetails')}</summary>
+        <dl className="ops-kv">
+          <dt>{t('admin.mainstreamChannels.detail.idRevision')}</dt>
+          <dd>
+            {channel.id} / {channel.revision}
+          </dd>
+        </dl>
+      </details>
+    </>
   );
 }
 
@@ -526,13 +537,11 @@ export function MainstreamChannelsPanel() {
                   <table className="ops-table ops-table--responsive">
                     <thead>
                       <tr>
-                        <th>{t('common.itemId')}</th>
                         <th>{t('admin.mainstreamChannels.table.name')}</th>
                         <th>{t('admin.mainstreamChannels.table.category')}</th>
                         <th>{t('admin.mainstreamChannels.table.connector')}</th>
                         <th>{t('admin.mainstreamChannels.table.baseUrl')}</th>
                         <th>{t('admin.mainstreamChannels.table.enabled')}</th>
-                        <th>{t('admin.mainstreamChannels.table.revision')}</th>
                         <th>{t('admin.mainstreamChannels.table.updated')}</th>
                         <th>{t('admin.mainstreamChannels.table.actions')}</th>
                       </tr>
@@ -540,9 +549,6 @@ export function MainstreamChannelsPanel() {
                     <tbody>
                       {pageData.data.map((channel) => (
                         <tr key={channel.id}>
-                          <td className="ops-id" data-label={t('common.itemId')}>
-                            {channel.id}
-                          </td>
                           <td
                             className="ops-cell-wide"
                             data-label={t('admin.mainstreamChannels.table.name')}
@@ -567,9 +573,6 @@ export function MainstreamChannelsPanel() {
                               danger={channel.state === 'retired'}
                               label={t(channel.enabled ? 'common.enabled' : 'common.disabled')}
                             />
-                          </td>
-                          <td data-label={t('admin.mainstreamChannels.table.revision')}>
-                            {channel.revision}
                           </td>
                           <td data-label={t('admin.mainstreamChannels.table.updated')}>
                             {formatDateTime(channel.updated_at)}

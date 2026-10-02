@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, isApiError } from '@shared/query/http';
-import {
-  useRequestAdaptationCopy,
-  type RequestAdaptationCopyKey,
-} from './requestAdaptationCopy';
+import { useRequestAdaptationCopy, type RequestAdaptationCopyKey } from './requestAdaptationCopy';
 
 type Mode = 'inherit' | 'replace';
 type MapKind = 'fixed_headers' | 'body_defaults' | 'body_forced';
@@ -38,6 +36,7 @@ interface Row {
   action: Action;
   value: string;
   existing: boolean;
+  structuredCache?: boolean;
 }
 interface ListDraft {
   mode: Mode;
@@ -153,11 +152,7 @@ function newDraft(view: Projection): Draft {
   };
 }
 
-function buildPayload(
-  draft: Draft,
-  revision: string,
-  copy: Copy,
-) {
+function buildPayload(draft: Draft, revision: string, copy: Copy) {
   const payload: Record<string, unknown> = { expected_revision: revision };
   for (const kind of ['forward_headers', 'native_extension_paths'] as const) {
     const section = draft[kind];
@@ -212,14 +207,55 @@ function MapEditor({
   section,
   editable,
   change,
+  gatewayCacheDefaults = false,
 }: {
   kind: MapKind;
   section: MapDraft;
   editable: boolean;
   change: (next: MapDraft) => void;
+  gatewayCacheDefaults?: boolean;
 }) {
   const copy = useRequestAdaptationCopy();
-  if (section.mode === 'inherit') return <p>{copy('inherited')}</p>;
+  const { t } = useTranslation();
+  const cacheHelpID = useId();
+  if (section.mode === 'inherit')
+    return (
+      <>
+        <p>{copy('inherited')}</p>
+        {gatewayCacheDefaults ? <p>{t('requestAdaptation.cache.inherited')}</p> : null}
+      </>
+    );
+  const structuredCache = (row: Row) =>
+    row.structuredCache || (row.existing && row.action !== 'replace');
+  const cacheRows = gatewayCacheDefaults
+    ? section.rows.filter((row) => row.name.trim() === '/cache_control')
+    : [];
+  const cacheRow = cacheRows.find((row) => !structuredCache(row)) ?? cacheRows[0];
+  const structuredCacheRow = !cacheRow || structuredCache(cacheRow);
+  const savedCache = cacheRows.some((row) => row.existing);
+  const cacheValue = !cacheRow
+    ? 'off'
+    : !structuredCacheRow
+      ? 'custom'
+      : cacheRow.action === 'clear'
+        ? 'off'
+        : cacheRow.action === 'keep'
+          ? 'keep'
+          : cacheRow.value === JSON.stringify({ type: 'ephemeral', ttl: '1h' })
+            ? '1h'
+            : '5m';
+  const changeCache = (ttl: string) => {
+    const rows = section.rows.filter((row) => row.name.trim() !== '/cache_control');
+    if (ttl !== 'off' || savedCache)
+      rows.push({
+        name: '/cache_control',
+        existing: savedCache,
+        structuredCache: true,
+        action: ttl === 'off' ? 'clear' : ttl === 'keep' ? 'keep' : 'replace',
+        value: ttl === '5m' || ttl === '1h' ? JSON.stringify({ type: 'ephemeral', ttl }) : '',
+      });
+    change({ ...section, rows });
+  };
   const changeRow = (index: number, next: Row) =>
     change({
       ...section,
@@ -227,60 +263,90 @@ function MapEditor({
     });
   return (
     <div className="core-form">
-      <p>{copy(kind === 'fixed_headers' ? 'fixedHelp' : 'bodyHelp')}</p>
-      {section.rows.length === 0 ? <p>{copy('empty')}</p> : null}
-      {section.rows.map((row, index) => (
-        <div className="core-field-grid" key={index}>
+      {gatewayCacheDefaults ? (
+        <div>
           <label>
-            <span>{copy('name')}</span>
-            <input
-              value={row.name}
-              maxLength={512}
-              readOnly={row.existing || !editable}
-              onChange={(event) => changeRow(index, { ...row, name: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{copy('action')}</span>
+            <span>{t('requestAdaptation.cache.label')}</span>
             <select
-              value={row.action}
+              value={cacheValue}
               disabled={!editable}
-              onChange={(event) =>
-                changeRow(index, { ...row, action: event.target.value as Action, value: '' })
-              }
+              aria-describedby={cacheHelpID}
+              onChange={(event) => changeCache(event.target.value)}
             >
-              {row.existing ? <option value="keep">{copy('keep')}</option> : null}
-              <option value="replace">{copy('change')}</option>
-              <option value="clear">{copy('clear')}</option>
+              {!structuredCacheRow ? (
+                <option value="custom" disabled>
+                  {t('requestAdaptation.cache.custom')}
+                </option>
+              ) : null}
+              {savedCache ? (
+                <option value="keep">{t('requestAdaptation.cache.keep')}</option>
+              ) : null}
+              <option value="off">{t('requestAdaptation.cache.off')}</option>
+              <option value="5m">{t('requestAdaptation.cache.fiveMinutes')}</option>
+              <option value="1h">{t('requestAdaptation.cache.oneHour')}</option>
             </select>
           </label>
-          {row.action === 'replace' ? (
-            <label>
-              <span>{copy('value')}</span>
-              {kind === 'fixed_headers' ? (
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={row.value}
-                  maxLength={4096}
-                  disabled={!editable}
-                  onChange={(event) => changeRow(index, { ...row, value: event.target.value })}
-                />
-              ) : (
-                <textarea
-                  value={row.value}
-                  rows={2}
-                  maxLength={65536}
-                  disabled={!editable}
-                  onChange={(event) => changeRow(index, { ...row, value: event.target.value })}
-                />
-              )}
-            </label>
-          ) : row.existing ? (
-            <span>{copy('masked')}</span>
-          ) : null}
+          <small id={cacheHelpID}>{t('requestAdaptation.cache.help')}</small>
         </div>
-      ))}
+      ) : null}
+      <p>{copy(kind === 'fixed_headers' ? 'fixedHelp' : 'bodyHelp')}</p>
+      {section.rows.length === 0 ? <p>{copy('empty')}</p> : null}
+      {section.rows.map((row, index) =>
+        gatewayCacheDefaults &&
+        structuredCache(row) &&
+        row.name.trim() === '/cache_control' ? null : (
+          <div className="core-field-grid" key={index}>
+            <label>
+              <span>{copy('name')}</span>
+              <input
+                value={row.name}
+                maxLength={512}
+                readOnly={row.existing || !editable}
+                onChange={(event) => changeRow(index, { ...row, name: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>{copy('action')}</span>
+              <select
+                value={row.action}
+                disabled={!editable}
+                onChange={(event) =>
+                  changeRow(index, { ...row, action: event.target.value as Action, value: '' })
+                }
+              >
+                {row.existing ? <option value="keep">{copy('keep')}</option> : null}
+                <option value="replace">{copy('change')}</option>
+                <option value="clear">{copy('clear')}</option>
+              </select>
+            </label>
+            {row.action === 'replace' ? (
+              <label>
+                <span>{copy('value')}</span>
+                {kind === 'fixed_headers' ? (
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={row.value}
+                    maxLength={4096}
+                    disabled={!editable}
+                    onChange={(event) => changeRow(index, { ...row, value: event.target.value })}
+                  />
+                ) : (
+                  <textarea
+                    value={row.value}
+                    rows={2}
+                    maxLength={65536}
+                    disabled={!editable}
+                    onChange={(event) => changeRow(index, { ...row, value: event.target.value })}
+                  />
+                )}
+              </label>
+            ) : row.existing ? (
+              <span>{copy('masked')}</span>
+            ) : null}
+          </div>
+        ),
+      )}
       {editable ? (
         <button
           type="button"
@@ -304,12 +370,15 @@ export function RequestAdaptationEditor({
   scope,
   connectorType,
   editable,
+  gatewayCacheDefaults = false,
 }: {
   url: string;
   scope: 'endpoint' | 'charity-model' | 'binding';
   connectorType?: string;
   editable: boolean;
+  gatewayCacheDefaults?: boolean;
 }) {
+  const { t } = useTranslation();
   const copy = useRequestAdaptationCopy();
   const [reload, setReload] = useState(0);
   const [view, setView] = useState<View | null>(null);
@@ -321,8 +390,7 @@ export function RequestAdaptationEditor({
   const [blocked, setBlocked] = useState(false);
   const [loadedContext, setLoadedContext] = useState<string | null>(null);
   const loadedContextRef = useRef<string | null>(null);
-  const contextChanged =
-    loadedContext !== null && loadedContext !== url;
+  const contextChanged = loadedContext !== null && loadedContext !== url;
   const saveBlocked = blocked || contextChanged;
 
   useEffect(() => {
@@ -352,10 +420,14 @@ export function RequestAdaptationEditor({
     return () => controller.abort();
   }, [url, reload]);
 
-  const updateList = (kind: ListKind, next: ListDraft) =>
+  const updateList = (kind: ListKind, next: ListDraft) => {
+    setNotice('');
     setDraft((current) => (current ? { ...current, [kind]: next } : current));
-  const updateMap = (kind: MapKind, next: MapDraft) =>
+  };
+  const updateMap = (kind: MapKind, next: MapDraft) => {
+    setNotice('');
     setDraft((current) => (current ? { ...current, [kind]: next } : current));
+  };
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (!editable || !view || !draft || saving || saveBlocked) return;
@@ -435,9 +507,12 @@ export function RequestAdaptationEditor({
       {!editable && view ? <p>{copy('readOnly')}</p> : null}
       {view && draft && !loading && !contextChanged ? (
         <form className="core-form" onSubmit={(event) => void save(event)}>
-          <p>
-            {copy('revision')}: {view.revision}
-          </p>
+          <details>
+            <summary>{t('common.operations.management.details')}</summary>
+            <p>
+              {copy('revision')}: {view.revision}
+            </p>
+          </details>
           {(
             [
               'forward_headers',
@@ -499,6 +574,10 @@ export function RequestAdaptationEditor({
                     kind={kind}
                     section={section as MapDraft}
                     editable={editable}
+                    gatewayCacheDefaults={
+                      kind === 'body_defaults' &&
+                      (connectorType === 'ai-sdk-gateway-v3' || gatewayCacheDefaults)
+                    }
                     change={(next) => updateMap(kind, next)}
                   />
                 )}

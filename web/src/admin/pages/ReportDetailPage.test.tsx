@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router';
 import { renderWithProviders } from '../../../test/unit/support';
@@ -16,6 +16,11 @@ const mocks = vi.hoisted(() => ({
   useReportDetailPage: vi.fn(),
   useReportTargetsPage: vi.fn(),
   useReportTargetDonationsPage: vi.fn(),
+  approveReport: vi.fn(),
+}));
+vi.mock('../features/operations/reports', async (original) => ({
+  ...(await original<typeof import('../features/operations/reports')>()),
+  approveReport: mocks.approveReport,
 }));
 
 vi.mock('../data', async (loadOriginal) => ({
@@ -137,6 +142,40 @@ afterEach(() => {
 });
 
 describe('ReportDetailPage numbered nested pagination', () => {
+  it('approves through one consequence dialog while retaining the authoritative versions', async () => {
+    mocks.useReportDetailPage.mockReturnValue({
+      data: { ...detail, status: 'pending_review' },
+      error: null,
+      isPending: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    mocks.approveReport.mockResolvedValue({ ...summary, status: 'approved_processing' });
+    const view = await renderWithProviders(
+      <Routes>
+        <Route path="/reports/:caseId" element={<ReportDetailPage />} />
+      </Routes>,
+      { station: 'admin', role: 'admin', route: `/reports/${caseId}` },
+    );
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
+    await view.user.type(screen.getByLabelText('Reason'), 'Reviewed the evidence');
+    await view.user.click(screen.getByRole('button', { name: 'Approve deletion' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).queryByRole('checkbox')).toBeNull();
+    expect(within(dialog).getByText('Reviewed the evidence')).toBeInTheDocument();
+    expect(mocks.approveReport).not.toHaveBeenCalled();
+    await view.user.click(within(dialog).getByRole('button', { name: 'Approve deletion' }));
+    await waitFor(() => expect(mocks.approveReport).toHaveBeenCalledTimes(1));
+    expect(mocks.approveReport.mock.calls[0].slice(0, 2)).toEqual([
+      caseId,
+      {
+        expected_material_version: detail.material_version,
+        expected_target_version: detail.target_version,
+        reason: 'Reviewed the evidence',
+        confirmation: true,
+      },
+    ]);
+  });
   it('keeps a deep-linked nested page while the first session read is pending', async () => {
     mocks.useAdminSession.mockReturnValue({ data: undefined, error: null, isPending: true });
     const content = () => (

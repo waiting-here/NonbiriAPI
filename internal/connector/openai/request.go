@@ -276,12 +276,22 @@ func projectCapabilities(fields []jsonField, stream bool) CapabilityRequirements
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilitySampling)
 		case "tools":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityTools)
+			var tools []map[string]json.RawMessage
+			if json.Unmarshal(field.value, &tools) == nil {
+				for _, tool := range tools {
+					if _, ok := tool["cache_control"]; ok {
+						required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityPromptCache)
+					}
+				}
+			}
 		case "tool_choice":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityToolChoice)
 		case "parallel_tool_calls":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityParallelTools)
 		case "reasoning_effort":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityReasoningEffort)
+		case "cache_control":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityPromptCache)
 		case "store":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityStorage)
 		default:
@@ -335,6 +345,9 @@ func projectMessageCapabilities(raw json.RawMessage) connectorcontract.Capabilit
 			continue
 		}
 		for _, block := range blocks {
+			if _, ok := block["cache_control"]; ok {
+				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityPromptCache)
+			}
 			var blockType string
 			if json.Unmarshal(block["type"], &blockType) != nil {
 				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)

@@ -2355,7 +2355,7 @@
       "endpoints.noKeysTitle": "No keys",
       "endpoints.noKeysBody": "Add a key you own to check models and create model connections.",
       "endpoints.key": "Key",
-      "endpoints.keyIdentifier": "Key identifier (partial key)",
+      "endpoints.keyIdentifier": "Key identifier (calls require the full key)",
       "endpoints.keyState": "Key status",
       "endpoints.storePolicy": "Do not save chat requests (store=false)",
       "endpoints.securityProcessing": "Security processing — currently unavailable",
@@ -3200,6 +3200,20 @@
       "items": {
         "unknown": "Unknown catch"
       }
+    }
+  },
+  "recurringLimits": {
+    "exact": {
+      "alignment": "Exact reset time",
+      "anchor": "Reset date and time",
+      "help": "Enter the reset time in {{zone}}. Until a future first reset, usage counts from this save. Short months use their last day, then return to the original day.",
+      "preview": "Next three resets",
+      "loading": "Calculating reset times…",
+      "unavailable": "Check the reset date and time, then try again.",
+      "period": "Resets follow the saved date and clock in the rule’s time zone.",
+      "gap_shifted": "Moved forward for daylight saving time",
+      "fold_later": "Later occurrence of repeated local time",
+      "anchorRequired": "Enter the reset date and time."
     }
   }
 }

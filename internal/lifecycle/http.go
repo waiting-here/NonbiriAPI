@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	accountExportRoute = "/api/account/export"
-	accountDeleteRoute = "/api/account/delete"
+	accountExportRoute      = "/api/account/export"
+	accountDeleteRoute      = "/api/account/delete"
+	adminAccountDeleteRoute = "/admin/api/users/{id}"
 )
 
 type UserPrincipal struct {
@@ -65,6 +66,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, coordi
 		method, pattern string
 		handler         AuthorizedAdminHandler
 	}{
+		{http.MethodDelete, adminAccountDeleteRoute, api.deleteAccountByAdmin},
 		{http.MethodGet, legalHoldListRoute, api.listLegalHolds},
 		{http.MethodGet, legalHoldDetailRoute, api.getLegalHold},
 		{http.MethodPost, legalHoldListRoute, api.createLegalHold},
@@ -96,6 +98,43 @@ func (api *lifecycleHTTP) exportAccount(writer http.ResponseWriter, request *htt
 
 type accountDeleteWire struct {
 	Confirm string `json:"confirm"`
+}
+
+type adminAccountDeleteWire struct {
+	ExpectedRevision string `json:"expected_revision"`
+	Confirmation     string `json:"confirmation"`
+}
+
+func (api *lifecycleHTTP) deleteAccountByAdmin(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
+	if !requireLifecycleEmptyQuery(writer, request) {
+		return
+	}
+	userID, err := parsePositiveDecimal(request.PathValue("id"))
+	if err != nil {
+		writeLifecycleError(writer, err)
+		return
+	}
+	var body adminAccountDeleteWire
+	if !decodeLifecycleObject(writer, request, &body) {
+		return
+	}
+	if body.Confirmation != "DELETE" {
+		writeLifecycleError(writer, ErrInvalid)
+		return
+	}
+	key, ok := lifecycleIdempotencyKey(writer, request)
+	if !ok {
+		return
+	}
+	if err := api.coordinator.DeleteAccountByAdmin(request.Context(), AdminAccountDeletion{
+		AdminID: principal.UserID, UserID: userID, ExpectedRevision: body.ExpectedRevision,
+		IdempotencyKey: key, DecisionNow: api.decisionNow(),
+	}); err != nil {
+		writeLifecycleError(writer, err)
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.WriteHeader(http.StatusNoContent)
 }
 
 func (api *lifecycleHTTP) deleteAccount(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {

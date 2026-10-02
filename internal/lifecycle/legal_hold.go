@@ -182,7 +182,7 @@ func (coordinator *Coordinator) CreateLegalHold(ctx context.Context, input Legal
 	if err := coordinator.adminAuth.AuthorizeFreshAdmin(ctx, tx, input.AdminID); err != nil {
 		return MutationResult[LegalHoldDetail]{}, err
 	}
-	decision, err := beginLegalHoldMutation(ctx, tx, input.AdminID, input.IdempotencyKey,
+	decision, err := beginAdminMutation(ctx, tx, input.AdminID, input.IdempotencyKey,
 		http.MethodPost, legalHoldListRoute, nil, canonicalBody, input.DecisionNow)
 	if err != nil {
 		return MutationResult[LegalHoldDetail]{}, err
@@ -259,7 +259,7 @@ func (coordinator *Coordinator) ReleaseLegalHold(ctx context.Context, input Lega
 	if err := coordinator.adminAuth.AuthorizeFreshAdmin(ctx, tx, input.AdminID); err != nil {
 		return MutationResult[LegalHoldDetail]{}, err
 	}
-	decision, err := beginLegalHoldMutation(ctx, tx, input.AdminID, input.IdempotencyKey,
+	decision, err := beginAdminMutation(ctx, tx, input.AdminID, input.IdempotencyKey,
 		http.MethodPost, legalHoldReleaseRoute, []string{input.HoldID}, canonicalBody, input.DecisionNow)
 	if err != nil {
 		return MutationResult[LegalHoldDetail]{}, err
@@ -315,7 +315,7 @@ VALUES(?,?,'release',?,?,?)`, input.HoldID, input.AdminID, input.Reason, input.D
 	return finishLegalHoldMutation(ctx, tx, decision, http.StatusOK, detail)
 }
 
-func beginLegalHoldMutation(ctx context.Context, tx *sql.Tx, adminID int64, key, method, route string,
+func beginAdminMutation(ctx context.Context, tx *sql.Tx, adminID int64, key, method, route string,
 	pathIDs []string, body []byte, decisionNow int64) (idempotency.Decision, error) {
 	actor, err := idempotency.ActorScopeHash("admin", strconv.FormatInt(adminID, 10))
 	if err != nil {
@@ -337,7 +337,7 @@ func beginLegalHoldMutation(ctx context.Context, tx *sql.Tx, adminID int64, key,
 	case errors.Is(err, idempotency.ErrConflict), errors.Is(err, idempotency.ErrInProgress):
 		return idempotency.Decision{}, ErrConflict
 	default:
-		return idempotency.Decision{}, fmt.Errorf("lifecycle: accept legal hold mutation: %w", err)
+		return idempotency.Decision{}, fmt.Errorf("lifecycle: accept administrator mutation: %w", err)
 	}
 }
 

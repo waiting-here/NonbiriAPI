@@ -50,6 +50,12 @@ async function prepare(
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
+      path: '/admin/api/gateway-model-capabilities',
+      body: { data: [] },
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
       path: '/admin/api/maintenance',
       body: { enabled: false, revision: '1' },
     });

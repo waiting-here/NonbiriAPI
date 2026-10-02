@@ -31,6 +31,8 @@ const keys = {
   exchangeHelp: 'admin.lakeNotes.exchangeHelp',
   saveDraft: 'admin.lakeNotes.saveDraft',
   publish: 'admin.lakeNotes.publish',
+  publishHelp: 'admin.lakeNotes.publishHelp',
+  withdrawalHelp: 'admin.lakeNotes.withdrawalHelp',
   savePeriod: 'admin.lakeNotes.savePeriod',
   cancelPeriod: 'admin.lakeNotes.cancelPeriod',
   cancelEdit: 'admin.lakeNotes.cancelEdit',

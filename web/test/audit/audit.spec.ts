@@ -396,6 +396,11 @@ test.describe('administrator policy changes and subsequent steward review', () =
       );
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await updated).status()).toBe(200);
+      await page
+        .locator('details')
+        .filter({ has: page.getByText('Policy revision: 2', { exact: true }) })
+        .locator('summary')
+        .click();
       await expect(page.getByText('Policy revision: 2', { exact: true })).toBeVisible();
 
       await page.goto(f.admin_url + '/economy-audit');

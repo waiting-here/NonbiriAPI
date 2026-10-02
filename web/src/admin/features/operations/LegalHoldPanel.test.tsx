@@ -8,6 +8,7 @@ const HOLD_ID = `lgh_${'A'.repeat(22)}`;
 const OTHER_HOLD_ID = `lgh_${'B'.repeat(21)}A`;
 const REPORT_ID = `rpc_${'B'.repeat(21)}A`;
 const OTHER_REPORT_ID = `rpc_${'C'.repeat(21)}A`;
+const ELEVATION_TOKEN = `${'a'.repeat(256)}.${'b'.repeat(43)}`;
 
 function session(username = 'root') {
   return { admin: { username } };
@@ -101,7 +102,7 @@ describe('administrator legal hold panel', () => {
           return stage === 'elevation'
             ? delayed.promise
             : jsonResponse({
-                token: 'elevated-token-12345678901234567890',
+                token: ELEVATION_TOKEN,
                 expires_at: 1_800_000_300,
               });
         if (url.pathname.endsWith('/release') && init?.method === 'POST') return delayed.promise;
@@ -120,11 +121,6 @@ describe('administrator legal hold panel', () => {
       await rendered.user.type(
         screen.getByLabelText('Administrator password (fresh elevation)'),
         'synthetic-test-password',
-      );
-      await rendered.user.click(
-        screen.getByRole('checkbox', {
-          name: 'Release is final; this object cannot receive another hold.',
-        }),
       );
       await rendered.user.click(screen.getByRole('button', { name: 'Release hold' }));
       const confirmButtons = screen.getAllByRole('button', { name: 'Release hold' });
@@ -722,7 +718,7 @@ describe('administrator legal hold panel', () => {
         {
           method: 'POST',
           path: '/admin/api/auth/elevate',
-          body: { token: 'elevated-token-12345678901234567890', expires_at: 1_800_000_300 },
+          body: { token: ELEVATION_TOKEN, expires_at: 1_800_000_300 },
         },
         {
           method: 'POST',
@@ -748,11 +744,6 @@ describe('administrator legal hold panel', () => {
       await rendered.user.type(
         screen.getByLabelText('Administrator password (fresh elevation)'),
         'correct horse battery staple',
-      );
-      await rendered.user.click(
-        screen.getByRole('checkbox', {
-          name: 'Release is final; this object cannot receive another hold.',
-        }),
       );
       await rendered.user.click(screen.getByRole('button', { name: 'Release hold' }));
       const confirmButtons = screen.getAllByRole('button', { name: 'Release hold' });
@@ -807,7 +798,7 @@ describe('administrator legal hold panel', () => {
       }
       if (target.pathname === '/admin/api/auth/elevate' && method === 'POST') {
         return jsonResponse({
-          token: 'elevated-token-12345678901234567890',
+          token: ELEVATION_TOKEN,
           expires_at: 1_800_000_300,
         });
       }
@@ -844,11 +835,6 @@ describe('administrator legal hold panel', () => {
       screen.getByLabelText('Administrator password (fresh elevation)'),
       'correct horse battery staple',
     );
-    await rendered.user.click(
-      screen.getByRole('checkbox', {
-        name: 'Release is final; this object cannot receive another hold.',
-      }),
-    );
     await rendered.user.click(screen.getByRole('button', { name: 'Release hold' }));
     const confirmButtons = screen.getAllByRole('button', { name: 'Release hold' });
     await rendered.user.click(confirmButtons[confirmButtons.length - 1]!);
@@ -871,7 +857,7 @@ describe('administrator legal hold panel', () => {
       confirmation: true,
     });
     expect((releaseCall?.[1]?.headers as Headers).get('X-Elevated-Token')).toBe(
-      'elevated-token-12345678901234567890',
+      ELEVATION_TOKEN,
     );
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       `?hold_kind=report_case&hold_page=2&hold_page_size=20&hold_id=${HOLD_ID}`,

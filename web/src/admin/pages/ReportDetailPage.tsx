@@ -97,7 +97,6 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
     pageSizeParam: 'lineage_page_size',
   });
   const [reason, setReason] = useState('');
-  const [confirmation, setConfirmation] = useState(false);
   const [decision, setDecision] = useState<Decision>(null);
   const [lineageTarget, setLineageTarget] = useState<ReportTarget | null>(null);
   const detail = useReportDetailPage(
@@ -195,7 +194,6 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
       // A retained cache entry is not authority after a failed refresh.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDecision(null);
-      setConfirmation(false);
     }
     if (isUnauthorized(error) || isForbidden(error)) {
       clearStationSession(client, 'admin');
@@ -645,7 +643,6 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               type="button"
               disabled={!reason.trim() || decide.isPending || resume.isPending}
               onClick={() => {
-                setConfirmation(false);
                 setDecision('approve');
               }}
             >
@@ -698,15 +695,12 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               ? t('admin.reports.detail.approveDeletion')
               : t('admin.reports.detail.rejectReport')
           }
-          confirmDisabled={decision === 'approve' && !confirmation}
           danger
           busy={decide.isPending}
           onCancel={() => {
             setDecision(null);
-            setConfirmation(false);
           }}
           onConfirm={() => {
-            if (decision === 'approve' && !confirmation) return;
             const report = detail.data;
             if (!report) return;
             const action = decision;
@@ -720,16 +714,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
             });
           }}
         >
-          {decision === 'approve' ? (
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={confirmation}
-                onChange={(event) => setConfirmation(event.target.checked)}
-              />
-              <span>{t('admin.reports.detail.confirmApprovalCheckbox')}</span>
-            </label>
-          ) : null}
+          <p className="ops-blacklist-note">{reason}</p>
         </ConfirmDialog>
       ) : null}
     </div>

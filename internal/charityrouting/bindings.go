@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -498,12 +499,13 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 	}
 	out.BindingRevision = strconv.FormatInt(revision, 10)
 	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,b.upstream_model_id,COALESCE(pc.automatic_supports,0),(COALESCE(pc.manual_supports,0)+EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=b.upstream_model_id)),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
+dk.display_head,dk.display_tail,b.upstream_model_id,COALESCE(pc.automatic_supports,0),(COALESCE(pc.manual_supports,0)+EXISTS(SELECT 1 FROM donation_key_manual_models dm WHERE dm.donation_key_id=dk.id AND dm.normalized_model_id=b.upstream_model_id)),COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),gm.policy_json
 FROM charity_model_bindings b
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=b.endpoint_key_id
 JOIN donation_keys dk ON dk.id=b.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
+LEFT JOIN gateway_model_capabilities gm ON dk.connector_type='ai-sdk-gateway-v3' AND gm.base_url=rtrim(dk.canonical_base_url,'/') AND gm.model=b.upstream_model_id
 WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 	if err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings: %w", err)
@@ -514,10 +516,18 @@ WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 		var item AdminBinding
 		var id, donationKeyID, donationID int64
 		var automatic, manual int64
+		var policy sql.NullString
 		if err := rows.Scan(&id, &item.Ord, &donationKeyID, &donationID, &item.Source.ConnectorType,
 			&item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail,
-			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM); err != nil {
+			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &policy); err != nil {
 			return AdminBindings{}, fmt.Errorf("charity routing: scan binding: %w", err)
+		}
+		if policy.Valid {
+			value, err := gatewaypolicy.DecodePolicy([]byte(policy.String))
+			if err != nil {
+				return AdminBindings{}, ErrInvariant
+			}
+			item.GatewayCapabilities = &value
 		}
 		item.ID = strconv.FormatInt(id, 10)
 		item.DonationKeyID = strconv.FormatInt(donationKeyID, 10)
@@ -622,7 +632,8 @@ func stewardBindings(value AdminBindings) StewardBindings {
 	out := StewardBindings{BindingRevision: value.BindingRevision, Bindings: make([]StewardBinding, len(value.Bindings))}
 	for index, binding := range value.Bindings {
 		out.Bindings[index] = StewardBinding{
-			ID: binding.ID, Ord: binding.Ord, DonationKeyID: binding.DonationKeyID, DonationID: binding.DonationID,
+			GatewayCapabilities: binding.GatewayCapabilities,
+			ID:                  binding.ID, Ord: binding.Ord, DonationKeyID: binding.DonationKeyID, DonationID: binding.DonationID,
 			Source: StewardCandidateSource{
 				ConnectorType: binding.Source.ConnectorType, CanonicalBaseURL: binding.Source.CanonicalBaseURL,
 				DisplayHead: binding.Source.DisplayHead, DisplayTail: binding.Source.DisplayTail,

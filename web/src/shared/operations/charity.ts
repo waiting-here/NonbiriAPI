@@ -3,6 +3,10 @@ import { decoded, idempotentOptions, queryPath } from './api';
 import { excludedFields } from './charityScope';
 import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import {
+  normalizeGatewayCapabilityPolicy,
+  type GatewayCapabilityPolicy,
+} from '@shared/gateway/capabilities';
+import {
   amount,
   array,
   boolean,
@@ -718,6 +722,7 @@ export interface TokenPrices {
 }
 
 export interface CharityBinding {
+  gateway_capabilities?: GatewayCapabilityPolicy | null;
   id: string;
   ord: number;
   donation_key_id: string;
@@ -1028,8 +1033,18 @@ function normalizeCandidateSourceTypes(value: unknown, label: string): ('automat
 function normalizeBinding(value: unknown, label: string): CharityBinding {
   const root = record(
     value,
-    ['id', 'ord', 'donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
+    [
+      'id',
+      'ord',
+      'donation_key_id',
+      'donation_id',
+      'source',
+      'upstream_model_id',
+      'source_types',
+      'gateway_capabilities',
+    ],
     label,
+    ['id', 'ord', 'donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
   );
   return {
     id: decimalID(root.id, `${label} id`),
@@ -1043,6 +1058,17 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
       bytes: 2_048,
     }),
     source_types: normalizeSourceTypes(root.source_types, `${label} source types`),
+    ...(root.gateway_capabilities === undefined
+      ? {}
+      : {
+          gateway_capabilities:
+            root.gateway_capabilities === null
+              ? null
+              : normalizeGatewayCapabilityPolicy(
+                  root.gateway_capabilities,
+                  `${label} Gateway capabilities`,
+                ),
+        }),
   };
 }
 

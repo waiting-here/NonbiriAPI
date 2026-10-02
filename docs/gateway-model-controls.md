@@ -8,24 +8,28 @@ Both `max_completion_tokens` and `max_tokens` become `maxOutputTokens`, preservi
 
 ## Configure a verified model
 
-The administrator can set `NONBIRI_GATEWAY_MODEL_CAPABILITIES` in the startup environment. It accepts one JSON object, up to 64 KiB and 128 model entries. Changes take effect after restart. Omit it to leave model-specific reasoning and storage controls disabled.
+Open **Settings → Gateway model capabilities** in the administrator site. Add the exact upstream address and model, then select the verified adapter, reasoning levels, output ceiling, storage policy and cache mapping. Saves apply to new requests immediately. Each admitted request keeps one capability snapshot through preflight, compilation and retries. Up to 128 targets can be configured. Binding details show their effective declaration.
+
+On the first upgraded startup, existing `NONBIRI_GATEWAY_MODEL_CAPABILITIES` entries are imported into the database once. An empty configuration also completes this migration. The database is then the sole source: later environment changes cannot overwrite edits or restore deleted entries. The retired variable can be removed after a successful upgrade.
 
 Each entry matches the exact stored endpoint base URL and complete upstream model ID. Trailing URL slashes are ignored; other URL and model text must match. No prefix, wildcard or provider-name inference applies. Matching entries govern both personal and charity bindings for that target.
 
-Example structure for an endpoint whose OpenAI Responses implementation and model capabilities have been verified:
+The administrator API uses `GET/POST /admin/api/gateway-model-capabilities` and `PUT/DELETE /admin/api/gateway-model-capabilities/{id}`. Writes require the existing administrator session, CSRF protection and `Idempotency-Key`. Create with `expected_revision:"0"`; updates and deletion use the current row revision. An outdated revision returns 409. A lost response can be recovered by replaying the same request and key.
+
+Example create request for a verified OpenAI Responses target:
 
 ```json
 {
-  "models": [
-    {
-      "base_url": "https://gateway.example/native/v3/ai",
-      "model": "openai/verified-model",
-      "adapter": "openai_responses",
-      "efforts": ["low", "medium", "high"],
-      "max_output_tokens": 128000,
-      "storage": "openai"
-    }
-  ]
+  "expected_revision": "0",
+  "entry": {
+    "base_url": "https://gateway.example/native/v3/ai",
+    "model": "openai/verified-model",
+    "adapter": "openai_responses",
+    "efforts": ["low", "medium", "high"],
+    "max_output_tokens": 128000,
+    "storage": "openai",
+    "cache": "reject"
+  }
 }
 ```
 
@@ -38,6 +42,7 @@ Replace the example with evidence for the actual gateway, provider implementatio
 | `efforts` | Verified levels for this model; defaults to empty |
 | `max_output_tokens` | Verified maximum preserving the requested budget; positive and at most 2147483647. Required for Anthropic profiles because the provider may clamp known-model budgets. Optional elsewhere; omitted or zero adds no local model ceiling. |
 | `storage` | `reject` by default, `openai`, or explicit lossy `omit_false` |
+| `cache` | `reject` by default; `anthropic` enables the verified Anthropic mapping |
 
 ## Reasoning
 
@@ -72,6 +77,20 @@ Explicit fields that the configured provider would discard or clamp reject befor
 Omitting `store` leaves upstream defaults in effect. The existing physical-key “request no storage” setting remains OpenAI-compatible only; it does not enable Gateway storage controls.
 
 OpenAI storage control governs the provider's documented storage behavior. It does not guarantee removal of abuse-monitoring records or control intermediary retention. `omit_false`, an omitted field, and Vercel's gateway ZDR option do not establish Runable-wide zero retention. See [OpenAI data controls](https://platform.openai.com/docs/guides/your-data) and [Vercel Gateway ZDR](https://vercel.com/docs/ai-gateway/security-and-compliance/zdr) for their respective scopes.
+
+## Prompt caching
+
+For a verified Anthropic adapter, enable the Anthropic cache mapping. The caller may place `cache_control:{"type":"ephemeral"}` at the request root, on a text content block, or on a function-tool definition. Optional `ttl` is `5m` or `1h`; omitted TTL keeps the provider default.
+
+The root maps to `providerOptions.anthropic.cacheControl`. Text blocks and tool definitions carry the same option at their own native position. System text blocks retain their order and individual markers. Unsupported markers or undeclared mappings reject explicitly. This follows the [LanguageModelV3 Anthropic implementation](https://github.com/vercel/ai/tree/def2c64454c32abc35b03b412f8127b8f360ce5e/packages/anthropic); the gateway must also execute the option.
+
+The model or binding request-adaptation editor can add an automatic cache default. Any caller cache marker takes priority, including text-block and tool markers. Ordinary and tool-flattening bindings share the exact upstream declaration while retaining their own adaptation defaults.
+
+Reported usage includes `prompt_tokens_details.cached_tokens` and `cache_write_tokens`; `cache_creation_tokens` remains as an alias for existing clients. Counts come from upstream usage. Configuring a marker does not prove a cache hit or a particular price.
+
+## Idle streaming
+
+Accepted streaming Chat Completions emit an SSE comment after 20 seconds without output, including while waiting for upstream headers or an allowed retry. Clients should ignore comments. Keepalives do not mark success, consume charity credit or reset failure counts. A final failure after HTTP has started ends with one SSE error. Client cancellation, write failure and the total request deadline stop both upstream work and keepalives. Non-streaming responses retain JSON behavior.
 
 ## Existing adaptation and diagnostics
 

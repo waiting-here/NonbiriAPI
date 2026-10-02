@@ -30,7 +30,13 @@ import {
   type RecurringLimitsWritePayload,
   type RecurringLimitsWriteReceipt,
 } from '@shared/operations/recurringLimits';
-import { browserTimeZone, fetchTimeZones, type TimeStation } from '@shared/time';
+import {
+  browserTimeZone,
+  fetchTimeZones,
+  fetchRecurrence,
+  formatOffset,
+  type TimeStation,
+} from '@shared/time';
 import { useCharityModelScope } from './charityModelScopeContext';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
@@ -77,6 +83,7 @@ interface RuleCardProps {
   zones: readonly string[];
   serverNow: number;
   locale: 'en' | 'zh';
+  station: TimeStation;
   onToggle: () => void;
   onChange: (update: Partial<RecurringLimitRuleInput>) => void;
   onDelete: () => void;
@@ -93,6 +100,7 @@ function payloadRuleFromDraft(rule: DraftRule): RecurringLimitRuleInput {
     mode: rule.mode,
     interval: rule.interval,
     alignment: rule.alignment,
+    anchor_local: rule.anchor_local ?? null,
     time_zone: rule.time_zone,
     week_starts_on: rule.week_starts_on,
     metric: rule.metric,
@@ -154,8 +162,12 @@ function validTimeZone(value: string, zones: readonly string[]): boolean {
 }
 
 function validCombination(rule: RecurringLimitRuleInput): boolean {
+  if (rule.alignment === 'exact_time' && !rule.anchor_local) return false;
   if (rule.mode === 'sliding') return rule.alignment === null && rule.week_starts_on === null;
-  if (rule.alignment === null || (isHourlyInterval(rule.interval) && rule.alignment === 'calendar'))
+  if (
+    rule.alignment === null ||
+    (isHourlyInterval(rule.interval) && rule.alignment !== 'first_success')
+  )
     return false;
   if (rule.alignment === 'calendar' && rule.interval === 'week') {
     return rule.week_starts_on !== null && rule.week_starts_on >= 1 && rule.week_starts_on <= 7;
@@ -167,6 +179,7 @@ function draftValidationError(
   rules: readonly DraftRule[],
   zones: readonly string[] | undefined,
   copy: RecurringLimitsCopy,
+  anchorRequired: string,
 ): string | undefined {
   if (rules.length > MAX_RULES) return copy.maxRules;
   for (const rule of rules) {
@@ -175,6 +188,13 @@ function draftValidationError(
       return copy.invalidLimit;
     }
     if (zones && !validTimeZone(rule.time_zone, zones)) return copy.invalidTimeZone;
+    if (
+      rule.mode === 'reset' &&
+      !isHourlyInterval(rule.interval) &&
+      rule.alignment === 'exact_time' &&
+      !rule.anchor_local
+    )
+      return anchorRequired;
     if (!validCombination(rule)) return copy.invalidCombination;
   }
   return undefined;
@@ -187,6 +207,7 @@ function newDraftRule(id: string, zone: string): DraftRule {
     mode: 'reset',
     interval: '5h',
     alignment: 'first_success',
+    anchor_local: null,
     time_zone: zone,
     week_starts_on: null,
     metric: 'calls',
@@ -313,6 +334,7 @@ function RuleUsage({
   locale: 'en' | 'zh';
 }) {
   const formatDateTime = useDateTimeFormatter();
+  const { t } = useTranslation();
   const context = useDisplayTimeContext();
   const displayLabel =
     context.mode === 'site' ? (locale === 'zh' ? '站点时间' : 'Site time') : copy.browserTime;
@@ -381,7 +403,11 @@ function RuleUsage({
             <strong>{copy.period}:</strong> {period}
           </p>
           <p className="recurring-limits__time">
-            {view.alignment === 'calendar' ? copy.naturalPeriod : copy.firstSuccessPeriod}
+            {view.alignment === 'exact_time'
+              ? t('recurringLimits.exact.period')
+              : view.alignment === 'calendar'
+                ? copy.naturalPeriod
+                : copy.firstSuccessPeriod}
           </p>
         </>
       ) : null}
@@ -412,7 +438,7 @@ function ruleSummary(
     `${copy.metric}: ${copy.metricValue[draft.metric]}`,
     `${copy.mode}: ${copy.modeValue[draft.mode]}`,
     `${copy.interval}: ${copy.intervalValue[draft.interval]}`,
-    `${copy.alignment}: ${startsAt}`,
+    `${copy.alignment}: ${startsAt}${draft.alignment === 'exact_time' ? ` ${draft.anchor_local ?? ''}` : ''}`,
     weekStart,
     `${copy.timeZone}: ${draft.time_zone || '—'}`,
     `${copy.limit}: ${metricWithUnit(draft.limit || null, draft.metric, copy)}`,
@@ -436,11 +462,13 @@ function RuleCard({
   zones,
   serverNow,
   locale,
+  station,
   onToggle,
   onChange,
   onDelete,
   onMove,
 }: RuleCardProps) {
+  const { t } = useTranslation();
   const zoneListId = useId();
   const zoneInputId = `${zoneListId}-input`;
   const ruleLabel = copy.rule(index + 1);
@@ -448,7 +476,7 @@ function RuleCard({
   const summary = ruleSummary(copy, ruleLabel, draft, view);
   const alignmentOptions: RecurringLimitAlignment[] = isHourlyInterval(draft.interval)
     ? ['first_success']
-    : ['first_success', 'calendar'];
+    : ['first_success', 'calendar', 'exact_time'];
   const intervalOptions: RecurringLimitInterval[] = ['1h', '5h', 'day', 'week', 'month'];
   const metricOptions: RecurringLimitMetric[] = [
     'calls',
@@ -458,7 +486,32 @@ function RuleCard({
     'credits',
   ];
   const modeOptions: RecurringLimitMode[] = ['reset', 'sliding'];
-  const firstSuccess = draft.alignment === 'first_success';
+  const exact = draft.mode === 'reset' && draft.alignment === 'exact_time';
+  const preview = useQuery({
+    queryKey: [
+      station === 'admin' ? 'admin' : 'user',
+      'quota-recurrence',
+      draft.anchor_local,
+      draft.interval,
+      draft.time_zone,
+      serverNow,
+    ],
+    queryFn: ({ signal }) =>
+      fetchRecurrence(
+        station,
+        draft.anchor_local ?? '',
+        draft.interval as 'day' | 'week' | 'month',
+        draft.time_zone,
+        serverNow,
+        signal,
+      ),
+    enabled:
+      exact &&
+      Boolean(draft.anchor_local) &&
+      !isHourlyInterval(draft.interval) &&
+      (!editable || zones.includes(draft.time_zone)),
+    retry: false,
+  });
   const calendarWeek =
     draft.mode === 'reset' && draft.alignment === 'calendar' && draft.interval === 'week';
   return (
@@ -510,6 +563,31 @@ function RuleCard({
       {expanded ? (
         <div className="recurring-limits__rule-body">
           <RuleUsage copy={copy} view={view} draft={draft} locale={locale} />
+          {exact ? (
+            <div>
+              <p>
+                <strong>{t('recurringLimits.exact.preview')}</strong>
+              </p>
+              {preview.isFetching ? (
+                <p>{t('recurringLimits.exact.loading')}</p>
+              ) : preview.error ? (
+                <p className="field-error">{t('recurringLimits.exact.unavailable')}</p>
+              ) : preview.data ? (
+                <ol>
+                  {preview.data.map((transition) => (
+                    <li key={transition.instant}>
+                      {transition.local.replace('T', ' ')} (
+                      {transition.time_zone === 'UTC' ? '' : `${transition.time_zone} `}UTC
+                      {formatOffset(transition.offset_seconds)})
+                      {transition.adjustment !== 'none'
+                        ? ` · ${transition.adjustment === 'gap_shifted' ? t('recurringLimits.exact.gap_shifted') : t('recurringLimits.exact.fold_later')}`
+                        : ''}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </div>
+          ) : null}
           {editable ? (
             <div className="recurring-limits__fields">
               <label>
@@ -537,10 +615,11 @@ function RuleCard({
                     const mode = event.target.value as RecurringLimitMode;
                     onChange(
                       mode === 'sliding'
-                        ? { mode, alignment: null, week_starts_on: null }
+                        ? { mode, alignment: null, anchor_local: null, week_starts_on: null }
                         : {
                             mode,
                             alignment: 'first_success',
+                            anchor_local: null,
                             week_starts_on: null,
                           },
                     );
@@ -569,6 +648,7 @@ function RuleCard({
                     onChange({
                       interval,
                       alignment,
+                      anchor_local: alignment === 'exact_time' ? draft.anchor_local : null,
                       week_starts_on:
                         alignment === 'calendar' && interval === 'week'
                           ? (draft.week_starts_on ?? 1)
@@ -587,12 +667,14 @@ function RuleCard({
                 <label>
                   <span>{copy.alignment}</span>
                   <select
-                    value={firstSuccess ? 'first_success' : 'calendar'}
+                    value={draft.alignment ?? 'first_success'}
                     disabled={disabled}
                     onChange={(event) => {
                       const alignment = event.target.value as RecurringLimitAlignment;
                       onChange({
                         alignment,
+                        anchor_local:
+                          alignment === 'exact_time' ? (draft.anchor_local ?? '') : null,
                         week_starts_on:
                           alignment === 'calendar' && draft.interval === 'week' ? 1 : null,
                       });
@@ -605,6 +687,28 @@ function RuleCard({
                     ))}
                   </select>
                 </label>
+              ) : null}
+              {exact ? (
+                <div>
+                  <label>
+                    <span>{t('recurringLimits.exact.anchor')}</span>
+                    <input
+                      type="datetime-local"
+                      step="1"
+                      value={draft.anchor_local ?? ''}
+                      disabled={disabled}
+                      onChange={(event) =>
+                        onChange({
+                          anchor_local:
+                            event.target.value.length === 16
+                              ? `${event.target.value}:00`
+                              : event.target.value.slice(0, 19),
+                        })
+                      }
+                    />
+                  </label>
+                  <small>{t('recurringLimits.exact.help', { zone: draft.time_zone })}</small>
+                </div>
               ) : null}
               {calendarWeek ? (
                 <label>
@@ -821,8 +925,15 @@ export function RecurringLimits({
   onCapabilityLoss,
 }: RecurringLimitsProps) {
   const modelID = useCharityModelScope();
-  const { i18n } = useTranslation();
-  const copy = copyForRecurringLimits(i18n.language);
+  const { t, i18n } = useTranslation();
+  const baseCopy = copyForRecurringLimits(i18n.language);
+  const copy = {
+    ...baseCopy,
+    alignmentValue: {
+      ...baseCopy.alignmentValue,
+      exact_time: t('recurringLimits.exact.alignment'),
+    },
+  };
   const locale: 'en' | 'zh' = i18n.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
   const editable = !readOnly && (role === 'admin' || role === 'steward');
   const client = useQueryClient();
@@ -998,7 +1109,12 @@ export function RecurringLimits({
       : false;
   const currentZones = zones.data?.zones ?? [];
   const validationError = draftRules
-    ? draftValidationError(draftRules, zones.data?.zones, copy)
+    ? draftValidationError(
+        draftRules,
+        zones.data?.zones,
+        copy,
+        t('recurringLimits.exact.anchorRequired'),
+      )
     : undefined;
   const structureMessages =
     baseline && draftRules
@@ -1338,6 +1454,7 @@ export function RecurringLimits({
             zones={currentZones}
             serverNow={serverNow}
             locale={locale}
+            station={role === 'admin' ? 'admin' : 'user'}
             onToggle={() =>
               setExpanded((current) => {
                 const next = new Set(current);

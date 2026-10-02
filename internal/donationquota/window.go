@@ -57,7 +57,13 @@ func periodAt(ctx context.Context, q Reader, e epoch, now int64) (aggregate, err
 	if e.rule.WeekStartsOn != nil {
 		week = *e.rule.WeekStartsOn
 	}
-	p, err := calendar.NaturalPeriod(now, e.rule.Interval, e.rule.TimeZone, week)
+	var p calendar.Period
+	var err error
+	if *e.rule.Alignment == "exact_time" {
+		p, err = calendar.RecurrencePeriod(now, e.effective, *e.rule.AnchorLocal, e.rule.Interval, e.rule.TimeZone)
+	} else {
+		p, err = calendar.NaturalPeriod(now, e.rule.Interval, e.rule.TimeZone, week)
+	}
 	if err != nil {
 		return aggregate{}, ErrInvariant
 	}
@@ -205,7 +211,7 @@ func view(ctx context.Context, q Reader, e epoch, now int64) (RuleView, error) {
 			return out, err
 		}
 		used, reserved = a.used, a.reserved
-		if a.exists || *e.rule.Alignment == "calendar" {
+		if a.exists || *e.rule.Alignment == "calendar" || *e.rule.Alignment == "exact_time" {
 			start, end := max(a.start, e.effective), a.end
 			out.PeriodStart, out.PeriodEnd, out.NextTransitionAt = &start, &end, &end
 		} else {

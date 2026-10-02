@@ -6,6 +6,7 @@ import { I18nextProvider } from 'react-i18next';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { modelFixture } from '@shared/picturebook/fixtures';
+import adminEnglish from '../../i18n/en.json';
 import { AdminContent } from './PictureBookAdmin';
 
 const publicModel = modelFixture();
@@ -176,7 +177,7 @@ async function setup(
   await i18n.init({
     lng: 'en',
     fallbackLng: 'en',
-    resources: { en: { translation: {} } },
+    resources: { en: { translation: adminEnglish } },
     initAsync: false,
   });
   const router = createMemoryRouter(
@@ -450,7 +451,7 @@ describe('picture book draft navigation', () => {
     await view.user.click(screen.getByLabelText('synthetic-image'));
     await view.user.clear(screen.getByLabelText('Sketch paper per image'));
     await view.user.type(screen.getByLabelText('Sketch paper per image'), '7');
-    await view.user.click(screen.getByRole('button', { name: 'Save selected models atomically' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save selected models' }));
     await screen.findByRole('button', { name: 'Retry the same batch save' });
     expect(screen.getByLabelText('Sketch paper per image')).toBeDisabled();
     expect(screen.getByLabelText('Service base URL')).toBeDisabled();

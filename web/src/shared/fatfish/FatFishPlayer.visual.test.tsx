@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import type { EngineState, Level } from './engine/types';
@@ -33,11 +33,13 @@ const state: EngineState = {
 function controller(canPlay = true, scene = level, runState = state) {
   const place = vi.fn(async (...args: number[]) => { void args; });
   const returnTool = vi.fn(async (...args: number[]) => { void args; });
+  const finish = vi.fn(async () => {});
+  const abandon = vi.fn(async () => ({ state: 'abandoned' }));
   const snapshot = { phase: canPlay ? 'running' : 'prepared', challenge: { level: scene, state: 'active' },
     state: runState, canPlay, provisional: null, error: null } as FatFishPlayerSnapshot;
   const value = { snapshot: () => snapshot, subscribe: () => () => {}, advance: () => {},
-    flush: async () => {}, poll: async () => null, place, returnTool } as unknown as FatFishSessionController;
-  return { value, place, returnTool };
+    flush: async () => {}, poll: async () => null, place, returnTool, finish, abandon } as unknown as FatFishSessionController;
+  return { value, place, returnTool, finish, abandon };
 }
 function pointer(target: Element, type: string, x: number, y: number, pointerID = 7) {
   const event = new Event(type, { bubbles: true }) as PointerEvent;
@@ -85,6 +87,71 @@ describe('Fat Fish illustrated player controls', () => {
     expect(play).toHaveBeenCalledTimes(1);
     view.unmount();
     expect(document.querySelector('[data-fatfish-music]')).toBeNull();
+  });
+
+  it('finishes free playtests directly and keeps a rejected finish playable', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const nativeConfirm = vi.spyOn(window, 'confirm');
+    const active = controller();
+    active.finish.mockRejectedValueOnce(
+      new Error('finish requires the minimum fish and bowl quotas'),
+    );
+    await renderWithProviders(<FatFishPlayer controller={active.value} mode="playtest" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    expect(active.finish).toHaveBeenCalledTimes(1);
+    await screen.findByRole('alert');
+    expect(screen.getByRole('button', { name: 'Finish' })).toBeEnabled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(active.finish).toHaveBeenCalledTimes(2);
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it('confirms early user finishes in the page and supports cancellation', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const nativeConfirm = vi.spyOn(window, 'confirm');
+    const active = controller();
+    await renderWithProviders(<FatFishPlayer controller={active.value} />, {
+      station: 'user',
+      role: 'user',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('1 remaining fish will not count');
+    expect(active.finish).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(active.finish).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Finish' }),
+    );
+    await waitFor(() => expect(active.finish).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it('retains the ticket consequence before abandoning a user challenge', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const nativeConfirm = vi.spyOn(window, 'confirm');
+    const active = controller();
+    const onTerminal = vi.fn();
+    await renderWithProviders(<FatFishPlayer controller={active.value} onTerminal={onTerminal} />, {
+      station: 'user',
+      role: 'user',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Abandon' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('not refunded');
+    expect(active.abandon).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Abandon' }));
+    await waitFor(() => expect(onTerminal).toHaveBeenCalledWith({ state: 'abandoned' }));
+    expect(active.abandon).toHaveBeenCalledTimes(1);
+    expect(nativeConfirm).not.toHaveBeenCalled();
   });
 
   it('shares one continuous field and workbench without a detached tool tray', async () => {

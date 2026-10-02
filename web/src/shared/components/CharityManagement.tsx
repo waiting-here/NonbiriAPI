@@ -15,6 +15,7 @@ import { excludedFields, halfPrice } from '@shared/operations/charityScope';
 import { getScopedDonationKey, patchScopedDonationKey } from '@shared/operations/scopedDonationKey';
 import { FailureResetControl } from './FailureResetControl';
 import { FailurePolicyControl } from './FailurePolicyControl';
+import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
 import { RequestAdaptationEditor } from './RequestAdaptationEditor';
@@ -1951,11 +1952,12 @@ function ModelForm({
   onCapabilityLoss?: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [draft, setDraft] = useState(() => modelDraft(model));
+  const [draft, updateDraft] = useState(() => modelDraft(model));
   const [baseRevision, setBaseRevision] = useState(model?.revision);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [halfError, setHalfError] = useState(false);
   const priceInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const discountDisclosure = useRef<HTMLDetailsElement>(null);
   const save = useRetainedOperation<
     { body: ReturnType<typeof modelBody>; revision?: string },
     CharityModel
@@ -1980,7 +1982,17 @@ function ModelForm({
     refresh,
     charityKeys.root(role),
   );
+  const setDraft: typeof updateDraft = (next) => {
+    if (save.isSuccess) save.reset();
+    setHalfError(false);
+    updateDraft(next);
+  };
   const validationError = modelDraftError(draft);
+  const discountError =
+    validationError === 'discountDates' || validationError === 'discountPercent';
+  useEffect(() => {
+    if (discountError && discountDisclosure.current) discountDisclosure.current.open = true;
+  }, [discountError]);
   const unknownSave = save.error && responseOutcomeUnknown(save.error);
   const capabilityLost =
     isUnauthorized(save.error) ||
@@ -2324,50 +2336,62 @@ function ModelForm({
           </>
         )}
       </fieldset>
-      <fieldset className="ops-form-section">
-        <legend>{copy.discountSettings}</legend>
-        <div className="ops-field-grid ops-paired-fields">
-          <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={draft.discountEnabled}
-              onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
-            />
-            <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
-          </label>
-          <label>
-            <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={draft.discountPercent}
-              onChange={(event) =>
-                setDraft({ ...draft, discountPercent: Number(event.target.value) })
+      <details className="ops-advanced" ref={discountDisclosure}>
+        <summary>
+          <strong>{copy.discountSettings}</strong>
+          {' · '}
+          {draft.discountEnabled
+            ? t('common.operations.charity.discountSummary', { percent: draft.discountPercent })
+            : t('common.disabled')}
+        </summary>
+        <fieldset className="ops-form-section">
+          <legend>{copy.discountSettings}</legend>
+          <div className="ops-field-grid ops-paired-fields">
+            <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={draft.discountEnabled}
+                onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
+              />
+              <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
+            </label>
+            <label>
+              <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={draft.discountPercent}
+                onChange={(event) =>
+                  setDraft({ ...draft, discountPercent: Number(event.target.value) })
+                }
+              />
+            </label>
+            <TimeInput
+              label={t(charityCopyKey(role, 'discountStart'))}
+              station={role === 'admin' ? 'admin' : 'steward'}
+              draft={draft.discountStart}
+              showZoneHint={false}
+              onChange={(update) =>
+                setDraft((current) => ({
+                  ...current,
+                  discountStart: update(current.discountStart),
+                }))
               }
             />
-          </label>
-          <TimeInput
-            label={t(charityCopyKey(role, 'discountStart'))}
-            station={role === 'admin' ? 'admin' : 'steward'}
-            draft={draft.discountStart}
-            showZoneHint={false}
-            onChange={(update) =>
-              setDraft((current) => ({ ...current, discountStart: update(current.discountStart) }))
-            }
-          />
-          <TimeInput
-            label={t(charityCopyKey(role, 'discountEnd'))}
-            station={role === 'admin' ? 'admin' : 'steward'}
-            draft={draft.discountEnd}
-            showZoneHint={false}
-            onChange={(update) =>
-              setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
-            }
-          />
-        </div>
-      </fieldset>
+            <TimeInput
+              label={t(charityCopyKey(role, 'discountEnd'))}
+              station={role === 'admin' ? 'admin' : 'steward'}
+              draft={draft.discountEnd}
+              showZoneHint={false}
+              onChange={(update) =>
+                setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
+              }
+            />
+          </div>
+        </fieldset>
+      </details>
       {save.error ? (
         <ErrorState error={save.error} />
       ) : remove.error ? (
@@ -2575,209 +2599,233 @@ function BindingsPanel({
     );
   }
   return (
-    <Card>
-      <h3>{t('common.operations.charity.orderedBindings')}</h3>
-      {bindings.isPending ? (
-        <LoadingState />
-      ) : bindings.error ? (
-        <ErrorState error={bindings.error} onRetry={() => void bindings.refetch()} />
-      ) : bindings.data.bindings.length === 0 ? (
-        <EmptyState
-          title={t(charityCopyKey(role, 'noBindings'))}
-          body={t('common.operations.charity.noBindingsBody')}
-        />
-      ) : (
-        <div className="ops-table-scroll">
-          <table className="ops-table ops-table--responsive">
-            <thead>
-              <tr>
-                <th>{t(charityCopyKey(role, 'order'))}</th>
-                <th>{t('common.operations.charity.source')}</th>
-                <th>{t(charityCopyKey(role, 'upstreamModel'))}</th>
-                <th>{t(charityCopyKey(role, 'actions'))}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bindingPage.data.map((entry, pageIndex) => {
-                const index = bindingPage.offset + pageIndex;
-                return (
-                  <tr key={entry.id}>
-                    <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
-                    <td
-                      className="ops-cell-wide"
-                      data-label={t('common.operations.charity.source')}
-                    >
-                      {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
-                      {entry.source.display_head}…{entry.source.display_tail}
-                      {entry.source_types.length === 0 ? (
-                        <>
-                          <br />
-                          <StatusBadge
-                            active={false}
-                            label={t('common.operations.charity.sourceBrowser.sourceMissing')}
-                          />
-                        </>
-                      ) : null}
-                      <KeyLimitSummary
-                        concurrency={entry.source.max_concurrency}
-                        rpm={entry.source.max_rpm}
-                        readOnly
-                      />
-                    </td>
-                    <td
-                      className="ops-cell-wide"
-                      data-label={t(charityCopyKey(role, 'upstreamModel'))}
-                    >
-                      {entry.upstream_model_id}
-                    </td>
-                    <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={busy || orderChanged}
-                        onClick={() =>
-                          setParams((current) => {
-                            const next = new URLSearchParams(current);
-                            next.set('charity_section', 'donations');
-                            next.set('donation_id', entry.donation_id);
-                            next.set('donation_key', entry.donation_key_id);
-                            next.set('donation_from', 'models');
-                            next.delete('donation_keys_page');
-                            next.delete('donation_keys_page_size');
-                            return next;
-                          })
-                        }
-                      >
-                        {t('common.operations.charity.sourceBrowser.manageKey', {
-                          id: entry.donation_key_id,
-                        })}
-                      </button>
-                      {showAdaptation ? (
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setAdaptationBinding(entry.id)}
-                        >
-                          {adaptationCopy('title')}
-                        </button>
-                      ) : null}
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={index === 0 || busy}
-                        onClick={() => move(index, -1)}
-                      >
-                        {t('common.operations.charity.moveUp')}
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        disabled={index === orderedBindings.length - 1 || busy}
-                        onClick={() => move(index, 1)}
-                      >
-                        {t('common.operations.charity.moveDown')}
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        type="button"
-                        disabled={busy || orderChanged}
-                        onClick={() =>
-                          remove.mutate({ id: entry.id, revision: bindings.data.binding_revision })
-                        }
-                      >
-                        {t('common.operations.charity.remove')}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {bindings.data && !bindings.error ? (
-        <PagePagination
-          metadata={bindingPage.pagination}
-          requestedPage={pager.page}
-          onPageChange={pager.setPage}
-          onPageSizeChange={pager.setPageSize}
-          busy={busy}
-        />
-      ) : null}
-      {showAdaptation &&
-      adaptationBinding &&
-      bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
+    <>
+      {showAdaptation ? (
         <RequestAdaptationEditor
-          key={`${accountId}:${model.id}:${adaptationBinding}`}
-          url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
-          scope="binding"
-          connectorType={
-            bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
-              .connector_type
-          }
+          key={`${accountId}:${role}:${model.id}`}
+          url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/request-adaptation`}
+          scope="charity-model"
+          gatewayCacheDefaults={Boolean(
+            bindings.data?.bindings.length &&
+            bindings.data.bindings.every(
+              (entry) => entry.source.connector_type === 'ai-sdk-gateway-v3',
+            ),
+          )}
           editable={role === 'admin'}
         />
       ) : null}
-      {orderChanged ? (
+      <Card>
+        <h3>{t('common.operations.charity.orderedBindings')}</h3>
+        {bindings.isPending ? (
+          <LoadingState />
+        ) : bindings.error ? (
+          <ErrorState error={bindings.error} onRetry={() => void bindings.refetch()} />
+        ) : bindings.data.bindings.length === 0 ? (
+          <EmptyState
+            title={t(charityCopyKey(role, 'noBindings'))}
+            body={t('common.operations.charity.noBindingsBody')}
+          />
+        ) : (
+          <div className="ops-table-scroll">
+            <table className="ops-table ops-table--responsive">
+              <thead>
+                <tr>
+                  <th>{t(charityCopyKey(role, 'order'))}</th>
+                  <th>{t('common.operations.charity.source')}</th>
+                  <th>{t(charityCopyKey(role, 'upstreamModel'))}</th>
+                  <th>{t(charityCopyKey(role, 'actions'))}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bindingPage.data.map((entry, pageIndex) => {
+                  const index = bindingPage.offset + pageIndex;
+                  return (
+                    <tr key={entry.id}>
+                      <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('common.operations.charity.source')}
+                      >
+                        {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
+                        {entry.source.display_head}…{entry.source.display_tail}
+                        {entry.source_types.length === 0 ? (
+                          <>
+                            <br />
+                            <StatusBadge
+                              active={false}
+                              label={t('common.operations.charity.sourceBrowser.sourceMissing')}
+                            />
+                          </>
+                        ) : null}
+                        <KeyLimitSummary
+                          concurrency={entry.source.max_concurrency}
+                          rpm={entry.source.max_rpm}
+                          readOnly
+                        />
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t(charityCopyKey(role, 'upstreamModel'))}
+                      >
+                        {entry.upstream_model_id}
+                        {entry.source.connector_type === 'ai-sdk-gateway-v3' ? (
+                          <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
+                        ) : null}
+                      </td>
+                      <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          disabled={busy || orderChanged}
+                          onClick={() =>
+                            setParams((current) => {
+                              const next = new URLSearchParams(current);
+                              next.set('charity_section', 'donations');
+                              next.set('donation_id', entry.donation_id);
+                              next.set('donation_key', entry.donation_key_id);
+                              next.set('donation_from', 'models');
+                              next.delete('donation_keys_page');
+                              next.delete('donation_keys_page_size');
+                              return next;
+                            })
+                          }
+                        >
+                          {t('common.operations.charity.sourceBrowser.manageKey', {
+                            id: entry.donation_key_id,
+                          })}
+                        </button>
+                        {showAdaptation ? (
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setAdaptationBinding(entry.id)}
+                          >
+                            {adaptationCopy('title')}
+                          </button>
+                        ) : null}
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          disabled={index === 0 || busy}
+                          onClick={() => move(index, -1)}
+                        >
+                          {t('common.operations.charity.moveUp')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          disabled={index === orderedBindings.length - 1 || busy}
+                          onClick={() => move(index, 1)}
+                        >
+                          {t('common.operations.charity.moveDown')}
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          type="button"
+                          disabled={busy || orderChanged}
+                          onClick={() =>
+                            remove.mutate({
+                              id: entry.id,
+                              revision: bindings.data.binding_revision,
+                            })
+                          }
+                        >
+                          {t('common.operations.charity.remove')}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {bindings.data && !bindings.error ? (
+          <PagePagination
+            metadata={bindingPage.pagination}
+            requestedPage={pager.page}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+            busy={busy}
+          />
+        ) : null}
+        {showAdaptation &&
+        adaptationBinding &&
+        bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
+          <RequestAdaptationEditor
+            key={`${accountId}:${model.id}:${adaptationBinding}`}
+            url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
+            scope="binding"
+            connectorType={
+              bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
+                .connector_type
+            }
+            editable={role === 'admin'}
+          />
+        ) : null}
+        {orderChanged ? (
+          <div className="ops-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={() => {
+                if (orderDraft) order.mutate(orderDraft, { onSuccess: () => setOrderDraft(null) });
+              }}
+            >
+              {t('common.operations.charity.saveOrder')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              disabled={busy}
+              onClick={() => setOrderDraft(null)}
+            >
+              {t('common.cancel')}
+            </button>
+            <span>{t('common.operations.charity.saveOrderHelp')}</span>
+          </div>
+        ) : null}
+        <h3>{t('common.operations.charity.bindingCandidates')}</h3>
+        <CharityBindingPicker
+          key={model.id}
+          role={role}
+          modelId={model.id}
+          selected={selected}
+          onChange={setSelected}
+          locked={busy || !bindings.data}
+          onCapabilityLoss={onCapabilityLoss}
+          onReadStateChange={setPickerBlocked}
+        />
         <div className="ops-actions">
           <button
-            type="button"
             className="btn btn-primary"
-            disabled={busy}
-            onClick={() => {
-              if (orderDraft) order.mutate(orderDraft, { onSuccess: () => setOrderDraft(null) });
-            }}
-          >
-            {t('common.operations.charity.saveOrder')}
-          </button>
-          <button
             type="button"
-            className="btn btn-quiet"
-            disabled={busy}
-            onClick={() => setOrderDraft(null)}
+            disabled={
+              !bindings.data || chosen.length === 0 || busy || orderChanged || pickerBlocked
+            }
+            onClick={() =>
+              bindings.data &&
+              !pickerBlocked &&
+              add.mutate(
+                { selections: chosen, revision: bindings.data.binding_revision },
+                { onSuccess: () => setSelected({}) },
+              )
+            }
           >
-            {t('common.cancel')}
+            {t('common.operations.charity.addSelected')}
           </button>
-          <span>{t('common.operations.charity.saveOrderHelp')}</span>
         </div>
-      ) : null}
-      <h3>{t('common.operations.charity.bindingCandidates')}</h3>
-      <CharityBindingPicker
-        key={model.id}
-        role={role}
-        modelId={model.id}
-        selected={selected}
-        onChange={setSelected}
-        locked={busy || !bindings.data}
-        onCapabilityLoss={onCapabilityLoss}
-        onReadStateChange={setPickerBlocked}
-      />
-      <div className="ops-actions">
-        <button
-          className="btn btn-primary"
-          type="button"
-          disabled={!bindings.data || chosen.length === 0 || busy || orderChanged || pickerBlocked}
-          onClick={() =>
-            bindings.data &&
-            !pickerBlocked &&
-            add.mutate(
-              { selections: chosen, revision: bindings.data.binding_revision },
-              { onSuccess: () => setSelected({}) },
-            )
-          }
-        >
-          {t('common.operations.charity.addSelected')}
-        </button>
-      </div>
-      {add.error ? (
-        <ErrorState error={add.error} />
-      ) : order.error ? (
-        <ErrorState error={order.error} />
-      ) : remove.error ? (
-        <ErrorState error={remove.error} />
-      ) : null}
-    </Card>
+        {add.error ? (
+          <ErrorState error={add.error} />
+        ) : order.error ? (
+          <ErrorState error={order.error} />
+        ) : remove.error ? (
+          <ErrorState error={remove.error} />
+        ) : null}
+      </Card>
+    </>
   );
 }
 
@@ -3085,14 +3133,6 @@ function ModelsPanel({
                   onCapabilityLoss={onCapabilityLoss}
                 />
               )}
-              {!trainee ? (
-                <RequestAdaptationEditor
-                  key={`${accountId}:${role}:${selected.id}`}
-                  url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(selected.id)}/request-adaptation`}
-                  scope="charity-model"
-                  editable={role === 'admin'}
-                />
-              ) : null}
               <BindingsPanel
                 key={`bindings:${selected.id}`}
                 role={role}

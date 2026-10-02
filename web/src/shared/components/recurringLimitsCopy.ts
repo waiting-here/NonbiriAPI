@@ -190,7 +190,11 @@ const en: RecurringLimitsCopy = {
     week: 'Week',
     month: 'Month',
   },
-  alignmentValue: { first_success: 'First successful call', calendar: 'Calendar boundary' },
+  alignmentValue: {
+    first_success: 'First successful call',
+    calendar: 'Calendar boundary',
+    exact_time: '',
+  },
   metricValue: {
     calls: 'Calls',
     tokens: 'Total tokens',
@@ -307,7 +311,7 @@ const zh: RecurringLimitsCopy = {
   },
   modeValue: { reset: '刷新', sliding: '滑动窗口' },
   intervalValue: { '1h': '1 小时', '5h': '5 小时', day: '日', week: '周', month: '月' },
-  alignmentValue: { first_success: '首次成功调用', calendar: '自然边界' },
+  alignmentValue: { first_success: '首次成功调用', calendar: '自然边界', exact_time: '' },
   metricValue: {
     calls: '调用次数',
     tokens: '总 Token 数',

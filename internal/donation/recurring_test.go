@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -159,6 +160,9 @@ func TestRecurringHTTPStrictFieldsAndBodyBudget(t *testing.T) {
 	json.Unmarshal(ruleBytes, &rule)
 	var bodies []string
 	for name := range rule {
+		if name == "anchor_local" {
+			continue // Older clients omit the optional anchor for existing modes.
+		}
 		clone := make(map[string]json.RawMessage, len(rule))
 		for k, v := range rule {
 			clone[k] = v
@@ -222,5 +226,94 @@ func TestRecurringHTTPStrictFieldsAndBodyBudget(t *testing.T) {
 		return donationquota.ValidateState(context.Background(), tx)
 	}(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+type recurringHTTPRegistrar struct {
+	mux   *http.ServeMux
+	actor int64
+}
+
+func (r recurringHTTPRegistrar) RegisterAdminRoute(method, pattern string, handler http.Handler) error {
+	r.mux.Handle(method+" "+pattern, handler)
+	return nil
+}
+
+func (r recurringHTTPRegistrar) RegisterUserRoute(method, pattern string, handler AuthorizedUserHandler) error {
+	r.mux.HandleFunc(method+" "+pattern, func(w http.ResponseWriter, request *http.Request) {
+		handler(w, request, UserPrincipal{UserID: r.actor})
+	})
+	return nil
+}
+
+func TestRecurringHTTPExactAnchorAndLegacyOmissionRoundTrip(t *testing.T) {
+	const anchor = "2026-10-27T03:00:01"
+	for _, role := range []reviewerRole{reviewerAdmin, reviewerSteward} {
+		t.Run(string(role), func(t *testing.T) {
+			e := newDonationTestEnv(t)
+			owner := e.seedUser(t, "recurring-http-owner", nil, false)
+			level := int64(6)
+			actor := e.seedUser(t, "recurring-http-steward", &level, false)
+			e.seedUser(t, "", nil, true)
+			_, key := e.seedEndpointKey(t, owner, 'r')
+			d := e.createDonation(t, owner, key)
+			mux := http.NewServeMux()
+			registrar := recurringHTTPRegistrar{mux: mux, actor: actor}
+			path := "/admin/api/donations/" + d.ID + "/keys/" + d.Keys[0].ID + "/recurring-limits"
+			if role == reviewerAdmin {
+				if err := RegisterAdminRoutes(registrar, e.service); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				path = "/api/steward/donations/" + d.ID + "/keys/" + d.Keys[0].ID + "/recurring-limits"
+				if err := RegisterStewardRoutes(registrar, e.service); err != nil {
+					t.Fatal(err)
+				}
+			}
+			request := func(method, body, seed string) *httptest.ResponseRecorder {
+				r := httptest.NewRequest(method, path, strings.NewReader(body))
+				if method == http.MethodPut {
+					r.Header.Set("Idempotency-Key", strings.Repeat(seed, 22))
+				}
+				w := httptest.NewRecorder()
+				mux.ServeHTTP(w, r)
+				return w
+			}
+			exact := `{"id":null,"mode":"reset","interval":"month","alignment":"exact_time","anchor_local":"` + anchor + `","time_zone":"UTC","week_starts_on":null,"metric":"calls","limit":"100"}`
+			legacy := `{"id":null,"mode":"reset","interval":"5h","alignment":"first_success","time_zone":"UTC","week_starts_on":null,"metric":"calls","limit":"100"}`
+			for i, rule := range []string{exact, legacy, strings.Replace(legacy, `"time_zone"`, `"anchor_local":null,"time_zone"`, 1)} {
+				body := fmt.Sprintf(`{"expected_revision":%q,"rules":[%s]}`, strconv.Itoa(i+1), rule)
+				w := request(http.MethodPut, body, string(rune('A'+i)))
+				if w.Code != http.StatusOK {
+					t.Fatalf("rule %d write: %d %s", i, w.Code, w.Body.String())
+				}
+				w = request(http.MethodGet, "", "")
+				var view RecurringLimits
+				if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &view) != nil || len(view.Rules) != 1 {
+					t.Fatalf("rule %d read: %d %s", i, w.Code, w.Body.String())
+				}
+				if view.DonationRevision != strconv.Itoa(i+2) || view.Rules[0].Limit != "100" {
+					t.Fatalf("wrong persisted view: %+v", view)
+				}
+				if i == 0 {
+					if view.Rules[0].AnchorLocal == nil || *view.Rules[0].AnchorLocal != anchor || *view.Rules[0].Alignment != "exact_time" || view.Rules[0].PeriodStart == nil || *view.Rules[0].PeriodStart != e.clock.Load() {
+						t.Fatalf("exact anchor or immediate partial period lost: %+v", view.Rules[0])
+					}
+				} else if view.Rules[0].AnchorLocal != nil || *view.Rules[0].Alignment != "first_success" {
+					t.Fatalf("legacy rule changed: %+v", view.Rules[0])
+				}
+			}
+			for _, invalid := range []string{
+				strings.Replace(exact, `,"anchor_local":"`+anchor+`"`, "", 1),
+				strings.Replace(exact, `"anchor_local":"`+anchor+`"`, `"anchor_local":null`, 1),
+				strings.Replace(exact, `"anchor_local":"`+anchor+`"`, `"anchor_local":7`, 1),
+				strings.Replace(exact, `"limit":"100"`, `"limit":"100","unknown":true`, 1),
+			} {
+				w := request(http.MethodPut, `{"expected_revision":"4","rules":[`+invalid+`]}`, "Z")
+				if w.Code != http.StatusBadRequest {
+					t.Fatalf("invalid rule accepted: %d %s", w.Code, w.Body.String())
+				}
+			}
+		})
 	}
 }

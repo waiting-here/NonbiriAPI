@@ -743,18 +743,15 @@ func (coordinator *Coordinator) DeleteAccount(ctx context.Context, userID, decis
 	return coordinator.deleteAccount(ctx, DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteSelf, ActorUserID: userID})
 }
 
-func (coordinator *Coordinator) DeleteAccountByAdmin(ctx context.Context, adminID, userID, decisionNow int64) error {
-	if adminID <= 0 {
-		return ErrInvalid
-	}
-	return coordinator.deleteAccount(ctx, DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteAdmin, ActorUserID: adminID})
-}
-
 func (coordinator *Coordinator) DeleteAccountBySystem(ctx context.Context, userID, decisionNow int64) error {
 	return coordinator.deleteAccount(ctx, DeleteRequest{UserID: userID, DecisionNow: decisionNow, Source: DeleteSystem})
 }
 
 func (coordinator *Coordinator) deleteAccount(ctx context.Context, request DeleteRequest) error {
+	return coordinator.deleteAccountWithControl(ctx, request, nil)
+}
+
+func (coordinator *Coordinator) deleteAccountWithControl(ctx context.Context, request DeleteRequest, control *adminDeletionControl) error {
 	userID, decisionNow := request.UserID, request.DecisionNow
 	if coordinator == nil || ctx == nil || !validDecision(userID, decisionNow) || !request.Source.Valid() {
 		return ErrInvalid
@@ -792,6 +789,14 @@ func (coordinator *Coordinator) deleteAccount(ctx context.Context, request Delet
 	if err != nil {
 		return err
 	}
+	if control != nil {
+		if err := control.begin(ctx, tx, request); err != nil {
+			return err
+		}
+		if control.replayed {
+			return tx.Commit()
+		}
+	}
 	var actor *int64
 	if request.ActorUserID > 0 {
 		actor = &request.ActorUserID
@@ -824,6 +829,12 @@ func (coordinator *Coordinator) deleteAccount(ctx context.Context, request Delet
 	if err := coordinator.ledger.ZeroAndDeleteAccount(ctx, tx, request, operationID); err != nil {
 		abortFinalizers()
 		return err
+	}
+	if control != nil {
+		if err := control.complete(ctx, tx); err != nil {
+			abortFinalizers()
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		abortFinalizers()

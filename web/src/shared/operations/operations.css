@@ -23,6 +23,12 @@ form.ops-toolbar > label {
   gap: var(--space-4, 1rem);
 }
 
+.gateway-capability-target {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .ops-page .card,
 .ops-subcard {
   display: grid;
@@ -310,6 +316,35 @@ fieldset.ops-field-grid {
   gap: var(--space-3, 0.75rem);
 }
 
+.ops-advanced {
+  min-width: 0;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
+}
+
+.ops-advanced > summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  color: var(--nb-color-text-muted);
+}
+
+.ops-advanced > summary strong {
+  color: var(--nb-color-text);
+}
+
+.ops-advanced[open] > summary {
+  margin-bottom: var(--nb-space-4);
+}
+
+.ops-advanced > fieldset {
+  margin-bottom: 0;
+}
+
+.ops-form-section {
+  min-inline-size: 0;
+}
+
 .ops-disclosure {
   width: 100%;
   justify-content: space-between;
@@ -506,7 +541,9 @@ fieldset.ops-field-grid {
   overflow-wrap: normal;
 }
 
-.ops-break { overflow-wrap: anywhere; }
+.ops-break {
+  overflow-wrap: anywhere;
+}
 
 .ops-action-button {
   white-space: nowrap;

@@ -7,6 +7,11 @@ process.env.NONBIRI_AUDIT_BROWSER_STATE = resolve('test-results/management/state
 
 export default defineConfig({
   ...audit,
-  testMatch: 'management.spec.ts',
+  testMatch: [
+    'management.spec.ts',
+    'moderation.spec.ts',
+    'directory-controls.spec.ts',
+    'operation-controls.spec.ts',
+  ],
   outputDir: 'test-results/management/browser',
 });

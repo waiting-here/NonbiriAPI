@@ -267,6 +267,12 @@ async function prepare(
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
+      path: '/admin/api/gateway-model-capabilities',
+      body: { data: [] },
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
       path: '/admin/api/maintenance',
       body: { enabled: false, revision: '1' },
     });
@@ -556,7 +562,10 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     },
   });
   await page.goto(`${ADMIN_ORIGIN}/settings`);
-  await page.getByRole('button', { name: /Identity and appearance/ }).click();
+  await expect(page.getByRole('button', { name: /Identity and appearance/ })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   await expect(page.getByLabel('Default Anthropic max output tokens')).toBeVisible();
   const timezoneInput = page.getByLabel('Site timezone offset');
   await timezoneInput.fill('345');

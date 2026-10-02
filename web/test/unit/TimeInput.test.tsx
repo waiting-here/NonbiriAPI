@@ -25,9 +25,11 @@ const json = (body: unknown, status = 200) =>
 function Harness({
   epoch = null,
   station = 'user',
+  replacementEpoch,
 }: {
   epoch?: number | null;
   station?: TimeStation;
+  replacementEpoch?: number | null;
 }) {
   const [draft, setDraft] = useState(() => createTimeDraft(epoch));
   const [note, setNote] = useState('');
@@ -46,6 +48,11 @@ function Harness({
         <input value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       <button disabled={timeDraftValue(draft) === undefined}>Save</button>
+      {replacementEpoch !== undefined ? (
+        <button type="button" onClick={() => setDraft(createTimeDraft(replacementEpoch))}>
+          Replace draft
+        </button>
+      ) : null}
       <output aria-label="Saved">{saved === undefined ? 'unsaved' : String(saved)}</output>
     </form>
   );
@@ -125,9 +132,56 @@ describe('wall-clock input', () => {
     );
   });
 
+  it.each([
+    ['admin', 0],
+    ['steward', 330],
+  ] as const)(
+    'applies the loaded site context to a replacement %s draft and resolves its next edit',
+    async (station, offset) => {
+      const fetchMock = vi.fn((path: string) =>
+        path.endsWith('/time-context')
+          ? Promise.resolve(json({ mode: 'site', offset_minutes: offset }))
+          : Promise.reject(new Error(`unexpected request: ${path}`)),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const original = Date.parse('2030-01-01T00:00:47Z') / 1000;
+      const replacement = original + 3600;
+      const siteText = (epoch: number) =>
+        new Date((epoch + offset * 60) * 1000).toISOString().slice(0, 16);
+      const view = await renderWithProviders(
+        <Harness epoch={original} replacementEpoch={replacement} station={station} />,
+        { station: station === 'admin' ? 'admin' : 'user' },
+      );
+      const input = screen.getByLabelText('End time');
+      await waitFor(() => expect(input).toHaveValue(siteText(original)));
+      await view.user.type(screen.getByLabelText('Note'), 'keep this');
+      await view.user.click(screen.getByRole('button', { name: 'Replace draft' }));
+      await waitFor(() => expect(input).toHaveValue(siteText(replacement)));
+      expect(screen.queryByText('Time zone: America/New_York')).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(screen.getByLabelText('Saved')).toHaveTextContent(String(replacement));
+      expect(screen.getByLabelText('Note')).toHaveValue('keep this');
+
+      const edited = Date.parse('2030-01-01T02:00:00Z') / 1000;
+      fireEvent.change(input, { target: { value: siteText(edited) } });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+      await view.user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(screen.getByLabelText('Saved')).toHaveTextContent(String(edited));
+      expect(fetchMock.mock.calls.every(([path]) => path.endsWith('/time-context'))).toBe(true);
+    },
+  );
+
   it('blocks unknown site time, then preserves a half-hour offset and an unsaved edit across context refresh', async () => {
     let complete!: (response: Response) => void;
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            complete = resolve;
+          }),
+      ),
+    );
     const epoch = Date.parse('2030-01-01T00:00:00Z') / 1000;
     const view = await renderWithProviders(<Harness epoch={epoch} station="steward" />, {
       station: 'user',
@@ -139,22 +193,42 @@ describe('wall-clock input', () => {
     expect(input).toBeDisabled();
     expect(await screen.findByText(/not configured/)).toBeVisible();
 
-    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: 330 }));
+    act(() =>
+      view.queryClient.setQueryData(['user', 'steward', 'time-context'], {
+        mode: 'site',
+        offset_minutes: 330,
+      }),
+    );
     await waitFor(() => expect(input).toHaveValue('2030-01-01T05:30'));
     expect(input).toBeEnabled();
     fireEvent.change(input, { target: { value: '2030-01-01T06:00' } });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
 
-    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: null }));
+    act(() =>
+      view.queryClient.setQueryData(['user', 'steward', 'time-context'], {
+        mode: 'site',
+        offset_minutes: null,
+      }),
+    );
     await waitFor(() => expect(input).toBeDisabled());
     expect(input).toHaveValue('2030-01-01T06:00');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: 330 }));
+    act(() =>
+      view.queryClient.setQueryData(['user', 'steward', 'time-context'], {
+        mode: 'site',
+        offset_minutes: 330,
+      }),
+    );
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByLabelText('Saved')).toHaveTextContent(String(epoch + 1800));
 
-    act(() => view.queryClient.setQueryData(['user', 'steward', 'time-context'], { mode: 'site', offset_minutes: 0 }));
+    act(() =>
+      view.queryClient.setQueryData(['user', 'steward', 'time-context'], {
+        mode: 'site',
+        offset_minutes: 0,
+      }),
+    );
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
     expect(screen.getByText(/site time zone changed/)).toBeVisible();
     fireEvent.change(input, { target: { value: '2030-01-01T06:01' } });

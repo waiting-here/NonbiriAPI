@@ -126,3 +126,32 @@ func TestBodyAdaptationPreservesNullableSamplingFields(t *testing.T) {
 		delete(d.BodyForced.Values, "/"+name)
 	}
 }
+
+func TestAutomaticCacheDefaultYieldsToExplicitMarkers(t *testing.T) {
+	d := Empty(ScopeCharityModel)
+	d.BodyDefaults.Values["/cache_control"] = json.RawMessage(`{"type":"ephemeral","ttl":"5m"}`)
+	for _, source := range []string{
+		`{"messages":[{"role":"user","content":[{"type":"text","text":"hello","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`,
+		`{"tools":[{"type":"function","cache_control":{"type":"ephemeral","ttl":"1h"}}]}`,
+		`{"cache_control":null}`,
+	} {
+		body, err := ApplyBody([]byte(source), d, 4096)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got, original map[string]any
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal([]byte(source), &original); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, original) {
+			t.Fatalf("explicit marker changed: %s", body)
+		}
+	}
+	body, err := ApplyBody([]byte(`{"model":"m"}`), d, 4096)
+	if err != nil || !strings.Contains(string(body), `"cache_control":{"ttl":"5m","type":"ephemeral"}`) {
+		t.Fatalf("default: %s %v", body, err)
+	}
+}

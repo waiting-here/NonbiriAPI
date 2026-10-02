@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
@@ -272,6 +273,10 @@ func TestAdminElevationRequiresPasswordAndBindsSession(t *testing.T) {
 	bad := request(t, f.runtime.AdminHandler(), host.StationAdmin, http.MethodPost, "https://admin.example/admin/api/auth/elevate", `{"password":"wrong"}`, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json"})
 	if bad.Code != http.StatusForbidden {
 		t.Fatalf("bad=%d %s", bad.Code, bad.Body.String())
+	}
+	var failure httperr.Envelope
+	if err := json.Unmarshal(bad.Body.Bytes(), &failure); err != nil || failure.Error.Code != httperr.CodeElevationRequired {
+		t.Fatalf("password failure must preserve the session: %d %s", bad.Code, bad.Body.String())
 	}
 	good := request(t, f.runtime.AdminHandler(), host.StationAdmin, http.MethodPost, "https://admin.example/admin/api/auth/elevate", `{"password":"correct horse battery staple"}`, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json"})
 	if good.Code != http.StatusOK {

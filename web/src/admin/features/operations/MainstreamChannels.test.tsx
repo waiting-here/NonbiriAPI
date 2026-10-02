@@ -259,8 +259,13 @@ describe('administrator mainstream channels page', () => {
     });
 
     expect(await screen.findByText('Original channel')).toBeVisible();
+    expect(screen.queryByRole('columnheader', { name: 'Revision' })).not.toBeInTheDocument();
+    expect(screen.queryByText(activeID)).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
-    expect(await screen.findByRole('heading', { name: 'Channel authority' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
+    expect(screen.getByText(`${activeID} / 3`)).not.toBeVisible();
+    await rendered.user.click(screen.getByText('Technical details'));
+    expect(screen.getByText(`${activeID} / 3`)).toBeVisible();
 
     const nameInputs = screen.getAllByLabelText('Channel name');
     await rendered.user.clear(nameInputs[1]);
@@ -276,7 +281,7 @@ describe('administrator mainstream channels page', () => {
 
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Channel authority' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument(),
     );
   });
 
@@ -384,7 +389,7 @@ describe('administrator mainstream channels page', () => {
 
     expect(await screen.findByText('Mutation authority')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
-    expect(await screen.findByRole('heading', { name: 'Channel authority' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
     const editName = screen.getAllByLabelText('Channel name')[1];
     await rendered.user.clear(editName);
     await rendered.user.type(editName, 'Mutation failure');
@@ -410,7 +415,7 @@ describe('administrator mainstream channels page', () => {
       }),
     ).toBeVisible();
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Channel authority' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument(),
     );
     expect(screen.getByLabelText('Channel name')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
@@ -459,7 +464,7 @@ describe('administrator mainstream channels page', () => {
     const createName = screen.getByLabelText('Channel name');
     await rendered.user.type(createName, 'Account one draft');
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
-    expect(await screen.findByRole('heading', { name: 'Channel authority' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
     expect(screen.getAllByLabelText('Channel name')).toHaveLength(2);
 
     holdLateDetail = true;
@@ -478,7 +483,7 @@ describe('administrator mainstream channels page', () => {
     rendered.queryClient.setQueryData(adminKeys.session, { admin: { username: 'two' } });
     expect(await screen.findByText('Account two')).toBeVisible();
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: 'Channel authority' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Channel name')).toHaveValue('');
     });
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
@@ -528,7 +533,7 @@ describe('administrator mainstream channels page', () => {
 
     expect(await screen.findByText('Before invalidation')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'View' }));
-    expect(await screen.findByRole('heading', { name: 'Channel authority' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Channel details' })).toBeVisible();
     const editName = screen.getAllByLabelText('Channel name')[1];
     await rendered.user.clear(editName);
     await rendered.user.type(editName, 'Late edit');
@@ -550,7 +555,7 @@ describe('administrator mainstream channels page', () => {
 
     rendered.queryClient.setQueryData(adminKeys.session, null);
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: 'Channel authority' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Channel details' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Channel name')).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Create channel' })).toBeDisabled();
     });

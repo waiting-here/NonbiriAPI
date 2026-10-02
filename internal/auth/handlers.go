@@ -602,7 +602,7 @@ func (r *Runtime) adminElevate(w http.ResponseWriter, req *http.Request) {
 			writeStableError(w, httperr.CodeRateLimited, "too many requests")
 			return
 		}
-		writeStableError(w, httperr.CodeForbidden, "invalid credentials")
+		writeStableError(w, httperr.CodeElevationRequired, "administrator password was not accepted")
 		return
 	}
 	if err := r.adminThrottle.Success(identity, r.adminUsername); err != nil {

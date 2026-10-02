@@ -69,7 +69,7 @@
       "emptyBody": "The administrator API returned no endpoint overview records.",
       "searchPlaceholder": "Filter by base URL substring",
       "searchAria": "Filter endpoints by base URL",
-      "queryTooLong": "Query must be 512 UTF-8 bytes or fewer (currently {{bytes}}).",
+      "queryTooLong": "The search is too long. Shorten it and try again.",
       "noProbeNotice": "This surface never sends ping, HEAD, empty, paid, or background health-check requests."
     },
     "alerts": {
@@ -96,7 +96,7 @@
         "registrationRejected": "Registration rejected",
         "maintenanceEnabled": "Maintenance enabled",
         "donationFailureDisabled": "Donation disabled after failures",
-        "issueProjectionIncomplete": "Issue projection incomplete",
+        "issueProjectionIncomplete": "Issue details incomplete",
         "reportRetryExhausted": "Report retries exhausted",
         "fishingRetryExhausted": "Fishing recovery retries exhausted",
         "rpsTerminalRetrying": "RPS terminal recovery retrying",
@@ -124,7 +124,7 @@
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
       "notConfigured": "not configured (null)",
-      "catalogDefault": "Raw default",
+      "catalogDefault": "Default",
       "catalogEffective": "Effective fallback",
       "catalogRange": "Hard range",
       "catalogStep": "step",
@@ -176,13 +176,13 @@
         "allowedChoice": "comes from the allowed choices",
         "amountRangeStep": "is within {{minimum}}–{{maximum}} credits at step {{step}}",
         "boolean": "uses true or false",
-        "canonical": "Enter a canonical {{type}} value that {{detail}}.",
+        "canonical": "Enter a {{type}} value that {{detail}}.",
         "integerSyntax": "contains no whitespace, fractions, exponents, or leading zeroes",
-        "maxUtf8Bytes": "is no larger than {{maximum}} UTF-8 bytes",
+        "maxUtf8Bytes": "is too long; shorten it",
         "noControlCharacters": "contains no control characters",
         "notNull": "is not null",
         "rangeStep": "is within {{minimum}}–{{maximum}} at step {{step}}",
-        "unicodeLength": "contains {{minimum}}–{{maximum}} Unicode characters"
+        "unicodeLength": "contains {{minimum}}–{{maximum}} characters"
       },
       "fieldDetails": "Defaults and limits",
       "pendingChanges": "{{count}} unsaved changes",
@@ -196,14 +196,17 @@
         "checkinBounds": "The minimum check-in reward must not exceed the maximum.",
         "levels": "Enabled level thresholds must increase from level 2 to level 4.",
         "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
-      }
+      },
+      "customizedCount": "{{count}} customized",
+      "groupDefaults": "Using defaults",
+      "searchHelp": "Find a setting by name or purpose"
     },
     "games": {
       "nav": "Games",
       "title": "Game configuration",
       "masterEnabled": "Games master switch",
       "fishingEnabled": "Fishing enabled",
-      "fishingRake": "{{pump}} deduction from each catch (basis points)",
+      "fishingRake": "{{pump}} fee (%)",
       "worm": "Worm bait",
       "lure": "Lure bait",
       "premium": "Premium bait",
@@ -212,10 +215,11 @@
       "bottle": "Message bottle",
       "clover": "Lucky clover",
       "shell": "Pearl shell",
-      "saved": "Game configuration updated from the authoritative server response.",
+      "saved": "Game settings saved.",
       "save": "Save game configuration",
       "controls": {
-        "globalGate": "Global gate",
+        "globalGate": "Games master switch",
+        "settings": "Game settings",
         "priceCredits": "{{field}} price (credits)",
         "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
       },
@@ -227,7 +231,7 @@
         "mode": "Mode: {{value}}",
         "phase": "Phase: {{value}}",
         "spec": "Specification: {{value}}",
-        "title": "Live authority counts"
+        "title": "Current games and queues"
       },
       "enums": {
         "unknown": "Unknown value ({{value}})"
@@ -243,10 +247,10 @@
         }
       },
       "operationsDescription": "Configure future game acceptance while monitoring independent in-flight and queue counts.",
-      "restoreAuthorityValues": "Restore authority values",
+      "restoreAuthorityValues": "Restore saved settings",
       "rps": {
         "base": "{{mode}} base (credits)",
-        "cut": "{{mode}} {{pump}} cut (basis points)",
+        "cut": "{{mode}} · {{pump}} fee (%)",
         "deadline": "{{mode}} {{deadline}}",
         "deadlines": {
           "dealer": "Dealer deadline",
@@ -274,9 +278,7 @@
           "platform": "Platform",
           "thursday": "Thursday pool",
           "welfare": "Welfare pool"
-        },
-        "queueCapacity": "{{mode}} queue capacity",
-        "queueCapacityHint": "Read-only runtime capacity; it is excluded from PATCH."
+        }
       },
       "sections": {
         "fishing": "Fishing",
@@ -284,14 +286,15 @@
         "rps": "Three-player RPS"
       },
       "validation": {
-        "amountMinimum": "{{field}} must be a canonical credit amount of at least {{minimum}}.",
-        "amountNonNegative": "{{field}} must be a canonical non-negative credit amount.",
+        "amountMinimum": "{{field}} must be a credit amount of at least {{minimum}}.",
+        "amountNonNegative": "{{field}} must be a credit amount of zero or more.",
         "integerRange": "{{field}} must be a whole number from {{minimum}} to {{maximum}}.",
-        "totalCuts": "{{mode}} pool cuts must total less than {{maximum}} basis points.",
+        "totalCuts": "{{mode}} fees must total less than {{maximum}}%.",
         "masterRequired": "Enable the game master switch, or turn off each game in the same edit.",
         "specRequiresPrice": "To enable the {{spec}} board, enable Link Link and set a positive price.",
         "modeRequiresStake": "To enable {{mode}}, enable Rock Paper Scissors and set a positive base stake.",
-        "changedElsewhere": "Game settings changed elsewhere. Your draft is retained; restore the latest settings before editing again."
+        "changedElsewhere": "Game settings changed elsewhere. Your draft is retained; restore the latest settings before editing again.",
+        "feeRange": "{{field}} must be between 0 and 99.99%, with at most two decimal places."
       }
     },
     "activities": {
@@ -300,19 +303,21 @@
         "amount": "Amount (credits)",
         "apply": "Apply adjustment",
         "cancel": "Cancel",
-        "confirmDecrease": "I understand this forcibly removes credits from the shared pool.",
+        "confirmTitle": "Confirm pool adjustment",
+        "confirmIncrease": "Add {{amount}} credits to {{pool}}. Reason: {{reason}}.",
+        "confirmDecrease": "Remove {{amount}} credits from {{pool}}, reducing its available balance. Reason: {{reason}}.",
         "decrease": "Decrease",
         "decreaseBlocked": "The current Thursday pool cannot be forcibly decreased after its natural window opens.",
         "direction": "Direction",
         "increase": "Increase",
         "reason": "Reason",
-        "selected": "Selected {{poolId}} at revision {{revision}}. Increases inject credits; decreases require explicit dangerous confirmation.",
+        "selected": "Increasing adds credits to the pool; decreasing removes credits from its available balance.",
         "title": "Pool adjustment"
       },
       "config": {
         "masterEnabled": "Master enabled",
-        "revisionHint": "Save activity switches and claim rules together. Set the site timezone first; Thursday also needs a period configured below. Open periods keep their existing rules.",
-        "save": "Save atomic configuration",
+        "revisionHint": "Save activity switches and claim rules together. Configure the Thursday activity below before enabling it. Open activities keep their existing rules.",
+        "save": "Save activity settings",
         "thursdayEnabled": "Thursday enabled",
         "title": "Activity configuration",
         "welfareCap": "Welfare cap (credits)",
@@ -331,30 +336,29 @@
         "createTitle": "Create next period",
         "entry": "Entry (credits)",
         "literature": "Literature",
-        "lockedHint": "The period is open or settling; frozen/current configuration cannot be edited.",
-        "nextPoolBp": "Next-pool share (basis points)",
+        "lockedHint": "The activity is open or settling; its rules cannot be edited.",
+        "nextPoolBp": "Next pool fee (%)",
         "scheduleHint": "The next activity opens at 00:00 next Thursday in Beijing time and lasts 24 hours. Fill in the announcement and entry rules, then save.",
         "windowBeijing": "Activity time (Beijing, UTC+8)",
         "perUserLimit": "Per-user limit",
-        "platformBp": "Platform share (basis points)",
+        "platformBp": "Platform fee (%)",
         "save": "Save next period",
         "updateTitle": "Update configured next period",
-        "welfareBp": "Welfare share (basis points)",
-        "literatureInvalid": "Use up to 1,024 characters and 4,096 bytes. Newlines and tabs are allowed; other control characters are not."
+        "welfareBp": "Welfare pool fee (%)",
+        "literatureInvalid": "Shorten the literature or remove special control characters. Newlines and tabs are allowed."
       },
       "pools": {
         "allStates": "All pool states",
         "allTypes": "All pool types",
         "adjust": "Adjust",
         "balance": "Balance",
-        "emptyBody": "The authority read returned no pools.",
+        "emptyBody": "No shared pools are available.",
         "emptyTitle": "No pools",
         "filterState": "Pool state",
         "filterType": "Pool type",
         "period": "Period",
-        "revision": "Revision",
         "select": "Select",
-        "singleton": "Singleton",
+        "singleton": "Ongoing shared pool",
         "unboundPeriod": "Not yet bound to a period",
         "title": "Shared pools",
         "typeState": "Type / state"
@@ -377,15 +381,15 @@
         }
       },
       "thursday": {
-        "emptyBody": "Create the next 24-hour period from the current activities revision.",
+        "emptyBody": "Configure the next 24-hour activity period.",
         "emptyTitle": "No configured or recoverable period",
         "entryLimit": "Entry / limit",
         "literature": "Literature",
         "payoutRollover": "Payout / rollover",
-        "periodRevision": "Period / revision",
+        "periodRevision": "Period",
         "processed": "Processed",
         "resume": "Resume existing settlement checkpoint",
-        "title": "Thursday authority"
+        "title": "Thursday activity status"
       },
       "title": "Activities and pools",
       "units": {
@@ -394,8 +398,8 @@
     },
     "mainstreamChannels": {
       "nav": "Mainstream channels",
-      "title": "Mainstream channel authority",
-      "description": "Maintain frozen channel templates used when endpoints are created. Existing endpoint provenance is unchanged by later edits or retirement.",
+      "title": "Mainstream channel management",
+      "description": "Manage channels users can choose when adding services. Channel changes leave existing services intact.",
       "category": {
         "subscription": "Mainstream subscription",
         "apiPlatform": "Mainstream API platform"
@@ -407,7 +411,7 @@
       "state": {
         "all": "All states",
         "active": "Active",
-        "retired": "Retired"
+        "retired": "Archived"
       },
       "filters": {
         "state": "Channel state"
@@ -415,10 +419,9 @@
       "table": {
         "name": "Name",
         "category": "Category",
-        "connector": "Connector",
-        "baseUrl": "Canonical base URL",
-        "enabled": "Enabled",
-        "revision": "Revision",
+        "connector": "API type",
+        "baseUrl": "API base URL",
+        "enabled": "Available for adding services",
         "updated": "Updated",
         "actions": "Actions"
       },
@@ -426,48 +429,50 @@
         "create": "Create channel",
         "view": "View",
         "save": "Save changes",
-        "retire": "Retire channel"
+        "retire": "Archive channel"
       },
       "form": {
         "name": "Channel name",
         "category": "Category",
-        "connector": "Connector",
-        "baseUrl": "Canonical base URL",
-        "enabled": "Enabled for new endpoint creation"
+        "connector": "API type",
+        "baseUrl": "API base URL",
+        "enabled": "Available for adding services",
+        "baseUrlHelp": "Enter the service API base URL, for example https://api.example.com/v1."
       },
       "validation": {
-        "invalid": "Enter a valid name and canonical URL without control characters."
+        "invalid": "Enter a channel name and a valid API base URL."
       },
       "create": {
         "title": "Create mainstream channel",
-        "description": "The saved values become immutable provenance snapshots on endpoints created from this channel."
+        "description": "Users adding a service from this channel use its API type and base URL. Later channel changes leave those services intact."
       },
       "detail": {
-        "title": "Channel authority",
-        "idRevision": "ID / revision",
+        "title": "Channel details",
+        "technicalDetails": "Technical details",
+        "idRevision": "Channel ID / version",
         "category": "Category",
-        "connector": "Connector",
-        "baseUrl": "Canonical base URL",
-        "enabled": "Creation availability",
-        "state": "Lifecycle state",
+        "connector": "API type",
+        "baseUrl": "API base URL",
+        "enabled": "Available for adding services",
+        "state": "State",
         "created": "Created",
         "updated": "Updated",
-        "retired": "Retired",
-        "retiredImmutable": "Retired channels are immutable and remain available only as historical provenance."
+        "retired": "Archived",
+        "retiredImmutable": "Archived channels cannot be edited or re-enabled. Existing services and donations keep their original channel information."
       },
       "edit": {
         "title": "Edit active channel"
       },
       "retire": {
-        "title": "Retire channel",
-        "description": "Retirement removes this channel from new endpoint creation while preserving existing endpoint and donation snapshots.",
-        "confirmTitle": "Retire this channel?",
-        "confirmDescription": "“{{name}}” cannot be edited or reactivated after retirement."
+        "title": "Archive channel",
+        "description": "Users can no longer select this channel when adding services. Existing services and donations keep their original channel information.",
+        "confirmTitle": "Archive this channel?",
+        "confirmDescription": "“{{name}}” cannot be edited or re-enabled after archiving."
       },
-      "authorityChanged": "The channel authority changed or the response was uncertain. The latest state has been loaded for review.",
+      "authorityChanged": "The channel changed or the result is unclear. Review the latest details before trying again.",
       "empty": {
         "title": "No mainstream channels",
-        "body": "No channel matches the selected lifecycle state."
+        "body": "No channel matches the selected state."
       }
     },
     "reports": {
@@ -491,11 +496,10 @@
         "actor": "Actor",
         "anonymous": "Anonymous",
         "approveDeletion": "Approve deletion",
-        "authorityTitle": "Case authority",
+        "authorityTitle": "Case details",
         "back": "Back to report inbox",
-        "canonicalUrl": "Canonical URL",
-        "confirmApprovalCheckbox": "I understand approved processing deletes matching endpoint keys.",
-        "confirmApproveBody": "This accepts irreversible deletion work for the current material and target revisions.",
+        "canonicalUrl": "API base URL",
+        "confirmApproveBody": "The protected keys listed in this case will be permanently deleted and cannot be restored.",
         "confirmApproveTitle": "Approve protected-key deletion?",
         "confirmRejectBody": "This releases all protected targets and records the review reason.",
         "confirmRejectTitle": "Reject this report?",
@@ -503,10 +507,10 @@
         "continuationBody": "This state cannot be re-decided or released. Resume only restarts the existing checkpoint with the same target version.",
         "continuationTitle": "Processing continuation",
         "deadline": "Deadline",
-        "decisionBody": "Approval permanently deletes matching protected endpoint keys through the integrated lifecycle. Rejection releases protection. Both require a reason and are never auto-retried after conflict or an unknown response.",
+        "decisionBody": "Approval permanently deletes the matching protected keys. Rejection releases protection. Both require a reason; a conflict or unclear result will not be retried automatically.",
         "decisionTitle": "Decision",
         "deidentified": "Deidentified",
-        "description": "Review bounded evidence and stable target snapshots before one terminal decision.",
+        "description": "Review the evidence and reported resources, then decide what action to take.",
         "endpoint": "Endpoint",
         "id": "ID",
         "keySnapshot": "Key snapshot",
@@ -552,7 +556,7 @@
           }
         },
         "materialTargetRevision": "Material / target revision",
-        "materialsEmptyBody": "This authority page contains no materials.",
+        "materialsEmptyBody": "No review materials are available for this case.",
         "materialsEmptyTitle": "No review materials",
         "materialsTitle": "Materials",
         "noReporterNote": "No reporter note.",
@@ -571,7 +575,7 @@
         "state": "State",
         "status": "Status",
         "submitted": "Submitted",
-        "targetsEmptyBody": "Indexing has not produced a target on this authority page.",
+        "targetsEmptyBody": "No matching targets have been found for this case yet.",
         "targetsEmptyTitle": "No targets",
         "targetsTitle": "Targets",
         "title": "Report case"
@@ -585,7 +589,7 @@
         "status": "Status"
       },
       "privacy": {
-        "body": "This inbox receives case metadata, bounded review materials, and protected target snapshots. Submitted credential secrets never appear.",
+        "body": "Review case details, submitted materials and reported resources here. Submitted secret keys are not displayed.",
         "title": "Privacy boundary"
       },
       "progress": {
@@ -606,7 +610,7 @@
         "rejected": "Rejected"
       },
       "table": {
-        "connectorUrl": "Connector / canonical URL",
+        "connectorUrl": "API type / base URL",
         "counts": "Counts",
         "deadline": "Deadline",
         "materials": "materials {{count}}",
@@ -638,8 +642,8 @@
         "mainstreamSubscription": "【Mainstream subscription】{{name}}",
         "mainstreamApiPlatform": "【Mainstream API platform】{{name}}",
         "connector": "Connector",
-        "baseUrl": "Canonical base URL",
-        "channelRevision": "Frozen channel revision",
+        "baseUrl": "API base URL",
+        "channelRevision": "Channel version when added",
         "keyHeading": "Key {{id}} · {{head}}…{{tail}}",
         "donation": "Donation",
         "physical": "Physical key",
@@ -727,12 +731,11 @@
         "createDescription": "The hold expires after {{days}} days and cannot be extended, copied, reopened, or recreated.",
         "createTitle": "Create this legal hold?",
         "releaseAction": "Release hold",
-        "releaseDescription": "Release is final, and ordinary cleanup may proceed immediately when the original deadline has passed.",
+        "releaseDescription": "Release is final. This object cannot receive another hold, and cleanup may proceed immediately after the original deadline.",
         "releaseTitle": "Release this legal hold?"
       },
       "create": {
         "basis": "Basis",
-        "confirmation": "I confirm this exact aggregate, expiry, and irreversible one-hold limit.",
         "days": "Days (1–365)",
         "objectKind": "Object kind",
         "objectReference": "Exact object reference",
@@ -773,7 +776,6 @@
         "requestLog": "Request log"
       },
       "release": {
-        "confirmation": "Release is final; this object cannot receive another hold.",
         "password": "Administrator password (fresh elevation)",
         "reason": "Release reason"
       },
@@ -834,7 +836,9 @@
       "empty": "No periods yet. New periods start as drafts with exchanges off.",
       "previous": "Previous",
       "next": "Next",
-      "cancelHelp": "Cancelling stops gameplay and exchanges for this period and preserves entry, receipts and profiles."
+      "cancelHelp": "Cancelling stops gameplay and exchanges for this period and preserves entry, receipts and profiles.",
+      "publishHelp": "Publishing lets users participate during this period's opening times and pay the configured entry fee.",
+      "withdrawalHelp": "Removing publication stops gameplay and exchanges for this period. Existing entries, receipts and profiles are kept."
     },
     "fatfish": {
       "workspace": {
@@ -1053,6 +1057,9 @@
         "tool_cup": "Cache puck",
         "move_selected_hole": "Move the whole hole when dragging a vertex"
       }
+    },
+    "picturebook": {
+      "saveSelectedModels": "Save selected models"
     }
   },
   "user": {
@@ -1068,6 +1075,20 @@
       "discountRemaining": "{{time}} remaining",
       "requestUnit": "Per request; final settlement is server-side.",
       "tokenUnit": "Per million tokens; four buckets are settled server-side."
+    }
+  },
+  "recurringLimits": {
+    "exact": {
+      "alignment": "Exact reset time",
+      "anchor": "Reset date and time",
+      "help": "Enter the reset time in {{zone}}. Until a future first reset, usage counts from this save. Short months use their last day, then return to the original day.",
+      "preview": "Next three resets",
+      "loading": "Calculating reset times…",
+      "unavailable": "Check the reset date and time, then try again.",
+      "period": "Resets follow the saved date and clock in the rule’s time zone.",
+      "gap_shifted": "Moved forward for daylight saving time",
+      "fold_later": "Later occurrence of repeated local time",
+      "anchorRequired": "Enter the reset date and time."
     }
   }
 }
