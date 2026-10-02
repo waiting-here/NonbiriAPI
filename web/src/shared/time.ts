@@ -148,6 +148,40 @@ export function browserTimeZone(): string | null {
   }
 }
 
+export async function fetchRecurrence(
+  station: TimeStation,
+  anchorLocal: string,
+  interval: 'day' | 'week' | 'month',
+  zone: string,
+  after: number,
+  signal?: AbortSignal,
+): Promise<ResolvedTime[]> {
+  const params = new URLSearchParams({
+    anchor_local: anchorLocal,
+    interval,
+    time_zone: zone,
+    after: String(after),
+  });
+  // Recurrence uses the rule zone; site display settings do not define it.
+  const path = station === 'admin' ? '/admin/api' : '/api';
+  const value = await apiFetch<unknown>(`${path}/time/recurrence?${params}`, { signal });
+  if (!object(value) || !Array.isArray(value.transitions)) throw invalidResponse();
+  return value.transitions.map((item: unknown) => {
+    if (
+      !object(item) ||
+      typeof item.instant !== 'number' ||
+      !Number.isFinite(item.instant) ||
+      typeof item.time_zone !== 'string' ||
+      typeof item.local !== 'string' ||
+      typeof item.offset_seconds !== 'number' ||
+      !Number.isFinite(item.offset_seconds) ||
+      !['none', 'gap_shifted', 'fold_later'].includes(String(item.adjustment))
+    )
+      throw invalidResponse();
+    return item as unknown as ResolvedTime;
+  });
+}
+
 /** The browser zone's offset at one instant; null leaves differences unknown. */
 export function browserOffsetMinutes(zone: string | null, atMillis = Date.now()): number | null {
   if (!zone || !Number.isFinite(atMillis)) return null;

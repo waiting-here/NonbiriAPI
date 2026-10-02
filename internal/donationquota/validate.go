@@ -254,6 +254,11 @@ func validateAggregates(ctx context.Context, tx *sql.Tx, e epoch, expected map[i
 				if err != nil || at < e.effective || end.Int64 != wantEnd {
 					return fmt.Errorf("%w: anchored period", ErrInvariant)
 				}
+			} else if *e.rule.Alignment == "exact_time" {
+				want, err := calendar.RecurrencePeriod(at, e.effective, *e.rule.AnchorLocal, e.rule.Interval, e.rule.TimeZone)
+				if err != nil || at != want.Start || end.Int64 != want.End {
+					return fmt.Errorf("%w: exact period", ErrInvariant)
+				}
 			} else {
 				week := 0
 				if e.rule.WeekStartsOn != nil {

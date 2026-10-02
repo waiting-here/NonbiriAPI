@@ -53,6 +53,30 @@ function jsonResponse(value: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('recurring limits operations', () => {
+  it('normalizes omitted legacy anchors to null while exact-time responses require an anchor', () => {
+    const legacy = normalizeRecurringLimitsResponse(response());
+    expect(legacy.rules[0]?.anchor_local).toBeNull();
+    expect(() =>
+      normalizeRecurringLimitsResponse(
+        response({
+          rules: [rule({ alignment: 'exact_time', interval: 'month', week_starts_on: null })],
+        }),
+      ),
+    ).toThrow(ApiError);
+    const exact = normalizeRecurringLimitsResponse(
+      response({
+        rules: [
+          rule({
+            alignment: 'exact_time',
+            interval: 'month',
+            week_starts_on: null,
+            anchor_local: '2026-10-27T03:00:01',
+          }),
+        ],
+      }),
+    );
+    expect(exact.rules[0]?.anchor_local).toBe('2026-10-27T03:00:01');
+  });
   it('uses the role-specific single-key paths and preserves exact wire strings', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(response()));
     vi.stubGlobal('fetch', fetchMock);
@@ -103,7 +127,7 @@ describe('recurring limits operations', () => {
     ).toThrow(ApiError);
   });
 
-  it('submits all eight rule fields with the captured revision and idempotency key', async () => {
+  it('submits the rule fields with the captured revision and idempotency key', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse({ donation_id: '7', key_id: '8', donation_revision: '10' }),
     );
@@ -113,6 +137,7 @@ describe('recurring limits operations', () => {
       mode: 'sliding',
       interval: 'month',
       alignment: null,
+      anchor_local: null,
       time_zone: 'America/Los_Angeles',
       week_starts_on: null,
       metric: 'credits',
@@ -212,6 +237,7 @@ describe('recurring limits operations', () => {
       mode: 'reset',
       interval: '1h',
       alignment: 'first_success',
+      anchor_local: null,
       time_zone: 'UTC',
       week_starts_on: null,
       metric: 'calls',

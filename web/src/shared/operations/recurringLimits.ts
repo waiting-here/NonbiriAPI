@@ -19,7 +19,7 @@ import {
 export type RecurringLimitRole = 'owner' | 'steward' | 'admin';
 export type RecurringLimitMode = 'reset' | 'sliding';
 export type RecurringLimitInterval = '1h' | '5h' | 'day' | 'week' | 'month';
-export type RecurringLimitAlignment = 'first_success' | 'calendar';
+export type RecurringLimitAlignment = 'first_success' | 'calendar' | 'exact_time';
 export type RecurringLimitMetric =
   'calls' | 'tokens' | 'input_tokens' | 'output_tokens' | 'credits';
 export type RecurringLimitState = 'limited' | 'waiting_first_success' | 'available';
@@ -33,6 +33,7 @@ export interface RecurringLimitRuleInput {
   mode: RecurringLimitMode;
   interval: RecurringLimitInterval;
   alignment: RecurringLimitAlignment | null;
+  anchor_local?: string | null;
   time_zone: string;
   week_starts_on: number | null;
   metric: RecurringLimitMetric;
@@ -107,7 +108,7 @@ function validateCombination(
       invalidResponse(`${label} sliding combination`);
     return;
   }
-  if (alignment === null || (isHourlyInterval(interval) && alignment === 'calendar')) {
+  if (alignment === null || (isHourlyInterval(interval) && alignment !== 'first_success')) {
     invalidResponse(`${label} reset combination`);
   }
   const weekCombination = alignment === 'calendar' && interval === 'week';
@@ -123,8 +124,19 @@ function validateCombination(
 function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleInput {
   const root = record(
     value,
-    ['id', 'mode', 'interval', 'alignment', 'time_zone', 'week_starts_on', 'metric', 'limit'],
+    [
+      'id',
+      'mode',
+      'interval',
+      'alignment',
+      'anchor_local',
+      'time_zone',
+      'week_starts_on',
+      'metric',
+      'limit',
+    ],
     label,
+    ['id', 'mode', 'interval', 'alignment', 'time_zone', 'week_starts_on', 'metric', 'limit'],
   );
   const id = root.id === null ? null : opaqueID(root.id, 'qlr_', `${label} id`);
   const mode = oneOf(root.mode, ['reset', 'sliding'] as const, `${label} mode`);
@@ -136,7 +148,17 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
   const alignment =
     root.alignment === null
       ? null
-      : oneOf(root.alignment, ['first_success', 'calendar'] as const, `${label} alignment`);
+      : oneOf(
+          root.alignment,
+          ['first_success', 'calendar', 'exact_time'] as const,
+          `${label} alignment`,
+        );
+  const anchorLocal =
+    root.anchor_local == null
+      ? null
+      : string(root.anchor_local, `${label} anchor`, { min: 19, max: 19 });
+  if (alignment === 'exact_time' ? anchorLocal === null : anchorLocal !== null)
+    invalidResponse(`${label} anchor`);
   const weekStartsOn = nullableInteger(root.week_starts_on, `${label} week start`, 1, 7);
   validateCombination(mode, interval, alignment, weekStartsOn, label);
   const metric = oneOf(
@@ -153,6 +175,7 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
     mode,
     interval,
     alignment,
+    anchor_local: anchorLocal,
     time_zone: wireTimeZone(root.time_zone, `${label} time zone`),
     week_starts_on: weekStartsOn,
     metric,
@@ -191,6 +214,7 @@ export function normalizeRuleView(value: unknown, label: string): RecurringLimit
       'mode',
       'interval',
       'alignment',
+      'anchor_local',
       'time_zone',
       'week_starts_on',
       'metric',
@@ -213,6 +237,7 @@ export function normalizeRuleView(value: unknown, label: string): RecurringLimit
       mode: root.mode,
       interval: root.interval,
       alignment: root.alignment,
+      anchor_local: root.anchor_local,
       time_zone: root.time_zone,
       week_starts_on: root.week_starts_on,
       metric: root.metric,

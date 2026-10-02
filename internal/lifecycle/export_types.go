@@ -286,6 +286,7 @@ type RecurringLimitExport struct {
 	Mode             string  `json:"mode"`
 	Interval         string  `json:"interval"`
 	Alignment        *string `json:"alignment"`
+	AnchorLocal      *string `json:"anchor_local"`
 	TimeZone         string  `json:"time_zone"`
 	WeekStartsOn     *int    `json:"week_starts_on"`
 	Metric           string  `json:"metric"`
