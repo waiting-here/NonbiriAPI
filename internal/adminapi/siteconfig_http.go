@@ -56,6 +56,10 @@ func RegisterSiteConfigRoutes(registrar SiteConfigRouteRegistrar, runtime *SiteC
 		method, pattern string
 		handler         SiteConfigAuthorizedAdminHandler
 	}{
+		{http.MethodGet, RouteAdminGatewayModels, runtime.getGatewayModels},
+		{http.MethodPost, RouteAdminGatewayModels, runtime.mutateGatewayModel},
+		{http.MethodPut, RouteAdminGatewayModel, runtime.mutateGatewayModel},
+		{http.MethodDelete, RouteAdminGatewayModel, runtime.mutateGatewayModel},
 		{http.MethodGet, RouteAdminBootstrapConfig, runtime.getBootstrap},
 		{http.MethodGet, RouteAdminSiteConfig, runtime.getSiteConfig},
 		{http.MethodGet, RouteAdminSiteConfigCatalog, runtime.getCatalog},

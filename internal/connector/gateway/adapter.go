@@ -78,7 +78,11 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		path = "/embedding-model"
 		body, err = compileEmbedding(embedding, attribution)
 	} else {
-		body, err = CompileTarget(chat, attribution, target, a.models, policy.NativeExtensions)
+		model := a.models.Lookup(target.BaseURL(), target.UpstreamModel())
+		if policy.GatewayModel != nil {
+			model = *policy.GatewayModel
+		}
+		body, err = CompileWithModel(chat, attribution, model, policy.NativeExtensions)
 	}
 	if err != nil {
 		var rejected *contract.RequestRejection

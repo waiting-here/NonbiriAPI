@@ -16,7 +16,7 @@ type GatewayAttributionProvider interface {
 }
 
 func gatewayCapabilities() contract.CapabilitySet {
-	return contract.CapabilitySet(contract.CapabilityText | contract.CapabilitySystem | contract.CapabilityImages | contract.CapabilityTools | contract.CapabilityToolChoice | contract.CapabilityStream | contract.CapabilitySampling | contract.CapabilityReasoningEffort | contract.CapabilityStorage | contract.CapabilityModelDiscovery | contract.CapabilityEmbeddings)
+	return contract.CapabilitySet(contract.CapabilityText | contract.CapabilitySystem | contract.CapabilityImages | contract.CapabilityTools | contract.CapabilityToolChoice | contract.CapabilityStream | contract.CapabilitySampling | contract.CapabilityReasoningEffort | contract.CapabilityStorage | contract.CapabilityPromptCache | contract.CapabilityModelDiscovery | contract.CapabilityEmbeddings)
 }
 func gatewayDescriptor() Descriptor {
 	return gatewayDescriptorWithModels(gatewaypolicy.Config{})
@@ -28,7 +28,11 @@ func gatewayDescriptorWithModels(models gatewaypolicy.Config) Descriptor {
 			if policy.ForceStoreFalse {
 				return &contract.RequestRejection{Stage: "model preflight", Field: "store", Reason: "OpenAI key storage policy is incompatible with this connector"}
 			}
-			body, err := gateway.CompileTarget(request, "", target, models, policy.NativeExtensions)
+			model := models.Lookup(target.BaseURL(), target.UpstreamModel())
+			if policy.GatewayModel != nil {
+				model = *policy.GatewayModel
+			}
+			body, err := gateway.CompileWithModel(request, "", model, policy.NativeExtensions)
 			clear(body)
 			return err
 		},

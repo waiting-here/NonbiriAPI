@@ -191,6 +191,7 @@ type Config struct {
 	Safety         *SafetyIdentifierFactory
 	Observer       *connector.SafeObserver
 	Adaptations    AdaptationReader
+	GatewayModels  GatewayModelReader
 	Now            func() time.Time
 	ForwardTimeout time.Duration
 	Settlement     time.Duration

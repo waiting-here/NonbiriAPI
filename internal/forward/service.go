@@ -65,6 +65,7 @@ type Service struct {
 	safety         *SafetyIdentifierFactory
 	observer       *connector.SafeObserver
 	adaptations    AdaptationReader
+	gatewayModels  GatewayModelReader
 	now            func() time.Time
 	timeout        time.Duration
 	settlement     time.Duration
@@ -154,8 +155,9 @@ func NewService(config Config) (*Service, error) {
 		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
 		charityGuard: config.CharityGuard,
 		connectors:   instances, safety: config.Safety, observer: config.Observer,
-		adaptations: config.Adaptations,
-		now:         config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
+		adaptations:   config.Adaptations,
+		gatewayModels: config.GatewayModels,
+		now:           config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
 		backoff: config.Backoff.normalized(),
 	}, nil
 }
@@ -588,6 +590,9 @@ func (service *Service) snapshot(
 		return executionPlan{}, ErrInternal
 	}
 
+	if err := service.freezeGatewayModels(ctx, &plan); err != nil {
+		return executionPlan{}, err
+	}
 	if err := service.freezeAdaptations(ctx, request, &plan, inbound); err != nil {
 		plan.clearPrepared()
 		return executionPlan{}, err
@@ -834,6 +839,7 @@ func (service *Service) runAttempts(
 			break
 		}
 		policy := dispatch.Policy()
+		policy.GatewayModel = candidate.Policy.GatewayModel
 		policy.SafetyIdentifier = safety
 		if prepared != nil {
 			policy.AdditionalHeaders = prepared.headers.Clone()

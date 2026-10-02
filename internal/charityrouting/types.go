@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -249,23 +250,25 @@ type StewardBindingCandidate struct {
 }
 
 type AdminBinding struct {
-	ID              string          `json:"id"`
-	Ord             int             `json:"ord"`
-	DonationKeyID   string          `json:"donation_key_id"`
-	DonationID      string          `json:"donation_id"`
-	Source          CandidateSource `json:"source"`
-	UpstreamModelID string          `json:"upstream_model_id"`
-	SourceTypes     []string        `json:"source_types"`
+	GatewayCapabilities *gatewaypolicy.Policy `json:"gateway_capabilities"`
+	ID                  string                `json:"id"`
+	Ord                 int                   `json:"ord"`
+	DonationKeyID       string                `json:"donation_key_id"`
+	DonationID          string                `json:"donation_id"`
+	Source              CandidateSource       `json:"source"`
+	UpstreamModelID     string                `json:"upstream_model_id"`
+	SourceTypes         []string              `json:"source_types"`
 }
 
 type StewardBinding struct {
-	ID              string                 `json:"id"`
-	Ord             int                    `json:"ord"`
-	DonationKeyID   string                 `json:"donation_key_id"`
-	DonationID      string                 `json:"donation_id"`
-	Source          StewardCandidateSource `json:"source"`
-	UpstreamModelID string                 `json:"upstream_model_id"`
-	SourceTypes     []string               `json:"source_types"`
+	GatewayCapabilities *gatewaypolicy.Policy  `json:"gateway_capabilities"`
+	ID                  string                 `json:"id"`
+	Ord                 int                    `json:"ord"`
+	DonationKeyID       string                 `json:"donation_key_id"`
+	DonationID          string                 `json:"donation_id"`
+	Source              StewardCandidateSource `json:"source"`
+	UpstreamModelID     string                 `json:"upstream_model_id"`
+	SourceTypes         []string               `json:"source_types"`
 }
 
 type AdminBindings struct {

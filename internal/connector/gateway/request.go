@@ -145,6 +145,12 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 				return nil, errRequest
 			}
 		case "max_tokens", "max_completion_tokens":
+		case "cache_control":
+			cache, err := cacheControl(raw, model, "cache_control")
+			if err != nil {
+				return nil, err
+			}
+			option(providerOptions, "anthropic")["cacheControl"] = cache
 		case "reasoning_effort":
 			effort, ok := text(raw)
 			if !ok || !gatewaypolicy.KnownEffort(effort) {
@@ -255,7 +261,7 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 			return nil, reject("native compile", "request", "unsupported top-level field")
 		}
 	}
-	prompt, err := compilePrompt(fields["messages"])
+	prompt, err := compilePrompt(fields["messages"], model)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +276,7 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 		for _, rawTool := range tools {
 			tool, err := parseObject(rawTool)
 			kind, ok := text(tool["type"])
-			if err != nil || !only(tool, "type", "function") || !ok || kind != "function" {
+			if err != nil || !only(tool, "type", "function", "cache_control") || !ok || kind != "function" {
 				return nil, errRequest
 			}
 			fn, err := parseObject(tool["function"])
@@ -283,6 +289,9 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 				return nil, errRequest
 			}
 			entry := map[string]any{"type": "function", "name": name, "inputSchema": fn["parameters"]}
+			if err := applyCache(entry, tool["cache_control"], model, "tools[].cache_control"); err != nil {
+				return nil, err
+			}
 			if raw, ok := fn["description"]; ok {
 				value, valid := text(raw)
 				if !valid {
@@ -329,7 +338,7 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 	return json.Marshal(output)
 }
 
-func compilePrompt(raw []byte) ([]any, error) {
+func compilePrompt(raw []byte, model *gatewaypolicy.Model) ([]any, error) {
 	var messages []json.RawMessage
 	if json.Unmarshal(raw, &messages) != nil || len(messages) == 0 || len(messages) > 4096 {
 		return nil, errRequest
@@ -344,11 +353,24 @@ func compilePrompt(raw []byte) ([]any, error) {
 			return nil, errRequest
 		}
 		if role == "system" {
-			value, ok := text(message["content"])
-			if !only(message, "role", "content") || !ok {
+			if !only(message, "role", "content") {
 				return nil, errRequest
 			}
-			result = append(result, map[string]any{"role": role, "content": value})
+			parts, err := compileContent(message["content"], role, model)
+			if err != nil {
+				return nil, err
+			}
+			if len(parts) == 0 {
+				return nil, errRequest
+			}
+			for _, value := range parts {
+				part := value.(map[string]any)
+				entry := map[string]any{"role": role, "content": part["text"]}
+				if options, ok := part["providerOptions"]; ok {
+					entry["providerOptions"] = options
+				}
+				result = append(result, entry)
+			}
 			continue
 		}
 		if role == "tool" {
@@ -364,7 +386,7 @@ func compilePrompt(raw []byte) ([]any, error) {
 		if role != "user" && role != "assistant" || !only(message, "role", "content", "tool_calls") {
 			return nil, errRequest
 		}
-		parts, err := compileContent(message["content"], role)
+		parts, err := compileContent(message["content"], role, model)
 		if err != nil {
 			return nil, err
 		}
@@ -398,12 +420,12 @@ func compilePrompt(raw []byte) ([]any, error) {
 	return result, nil
 }
 
-func compileContent(raw []byte, role string) ([]any, error) {
+func compileContent(raw []byte, role string, model *gatewaypolicy.Model) ([]any, error) {
 	if role == "assistant" && (len(raw) == 0 || isNull(raw)) {
 		return []any{}, nil
 	}
 	if value, ok := text(raw); ok {
-		return []any{map[string]string{"type": "text", "text": value}}, nil
+		return []any{map[string]any{"type": "text", "text": value}}, nil
 	}
 	var parts []json.RawMessage
 	if json.Unmarshal(raw, &parts) != nil || parts == nil || len(parts) > 4096 {
@@ -419,10 +441,14 @@ func compileContent(raw []byte, role string) ([]any, error) {
 		switch kind {
 		case "text":
 			value, ok := text(part["text"])
-			if !ok || !only(part, "type", "text") {
+			if !ok || !only(part, "type", "text", "cache_control") {
 				return nil, errRequest
 			}
-			out = append(out, map[string]string{"type": "text", "text": value})
+			entry := map[string]any{"type": "text", "text": value}
+			if err := applyCache(entry, part["cache_control"], model, "messages[].content[].cache_control"); err != nil {
+				return nil, err
+			}
+			out = append(out, entry)
 		case "image_url":
 			image, err := parseObject(part["image_url"])
 			value, ok := text(image["url"])
@@ -542,6 +568,10 @@ func outputBudget(fields object) (int64, error) {
 // with the same exact-target policy used before request acceptance.
 func CompileTarget(request *openai.ChatRequest, attribution string, target contract.Target, models gatewaypolicy.Config, native map[string]json.RawMessage) ([]byte, error) {
 	model := models.Lookup(target.BaseURL(), target.UpstreamModel())
+	return CompileWithModel(request, attribution, model, native)
+}
+
+func CompileWithModel(request *openai.ChatRequest, attribution string, model gatewaypolicy.Model, native map[string]json.RawMessage) ([]byte, error) {
 	body, err := compileChatWithModel(request, attribution, &model)
 	if err != nil {
 		return nil, err
@@ -555,12 +585,32 @@ func CompileTarget(request *openai.ChatRequest, attribution string, target contr
 	}
 	merged, err := requestadaptation.MergeNative(body, native, maxJSONBytes)
 	clear(body)
-	return merged, err
+	if err != nil {
+		return nil, err
+	}
+	var options struct {
+		ProviderOptions struct {
+			Anthropic struct {
+				CacheControl json.RawMessage `json:"cacheControl"`
+			} `json:"anthropic"`
+		} `json:"providerOptions"`
+	}
+	if err := json.Unmarshal(merged, &options); err != nil {
+		clear(merged)
+		return nil, errRequest
+	}
+	if raw := options.ProviderOptions.Anthropic.CacheControl; len(raw) != 0 {
+		if _, err := cacheControl(raw, &model, "providerOptions.anthropic.cacheControl"); err != nil {
+			clear(merged)
+			return nil, err
+		}
+	}
+	return merged, nil
 }
 
 func validateControlExtensions(request *openai.ChatRequest, native map[string]json.RawMessage) error {
 	var protected []string
-	for _, name := range []string{"max_tokens", "max_completion_tokens", "reasoning_effort", "store"} {
+	for _, name := range []string{"max_tokens", "max_completion_tokens", "reasoning_effort", "store", "cache_control"} {
 		raw, present := request.RawField(name)
 		active := present && !isNull(raw)
 		clear(raw)
@@ -574,6 +624,8 @@ func validateControlExtensions(request *openai.ChatRequest, native map[string]js
 			protected = append(protected, "/providerOptions/openai/reasoningEffort", "/providerOptions/openai/forceReasoning", "/providerOptions/openai/systemMessageMode", "/providerOptions/anthropic/effort", "/providerOptions/anthropic/thinking", "/providerOptions/bedrock/thinking", "/providerOptions/bedrock/effort")
 		case "store":
 			protected = append(protected, "/providerOptions/openai/store")
+		case "cache_control":
+			protected = append(protected, "/providerOptions/anthropic/cacheControl")
 		}
 	}
 	for path := range native {

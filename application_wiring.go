@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"log/slog"
 	"time"
 
@@ -267,6 +268,9 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create audit runtime: %w", err)
 	}
+	if err := gatewaypolicy.NewStore(store.DB()).Initialize(startupContext, cfg.GatewayModelsImport, cfg.GatewayModels); err != nil {
+		return nil, fmt.Errorf("initialize Gateway model capabilities: %w", err)
+	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
 		Committed: audits.configurationChanged,
@@ -341,7 +345,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create discovery worker: %w", err)
 	}
-	connectorRegistry := connector.NewDefaultRegistryWithGatewayModels(cfg.GatewayModels)
+	connectorRegistry := connector.NewDefaultRegistry()
 	announcementRepository, err := announcements.NewRepository(announcements.Config{
 		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
 	})

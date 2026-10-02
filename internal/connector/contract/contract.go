@@ -6,6 +6,7 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -54,6 +55,7 @@ const (
 	CapabilityEmbeddings
 	CapabilityReasoningEffort
 	CapabilityStorage
+	CapabilityPromptCache
 )
 
 const KnownCapabilities = CapabilityText |
@@ -69,7 +71,7 @@ const KnownCapabilities = CapabilityText |
 	CapabilityModelDiscovery |
 	CapabilityEmbeddings |
 	CapabilityReasoningEffort |
-	CapabilityStorage
+	CapabilityStorage | CapabilityPromptCache
 
 // CapabilitySet is an immutable bit set in a registry descriptor.
 type CapabilitySet uint64
@@ -153,6 +155,7 @@ func (Target) LogValue() slog.Value {
 // Additional fields belong here only when their policy implementation needs
 // them; the initial projection carries the existing origin-scoped identifier.
 type AttemptPolicy struct {
+	GatewayModel      *gatewaypolicy.Model
 	SafetyIdentifier  string
 	ForceStoreFalse   bool
 	FlattenToolCalls  bool

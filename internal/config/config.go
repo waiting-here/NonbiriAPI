@@ -75,10 +75,11 @@ type Config struct {
 	UserHost string
 	// AdminHost is the admin station hostname (env override or derived as
 	// "admin." + UserHost). It must differ from UserHost.
-	AdminHost         string
-	TrustedProxyCIDRs []netip.Prefix
-	SMTP              SMTPConfig
-	GatewayModels     gatewaypolicy.Config
+	AdminHost           string
+	TrustedProxyCIDRs   []netip.Prefix
+	SMTP                SMTPConfig
+	GatewayModels       gatewaypolicy.Config
+	GatewayModelsImport string
 }
 
 // SMTPConfig is reserved (alpha has no email alerts); it is parsed and
@@ -115,11 +116,7 @@ func Load() (*Config, error) {
 	if timeoutErr != nil {
 		errs = append(errs, timeoutErr.Error())
 	}
-	var gatewayErr error
-	c.GatewayModels, gatewayErr = gatewaypolicy.Parse(os.Getenv("NONBIRI_GATEWAY_MODEL_CAPABILITIES"))
-	if gatewayErr != nil {
-		errs = append(errs, "NONBIRI_GATEWAY_MODEL_CAPABILITIES: "+gatewayErr.Error())
-	}
+	c.GatewayModelsImport = os.Getenv("NONBIRI_GATEWAY_MODEL_CAPABILITIES")
 
 	// Master key: exactly one non-empty source is required. Parsing produces a
 	// short-lived byte slice that setMasterKey clears after constructing the

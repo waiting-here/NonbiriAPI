@@ -96,11 +96,15 @@ func ApplyBody(source []byte, d Document, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	callerCache := hasPromptCache(root)
 	for _, section := range []struct {
 		values      map[string]json.RawMessage
 		onlyMissing bool
 	}{{d.BodyDefaults.Values, true}, {d.BodyForced.Values, false}} {
 		for path, raw := range section.values {
+			if section.onlyMissing && (path == "/cache_control" || strings.HasPrefix(path, "/cache_control/")) && callerCache {
+				continue
+			}
 			parts, err := ParsePointer(path)
 			if err != nil {
 				return nil, err
@@ -241,4 +245,38 @@ func nativeRootAllowed(path string) bool {
 		return false
 	}
 	return !strings.HasPrefix(root, "_")
+}
+
+// Explicit block/tool markers also suppress an automatic cache default.
+func hasPromptCache(root map[string]any) bool {
+	if _, ok := root["cache_control"]; ok {
+		return true
+	}
+	if tools, ok := root["tools"].([]any); ok {
+		for _, value := range tools {
+			if tool, ok := value.(map[string]any); ok {
+				if _, ok := tool["cache_control"]; ok {
+					return true
+				}
+			}
+		}
+	}
+	if messages, ok := root["messages"].([]any); ok {
+		for _, value := range messages {
+			message, ok := value.(map[string]any)
+			if !ok {
+				continue
+			}
+			if content, ok := message["content"].([]any); ok {
+				for _, part := range content {
+					if block, ok := part.(map[string]any); ok {
+						if _, ok := block["cache_control"]; ok {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
 }
