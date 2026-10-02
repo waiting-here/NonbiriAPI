@@ -17,6 +17,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
@@ -42,6 +43,11 @@ type embeddingHTTPFixture struct {
 // This uses the production CallerKey verifier, routing repositories, claim
 // rail, ledger and LocalBackend. Only the upstream HTTP server is simulated.
 func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddingHTTPFixture {
+	t.Helper()
+	return newEmbeddingHTTPFixtureWithConfig(t, nil, custom...)
+}
+
+func newEmbeddingHTTPFixtureWithConfig(t *testing.T, configure func(*config.Config, string), custom ...http.HandlerFunc) *embeddingHTTPFixture {
 	t.Helper()
 	f := &embeddingHTTPFixture{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +122,11 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = f.store.Close() })
-	f.app, err = buildApplication(context.Background(), auditConfig(), f.store, vault)
+	cfg := auditConfig()
+	if configure != nil {
+		configure(cfg, upstream.URL+"/v1")
+	}
+	f.app, err = buildApplication(context.Background(), cfg, f.store, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +161,7 @@ func newEmbeddingHTTPFixture(t *testing.T, custom ...http.HandlerFunc) *embeddin
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistryWithGatewayModels(cfg.GatewayModels), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits)
 	if err != nil {
 		t.Fatal(err)
 	}

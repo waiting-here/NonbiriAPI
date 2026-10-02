@@ -125,3 +125,13 @@ func (r *validatedRequest) bodyLimit() int64 {
 	}
 	return r.embedding.RequestBodyLimit()
 }
+
+func (r *validatedRequest) checkTarget(registry *connector.Registry, target contract.Target, policy contract.AttemptPolicy) error {
+	if !r.valid() {
+		return openai.ErrInvalidRequest
+	}
+	if r.chat != nil && !r.chat.SupportsRolePassthrough(string(target.Type())) {
+		return &contract.RequestRejection{Stage: "role preflight", Field: "messages", Reason: "role cannot be passed through to this connector"}
+	}
+	return registry.CheckTargetRequest(target, r.operation, r.chat, r.embedding, policy)
+}

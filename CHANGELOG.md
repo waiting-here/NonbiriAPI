@@ -10,6 +10,8 @@ Changes in development.
 
 ### Added
 
+- Gateway V3 preserves `max_completion_tokens` and `max_tokens`, validates conflicting budgets, and supports administrator-configured model reasoning and storage policies. Unsupported controls reject before reservation, with field and stage diagnostics.
+
 - Per-model ordinary message-role policies for personal and charity models, with native compatibility, explicit passthrough/mapping/rejection and independent tool-message handling.
 - Personal CallerKey reads, partial batch key imports and model-connection appends with owned-secret deduplication, default manual or strict fresh-discovery mode, fixed 24-hour recovery and shared automation admission. L6 CallerKeys gain bounded charity resource/catalog/model/connection reads; L5 retains personal automation and existing scoped browser permissions.
 - Lake Notes as a separate server-backed limited activity: full fishing progression, one recoverable cast, per-period once-only general-credit entry, exact four-way coin/general/game-credit exchanges and administrator periods. The activity and all exchanges start disabled; profiles persist across devices and periods.

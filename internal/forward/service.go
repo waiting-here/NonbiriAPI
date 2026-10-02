@@ -560,7 +560,7 @@ func (service *Service) snapshot(
 		return executionPlan{}, err
 	}
 	capable := make([]RouteCandidate, 0, len(plan.candidates))
-	capabilityByType := make(map[connectorcontract.Type]bool, len(service.connectors))
+	var rejection error
 	for _, candidate := range plan.candidates {
 		if !service.validCandidate(candidate, admission.charity) {
 			plan.clearPrepared()
@@ -570,23 +570,29 @@ func (service *Service) snapshot(
 		if candidate.prepared != nil {
 			candidateRequest = candidate.prepared.request
 		}
-		supported, evaluated := capabilityByType[candidate.ConnectorType]
+		policy := candidate.Policy
 		if candidate.prepared != nil {
-			evaluated = false
+			policy.NativeExtensions = candidate.prepared.native
 		}
-		if !evaluated {
-			supported = candidateRequest.supports(service.registry, candidate.ConnectorType)
-			capabilityByType[candidate.ConnectorType] = supported
-		}
-		if supported {
+		target := connectorcontract.NewTarget(candidate.ConnectorType, candidate.CanonicalBaseURL, candidate.UpstreamModelID)
+		rejected := candidateRequest.checkTarget(service.registry, target, policy)
+		if rejected == nil {
 			candidate.Policy.FlattenToolCalls = request.chat != nil && admission.flatten
 			capable = append(capable, candidate)
-		} else if candidate.prepared != nil {
-			candidate.prepared.clear()
+		} else {
+			if rejection == nil {
+				rejection = rejected
+			}
+			if candidate.prepared != nil {
+				candidate.prepared.clear()
+			}
 		}
 	}
 	clear(plan.candidates)
 	if len(capable) == 0 {
+		if rejection != nil {
+			return executionPlan{}, rejection
+		}
 		return executionPlan{}, openai.ErrInvalidRequest
 	}
 	ordered, err := orderCandidates(plan.strategy, capable)
@@ -1321,6 +1327,12 @@ type accountBannedError struct{ until *int64 }
 func (*accountBannedError) Error() string { return "account is banned" }
 
 func failureForError(err error, charity bool) wireFailure {
+	var rejected *connectorcontract.RequestRejection
+	if errors.As(err, &rejected) {
+		failure := platformFailure(httperr.CodeInvalidRequest, rejected.Field+": "+rejected.Reason)
+		failure.diagnostic = rejected.Error()
+		return failure
+	}
 	var banned *accountBannedError
 	switch {
 	case err == nil:
@@ -1423,8 +1435,12 @@ func callerFromFailure(failure wireFailure) claim.CallerResult {
 
 func debugCallerResult(failure wireFailure, completedAt int64) debug.DebugCallerResult {
 	code := failure.code
+	message := failure.message
+	if failure.code == httperr.CodeInvalidRequest && failure.diagnostic != "" {
+		message = failure.diagnostic
+	}
 	return debug.DebugCallerResult{
 		HTTPStatus: failure.status, ErrorCode: &code, Source: debug.SourcePlatform,
-		Message: "[NonbiriAPI] " + strings.ReplaceAll(failure.message, "[NonbiriAPI] ", ""), CompletedAt: completedAt,
+		Message: "[NonbiriAPI] " + strings.ReplaceAll(message, "[NonbiriAPI] ", ""), CompletedAt: completedAt,
 	}
 }

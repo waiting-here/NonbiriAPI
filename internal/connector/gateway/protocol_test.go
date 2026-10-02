@@ -88,11 +88,15 @@ func TestChatCompilerFidelity(t *testing.T) {
 			t.Fatal(fragment)
 		}
 	}
-	for _, extra := range []string{`"store":false`, `"max_completion_tokens":128`, `"parallel_tool_calls":false`, `"providerOptions":{"gateway":{"user":"injected"}}`, `"user":"injected"`, `"unknown":null`, `"thinking":{"type":"enabled","budget_tokens":4096}`, `"reasoning_effort":"low"`, `"reasoning":{"effort":"medium"}`, `"n":2`, `"logit_bias":{"1":1}`, `"logprobs":true`, `"response_format":{"type":"json_object"}`, `"stop":[null]`, `"stop":[""]`, `"seed":9007199254740992`, `"tools":[{"type":"web_search"}]`, `"tool_choice":"required"`} {
+	for _, extra := range []string{`"store":false`, `"parallel_tool_calls":false`, `"providerOptions":{"gateway":{"user":"injected"}}`, `"user":"injected"`, `"unknown":null`, `"thinking":{"type":"enabled","budget_tokens":4096}`, `"reasoning_effort":"low"`, `"reasoning":{"effort":"medium"}`, `"n":2`, `"logit_bias":{"1":1}`, `"logprobs":true`, `"response_format":{"type":"json_object"}`, `"stop":[null]`, `"stop":[""]`, `"seed":9007199254740992`, `"tools":[{"type":"web_search"}]`, `"tool_choice":"required"`} {
 		raw := strings.TrimSuffix(prompt, "}") + "," + extra + "}"
 		r, err := openai.DecodeChatRequest(strings.NewReader(raw), 4<<20)
-		if err == nil && SupportsRequest(r) {
-			t.Fatalf("silently accepted %s", extra)
+		if err == nil {
+			body, compileErr := compileChat(r, "")
+			clear(body)
+			if compileErr == nil {
+				t.Fatalf("silently accepted %s", extra)
+			}
 		}
 	}
 }

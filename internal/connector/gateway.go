@@ -5,6 +5,8 @@ import (
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/gateway"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 )
 
 // GatewayAttributionProvider resolves the administrator's current setting for
@@ -14,12 +16,24 @@ type GatewayAttributionProvider interface {
 }
 
 func gatewayCapabilities() contract.CapabilitySet {
-	return contract.CapabilitySet(contract.CapabilityText | contract.CapabilitySystem | contract.CapabilityImages | contract.CapabilityTools | contract.CapabilityToolChoice | contract.CapabilityStream | contract.CapabilitySampling | contract.CapabilityModelDiscovery | contract.CapabilityEmbeddings)
+	return contract.CapabilitySet(contract.CapabilityText | contract.CapabilitySystem | contract.CapabilityImages | contract.CapabilityTools | contract.CapabilityToolChoice | contract.CapabilityStream | contract.CapabilitySampling | contract.CapabilityReasoningEffort | contract.CapabilityStorage | contract.CapabilityModelDiscovery | contract.CapabilityEmbeddings)
 }
 func gatewayDescriptor() Descriptor {
+	return gatewayDescriptorWithModels(gatewaypolicy.Config{})
+}
+
+func gatewayDescriptorWithModels(models gatewaypolicy.Config) Descriptor {
 	return Descriptor{Type: contract.TypeAISDKGatewayV3, Capabilities: gatewayCapabilities(), Discoverer: gateway.ModelDiscoverer{}, Supports: gateway.SupportsRequest, SupportsEmbedding: gateway.SupportsEmbedding,
+		CheckTarget: func(target contract.Target, request *openai.ChatRequest, policy contract.AttemptPolicy) error {
+			if policy.ForceStoreFalse {
+				return &contract.RequestRejection{Stage: "model preflight", Field: "store", Reason: "OpenAI key storage policy is incompatible with this connector"}
+			}
+			body, err := gateway.CompileTarget(request, "", target, models, policy.NativeExtensions)
+			clear(body)
+			return err
+		},
 		New: func(dependencies Dependencies) Connector {
-			adapter, err := gateway.NewAdapter(dependencies.Backend)
+			adapter, err := gateway.NewAdapterWithModels(dependencies.Backend, models)
 			if err != nil {
 				return nil
 			}

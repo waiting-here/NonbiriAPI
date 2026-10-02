@@ -15,6 +15,7 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -32,14 +33,19 @@ type responseGuard interface {
 
 type Adapter struct {
 	backend backend.Backend
+	models  gatewaypolicy.Config
 	now     func() time.Time
 }
 
 func NewAdapter(outbound backend.Backend) (*Adapter, error) {
+	return NewAdapterWithModels(outbound, gatewaypolicy.Config{})
+}
+
+func NewAdapterWithModels(outbound backend.Backend, models gatewaypolicy.Config) (*Adapter, error) {
 	if backend.IsNil(outbound) || outbound.MaxResponseBytes() <= 0 {
 		return nil, errors.New("gateway: outbound backend required")
 	}
-	return &Adapter{backend: outbound, now: time.Now}, nil
+	return &Adapter{backend: outbound, models: models, now: time.Now}, nil
 }
 
 // Attempt executes one upstream attempt. Routing alone owns retries and billing.
@@ -72,13 +78,17 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, w http.ResponseWriter, 
 		path = "/embedding-model"
 		body, err = compileEmbedding(embedding, attribution)
 	} else {
-		body, err = compileChat(chat, attribution)
+		body, err = CompileTarget(chat, attribution, target, a.models, policy.NativeExtensions)
 	}
 	if err != nil {
+		var rejected *contract.RequestRejection
+		if errors.As(err, &rejected) {
+			result.Diagnostic = rejected.Error()
+		}
 		return result
 	}
 	defer func() { clear(body) }()
-	if len(policy.NativeExtensions) != 0 {
+	if embedding != nil && len(policy.NativeExtensions) != 0 {
 		merged, mergeErr := requestadaptation.MergeNative(body, policy.NativeExtensions, maxJSONBytes)
 		if mergeErr != nil {
 			return result

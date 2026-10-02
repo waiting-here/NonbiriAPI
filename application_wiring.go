@@ -341,7 +341,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create discovery worker: %w", err)
 	}
-	connectorRegistry := connector.NewDefaultRegistry()
+	connectorRegistry := connector.NewDefaultRegistryWithGatewayModels(cfg.GatewayModels)
 	announcementRepository, err := announcements.NewRepository(announcements.Config{
 		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
 	})

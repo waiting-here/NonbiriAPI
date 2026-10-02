@@ -280,6 +280,10 @@ func projectCapabilities(fields []jsonField, stream bool) CapabilityRequirements
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityToolChoice)
 		case "parallel_tool_calls":
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityParallelTools)
+		case "reasoning_effort":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityReasoningEffort)
+		case "store":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityStorage)
 		default:
 			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
 		}

@@ -237,7 +237,7 @@ func nativeRootAllowed(path string) bool {
 		return false
 	}
 	switch root {
-	case "max_tokens", "max_completion_tokens", "temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty", "seed", "stop", "n", "logit_bias", "logprobs", "response_format":
+	case "max_tokens", "max_completion_tokens", "reasoning_effort", "temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty", "seed", "stop", "n", "logit_bias", "logprobs", "response_format":
 		return false
 	}
 	return !strings.HasPrefix(root, "_")

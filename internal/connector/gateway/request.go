@@ -13,7 +13,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -75,12 +78,17 @@ func number(raw []byte, minimum, maximum float64, integer bool) bool {
 func isNull(raw []byte) bool { return bytes.Equal(bytes.TrimSpace(raw), []byte("null")) }
 
 func SupportsRequest(request *openai.ChatRequest) bool {
-	body, err := compileChat(request, "")
+	body, err := compileChatWithModel(request, "", nil)
 	clear(body)
 	return err == nil
 }
 
 func compileChat(request *openai.ChatRequest, attribution string) ([]byte, error) {
+	model := gatewaypolicy.Model{}
+	return compileChatWithModel(request, attribution, &model)
+}
+
+func compileChatWithModel(request *openai.ChatRequest, attribution string, model *gatewaypolicy.Model) ([]byte, error) {
 	if request == nil {
 		return nil, errRequest
 	}
@@ -94,6 +102,30 @@ func compileChat(request *openai.ChatRequest, attribution string) ([]byte, error
 			clear(raw)
 		}
 	}()
+	budget, err := outputBudget(fields)
+	if err != nil {
+		return nil, err
+	}
+	if budget > 0 {
+		if model != nil && model.MaxOutputTokens > 0 && budget > model.MaxOutputTokens {
+			return nil, reject("model preflight", "max_completion_tokens/max_tokens", "output budget exceeds the configured model limit")
+		}
+		output["maxOutputTokens"] = budget
+	}
+	providerOptions := map[string]any{}
+	if model != nil && model.Adapter == gatewaypolicy.AnthropicAlwaysAdaptive {
+		option(providerOptions, "anthropic")["thinking"] = map[string]string{"type": "adaptive"}
+	}
+	forceReasoning := model != nil && (model.Adapter == gatewaypolicy.OpenAIChat || model.Adapter == gatewaypolicy.OpenAIResponses) && model.HasReasoning()
+	if forceReasoning {
+		option(providerOptions, "openai")["forceReasoning"] = true
+		option(providerOptions, "openai")["systemMessageMode"] = "system"
+	}
+	if model != nil {
+		if err := validateProviderControls(fields, *model, forceReasoning); err != nil {
+			return nil, err
+		}
+	}
 	for name, raw := range fields {
 		switch name {
 		case "model", "messages", "tools", "tool_choice", "safety_identifier":
@@ -112,15 +144,51 @@ func compileChat(request *openai.ChatRequest, attribution string) ([]byte, error
 			if value, ok := options["include_usage"]; ok && !bytes.Equal(value, []byte("true")) && !bytes.Equal(value, []byte("false")) {
 				return nil, errRequest
 			}
-		case "max_tokens", "temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty", "seed":
+		case "max_tokens", "max_completion_tokens":
+		case "reasoning_effort":
+			effort, ok := text(raw)
+			if !ok || !gatewaypolicy.KnownEffort(effort) {
+				return nil, reject("native compile", "reasoning_effort", "unsupported effort value")
+			}
+			if model == nil {
+				continue
+			}
+			if !model.AllowsEffort(effort) {
+				return nil, reject("model preflight", "reasoning_effort", "effort is not enabled for this model")
+			}
+			switch model.Adapter {
+			case gatewaypolicy.OpenAIChat, gatewaypolicy.OpenAIResponses:
+				option(providerOptions, "openai")["reasoningEffort"] = effort
+			case gatewaypolicy.AnthropicEffort, gatewaypolicy.AnthropicAdaptive, gatewaypolicy.AnthropicAlwaysAdaptive:
+				option(providerOptions, "anthropic")["effort"] = effort
+				if model.Adapter == gatewaypolicy.AnthropicAdaptive {
+					option(providerOptions, "anthropic")["thinking"] = map[string]string{"type": "adaptive"}
+				}
+			}
+		case "store":
+			if !bytes.Equal(raw, []byte("true")) && !bytes.Equal(raw, []byte("false")) {
+				return nil, reject("native compile", "store", "expected a boolean")
+			}
+			if model == nil {
+				continue
+			}
+			switch model.Storage {
+			case gatewaypolicy.OpenAIStore:
+				option(providerOptions, "openai")["store"] = json.RawMessage(raw)
+			case gatewaypolicy.OmitFalse:
+				if !bytes.Equal(raw, []byte("false")) {
+					return nil, reject("model preflight", "store", "only false is allowed by the configured omission policy")
+				}
+			default:
+				return nil, reject("model preflight", "store", "storage control is not verified for this model")
+			}
+		case "temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty", "seed":
 			if isNull(raw) {
 				continue
 			}
-			wire := map[string]string{"max_tokens": "maxOutputTokens", "temperature": "temperature", "top_p": "topP", "top_k": "topK", "presence_penalty": "presencePenalty", "frequency_penalty": "frequencyPenalty", "seed": "seed"}[name]
+			wire := map[string]string{"temperature": "temperature", "top_p": "topP", "top_k": "topK", "presence_penalty": "presencePenalty", "frequency_penalty": "frequencyPenalty", "seed": "seed"}[name]
 			min, max, integer := 0.0, 2.0, false
 			switch name {
-			case "max_tokens":
-				min, max, integer = 1, 2147483647, true
 			case "top_k":
 				max, integer = 2147483647, true
 			case "top_p":
@@ -184,7 +252,7 @@ func compileChat(request *openai.ChatRequest, attribution string) ([]byte, error
 				return nil, errRequest
 			}
 		default:
-			return nil, errRequest
+			return nil, reject("native compile", "request", "unsupported top-level field")
 		}
 	}
 	prompt, err := compilePrompt(fields["messages"])
@@ -253,7 +321,10 @@ func compileChat(request *openai.ChatRequest, attribution string) ([]byte, error
 		}
 	}
 	if attribution != "" {
-		output["providerOptions"] = map[string]any{"gateway": map[string]string{"user": attribution}}
+		option(providerOptions, "gateway")["user"] = attribution
+	}
+	if len(providerOptions) != 0 {
+		output["providerOptions"] = providerOptions
 	}
 	return json.Marshal(output)
 }
@@ -433,4 +504,129 @@ func compileEmbedding(request *openai.EmbeddingRequest, attribution string) ([]b
 		out["providerOptions"] = map[string]any{"gateway": map[string]string{"user": attribution}}
 	}
 	return json.Marshal(out)
+}
+
+func reject(stage, field, reason string) error {
+	return &contract.RequestRejection{Stage: stage, Field: field, Reason: reason}
+}
+
+func option(options map[string]any, provider string) map[string]any {
+	if value, ok := options[provider].(map[string]any); ok {
+		return value
+	}
+	value := map[string]any{}
+	options[provider] = value
+	return value
+}
+
+func outputBudget(fields object) (int64, error) {
+	var result int64
+	for _, name := range []string{"max_tokens", "max_completion_tokens"} {
+		raw, present := fields[name]
+		if !present || isNull(raw) {
+			continue
+		}
+		var value int64
+		if json.Unmarshal(raw, &value) != nil || value < 1 || value > 2147483647 {
+			return 0, reject("native compile", name, "expected an integer from 1 to 2147483647")
+		}
+		if result != 0 && result != value {
+			return 0, reject("native compile", "max_completion_tokens/max_tokens", "conflicting output budgets")
+		}
+		result = value
+	}
+	return result, nil
+}
+
+// CompileTarget validates the effective request and declared native extensions
+// with the same exact-target policy used before request acceptance.
+func CompileTarget(request *openai.ChatRequest, attribution string, target contract.Target, models gatewaypolicy.Config, native map[string]json.RawMessage) ([]byte, error) {
+	model := models.Lookup(target.BaseURL(), target.UpstreamModel())
+	body, err := compileChatWithModel(request, attribution, &model)
+	if err != nil {
+		return nil, err
+	}
+	if len(native) == 0 {
+		return body, nil
+	}
+	if err := validateControlExtensions(request, native); err != nil {
+		clear(body)
+		return nil, err
+	}
+	merged, err := requestadaptation.MergeNative(body, native, maxJSONBytes)
+	clear(body)
+	return merged, err
+}
+
+func validateControlExtensions(request *openai.ChatRequest, native map[string]json.RawMessage) error {
+	var protected []string
+	for _, name := range []string{"max_tokens", "max_completion_tokens", "reasoning_effort", "store"} {
+		raw, present := request.RawField(name)
+		active := present && !isNull(raw)
+		clear(raw)
+		if !active {
+			continue
+		}
+		switch name {
+		case "max_tokens", "max_completion_tokens":
+			protected = append(protected, "/maxOutputTokens", "/providerOptions/openai/maxCompletionTokens", "/providerOptions/openai/forceReasoning", "/providerOptions/openai/systemMessageMode", "/providerOptions/anthropic/thinking", "/providerOptions/bedrock/thinking")
+		case "reasoning_effort":
+			protected = append(protected, "/providerOptions/openai/reasoningEffort", "/providerOptions/openai/forceReasoning", "/providerOptions/openai/systemMessageMode", "/providerOptions/anthropic/effort", "/providerOptions/anthropic/thinking", "/providerOptions/bedrock/thinking", "/providerOptions/bedrock/effort")
+		case "store":
+			protected = append(protected, "/providerOptions/openai/store")
+		}
+	}
+	for path := range native {
+		for _, control := range protected {
+			if path == control || strings.HasPrefix(path, control+"/") || strings.HasPrefix(control, path+"/") {
+				return reject("native adaptation", "request controls", "native extension conflicts with translated controls")
+			}
+		}
+	}
+	return nil
+}
+
+func validateProviderControls(fields object, model gatewaypolicy.Model, forceReasoning bool) error {
+	var omitted []string
+	if model.Adapter == gatewaypolicy.AnthropicAlwaysAdaptive {
+		if raw, present := fields["tool_choice"]; present {
+			choice, _ := text(raw)
+			if choice == "required" || bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) {
+				return reject("model preflight", "tool_choice", "configured provider cannot require a tool call")
+			}
+		}
+	}
+	switch model.Adapter {
+	case gatewaypolicy.OpenAIChat:
+		omitted = []string{"top_k"}
+		if forceReasoning {
+			omitted = append(omitted, "temperature", "top_p", "presence_penalty", "frequency_penalty")
+		}
+	case gatewaypolicy.OpenAIResponses:
+		omitted = []string{"top_k", "seed", "stop", "presence_penalty", "frequency_penalty"}
+		if forceReasoning {
+			omitted = append(omitted, "temperature", "top_p")
+		}
+	case gatewaypolicy.AnthropicEffort, gatewaypolicy.AnthropicAdaptive, gatewaypolicy.AnthropicAlwaysAdaptive:
+		omitted = []string{"presence_penalty", "frequency_penalty", "seed"}
+		_, hasEffort := fields["reasoning_effort"]
+		if model.Adapter == gatewaypolicy.AnthropicAlwaysAdaptive || model.Adapter == gatewaypolicy.AnthropicAdaptive && hasEffort {
+			omitted = append(omitted, "temperature", "top_k", "top_p")
+		} else {
+			if raw, present := fields["temperature"]; present && !isNull(raw) {
+				if !number(raw, 0, 1, false) {
+					return reject("model preflight", "temperature", "configured provider requires a value from 0 to 1")
+				}
+				if raw, present := fields["top_p"]; present && !isNull(raw) {
+					return reject("model preflight", "top_p", "configured provider omits top_p when temperature is present")
+				}
+			}
+		}
+	}
+	for _, name := range omitted {
+		if raw, present := fields[name]; present && !isNull(raw) {
+			return reject("model preflight", name, "configured provider would omit this field")
+		}
+	}
+	return nil
 }
