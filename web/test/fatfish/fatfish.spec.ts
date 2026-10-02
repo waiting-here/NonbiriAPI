@@ -183,6 +183,10 @@ async function submitCurrentResult(player: Locator, automatic = false) {
       // below waits for asynchronous verification after that transition.
       if (await finish.isEnabled()) throw error;
     }
+    const confirmation = player.page().getByRole('alertdialog', { name: 'Finish', exact: true });
+    if (await confirmation.isVisible()) {
+      await confirmation.getByRole('button', { name: 'Finish', exact: true }).click();
+    }
   }
   if (automatic) await expect(player.getByText(/^Verified · /)).toBeVisible();
   else await submit.click();
@@ -758,6 +762,10 @@ test('a local season publishes explicitly and the original user tab resumes, set
       response.url().endsWith('/periods/' + period.id + '/publish'),
     );
     await adminPage.getByRole('button', { name: 'Publish period', exact: true }).click();
+    await adminPage
+      .getByRole('alertdialog', { name: 'Rice garden season', exact: true })
+      .getByRole('button', { name: 'Publish period', exact: true })
+      .click();
     expect((await publishing).status()).toBe(200);
     await expect(
       adminPage.getByRole('button', { name: 'Close period', exact: true }),
@@ -898,6 +906,10 @@ test('a local season publishes explicitly and the original user tab resumes, set
     expect(response.status()).toBe(200);
     expect(((await response.json()) as { eligible: boolean }).eligible).toBe(true);
     await adminPage.getByRole('button', { name: 'Close period', exact: true }).click();
+    await adminPage
+      .getByRole('alertdialog', { name: 'Rice garden season', exact: true })
+      .getByRole('button', { name: 'Close period', exact: true })
+      .click();
     await expect(
       adminPage.getByRole('button', { name: 'Reopen period', exact: true }),
     ).toBeVisible();

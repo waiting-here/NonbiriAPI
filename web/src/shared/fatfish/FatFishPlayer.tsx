@@ -7,6 +7,7 @@ const toolLabels = {
 } as const;
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useActivityText } from '@shared/limitedactivities/copy';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { normalizeLevel } from './engine/canonical';
 import { containsPolygon, pointInRing, translatePolygon } from './engine/geometry';
 import {
@@ -192,6 +193,7 @@ export function FatFishPlayer({
   const [draggingTool, setDraggingTool] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'finish' | 'abandon' | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [zoomed, setZoomed] = useState(false);
@@ -299,6 +301,22 @@ export function FatFishPlayer({
     try {
       const view = await controller.submit();
       if (view.state !== 'verifying') onTerminal?.(view);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const completeAction = async (action: 'finish' | 'abandon') => {
+    setConfirmAction(null);
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (action === 'finish') await controller.finish();
+      else {
+        const view = await controller.abandon();
+        onTerminal?.(view);
+      }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -645,20 +663,10 @@ export function FatFishPlayer({
         <button
           type="button"
           className="fatfish-player__finish"
-          disabled={!snapshot.canPlay || !snapshot.state || snapshot.state.terminal}
+          disabled={busy || !snapshot.canPlay || !snapshot.state || snapshot.state.terminal}
           onClick={() => {
-            const remaining =
-              snapshot.state?.fish.filter((fish) => fish.status === 'walking').length ?? 0;
-            if (
-              window.confirm(
-                text('common.finishWithTheCurrentRescuedCountRemaining', { remaining: remaining }),
-              )
-            )
-              void controller
-                .finish()
-                .catch((error: unknown) =>
-                  setActionError(error instanceof Error ? error.message : String(error)),
-                );
+            if (mode === 'playtest') void completeAction('finish');
+            else setConfirmAction('finish');
           }}
         >
           {text('common.finish')}
@@ -677,15 +685,7 @@ export function FatFishPlayer({
           <button
             type="button"
             disabled={busy || !snapshot.challenge}
-            onClick={() => {
-              if (window.confirm(text('common.abandonThisChallengeAStartedTicketIs')))
-                void controller
-                  .abandon()
-                  .then(onTerminal)
-                  .catch((error: unknown) =>
-                    setActionError(error instanceof Error ? error.message : String(error)),
-                  );
-            }}
+            onClick={() => setConfirmAction('abandon')}
           >
             {text('common.abandon')}
           </button>
@@ -706,6 +706,25 @@ export function FatFishPlayer({
         </p>
       ) : null}
       {actionError || snapshot.error ? <p role="alert">{actionError ?? snapshot.error}</p> : null}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={text(confirmAction === 'abandon' ? 'common.abandon' : 'common.finish')}
+        description={
+          confirmAction === 'abandon'
+            ? text('common.abandonThisChallengeAStartedTicketIs')
+            : text('common.finishWithTheCurrentRescuedCountRemaining', {
+                remaining:
+                  snapshot.state?.fish.filter((fish) => fish.status === 'walking').length ?? 0,
+              })
+        }
+        confirmLabel={text(confirmAction === 'abandon' ? 'common.abandon' : 'common.finish')}
+        danger={confirmAction === 'abandon'}
+        busy={busy}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          if (confirmAction) void completeAction(confirmAction);
+        }}
+      />
     </section>
   );
 }
