@@ -326,7 +326,7 @@ func TestCharityUsesCharityPurposeAndPreservesUpstreamStatusAfterDispatch(t *tes
 	}
 }
 
-func TestCommittedFailedStreamGetsNoSecondEnvelopeAndUsageUnknown(t *testing.T) {
+func TestCommittedFailedStreamGetsOneTerminalErrorAndUsageUnknown(t *testing.T) {
 	fixture := newServiceFixture(t, nil)
 	fixture.addDispatch(fixture.personal.snapshot.Candidates[0])
 	fixture.openAI.results = []connectorcontract.AttemptResult{{
@@ -340,7 +340,7 @@ func TestCommittedFailedStreamGetsNoSecondEnvelopeAndUsageUnknown(t *testing.T) 
 
 	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
 
-	if recorder.Body.String() != partial || strings.Contains(recorder.Body.String(), `"error"`) || strings.Contains(recorder.Body.String(), "[DONE]") {
+	if !strings.HasPrefix(recorder.Body.String(), partial) || strings.Count(recorder.Body.String(), `"error":`) != 1 || strings.Contains(recorder.Body.String(), "[DONE]") {
 		t.Fatalf("committed stream body=%q", recorder.Body.String())
 	}
 	outcome := fixture.claims.outcomes[0]
