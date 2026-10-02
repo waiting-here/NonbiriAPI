@@ -146,6 +146,7 @@ function ChannelForm({
   return (
     <form
       className="ops-stack"
+      onChange={() => setInvalid(false)}
       onSubmit={(event) => {
         event.preventDefault();
         const valid = validDraft(draft);
@@ -200,11 +201,14 @@ function ChannelForm({
           <span>{t('admin.mainstreamChannels.form.baseUrl')}</span>
           <input
             value={draft.base_url}
+            type="url"
+            placeholder="https://api.example.com/v1"
             maxLength={4_096}
             autoComplete="off"
             disabled={!canEdit || busy}
             onChange={(event) => setDraft({ ...draft, base_url: event.target.value })}
           />
+          <small>{t('admin.mainstreamChannels.form.baseUrlHelp')}</small>
         </label>
       </div>
       <label className="checkbox-label">

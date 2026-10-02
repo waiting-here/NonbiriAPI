@@ -223,10 +223,11 @@ function UserAuthority({
             <h2>
               {t('management.users.manageLimitsTitle')} / {t('management.users.levelSectionTitle')}
             </h2>
-            <p>
-              {t('management.users.limitHint')}{' '}
-              {t('management.users.revisionGuard', { revision: user.revision })}
-            </p>
+            <p>{t('management.users.limitHint')}</p>
+            <details>
+              <summary>{t('common.operations.management.details')}</summary>
+              <p>{t('management.users.revisionGuard', { revision: user.revision })}</p>
+            </details>
             <div className="ops-field-grid">
               <label>
                 <span>{t('management.users.endpointLimit')}</span>

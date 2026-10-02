@@ -65,6 +65,7 @@ describe('key failure policy', () => {
       view.rerender(<FailurePolicyControl {...props} threshold="0" revision="8" />);
       await view.user.clear(field);
       await view.user.type(field, '10');
+      expect(screen.queryByText('Failure policy saved and recalculated.')).not.toBeInTheDocument();
       expect(screen.getByText(/Never disable automatically for errors/)).toBeInTheDocument();
     });
   }

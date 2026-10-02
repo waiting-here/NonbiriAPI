@@ -121,11 +121,6 @@ describe('administrator legal hold panel', () => {
         screen.getByLabelText('Administrator password (fresh elevation)'),
         'synthetic-test-password',
       );
-      await rendered.user.click(
-        screen.getByRole('checkbox', {
-          name: 'Release is final; this object cannot receive another hold.',
-        }),
-      );
       await rendered.user.click(screen.getByRole('button', { name: 'Release hold' }));
       const confirmButtons = screen.getAllByRole('button', { name: 'Release hold' });
       await rendered.user.click(confirmButtons.at(-1)!);
@@ -749,11 +744,6 @@ describe('administrator legal hold panel', () => {
         screen.getByLabelText('Administrator password (fresh elevation)'),
         'correct horse battery staple',
       );
-      await rendered.user.click(
-        screen.getByRole('checkbox', {
-          name: 'Release is final; this object cannot receive another hold.',
-        }),
-      );
       await rendered.user.click(screen.getByRole('button', { name: 'Release hold' }));
       const confirmButtons = screen.getAllByRole('button', { name: 'Release hold' });
       await rendered.user.click(confirmButtons[confirmButtons.length - 1]!);
@@ -843,11 +833,6 @@ describe('administrator legal hold panel', () => {
     await rendered.user.type(
       screen.getByLabelText('Administrator password (fresh elevation)'),
       'correct horse battery staple',
-    );
-    await rendered.user.click(
-      screen.getByRole('checkbox', {
-        name: 'Release is final; this object cannot receive another hold.',
-      }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Release hold' }));
     const confirmButtons = screen.getAllByRole('button', { name: 'Release hold' });

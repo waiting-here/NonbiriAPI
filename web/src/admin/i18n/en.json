@@ -69,7 +69,7 @@
       "emptyBody": "The administrator API returned no endpoint overview records.",
       "searchPlaceholder": "Filter by base URL substring",
       "searchAria": "Filter endpoints by base URL",
-      "queryTooLong": "Query must be 512 UTF-8 bytes or fewer (currently {{bytes}}).",
+      "queryTooLong": "The search is too long. Shorten it and try again.",
       "noProbeNotice": "This surface never sends ping, HEAD, empty, paid, or background health-check requests."
     },
     "alerts": {
@@ -124,7 +124,7 @@
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
       "notConfigured": "not configured (null)",
-      "catalogDefault": "Raw default",
+      "catalogDefault": "Default",
       "catalogEffective": "Effective fallback",
       "catalogRange": "Hard range",
       "catalogStep": "step",
@@ -178,11 +178,11 @@
         "boolean": "uses true or false",
         "canonical": "Enter a canonical {{type}} value that {{detail}}.",
         "integerSyntax": "contains no whitespace, fractions, exponents, or leading zeroes",
-        "maxUtf8Bytes": "is no larger than {{maximum}} UTF-8 bytes",
+        "maxUtf8Bytes": "is too long; shorten it",
         "noControlCharacters": "contains no control characters",
         "notNull": "is not null",
         "rangeStep": "is within {{minimum}}–{{maximum}} at step {{step}}",
-        "unicodeLength": "contains {{minimum}}–{{maximum}} Unicode characters"
+        "unicodeLength": "contains {{minimum}}–{{maximum}} characters"
       },
       "fieldDetails": "Defaults and limits",
       "pendingChanges": "{{count}} unsaved changes",
@@ -196,14 +196,17 @@
         "checkinBounds": "The minimum check-in reward must not exceed the maximum.",
         "levels": "Enabled level thresholds must increase from level 2 to level 4.",
         "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
-      }
+      },
+      "customizedCount": "{{count}} customized",
+      "groupDefaults": "Using defaults",
+      "searchHelp": "Find a setting by name or purpose"
     },
     "games": {
       "nav": "Games",
       "title": "Game configuration",
       "masterEnabled": "Games master switch",
       "fishingEnabled": "Fishing enabled",
-      "fishingRake": "{{pump}} deduction from each catch (basis points)",
+      "fishingRake": "{{pump}} fee (%)",
       "worm": "Worm bait",
       "lure": "Lure bait",
       "premium": "Premium bait",
@@ -246,7 +249,7 @@
       "restoreAuthorityValues": "Restore authority values",
       "rps": {
         "base": "{{mode}} base (credits)",
-        "cut": "{{mode}} {{pump}} cut (basis points)",
+        "cut": "{{mode}} · {{pump}} fee (%)",
         "deadline": "{{mode}} {{deadline}}",
         "deadlines": {
           "dealer": "Dealer deadline",
@@ -332,15 +335,15 @@
         "entry": "Entry (credits)",
         "literature": "Literature",
         "lockedHint": "The period is open or settling; frozen/current configuration cannot be edited.",
-        "nextPoolBp": "Next-pool share (basis points)",
+        "nextPoolBp": "Next pool fee (%)",
         "scheduleHint": "The next activity opens at 00:00 next Thursday in Beijing time and lasts 24 hours. Fill in the announcement and entry rules, then save.",
         "windowBeijing": "Activity time (Beijing, UTC+8)",
         "perUserLimit": "Per-user limit",
-        "platformBp": "Platform share (basis points)",
+        "platformBp": "Platform fee (%)",
         "save": "Save next period",
         "updateTitle": "Update configured next period",
-        "welfareBp": "Welfare share (basis points)",
-        "literatureInvalid": "Use up to 1,024 characters and 4,096 bytes. Newlines and tabs are allowed; other control characters are not."
+        "welfareBp": "Welfare pool fee (%)",
+        "literatureInvalid": "Shorten the literature or remove special control characters. Newlines and tabs are allowed."
       },
       "pools": {
         "allStates": "All pool states",
@@ -382,7 +385,7 @@
         "entryLimit": "Entry / limit",
         "literature": "Literature",
         "payoutRollover": "Payout / rollover",
-        "periodRevision": "Period / revision",
+        "periodRevision": "Period",
         "processed": "Processed",
         "resume": "Resume existing settlement checkpoint",
         "title": "Thursday authority"
@@ -395,7 +398,7 @@
     "mainstreamChannels": {
       "nav": "Mainstream channels",
       "title": "Mainstream channel authority",
-      "description": "Maintain frozen channel templates used when endpoints are created. Existing endpoint provenance is unchanged by later edits or retirement.",
+      "description": "Manage channels users can choose when adding services. Editing or retiring a channel leaves existing services intact.",
       "category": {
         "subscription": "Mainstream subscription",
         "apiPlatform": "Mainstream API platform"
@@ -433,7 +436,8 @@
         "category": "Category",
         "connector": "Connector",
         "baseUrl": "Canonical base URL",
-        "enabled": "Enabled for new endpoint creation"
+        "enabled": "Enabled for new endpoint creation",
+        "baseUrlHelp": "Enter the service API base URL, for example https://api.example.com/v1."
       },
       "validation": {
         "invalid": "Enter a valid name and canonical URL without control characters."
@@ -494,7 +498,6 @@
         "authorityTitle": "Case authority",
         "back": "Back to report inbox",
         "canonicalUrl": "Canonical URL",
-        "confirmApprovalCheckbox": "I understand approved processing deletes matching endpoint keys.",
         "confirmApproveBody": "This accepts irreversible deletion work for the current material and target revisions.",
         "confirmApproveTitle": "Approve protected-key deletion?",
         "confirmRejectBody": "This releases all protected targets and records the review reason.",
@@ -506,7 +509,7 @@
         "decisionBody": "Approval permanently deletes matching protected endpoint keys through the integrated lifecycle. Rejection releases protection. Both require a reason and are never auto-retried after conflict or an unknown response.",
         "decisionTitle": "Decision",
         "deidentified": "Deidentified",
-        "description": "Review bounded evidence and stable target snapshots before one terminal decision.",
+        "description": "Review the evidence and reported resources, then decide what action to take.",
         "endpoint": "Endpoint",
         "id": "ID",
         "keySnapshot": "Key snapshot",
@@ -727,12 +730,11 @@
         "createDescription": "The hold expires after {{days}} days and cannot be extended, copied, reopened, or recreated.",
         "createTitle": "Create this legal hold?",
         "releaseAction": "Release hold",
-        "releaseDescription": "Release is final, and ordinary cleanup may proceed immediately when the original deadline has passed.",
+        "releaseDescription": "Release is final. This object cannot receive another hold, and cleanup may proceed immediately after the original deadline.",
         "releaseTitle": "Release this legal hold?"
       },
       "create": {
         "basis": "Basis",
-        "confirmation": "I confirm this exact aggregate, expiry, and irreversible one-hold limit.",
         "days": "Days (1–365)",
         "objectKind": "Object kind",
         "objectReference": "Exact object reference",
@@ -773,7 +775,6 @@
         "requestLog": "Request log"
       },
       "release": {
-        "confirmation": "Release is final; this object cannot receive another hold.",
         "password": "Administrator password (fresh elevation)",
         "reason": "Release reason"
       },
@@ -1068,6 +1069,19 @@
       "discountRemaining": "{{time}} remaining",
       "requestUnit": "Per request; final settlement is server-side.",
       "tokenUnit": "Per million tokens; four buckets are settled server-side."
+    }
+  },
+  "recurringLimits": {
+    "exact": {
+      "alignment": "Exact reset time",
+      "anchor": "Reset date and time",
+      "help": "Enter the reset time in {{zone}}. Until a future first reset, usage counts from this save. Short months use their last day, then return to the original day.",
+      "preview": "Next three resets",
+      "loading": "Calculating reset times…",
+      "unavailable": "Check the reset date and time, then try again.",
+      "period": "Resets follow the saved date and clock in the rule’s time zone.",
+      "gap_shifted": "Moved forward for daylight saving time",
+      "fold_later": "Later occurrence of repeated local time"
     }
   }
 }

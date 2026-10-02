@@ -43,7 +43,10 @@ function installActivities(initialPeriod: Period | null, rejectWrite = false) {
         return reply({
           revision: '4',
           master_enabled: false,
-          loan_enabled: false, loan_tiers: ['10000', '100000', '1000000'], loan_a: '0.9', loan_b: '1.3',
+          loan_enabled: false,
+          loan_tiers: ['10000', '100000', '1000000'],
+          loan_a: '0.9',
+          loan_b: '1.3',
           welfare: { enabled: false, threshold: '1', cap: '2' },
           thursday: { enabled: false },
         });
@@ -61,7 +64,13 @@ function installActivities(initialPeriod: Period | null, rejectWrite = false) {
           'period_key' | 'opens_at' | 'entry' | 'literature' | 'per_user_limit' | 'pumps_bp'
         >;
         writes.push(body);
-        if (rejectWrite) return new Response(JSON.stringify({ error: { code: 'conflict', message: 'revision changed', source: 'platform' } }), { status: 409, headers: { 'content-type': 'application/json' } });
+        if (rejectWrite)
+          return new Response(
+            JSON.stringify({
+              error: { code: 'conflict', message: 'revision changed', source: 'platform' },
+            }),
+            { status: 409, headers: { 'content-type': 'application/json' } },
+          );
         period = {
           ...previousPeriod,
           period_key: body.period_key,
@@ -136,7 +145,7 @@ describe('automatic activity schedules', () => {
     expect(save).toBeEnabled();
     fireEvent.change(literature, { target: { value: '界'.repeat(1025) } });
     expect(literature).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByRole('alert')).toHaveTextContent('1,024 characters');
+    expect(screen.getByRole('alert')).toHaveTextContent('Shorten the literature');
     expect(save).toBeDisabled();
     fireEvent.change(literature, { target: { value: 'First line\n\tSecond line' } });
     expect(literature).toHaveAttribute('aria-invalid', 'false');
@@ -144,6 +153,22 @@ describe('automatic activity schedules', () => {
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatchObject({ literature: 'First line\n\tSecond line' });
     expect(literature).toHaveValue('First line\n\tSecond line');
+  });
+
+  it('edits natural fee percentages and sends the existing exact integer units', async () => {
+    const writes = installActivities(null);
+    const view = await renderActivities();
+    await waitFor(() => expect(view.entry).toBeEnabled());
+    await view.user.clear(view.entry);
+    await view.user.type(view.entry, '2');
+    await view.user.type(screen.getByLabelText('Literature'), 'Next announcement');
+    const fee = screen.getByLabelText('Platform fee (%)');
+    await view.user.clear(fee);
+    await view.user.type(fee, '1.25');
+    expect(fee).toHaveValue(1.25);
+    await view.user.click(screen.getByRole('button', { name: 'Save next period' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].pumps_bp).toEqual({ platform: 125, welfare: 0, next_pool: 0 });
   });
 
   it('refreshes a new schedule across the Thursday boundary without losing edits, and allows cancel', async () => {

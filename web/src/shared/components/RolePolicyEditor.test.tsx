@@ -28,6 +28,8 @@ function Form({ initial }: { initial?: RolePolicy }) {
 describe('structured message roles', () => {
   it('keeps the protocol default and supports separate developer and fallback actions with keyboard focus', async () => {
     const view = await renderWithProviders(<Form />, { station: 'admin', locale: 'en' });
+    expect(view.container.querySelector('details')).not.toHaveAttribute('open');
+    await view.user.click(screen.getByText(/Default:.*role rules/));
     const fallback = screen.getByRole('combobox', { name: 'Default action for unlisted roles' });
     expect(fallback).toHaveValue('native');
     await view.user.selectOptions(fallback, 'reject');
@@ -35,6 +37,7 @@ describe('structured message roles', () => {
     const name = screen.getByRole('textbox', { name: 'Role name' });
     expect(name).toHaveFocus();
     await view.user.type(name, 'developer');
+    expect(name.closest('details')).toHaveAttribute('open');
     await view.user.selectOptions(
       screen.getByRole('combobox', { name: 'Handling action' }),
       'system',
@@ -53,15 +56,18 @@ describe('structured message roles', () => {
       <Form initial={{ default_action: 'native', rules: { developer: 'passthrough' } }} />,
       { station: 'admin', locale: 'en' },
     );
+    await view.user.click(screen.getByText(/Default:.*role rules/));
     await view.user.click(screen.getByRole('button', { name: 'Add a role rule' }));
     const names = screen.getAllByRole('textbox', { name: 'Role name' });
     await view.user.type(names[1], 'developer');
     expect(names[0]).toHaveValue('developer');
     expect(names[1]).toHaveValue('developer');
     expect(screen.getByRole('alert')).toHaveTextContent('This role is already configured');
+    expect(screen.getByRole('alert').closest('details')).toHaveAttribute('open');
     expect(screen.getByRole('button', { name: 'Save roles' })).toBeDisabled();
     await view.user.clear(names[1]);
     await view.user.type(names[1], 'critic');
+    expect(names[1].closest('details')).toHaveAttribute('open');
     await view.user.selectOptions(
       screen.getAllByRole('combobox', { name: 'Handling action' })[1],
       'user',

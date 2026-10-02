@@ -2355,7 +2355,7 @@
       "endpoints.noKeysTitle": "还没有密钥",
       "endpoints.noKeysBody": "添加你拥有的密钥后，即可检查模型并创建模型连接。",
       "endpoints.key": "密钥",
-      "endpoints.keyIdentifier": "密钥标识（非完整密钥）",
+      "endpoints.keyIdentifier": "密钥标识（调用需要使用完整密钥）",
       "endpoints.keyState": "密钥状态",
       "endpoints.storePolicy": "不保存聊天请求（store=false）",
       "endpoints.securityProcessing": "安全处理中，当前不可操作",
@@ -3200,6 +3200,19 @@
       "items": {
         "unknown": "未知收获"
       }
+    }
+  },
+  "recurringLimits": {
+    "exact": {
+      "alignment": "指定刷新时间",
+      "anchor": "刷新日期与时间",
+      "help": "按 {{zone}} 填写刷新时间。首次刷新在未来时，本次保存起开始计量；短月份使用月末，之后恢复原日期。",
+      "preview": "接下来三次刷新",
+      "loading": "正在计算刷新时间…",
+      "unavailable": "请检查刷新日期与时间后重试。",
+      "period": "按规则时区中保存的日期与时刻刷新。",
+      "gap_shifted": "已按夏令时向后顺延",
+      "fold_later": "采用重复当地时间的较晚一次"
     }
   }
 }

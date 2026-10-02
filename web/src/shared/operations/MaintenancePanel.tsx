@@ -85,12 +85,12 @@ export function MaintenancePanel({
         <div><h2>{title}</h2><p>{description}</p></div>
         {authority ? <StatusBadge active={!authority.enabled} danger={authority.enabled} label={authority.enabled ? t('common.operations.maintenance.enabledStatus') : t('common.operations.maintenance.disabledStatus')} /> : null}
       </div>
-      {authority ? <p className="muted">{t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}</p> : null}
+      {authority ? <details><summary>{t('common.operations.management.details')}</summary><p className="muted">{t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}</p></details> : null}
       {role === 'steward' && authority?.enabled ? <p>{t('common.operations.maintenance.stewardCannotDisable')}</p> : null}
       {state.error && state.data ? <ErrorState error={state.error} onRetry={() => void state.refetch()} /> : null}
       {transition.error ? <ErrorState error={transition.error} /> : null}
       {mayAct ? <>
-        <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+        <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => { if (transition.isSuccess) transition.reset(); setReason(event.target.value); }} /><small>{t('common.operations.maintenance.reasonHelp')}</small></label>
         {!reasonOK && reason.length > 0 ? <p className="field-error" role="alert">{t('common.operations.maintenance.reasonInvalid')}</p> : null}
         <button className="btn btn-danger" type="button" disabled={!reasonOK || transition.isPending} onClick={() => { transition.reset(); setConfirmation(action); }}>{actionLabel}</button>
       </> : null}

@@ -345,6 +345,75 @@ const charityModel = (start: number, end: number): CharityModel => ({
 const siteDateTime = (epoch: number) => `${new Date(epoch * 1_000).toISOString().slice(0, 19)}.000`;
 
 describe('CharityManagement corrective controls', () => {
+  it.each([false, true])(
+    'offers model cache defaults only for an entirely Gateway binding set (mixed=%s)',
+    async (mixed) => {
+      const model = { ...charityModel(10, 20), binding_count: '2' };
+      const binding = (id: string, connector: string) => ({
+        id,
+        ord: Number(id) - 1,
+        donation_id: id,
+        donation_key_id: id,
+        upstream_model_id: `model-${id}`,
+        source_types: ['automatic'],
+        source: {
+          connector_type: connector,
+          canonical_base_url: 'https://gateway.example/v1',
+          display_head: 'head',
+          display_tail: 'tail',
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn<typeof fetch>(async (input) => {
+          const url = new URL(String(input), 'https://example.test');
+          if (url.pathname === '/admin/api/session') return jsonResponse(adminSession);
+          if (url.pathname === '/admin/api/time-context') return jsonResponse(siteTimeContext);
+          if (url.pathname === '/admin/api/time-zones')
+            return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+          if (url.pathname === '/admin/api/charity-models')
+            return jsonResponse(numberedPage([model], url));
+          if (url.pathname === '/admin/api/charity-models/1') return jsonResponse(model);
+          if (url.pathname === '/admin/api/charity-models/1/bindings')
+            return jsonResponse({
+              bindings: [
+                binding('1', 'ai-sdk-gateway-v3'),
+                binding('2', mixed ? 'openai-compatible' : 'ai-sdk-gateway-v3'),
+              ],
+              binding_revision: '0',
+            });
+          if (url.pathname.endsWith('/request-adaptation'))
+            return jsonResponse({
+              revision: '1',
+              forward_headers: { mode: 'replace', values: [] },
+              fixed_headers: { mode: 'replace', values: {} },
+              body_defaults: { mode: 'replace', values: {} },
+              body_forced: { mode: 'replace', values: {} },
+              native_extension_paths: { mode: 'replace', values: [] },
+            });
+          if (
+            url.pathname === '/admin/api/donations' ||
+            url.pathname === '/admin/api/donation-sources' ||
+            url.pathname.endsWith('/binding-candidates')
+          )
+            return jsonResponse(numberedPage([], url));
+          throw new Error(`Unexpected fixture request: ${url.pathname}`);
+        }),
+      );
+      const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+        station: 'admin',
+        role: 'admin',
+      });
+      await view.user.click(
+        await screen.findByRole('tab', { name: 'Charity models and bindings' }),
+      );
+      await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
+      await screen.findByRole('heading', { name: 'Service connection order' });
+      await screen.findByRole('button', { name: 'Save request adaptation' });
+      if (mixed) expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
+      else expect(await screen.findByLabelText('Automatic cache default')).toHaveValue('off');
+    },
+  );
   it('explains unavailable historical key IDs instead of linking all logs', async () => {
     installDonationFetch(approvedDonation(managedKey({ endpoint_key_id: null })));
     const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
@@ -806,6 +875,12 @@ describe('CharityManagement corrective controls', () => {
     const card = heading.closest('.card');
     if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
     const editor = within(card);
+    const discountPercent = editor.getByLabelText(/Discount percentage/);
+    const discountDetails = discountPercent.closest('details');
+    fireEvent.change(discountPercent, { target: { value: '101' } });
+    expect(discountDetails).toHaveAttribute('open');
+    fireEvent.change(discountPercent, { target: { value: '10' } });
+    expect(discountDetails).toHaveAttribute('open');
     await waitFor(() =>
       expect(editor.getByLabelText('Start (optional)')).toHaveValue(siteDateTime(start)),
     );

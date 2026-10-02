@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
@@ -34,6 +35,8 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
   initial: PeriodRecord | null; onSaved(period: PeriodRecord): void; onDirty(dirty: boolean): void;
 }) {
   const text = useFatFishText(), client = useQueryClient();
+  const { t } = useTranslation();
+  const [confirmAction, setConfirmAction] = useState<'publish' | 'close' | 'reopen' | null>(null);
   const [title, setTitle] = useState(initial?.title ?? ''), [description, setDescription] = useState(initial?.description ?? '');
   const [visible, setVisible] = useState(initial?.visible ?? false), [paused, setPaused] = useState(initial?.paused ?? false);
   const [pastPublic, setPastPublic] = useState(initial?.past_public ?? false);
@@ -125,8 +128,8 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
   };
   return <div className="fatfish-period-editor">{leaveDialog}{changingNode.dialog}
     <h2>{initial ? text('edit_period') : text('new_period')}</h2>
-    {period ? <p role="status">{text('current_state')}: {state} · r{revision}</p> : null}
-    <div className="fatfish-fields" inert={editingLocked}>
+    {period ? <p role="status">{text('current_state')}: {state}</p> : null}
+    <div className="fatfish-fields" inert={editingLocked} onChange={() => setNotice('')}>
       <label>{text('title')}<input value={title} maxLength={128} onChange={(event) => setTitle(event.target.value)} /></label>
       <label>{text('description')}<textarea value={description} maxLength={8192} onChange={(event) => setDescription(event.target.value)} /></label>
       <label><input type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} />{text('visible_in_directory')}</label>
@@ -134,18 +137,24 @@ function PeriodDraftEditor({ initial, onSaved, onDirty }: {
       <label><input type="checkbox" checked={pastPublic} onChange={(event) => setPastPublic(event.target.checked)} />{text('public_after_close')}</label>
     </div>
     <TimeContextNotice station="admin" />
-    <div className="fatfish-fields" inert={editingLocked}><TimeInput label={text('start_time')} station="admin" draft={start} showZoneHint={false} onChange={setStart} />
-      <TimeInput label={text('end_time_exclusive')} station="admin" draft={end} showZoneHint={false} onChange={setEnd} /></div>
+    <div className="fatfish-fields" inert={editingLocked}><TimeInput label={text('start_time')} station="admin" draft={start} showZoneHint={false} onChange={(value) => { setNotice(''); setStart(value); }} />
+      <TimeInput label={text('end_time_exclusive')} station="admin" draft={end} showZoneHint={false} onChange={(value) => { setNotice(''); setEnd(value); }} /></div>
     <p>{text('saving_a_draft_never_opens_a_formal_period_check_reachability_and_play')}</p>
     {dirty ? <p role="status">{text('unsaved_changes')}</p> : null}
     {!textValid ? <p role="alert">{text('title_is_limited_to_128_utf_8_bytes_description_to_8192_bytes')}</p> : null}
     {uncertain ? <p role="status">{text('save_outcome_unknown_retry_the_same_request')}</p> : null}
     <div className="fatfish-actions"><button type="button" disabled={!title.trim() || !textValid || starts === null || starts === undefined || ends === null || ends === undefined || ends <= starts || save.isPending} onClick={() => void submit()}>{uncertain ? text('retry_save') : text('save_period')}</button>
       {period ? <button type="button" disabled={editingLocked} onClick={() => void checkGraph()}>{text('check_and_preview_publish_conditions')}</button> : null}
-      {period && state === 'draft' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('publish')}>{text('publish_period')}</button> : null}
-      {period && state === 'open' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('close')}>{text('close_period')}</button> : null}
-      {period && state === 'closed' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => void changeState('reopen')}>{text('reopen_period')}</button> : null}
+      {period && state === 'draft' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => setConfirmAction('publish')}>{text('publish_period')}</button> : null}
+      {period && state === 'open' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => setConfirmAction('close')}>{text('close_period')}</button> : null}
+      {period && state === 'closed' ? <button type="button" disabled={editingLocked || dirty || nodeDirty || transition.isPending} onClick={() => setConfirmAction('reopen')}>{text('reopen_period')}</button> : null}
     </div>
+    <ConfirmDialog open={confirmAction !== null} title={period?.title ?? t('common.operations.management.periodActions')}
+      description={t('common.operations.management.periodActionHelp', { action: confirmAction === 'publish' ? text('publish_period') : confirmAction === 'close' ? text('close_period') : text('reopen_period') })}
+      confirmLabel={confirmAction === 'publish' ? text('publish_period') : confirmAction === 'close' ? text('close_period') : text('reopen_period')}
+      danger={confirmAction === 'close'} busy={transition.isPending} onCancel={() => setConfirmAction(null)} onConfirm={() => {
+        if (confirmAction) { void changeState(confirmAction); setConfirmAction(null); }
+      }} />
     {graph && period ? <GraphPreview graph={graph} nodes={period.nodes ?? []} /> : null}
     {notice ? <p role="status">{notice}</p> : null}
     {error ? <ErrorState error={error} /> : null}

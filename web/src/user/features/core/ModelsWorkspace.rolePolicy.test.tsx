@@ -77,6 +77,7 @@ async function renderEditor(create = false) {
       name: create ? 'Create platform model' : 'Edit platform model',
     }),
   );
+  await view.user.click(screen.getByText(/Default:.*role rules/));
   return view;
 }
 async function addRule(

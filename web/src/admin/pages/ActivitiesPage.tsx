@@ -18,6 +18,7 @@ import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { amount } from '@shared/operations/wire';
 import { validLoanConfig } from '@shared/operations/loans';
 import { useLoanText } from '@shared/components/loanCopy';
+import { percentBP } from '../features/games/config';
 import { formatBeijingTime, nextThursdaySchedule } from '../features/operations/thursdaySchedule';
 import {
   adjustPool,
@@ -39,23 +40,82 @@ import { useAdminSession } from '../data';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
 
-function LoanConfiguration({ config, disabled, onChange }: { config: ActivitiesConfig; disabled: boolean; onChange: (value: ActivitiesConfig) => void }) {
+function LoanConfiguration({
+  config,
+  disabled,
+  onChange,
+}: {
+  config: ActivitiesConfig;
+  disabled: boolean;
+  onChange: (value: ActivitiesConfig) => void;
+}) {
   const text = useLoanText();
-  return <fieldset disabled={disabled}>
-    <legend>{text('赛博网贷', 'Cyber loan')}</legend>
-    <div className="ops-field-grid">
-      <label className="checkbox-label"><input type="checkbox" checked={config.loan_enabled} onChange={(event) => onChange({ ...config, loan_enabled: event.target.checked })} /><span>{text('启用借款', 'Enable loans')}</span></label>
-      {config.loan_tiers.map((value, index) => <label key={index}><span>{text('额度', 'Tier')} {index + 1}</span><input inputMode="numeric" maxLength={13} value={value} onChange={(event) => {
-        const loan_tiers: [string, string, string] = [...config.loan_tiers];
-        loan_tiers[index] = event.target.value;
-        onChange({ ...config, loan_tiers });
-      }} /></label>)}
-      <label><span>{text('到账系数 A（0 ＜ A ＜ 1）', 'Disbursement coefficient A (0 < A < 1)')}</span><input inputMode="decimal" maxLength={17} value={config.loan_a} onChange={(event) => onChange({ ...config, loan_a: event.target.value })} /></label>
-      <label><span>{text('本息系数 B（B ＞ 1）', 'Repayment coefficient B (B > 1)')}</span><input inputMode="decimal" maxLength={17} value={config.loan_b} onChange={(event) => onChange({ ...config, loan_b: event.target.value })} /></label>
-    </div>
-    <p>{text('三档额度为递增正整数；系数最多三位小数。游戏积分到账为额度 × A，通用积分扣除为额度 × B。', 'Use three increasing positive whole-number amounts. Coefficients allow up to three decimal places. Game credits received equal the amount × A; general credits deducted equal the amount × B.')}</p>
-    {!validLoanConfig(config) ? <p className="field-error" role="alert">{text('请检查三档额度和系数；各项金额不得超过 9000000000000 积分。', 'Check the three amounts and coefficients. No resulting amount may exceed 9000000000000 credits.')}</p> : null}
-  </fieldset>;
+  const { t } = useTranslation();
+  return (
+    <fieldset disabled={disabled}>
+      <legend>{text('赛博网贷', 'Cyber loan')}</legend>
+      <div className="ops-field-grid">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={config.loan_enabled}
+            onChange={(event) => onChange({ ...config, loan_enabled: event.target.checked })}
+          />
+          <span>{text('启用借款', 'Enable loans')}</span>
+        </label>
+        {config.loan_tiers.map((value, index) => (
+          <label key={index}>
+            <span>
+              {t('common.operations.management.loanTier')} {index + 1}
+            </span>
+            <input
+              inputMode="numeric"
+              maxLength={13}
+              value={value}
+              onChange={(event) => {
+                const loan_tiers: [string, string, string] = [...config.loan_tiers];
+                loan_tiers[index] = event.target.value;
+                onChange({ ...config, loan_tiers });
+              }}
+            />
+          </label>
+        ))}
+        <label>
+          <span>{text('到账系数 A（0 ＜ A ＜ 1）', 'Disbursement coefficient A (0 < A < 1)')}</span>
+          <input
+            inputMode="decimal"
+            maxLength={17}
+            value={config.loan_a}
+            onChange={(event) => onChange({ ...config, loan_a: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>{text('本息系数 B（B ＞ 1）', 'Repayment coefficient B (B > 1)')}</span>
+          <input
+            inputMode="decimal"
+            maxLength={17}
+            value={config.loan_b}
+            onChange={(event) => onChange({ ...config, loan_b: event.target.value })}
+          />
+        </label>
+      </div>
+      <p>
+        {text(
+          '三档额度为递增正整数；系数最多三位小数。游戏积分到账为额度 × A，通用积分扣除为额度 × B。',
+          'Use three increasing positive whole-number amounts. Coefficients allow up to three decimal places. Game credits received equal the amount × A; general credits deducted equal the amount × B.',
+        )}
+      </p>
+      <p className="muted">{t('common.operations.management.loanExample')}</p>
+      {!validLoanConfig(config) ? (
+        <p className="field-error" role="alert">
+          {text(
+            '请检查三档额度和系数；各项金额不得超过 9000000000000 积分。',
+            'Check the three amounts and coefficients. No resulting amount may exceed 9000000000000 credits.',
+          )}
+        </p>
+      ) : null}
+    </fieldset>
+  );
 }
 
 function validPositiveAmount(value: string): boolean {
@@ -185,7 +245,8 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
   const periodDraft = periodOverride ?? draftForPeriod(period);
   const literature = periodDraft.literature.replaceAll('\r\n', '\n');
   const literatureError = isActivityLiterature(literature)
-    ? null : t('admin.activities.period.literatureInvalid');
+    ? null
+    : t('admin.activities.period.literatureInvalid');
   const configUnchanged = JSON.stringify(configDraft) === JSON.stringify(config.data);
   const configStale = configDraft?.revision !== config.data?.revision;
   const configDependency =
@@ -431,7 +492,11 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               </label>
             </div>
             {saveConfig.error ? <ErrorState error={saveConfig.error} /> : null}
-            <LoanConfiguration config={configDraft} disabled={!scopeReady || saveConfig.isPending} onChange={editConfig} />
+            <LoanConfiguration
+              config={configDraft}
+              disabled={!scopeReady || saveConfig.isPending}
+              onChange={editConfig}
+            />
             {configDependency ? (
               <p role="alert" className="field-error">
                 {configDependency}
@@ -492,9 +557,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 />
               </dd>
               <dt>{t('admin.activities.thursday.periodRevision')}</dt>
-              <dd>
-                {period.period_key} / {period.revision}
-              </dd>
+              <dd>{period.period_key}</dd>
               <dt>{t('admin.activities.period.windowBeijing')}</dt>
               <dd>
                 {formatBeijingTime(period.opens_at)} — {formatBeijingTime(period.closes_at)}
@@ -587,9 +650,16 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 <input
                   type="number"
                   min="0"
-                  max="9999"
-                  value={periodDraft.platform}
-                  onChange={(event) => editPeriod({ platform: event.target.value })}
+                  max="99.99"
+                  step="0.01"
+                  value={
+                    Number.isNaN(Number(periodDraft.platform))
+                      ? ''
+                      : Number(periodDraft.platform) / 100
+                  }
+                  onChange={(event) =>
+                    editPeriod({ platform: String(percentBP(event.target.value)) })
+                  }
                 />
               </label>
               <label>
@@ -597,9 +667,16 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 <input
                   type="number"
                   min="0"
-                  max="9999"
-                  value={periodDraft.welfare}
-                  onChange={(event) => editPeriod({ welfare: event.target.value })}
+                  max="99.99"
+                  step="0.01"
+                  value={
+                    Number.isNaN(Number(periodDraft.welfare))
+                      ? ''
+                      : Number(periodDraft.welfare) / 100
+                  }
+                  onChange={(event) =>
+                    editPeriod({ welfare: String(percentBP(event.target.value)) })
+                  }
                 />
               </label>
               <label>
@@ -607,12 +684,20 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 <input
                   type="number"
                   min="0"
-                  max="9999"
-                  value={periodDraft.next_pool}
-                  onChange={(event) => editPeriod({ next_pool: event.target.value })}
+                  max="99.99"
+                  step="0.01"
+                  value={
+                    Number.isNaN(Number(periodDraft.next_pool))
+                      ? ''
+                      : Number(periodDraft.next_pool) / 100
+                  }
+                  onChange={(event) =>
+                    editPeriod({ next_pool: String(percentBP(event.target.value)) })
+                  }
                 />
               </label>
             </fieldset>
+            <p className="muted">{t('common.operations.management.feeHelp')}</p>
             <label className="ops-form-field">
               <span>{t('admin.activities.period.literature')}</span>
               <textarea
@@ -623,7 +708,11 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 onChange={(event) => editPeriod({ literature: event.target.value })}
               />
             </label>
-            {literatureError ? <p id="thursday-literature-error" role="alert" className="inline-notice">{literatureError}</p> : null}
+            {literatureError ? (
+              <p id="thursday-literature-error" role="alert" className="inline-notice">
+                {literatureError}
+              </p>
+            ) : null}
             {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
             <button
               className="btn btn-primary"
