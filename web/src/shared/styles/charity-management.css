@@ -174,3 +174,100 @@
     grid-template-columns: 1fr;
   }
 }
+
+.charity-donations {
+  min-width: 0;
+}
+.charity-donations__list,
+.charity-donations > .ops-detail-target {
+  min-width: 0;
+}
+.charity-donations.nb-md {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+.charity-donation-summary {
+  display: grid;
+  gap: var(--nb-space-1);
+  max-width: 26rem;
+}
+.charity-donation-summary small,
+.charity-available-count {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--nb-color-text-muted);
+  overflow-wrap: anywhere;
+}
+.charity-donation-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.charity-donation-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--nb-font-mono);
+}
+.charity-batch-menu {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+  margin-left: auto;
+}
+.charity-batch-section {
+  margin-top: var(--nb-space-4);
+}
+.charity-batch-section[hidden] {
+  display: none;
+}
+.charity-management .nb-fold {
+  margin-block: var(--nb-space-3);
+}
+@media (max-width: 64rem) {
+  .charity-donations.nb-md {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.charity-donation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--nb-space-3);
+}
+.charity-donation-toolbar > .nb-filter {
+  flex: 1;
+  min-width: min(100%, 22rem);
+}
+.charity-donation-search {
+  display: flex;
+  align-items: end;
+  gap: var(--nb-space-2);
+  min-width: 0;
+}
+.charity-donation-search label {
+  flex: 1;
+  min-width: 0;
+}
+.charity-donation-search input {
+  width: 100%;
+  min-width: 0;
+}
+@media (max-width: 48rem) {
+  .charity-donation-summary .charity-donation-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 48rem) {
+  .charity-management > .nb-tabs [role='tab'] {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--nb-space-2);
+    white-space: normal;
+    text-align: center;
+  }
+}

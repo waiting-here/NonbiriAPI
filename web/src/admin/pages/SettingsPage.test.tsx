@@ -1,4 +1,5 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { SettingsPage } from './SettingsPage';
@@ -11,7 +12,18 @@ vi.mock('../features/operations/core', async (original) => ({
 }));
 vi.mock('@shared/operations/MaintenancePanel', () => ({ MaintenancePanel: () => null }));
 vi.mock('../features/operations/LegalHoldPanel', () => ({ LegalHoldPanel: () => null }));
-vi.mock('../features/gateway/GatewayCapabilitiesSection', () => ({ default: () => null }));
+vi.mock('../features/gateway/GatewayCapabilitiesSection', () => ({
+  default: function GatewayDraft() {
+    const [value, setValue] = useState('');
+    return (
+      <input
+        aria-label="Gateway draft"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      />
+    );
+  },
+}));
 
 const pair = (en: string, zh: string) => ({ en, zh });
 function entry(
@@ -69,8 +81,7 @@ describe('site settings discovery and saving', () => {
       });
       view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
       const label = locale === 'en' ? 'Response wait' : '响应等待';
-      await screen.findByText(locale === 'en' ? '1 customized' : '1 项已调整', { exact: false });
-      expect(screen.queryByLabelText(label)).toBeNull();
+      expect(await screen.findByLabelText(label)).toHaveValue(130);
       const search = screen.getByRole('searchbox');
       await view.user.type(search, label);
       const field = screen.getByLabelText(label);
@@ -107,5 +118,60 @@ describe('site settings discovery and saving', () => {
     await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
     await screen.findByRole('alert');
     expect(screen.getByLabelText('Response wait')).toHaveValue(151);
+  });
+  it('retains edits across groups and confirms settings requiring care', async () => {
+    bundle.catalog.push(entry('access_wait', 'access', pair('Access wait', '访问等待')));
+    bundle.values.access_wait = 120;
+    const view = await renderWithProviders(<SettingsPage />, {
+      station: 'admin',
+      role: 'admin',
+      route: '/settings?group=limits',
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+    const field = await screen.findByLabelText('Response wait');
+    await view.user.clear(field);
+    await view.user.type(field, '150');
+    await view.user.click(screen.getByRole('button', { name: 'Access' }));
+    expect(screen.queryByLabelText('Response wait')).toBeNull();
+    await view.user.clear(screen.getByLabelText('Access wait'));
+    await view.user.type(screen.getByLabelText('Access wait'), '140');
+    await view.user.type(screen.getByRole('searchbox'), 'response_wait');
+    expect(screen.getByLabelText('Response wait')).toHaveValue(150);
+    await view.user.clear(screen.getByRole('searchbox'));
+    expect(screen.getByLabelText('Access wait')).toHaveValue(140);
+    await view.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    expect(api.patchSiteSettings).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('alertdialog');
+    await view.user.click(within(dialog).getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
+    expect(api.patchSiteSettings.mock.calls[0][0]).toEqual({
+      expected_revision: '1',
+      values: { response_wait_seconds: 150, access_wait: 140 },
+    });
+  });
+
+  it('allows discarding invalid edits while saving is disabled', async () => {
+    const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
+    await view.user.clear(await screen.findByLabelText('Response wait'));
+    expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByLabelText('Response wait')).toHaveValue(130);
+    expect(screen.queryByRole('button', { name: 'Save all changes' })).toBeNull();
+    expect(api.patchSiteSettings).not.toHaveBeenCalled();
+  });
+
+  it('keeps independent form drafts when switching groups or searching', async () => {
+    const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
+    await screen.findByLabelText('Response wait');
+    await view.user.click(screen.getByRole('button', { name: 'Gateway model capabilities' }));
+    await view.user.type(screen.getByRole('textbox', { name: 'Gateway draft' }), 'saved locally');
+    await view.user.click(screen.getByRole('button', { name: 'Limits' }));
+    expect(screen.getByLabelText('Gateway draft')).not.toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Gateway model capabilities' }));
+    await view.user.type(screen.getByRole('searchbox'), 'Response wait');
+    expect(screen.getByLabelText('Gateway draft')).not.toBeVisible();
+    await view.user.clear(screen.getByRole('searchbox'));
+    expect(screen.getByRole('textbox', { name: 'Gateway draft' })).toHaveValue('saved locally');
+    expect(api.patchSiteSettings).not.toHaveBeenCalled();
   });
 });

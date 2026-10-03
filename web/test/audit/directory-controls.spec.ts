@@ -87,18 +87,19 @@ test('administrator submits endpoint search, resets it and pages actual shared m
         )
       ).data,
     ).toMatchObject([{ base_url: baseURL, user_count: '2' }]);
+    const memberRead = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/admin/api/overview/endpoints/users' &&
+        new URL(response.url()).searchParams.get('page_size') === '20',
+    );
     await page
       .getByRole('button', { name: adminEn.admin.endpoints.showUsers, exact: true })
       .click();
     const members = page.locator('.ops-table .ops-table');
     await expect(members.locator('tbody tr')).toHaveCount(2);
     const memberPager = page.getByRole('navigation', { name: 'Pagination', exact: true }).first();
-    const memberRead = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === '/admin/api/overview/endpoints/users' &&
-        new URL(response.url()).searchParams.get('page_size') === '10',
-    );
-    await memberPager.getByLabel(commonEn.common.pageControls.size).selectOption('10');
+    await expect(memberPager).toHaveText('2 items');
+    await expect(memberPager.getByLabel(commonEn.common.pageControls.size)).toHaveCount(0);
     const result = await memberRead;
     expect(result.ok()).toBe(true);
     expect(
@@ -221,9 +222,11 @@ test('administrator filters donations and manages manual candidates', async ({ b
     await page
       .getByRole('button', { name: copy.donationHandling.applySearch, exact: true })
       .click();
+    const filterDisclosure = page.locator('.charity-donations .nb-filter__more summary');
+    if (await filterDisclosure.isVisible()) await filterDisclosure.click();
     await page.getByLabel(copy.donationHandling.filter).selectOption('pending');
     await expect(
-      page.locator('.ops-table tbody').getByText(donation.description, { exact: true }),
+      page.locator('.nb-table tbody').getByText(donation.description, { exact: true }),
     ).toBeVisible();
     expect(
       (

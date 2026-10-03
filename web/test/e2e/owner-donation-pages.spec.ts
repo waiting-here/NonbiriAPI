@@ -197,12 +197,12 @@ for (const [width, locale, theme] of [
       for (const navigation of await panel
         .getByRole('navigation', { name: common.pagination })
         .all()) {
-        const controls = [
-          navigation.getByRole('button', { name: common.previous, exact: true }),
-          navigation.getByRole('button', { name: common.next, exact: true }),
-          navigation.getByRole('textbox', { name: common.pageControls.jump, exact: true }),
-          navigation.getByRole('button', { name: common.pageControls.go, exact: true }),
-        ];
+        const controls = await navigation.locator('.nb-pager__pages button:visible').all();
+        const jump = navigation.getByRole('textbox', {
+          name: common.pageControls.jump,
+          exact: true,
+        });
+        if (await jump.isVisible()) controls.push(jump);
         const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
         expect(
           boxes.every((box) => box && box.width > 0 && box.x >= 0 && box.x + box.width <= width),

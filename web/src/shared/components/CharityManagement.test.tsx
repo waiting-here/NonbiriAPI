@@ -1041,6 +1041,7 @@ describe('CharityManagement corrective controls', () => {
       if (fixture.frame === 'steward') {
         expect(editor.queryByLabelText('关联有效时长（秒）')).not.toBeInTheDocument();
       }
+      await view.user.click(editor.getByText(fixture.locale === 'zh' ? '额度与预留' : 'Quota and reserve', { selector: 'strong' }));
       const reserve = editor.getByLabelText(fixture.reserveLabel);
       expect(reserve).toHaveValue('1.234');
       expect(editor.getByText(fixture.reserveHelp)).toBeVisible();

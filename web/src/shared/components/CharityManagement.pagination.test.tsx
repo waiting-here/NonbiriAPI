@@ -535,10 +535,10 @@ describe('managed donation page integration', () => {
       );
     const firstNote = firstReviewNote();
     fireEvent.change(firstNote, { target: { value: 'first page note' } });
-    await view.user.click(within(card).getByText('Next', { selector: 'button', exact: true }));
+    await view.user.click(within(card).getByRole('button', { name: 'Next' }));
     const lastNote = within(card).getByLabelText('Review note');
     fireEvent.change(lastNote, { target: { value: 'second page note' } });
-    await view.user.click(within(card).getByText('Previous', { selector: 'button', exact: true }));
+    await view.user.click(within(card).getByRole('button', { name: 'Previous' }));
     expect(firstReviewNote()).toHaveValue('first page note');
     const reviewFields = [...card.children].find((child) => child.matches('div.ops-field-grid'));
     if (!(reviewFields instanceof HTMLElement)) throw new Error('Review fields missing');

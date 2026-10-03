@@ -25,6 +25,8 @@ import { useRequestAdaptationCopy } from './requestAdaptationCopy';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { MarkdownText } from './MarkdownText';
+import { DataTable, FilterBar, Fold, MoreMenu, Tabs } from '@shared/components/ui';
+import '@shared/styles/charity-management.css';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -626,14 +628,18 @@ function DonationKeyEditor({
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
       <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} readOnly />
-      <FailurePolicyControl
-        role={role}
-        donationID={donation.id}
-        keyID={item.id}
-        revision={donation.revision}
-        threshold={item.failure_disable_threshold}
-        refresh={refresh}
-      />
+      <Fold
+        title={t('common.operations.charity.failureStrategy', { defaultValue: 'Failure strategy' })}
+      >
+        <FailurePolicyControl
+          role={role}
+          donationID={donation.id}
+          keyID={item.id}
+          revision={donation.revision}
+          threshold={item.failure_disable_threshold}
+          refresh={refresh}
+        />
+      </Fold>
       <h5>{copy.keyUsage}</h5>
       <div className="ops-toolbar">
         <StatusBadge
@@ -716,10 +722,16 @@ function DonationKeyEditor({
       {donation.status === 'approved' && !terminal ? (
         <>
           <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
-          <KeyQuotaFields
-            value={draft}
-            onChange={(next) => setDraft((current) => ({ ...current, ...next }))}
-          />
+          <Fold
+            title={t('common.operations.charity.quotaReserve', {
+              defaultValue: 'Quota and reserve',
+            })}
+          >
+            <KeyQuotaFields
+              value={draft}
+              onChange={(next) => setDraft((current) => ({ ...current, ...next }))}
+            />
+          </Fold>
           <fieldset className="ops-form-section">
             <legend>{copy.keyManagement}</legend>
             <div className="ops-field-grid">
@@ -1051,15 +1063,21 @@ function DonationReview({
                       readOnly
                     />
                     <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
-                    <KeyQuotaFields
-                      value={draft}
-                      onChange={(next) =>
-                        setKeys((current) => ({
-                          ...current,
-                          [entry.id]: { ...current[entry.id], ...next },
-                        }))
-                      }
-                    />
+                    <Fold
+                      title={t('common.operations.charity.quotaReserve', {
+                        defaultValue: 'Quota and reserve',
+                      })}
+                    >
+                      <KeyQuotaFields
+                        value={draft}
+                        onChange={(next) =>
+                          setKeys((current) => ({
+                            ...current,
+                            [entry.id]: { ...current[entry.id], ...next },
+                          }))
+                        }
+                      />
+                    </Fold>
                     <div className="ops-field-grid">
                       <label>
                         <span>{t('common.operations.charity.safeNote')}</span>
@@ -1425,6 +1443,8 @@ function DonationsPanel({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const [batch, setBatch] = useState<'discovery' | 'reset' | null>(null);
+  const resetBatchRef = useRef<HTMLDivElement>(null);
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const rawHandling = oneParam(searchParams, 'handling');
@@ -1550,201 +1570,304 @@ function DonationsPanel({
     );
   }
   return (
-    <div className="ops-stack" ref={listRef} tabIndex={-1}>
-      <Card>
-        <div className="ops-toolbar">
-          <label>
-            <span>{t('common.donationHandling.filter')}</span>
-            <select value={handling} onChange={(event) => updateFilters(event.target.value, query)}>
-              <option value="">{t('common.donationHandling.all')}</option>
-              {(['pending', 'processed', 'closed', 'legacy'] as const).map((state) => (
-                <option key={state} value={state}>
-                  {t(donationHandlingStateKey[state])}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{t('common.donationHandling.search')}</span>
-            <input
-              type="search"
-              value={queryDraft}
-              aria-invalid={!queryValid}
-              onChange={(event) => setQueryDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && queryValid) {
-                  event.preventDefault();
-                  updateFilters(handling, queryDraft);
-                }
+    <div className={`charity-donations${selected ? ' nb-md' : ''}`} ref={listRef} tabIndex={-1}>
+      <div className="charity-donations__list">
+        <Card>
+          <div className="charity-donation-toolbar">
+            <FilterBar
+              secondaryLabel={t('common.filter')}
+              activeCount={[handling, status, query].filter(Boolean).length}
+              search={
+                <div className="charity-donation-search">
+                  {' '}
+                  <label>
+                    <span>{t('common.donationHandling.search')}</span>
+                    <input
+                      type="search"
+                      value={queryDraft}
+                      aria-invalid={!queryValid}
+                      onChange={(event) => setQueryDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && queryValid) {
+                          event.preventDefault();
+                          updateFilters(handling, queryDraft);
+                        }
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!queryValid}
+                    onClick={() => updateFilters(handling, queryDraft)}
+                  >
+                    {t('common.donationHandling.applySearch')}
+                  </button>
+                  {!queryValid ? (
+                    <p className="field-error" role="alert">
+                      {t('common.donationHandling.searchInvalid')}
+                    </p>
+                  ) : null}
+                </div>
+              }
+              secondary={
+                <>
+                  {' '}
+                  <label>
+                    <span>{t('common.donationHandling.filter')}</span>
+                    <select
+                      value={handling}
+                      onChange={(event) => updateFilters(event.target.value, query)}
+                    >
+                      <option value="">{t('common.donationHandling.all')}</option>
+                      {(['pending', 'processed', 'closed', 'legacy'] as const).map((state) => (
+                        <option key={state} value={state}>
+                          {t(donationHandlingStateKey[state])}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t(charityCopyKey(role, 'statusFilter'))}</span>
+                    <select
+                      value={status}
+                      onChange={(event) => {
+                        updateFilters(handling, query, event.target.value);
+                      }}
+                    >
+                      <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
+                      {['pending', 'approved', 'rejected', 'deleted', 'expired'].map((value) => (
+                        <option key={value} value={value}>
+                          {t(charityStatusKey(role, value as DonationStatus))}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              }
+              chips={[
+                ...(handling
+                  ? [
+                      {
+                        key: 'handling',
+                        label: t(
+                          donationHandlingStateKey[
+                            handling as keyof typeof donationHandlingStateKey
+                          ],
+                        ),
+                        onRemove: () => updateFilters('', query, status),
+                        removeLabel: t('common.resetFilter'),
+                      },
+                    ]
+                  : []),
+                ...(status
+                  ? [
+                      {
+                        key: 'status',
+                        label: t(charityStatusKey(role, status as DonationStatus)),
+                        onRemove: () => updateFilters(handling, query, ''),
+                        removeLabel: t('common.resetFilter'),
+                      },
+                    ]
+                  : []),
+                ...(query
+                  ? [
+                      {
+                        key: 'query',
+                        label: query,
+                        onRemove: () => updateFilters(handling, '', status),
+                        removeLabel: t('common.resetFilter'),
+                      },
+                    ]
+                  : []),
+              ]}
+              onClearAll={() => updateFilters('', '', '')}
+              clearAllLabel={t('common.resetFilter')}
+              onSubmit={() => {
+                if (queryValid) updateFilters(handling, queryDraft);
               }}
             />
-          </label>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={!queryValid}
-            onClick={() => updateFilters(handling, queryDraft)}
-          >
-            {t('common.donationHandling.applySearch')}
-          </button>
-          {!queryValid ? (
-            <p className="field-error" role="alert">
-              {t('common.donationHandling.searchInvalid')}
-            </p>
-          ) : null}
-          <label>
-            <span>{t(charityCopyKey(role, 'statusFilter'))}</span>
-            <select
-              value={status}
-              onChange={(event) => {
-                updateFilters(handling, query, event.target.value);
-              }}
-            >
-              <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
-              {['pending', 'approved', 'rejected', 'deleted', 'expired'].map((value) => (
-                <option key={value} value={value}>
-                  {t(charityStatusKey(role, value as DonationStatus))}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <DonationDiscoveryControl
-          key={`discovery-all:${role}:${accountId}`}
-          role={role}
-          target={{ donation_id: null }}
-          onCapabilityLoss={onCapabilityLoss}
-        />
-        {list.data ? (
-          <FailureResetControl
-            key={`${role}:${accountId}:${status}:${handling}:${query}`}
-            role={role}
-            selection={{
-              view: 'donations',
-              ...({ status, handling, q: query } as ManagedDonationPageFilters),
-            }}
-            disabled={list.isFetching || Boolean(list.error)}
-            onCapabilityLoss={onCapabilityLoss}
-            choices={list.data.data.map((item) => ({
-              id: item.id,
-              label: item.description || t('common.operations.charity.noDescription'),
-              target: { view: 'donation_keys', donation_id: item.id },
-            }))}
-          />
-        ) : null}
-        {list.isPending ? (
-          <LoadingState />
-        ) : list.error ? (
-          <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-        ) : list.data.data.length === 0 ? (
-          <EmptyState
-            title={t(charityCopyKey(role, 'noDonations'))}
-            body={t(charityCopyKey(role, 'noDonationsBody'))}
-          />
-        ) : (
-          <>
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t('common.operations.charity.description')}</th>
-                    <th>{t('common.operations.charity.owner')}</th>
-                    <th>{t('common.status')}</th>
-                    <th>{t('common.donationHandling.title')}</th>
-                    <th>{t('common.operations.charity.keys')}</th>
-                    <th>{t('common.operations.charity.open')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.data.data.map((item) => (
-                    <tr key={item.id}>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('common.operations.charity.description')}
-                      >
-                        <MarkdownText>
-                          {item.description || t('common.operations.charity.noDescription')}
-                        </MarkdownText>
-                        <details>
-                          <summary>{t('common.itemId')}</summary>
-                          {item.id}
-                        </details>
-                        <ul className="ops-source-preview">
-                          {item.sources.map((source) => (
-                            <li
-                              key={`${source.kind}:${source.kind === 'mainstream' ? source.channel_id : source.base_url}:${source.connector_type}`}
-                            >
-                              {source.kind === 'mainstream' ? `${source.name} · ` : ''}
-                              {source.base_url}
-                            </li>
-                          ))}
-                        </ul>
-                        {BigInt(item.source_count) > BigInt(item.sources.length) ? (
-                          <small>
-                            {t('common.operations.charity.sourcePreview', {
-                              shown: item.sources.length,
-                              total: item.source_count,
-                            })}
-                          </small>
-                        ) : null}
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('common.operations.charity.owner')}
-                      >
-                        {item.owner?.display_name ?? t('common.operations.charity.deidentified')}
-                      </td>
-                      <td data-label={t('common.status')}>
-                        <StatusBadge
-                          active={item.status === 'approved'}
-                          label={t(charityStatusKey(role, item.status))}
-                        />
-                      </td>
-                      <td className="ops-cell-wide" data-label={t('common.donationHandling.title')}>
-                        <DonationHandlingStatus handling={item.handling} />
-                      </td>
-                      <td data-label={t('common.operations.charity.keys')}>
-                        {item.key_count}
-                        <div className="muted">
-                          {Object.entries(item.state_counts)
-                            .filter(([, count]) => count !== '0')
-                            .map(([state, count]) => (
-                              <span className="ops-summary-part" key={state}>
-                                {t(charityStateKey(state as CharityState))}: {count}
-                              </span>
-                            ))}
-                        </div>
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('common.operations.charity.open')}
-                      >
-                        <button
-                          className="btn btn-secondary ops-row-action"
-                          type="button"
-                          disabled={list.isFetching}
-                          onClick={() => setSelected(item.id)}
-                        >
-                          {t('common.operations.charity.openReview')}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="charity-batch-menu">
+              <span>
+                {t('common.operations.charity.batchActions', { defaultValue: 'Batch actions' })}
+              </span>
+              <MoreMenu
+                label={t('common.operations.charity.batchActions', {
+                  defaultValue: 'Batch actions',
+                })}
+                items={[
+                  {
+                    label: t('common.operations.charity.batchDiscovery', {
+                      defaultValue: 'Discover all donations',
+                    }),
+                    onSelect: () => setBatch('discovery'),
+                  },
+                  {
+                    label: t('common.operations.charity.batchFailureReset', {
+                      defaultValue: 'Reset failure streaks',
+                    }),
+                    disabled: !list.data || list.isFetching || Boolean(list.error),
+                    onSelect: () => {
+                      setBatch('reset');
+                      const details = resetBatchRef.current?.querySelector('details');
+                      if (details) details.open = true;
+                    },
+                  },
+                ]}
+              />
             </div>
-          </>
-        )}
-        {list.data && !list.error ? (
-          <PagePagination
-            metadata={list.data.pagination}
-            requestedPage={pager.page}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            busy={list.isFetching}
-          />
-        ) : null}
-      </Card>
+          </div>
+          <div hidden={batch !== 'discovery'} className="charity-batch-section">
+            <DonationDiscoveryControl
+              key={`discovery-all:${role}:${accountId}`}
+              role={role}
+              target={{ donation_id: null }}
+              onCapabilityLoss={onCapabilityLoss}
+            />
+          </div>
+          <div hidden={batch !== 'reset'} ref={resetBatchRef} className="charity-batch-section">
+            {list.data ? (
+              <FailureResetControl
+                key={`${role}:${accountId}:${status}:${handling}:${query}`}
+                role={role}
+                selection={{
+                  view: 'donations',
+                  ...({ status, handling, q: query } as ManagedDonationPageFilters),
+                }}
+                disabled={list.isFetching || Boolean(list.error)}
+                onCapabilityLoss={onCapabilityLoss}
+                choices={list.data.data.map((item) => ({
+                  id: item.id,
+                  label: item.description || t('common.operations.charity.noDescription'),
+                  target: { view: 'donation_keys', donation_id: item.id },
+                }))}
+              />
+            ) : null}
+          </div>
+          {batch ? (
+            <button type="button" className="btn btn-quiet" onClick={() => setBatch(null)}>
+              {t('common.close')}
+            </button>
+          ) : null}
+          {list.isPending ? (
+            <LoadingState />
+          ) : list.error ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : list.data.data.length === 0 ? (
+            <EmptyState
+              title={t(charityCopyKey(role, 'noDonations'))}
+              body={t(charityCopyKey(role, 'noDonationsBody'))}
+            />
+          ) : (
+            <>
+              <DataTable
+                caption={t(charityCopyKey(role, 'donationsTitle'))}
+                rows={list.data.data}
+                rowKey={(item) => item.id}
+                selectedKey={selected}
+                columns={[
+                  {
+                    key: 'description',
+                    header: t('common.operations.charity.description'),
+                    cell: 'title',
+                    render: (item) => (
+                      <div className="charity-donation-summary">
+                        <span className="charity-donation-description">
+                          {item.description || t('common.operations.charity.noDescription')}
+                        </span>
+                        <small
+                          className="charity-donation-meta"
+                          title={[
+                            item.id,
+                            ...item.sources.map(
+                              (source) =>
+                                `${source.kind === 'mainstream' ? `${source.name} · ` : ''}${source.base_url}`,
+                            ),
+                          ].join(' · ')}
+                        >
+                          {t('common.itemId')} · {item.id} ·{' '}
+                          {item.sources[0] ? safeSourceLabel(item.sources[0], t) : '—'}
+                          {BigInt(item.source_count) > 1n
+                            ? ' · ' +
+                              t('common.operations.charity.sourcePreview', {
+                                shown: Math.min(1, item.sources.length),
+                                total: item.source_count,
+                              })
+                            : ''}
+                        </small>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'owner',
+                    header: t('common.operations.charity.owner'),
+                    mobileLabel: t('common.operations.charity.owner'),
+                    cell: 'meta',
+                    render: (item) =>
+                      item.owner?.display_name ?? t('common.operations.charity.deidentified'),
+                  },
+                  {
+                    key: 'status',
+                    header: t('common.status'),
+                    cell: 'status',
+                    render: (item) => (
+                      <StatusBadge
+                        active={item.status === 'approved'}
+                        label={t(charityStatusKey(role, item.status))}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'handling',
+                    header: t('common.donationHandling.title'),
+                    mobileLabel: t('common.donationHandling.title'),
+                    cell: 'meta',
+                    render: (item) => <DonationHandlingStatus handling={item.handling} />,
+                  },
+                  {
+                    key: 'keys',
+                    header: t('common.operations.charity.keys'),
+                    mobileLabel: t('common.operations.charity.keys'),
+                    cell: 'meta',
+                    render: (item) => (
+                      <>
+                        {item.key_count}
+                        <small className="charity-available-count">
+                          {t(charityStateKey('available'))}: {item.state_counts.available}
+                        </small>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'actions',
+                    header: t('common.operations.charity.open'),
+                    cell: 'action',
+                    render: (item) => (
+                      <button
+                        type="button"
+                        className="btn btn-secondary ops-row-action"
+                        disabled={list.isFetching}
+                        onClick={() => setSelected(item.id)}
+                      >
+                        {t('common.operations.charity.openReview')}
+                      </button>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+          {list.data && !list.error ? (
+            <PagePagination
+              metadata={list.data.pagination}
+              requestedPage={pager.page}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+              busy={list.isFetching}
+            />
+          ) : null}
+        </Card>
+      </div>
       {selected ? (
         <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
           <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
@@ -2298,23 +2421,29 @@ function ModelForm({
           </div>
         ) : (
           <>
-            <div className="ops-field-grid">
-              <label>
-                <span>{t('common.operations.charity.tokenReserveCredits')}</span>
-                <input
-                  aria-label={t('common.operations.charity.tokenReserveCredits')}
-                  inputMode="decimal"
-                  value={draft.tokenReserveCredits ?? ''}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      tokenReserveCredits: event.target.value || null,
-                    }))
-                  }
-                />
-                <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
-              </label>
-            </div>
+            <Fold
+              title={t('common.operations.charity.quotaReserve', {
+                defaultValue: 'Quota and reserve',
+              })}
+            >
+              <div className="ops-field-grid">
+                <label>
+                  <span>{t('common.operations.charity.tokenReserveCredits')}</span>
+                  <input
+                    aria-label={t('common.operations.charity.tokenReserveCredits')}
+                    inputMode="decimal"
+                    value={draft.tokenReserveCredits ?? ''}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        tokenReserveCredits: event.target.value || null,
+                      }))
+                    }
+                  />
+                  <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
+                </label>
+              </div>
+            </Fold>
             <div className="charity-price-grid">
               <div className="charity-price-headings" aria-hidden="true">
                 {(['userPrices', 'donorRewards'] as const).map((side) => (
@@ -2610,18 +2739,24 @@ function BindingsPanel({
   return (
     <>
       {showAdaptation ? (
-        <RequestAdaptationEditor
-          key={`${accountId}:${role}:${model.id}`}
-          url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/request-adaptation`}
-          scope="charity-model"
-          gatewayCacheDefaults={Boolean(
-            bindings.data?.bindings.length &&
-            bindings.data.bindings.every(
-              (entry) => entry.source.connector_type === 'ai-sdk-gateway-v3',
-            ),
-          )}
-          editable={role === 'admin'}
-        />
+        <Fold
+          title={t('common.operations.charity.adaptationSettings', {
+            defaultValue: 'Request adaptation',
+          })}
+        >
+          <RequestAdaptationEditor
+            key={`${accountId}:${role}:${model.id}`}
+            url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/request-adaptation`}
+            scope="charity-model"
+            gatewayCacheDefaults={Boolean(
+              bindings.data?.bindings.length &&
+              bindings.data.bindings.every(
+                (entry) => entry.source.connector_type === 'ai-sdk-gateway-v3',
+              ),
+            )}
+            editable={role === 'admin'}
+          />
+        </Fold>
       ) : null}
       <Card>
         <h3>{t('common.operations.charity.orderedBindings')}</h3>
@@ -2762,16 +2897,22 @@ function BindingsPanel({
         {showAdaptation &&
         adaptationBinding &&
         bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
-          <RequestAdaptationEditor
-            key={`${accountId}:${model.id}:${adaptationBinding}`}
-            url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
-            scope="binding"
-            connectorType={
-              bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
-                .connector_type
-            }
-            editable={role === 'admin'}
-          />
+          <Fold
+            title={t('common.operations.charity.adaptationSettings', {
+              defaultValue: 'Request adaptation',
+            })}
+          >
+            <RequestAdaptationEditor
+              key={`${accountId}:${model.id}:${adaptationBinding}`}
+              url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
+              scope="binding"
+              connectorType={
+                bindings.data.bindings.find((entry) => entry.id === adaptationBinding)?.source
+                  .connector_type
+              }
+              editable={role === 'admin'}
+            />
+          </Fold>
         ) : null}
         {orderChanged ? (
           <div className="ops-actions">
@@ -3225,69 +3366,72 @@ function CharityManagementAccount({
     );
   return (
     <div className="ops-stack charity-management">
-      <div
-        className="ops-tabs"
-        role="tablist"
-        aria-label={t('common.operations.charity.sectionsLabel')}
-      >
-        {(
+      <Tabs
+        label={t('common.operations.charity.sectionsLabel')}
+        value={section}
+        onChange={setSection}
+        tabs={(
           [
-            [
-              'donations',
-              frame === 'admin'
-                ? t('admin.charity.donationsTitle')
-                : t('user.steward.donationsTitle'),
-            ],
-            [
-              'models',
-              frame === 'admin' ? t('admin.charity.modelsTitle') : t('user.steward.modelsTitle'),
-            ],
-            ['sources', t('common.operations.charity.sourceGroups')],
+            {
+              value: 'donations',
+              label: t(
+                frame === 'admin' ? 'admin.charity.donationsTitle' : 'user.steward.donationsTitle',
+              ),
+              id: 'charity-tab-donations',
+              panelId: 'charity-panel',
+            },
+            {
+              value: 'models',
+              label: t(
+                frame === 'admin' ? 'admin.charity.modelsTitle' : 'user.steward.modelsTitle',
+              ),
+              id: 'charity-tab-models',
+              panelId: 'charity-panel',
+            },
+            {
+              value: 'sources',
+              label: t('common.operations.charity.sourceGroups'),
+              id: 'charity-tab-sources',
+              panelId: 'charity-panel',
+            },
           ] as const
-        )
-          .filter(([value]) => !trainee || value === 'models')
-          .map(([value, label]) => (
-            <button
-              key={value}
-              className={section === value ? 'btn btn-primary' : 'btn btn-secondary'}
-              type="button"
-              role="tab"
-              aria-selected={section === value}
-              onClick={() => setSection(value)}
-            >
-              {label}
-            </button>
-          ))}
+        ).filter((tab) => !trainee || tab.value === 'models')}
+      />
+      <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
+        {section === 'donations' ? (
+          <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
+        ) : section === 'models' ? (
+          <ModelsPanel
+            role={frame}
+            accountId={accountId}
+            onCapabilityLoss={clearCapability}
+            trainee={trainee}
+          />
+        ) : (
+          <CharitySourceBrowser
+            role={frame}
+            accountId={accountId}
+            enabled
+            onCapabilityLoss={clearCapability}
+            onOpenDonation={(donationId, keyId) =>
+              setParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set('charity_section', 'donations');
+                next.set('donation_id', donationId);
+                next.set('donation_from', 'sources');
+                for (const name of [
+                  'donation_key',
+                  'donation_keys_page',
+                  'donation_keys_page_size',
+                ])
+                  next.delete(name);
+                if (keyId) next.set('donation_key', keyId);
+                return next;
+              })
+            }
+          />
+        )}
       </div>
-      {section === 'donations' ? (
-        <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
-      ) : section === 'models' ? (
-        <ModelsPanel
-          role={frame}
-          accountId={accountId}
-          onCapabilityLoss={clearCapability}
-          trainee={trainee}
-        />
-      ) : (
-        <CharitySourceBrowser
-          role={frame}
-          accountId={accountId}
-          enabled
-          onCapabilityLoss={clearCapability}
-          onOpenDonation={(donationId, keyId) =>
-            setParams((current) => {
-              const next = new URLSearchParams(current);
-              next.set('charity_section', 'donations');
-              next.set('donation_id', donationId);
-              next.set('donation_from', 'sources');
-              for (const name of ['donation_key', 'donation_keys_page', 'donation_keys_page_size'])
-                next.delete(name);
-              if (keyId) next.set('donation_key', keyId);
-              return next;
-            })
-          }
-        />
-      )}
     </div>
   );
 }

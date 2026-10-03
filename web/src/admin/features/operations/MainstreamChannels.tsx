@@ -8,6 +8,9 @@ import {
   StationSessionChangedError,
   stationSessionMatches,
 } from '@shared/charityManagement';
+import { DataTable, Segmented, Toggle } from '@shared/components/ui';
+import { Drawer } from '@shared/components/ui/Drawer';
+import './mainstream-channels.css';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import {
   Card,
@@ -165,38 +168,26 @@ function ChannelForm({
             onChange={(event) => setDraft({ ...draft, name: event.target.value })}
           />
         </label>
-        <label>
-          <span>{t('admin.mainstreamChannels.form.category')}</span>
-          <select
-            value={draft.category}
-            disabled={!canEdit || busy}
-            onChange={(event) =>
-              setDraft({ ...draft, category: event.target.value as MainstreamChannelCategory })
-            }
-          >
-            {MAINSTREAM_CHANNEL_CATEGORIES.map((value) => (
-              <option key={value} value={value}>
-                {t(CATEGORY_LABEL_KEYS[value])}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>{t('admin.mainstreamChannels.form.connector')}</span>
-          <select
-            value={draft.connector_type}
-            disabled={!canEdit || busy}
-            onChange={(event) =>
-              setDraft({ ...draft, connector_type: event.target.value as MainstreamConnectorType })
-            }
-          >
-            {MAINSTREAM_CONNECTOR_TYPES.map((value) => (
-              <option key={value} value={value}>
-                {t(CONNECTOR_LABEL_KEYS[value])}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Segmented
+          label={t('admin.mainstreamChannels.form.category')}
+          value={draft.category}
+          disabled={!canEdit || busy}
+          options={MAINSTREAM_CHANNEL_CATEGORIES.map((value) => ({
+            value,
+            label: t(CATEGORY_LABEL_KEYS[value]),
+          }))}
+          onChange={(category) => setDraft({ ...draft, category })}
+        />
+        <Segmented
+          label={t('admin.mainstreamChannels.form.connector')}
+          value={draft.connector_type}
+          disabled={!canEdit || busy}
+          options={MAINSTREAM_CONNECTOR_TYPES.map((value) => ({
+            value,
+            label: t(CONNECTOR_LABEL_KEYS[value]),
+          }))}
+          onChange={(connector_type) => setDraft({ ...draft, connector_type })}
+        />
         <label>
           <span>{t('admin.mainstreamChannels.form.baseUrl')}</span>
           <input
@@ -211,15 +202,12 @@ function ChannelForm({
           <small>{t('admin.mainstreamChannels.form.baseUrlHelp')}</small>
         </label>
       </div>
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={draft.enabled}
-          disabled={!canEdit || busy}
-          onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
-        />
-        <span>{t('admin.mainstreamChannels.form.enabled')}</span>
-      </label>
+      <Toggle
+        label={t('admin.mainstreamChannels.form.enabled')}
+        checked={draft.enabled}
+        disabled={!canEdit || busy}
+        onChange={(enabled) => setDraft({ ...draft, enabled })}
+      />
       {invalid ? (
         <p className="inline-notice">{t('admin.mainstreamChannels.validation.invalid')}</p>
       ) : null}
@@ -257,7 +245,7 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
         <dt>{t('admin.mainstreamChannels.detail.baseUrl')}</dt>
         <dd className="ops-wrap">{channel.base_url}</dd>
         <dt>{t('admin.mainstreamChannels.detail.enabled')}</dt>
-        <dd>{t(channel.enabled ? 'common.enabled' : 'common.disabled')}</dd>
+        <dd>{t(channel.enabled ? 'admin.mainstreamChannels.available' : 'common.disabled')}</dd>
         <dt>{t('admin.mainstreamChannels.detail.state')}</dt>
         <dd>{t(STATE_LABEL_KEYS[channel.state])}</dd>
         <dt>{t('admin.mainstreamChannels.detail.created')}</dt>
@@ -284,7 +272,7 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
   );
 }
 
-export function MainstreamChannelsPanel() {
+export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: boolean }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -313,6 +301,8 @@ export function MainstreamChannelsPanel() {
     );
   }, [searchParams, setSearchParams]);
   const [selected, setSelected] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [retireTarget, setRetireTarget] = useState<AdminMainstreamChannel | null>(null);
   const [authorityLoss, setAuthorityLoss] = useState<unknown>(null);
   const [accountScope, setAccountScope] = useState(accountID);
@@ -423,6 +413,8 @@ export function MainstreamChannelsPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccountScope(accountID);
     setSelected('');
+    setDrawerOpen(false);
+    setCreating(false);
     setRetireTarget(null);
     if (previousAccountID && accountID && previousAccountID !== accountID) {
       setAuthorityLoss(null);
@@ -453,6 +445,8 @@ export function MainstreamChannelsPanel() {
     if (isAuthorityLoss(authorityError)) {
       setAuthorityLoss(authorityError);
       setSelected('');
+      setDrawerOpen(false);
+      setCreating(false);
       setRetireTarget(null);
       create.reset();
       patch.reset();
@@ -462,6 +456,8 @@ export function MainstreamChannelsPanel() {
       setAuthorityLoss(null);
     } else if (isNotFoundError(detail.error)) {
       setSelected('');
+      setDrawerOpen(false);
+      setCreating(false);
       setRetireTarget(null);
     }
   }, [
@@ -483,8 +479,30 @@ export function MainstreamChannelsPanel() {
   const pageData = channels.data;
   const busy = channels.isFetching;
 
+  const newChannelAction = (
+    <button
+      type="button"
+      className="btn btn-primary"
+      disabled={!canWrite}
+      onClick={() => {
+        setCreating(true);
+        setDrawerOpen(true);
+      }}
+    >
+      <span aria-hidden="true">＋</span>{' '}
+      {t('admin.mainstreamChannels.actions.new', { defaultValue: 'New channel' })}
+    </button>
+  );
+
   return (
     <div className="ops-stack">
+      {showHeader ? (
+        <PageHeader
+          title={t('admin.mainstreamChannels.title')}
+          description={t('admin.mainstreamChannels.description')}
+          actions={newChannelAction}
+        />
+      ) : null}
       <Card>
         <div className="ops-toolbar">
           <label>
@@ -511,6 +529,7 @@ export function MainstreamChannelsPanel() {
               <option value="all">{t('admin.mainstreamChannels.state.all')}</option>
             </select>
           </label>
+          {!showHeader ? newChannelAction : null}
         </div>
         {session.error || authorityLoss ? (
           <ErrorState
@@ -533,75 +552,95 @@ export function MainstreamChannelsPanel() {
               />
             ) : (
               <>
-                <div className="ops-table-scroll">
-                  <table className="ops-table ops-table--responsive">
-                    <thead>
-                      <tr>
-                        <th>{t('admin.mainstreamChannels.table.name')}</th>
-                        <th>{t('admin.mainstreamChannels.table.category')}</th>
-                        <th>{t('admin.mainstreamChannels.table.connector')}</th>
-                        <th>{t('admin.mainstreamChannels.table.baseUrl')}</th>
-                        <th>{t('admin.mainstreamChannels.table.enabled')}</th>
-                        <th>{t('admin.mainstreamChannels.table.updated')}</th>
-                        <th>{t('admin.mainstreamChannels.table.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pageData.data.map((channel) => (
-                        <tr key={channel.id}>
-                          <td
-                            className="ops-cell-wide"
-                            data-label={t('admin.mainstreamChannels.table.name')}
-                          >
-                            {channel.name}
-                          </td>
-                          <td data-label={t('admin.mainstreamChannels.table.category')}>
-                            {t(CATEGORY_LABEL_KEYS[channel.category])}
-                          </td>
-                          <td data-label={t('admin.mainstreamChannels.table.connector')}>
-                            {t(CONNECTOR_LABEL_KEYS[channel.connector_type])}
-                          </td>
-                          <td
-                            className="ops-cell-wide ops-wrap"
-                            data-label={t('admin.mainstreamChannels.table.baseUrl')}
-                          >
-                            {channel.base_url}
-                          </td>
-                          <td data-label={t('admin.mainstreamChannels.table.enabled')}>
-                            <StatusBadge
-                              active={channel.enabled}
-                              danger={channel.state === 'retired'}
-                              label={t(channel.enabled ? 'common.enabled' : 'common.disabled')}
-                            />
-                          </td>
-                          <td data-label={t('admin.mainstreamChannels.table.updated')}>
-                            {formatDateTime(channel.updated_at)}
-                          </td>
-                          <td
-                            className="ops-cell-wide"
-                            data-label={t('admin.mainstreamChannels.table.actions')}
-                          >
-                            <button
-                              className="btn btn-secondary"
-                              type="button"
-                              disabled={
-                                busy ||
-                                !scopeReady ||
-                                accountScope !== accountID ||
-                                session.isPending ||
-                                session.isFetching ||
-                                Boolean(authorityLoss)
-                              }
-                              onClick={() => setSelected(channel.id)}
-                            >
-                              {t('admin.mainstreamChannels.actions.view')}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  caption={t('admin.mainstreamChannels.title')}
+                  rows={pageData.data}
+                  rowKey={(channel) => channel.id}
+                  selectedKey={selected}
+                  columns={[
+                    {
+                      key: 'name',
+                      header: t('admin.mainstreamChannels.table.name'),
+                      cell: 'title',
+                      render: (channel) => channel.name,
+                    },
+                    {
+                      key: 'category',
+                      header: t('admin.mainstreamChannels.table.category'),
+                      mobileLabel: t('admin.mainstreamChannels.table.category'),
+                      cell: 'meta',
+                      render: (channel) => t(CATEGORY_LABEL_KEYS[channel.category]),
+                    },
+                    {
+                      key: 'connector',
+                      header: t('admin.mainstreamChannels.table.connector'),
+                      mobileLabel: t('admin.mainstreamChannels.table.connector'),
+                      cell: 'meta',
+                      render: (channel) => t(CONNECTOR_LABEL_KEYS[channel.connector_type]),
+                    },
+                    {
+                      key: 'base-url',
+                      header: t('admin.mainstreamChannels.table.baseUrl'),
+                      mobileLabel: t('admin.mainstreamChannels.table.baseUrl'),
+                      cell: 'meta',
+                      render: (channel) => (
+                        <span className="channel-base-url" title={channel.base_url}>
+                          {channel.base_url}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'status',
+                      header: t('admin.mainstreamChannels.table.enabled'),
+                      cell: 'status',
+                      render: (channel) => (
+                        <StatusBadge
+                          active={channel.state === 'active' && channel.enabled}
+                          label={t(
+                            channel.state === 'retired'
+                              ? STATE_LABEL_KEYS.retired
+                              : channel.enabled
+                                ? 'admin.mainstreamChannels.available'
+                                : 'common.disabled',
+                          )}
+                        />
+                      ),
+                    },
+                    {
+                      key: 'updated',
+                      header: t('admin.mainstreamChannels.table.updated'),
+                      mobileLabel: t('admin.mainstreamChannels.table.updated'),
+                      cell: 'meta',
+                      render: (channel) => formatDateTime(channel.updated_at),
+                    },
+                    {
+                      key: 'actions',
+                      header: t('admin.mainstreamChannels.table.actions'),
+                      cell: 'action',
+                      render: (channel) => (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={
+                            busy ||
+                            !scopeReady ||
+                            accountScope !== accountID ||
+                            session.isPending ||
+                            session.isFetching ||
+                            Boolean(authorityLoss)
+                          }
+                          onClick={() => {
+                            setCreating(false);
+                            setSelected(channel.id);
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          {t('admin.mainstreamChannels.actions.view')}
+                        </button>
+                      ),
+                    },
+                  ]}
+                />
                 <PagePagination
                   metadata={pageData.pagination}
                   requestedPage={pager.page}
@@ -626,84 +665,119 @@ export function MainstreamChannelsPanel() {
         )}
       </Card>
 
-      <Card>
-        <h2>{t('admin.mainstreamChannels.create.title')}</h2>
-        <p>{t('admin.mainstreamChannels.create.description')}</p>
-        <ChannelForm
-          key={`create:${accountID ?? 'anonymous'}`}
-          mode="create"
-          busy={create.isPending}
-          error={createError}
-          canWrite={canWrite}
-          onSubmit={(draft) => {
-            if (!canWrite || !accountID) return;
-            const submittedAccountID = accountID;
-            create.mutate(
-              { accountID: submittedAccountID, draft },
-              {
-                onSuccess: (channel) => {
-                  if (isCurrentAccount(submittedAccountID)) setSelected(channel.id);
-                },
-              },
-            );
-          }}
-        />
-      </Card>
+      <Drawer
+        open={drawerOpen && scopeReady && accountScope === accountID && !authorityRevoked}
+        onClose={() => setDrawerOpen(false)}
+        busy={create.isPending || patch.isPending || retire.isPending}
+        title={t(
+          creating
+            ? 'admin.mainstreamChannels.create.title'
+            : 'admin.mainstreamChannels.detail.title',
+        )}
+        closeLabel={t('common.close')}
+      >
+        {creating ? (
+          <div className="ops-stack">
+            <p>{t('admin.mainstreamChannels.create.description')}</p>
+            <ChannelForm
+              key={`create:${accountID ?? 'anonymous'}`}
+              mode="create"
+              busy={create.isPending}
+              error={createError}
+              canWrite={canWrite}
+              onSubmit={(draft) => {
+                if (!canWrite || !accountID) return;
+                const submittedAccountID = accountID;
+                create.mutate(
+                  { accountID: submittedAccountID, draft },
+                  {
+                    onSuccess: (channel) => {
+                      if (isCurrentAccount(submittedAccountID)) {
+                        setCreating(false);
+                        setSelected(channel.id);
+                      }
+                    },
+                  },
+                );
+              }}
+            />
+          </div>
+        ) : null}
 
-      {selected ? (
-        <Card>
-          {detail.isPending ? (
-            <LoadingState />
-          ) : detail.error ? (
-            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-          ) : selectedChannel ? (
-            <>
-              <h2>{t('admin.mainstreamChannels.detail.title')}</h2>
-              <ChannelDetails channel={selectedChannel} />
-              {selectedChannel.state === 'active' ? (
-                <>
-                  <h3>{t('admin.mainstreamChannels.edit.title')}</h3>
-                  <ChannelForm
-                    key={`${accountID ?? 'anonymous'}:${selectedChannel.id}:${selectedChannel.revision}`}
-                    mode="edit"
-                    channel={selectedChannel}
-                    busy={patch.isPending}
-                    error={patchError}
-                    canWrite={canWrite}
-                    onCancel={() => setSelected('')}
-                    onSubmit={(draft) => {
-                      if (!canWrite || !accountID) return;
-                      const input = changedPatch(selectedChannel, draft);
-                      if (Object.keys(input).length === 1) return;
-                      patch.mutate({
-                        accountID,
-                        id: selectedChannel.id,
-                        patch: input,
-                      });
-                    }}
-                  />
-                  <div className="ops-danger">
-                    <h3>{t('admin.mainstreamChannels.retire.title')}</h3>
-                    <p>{t('admin.mainstreamChannels.retire.description')}</p>
-                    <button
-                      className="btn btn-danger"
-                      type="button"
-                      disabled={!canWrite || retire.isPending || patch.isPending}
-                      onClick={() => setRetireTarget(selectedChannel)}
-                    >
-                      {t('admin.mainstreamChannels.actions.retire')}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p className="inline-notice">
-                  {t('admin.mainstreamChannels.detail.retiredImmutable')}
-                </p>
-              )}
-            </>
-          ) : null}
-        </Card>
-      ) : null}
+        {!creating && selected ? (
+          <div className="ops-stack">
+            {detail.isPending ? (
+              <LoadingState />
+            ) : detail.error ? (
+              <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+            ) : selectedChannel ? (
+              <>
+                <ChannelDetails channel={selectedChannel} />
+                {selectedChannel.state === 'active' ? (
+                  <>
+                    <h3>{t('admin.mainstreamChannels.edit.title')}</h3>
+                    <ChannelForm
+                      key={`${accountID ?? 'anonymous'}:${selectedChannel.id}:${selectedChannel.revision}`}
+                      mode="edit"
+                      channel={selectedChannel}
+                      busy={patch.isPending}
+                      error={patchError}
+                      canWrite={canWrite}
+                      onCancel={() => setDrawerOpen(false)}
+                      onSubmit={(draft) => {
+                        if (!canWrite || !accountID) return;
+                        const input = changedPatch(selectedChannel, draft);
+                        if (Object.keys(input).length === 1) return;
+                        patch.mutate({
+                          accountID,
+                          id: selectedChannel.id,
+                          patch: input,
+                        });
+                      }}
+                    />
+                    <div className="ops-danger">
+                      <h3>{t('admin.mainstreamChannels.retire.title')}</h3>
+                      <p>{t('admin.mainstreamChannels.retire.description')}</p>
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        disabled={!canWrite || retire.isPending || patch.isPending}
+                        onClick={() => setRetireTarget(selectedChannel)}
+                      >
+                        {t('admin.mainstreamChannels.actions.retire')}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="inline-notice">
+                    {t('admin.mainstreamChannels.detail.retiredImmutable')}
+                  </p>
+                )}
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {retireTarget && canWrite ? (
+          <ConfirmDialog
+            open
+            danger
+            busy={retire.isPending}
+            title={t('admin.mainstreamChannels.retire.confirmTitle')}
+            description={t('admin.mainstreamChannels.retire.confirmDescription', {
+              name: retireTarget.name,
+            })}
+            confirmLabel={t('admin.mainstreamChannels.actions.retire')}
+            onCancel={() => setRetireTarget(null)}
+            onConfirm={() => {
+              const target = retireTarget;
+              setRetireTarget(null);
+              if (!accountID || !canWrite) return;
+              retire.mutate({ accountID, id: target.id, revision: target.revision });
+            }}
+          />
+        ) : null}
+      </Drawer>
 
       {mutationError && conflictNotice ? (
         <p className="inline-notice" role="status">
@@ -711,38 +785,14 @@ export function MainstreamChannelsPanel() {
         </p>
       ) : null}
       {retireError && !conflictNotice ? <ErrorState error={retireError} /> : null}
-      {retireTarget && canWrite ? (
-        <ConfirmDialog
-          open
-          danger
-          busy={retire.isPending}
-          title={t('admin.mainstreamChannels.retire.confirmTitle')}
-          description={t('admin.mainstreamChannels.retire.confirmDescription', {
-            name: retireTarget.name,
-          })}
-          confirmLabel={t('admin.mainstreamChannels.actions.retire')}
-          onCancel={() => setRetireTarget(null)}
-          onConfirm={() => {
-            const target = retireTarget;
-            setRetireTarget(null);
-            if (!accountID || !canWrite) return;
-            retire.mutate({ accountID, id: target.id, revision: target.revision });
-          }}
-        />
-      ) : null}
     </div>
   );
 }
 
 export function MainstreamChannelsPage() {
-  const { t } = useTranslation();
   return (
     <div className="page ops-page">
-      <PageHeader
-        title={t('admin.mainstreamChannels.title')}
-        description={t('admin.mainstreamChannels.description')}
-      />
-      <MainstreamChannelsPanel />
+      <MainstreamChannelsPanel showHeader />
     </div>
   );
 }

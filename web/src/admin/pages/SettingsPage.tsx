@@ -1,10 +1,21 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '@shared/query/http';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import {
+  Affix,
+  Panel,
+  PanelHead,
+  PanelBody,
+  SaveBar,
+  Segmented,
+  Toggle,
+} from '@shared/components/ui';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import './settings/settings.css';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import GatewayCapabilitiesSection from '../features/gateway/GatewayCapabilitiesSection';
 import {
@@ -209,10 +220,6 @@ function parseSetting(
 const scalar = (value: unknown) => (value === null ? 'null' : value === '' ? '""' : String(value));
 const attribute = (value: unknown) =>
   typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
-const creditPreview = (value: string) => {
-  const [whole, fraction] = value.split('.');
-  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction ? `.${fraction}` : ''}`;
-};
 const timezonePreview = (minutes: number) => {
   const absolute = Math.abs(minutes);
   return `UTC${minutes < 0 ? '-' : '+'}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`;
@@ -255,8 +262,8 @@ function SettingField({
     isNull: value === null && entry.null_writable,
     original: value,
   };
-  const dirty = Boolean(drafts[entry.key]);
   const parsed = parsedDraft(entry, draft, t);
+  const dirty = Boolean(drafts[entry.key]) && (parsed.error !== null || parsed.value !== value);
   const locale = catalogLocale(language);
   const inputID = 'site-setting-' + entry.key;
   const change = (text: string) => onEdit(entry.key, { ...draft, text });
@@ -275,40 +282,53 @@ function SettingField({
     preview = t('admin.settings.catalogDurationPreview', {
       value: humanReadableSeconds(parsed.value, language),
     });
-  } else if (parsed.error === null && typeof parsed.value === 'string' && entry.type === 'amount') {
-    preview = t('admin.settings.catalogMilliPreview', { credits: creditPreview(parsed.value) });
   }
+  const inputProps = {
+    id: inputID,
+    type: entry.type === 'integer' ? 'number' : 'text',
+    inputMode:
+      entry.type === 'integer'
+        ? ('numeric' as const)
+        : entry.type === 'amount'
+          ? ('decimal' as const)
+          : undefined,
+    min: attribute(entry.minimum),
+    max: attribute(entry.maximum),
+    step: attribute(entry.step),
+    value: draft.text,
+    disabled: busy || draft.isNull,
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => change(event.target.value),
+  };
   const control =
-    entry.key === 'checkin_mutually_exclusive' && entry.type === 'boolean' ? (
-      <label className="checkbox-label">
-        <input
-          id={inputID}
-          type="checkbox"
+    entry.type === 'boolean' ? (
+      <div className="setting-toggle">
+        <Toggle
+          label={entry.title[locale]}
           checked={draft.text === 'true'}
           disabled={busy || draft.isNull}
-          onChange={(event) => change(String(event.target.checked))}
+          onChange={(checked) => change(String(checked))}
         />
-        <span>{draft.text === 'true' ? t('common.enabled') : t('common.disabled')}</span>
-      </label>
-    ) : entry.type === 'boolean' || entry.type === 'enum' ? (
+      </div>
+    ) : entry.type === 'enum' && entry.allowed_values.length <= 4 ? (
+      <Segmented
+        label={entry.title[locale]}
+        value={draft.text}
+        disabled={busy || draft.isNull}
+        options={entry.allowed_values.map((value) => ({ value, label: enumValueLabel(t, value) }))}
+        onChange={change}
+      />
+    ) : entry.type === 'enum' ? (
       <select
         id={inputID}
         value={draft.text}
         disabled={busy || draft.isNull}
         onChange={(event) => change(event.target.value)}
       >
-        {entry.type === 'boolean' ? (
-          <>
-            <option value="true">{t('common.enabled')}</option>
-            <option value="false">{t('common.disabled')}</option>
-          </>
-        ) : (
-          entry.allowed_values.map((allowed) => (
-            <option key={allowed || 'empty'} value={allowed}>
-              {enumValueLabel(t, allowed)}
-            </option>
-          ))
-        )}
+        {entry.allowed_values.map((allowed) => (
+          <option key={allowed || 'empty'} value={allowed}>
+            {enumValueLabel(t, allowed)}
+          </option>
+        ))}
       </select>
     ) : entry.type === 'text' ? (
       <textarea
@@ -319,79 +339,88 @@ function SettingField({
         disabled={busy || draft.isNull}
         onChange={(event) => change(event.target.value)}
       />
+    ) : entry.type === 'amount' || (entry.type === 'integer' && entry.unit) ? (
+      <Affix {...inputProps} unit={entry.unit?.[locale] ?? ''} />
     ) : (
-      <input
-        id={inputID}
-        type={entry.type === 'integer' ? 'number' : 'text'}
-        inputMode={
-          entry.type === 'integer' ? 'numeric' : entry.type === 'amount' ? 'decimal' : undefined
-        }
-        min={attribute(entry.minimum)}
-        max={attribute(entry.maximum)}
-        step={attribute(entry.step)}
-        value={draft.text}
-        disabled={busy || draft.isNull}
-        onChange={(event) => change(event.target.value)}
-      />
+      <input {...inputProps} />
     );
   return (
-    <div className="ops-setting">
-      <div>
+    <div className={`nb-setting${dirty ? ' is-dirty' : ''}`}>
+      <div className="nb-setting__text">
         <h3>
-          <label htmlFor={inputID}>{entry.title[locale]}</label>
+          {entry.type === 'boolean' ||
+          (entry.type === 'enum' && entry.allowed_values.length <= 4) ? (
+            entry.title[locale]
+          ) : (
+            <label htmlFor={inputID}>{entry.title[locale]}</label>
+          )}
         </h3>
         <p>{entry.description[locale]}</p>
-        <p className="muted">
-          {entry.unit ? entry.unit[locale] + ' · ' : ''}
-          {t('admin.settings.catalogDefault')}{' '}
-          {entry.raw_default === null
-            ? t('admin.settings.notConfigured')
-            : entry.type === 'boolean'
-              ? t(entry.raw_default ? 'common.enabled' : 'common.disabled')
-              : entry.type === 'enum'
-                ? enumValueLabel(t, String(entry.raw_default))
-                : entry.raw_default === ''
-                  ? t('admin.settings.enumValues.empty')
-                  : scalar(entry.raw_default)}
-        </p>
-        {entry.independent_gates.length ? (
-          <p className="muted">
-            {t('admin.settings.catalogIndependentGate')}:{' '}
-            {entry.independent_gates
-              .map(
-                (gate) =>
-                  catalogLabels[gate] ?? t('admin.settings.unknownCatalogGate', { key: gate }),
-              )
-              .join(', ')}
-          </p>
-        ) : null}
-        <details>
-          <summary>{t('admin.settings.fieldDetails')}</summary>
-          <small>
-            {entry.key} · {settingTypeLabel(t, entry.type)}
-            {entry.unit ? ' · ' + entry.unit[locale] : ''}
-          </small>
-          <p className="muted">
-            {t('admin.settings.catalogDefault')} {scalar(entry.raw_default)} ·{' '}
-            {t('admin.settings.catalogEffective')} {scalar(entry.effective_fallback)}
-          </p>
-          {entry.minimum !== null || entry.maximum !== null ? (
-            <p className="muted">
-              {t('admin.settings.catalogRange')} {scalar(entry.minimum)}–{scalar(entry.maximum)}
-              {entry.step !== null
-                ? ' · ' + t('admin.settings.catalogStep') + ' ' + scalar(entry.step)
-                : ''}
-            </p>
-          ) : null}
-          {entry.type === 'text' ? (
-            <p className="muted">
-              {t('admin.settings.legalBytes', { count: utf8Bytes(draft.text), max: entry.maximum })}
-            </p>
-          ) : null}
-        </details>
       </div>
-      <div className="ops-setting-control">
+      <div className="nb-setting__control">
         {control}
+        <div className="setting-meta-line">
+          <p className="nb-setting__meta">
+            {t('admin.settings.catalogDefault')}{' '}
+            {entry.raw_default === null
+              ? t('admin.settings.notConfigured')
+              : entry.type === 'boolean'
+                ? t(entry.raw_default ? 'common.enabled' : 'common.disabled')
+                : entry.type === 'enum'
+                  ? enumValueLabel(t, String(entry.raw_default))
+                  : entry.raw_default === ''
+                    ? t('admin.settings.enumValues.empty')
+                    : scalar(entry.raw_default)}
+          </p>
+          <details className="setting-info">
+            <summary aria-label={t('admin.settings.fieldDetails')}>ⓘ</summary>
+            <small>
+              {entry.key} · {settingTypeLabel(t, entry.type)}
+              {entry.unit ? ' · ' + entry.unit[locale] : ''}
+            </small>
+            <p className="muted">
+              {t('admin.settings.catalogDefault')} {scalar(entry.raw_default)} ·{' '}
+              {t('admin.settings.catalogEffective')} {scalar(entry.effective_fallback)}
+            </p>
+            {entry.minimum !== null || entry.maximum !== null ? (
+              <p className="muted">
+                {t('admin.settings.catalogRange')} {scalar(entry.minimum)}–{scalar(entry.maximum)}
+                {entry.step !== null
+                  ? ' · ' + t('admin.settings.catalogStep') + ' ' + scalar(entry.step)
+                  : ''}
+              </p>
+            ) : null}
+            {entry.type === 'text' ? (
+              <p className="muted">
+                {t('admin.settings.legalBytes', {
+                  count: utf8Bytes(draft.text),
+                  max: entry.maximum,
+                })}
+              </p>
+            ) : null}
+            {entry.independent_gates.length ? (
+              <p className="muted">
+                {t('admin.settings.catalogIndependentGate')}:{' '}
+                {entry.independent_gates
+                  .map(
+                    (gate) =>
+                      catalogLabels[gate] ?? t('admin.settings.unknownCatalogGate', { key: gate }),
+                  )
+                  .join(', ')}
+              </p>
+            ) : null}
+            {value === null && !entry.null_writable ? (
+              <p className="muted">{t('admin.settings.notConfigured')}</p>
+            ) : null}
+            {preview ? <p className="muted">{preview}</p> : null}
+            {draft.text === '0' ? <p className="muted">{entry.zero_semantics[locale]}</p> : null}
+            {draft.isNull ? <p className="muted">{entry.null_semantics[locale]}</p> : null}
+            {!draft.isNull && draft.text === '' ? (
+              <p className="muted">{entry.empty_semantics[locale]}</p>
+            ) : null}
+          </details>
+        </div>
+
         {entry.null_writable ? (
           <label className="checkbox-label">
             <input
@@ -402,15 +431,6 @@ function SettingField({
             />
             <span>{t('admin.settings.restoreFallback')}</span>
           </label>
-        ) : null}
-        {value === null && !entry.null_writable ? (
-          <p className="muted">{t('admin.settings.notConfigured')}</p>
-        ) : null}
-        {preview ? <p className="muted">{preview}</p> : null}
-        {draft.text === '0' ? <p className="muted">{entry.zero_semantics[locale]}</p> : null}
-        {draft.isNull ? <p className="muted">{entry.null_semantics[locale]}</p> : null}
-        {!draft.isNull && draft.text === '' ? (
-          <p className="muted">{entry.empty_semantics[locale]}</p>
         ) : null}
         {entry.key === 'site_logo_url' ? (
           <p className="inline-notice">{t('admin.settings.remoteLogoWarning')}</p>
@@ -423,11 +443,19 @@ function SettingField({
         {dirty ? (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-quiet"
             disabled={busy}
             onClick={() => onReset(entry.key)}
           >
-            {t('admin.settings.restoreAuthorityValue')}
+            <span className="nb-badge nb-badge--warn">
+              {t('admin.settings.modified', { defaultValue: 'Modified' })}
+            </span>{' '}
+            ·{' '}
+            {t('admin.settings.original', {
+              defaultValue: 'Previously {{value}}',
+              value: scalar(draft.original),
+            })}{' '}
+            · {t('admin.settings.restoreAuthorityValue')}
           </button>
         ) : null}
       </div>
@@ -435,49 +463,113 @@ function SettingField({
   );
 }
 
+// These pairs are declared by the site configuration catalog's check-in bounds.
+const REWARD_PAIRS = [
+  ['checkin_award_min_milli', 'checkin_award_max_milli'],
+  ['game_checkin_award_min_milli', 'game_checkin_award_max_milli'],
+] as const;
+const LEVEL_NAMES = Array.from({ length: 6 }, (_, index) => `level_display_name_${index + 1}`);
+const GROUP_ORDER = [
+  'economy',
+  'charity',
+  'connector',
+  'identity',
+  'limits',
+  'reports',
+  'gateway',
+  'access',
+  'abuse',
+  'legal',
+  'legal-hold',
+  'maintenance',
+];
+const EXTRA_GROUP_LABELS: Record<string, string> = {
+  gateway: 'admin.settings.gatewayGroup',
+  'legal-hold': 'admin.settings.legalHoldGroup',
+  maintenance: 'admin.settings.maintenanceGroup',
+};
+const extraGroupDefaults: Record<string, string> = {
+  gateway: 'Gateway model capabilities',
+  'legal-hold': 'Legal holds',
+  maintenance: 'Maintenance mode',
+};
+function navigationLabel(t: TFunction, name: string) {
+  return EXTRA_GROUP_LABELS[name]
+    ? t(EXTRA_GROUP_LABELS[name], { defaultValue: extraGroupDefaults[name] })
+    : groupLabel(t, name);
+}
 function Group({
   name,
   entries,
-  searching,
   ...editor
-}: EditorProps & { name: string; entries: SiteConfigCatalogEntry[]; searching: boolean }) {
+}: EditorProps & { name: string; entries: SiteConfigCatalogEntry[] }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(name === 'identity');
-  const edited = entries.some((entry) => Boolean(editor.drafts[entry.key]));
-  const open = expanded || searching || edited;
-  const nondefault = entries.filter((entry) => editor.values[entry.key] !== entry.raw_default);
-  const locale = catalogLocale(editor.language);
+  const field = (entry: SiteConfigCatalogEntry) => (
+    <SettingField key={entry.key} entry={entry} {...editor} />
+  );
+  const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+  const used = new Set<string>();
+  const pairs = REWARD_PAIRS.filter((pair) => pair.every((key) => byKey.has(key)));
+  const names = LEVEL_NAMES.map((key) => byKey.get(key)).filter(
+    (entry): entry is SiteConfigCatalogEntry => Boolean(entry),
+  );
   return (
-    <Card>
-      <button
-        className="btn btn-link ops-disclosure"
-        type="button"
-        aria-expanded={open}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span>{groupLabel(t, name)}</span>
-        <span>{t('admin.settings.groupCount', { count: entries.length })}</span>
-      </button>
-      {nondefault.length ? (
-        <p className="muted">
-          {t('admin.settings.customizedCount', { count: nondefault.length })}:{' '}
-          {nondefault
-            .slice(0, 3)
-            .map((entry) => entry.title[locale])
-            .join(' · ')}
-          {nondefault.length > 3 ? ' …' : ''}
-        </p>
-      ) : (
-        <p className="muted">{t('admin.settings.groupDefaults')}</p>
-      )}
-      {open ? (
-        <div className="ops-stack">
-          {entries.map((entry) => (
-            <SettingField key={entry.key} entry={entry} {...editor} />
-          ))}
-        </div>
-      ) : null}
-    </Card>
+    <Panel tone={DANGEROUS_GROUPS.has(name) ? 'danger' : undefined}>
+      <PanelHead
+        title={groupLabel(t, name)}
+        description={t('admin.settings.groupCount', { count: entries.length })}
+      />
+      <PanelBody>
+        {entries.map((entry) => {
+          if (used.has(entry.key)) return null;
+          const pair = pairs.find((keys) => keys.includes(entry.key as never));
+          if (pair) {
+            pair.forEach((key) => used.add(key));
+            return (
+              <div className="nb-setting settings-composite" key={pair[0]}>
+                <div className="nb-setting__text">
+                  <h3>
+                    {t(
+                      pair[0].startsWith('game_')
+                        ? 'admin.settings.gameRewardRange'
+                        : 'admin.settings.rewardRange',
+                      {
+                        defaultValue: pair[0].startsWith('game_')
+                          ? 'Game check-in reward'
+                          : 'Check-in reward',
+                      },
+                    )}
+                  </h3>
+                  <p>
+                    {t('admin.settings.rewardRangeHelp', {
+                      defaultValue: 'Each check-in awards an amount within this range.',
+                    })}
+                  </p>
+                </div>
+                <div className="settings-paired">{pair.map((key) => field(byKey.get(key)!))}</div>
+              </div>
+            );
+          }
+          if (names.length === 6 && LEVEL_NAMES.includes(entry.key)) {
+            names.forEach((name) => used.add(name.key));
+            return (
+              <div className="nb-setting settings-composite" key="level-names">
+                <div className="nb-setting__text">
+                  <h3>{t('admin.settings.levelNames', { defaultValue: 'Level display names' })}</h3>
+                  <p>
+                    {t('admin.settings.levelNamesHelp', {
+                      defaultValue: 'Leave a name empty to use its default.',
+                    })}
+                  </p>
+                </div>
+                <div className="settings-level-names">{names.map(field)}</div>
+              </div>
+            );
+          }
+          return field(entry);
+        })}
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -490,6 +582,11 @@ export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, SettingDraft>>({});
+  const [params, setParams] = useSearchParams();
+  const [confirmation, setConfirmation] = useState<{
+    expected_revision: string;
+    values: Record<string, CatalogValue>;
+  } | null>(null);
   const resetField = (key: string) => {
     save.reset();
     setDrafts((current) =>
@@ -602,13 +699,78 @@ export function SettingsPage() {
     }),
     [authority.data, locale, t],
   );
-  const ordinary = [...groups].filter(([name]) => !DANGEROUS_GROUPS.has(name));
-  const dangerous = [...groups].filter(([name]) => DANGEROUS_GROUPS.has(name));
+  const allGroups = [
+    ...new Set(
+      (authority.data?.catalog ?? [])
+        .filter(
+          (entry) =>
+            entry.key !== 'default_locale' &&
+            entry.write_endpoint.startsWith('/admin/api/site-config/'),
+        )
+        .map((entry) => entry.group),
+    ),
+  ];
+  const navigationGroups = [
+    ...GROUP_ORDER.filter((name) => allGroups.includes(name) || EXTRA_GROUP_LABELS[name]),
+    ...allGroups.filter((name) => !GROUP_ORDER.includes(name)),
+  ];
+  const requestedGroup = params.get('group');
+  const activeGroup =
+    requestedGroup && navigationGroups.includes(requestedGroup)
+      ? requestedGroup
+      : (navigationGroups[0] ?? 'economy');
+  const editedGroups = [
+    ...new Set(
+      (authority.data?.catalog ?? [])
+        .filter((entry) => {
+          const draft = drafts[entry.key];
+          if (!draft) return false;
+          const parsed = parsedDraft(entry, draft, t);
+          return parsed.error !== null || parsed.value !== authority.data?.values[entry.key];
+        })
+        .map((entry) => entry.group),
+    ),
+  ];
+  const dangerousChanges = editedGroups.some((name) => DANGEROUS_GROUPS.has(name));
+  const saveDisabled =
+    invalidDraft ||
+    Boolean(dependencyError) ||
+    changedElsewhere.length > 0 ||
+    !Object.keys(pending).length ||
+    Boolean(authority.error);
+  const requestSave = () => {
+    if (!authority.data || saveDisabled || save.isPending) return;
+    const input = { expected_revision: authority.data.revision, values: pending };
+    if (dangerousChanges) setConfirmation(input);
+    else save.mutate(input);
+  };
+  const editor = {
+    values: authority.data?.values ?? {},
+    drafts,
+    busy: save.isPending,
+    onEdit: editField,
+    onReset: resetField,
+    language: i18n.language,
+    catalogLabels,
+  };
   const initialFailure = !authority.data && authority.error;
 
   return (
     <div className="page ops-page">
-      <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
+      <PageHeader
+        title={t('admin.settings.title')}
+        description={t('admin.settings.description')}
+        actions={
+          <input
+            className="settings-search"
+            type="search"
+            aria-label={t('common.search')}
+            value={search}
+            placeholder={t('admin.settings.searchHelp')}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        }
+      />
       {authority.isPending ? (
         <LoadingState />
       ) : initialFailure ? (
@@ -618,56 +780,86 @@ export function SettingsPage() {
           {authority.error ? (
             <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
           ) : null}
-          <Card>
-            <div className="ops-toolbar">
-              <label>
-                <span>{t('common.search')}</span>
-                <input
-                  type="search"
-                  value={search}
-                  placeholder={t('admin.settings.searchHelp')}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
-              <div className="ops-actions">
+          <div className="nb-settings">
+            <nav
+              className="nb-settings__nav"
+              aria-label={t('admin.settings.navigation', { defaultValue: 'Setting groups' })}
+            >
+              {[false, true].map((dangerous) => (
+                <div className="settings-nav-group" key={String(dangerous)}>
+                  <h2>
+                    {t(dangerous ? 'admin.settings.cautious' : 'admin.settings.regular', {
+                      defaultValue: dangerous ? 'Use with care' : 'General',
+                    })}
+                  </h2>
+                  {navigationGroups
+                    .filter(
+                      (name) =>
+                        (DANGEROUS_GROUPS.has(name) ||
+                          name === 'legal-hold' ||
+                          name === 'maintenance') === dangerous,
+                    )
+                    .map((name) => (
+                      <button
+                        type="button"
+                        key={name}
+                        aria-current={!search.trim() && activeGroup === name ? 'page' : undefined}
+                        className={editedGroups.includes(name) ? 'is-dirty' : undefined}
+                        onClick={() => {
+                          setSearch('');
+                          setParams((current) => {
+                            const next = new URLSearchParams(current);
+                            next.set('group', name);
+                            return next;
+                          });
+                        }}
+                      >
+                        {navigationLabel(t, name)}
+                        {editedGroups.includes(name) ? (
+                          <span
+                            className="settings-dirty-dot"
+                            aria-label={t('admin.settings.modified', { defaultValue: 'Modified' })}
+                          />
+                        ) : null}
+                      </button>
+                    ))}
+                </div>
+              ))}
+              <div className="settings-other">
+                <h2>
+                  {t('admin.settings.otherConfiguration', { defaultValue: 'Other configuration' })}
+                </h2>
                 <Link to="/activities">{t('admin.activities.nav')}</Link>
                 <Link to="/games">{t('admin.games.nav')}</Link>
               </div>
+            </nav>
+            <div className="settings-content">
+              {search.trim() ? (
+                groups.size ? (
+                  [...groups].map(([name, entries]) => (
+                    <Group key={name} name={name} entries={entries} {...editor} />
+                  ))
+                ) : (
+                  <EmptyState
+                    title={t('admin.settings.ordinaryEmpty')}
+                    body={t('admin.settings.ordinaryEmptyBody')}
+                  />
+                )
+              ) : !EXTRA_GROUP_LABELS[activeGroup] ? (
+                <Group name={activeGroup} entries={groups.get(activeGroup) ?? []} {...editor} />
+              ) : null}
+              <div hidden={Boolean(search.trim()) || activeGroup !== 'gateway'}>
+                <GatewayCapabilitiesSection />
+              </div>
+              <div hidden={Boolean(search.trim()) || activeGroup !== 'legal-hold'}>
+                <LegalHoldPanel />
+              </div>
+              <div hidden={Boolean(search.trim()) || activeGroup !== 'maintenance'}>
+                <MaintenancePanel role="admin" />
+              </div>
             </div>
-          </Card>
-          <Card className="ops-save-bar">
-            <span>{t('admin.settings.pendingChanges', { count: pendingCount })}</span>
-            <div className="ops-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={
-                  save.isPending ||
-                  invalidDraft ||
-                  Boolean(dependencyError) ||
-                  changedElsewhere.length > 0 ||
-                  !Object.keys(pending).length ||
-                  Boolean(authority.error)
-                }
-                onClick={() =>
-                  authority.data &&
-                  save.mutate({ expected_revision: authority.data.revision, values: pending })
-                }
-              >
-                {save.isPending ? t('common.working') : t('admin.settings.saveAll')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={save.isPending || !Object.keys(drafts).length}
-                onClick={() => {
-                  setDrafts({});
-                  save.reset();
-                }}
-              >
-                {t('admin.settings.discardAll')}
-              </button>
-            </div>
+          </div>
+          <div className="settings-feedback">
             {dependencyError ? (
               <p role="alert" className="field-error">
                 {dependencyError}
@@ -688,65 +880,51 @@ export function SettingsPage() {
               )
             ) : null}
             {save.isSuccess ? <p role="status">{t('admin.settings.saved')}</p> : null}
-          </Card>
-          <div className="ops-settings-columns">
-            <section>
-              <h2>{t('admin.settings.ordinaryTitle')}</h2>
-              {ordinary.length ? (
-                ordinary.map(([name, entries]) => (
-                  <Group
-                    key={name}
-                    name={name}
-                    entries={entries}
-                    searching={Boolean(search.trim())}
-                    values={authority.data.values}
-                    drafts={drafts}
-                    busy={save.isPending}
-                    onEdit={editField}
-                    onReset={resetField}
-                    language={i18n.language}
-                    catalogLabels={catalogLabels}
-                  />
-                ))
-              ) : (
-                <EmptyState
-                  title={t('admin.settings.ordinaryEmpty')}
-                  body={t('admin.settings.ordinaryEmptyBody')}
-                />
-              )}
-            </section>
-            <section className="ops-danger">
-              <h2>{t('admin.settings.dangerousTitle')}</h2>
-              <p>{t('admin.settings.dangerousDescription')}</p>
-              {dangerous.length ? (
-                dangerous.map(([name, entries]) => (
-                  <Group
-                    key={name}
-                    name={name}
-                    entries={entries}
-                    searching={Boolean(search.trim())}
-                    values={authority.data.values}
-                    drafts={drafts}
-                    busy={save.isPending}
-                    onEdit={editField}
-                    onReset={resetField}
-                    language={i18n.language}
-                    catalogLabels={catalogLabels}
-                  />
-                ))
-              ) : (
-                <EmptyState
-                  title={t('admin.settings.dangerousEmpty')}
-                  body={t('admin.settings.dangerousEmptyBody')}
-                />
-              )}
-            </section>
           </div>
+          <SaveBar
+            dirtyCount={pendingCount}
+            scope={
+              <>
+                {editedGroups.map((name) => navigationLabel(t, name)).join(' · ')}
+                {dangerousChanges ? (
+                  <small className="settings-save-warning">
+                    {t('admin.settings.confirmationHint', {
+                      defaultValue: 'Settings requiring care will be confirmed before saving.',
+                    })}
+                  </small>
+                ) : null}
+              </>
+            }
+            busy={save.isPending}
+            saveDisabled={saveDisabled}
+            onSave={requestSave}
+            onDiscard={() => {
+              setDrafts({});
+              save.reset();
+            }}
+            saveLabel={save.isPending ? t('common.working') : t('admin.settings.saveAll')}
+            discardLabel={t('admin.settings.discardAll')}
+            dirtyLabel={(count) => t('admin.settings.pendingChanges', { count })}
+          />
+          <ConfirmDialog
+            open={confirmation !== null}
+            danger
+            title={t('admin.settings.confirmTitle', {
+              defaultValue: 'Save settings requiring care?',
+            })}
+            description={t('admin.settings.dangerousDescription')}
+            confirmLabel={t('admin.settings.saveAll')}
+            confirmDisabled={saveDisabled}
+            busy={save.isPending}
+            onCancel={() => setConfirmation(null)}
+            onConfirm={() => {
+              if (!confirmation || saveDisabled) return;
+              save.mutate(confirmation);
+              setConfirmation(null);
+            }}
+          />
         </>
       ) : null}
-      <GatewayCapabilitiesSection />
-      <MaintenancePanel role="admin" />
-      <LegalHoldPanel />
     </div>
   );
 }
