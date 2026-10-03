@@ -150,6 +150,7 @@ test('custom presets persist across reloads without matchmaking, payment or cros
     expect(saved.slots[0].loadout.harness).not.toBeNull();
     await page.reload();
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('.likes-loadout-step > summary').filter({ hasText: '4 · Skills' }).click();
     await presets.getByRole('button', { name: 'Load Preset1', exact: true }).click();
     await expect(presets.getByRole('status')).toContainText(
       'loaded. You have not joined matchmaking.',
@@ -668,7 +669,10 @@ test('administrator check-in choice persists and both cards follow real daily el
     const settingsPage = await admin.newPage();
     await settingsPage.goto(fixture().admin_url + '/settings');
     await settingsPage.getByRole('button', { name: /^Economy/ }).click();
-    const choice = settingsPage.locator('#site-setting-checkin_mutually_exclusive');
+    const choice = settingsPage.getByRole('switch', {
+      name: 'Choose one daily check-in',
+      exact: true,
+    });
     await expect(choice).not.toBeChecked();
     await choice.check();
     await settingsPage.getByRole('button', { name: 'Save all changes', exact: true }).click();
@@ -708,8 +712,8 @@ test('administrator check-in choice persists and both cards follow real daily el
     const gameBox = await game.boundingBox();
     expect(generalBox).not.toBeNull();
     expect(gameBox).not.toBeNull();
-    expect(Math.abs(generalBox!.y - gameBox!.y)).toBeLessThan(1);
-    expect(generalBox!.x + generalBox!.width).toBeLessThan(gameBox!.x);
+    expect(Math.abs(generalBox!.x - gameBox!.x)).toBeLessThan(1);
+    expect(generalBox!.y + generalBox!.height).toBeLessThan(gameBox!.y);
     await generalButton.click();
     await expect(general).toContainText('Checked in');
     await expect(game).toContainText('Other check-in claimed');

@@ -68,17 +68,23 @@ test('administrator loads inactivity execution records and opens the persisted c
     const loaded = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith('/inactivity-policy/runs'),
     );
-    await page.getByRole('button', { name: 'Load recent records', exact: true }).click();
+    await page
+      .locator('summary')
+      .filter({ hasText: /^Execution records$/ })
+      .click();
     expect((await loaded).ok()).toBe(true);
-    const records = page
-      .getByRole('heading', { name: 'Execution records', exact: true })
-      .locator('..');
+    const records = page.getByRole('table', { name: 'Execution records', exact: true });
     await expect(records.locator('tbody tr')).toHaveCount(runs.data.length);
-    await page.getByRole('button', { name: 'Load audit records', exact: true }).click();
+    await page
+      .locator('summary')
+      .filter({ hasText: /^Configuration and preview audit$/ })
+      .click();
     const entry = page
       .locator('details')
       .filter({
-        has: page.locator('summary', { hasText: 'Preview · Revision ' + audit.policy_revision }),
+        has: page.locator(':scope > summary', {
+          hasText: 'Preview · Revision ' + audit.policy_revision,
+        }),
       })
       .first();
     await entry.locator('summary').click();
@@ -106,7 +112,8 @@ test('administrator saves selected image-model availability and reads the author
     expect(model).toBeDefined();
     const original = await read(context, prefix + '/models/' + model.id);
     const page = await context.newPage();
-    await page.goto(origin + '/limited-activities');
+    await page.goto(origin + '/limited-activities?activity=picture-book');
+    await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Choose a model to configure', exact: true })
       .selectOption(model.id);
@@ -130,6 +137,7 @@ test('administrator saves selected image-model availability and reads the author
     expect(persisted.revision).not.toBe(original.revision);
     expect(persisted.price).toEqual(original.price);
     await page.reload();
+    await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Choose a model to configure', exact: true })
       .selectOption(model.id);
@@ -177,7 +185,8 @@ test('administrator filters open welfare pools and selects the returned pool for
     );
     const row = page
       .getByRole('row')
-      .filter({ hasText: copy.states.poolType.welfare + ' / ' + copy.states.pool.open });
+      .filter({ hasText: copy.states.poolType.welfare })
+      .filter({ hasText: copy.states.pool.open });
     await row.getByRole('button', { name: copy.pools.select, exact: true }).click();
     await expect(
       page.getByRole('heading', {

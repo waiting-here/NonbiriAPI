@@ -851,34 +851,36 @@ test('real endpoint adaptation hides saved values and blocks stale browser write
     const path = '/api/endpoints/' + endpoint.id + '/request-adaptation';
     const page = await owner.newPage();
     await page.goto(fixture().user_url + '/endpoints/' + endpoint.id);
+    await page.getByText('Request rewriting (advanced)', { exact: true }).click();
     const fixed = page.getByRole('group', {
-      name: 'Fixed outbound headers',
+      name: 'Headers added to requests',
       exact: true,
     });
     await fixed.getByRole('button', { name: 'Add field' }).click();
     await fixed.getByLabel('Header or path').fill('X-Synthetic-Header');
     await fixed.getByLabel('Value', { exact: true }).fill('synthetic-private-header');
     const forced = page.getByRole('group', {
-      name: 'Forced body values',
+      name: 'Fixed parameters (always override)',
       exact: true,
     });
     await forced.getByRole('button', { name: 'Add field' }).click();
     await forced.getByLabel('Header or path').fill('/reasoning_effort');
     await forced.getByLabel('Value', { exact: true }).fill('"medium"');
     await page
-      .getByRole('group', { name: 'Client headers to forward', exact: true })
+      .getByRole('group', { name: 'Allowed client headers', exact: true })
       .getByRole('textbox')
       .fill('X-Client-Tag');
     const saved = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === path && response.request().method() === 'PUT',
     );
-    await page.getByRole('button', { name: 'Save request adaptation' }).click();
+    await page.getByRole('button', { name: 'Save request rewriting' }).click();
     const receipt = await saved;
     expect(receipt.status()).toBe(200);
     expect(await receipt.text()).not.toContain('synthetic-private-header');
     await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
     await page.reload();
+    await page.getByText('Request rewriting (advanced)', { exact: true }).click();
     await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
     await fixed.getByRole('combobox').selectOption('replace');
     await expect(fixed.getByLabel('Value', { exact: true })).toHaveValue('');
@@ -901,11 +903,11 @@ test('real endpoint adaptation hides saved values and blocks stale browser write
       (response) =>
         new URL(response.url()).pathname === path && response.request().method() === 'PUT',
     );
-    await page.getByRole('button', { name: 'Save request adaptation' }).click();
+    await page.getByRole('button', { name: 'Save request rewriting' }).click();
     expect((await stale).status()).toBe(409);
-    await expect(page.getByRole('button', { name: 'Save request adaptation' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save request rewriting' })).toBeDisabled();
     await page.getByRole('button', { name: 'Refresh configuration', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Save request adaptation' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Save request rewriting' })).toBeEnabled();
     await expect(fixed.getByText('Saved value is hidden')).toBeVisible();
     expect(
       await page.evaluate(() =>

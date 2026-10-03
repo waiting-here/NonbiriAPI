@@ -548,7 +548,13 @@ test('all four real exchanges, bilingual themes, narrow menus and cover fallback
     );
     expect(await cover.getAttribute('alt')).toBe(shared.coverAlt);
     const box = await cover.boundingBox();
-    expect(box!.width / box!.height).toBeCloseTo(16 / 9, 1);
+    if (width < 640) {
+      const card = cover.locator('..').locator('..');
+      const textBox = await card.locator('.limited-entry__copy').boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(textBox!.x + 1);
+      expect(box!.width).toBeLessThan(textBox!.width);
+      expect(await cover.evaluate((image) => getComputedStyle(image).objectFit)).toBe('cover');
+    } else expect(box!.width / box!.height).toBeCloseTo(16 / 9, 1);
     await view.route('**/assets/lake-notes/cover.png', (route) => route.abort('failed'));
     await view.reload();
     await expect(view.getByRole('img', { name: shared.coverAlt, exact: true })).toBeVisible();
