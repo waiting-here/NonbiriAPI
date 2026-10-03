@@ -1734,7 +1734,13 @@
       "observations": "Observations",
       "closedAt": "Closed",
       "openResource": "Open current resource",
-      "resourceUnavailable": "The linked resource was removed or is no longer available."
+      "resourceUnavailable": "The related service or key was deleted. This issue will close automatically.",
+      "resources": {
+        "endpoint_key": "Service key",
+        "endpoint": "Service"
+      },
+      "resourceType": "Related",
+      "closedResourceUnavailable": "The related service or key was deleted. This issue is closed."
     },
     "report": {
       "nav": "Report leaked credential",
@@ -1866,7 +1872,8 @@
         "imageBody": "Limited activities need a configured opening period. Hiding an activity removes its directory entry but does not block an otherwise eligible visitor with its link. Reopening keeps balances and history. The picture-book activity exchanges general credits for draft paper and brushes; it does not support reverse exchange or exchange between those currencies. The default prices are 1,000 general credits per draft paper and 10,000 per brush. Brush supply is a cumulative shared cap, initially ten; reducing the cap does not confiscate existing balances, and task refunds do not restore exchange supply. Administrators may change future prices and settings. A no-charge quote lets you review the selected size and exact price without requesting an image. Submitting reserves both quoted currency amounts multiplied by the requested image count under the accepted model and pricing revisions. If a revision changes first, review a fresh quote. Any valid partial success charges the full accepted task price. Failure, an unresolved result at the execution deadline, or cancellation before dispatch refunds both currencies. After dispatch you cannot cancel, and closing the page does not cancel. The server controls ordering and upstream requests; no participant receives a privileged queue or free allowance. Default queue and execution limits are 30 minutes each. Successful images have a ten-minute memory pickup window and may be lost on page closure, expiry or restart without a refund. Restart refunds queued tasks whose in-memory payload was lost; an uncertain upstream submission is never automatically repeated. Natural activity end lets accepted work finish, while manual pause or maintenance cancels undispatched tasks and refunds them. Bans prevent result access; account deletion removes private data while minimal anonymous execution cleanup may continue. Administrators open Lake Notes for defined periods. The entry fee is shown before confirmation and charged at most once per period in general credits. Device changes, price edits and reopening after a pause do not repeat that fee; another period may charge separately. Profiles and coins persist across periods. Ending, pause or maintenance preserves progress and stops play and exchanges. The four directions between coins and general or game credits are configured separately and start disabled. Exchanges use the confirmed whole-lot quantity and preserve the remainder; a price change requires fresh confirmation. These virtual assets have no cash redemption, withdrawal or user-to-user transfer. Custom picture-book dimensions must have an applicable quote; price changes require reselection and confirmation.",
         "inactivityTitle": "Inactivity policies",
         "inactivityBody": "An administrator may enable an inactivity policy; it is disabled by default. The user site displays the applicable rules and expected processing dates. Successful login or API use, check-ins, benefit claims and effective game/activity actions count as activity; passive rewards and background polling do not. Administrators and levels 5 and 6 are exempt, but owning a usable donated key does not create an exemption. Configured decay affects only positive available general/game balances, with separate rates or fixed amounts, periods and retained floors. It does not take frozen funds or activity currencies or deepen a negative balance. First enablement, re-enablement and stricter rules grant at least seven days. A missed series of decay periods is caught up at most once; if protective banning is due at the same check, banning takes priority without decay. A protective permanent ban preserves the account and balances, stops future decay, and can be reversed by an administrator, restarting observation. Existing donations remain usable and earn normal rewards only for this protective ban reason; the banned account still cannot log in or call APIs."
-      }
+      },
+      "contents": "Contents"
     },
     "logs": {
       "title": "Records",
@@ -2629,7 +2636,7 @@
       "account.exportBody": "Download a copy of the account information available for export.",
       "account.export": "Request export",
       "account.deleteTitle": "Delete account",
-      "account.deleteBody": "Deletion is irreversible and removes access to account-owned resources. Shared records retain necessary de-identified information. Administrators retain a deletion alert with your Discord ID and economic balances; blacklist entries also survive deletion.",
+      "account.deleteBody": "Deletion is irreversible and removes access to account-owned resources; shared records retain necessary de-identified information. Administrators retain a deletion alert with your Discord ID and economic balances, and blacklist entries survive deletion.",
       "account.delete": "Delete account",
       "account.deleteConfirm": "Permanently delete account",
       "account.dangerTitle": "Danger zone",
@@ -2653,7 +2660,14 @@
       "keys.curlTitle": "Command-line test",
       "keys.curlHelp": "Check the key and model with curl.",
       "keys.curlPlaceholder": "Replace the model name with the one you want to use. Set NONBIRI_KEY to your saved key.",
-      "keys.automationTitle": "Import keys and models with scripts (advanced)"
+      "keys.automationTitle": "Import keys and models with scripts (advanced)",
+      "accountPresentation.preferences": "Preferences",
+      "accountPresentation.themeHint": "Choose light, dark, or your system theme.",
+      "accountPresentation.densityHint": "Adjust spacing in lists and forms.",
+      "accountPresentation.fontHint": "Adjust interface text size.",
+      "accountPresentation.exportBody": "Confirm again with Discord; you will return here automatically and download your export.",
+      "accountPresentation.exportAction": "Export…",
+      "accountPresentation.deleteAction": "Delete account…"
     },
     "lakeNotes": {
       "back": "Back to activities",
@@ -3345,6 +3359,18 @@
       "apiKeyLink": "Create or view it in API access",
       "retryDiscovery": "Retry loading models",
       "manualName": "Enter a model name manually"
+    },
+    "records": {
+      "title": "Records",
+      "calls": "Calls",
+      "credits": "Credits",
+      "issues": "Issues",
+      "moreConditions": "More filters",
+      "debugResults": "What does the client receive during debugging?",
+      "case": "Case",
+      "clientResult": "Client receives",
+      "explanation": "Explanation",
+      "cancelled": "Cancelled"
     }
   },
   "games": {

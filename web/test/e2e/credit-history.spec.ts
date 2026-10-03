@@ -47,18 +47,21 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
       },
     });
   });
+  await page.route('**/api/limited-activities/picture-book/wallet', (route) =>
+    route.fulfill({ json: { general: '0', sketch_paper: '42', sketch_brush: '8' } }),
+  );
   await page.goto(`${USER_ORIGIN}/credits`);
-  await expect(page.getByRole('heading', { name: 'Nonbiri credit history' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Records' })).toBeVisible();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(20);
   await expect(page.getByText('9000000000000.007', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect.poll(() => queries.at(-1)?.get('page')).toBe('2');
   expect(queries.at(-1)?.get('anchor')).toBe(anchor);
-  await page.getByRole('textbox', { name: 'Go to page', exact: true }).fill('3');
-  await page.getByRole('button', { name: 'Go', exact: true }).click();
+  await page.getByRole('button', { name: '3', exact: true }).click();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(15);
   await page.getByRole('combobox', { name: 'Items per page', exact: true }).selectOption('50');
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(50);
+  await page.getByText('More filters', { exact: true }).click();
   await page.getByRole('combobox', { name: 'Reason', exact: true }).selectOption('charity');
   await page.getByRole('combobox', { name: 'Money in / out' }).selectOption('expense');
   await page.getByRole('button', { name: 'Apply filters' }).click();
@@ -70,9 +73,15 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
     `/logs?request_id=${requestID}`,
   );
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.screenshot({ path: '../tmp/credit-history-desktop.png', fullPage: true });
+  await page.screenshot({
+    path: `${process.env.NONBIRI_SCREENSHOT_DIR ?? '../tmp'}/credit-history-desktop.png`,
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '../tmp/credit-history-mobile.png', fullPage: true });
+  await page.screenshot({
+    path: `${process.env.NONBIRI_SCREENSHOT_DIR ?? '../tmp'}/credit-history-mobile.png`,
+    fullPage: true,
+  });
   const overflowing = await page.locator('body *').evaluateAll((nodes) =>
     nodes
       .filter((node) => node.getBoundingClientRect().right > window.innerWidth + 1)
@@ -95,7 +104,10 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
         .evaluate((table) => table.scrollWidth <= table.clientWidth),
     )
     .toBe(true);
-  await page.screenshot({ path: '../tmp/credit-history-mobile.png', fullPage: true });
+  await page.screenshot({
+    path: `${process.env.NONBIRI_SCREENSHOT_DIR ?? '../tmp'}/credit-history-mobile.png`,
+    fullPage: true,
+  });
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(50);
   await expect(page.getByRole('link', { name: 'View request' })).toHaveCount(0);

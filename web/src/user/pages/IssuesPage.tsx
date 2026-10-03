@@ -1,14 +1,8 @@
+import { RecordsHeader } from '../components/RecordsHeader';
 import { Link } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -33,8 +27,8 @@ const STATE_LABEL_KEYS: Record<IssueState, string> = {
 };
 
 const RESOURCE_LABEL_KEYS: Record<Issue['resource_kind'], string> = {
-  endpoint: 'user.issues.resourceKind.endpoint',
-  endpoint_key: 'user.issues.resourceKind.endpointKey',
+  endpoint: 'user.issues.resources.endpoint',
+  endpoint_key: 'user.issues.resources.endpoint_key',
   model: 'user.issues.resourceKind.model',
 };
 
@@ -75,10 +69,17 @@ export function IssuesPage() {
 
   return (
     <div className="page ops-stack">
-      <PageHeader
-        eyebrow={t('user.issues.eyebrow')}
-        title={t('user.issues.title')}
+      <RecordsHeader
         description={t('user.issues.authorityDescription')}
+        issueCount={
+          state === 'current' &&
+          pageData &&
+          !issues.isPlaceholderData &&
+          !issues.error &&
+          !pageData.projection_incomplete
+            ? pageData.pagination.total_items
+            : undefined
+        }
       />
       <div className="ops-tabs" role="tablist" aria-label={t('user.issues.stateLabel')}>
         <button
@@ -126,10 +127,10 @@ export function IssuesPage() {
               }
             />
           ) : (
-            <div className="ops-stack">
+            <Card>
               {pageData.data.map((issue) => (
-                <Card key={issue.id} className="ops-stack">
-                  <div className="card-title-row">
+                <div key={issue.id} className="nb-row records-issue">
+                  <div className="records-issue__heading">
                     <h2>{t(SUMMARY_LABEL_KEYS[issue.summary_code])}</h2>
                     <StatusBadge
                       active={issue.state === 'current'}
@@ -138,8 +139,8 @@ export function IssuesPage() {
                     />
                   </div>
                   {issue.safe_detail ? <p>{issue.safe_detail}</p> : null}
-                  <dl className="ops-kv">
-                    <dt>{t('user.issues.resource')}</dt>
+                  <dl className="nb-facts nb-facts--inline">
+                    <dt>{t('user.issues.resourceType')}</dt>
                     <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
                     <dt>{t('user.issues.firstSeen')}</dt>
                     <dd>{formatDateTime(issue.first_seen_at)}</dd>
@@ -166,11 +167,17 @@ export function IssuesPage() {
                       {t('user.issues.openResource')}
                     </Link>
                   ) : (
-                    <p className="table-note">{t('user.issues.resourceUnavailable')}</p>
+                    <p className="table-note">
+                      {t(
+                        issue.state === 'closed'
+                          ? 'user.issues.closedResourceUnavailable'
+                          : 'user.issues.resourceUnavailable',
+                      )}
+                    </p>
                   )}
-                </Card>
+                </div>
               ))}
-            </div>
+            </Card>
           )}
           <PagePagination
             metadata={pageData.pagination}

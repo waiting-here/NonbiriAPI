@@ -3,6 +3,13 @@ import zh from '../../i18n/zh.json';
 import { useRegisteredCopy, type CopyParameters } from '@shared/i18n/useRegisteredCopy';
 
 const keys = {
+  'accountPresentation.preferences': 'user.core.accountPresentation.preferences',
+  'accountPresentation.themeHint': 'user.core.accountPresentation.themeHint',
+  'accountPresentation.densityHint': 'user.core.accountPresentation.densityHint',
+  'accountPresentation.fontHint': 'user.core.accountPresentation.fontHint',
+  'accountPresentation.exportBody': 'user.core.accountPresentation.exportBody',
+  'accountPresentation.exportAction': 'user.core.accountPresentation.exportAction',
+  'accountPresentation.deleteAction': 'user.core.accountPresentation.deleteAction',
   'filters.title': 'user.core.filters.title',
   'filters.all': 'user.core.filters.all',
   'filters.source': 'user.core.filters.source',

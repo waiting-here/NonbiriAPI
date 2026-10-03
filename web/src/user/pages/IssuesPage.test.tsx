@@ -138,10 +138,10 @@ describe('user issues page', () => {
       {
         method: 'GET',
         path: '/api/issues?state=current&page=1&page_size=50',
-        body: page([issue('1')], {
+        body: page([...firstPage, issue('21')], {
           page: '1',
           page_size: 50,
-          total_items: '1',
+          total_items: '21',
           total_pages: '1',
         }),
       },
@@ -189,8 +189,8 @@ describe('user issues page', () => {
 
     expect(await screen.findByRole('heading', { name: 'No issues returned' })).toBeVisible();
     expect(screen.getByText('Updating the list…')).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Items per page' })).not.toBeInTheDocument();
   });
 
   it('switches between current and closed issue collections and keeps removed links unavailable', async () => {
@@ -228,9 +228,42 @@ describe('user issues page', () => {
     expect(search.get('page_size')).toBe('20');
     await waitFor(() => expect(screen.queryByText('Issue current')).not.toBeInTheDocument());
     expect(
-      screen.getByText('The linked resource was removed or is no longer available.'),
+      screen.getByText('The related service or key was deleted. This issue is closed.'),
     ).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Open current resource' })).not.toBeInTheDocument();
+  });
+
+  it('does not label a retained closed page as an unresolved issue count while switching collections', async () => {
+    const current = deferred<Response>();
+    const requests: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input) => {
+        const path = String(input);
+        requests.push(path);
+        if (path === '/api/session') return jsonResponse(session());
+        if (path === '/api/issues?state=closed&page=1&page_size=20')
+          return jsonResponse(page([issue('old', { state: 'closed', closed_at: 1800000002 })]));
+        if (path === '/api/issues?state=current&page=1&page_size=20') return current.promise;
+        throw new Error(`Unexpected request ${path}`);
+      }),
+    );
+    const view = await renderWithProviders(<IssuesPage />, {
+      station: 'user',
+      role: 'user',
+      route: '/issues?state=closed',
+    });
+    await screen.findByText('Issue old');
+    await view.user.click(screen.getByRole('tab', { name: 'Current' }));
+    expect(view.container.querySelector('.records-tabs .nb-badge')).toBeNull();
+    current.resolve(jsonResponse(page([issue('new')])));
+    await screen.findByText('Issue new');
+    expect(view.container.querySelector('.records-tabs .nb-badge')).toHaveTextContent('1');
+    expect(requests).toEqual([
+      '/api/session',
+      '/api/issues?state=closed&page=1&page_size=20',
+      '/api/issues?state=current&page=1&page_size=20',
+    ]);
   });
 
   it('restores the selected state, page, and size from the URL', async () => {

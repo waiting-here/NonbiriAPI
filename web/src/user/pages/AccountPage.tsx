@@ -18,8 +18,8 @@ export function AccountPage() {
             key={user.id}
             user={user}
             lifecycleAdapter={productionAccountLifecycleAdapter}
+            activity={<InactivityStatus key={`${user.id}-activity`} accountId={user.id} />}
           />
-          <InactivityStatus key={`${user.id}-activity`} accountId={user.id} />
         </>
       )}
     </CoreUserGate>
