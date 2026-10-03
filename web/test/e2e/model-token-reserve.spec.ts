@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from './test';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
@@ -570,9 +570,23 @@ for (const scenario of scenarios) {
       expect(exportURL.pathname).toBe(`${scenario.root}/logs/export.${format}`);
       expect(exportURL.searchParams.get('charity_model')).toBe(nameFragment);
       expect(exportURL.searchParams.has('page')).toBe(false);
+      await expect(link).toHaveAttribute('download', '');
+      // Chromium download-only requests bypass these routes without a CDP
+      // networkId, and the fixture server has no per-test HTTP export hook.
+      // The attachment response checks the URL and bytes; the native download
+      // attribute is checked above, but its download behavior is not exercised.
+      await link.evaluate((element) => element.removeAttribute('download'));
       const downloaded = page.waitForEvent('download');
       await link.click();
-      expect(await (await downloaded).failure()).toBeNull();
+      const download = await downloaded;
+      expect(download.url()).toBe(exportURL.href);
+      expect(download.suggestedFilename()).toBe(`logs.${format}`);
+      expect(await download.failure()).toBeNull();
+      const path = await download.path();
+      expect(path).not.toBeNull();
+      expect(await readFile(path!, 'utf8')).toBe(
+        format === 'csv' ? 'request_id,charity_model\n' : '[]',
+      );
     }
     expect(exportReads.map((url) => url.searchParams.get('charity_model'))).toEqual([
       nameFragment,
