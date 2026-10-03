@@ -11,12 +11,6 @@ vi.mock('../common/duel/copy', async () => {
   const { testDuelText } = await import('../common/duel/copy.test-support');
   return { ...actual, useDuelText: () => testDuelText(actual.duelCopyKeys, 'zh') };
 });
-HTMLDialogElement.prototype.showModal = function () {
-  this.open = true;
-};
-HTMLDialogElement.prototype.close = function () {
-  this.open = false;
-};
 const zh = testDuelText(duelCopyKeys, 'zh');
 describe.each(['quick', 'standard'] as const)('%s player explanations', (mode) => {
   const catalog = testCatalog.modes[mode];

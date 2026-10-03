@@ -133,12 +133,22 @@ for (const width of [1440, 768, 390])
         else {
           await expect(page.locator('a.game-center-card')).toHaveCount(6);
           await expect(page.locator('a.game-center-card button')).toHaveCount(0);
-          if (width === 390)
+          if (width === 390) {
+            const cards = page.locator('a.game-center-card');
             expect(
               await page
-                .locator('.game-center')
+                .locator('.game-center-grid')
                 .evaluate((el) => el.getBoundingClientRect().height),
-            ).toBeLessThan(1600);
+            ).toBeLessThan(1000);
+            for (const card of await cards.all()) {
+              const hero = await card.locator('.game-center-card__hero').boundingBox();
+              const body = await card.locator('.game-center-card__body').boundingBox();
+              expect(hero).not.toBeNull();
+              expect(body).not.toBeNull();
+              expect(hero!.x + hero!.width).toBeLessThanOrEqual(body!.x + 1);
+              expect(Math.abs(hero!.y - body!.y)).toBeLessThanOrEqual(1);
+            }
+          }
         }
         if (game === 'likes' && width === 390) {
           const steps = page.locator('.likes-loadout-step');
