@@ -53,7 +53,7 @@ describe('RequestAdaptationEditor', () => {
       />,
       { station: 'user', role: 'user' },
     );
-    const defaults = await screen.findByRole('group', { name: 'Body defaults (only when absent)' });
+    const defaults = await screen.findByRole('group', { name: 'Default parameters (when absent)' });
     await view.user.click(within(defaults).getByRole('button', { name: 'Add field' }));
     const path = within(defaults).getByRole('textbox', { name: 'Header or path' });
     await view.user.type(path, '/cache_control');
@@ -66,8 +66,8 @@ describe('RequestAdaptationEditor', () => {
     await view.user.click(value);
     await view.user.paste('{ "type": "ephemeral", "ttl": "1h" }');
     expect(value).toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
-    await screen.findByText('Request adaptation saved.');
+    await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
+    await screen.findByText('Request rewriting saved.');
     expect(sent?.body_defaults).toEqual({
       mode: 'replace',
       values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '1h' } } },
@@ -79,8 +79,8 @@ describe('RequestAdaptationEditor', () => {
     );
     await view.user.selectOptions(screen.getByLabelText('Automatic cache default'), '5m');
     expect(within(defaults).queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
-    await screen.findByText('Request adaptation saved.');
+    await view.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
+    await screen.findByText('Request rewriting saved.');
     expect(sent?.body_defaults).toEqual({
       mode: 'replace',
       values: { '/cache_control': { action: 'replace', value: { type: 'ephemeral', ttl: '5m' } } },
@@ -255,7 +255,7 @@ describe('RequestAdaptationEditor', () => {
       />,
       { station: 'user', role: 'user' },
     );
-    const forced = await screen.findByRole('group', { name: 'Forced body values' });
+    const forced = await screen.findByRole('group', { name: 'Fixed parameters (always override)' });
     expect(screen.queryByLabelText('Automatic cache default')).not.toBeInTheDocument();
     await rendered.user.click(within(forced).getByRole('button', { name: 'Add field' }));
     await rendered.user.type(
@@ -263,7 +263,7 @@ describe('RequestAdaptationEditor', () => {
       '/max_tokens',
     );
     await rendered.user.type(within(forced).getByRole('textbox', { name: 'Value' }), '333');
-    await rendered.user.click(screen.getByRole('button', { name: 'Save request adaptation' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save request rewriting' }));
     await waitFor(() => expect(sent).toBeDefined());
     expect(sent?.expected_revision).toBe('1');
     expect(
@@ -272,10 +272,10 @@ describe('RequestAdaptationEditor', () => {
     expect(
       (sent?.body_forced as { values: Record<string, unknown> }).values['/max_tokens'],
     ).toEqual({ action: 'replace', value: 333 });
-    expect(screen.getByText('Request adaptation saved.')).toBeInTheDocument();
-    const forwarded = screen.getByRole('group', { name: 'Client headers to forward' });
+    expect(screen.getByText('Request rewriting saved.')).toBeInTheDocument();
+    const forwarded = screen.getByRole('group', { name: 'Allowed client headers' });
     await rendered.user.type(within(forwarded).getByRole('textbox'), '\nX-Other');
-    expect(screen.queryByText('Request adaptation saved.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Request rewriting saved.')).not.toBeInTheDocument();
   });
 
   it('renders an inherited read-only connection projection without revealing values', async () => {
@@ -332,12 +332,12 @@ describe('RequestAdaptationEditor', () => {
     );
 
     const forwardedHeaders = () =>
-      within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole('textbox');
-    await screen.findByRole('group', { name: 'Client headers to forward' });
+      within(screen.getByRole('group', { name: 'Allowed client headers' })).getByRole('textbox');
+    await screen.findByRole('group', { name: 'Allowed client headers' });
     const headers = forwardedHeaders();
     await rendered.user.clear(headers);
     await rendered.user.type(headers, 'X-Dirty');
-    const fixed = screen.getByRole('group', { name: 'Fixed outbound headers' });
+    const fixed = screen.getByRole('group', { name: 'Headers added to requests' });
     await rendered.user.selectOptions(
       within(fixed).getByRole('combobox', { name: 'Edit' }),
       'replace',
@@ -346,11 +346,11 @@ describe('RequestAdaptationEditor', () => {
     await rendered.user.type(secret, 'unsaved-secret');
     await rendered.i18n.changeLanguage('zh-CN');
 
-    expect(await screen.findByRole('heading', { name: '请求头与请求主体' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '请求改写' })).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(headers).toHaveValue('X-Dirty');
     expect(secret).toHaveValue('unsaved-secret');
-    expect(screen.getByRole('button', { name: '保存请求适配' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '保存请求改写' })).toBeEnabled();
   });
 
   it('marks a failed manual refresh stale and keeps saving blocked until refresh succeeds', async () => {
@@ -373,8 +373,8 @@ describe('RequestAdaptationEditor', () => {
     );
 
     const forwardedHeaders = () =>
-      within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole('textbox');
-    await screen.findByRole('group', { name: 'Client headers to forward' });
+      within(screen.getByRole('group', { name: 'Allowed client headers' })).getByRole('textbox');
+    await screen.findByRole('group', { name: 'Allowed client headers' });
     const headers = forwardedHeaders();
     await rendered.user.clear(headers);
     await rendered.user.type(headers, 'X-Dirty');
@@ -385,12 +385,12 @@ describe('RequestAdaptationEditor', () => {
         'The displayed settings could not be refreshed and may be stale. Refresh successfully before saving.',
       ),
     ).toBeInTheDocument();
-    const save = screen.getByRole('button', { name: 'Save request adaptation' });
+    const save = screen.getByRole('button', { name: 'Save request rewriting' });
     expect(save).toBeDisabled();
 
     await rendered.user.click(screen.getByRole('button', { name: 'Refresh configuration' }));
     await waitFor(() => expect(screen.getAllByRole('textbox')[0]).toHaveValue('X-Authoritative'));
-    expect(screen.getByRole('button', { name: 'Save request adaptation' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save request rewriting' })).toBeEnabled();
   });
 
   it.each(['invalid_json', 'invalid_dto'] as const)(
@@ -421,23 +421,23 @@ describe('RequestAdaptationEditor', () => {
       );
 
       await rendered.user.click(
-        await screen.findByRole('button', { name: 'Save request adaptation' }),
+        await screen.findByRole('button', { name: 'Save request rewriting' }),
       );
       expect(
         await screen.findByText('The save outcome is uncertain. Refresh before trying again.'),
       ).toBeInTheDocument();
-      const save = screen.getByRole('button', { name: 'Save request adaptation' });
+      const save = screen.getByRole('button', { name: 'Save request rewriting' });
       expect(save).toBeDisabled();
 
       await rendered.user.click(screen.getByRole('button', { name: 'Refresh configuration' }));
       await waitFor(() =>
         expect(
-          within(screen.getByRole('group', { name: 'Client headers to forward' })).getByRole(
+          within(screen.getByRole('group', { name: 'Allowed client headers' })).getByRole(
             'textbox',
           ),
         ).toHaveValue('X-Authoritative'),
       );
-      expect(screen.getByRole('button', { name: 'Save request adaptation' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Save request rewriting' })).toBeEnabled();
     },
   );
 });

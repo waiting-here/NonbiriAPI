@@ -1,3 +1,4 @@
+import { Fold } from '@shared/components/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiFetch, isApiError } from '@shared/query/http';
@@ -208,14 +209,16 @@ function MapEditor({
   editable,
   change,
   gatewayCacheDefaults = false,
+  endpointScope = false,
 }: {
   kind: MapKind;
   section: MapDraft;
   editable: boolean;
   change: (next: MapDraft) => void;
   gatewayCacheDefaults?: boolean;
+  endpointScope?: boolean;
 }) {
-  const copy = useRequestAdaptationCopy();
+  const copy = useRequestAdaptationCopy(endpointScope);
   const { t } = useTranslation();
   const cacheHelpID = useId();
   if (section.mode === 'inherit')
@@ -347,6 +350,34 @@ function MapEditor({
           </div>
         ),
       )}
+      {editable && endpointScope ? (
+        <button
+          type="button"
+          className="nb-btn nb-btn--ghost"
+          onClick={() =>
+            change({
+              ...section,
+              rows: [
+                ...section.rows,
+                {
+                  name:
+                    kind === 'fixed_headers'
+                      ? 'x-client-version'
+                      : kind === 'body_defaults'
+                        ? '/temperature'
+                        : '/tool_choice',
+                  value:
+                    kind === 'fixed_headers' ? '1' : kind === 'body_defaults' ? '0.7' : '"auto"',
+                  action: 'replace',
+                  existing: false,
+                },
+              ],
+            })
+          }
+        >
+          {copy('example')}
+        </button>
+      ) : null}
       {editable ? (
         <button
           type="button"
@@ -371,15 +402,17 @@ export function RequestAdaptationEditor({
   connectorType,
   editable,
   gatewayCacheDefaults = false,
+  onConfiguredCount,
 }: {
   url: string;
   scope: 'endpoint' | 'charity-model' | 'binding';
   connectorType?: string;
   editable: boolean;
   gatewayCacheDefaults?: boolean;
+  onConfiguredCount?: (count: number) => void;
 }) {
   const { t } = useTranslation();
-  const copy = useRequestAdaptationCopy();
+  const copy = useRequestAdaptationCopy(scope === 'endpoint');
   const [reload, setReload] = useState(0);
   const [view, setView] = useState<View | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -419,6 +452,17 @@ export function RequestAdaptationEditor({
       });
     return () => controller.abort();
   }, [url, reload]);
+
+  useEffect(() => {
+    if (view)
+      onConfiguredCount?.(
+        view.forward_headers.values.length +
+          view.native_extension_paths.values.length +
+          Object.keys(view.fixed_headers.values).length +
+          Object.keys(view.body_defaults.values).length +
+          Object.keys(view.body_forced.values).length,
+      );
+  }, [view, onConfiguredCount]);
 
   const updateList = (kind: ListKind, next: ListDraft) => {
     setNotice('');
@@ -472,6 +516,22 @@ export function RequestAdaptationEditor({
     }
   };
 
+  const technicalDetails = (
+    <>
+      <p>
+        {connectorType === 'openai-compatible'
+          ? copy('openaiSupport')
+          : connectorType
+            ? copy('convertedSupport')
+            : copy('allSupport')}
+      </p>
+      {view ? (
+        <p>
+          {copy('revision')}: {view.revision}
+        </p>
+      ) : null}
+    </>
+  );
   return (
     <section className="core-card">
       <div className="core-card__header">
@@ -494,25 +554,19 @@ export function RequestAdaptationEditor({
         </button>
       </div>
       <p>{copy('description')}</p>
-      <p>
-        {connectorType === 'openai-compatible'
-          ? copy('openaiSupport')
-          : connectorType
-            ? copy('convertedSupport')
-            : copy('allSupport')}
-      </p>
+      {scope === 'endpoint' ? (
+        <Fold title={t('common.operations.management.details')} plain>
+          {technicalDetails}
+        </Fold>
+      ) : (
+        technicalDetails
+      )}
       {loading ? <p role="status">{copy('loading')}</p> : null}
       {notice ? <p role="status">{notice}</p> : null}
       {loadError ? <p role="status">{copy(loadError)}</p> : null}
       {!editable && view ? <p>{copy('readOnly')}</p> : null}
       {view && draft && !loading && !contextChanged ? (
         <form className="core-form" onSubmit={(event) => void save(event)}>
-          <details>
-            <summary>{t('common.operations.management.details')}</summary>
-            <p>
-              {copy('revision')}: {view.revision}
-            </p>
-          </details>
           {(
             [
               'forward_headers',
@@ -556,22 +610,46 @@ export function RequestAdaptationEditor({
                   section.mode === 'inherit' ? (
                     <p>{copy('inherited')}</p>
                   ) : (
-                    <label>
-                      <span>{copy('listHelp')}</span>
-                      <textarea
-                        value={(section as ListDraft).text}
-                        rows={3}
-                        maxLength={65536}
-                        disabled={!editable}
-                        onChange={(event) =>
-                          updateList(kind, { mode: section.mode, text: event.target.value })
-                        }
-                      />
-                    </label>
+                    <div>
+                      <label>
+                        <span>{copy('listHelp')}</span>
+                        <textarea
+                          value={(section as ListDraft).text}
+                          rows={3}
+                          maxLength={65536}
+                          disabled={!editable}
+                          onChange={(event) =>
+                            updateList(kind, { mode: section.mode, text: event.target.value })
+                          }
+                        />
+                      </label>
+                      {editable && scope === 'endpoint' ? (
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--ghost"
+                          onClick={() =>
+                            updateList(kind, {
+                              mode: section.mode,
+                              text: [
+                                (section as ListDraft).text,
+                                kind === 'forward_headers'
+                                  ? 'x-client-version'
+                                  : '/custom_parameter',
+                              ]
+                                .filter(Boolean)
+                                .join('\n'),
+                            })
+                          }
+                        >
+                          {copy('example')}
+                        </button>
+                      ) : null}
+                    </div>
                   )
                 ) : (
                   <MapEditor
                     kind={kind}
+                    endpointScope={scope === 'endpoint'}
                     section={section as MapDraft}
                     editable={editable}
                     gatewayCacheDefaults={

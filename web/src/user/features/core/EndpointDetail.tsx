@@ -1,4 +1,6 @@
-import { OutcomeNote } from '@shared/components/ui';
+import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
+import { Drawer } from '@shared/components/ui/Drawer';
+import { useTranslation } from 'react-i18next';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
@@ -38,7 +40,6 @@ import {
   CoreTime,
   DiscoveryStatus,
   SafeCopyValue,
-  StatusPill,
 } from './components';
 import { useCoreCopy } from './copy';
 import { useQuickstartCopy } from './quickstartCopy';
@@ -623,7 +624,7 @@ function ManualEntryRow({
           <div className="core-form-actions">
             <button
               type="button"
-              className="btn btn-danger"
+              className="nb-btn nb-btn--danger-outline"
               disabled={
                 busy ||
                 attemptKind === 'update' ||
@@ -662,10 +663,12 @@ function ManualCatalog({
   accountId,
   endpointId,
   keyId,
+  visible,
 }: {
   accountId: string;
   endpointId: string;
   keyId: string;
+  visible: boolean;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
@@ -688,7 +691,7 @@ function ManualCatalog({
       page,
       pageSize,
     },
-    Boolean(accountId && endpointId && keyId),
+    Boolean(visible && accountId && endpointId && keyId),
   );
   const [upstreamModel, setUpstreamModel] = useState('');
   const [provider, setProvider] = useState('');
@@ -892,13 +895,18 @@ function EndpointKeyCard({
   endpoint,
   keyData,
   onRefresh,
+  suppressRouteDrawer = false,
 }: {
   accountId: string;
   endpoint: Endpoint;
+  suppressRouteDrawer?: boolean;
   keyData: EndpointKey;
   onRefresh: () => void;
 }) {
   const { t } = useCoreCopy();
+  const { t: ui } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const evidence = keyData.browse?.discovery;
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -907,7 +915,42 @@ function EndpointKeyCard({
   const [editRevision, setEditRevision] = useState(keyData.revision);
   const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
   const [maxRPM, setMaxRPM] = useState(String(keyData.max_rpm));
-  const [manualCatalogOpen, setManualCatalogOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const [modelsVisited, setModelsVisited] = useState(false);
+  const routesOpen = new URLSearchParams(location.search).has(`routes_${keyData.id}_page`);
+  const showModels = modelsOpen || (routesOpen && !suppressRouteDrawer);
+  const modelPager = usePagePager({
+    station: 'user',
+    listType: 'key-available-models',
+    scopeKey: `${accountId}:${endpoint.id}:${keyData.id}`,
+  });
+  const automatic = useNumberedCatalog(
+    accountId,
+    endpoint.id,
+    keyData.id,
+    'automatic',
+    { page: modelPager.page, pageSize: modelPager.pageSize },
+    showModels,
+  );
+  const openModels = () => {
+    setModelsVisited(true);
+    setModelsOpen(true);
+  };
+  const openRoutes = () => {
+    setModelsVisited(true);
+    const params = new URLSearchParams(location.search);
+    if (!routesOpen) params.set(`routes_${keyData.id}_page`, '1');
+    navigate(`${location.pathname}?${params.toString()}`, { state: location.state });
+  };
+  const closeModels = () => {
+    setModelsOpen(false);
+    if (routesOpen) {
+      const params = new URLSearchParams(location.search);
+      params.delete(`routes_${keyData.id}_page`);
+      params.delete(`routes_${keyData.id}_page_size`);
+      navigate(`${location.pathname}?${params.toString()}`, { state: location.state });
+    }
+  };
   type Intent =
     | { kind: 'refresh'; evidenceRevision: string }
     | { kind: 'patch'; input: EndpointKeyPatchInput }
@@ -1037,61 +1080,45 @@ function EndpointKeyCard({
     `${keyData.display_head}${keyData.display_head && keyData.display_tail ? '…' : ''}${keyData.display_tail}` ||
     t('common.notSet');
 
+  const actionBlocked =
+    busy || reconciliationRequired || Boolean(replayAttempt) || keyData.suspension_state !== 'none';
+  const blockTitle =
+    keyData.suspension_state !== 'none' ? ui('user.services.blockedAction') : undefined;
   return (
-    <li className="core-key-card">
-      <div className="core-key-card__top">
-        <div>
-          <strong>{keyData.note || t('endpoints.key')}</strong>
-          <div className="core-muted">{t('endpoints.keyIdentifier')}</div>
-          <div>
-            <SafeCopyValue value={display} label={t('endpoints.keyIdentifier')} />
-          </div>
-        </div>
-        {!endpoint.enabled ? (
-          <StatusPill tone="warning">{t('browse.state.endpoint_disabled')}</StatusPill>
-        ) : keyData.suspension_state === 'security_processing' ? (
-          <StatusPill tone="danger">{t('endpoints.securityProcessing')}</StatusPill>
+    <tr className="core-key-card">
+      <td data-cell="title">
+        <strong>{keyData.note || t('endpoints.key')}</strong>
+        <span className="nb-sub nb-mono">{display}</span>
+      </td>
+      <td data-cell="status">
+        <span
+          className={`nb-badge nb-badge--${keyData.suspension_state !== 'none' ? 'bad' : physicalAvailable ? 'ok' : 'warn'}`}
+        >
+          {!endpoint.enabled
+            ? t('browse.state.endpoint_disabled')
+            : keyData.suspension_state !== 'none'
+              ? t('endpoints.securityProcessing')
+              : keyData.enabled
+                ? t('common.enabled')
+                : t('common.disabled')}
+        </span>
+        {keyData.browse?.donation_eligibility === 'already_donated' ? (
+          <span className="nb-sub">
+            <span className="nb-badge">{ui('user.services.donated')}</span>
+          </span>
+        ) : null}
+      </td>
+      <td data-cell="meta" data-label={t('endpoints.discovery')}>
+        {evidence?.count !== null && evidence?.count !== undefined ? (
+          <span className="nb-num">{evidence.count}</span>
         ) : (
-          <StatusPill tone={keyData.enabled ? 'success' : 'neutral'}>
-            {keyData.enabled ? t('common.enabled') : t('common.disabled')}
-          </StatusPill>
-        )}
-      </div>
-      <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
-      <p className="core-muted">{t('browse.personalLimits')}</p>
-      <dl className="core-detail-list">
-        <div>
-          <dt>{t('endpoints.storePolicy')}</dt>
-          <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
-        </div>
-        <div>
-          <dt>{t('common.updated')}</dt>
-          <dd>
-            <CoreTime value={keyData.updated_at} />
-          </dd>
-        </div>
-      </dl>
-
-      <section className="core-card">
-        <div className="core-card__header">
-          <h3>{t('endpoints.discovery')}</h3>
-        </div>
-        {!evidence ? (
-          <p className="core-muted">{t('common.unknown')}</p>
-        ) : (
-          <>
-            <DiscoveryStatus evidence={evidence} />
-            {evidence.observed_at !== null ? (
-              <p>
-                <span className="core-muted">{t('endpoints.observedAt')}: </span>
-                <CoreTime value={evidence.observed_at} />
-              </p>
-            ) : null}
-          </>
+          <span>{evidence?.state === 'checking' ? t('common.working') : t('common.notSet')}</span>
         )}
         <button
           type="button"
-          className="btn btn-secondary"
+          className="nb-btn nb-btn--ghost nb-btn--sm"
+          aria-label={t('endpoints.refreshDiscovery')}
+          title={t('endpoints.refreshDiscovery')}
           disabled={
             busy ||
             !evidence ||
@@ -1100,223 +1127,290 @@ function EndpointKeyCard({
             !physicalAvailable ||
             Boolean(replayAttempt)
           }
-          onClick={() =>
-            void run({
-              kind: 'refresh',
-              evidenceRevision: evidence?.revision ?? '0',
-            })
-          }
+          onClick={() => void run({ kind: 'refresh', evidenceRevision: evidence?.revision ?? '0' })}
         >
-          {busy ? t('common.working') : t('endpoints.refreshDiscovery')}
+          {evidence?.count != null ? '↻' : t('endpoints.refreshDiscovery')}
         </button>
-      </section>
-
-      <KeyBrowseSummary
-        accountId={accountId}
-        endpointId={endpoint.id}
-        keyData={keyData}
-        onRefresh={onRefresh}
-      />
-
-      <details
-        className="core-manual-details"
-        onToggle={(event) => setManualCatalogOpen(event.currentTarget.open)}
-      >
-        <summary>{t('endpoints.manualTitle')}</summary>
-        {manualCatalogOpen ? (
-          <ManualCatalog accountId={accountId} endpointId={endpoint.id} keyId={keyData.id} />
-        ) : null}
-      </details>
-      <OutcomeNotice
-        outcome={outcome}
-        savedRefreshFailed={operation.outcome === 'refresh-failed'}
-        onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
-        busy={busy}
-      />
-      {reconciliationRequired ? (
+      </td>
+      <td data-cell="meta" data-label={ui('user.services.keyLimits')}>
+        {keyData.max_concurrency === 0 && keyData.max_rpm === 0 ? (
+          ui('common.keyLimits.unlimited')
+        ) : (
+          <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
+        )}
+      </td>
+      <td data-cell="meta" data-label={ui('user.services.inUse')}>
         <button
           type="button"
-          className="btn btn-secondary"
-          disabled={busy}
-          onClick={() => void reconcile()}
+          className="nb-btn nb-btn--ghost nb-btn--sm"
+          onClick={openRoutes}
+          aria-label={t('browse.modelCount', { count: keyData.browse?.model_count ?? '—' })}
         >
-          {t('common.reconcile')}
+          {keyData.browse?.model_count ?? '—'}
         </button>
-      ) : null}
-      {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={busy || reconciliationRequired}
-          onClick={() => void run(replayAttempt)}
-        >
-          {t('common.reconcile')}
-        </button>
-      ) : null}
-      {editing ? (
-        <form
-          className="core-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run({
-              kind: 'patch',
-              input: {
-                note,
-                max_concurrency: Number(maxConcurrency),
-                max_rpm: Number(maxRPM),
-                expected_revision: editRevision,
-              },
-            });
-          }}
-        >
-          <div className="core-field-grid">
-            <label>
-              <span>{t('endpoints.keyNote')}</span>
-              <input
-                value={note}
-                maxLength={2048}
-                disabled={Boolean(replayAttempt)}
-                onChange={(event) => setNote(event.target.value)}
-              />
-            </label>
-          </div>
-          <KeyLimitFields
-            concurrency={maxConcurrency}
-            rpm={maxRPM}
-            onConcurrency={setMaxConcurrency}
-            onRPM={setMaxRPM}
-            disabled={busy || Boolean(replayAttempt)}
-          />
-          <div className="core-form-actions">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={busy || Boolean(replayAttempt)}
-              onClick={() => {
-                setNote(keyData.note);
-                setEditing(false);
-              }}
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={
-                busy ||
-                reconciliationRequired ||
-                Boolean(replayAttempt) ||
-                (note === keyData.note &&
-                  Number(maxConcurrency) === keyData.max_concurrency &&
-                  Number(maxRPM) === keyData.max_rpm)
-              }
-            >
-              {t('common.save')}
-            </button>
-          </div>
-        </form>
-      ) : null}
-      <div className="core-row-actions">
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={
-            busy ||
-            reconciliationRequired ||
-            Boolean(replayAttempt) ||
-            keyData.suspension_state !== 'none'
-          }
-          onClick={() => {
-            setNote(keyData.note);
-            setEditRevision(keyData.revision);
-            setMaxConcurrency(String(keyData.max_concurrency));
-            setMaxRPM(String(keyData.max_rpm));
-            setEditing((value) => !value);
-          }}
-        >
-          {t('common.edit')}
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={
-            busy ||
-            reconciliationRequired ||
-            Boolean(replayAttempt) ||
-            keyData.suspension_state !== 'none'
-          }
-          onClick={() =>
-            void run({
-              kind: 'patch',
-              input: { enabled: !keyData.enabled, expected_revision: keyData.revision },
-            })
-          }
-        >
-          {keyData.enabled ? t('endpoints.keyToggleOff') : t('endpoints.keyToggleOn')}
-        </button>
-        {endpoint.connector_type === 'openai-compatible' ? (
+      </td>
+      <td data-cell="action" className="is-action">
+        <div className="nb-inline">
           <button
             type="button"
-            className="btn btn-secondary"
-            disabled={
-              busy ||
-              reconciliationRequired ||
-              Boolean(replayAttempt) ||
-              keyData.suspension_state !== 'none'
+            className="nb-btn nb-btn--secondary nb-btn--sm"
+            onClick={openModels}
+          >
+            {ui('user.services.viewModels')}
+          </button>
+          <MoreMenu
+            label={`${ui('user.services.more')} · ${keyData.note || display}`}
+            items={[
+              {
+                label: <span title={blockTitle}>{ui('user.services.editKey')}</span>,
+                disabled: actionBlocked,
+                onSelect: () => {
+                  setNote(keyData.note);
+                  setEditRevision(keyData.revision);
+                  setMaxConcurrency(String(keyData.max_concurrency));
+                  setMaxRPM(String(keyData.max_rpm));
+                  setEditing(true);
+                },
+              },
+              {
+                label: <span title={blockTitle}>{t('endpoints.manualTitle')}</span>,
+                disabled: actionBlocked,
+                onSelect: openModels,
+              },
+              ...(endpoint.connector_type === 'openai-compatible'
+                ? [
+                    {
+                      label: (
+                        <span title={blockTitle}>
+                          {keyData.force_store_false
+                            ? t('endpoints.storePolicyOff')
+                            : t('endpoints.storePolicyOn')}
+                        </span>
+                      ),
+                      disabled: actionBlocked,
+                      onSelect: () =>
+                        void run({
+                          kind: 'patch',
+                          input: {
+                            force_store_false: !keyData.force_store_false,
+                            expected_revision: keyData.revision,
+                          },
+                        }),
+                    },
+                  ]
+                : []),
+              {
+                label: (
+                  <span title={blockTitle}>
+                    {keyData.enabled ? t('endpoints.keyToggleOff') : t('endpoints.keyToggleOn')}
+                  </span>
+                ),
+                disabled: actionBlocked,
+                onSelect: () =>
+                  void run({
+                    kind: 'patch',
+                    input: { enabled: !keyData.enabled, expected_revision: keyData.revision },
+                  }),
+              },
+              'separator',
+              {
+                label: <span title={blockTitle}>{t('endpoints.deleteKey')}…</span>,
+                disabled: actionBlocked,
+                danger: true,
+                onSelect: () => setDeleteOpen(true),
+              },
+            ]}
+          />
+        </div>
+        <OutcomeNotice
+          outcome={outcome}
+          savedRefreshFailed={reconciliationRequired}
+          onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+          busy={busy}
+        />
+        {reconciliationRequired ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={busy}
+            onClick={() => void reconcile()}
+          >
+            {t('common.reconcile')}
+          </button>
+        ) : null}
+        {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={busy || reconciliationRequired}
+            onClick={() => void run(replayAttempt)}
+          >
+            {t('common.reconcile')}
+          </button>
+        ) : null}
+        <Drawer
+          open={showModels}
+          onClose={closeModels}
+          title={`${ui('user.services.viewModels')} · ${keyData.note || display}`}
+          closeLabel={t('common.close')}
+        >
+          {modelsVisited || routesOpen ? (
+            <>
+              {automatic.isPending ? (
+                <CoreLoading compact />
+              ) : automatic.error ? (
+                <CoreErrorPanel
+                  compact
+                  error={automatic.error}
+                  onRetry={() => void automatic.refetch()}
+                />
+              ) : automatic.data ? (
+                <section className="core-card">
+                  <h3>{t('endpoints.discovery')}</h3>
+                  <DiscoveryStatus evidence={automatic.data.evidence} />
+                  <ul className="services-model-list">
+                    {automatic.data.automatic_entries.map((entry) => (
+                      <li className="nb-mono" key={entry.id}>
+                        {entry.upstream_model_id}
+                      </li>
+                    ))}
+                  </ul>
+                  <PagePagination
+                    metadata={automatic.data.pagination}
+                    requestedPage={modelPager.page}
+                    busy={automatic.isFetching}
+                    onPageChange={modelPager.setPage}
+                    onPageSizeChange={modelPager.setPageSize}
+                  />
+                </section>
+              ) : null}
+              <KeyBrowseSummary
+                accountId={accountId}
+                endpointId={endpoint.id}
+                keyData={keyData}
+                onRefresh={onRefresh}
+              />
+              <ManualCatalog
+                accountId={accountId}
+                endpointId={endpoint.id}
+                keyId={keyData.id}
+                visible={showModels}
+              />
+            </>
+          ) : null}
+        </Drawer>
+        <Drawer
+          open={editing}
+          onClose={() => {
+            if (!busy && !replayAttempt) {
+              setNote(keyData.note);
+              setEditing(false);
             }
-            onClick={() =>
+          }}
+          title={ui('user.services.editKey')}
+          closeLabel={t('common.close')}
+          busy={busy || Boolean(replayAttempt)}
+        >
+          <p className="nb-muted">{t('browse.personalLimits')}</p>
+          <dl className="nb-facts">
+            <div>
+              <dt>{t('endpoints.storePolicy')}</dt>
+              <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
+            </div>
+            <div>
+              <dt>{t('common.updated')}</dt>
+              <dd>
+                <CoreTime value={keyData.updated_at} />
+              </dd>
+            </div>
+          </dl>
+          <form
+            className="core-form"
+            onSubmit={(event) => {
+              event.preventDefault();
               void run({
                 kind: 'patch',
                 input: {
-                  force_store_false: !keyData.force_store_false,
-                  expected_revision: keyData.revision,
+                  note,
+                  max_concurrency: Number(maxConcurrency),
+                  max_rpm: Number(maxRPM),
+                  expected_revision: editRevision,
                 },
-              })
-            }
+              });
+            }}
           >
-            {keyData.force_store_false
-              ? t('endpoints.storePolicyOff')
-              : t('endpoints.storePolicyOn')}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="btn btn-danger"
-          disabled={
-            busy ||
-            reconciliationRequired ||
-            Boolean(replayAttempt) ||
-            keyData.suspension_state !== 'none'
+            <div className="core-field-grid">
+              <label>
+                <span>{t('endpoints.keyNote')}</span>
+                <input
+                  value={note}
+                  maxLength={2048}
+                  disabled={Boolean(replayAttempt)}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </label>
+            </div>
+            <KeyLimitFields
+              concurrency={maxConcurrency}
+              rpm={maxRPM}
+              onConcurrency={setMaxConcurrency}
+              onRPM={setMaxRPM}
+              disabled={busy || Boolean(replayAttempt)}
+            />
+            <div className="core-form-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || Boolean(replayAttempt)}
+                onClick={() => {
+                  setNote(keyData.note);
+                  setEditing(false);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={
+                  busy ||
+                  reconciliationRequired ||
+                  Boolean(replayAttempt) ||
+                  (note === keyData.note &&
+                    Number(maxConcurrency) === keyData.max_concurrency &&
+                    Number(maxRPM) === keyData.max_rpm)
+                }
+              >
+                {t('common.save')}
+              </button>
+            </div>
+          </form>
+        </Drawer>
+        <ConfirmDialog
+          open={deleteOpen}
+          title={t('endpoints.deleteKeyTitle')}
+          description={t('endpoints.deleteKeyBody')}
+          confirmLabel={
+            replayAttempt?.kind === 'delete' ? t('common.retrySame') : t('endpoints.deleteKey')
           }
-          onClick={() => setDeleteOpen(true)}
-        >
-          {t('endpoints.deleteKey')}
-        </button>
-      </div>
-      <ConfirmDialog
-        open={deleteOpen}
-        title={t('endpoints.deleteKeyTitle')}
-        description={t('endpoints.deleteKeyBody')}
-        confirmLabel={
-          replayAttempt?.kind === 'delete' ? t('common.retrySame') : t('endpoints.deleteKey')
-        }
-        danger
-        busy={busy}
-        onCancel={() => {
-          if (!busy) setDeleteOpen(false);
-        }}
-        onConfirm={() =>
-          void run(
-            replayAttempt?.kind === 'delete'
-              ? replayAttempt
-              : {
-                  kind: 'delete',
-                  expectedRevision: keyData.revision,
-                },
-          )
-        }
-      />
-    </li>
+          danger
+          busy={busy}
+          onCancel={() => {
+            if (!busy) setDeleteOpen(false);
+          }}
+          onConfirm={() =>
+            void run(
+              replayAttempt?.kind === 'delete'
+                ? replayAttempt
+                : {
+                    kind: 'delete',
+                    expectedRevision: keyData.revision,
+                  },
+            )
+          }
+        />
+      </td>
+    </tr>
   );
 }
 
@@ -1328,6 +1422,9 @@ export function EndpointDetail({
   endpointId: string;
 }) {
   const { t } = useCoreCopy();
+  const { t: ui } = useTranslation();
+  const [adaptationCount, setAdaptationCount] = useState<number | null>(null);
+  const [usingModels, setUsingModels] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1494,175 +1591,211 @@ export function EndpointDetail({
   };
 
   return (
-    <div className="page core-page core-stack">
+    <div
+      className={`page core-page core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
+    >
       <PageHeader
         icon="endpoints"
-        title={t('endpoints.detailsTitle')}
-        description={t('endpoints.detailsDescription')}
+        title={
+          endpoint.data.note ||
+          (endpoint.data.origin.kind === 'mainstream'
+            ? endpoint.data.origin.name
+            : t('endpoints.detailsTitle'))
+        }
+        description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
         back={
           <Link to={returnTo} state={location.state}>
-            {t('common.back')}
+            ← {t('endpoints.title')}
           </Link>
         }
-      />
-      <section className="core-card">
-        <div className="core-card__header">
-          <h2>
-            <ConnectorLabel value={endpoint.data.connector_type} />
-          </h2>
-          <StatusPill tone={endpoint.data.enabled ? 'success' : 'neutral'}>
-            {endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
-          </StatusPill>
-        </div>
-        <dl className="core-detail-list">
-          <div>
-            <dt>{t('endpoints.baseUrl')}</dt>
-            <dd>
-              <SafeCopyValue value={endpoint.data.base_url} label={t('endpoints.baseUrl')} />
-            </dd>
-          </div>
-          <div>
-            <dt>{t('endpoints.origin')}</dt>
-            <dd>
-              {endpoint.data.origin.kind === 'mainstream'
-                ? t('endpoints.originMainstream', { name: endpoint.data.origin.name })
-                : t('endpoints.originCustom')}
-            </dd>
-          </div>
-          <div>
-            <dt>{t('endpoints.note')}</dt>
-            <dd>{endpoint.data.note || t('common.notSet')}</dd>
-          </div>
-          <div>
-            <dt>{t('endpoints.keyCount')}</dt>
-            <dd className="core-number">{endpoint.data.key_count}</dd>
-          </div>
-        </dl>
-        <div className="core-row-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() =>
-              void runEndpointAction({
-                kind: 'patch',
-                input: {
-                  enabled: !endpoint.data.enabled,
-                  expected_revision: endpoint.data.revision,
+        actions={
+          <div className="nb-inline">
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
+              onClick={() => setEditing(true)}
+            >
+              {ui('user.services.editName')}
+            </button>
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              disabled={addingKey || reconciliationRequired || Boolean(replayAttempt)}
+              onClick={() => setAddingKey(true)}
+            >
+              ＋ {t('endpoints.addKey')}
+            </button>
+            <MoreMenu
+              label={ui('user.services.more')}
+              items={[
+                {
+                  label: endpoint.data.enabled ? t('endpoints.toggleOff') : t('endpoints.toggleOn'),
+                  disabled: busy || reconciliationRequired || Boolean(replayAttempt),
+                  onSelect: () =>
+                    void runEndpointAction({
+                      kind: 'patch',
+                      input: {
+                        enabled: !endpoint.data.enabled,
+                        expected_revision: endpoint.data.revision,
+                      },
+                    }),
                 },
-              })
-            }
-          >
-            {endpoint.data.enabled ? t('endpoints.toggleOff') : t('endpoints.toggleOn')}
-          </button>
-        </div>
-        <OutcomeNotice
-          outcome={outcome}
-          savedRefreshFailed={operation.outcome === 'refresh-failed'}
-          onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
-          busy={busy}
-        />
-        {reconciliationRequired ? (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={busy}
-            onClick={() => void reconcile()}
-          >
-            {t('common.reconcile')}
-          </button>
-        ) : null}
-        {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={busy || reconciliationRequired}
-            onClick={() => void runEndpointAction(replayAttempt)}
-          >
-            {t('common.reconcile')}
-          </button>
-        ) : null}
-        {editing ? (
-          <form
-            className="core-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runEndpointAction({
-                kind: 'patch',
-                input: { note: endpointNote, expected_revision: endpoint.data.revision },
-              });
-            }}
-          >
-            <div className="core-field-grid">
-              <label>
-                <span>{t('endpoints.note')}</span>
-                <input
-                  value={endpointNote}
-                  maxLength={2048}
-                  disabled={Boolean(replayAttempt)}
-                  onChange={(event) => setEndpointNote(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="core-form-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy || Boolean(replayAttempt)}
-                onClick={() => {
-                  setEndpointNote(endpoint.data.note);
-                  setEditing(false);
-                }}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={
-                  busy ||
-                  reconciliationRequired ||
-                  Boolean(replayAttempt) ||
-                  endpointNote === endpoint.data.note
-                }
-              >
-                {t('common.save')}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() => setEditing(true)}
-          >
-            {t('common.edit')}
-          </button>
-        )}
-      </section>
-
-      <RequestAdaptationEditor
-        key={`${accountId}:${endpoint.data.id}`}
-        url={`/api/endpoints/${encodeURIComponent(endpoint.data.id)}/request-adaptation`}
-        scope="endpoint"
-        connectorType={endpoint.data.connector_type}
-        editable
+              ]}
+            />
+          </div>
+        }
       />
+      <section className="nb-panel">
+        <div className="nb-panel__body">
+          <dl className="nb-facts">
+            <div>
+              <dt>{t('endpoints.baseUrl')}</dt>
+              <dd>
+                <SafeCopyValue value={endpoint.data.base_url} label={t('endpoints.baseUrl')} />
+              </dd>
+            </div>
+            <div>
+              <dt>{t('endpoints.connector')}</dt>
+              <dd>
+                <ConnectorLabel value={endpoint.data.connector_type} />
+              </dd>
+            </div>
+            <div>
+              <dt>{t('endpoints.origin')}</dt>
+              <dd>
+                {endpoint.data.origin.kind === 'mainstream'
+                  ? t('endpoints.originMainstream', { name: endpoint.data.origin.name })
+                  : t('endpoints.originCustom')}
+              </dd>
+            </div>
+            <div>
+              <dt>{ui('user.services.modelsUsing')}</dt>
+              <dd>
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--ghost nb-btn--sm"
+                  onClick={() => setUsingModels(true)}
+                >
+                  {endpoint.data.browse?.model_count ?? '—'}
+                </button>
+              </dd>
+            </div>
+          </dl>
+          <p className="nb-small nb-muted">{t('endpoints.detailsDescription')}</p>
+          <OutcomeNotice
+            outcome={outcome}
+            savedRefreshFailed={operation.outcome === 'refresh-failed'}
+            onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+            busy={busy}
+          />
+          {reconciliationRequired ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={() => void reconcile()}
+            >
+              {t('common.reconcile')}
+            </button>
+          ) : null}
+          {replayAttempt && (replayAttempt.kind !== 'delete' || !deleteOpen) ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy || reconciliationRequired}
+              onClick={() => void runEndpointAction(replayAttempt)}
+            >
+              {t('common.reconcile')}
+            </button>
+          ) : null}
+          {editing ? (
+            <form
+              className="core-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void runEndpointAction({
+                  kind: 'patch',
+                  input: { note: endpointNote, expected_revision: endpoint.data.revision },
+                });
+              }}
+            >
+              <div className="core-field-grid">
+                <label>
+                  <span>{t('endpoints.note')}</span>
+                  <input
+                    value={endpointNote}
+                    maxLength={2048}
+                    disabled={Boolean(replayAttempt)}
+                    onChange={(event) => setEndpointNote(event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="core-form-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy || Boolean(replayAttempt)}
+                  onClick={() => {
+                    setEndpointNote(endpoint.data.note);
+                    setEditing(false);
+                  }}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={
+                    busy ||
+                    reconciliationRequired ||
+                    Boolean(replayAttempt) ||
+                    endpointNote === endpoint.data.note
+                  }
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </div>
+      </section>
+      <Drawer
+        open={usingModels}
+        onClose={() => {
+          setUsingModels(false);
+          const params = new URLSearchParams(location.search);
+          for (const field of [...params.keys()]) if (/^routes_/.test(field)) params.delete(field);
+          navigate(`${location.pathname}?${params.toString()}`, { state: location.state });
+        }}
+        title={ui('user.services.modelsUsing')}
+        closeLabel={t('common.close')}
+      >
+        <Link className="nb-btn nb-btn--secondary" to="/models">
+          {t('models.title')}
+        </Link>
+        {usingModels
+          ? keys.data?.data.map((keyData) => (
+              <section key={keyData.id}>
+                <h3>{keyData.note || t('endpoints.key')}</h3>
+                <KeyBrowseSummary
+                  accountId={accountId}
+                  endpointId={endpointId}
+                  keyData={keyData}
+                  onRefresh={() => void keys.refetch()}
+                />
+              </section>
+            ))
+          : null}
+      </Drawer>
 
       <section className="core-card" aria-busy={keys.isFetching}>
         <div className="core-card__header">
           <h2>{t('endpoints.key')}</h2>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={addingKey || reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() => setAddingKey(true)}
-          >
-            {t('endpoints.addKey')}
-          </button>
         </div>
-        <ResourceFilterBar control={filters} />
+        {BigInt(endpoint.data.key_count) > 10n || filters.active ? (
+          <ResourceFilterBar control={filters} />
+        ) : null}
         {addingKey ? (
           <AddEndpointKeyForm
             accountId={accountId}
@@ -1685,17 +1818,35 @@ export function EndpointDetail({
         ) : keys.data.data.length === 0 ? (
           <CoreEmpty title={t('endpoints.noKeysTitle')} body={t('endpoints.noKeysBody')} />
         ) : (
-          <ul className="core-key-list">
-            {keys.data.data.map((keyData) => (
-              <EndpointKeyCard
-                key={keyData.id}
-                accountId={accountId}
-                endpoint={endpoint.data}
-                keyData={keyData}
-                onRefresh={() => void keys.refetch()}
-              />
-            ))}
-          </ul>
+          <div className="nb-table-wrap services-key-table">
+            <table className="nb-table">
+              <caption className="nb-sr">{t('endpoints.key')}</caption>
+              <thead>
+                <tr>
+                  <th>{t('endpoints.key')}</th>
+                  <th>{t('endpoints.keyState')}</th>
+                  <th>{t('endpoints.discovery')}</th>
+                  <th>{ui('user.services.keyLimits')}</th>
+                  <th>{ui('user.services.inUse')}</th>
+                  <th>
+                    <span className="nb-sr">{ui('user.services.more')}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {keys.data.data.map((keyData) => (
+                  <EndpointKeyCard
+                    key={keyData.id}
+                    accountId={accountId}
+                    endpoint={endpoint.data}
+                    keyData={keyData}
+                    onRefresh={() => void keys.refetch()}
+                    suppressRouteDrawer={usingModels}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {keys.data ? (
           <PagePagination
@@ -1708,16 +1859,41 @@ export function EndpointDetail({
         ) : null}
       </section>
 
-      <section className="core-card core-danger-zone">
+      <Fold
+        title={ui('user.services.adaptation')}
+        meta={
+          adaptationCount === null
+            ? t('common.loading')
+            : adaptationCount
+              ? ui('user.services.adaptationCount', { count: adaptationCount })
+              : ui('user.services.adaptationNone')
+        }
+      >
+        <p className="nb-small nb-muted">{ui('user.services.adaptationHelp')}</p>
+        <RequestAdaptationEditor
+          key={`${accountId}:${endpoint.data.id}`}
+          url={`/api/endpoints/${encodeURIComponent(endpoint.data.id)}/request-adaptation`}
+          scope="endpoint"
+          connectorType={endpoint.data.connector_type}
+          editable
+          onConfiguredCount={setAdaptationCount}
+        />
+      </Fold>
+      <section className="nb-panel nb-panel--danger">
         <div className="core-card__header">
-          <h2>{t('endpoints.dangerTitle')}</h2>
+          <h2>{t('endpoints.deleteEndpoint')}</h2>
         </div>
-        <p>{t('endpoints.deleteEndpointBody')}</p>
+        <p>
+          {ui('user.services.deleteImpact', {
+            keys: endpoint.data.key_count,
+            models: endpoint.data.browse?.model_count ?? '—',
+          })}
+        </p>
         <div className="core-row-actions">
           <span />
           <button
             type="button"
-            className="btn btn-danger"
+            className="nb-btn nb-btn--danger-outline"
             disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
             onClick={() => setDeleteOpen(true)}
           >

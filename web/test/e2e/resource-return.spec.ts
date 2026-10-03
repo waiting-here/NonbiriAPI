@@ -91,6 +91,25 @@ const endpointKey = {
 };
 
 async function installEndpointRoutes(page: Parameters<typeof mockJson>[0]): Promise<void> {
+  await page.route(`${USER_ORIGIN}/api/endpoints/11/keys/2/models?**`, (route) =>
+    route.fulfill({
+      json: {
+        evidence: {
+          state: 'unknown',
+          revision: '0',
+          result: null,
+          safe_class: 'none',
+          observed_at: null,
+          count: null,
+        },
+        automatic_entries: [],
+        manual_entries: [],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      },
+    }),
+  );
+
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
@@ -157,10 +176,10 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
   await page.locator('a[href="/endpoints/11"]').click();
-  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints/11`);
 
-  const showAll = page.getByRole('button', { name: 'Browse all 11 sources', exact: true });
+  const showAll = page.getByRole('button', { name: /11 associated model/ });
   await showAll.click();
   await expect(page).toHaveURL(/\/endpoints\/11\?routes_2_page=1/);
   await expect(page.getByText('Vendor/Model-1', { exact: true })).toBeVisible();
@@ -186,14 +205,24 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await page.goForward();
   await expect(page).toHaveURL(/routes_2_page=2&routes_2_page_size=10/);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
-  await page.getByRole('link', { name: 'Back', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
+  await page
+    .getByRole('dialog')
+    .locator('.nb-drawer__head')
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await page.getByRole('link', { name: '← My services', exact: true }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints?page=2&page_size=10`);
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
 
   await page.goto(`${USER_ORIGIN}/endpoints/11?routes_2_page=1&routes_2_page_size=10`);
-  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
-  await page.getByRole('link', { name: 'Back', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'resource return fixture' })).toBeVisible();
+  await page
+    .getByRole('dialog')
+    .locator('.nb-drawer__head')
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await page.getByRole('link', { name: '← My services', exact: true }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints`);
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();

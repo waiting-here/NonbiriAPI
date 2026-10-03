@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { EndpointDetail } from './EndpointDetail';
 import * as coreQueries from './queries';
@@ -14,6 +14,29 @@ vi.mock('./queries', async () => {
     ...actual,
     useEndpoint: vi.fn(),
   };
+});
+
+const modal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+const close = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value() {
+      this.setAttribute('open', '');
+    },
+  });
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value() {
+      this.removeAttribute('open');
+    },
+  });
+});
+afterAll(() => {
+  if (modal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', modal);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+  if (close) Object.defineProperty(HTMLDialogElement.prototype, 'close', close);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
 });
 
 function fixture(path: string): Record<string, unknown> {
@@ -142,6 +165,8 @@ describe('endpoint detail numbered resource panels', () => {
       const raw = input instanceof Request ? input.url : String(input);
       const url = new URL(raw, window.location.origin);
       const path = `${url.pathname}${url.search}`;
+      if (url.searchParams.get('source') === 'automatic')
+        return Promise.resolve(jsonResponse(catalogPage([])));
       if (path === '/api/endpoints/11/keys?page=1&page_size=20') {
         return Promise.resolve(
           jsonResponse({
@@ -168,7 +193,7 @@ describe('endpoint detail numbered resource panels', () => {
     );
 
     expect(await screen.findByText('key note')).toBeVisible();
-    await rendered.user.click(screen.getByText('Manually added models', { selector: 'summary' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'View models' }));
     expect(await screen.findByText('Vendor/Manual')).toBeVisible();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       '/api/endpoints/11/keys?page=1&page_size=20',
@@ -176,17 +201,20 @@ describe('endpoint detail numbered resource panels', () => {
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       '/api/endpoints/11/keys/21/models?page=1&page_size=20&source=manual',
     );
-    expect(screen.getAllByRole('combobox', { name: 'Items per page' })).toHaveLength(2);
-    expect(screen.getByRole('heading', { name: 'Key' }).closest('section')).toHaveAttribute(
-      'aria-busy',
-      'false',
-    );
+    expect(screen.queryByRole('combobox', { name: 'Per page' })).not.toBeInTheDocument();
     expect(screen.getByText('Vendor/Manual').closest('section')).toHaveAttribute(
       'aria-busy',
       'false',
     );
 
-    await rendered.user.click(screen.getByRole('link', { name: 'Back' }));
+    await rendered.user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }),
+    );
+    expect(screen.getByRole('heading', { name: 'Key' }).closest('section')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
+    await rendered.user.click(screen.getByRole('link', { name: /My services/ }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=3&page_size=50'),
     );
@@ -211,6 +239,8 @@ describe('endpoint detail numbered resource panels', () => {
           }),
         );
       }
+      if (url.searchParams.get('source') === 'automatic')
+        return Promise.resolve(jsonResponse(catalogPage([])));
       if (path === '/api/endpoints/11/keys?page=1&page_size=20') {
         return Promise.resolve(
           jsonResponse({
@@ -261,7 +291,7 @@ describe('endpoint detail numbered resource panels', () => {
       ),
     ).toBe(true);
 
-    const summaries = screen.getAllByText('Manually added models', { selector: 'summary' });
+    const summaries = screen.getAllByRole('button', { name: 'View models' });
     expect(summaries).toHaveLength(2);
     await rendered.user.click(summaries[0]);
     expect(await screen.findByText('Vendor/Manual-0')).toBeVisible();
@@ -277,7 +307,7 @@ describe('endpoint detail numbered resource panels', () => {
     ).getByRole('button', { name: 'Next' });
     expect(manual21Next).toBeEnabled();
     await rendered.user.click(manual21Next);
-    expect(await screen.findByText('Page 2 of 2 · Total: 21')).toBeVisible();
+    expect(await screen.findByText('Page 2 of 2')).toBeVisible();
     let search = new URL(`https://example.test${screen.getByTestId('location').textContent ?? ''}`)
       .searchParams;
     expect(search.get('manual_21_page')).toBe('2');
@@ -286,7 +316,9 @@ describe('endpoint detail numbered resource panels', () => {
     expect(search.get('manual_22_page_size')).toBe('100');
 
     const requestsBeforeCollapse = requests.filter((path) => path.includes('/keys/21/models'));
-    await rendered.user.click(summaries[0]);
+    await rendered.user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 1_100));
     expect(requests.filter((path) => path.includes('/keys/21/models'))).toEqual(
       requestsBeforeCollapse,
@@ -310,6 +342,8 @@ describe('endpoint detail numbered resource panels', () => {
       const url = new URL(raw, window.location.origin);
       const path = `${url.pathname}${url.search}`;
       requests.push({ path, method: init?.method ?? 'GET', body: init?.body?.toString() });
+      if (url.searchParams.get('source') === 'automatic')
+        return Promise.resolve(jsonResponse(catalogPage([])));
       if (path === '/api/endpoints/11/keys?page=1&page_size=20') {
         return Promise.resolve(
           jsonResponse({
@@ -336,7 +370,7 @@ describe('endpoint detail numbered resource panels', () => {
     );
     rendered.queryClient.setQueryData(coreQueries.coreKeys.session, session);
 
-    expect(await screen.findByRole('heading', { name: 'Service details' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'endpoint note' })).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
     const dialog = screen.getByRole('alertdialog');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete service' }));
