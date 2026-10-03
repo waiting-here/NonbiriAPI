@@ -769,13 +769,13 @@ test('level-six stewardship shows the shared owner projection and caller identit
 
   await page.getByRole('tab', { name: 'Request logs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Request logs', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
   await expect(page.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();
   await expect(page.getByText(DISCORD_ID, { exact: true })).toBeVisible();
   expect(logListReads).toContain('?page=1&page_size=20');
   const copyButton = page.getByRole('button', { name: 'Copy Discord ID', exact: true }).first();
   await copyButton.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(DISCORD_ID);
-  await page.getByRole('button', { name: 'Details', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();

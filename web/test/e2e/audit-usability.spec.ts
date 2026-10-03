@@ -16,7 +16,11 @@ async function layout(page: import('@playwright/test').Page, name: string) {
     expect(
       await page
         .locator('.audit-page button, .inactivity-editor button')
-        .evaluateAll((nodes) => nodes.filter((n) => !n.classList.contains('btn')).length),
+        .evaluateAll(
+          (nodes) =>
+            nodes.filter((n) => n.getAttribute('role') !== 'tab' && !n.classList.contains('btn'))
+              .length,
+        ),
     ).toBe(0);
     expect(
       await page
@@ -62,9 +66,13 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
       }
       await route.fulfill({
         json: {
-          items: saved ? [saved] : [], page: '1', page_size: 20,
-          total_items: saved ? '1' : '0', total_pages: '1',
-          revision: saved ? 'rule-revision-2' : 'rule-revision-1', changed: false,
+          items: saved ? [saved] : [],
+          page: '1',
+          page_size: 20,
+          total_items: saved ? '1' : '0',
+          total_pages: '1',
+          revision: saved ? 'rule-revision-2' : 'rule-revision-1',
+          changed: false,
         },
       });
       return;
@@ -88,10 +96,19 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
       return;
     }
     if (path === 'access-events') {
-      await route.fulfill({ json: {
-        data: [], page: '1', page_size: 20, total_items: '0', total_pages: '1',
-        watermark: '0', changed: false, from: 1800000000 - 86400, to: 1800000000,
-      } });
+      await route.fulfill({
+        json: {
+          data: [],
+          page: '1',
+          page_size: 20,
+          total_items: '0',
+          total_pages: '1',
+          watermark: '0',
+          changed: false,
+          from: 1800000000 - 86400,
+          to: 1800000000,
+        },
+      });
       return;
     }
     expect(url.searchParams.has('to')).toBe(false);
@@ -109,13 +126,16 @@ test('audit quick ranges, healthy capture and rule patterns work without reloadi
     });
   });
   await page.goto(ADMIN_ORIGIN + '/abuse-audit');
-  await expect(page.getByRole('heading', { name: 'Scan user summaries', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Scan user summaries', exact: true }),
+  ).toBeVisible();
+  await page.locator('.audit-page .nb-fold summary').filter({ hasText: 'More filters' }).click();
   await page.getByLabel(/^Time range/).selectOption('168');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
-  await page.getByRole('button', { name: 'Access events', exact: true }).click();
+  await page.getByRole('tab', { name: 'Access events', exact: true }).click();
   await expect(page.getByText('No capture gaps recorded', { exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Client rules', exact: true }).click();
+  await page.getByRole('tab', { name: 'Client rules', exact: true }).click();
   await page.getByRole('button', { name: 'New rule', exact: true }).click();
   for (const [name, field, value] of [
     ['Tavo', 'user_agent', 'Tavo/'],

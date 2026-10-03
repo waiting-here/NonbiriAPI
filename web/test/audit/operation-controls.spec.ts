@@ -205,8 +205,8 @@ test('administrator confirms one automatic client-rule consequence and removes t
     const name = 'Synthetic bounded client rule ' + randomUUID().slice(0, 8);
     await page.goto(origin + '/abuse-audit');
     await page
-      .getByRole('group', { name: 'Abuse audit', exact: true })
-      .getByRole('button', { name: 'Client rules', exact: true })
+      .getByRole('tablist', { name: 'Abuse audit', exact: true })
+      .getByRole('tab', { name: 'Client rules', exact: true })
       .click();
     await page.getByRole('button', { name: 'New rule', exact: true }).click();
     await page.getByLabel('Rule name', { exact: true }).fill(name);

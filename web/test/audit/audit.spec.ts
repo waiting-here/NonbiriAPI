@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
@@ -208,10 +209,11 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false) 
   await expect(dialog.getByRole('region', { name: 'Request source' })).not.toContainText(
     'discard=this',
   );
+  await dialog.locator('summary').filter({ hasText: 'Service call attempts' }).click();
   await dialog.getByRole('button', { name: 'Upstream error details' }).click();
   const event = dialog
     .locator('details')
-    .filter({ has: page.locator('summary', { hasText: 'Error event 1' }) })
+    .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
     .first();
   await event.locator('summary').first().click();
   const load = event.getByRole('button', { name: 'Load original body' });
@@ -255,8 +257,8 @@ async function discoveryDiagnostics(page: Page, admin: boolean) {
 }
 async function clientRule(page: Page, name: string, editing = false) {
   await page
-    .getByRole('group', { name: 'Abuse audit', exact: true })
-    .getByRole('button', { name: 'Client rules', exact: true })
+    .getByRole('tablist', { name: 'Abuse audit', exact: true })
+    .getByRole('tab', { name: 'Client rules', exact: true })
     .click();
   if (editing) {
     const card = page
@@ -283,13 +285,13 @@ async function clientRule(page: Page, name: string, editing = false) {
 }
 async function riskEvidence(page: Page, sustained = true) {
   const f = fixture();
-  const group = page.getByRole('group', { name: 'Abuse audit', exact: true });
-  await group.getByRole('button', { name: 'Users', exact: true }).click();
+  const group = page.getByRole('tablist', { name: 'Abuse audit', exact: true });
+  await group.getByRole('tab', { name: 'Users', exact: true }).click();
   await page.getByLabel('Risk filter').selectOption('rpm');
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   if (!sustained) {
-    await expect(page.getByText('Page 1 of 1 · Total: 0', { exact: true })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Pagination' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'No results yet', exact: true })).toBeVisible();
     await page.getByLabel('Risk filter').selectOption('');
     await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
@@ -306,19 +308,19 @@ async function riskEvidence(page: Page, sustained = true) {
   ).toHaveText(sustained ? '5 / 0' : '0 / 5');
   await card.getByRole('button', { name: 'Inspect', exact: true }).click();
   await expect(page.getByText('Minute observations', { exact: true })).toBeVisible();
-  await group.getByRole('button', { name: 'Shared IPs', exact: true }).click();
+  await group.getByRole('tab', { name: 'Shared IPs', exact: true }).click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: f.source_ip, exact: true })).toBeVisible();
   await expect(page.getByText('Distinct Discord identities: 4', { exact: false })).toBeVisible();
-  await group.getByRole('button', { name: 'Client matches', exact: true }).click();
+  await group.getByRole('tab', { name: 'Client matches', exact: true }).click();
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
-  await expect(page.getByText('Page 1 of 1 · Total: 4', { exact: true })).toBeVisible();
+  await expect(page.getByText('4 items', { exact: true })).toBeVisible();
   const savedURL = page.url();
   expect(new URL(savedURL).searchParams.get('audit_scan')).toMatch(/^scn_/);
   await page.reload();
-  await expect(page.getByText('Page 1 of 1 · Total: 4', { exact: true })).toBeVisible();
+  await expect(page.getByText('4 items', { exact: true })).toBeVisible();
   expect(page.url()).toBe(savedURL);
   const sources = page.locator('summary').filter({ hasText: 'Source information' });
   await sources.first().click();
@@ -386,8 +388,8 @@ test.describe('administrator policy changes and subsequent steward review', () =
       await clientRule(page, 'Synthetic client signal');
       await riskEvidence(page);
       await page
-        .getByRole('group', { name: 'Abuse audit', exact: true })
-        .getByRole('button', { name: 'Thresholds', exact: true })
+        .getByRole('tablist', { name: 'Abuse audit', exact: true })
+        .getByRole('tab', { name: 'Thresholds', exact: true })
         .click();
       await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('80');
       await page.getByLabel('Threshold (%)', { exact: true }).fill('75');
@@ -444,12 +446,14 @@ test.describe('administrator policy changes and subsequent steward review', () =
             .filter({ hasText: /^Net stock$/ })
             .locator('..'),
         ).toContainText(amount(net[asset]));
+        await page.locator('summary').filter({ hasText: 'Reconciliation details' }).click();
         await expect(
           page.getByText(
             'Retained-ledger reconciliation matches: net stock = issuance − retirement.',
             { exact: true },
           ),
         ).toBeVisible();
+        await page.locator('summary').filter({ hasText: 'Time details' }).click();
         await expect(
           page.getByRole('table', { name: 'Flows by time bucket', exact: true }),
         ).toBeVisible();
@@ -505,8 +509,8 @@ test.describe('administrator policy changes and subsequent steward review', () =
           ).toContainText('1');
       }
       await page
-        .getByRole('group', { name: 'Audit view' })
-        .getByRole('button', { name: 'Channels', exact: true })
+        .getByRole('tablist', { name: 'Audit view' })
+        .getByRole('tab', { name: 'Channels', exact: true })
         .click();
       const channels = page.getByRole('table', {
         name: 'Open a channel to inspect its ledger entries',
@@ -544,8 +548,8 @@ test.describe('administrator policy changes and subsequent steward review', () =
       // A policy revision must not reinterpret older complete minutes as current evidence.
       await riskEvidence(page, false);
       await page
-        .getByRole('group', { name: 'Abuse audit', exact: true })
-        .getByRole('button', { name: 'Thresholds', exact: true })
+        .getByRole('tablist', { name: 'Abuse audit', exact: true })
+        .getByRole('tab', { name: 'Thresholds', exact: true })
         .click();
       await expect(page.getByLabel('Threshold (%)', { exact: true })).toBeDisabled();
       await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('75');
@@ -740,5 +744,104 @@ test('administrator check-in choice persists and both cards follow real daily el
   } finally {
     await admin.close();
     await user.close();
+  }
+});
+
+test('audit presentation keeps folds, role tabs and mobile content within the viewport', async ({
+  browser,
+}) => {
+  const f = fixture();
+  const admin = await session(browser, 'admin');
+  const snap = async (page: Page, name: string) => {
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({
+        path: resolve(process.env.NONBIRI_VISUAL_DIR, name + '.png'),
+        fullPage: true,
+        animations: 'disabled',
+      });
+  };
+  const noOverflow = async (page: Page) => {
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
+  };
+  try {
+    const page = await admin.newPage();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    for (const theme of ['light', 'dark']) {
+      for (const path of ['/abuse-audit', '/economy-audit', '/alerts']) {
+        await page.goto(f.admin_url + path);
+        await page.evaluate((value) => {
+          localStorage.setItem('nb.theme', value);
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        await expect(page.locator('main h1')).toBeVisible();
+        if (path === '/abuse-audit') {
+          const tabs = page.getByRole('tablist', { name: 'Abuse audit', exact: true });
+          await expect(tabs.getByRole('tab')).toHaveCount(7);
+          for (let index = 0; index < 7; index++) {
+            await tabs.getByRole('tab').nth(index).click();
+            await expect(tabs.getByRole('tab').nth(index)).toHaveAttribute('aria-selected', 'true');
+          }
+          await tabs.getByRole('tab').first().click();
+          await expect(
+            page
+              .locator('details')
+              .filter({ has: page.locator(':scope > summary', { hasText: 'Audit basis' }) }),
+          ).not.toHaveAttribute('open');
+        }
+        if (path === '/economy-audit') {
+          await expect(page.locator('.nb-stats').first()).toBeVisible();
+          const periods = page
+            .locator('details')
+            .filter({ has: page.locator(':scope > summary', { hasText: 'Time details' }) });
+          await expect(periods).not.toHaveAttribute('open');
+          await periods.locator('summary').click();
+          await expect(
+            page.getByRole('table', { name: 'Flows by time bucket', exact: true }),
+          ).toBeVisible();
+          await page.locator('summary').filter({ hasText: 'Reconciliation details' }).click();
+        }
+        if (path === '/alerts') {
+          await expect(page.locator('.alerts-page tbody tr').first()).toBeVisible();
+          await page.locator('.alerts-page tbody input[type="checkbox"]').first().check();
+          await expect(
+            page.getByRole('button', { name: /selected.*resolved|Resolve.*selected/i }),
+          ).toBeVisible();
+        }
+        for (const width of [1440, 768, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          await noOverflow(page);
+          if (width < 1024)
+            await expect
+              .poll(() =>
+                page
+                  .locator('.nb-admin-sidebar')
+                  .evaluate((node) => node.getBoundingClientRect().right),
+              )
+              .toBeLessThanOrEqual(0);
+          await snap(page, `admin${path.replaceAll('/', '-')}-${theme}-${width}`);
+        }
+      }
+    }
+  } finally {
+    await admin.close();
+  }
+  for (const level of [5, 6] as const) {
+    const context = await session(browser, level);
+    try {
+      const page = await context.newPage();
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.goto(f.user_url + '/steward?tab=charity');
+      const tabs = page.locator('.page > .nb-tabs').first();
+      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 1 : 7);
+      for (const width of [1440, 768, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await noOverflow(page);
+        await snap(page, `steward-level${level}-${width}`);
+      }
+    } finally {
+      await context.close();
+    }
   }
 });

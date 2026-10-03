@@ -1,3 +1,4 @@
+import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { useLocation, useNavigate } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,8 @@ import {
   type JsonFetchFixture,
 } from '../../../../test/unit/support';
 import { RoleLogPanel } from './RoleLogPanel';
+
+installNativeDialog();
 
 const usage = {
   uncached_input_tokens: '0',
@@ -180,6 +183,7 @@ describe('numbered role log panel', () => {
       },
     );
     await view.user.click(await screen.findByRole('button', { name: 'Details' }));
+    await view.user.click(await screen.findByText('Service call attempts', { selector: 'strong' }));
     expect(await screen.findByText('Matched this key')).toBeVisible();
     expect(screen.getAllByText('Matched this key')).toHaveLength(1);
     expect(queryFromProbe(view.container).get('endpoint_key_id')).toBe('2');
@@ -298,8 +302,8 @@ describe('numbered role log panel', () => {
     await waitFor(() =>
       expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible(),
     );
-    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
-    const listResult = screen.getByText('Page 2 of 2 · Total: 21').closest('.ops-stack');
+    expect(screen.getByText('21 items')).toBeVisible();
+    const listResult = screen.getByText('21 items').closest('.ops-stack');
     expect(listResult?.getAttribute('aria-busy')).toBe('false');
     expect(
       within(screen.getByRole('navigation', { name: 'Pagination' })).getByRole('combobox'),
@@ -313,7 +317,7 @@ describe('numbered role log panel', () => {
     );
     await view.user.click(screen.getByRole('button', { name: 'Back' }));
     await waitFor(() => expect(queryFromProbe(view.container).get('page')).toBe('2147483647'));
-    expect(await screen.findByText('Original account: 21', { exact: true })).toBeVisible();
+    expect(await screen.findByText('#21', { exact: true })).toBeVisible();
 
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
     const dialog = await screen.findByRole('dialog');
@@ -321,6 +325,9 @@ describe('numbered role log panel', () => {
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         `/admin/api/logs/${requestID(20)}?attempt_page=1&attempt_page_size=20`,
       ),
+    );
+    await view.user.click(
+      await within(dialog).findByText('Service call attempts', { selector: 'strong' }),
     );
     await waitFor(() =>
       expect(within(dialog).getAllByText('upstream-model', { exact: true })).toHaveLength(2),
@@ -494,11 +501,15 @@ describe('numbered role log panel', () => {
       role: 'admin',
       route: '/logs?page=1&page_size=20',
     });
-    expect(await screen.findByText('Usage total mismatch')).toBeVisible();
-    await view.user.click(screen.getByRole('button', { name: 'Details' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Details' }));
+    const drawer = await screen.findByRole('dialog');
+    await view.user.click(
+      within(drawer).getByText('Service call attempts', { selector: 'strong' }),
+    );
+    expect(await within(drawer).findAllByText('Usage total mismatch')).toHaveLength(2);
     const explanation =
       'Usage total mismatch. The upstream-reported total differs from the sum of valid usage components. Billing uses those components.';
-    await waitFor(() => expect(screen.getAllByLabelText(explanation)).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByLabelText(explanation)).toHaveLength(2));
   });
 
   it('does not expose the management mismatch filter or badge to ordinary users', async () => {
@@ -581,7 +592,9 @@ describe('numbered role log panel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
     const dialog = await screen.findByRole('dialog');
-    await waitFor(() => expect(within(dialog).getByText('Success', { exact: true })).toBeVisible());
+    await waitFor(() =>
+      expect(within(dialog).getAllByText('Success', { exact: true })[0]).toBeVisible(),
+    );
     expect(within(dialog).queryByText('Service call attempts', { exact: true })).toBeNull();
     expect(within(dialog).queryByRole('navigation', { name: 'Pagination' })).toBeNull();
     expect(
@@ -592,7 +605,7 @@ describe('numbered role log panel', () => {
     ).toBe(false);
   });
 
-  it('keeps an empty steward page paginated and marks the result region busy state', async () => {
+  it('hides an empty steward pager and marks the result region busy state', async () => {
     const fetchMock = installJsonFetchFixtures([
       timeZoneFixture('/api/time-zones'),
       {
@@ -613,8 +626,7 @@ describe('numbered role log panel', () => {
       ),
     );
     await waitFor(() => expect(screen.getByText('No logs', { exact: true })).toBeVisible());
-    expect(screen.getByText('That page is no longer available. Showing page 1.')).toBeVisible();
-    expect(screen.getByRole('navigation', { name: 'Pagination' })).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).toBeNull();
     const emptyResult = screen.getByText('No logs', { exact: true }).closest('.ops-stack');
     expect(emptyResult?.getAttribute('aria-busy')).toBe('false');
   });

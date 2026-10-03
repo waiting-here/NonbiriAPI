@@ -76,7 +76,11 @@
       "sensitiveStateCleared": "本页敏感信息已清除。",
       "maintenanceTab": "维护模式",
       "usersTab": "用户管理",
-      "announcementsTab": "公告管理"
+      "announcementsTab": "公告管理",
+      "presentation": {
+        "description": "按你的权限显示可用功能。"
+      },
+      "blacklistTab": "黑名单"
     },
     "endpoints": {
       "nav": "我的服务"
@@ -1825,7 +1829,20 @@
       "description": "查看你自己的请求基本信息与 Token 用量，不包含请求与响应内容。",
       "empty": "没有日志记录",
       "emptyBody": "当前筛选条件下没有返回属于此账号的请求记录。",
-      "eyebrow": ""
+      "eyebrow": "",
+      "result": {
+        "success": "成功",
+        "pending": "处理中",
+        "upstream": "服务商出错 {{status}}",
+        "keyRejected": "服务商拒绝了密钥",
+        "rateLimited": "服务商限制频率",
+        "timeout": "请求超时",
+        "credits": "余额不足",
+        "missingModel": "模型不存在",
+        "rejected": "调用前被拒绝",
+        "cancelled": "已取消",
+        "failed": "失败（{{status}}）"
+      }
     },
     "charity": {
       "resourcePicker": {

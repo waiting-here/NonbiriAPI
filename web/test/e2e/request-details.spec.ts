@@ -60,9 +60,10 @@ for (const station of ['user', 'admin'] as const) {
     await page.goto(
       `${origin}/logs${station === 'user' ? `?request_id=${detail.request.id}` : ''}`,
     );
-    if (station === 'admin') await page.locator('.table-wrap tbody button').first().click();
+    if (station === 'admin') await page.locator('.log-table tbody button').first().click();
     const drawer = page.getByRole('dialog');
     await expect(drawer).toBeVisible();
+    await drawer.locator('summary').filter({ hasText: 'Service call attempts' }).click();
     await expect(drawer.locator('.log-attempt')).toHaveCount(2);
     await expect(drawer.locator('table')).toHaveCount(0);
     await expect(drawer.locator('.log-attempt-notice')).toBeVisible();
@@ -79,10 +80,7 @@ for (const station of ['user', 'admin'] as const) {
       await expect
         .poll(() => drawer.evaluate((node) => node.getBoundingClientRect().left))
         .toBeGreaterThanOrEqual(0);
-      const pageLabel = drawer.locator('.page-pagination__jump > span');
-      await expect(pageLabel).toHaveCSS('clip-path', 'inset(50%)');
-      await expect(pageLabel).toHaveCSS('overflow', 'hidden');
-      await expect(drawer.getByRole('textbox', { name: 'Go to page' })).toBeVisible();
+      await expect(drawer.getByRole('textbox', { name: 'Go to page' })).toHaveCount(0);
       await expect
         .poll(() =>
           drawer.evaluate((node) =>

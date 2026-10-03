@@ -76,7 +76,11 @@
       "sensitiveStateCleared": "Sensitive information on this page has been cleared.",
       "maintenanceTab": "Maintenance",
       "usersTab": "Users",
-      "announcementsTab": "Announcements"
+      "announcementsTab": "Announcements",
+      "presentation": {
+        "description": "Available features follow your permissions."
+      },
+      "blacklistTab": "Blacklist"
     },
     "endpoints": {
       "nav": "My services"
@@ -1825,7 +1829,20 @@
       "description": "View basic details and token usage for your own requests. Request and response content is not shown.",
       "empty": "No log records",
       "emptyBody": "No requests from your account match the current filters.",
-      "eyebrow": ""
+      "eyebrow": "",
+      "result": {
+        "success": "Success",
+        "pending": "In progress",
+        "upstream": "Provider error {{status}}",
+        "keyRejected": "Provider rejected the key",
+        "rateLimited": "Provider rate limited",
+        "timeout": "Request timed out",
+        "credits": "Insufficient credits",
+        "missingModel": "Model not found",
+        "rejected": "Rejected before dispatch",
+        "cancelled": "Cancelled",
+        "failed": "Failed ({{status}})"
+      }
     },
     "charity": {
       "resourcePicker": {

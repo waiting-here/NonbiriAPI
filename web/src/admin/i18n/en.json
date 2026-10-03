@@ -114,7 +114,16 @@
       "generalBalance": "General credits",
       "gameBalance": "Game credits",
       "donationCredit": "Donation credit",
-      "sketchAssets": "Paper / brushes"
+      "sketchAssets": "Paper / brushes",
+      "presentation": {
+        "running": "Operations",
+        "security": "Security",
+        "games": "Games",
+        "accounts": "Accounts",
+        "worker": "Background task checkpoint failed",
+        "actions": "Alert actions",
+        "deletionSnapshot": "Balances before deletion"
+      }
     },
     "settings": {
       "nav": "Site settings",
@@ -1078,6 +1087,17 @@
     },
     "picturebook": {
       "saveSelectedModels": "Save selected models"
+    },
+    "economyAudit": {
+      "presentation": {
+        "negativeZero": "Negative balances: all zero",
+        "negative": "Negative balances",
+        "reconciliation": "Reconciliation details",
+        "matched": "Matched",
+        "mismatch": "Mismatch",
+        "incomplete": "Incomplete coverage",
+        "periods": "Time details ({{count}} periods)"
+      }
     }
   },
   "user": {

@@ -17,6 +17,9 @@ import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/S
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { type PageSize } from '@shared/operations/pageNumbers';
+import { Fold, Note } from '@shared/components/ui';
+import { LogResultBadge, logResult } from './LogResult';
+import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { CallerIdentity } from './CallerIdentity';
 import { LogOriginIdentity } from './LogOriginIdentity';
 import { LogDetailDrawer } from './LogDetailDrawer';
@@ -65,6 +68,23 @@ function validRequestID(value: string | null): string | null {
 
 function requestFrom(detail: NumberedRoleLogDetail): RoleLogRow {
   return detail.request;
+}
+
+function ShortLogTime({ at }: { at: number }) {
+  const context = useDisplayTimeContext();
+  const full = useDateTimeFormatter()(at);
+  const [nowAt] = useState(Date.now);
+  const shift = context.mode === 'site' ? (context.offset_minutes ?? 0) * 60_000 : 0;
+  const date = new Date(at * 1000 + shift),
+    now = new Date(nowAt + shift);
+  const year = context.mode === 'site' ? date.getUTCFullYear() : date.getFullYear();
+  const currentYear = context.mode === 'site' ? now.getUTCFullYear() : now.getFullYear();
+  const short = year === currentYear ? full.replace(`${year}/`, '').replace(`/${year}`, '') : full;
+  return (
+    <time dateTime={new Date(at * 1000).toISOString()} title={full}>
+      {short}
+    </time>
+  );
 }
 
 function UsageMismatchBadge({ visible }: { visible: boolean }) {
@@ -557,81 +577,119 @@ function ScopedRoleLogPanel({
     patchUrlState({ ...next, page: 1 }, { clearDetail: true });
   };
 
+  const routeSummary = (route: LogRouteKind) =>
+    t(
+      'common.operations.logs.presentation.' +
+        (route === 'model_discovery'
+          ? 'models'
+          : route.endsWith('embeddings')
+            ? 'embeddings'
+            : 'chat'),
+    );
+  const modelCell = (row: RoleLogRow) => (
+    <>
+      <span className="mono">{'model' in row ? row.model : (row.charity_model ?? '—')}</span>
+      <span className="nb-sub">
+        {row.route_kind === 'model_discovery'
+          ? ''
+          : t(
+              'common.operations.logs.presentation.' +
+                (row.route_kind.startsWith('charity_') ? 'charity' : 'personal'),
+            ) + ' · '}
+        {routeSummary(row.route_kind)}
+      </span>
+    </>
+  );
+  const usageCell = (row: RoleLogRow) => {
+    if (row.usage.usage_unknown) return '—';
+    const input = (
+      BigInt(row.usage.uncached_input_tokens) +
+      BigInt(row.usage.cache_read_input_tokens) +
+      BigInt(row.usage.cache_write_input_tokens)
+    ).toString();
+    return (
+      <span className="log-usage">
+        {t('common.operations.logs.presentation.usage', { input, output: row.usage.output_tokens })}
+        {row.usage.cache_read_input_tokens !== '0' || row.usage.cache_write_input_tokens !== '0' ? (
+          <span className="nb-sub">
+            {[
+              row.usage.cache_read_input_tokens !== '0'
+                ? t('common.operations.logs.presentation.cacheRead', {
+                    tokens: row.usage.cache_read_input_tokens,
+                  })
+                : '',
+              row.usage.cache_write_input_tokens !== '0'
+                ? t('common.operations.logs.presentation.cacheWrite', {
+                    tokens: row.usage.cache_write_input_tokens,
+                  })
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        ) : null}
+      </span>
+    );
+  };
   const columns: LogColumn<RoleLogRow>[] = [
-    { key: 'time', header: t('logs.time'), render: (row) => formatDateTime(row.started_at) },
     {
-      key: 'phase',
-      header: t('logs.phase'),
-      render: (row) =>
-        t(row.phase === 'pre_handler' ? 'logs.phasePreHandler' : 'logs.phaseHandler'),
+      key: 'time',
+      header: t('logs.time'),
+      cell: 'meta',
+      align: 'nowrap',
+      render: (row) => <ShortLogTime at={row.started_at} />,
     },
-    { key: 'route', header: t('logs.routeKind'), render: (row) => routeLabel(row.route_kind) },
-    ...(role === 'user'
-      ? [
-          {
-            key: 'model',
-            header: t('common.model'),
-            render: (row: RoleLogRow) => ('model' in row ? row.model : '—'),
-          },
-        ]
-      : []),
     ...(role !== 'user'
       ? [
-          {
-            key: 'charity_model',
-            header: t('logs.charityModel'),
-            render: (row: RoleLogRow) =>
-              'charity_model' in row ? (row.charity_model ?? '—') : '—',
-          },
           {
             key: 'user',
             header: t('common.history.originalIdentity'),
+            cell: 'title' as const,
             render: (row: RoleLogRow) =>
-              row.role === 'admin' || row.role === 'steward' ? (
-                <LogOriginIdentity value={row} role={row.role} />
+              row.role !== 'user' ? (
+                <LogOriginIdentity
+                  value={row}
+                  role={row.role}
+                  compact
+                  nickname={
+                    row.origin_discord_id &&
+                    row.origin_discord_id === row.caller_identity?.discord_id
+                      ? row.caller_identity.discord_nickname
+                      : null
+                  }
+                />
               ) : (
                 '—'
               ),
           },
         ]
       : []),
-    ...(role !== 'user'
-      ? [
-          {
-            key: 'caller',
-            header: t('logs.caller'),
-            render: (row: RoleLogRow) =>
-              row.role === 'admin' || row.role === 'steward' ? (
-                <CallerIdentity identity={row.caller_identity} />
-              ) : (
-                '—'
-              ),
-          },
-        ]
-      : []),
-    { key: 'result', header: t('common.operations.logs.result'), render: resultLabel },
-    { key: 'status', header: t('common.status'), render: (row) => row.caller_status ?? '—' },
     {
-      key: 'error',
-      header: t('logs.error'),
-      render: (row) => <span className="mono">{row.caller_error_code ?? '—'}</span>,
+      key: 'model',
+      header: t('common.model'),
+      cell: role === 'user' ? 'title' : 'meta',
+      render: modelCell,
     },
     {
-      key: 'usage',
-      header: t('logs.tokens'),
-      render: (row) => (
-        <div className="ops-stack">
-          <TokenBuckets row={row.usage} />
-          {row.role !== 'user' ? <UsageMismatchBadge visible={row.usage_total_mismatch} /> : null}
-        </div>
-      ),
+      key: 'result',
+      header: t('common.operations.logs.result'),
+      cell: 'status',
+      render: (row) => <LogResultBadge row={row} />,
     },
+    { key: 'usage', header: t('logs.tokens'), cell: 'meta', align: 'num', render: usageCell },
     {
       key: 'charge',
       header: t('common.operations.logs.charge'),
+      cell: 'meta',
+      align: 'num',
       render: (row) => <span className="mono">{row.usage.charge}</span>,
     },
   ];
+
+  const resultHint = (row: RoleLogRow) => {
+    const result = logResult(row);
+    return 'hint' in result ? t('common.operations.logs.presentation.' + result.hint) : null;
+  };
 
   let detailBody: ReactNode = null;
   if (selectedID && detail.isPending) detailBody = t('common.loading');
@@ -650,6 +708,7 @@ function ScopedRoleLogPanel({
       ? [
           {
             label: t('common.operations.logs.request'),
+            technical: true,
             value: <span className="mono">{detailRequest.id}</span>,
           },
           ...(role !== 'user' &&
@@ -669,6 +728,21 @@ function ScopedRoleLogPanel({
                 },
               ]
             : []),
+          { label: t('logs.time'), value: formatDateTime(detailRequest.started_at) },
+          {
+            label: t('common.model'),
+            value:
+              'model' in detailRequest ? detailRequest.model : (detailRequest.charity_model ?? '—'),
+          },
+          {
+            label: t('common.operations.logs.presentation.duration'),
+            value:
+              detailRequest.completed_at === null
+                ? '—'
+                : t('common.operations.logs.presentation.seconds', {
+                    seconds: detailRequest.completed_at - detailRequest.started_at,
+                  }),
+          },
           { label: t('logs.routeKind'), value: routeLabel(detailRequest.route_kind) },
           {
             label: t('logs.phase'),
@@ -700,10 +774,12 @@ function ScopedRoleLogPanel({
             : []),
           {
             label: t('common.operations.logs.callerResult'),
+            technical: true,
             value: `${resultLabel(detailRequest)} / ${detailRequest.caller_status ?? '—'}`,
           },
           {
             label: t('common.operations.logs.callerError'),
+            technical: true,
             value: <span className="mono">{detailRequest.caller_error_code ?? '—'}</span>,
           },
           {
@@ -742,15 +818,23 @@ function ScopedRoleLogPanel({
                   label: t('common.operations.logs.attempts'),
                   wide: true,
                   value: (
-                    <AttemptTable
-                      detail={detailData}
-                      role={role}
-                      endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
-                      page={attemptPager.page}
-                      busy={detail.isFetching}
-                      onPageChange={attemptPager.setPage}
-                      onPageSizeChange={attemptPager.setPageSize}
-                    />
+                    <Fold
+                      plain
+                      title={t('common.operations.logs.attempts')}
+                      summary={
+                        'attempt_count' in detailRequest ? detailRequest.attempt_count : undefined
+                      }
+                    >
+                      <AttemptTable
+                        detail={detailData}
+                        role={role}
+                        endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
+                        page={attemptPager.page}
+                        busy={detail.isFetching}
+                        onPageChange={attemptPager.setPage}
+                        onPageSizeChange={attemptPager.setPageSize}
+                      />
+                    </Fold>
                   ),
                 },
               ]
@@ -805,25 +889,27 @@ function ScopedRoleLogPanel({
   const pageData = invalidKeyFilter ? undefined : logs.data;
   const listBusy = logs.isFetching;
   return (
-    <Card className="ops-stack">
+    <Card className={`ops-stack log-panel log-panel--${role}`}>
       <div className="card-title-row">
         <h2>{title}</h2>
         {!invalidKeyFilter && (
-          <div className="ops-actions">
-            <a className="btn btn-secondary" href={roleLogExportPath(role, filter, 'csv')} download>
-              {t('common.operations.logs.exportCsv')}
-            </a>
-            <a
-              className="btn btn-secondary"
-              href={roleLogExportPath(role, filter, 'json')}
-              download
-            >
-              {t('common.operations.logs.exportJson')}
-            </a>
-          </div>
+          <details className="nb-more log-export">
+            <summary className="btn btn-secondary">
+              {t('common.operations.logs.presentation.export')} ▾
+            </summary>
+            <div className="nb-more__menu">
+              {(['csv', 'json'] as const).map((format) => (
+                <a key={format} href={roleLogExportPath(role, filter, format)} download>
+                  {t(
+                    'common.operations.logs.presentation.' +
+                      (format === 'csv' ? 'exportCsv' : 'exportJson'),
+                  )}
+                </a>
+              ))}
+            </div>
+          </details>
         )}
       </div>
-      {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
       {invalidKeyFilter ? (
         <p className="field-error" role="alert">
@@ -874,11 +960,41 @@ function ScopedRoleLogPanel({
       ) : (
         <LoadingState />
       )}
+      {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       <LogDetailDrawer
         open={Boolean(selectedID) && !invalidKeyFilter}
         onClose={closeDetail}
         title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
         fields={detailFields}
+        diagnostics={
+          detailRequest
+            ? {
+                label: t('common.operations.logs.request'),
+                text: [
+                  detailRequest.id,
+                  detailRequest.caller_error_code,
+                  detailRequest.caller_status,
+                ]
+                  .filter((value) => value !== null)
+                  .join(' · '),
+              }
+            : undefined
+        }
+        result={
+          detailRequest ? (
+            <Note
+              tone={logResult(detailRequest).tone}
+              title={t(
+                (role === 'user'
+                  ? 'user.logs.result.'
+                  : 'common.operations.logs.presentation.result.') + logResult(detailRequest).key,
+                { status: detailRequest.caller_status ?? '—' },
+              )}
+            >
+              {resultHint(detailRequest)}
+            </Note>
+          ) : null
+        }
       />
     </Card>
   );
