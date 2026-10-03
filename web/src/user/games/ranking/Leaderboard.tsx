@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { Toggle, Fold } from '@shared/components/ui';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
@@ -30,16 +32,13 @@ function CharityPrivacy() {
   if (!session.data?.user || session.error) return null;
   return (
     <div className="rank-privacy">
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={!session.data.user.charity_profile_public}
-          disabled={save.isPending}
-          onChange={(event) => save.mutate(!event.target.checked)}
-        />
-        {text('ranking.stayAnonymousOnTheTrueCharityLeaderboard')}
-      </label>
-      <p className="table-note">{text('ranking.thisChoiceAppliesOnlyToTrueCharity')}</p>
+      <Toggle
+        label={text('ranking.stayAnonymousOnTheTrueCharityLeaderboard')}
+        description={text('ranking.thisChoiceAppliesOnlyToTrueCharity')}
+        checked={!session.data.user.charity_profile_public}
+        disabled={save.isPending}
+        onChange={(checked) => save.mutate(!checked)}
+      />
       {save.error && <ErrorState error={save.error} />}
     </div>
   );
@@ -47,9 +46,11 @@ function CharityPrivacy() {
 export function Leaderboard({
   board,
   enabled = true,
+  foldHelp = false,
 }: {
   readonly board: RankBoard;
   readonly enabled?: boolean;
+  readonly foldHelp?: boolean;
 }) {
   const session = useUserSession(false);
   const owner = session.error ? undefined : session.data?.user.id;
@@ -59,6 +60,7 @@ export function Leaderboard({
       owner={owner}
       board={board}
       enabled={enabled}
+      foldHelp={foldHelp}
     />
   );
 }
@@ -66,11 +68,14 @@ function RankingPanel({
   board,
   owner,
   enabled,
+  foldHelp,
 }: {
   readonly board: RankBoard;
   readonly owner?: string;
   readonly enabled: boolean;
+  readonly foldHelp: boolean;
 }) {
+  const { t } = useTranslation();
   const text = useDuelText();
   const [selectedWindow, setWindow] = useState<RankWindow>('7d');
   const [page, setPage] = useState('1');
@@ -122,8 +127,17 @@ function RankingPanel({
   const rows = [...(data?.rows ?? []), ...(data?.me ? [data.me] : [])];
   return (
     <Card className="progression-ranking">
-      <h2>{names[board][0]}</h2>
-      <p>{help}</p>
+      <div className="rank-heading">
+        <h2>{names[board][0]}</h2>
+        {board === 'charity' ? <CharityPrivacy /> : null}
+      </div>
+      {foldHelp ? (
+        <Fold plain title={t('user.games.presentation.calculation')}>
+          <p>{help}</p>
+        </Fold>
+      ) : (
+        <p>{help}</p>
+      )}
       <div className="rank-actions">
         {board === 'bidding' || board === 'blackjack' ? (
           <label>
@@ -232,11 +246,9 @@ function RankingPanel({
           </button>
         </nav>
       )}
-      {board === 'charity' ? (
-        <CharityPrivacy />
-      ) : (
+      {board !== 'charity' && !foldHelp ? (
         <p className="table-note">{text('ranking.allGameLeaderboardsShareYourGamePrivacy')}</p>
-      )}
+      ) : null}
     </Card>
   );
 }

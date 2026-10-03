@@ -967,7 +967,7 @@
         },
         "ranking": {
           "stayAnonymousOnTheTrueCharityLeaderboard": "在真·慈善榜中匿名",
-          "thisChoiceAppliesOnlyToTrueCharity": "此选择仅用于真·慈善榜，与游戏榜的匿名设置独立。封禁期间始终匿名，解除后恢复你的选择。",
+          "thisChoiceAppliesOnlyToTrueCharity": "只影响慈善榜；封禁期间始终匿名。",
           "trueCharity": "真·慈善榜",
           "anonymousTruePhilanthropist": "匿名真·慈善家",
           "gameCharity": "游戏慈善榜",
@@ -1503,6 +1503,23 @@
             "resultBody": "完整结果会先显示在本页，之后才能加入下一局猜拳。如果稍后回来，属于你的结果会一直保留到页面确认你已经看过为止。"
           }
         }
+      },
+      "presentation": {
+        "description": "用游戏积分玩几局。",
+        "activityWallet": "去活动领游戏积分 →",
+        "unavailable": "未开放",
+        "test": "测试",
+        "learn": "查看规则和记录 →",
+        "enter": "进入 →",
+        "rankings": "排行榜 · 近 7×24 小时",
+        "calculation": "怎么计算",
+        "cost": "本次花费",
+        "stepMode": "1 · 模式",
+        "stepRole": "2 · 角色",
+        "stepHarness": "3 · Harness",
+        "stepSkills": "4 · 技能",
+        "creditHistory": "积分记录",
+        "overallRankings": "综合榜"
       }
     },
     "debug": {
@@ -2196,6 +2213,12 @@
           "account_banned": "账号在结算时已被封禁。",
           "account_deleted": "账号在结算前已删除。"
         }
+      },
+      "presentation": {
+        "closed": "活动暂时关闭，已有结果仍可查看。",
+        "unavailable": "未开放",
+        "rules": "规则",
+        "records": "积分记录"
       }
     },
     "core": {

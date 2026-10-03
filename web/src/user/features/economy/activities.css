@@ -1,0 +1,113 @@
+.economy-activities-page .economy-activities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--nb-space-4);
+  align-items: start;
+}
+.activity-slot {
+  min-width: 0;
+}
+.activity-slot.is-available {
+  display: contents;
+}
+.activity-slot.is-available > summary {
+  display: none;
+}
+.activity-slot__body > .card {
+  margin: 0;
+}
+.activity-slot:not(.is-available) .activity-slot__body {
+  padding: var(--nb-space-4);
+}
+.economy-activities-page .loan-promo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--nb-space-3);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.economy-activities-page .loan-card {
+  grid-column: auto;
+}
+.economy-activities-page .loan-promo__copy,
+.economy-activities-page .loan-promo__offer {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+}
+.economy-activities-page .loan-promo__eyebrow,
+.economy-activities-page .loan-promo__ticket-heading {
+  display: none;
+}
+.economy-activities-page .loan-promo__copy h2 {
+  font-size: var(--nb-font-size-lg);
+}
+.economy-activities-page .loan-promo__slogan {
+  font-size: var(--nb-font-size-md);
+  margin: var(--nb-space-3) 0;
+}
+.economy-activities-page .loan-promo__pitch {
+  font-size: var(--nb-font-size-sm);
+}
+.economy-activities-page .loan-promo__perks {
+  display: grid;
+  gap: var(--nb-space-2);
+}
+.economy-activities-page .loan-promo__offer {
+  align-content: start;
+}
+.economy-activities-page .economy-stat-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+}
+.economy-activities-page .economy-stat-grid > section {
+  padding: var(--nb-space-3);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  min-width: 0;
+}
+.economy-activities-page .nb-fold > summary,
+.economy-activities-page button {
+  min-height: 2.5rem;
+}
+.activity-slot > summary .nb-badge {
+  margin-left: auto;
+}
+@media (width < 48rem) {
+  .economy-activities-page .economy-activities-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.economy-activities-page a.limited-entry {
+  text-decoration: none;
+  color: inherit;
+  display: grid;
+  overflow: hidden;
+}
+.economy-activities-page a.limited-entry:focus-visible {
+  outline: 3px solid var(--nb-color-accent);
+  outline-offset: 3px;
+}
+.economy-activities-page .limited-entry__eyebrow,
+.economy-activities-page .limited-entry__copy > p:nth-last-of-type(1) {
+  display: none;
+}
+.economy-activities-page .limited-entry__action {
+  color: var(--nb-color-accent);
+  font-size: var(--nb-text-sm);
+}
+@media (max-width: 39.999rem) {
+  .economy-activities-page a.limited-entry {
+    grid-template-columns: 7rem minmax(0, 1fr);
+  }
+  .economy-activities-page .limited-entry__cover {
+    aspect-ratio: auto;
+    height: 100%;
+  }
+  .economy-activities-page .limited-entry__copy {
+    padding: 0.75rem;
+  }
+}

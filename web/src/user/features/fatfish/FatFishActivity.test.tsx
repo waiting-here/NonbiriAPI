@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { FatFishSessionController } from '../../../shared/fatfish/session';
@@ -74,6 +74,82 @@ describe('fat fish user service projection', () => {
     await view.user.click(screen.getAllByRole('button', { name: 'Next' })[2]);
     await waitFor(() => expect(screen.getByText('ffc_2')).toBeInTheDocument());
   });
+  it.each([false, true])(
+    'keeps the exact unlock confirmation and applies one accepted operation (%s)',
+    async (accept) => {
+      const writes: string[] = [];
+      let unlocked = false;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = String(input);
+          if (init?.method === 'POST') {
+            writes.push(path);
+            expect(JSON.parse(String(init?.body))).toEqual({ expected_revision: visible.revision });
+            unlocked = true;
+            return reply({ ...progress, unlocked: true });
+          }
+          if (path === '/api/session') return reply(session);
+          if (path.includes('/challenges/current')) return reply(null);
+          if (path.includes('/periods/ffp_one/nodes/ffn_visible'))
+            return reply({
+              ...visible,
+              progress: { ...progress, unlocked },
+              eligible: true,
+              condition_hint: { kind: 'all', met: true, hidden_count: 0, children: [] },
+            });
+          if (path.includes('/periods/ffp_one/leaderboard'))
+            return reply({
+              period_id: 'ffp_one',
+              final: false,
+              page: 1,
+              page_size: 20,
+              total: 0,
+              rows: [],
+            });
+          if (path.includes('/periods/ffp_one')) return reply(period);
+          if (path.includes('/periods?page='))
+            return reply({
+              items: [{ ...period, nodes: undefined }],
+              page: 1,
+              page_size: 20,
+              has_more: false,
+            });
+          if (path.includes('/history'))
+            return reply({ items: [], page: 1, page_size: 20, has_more: false });
+          throw new Error(`Unexpected request ${path}`);
+        }),
+      );
+      const view = await renderWithProviders(<FatFishActivityPage />, {
+        station: 'user',
+        role: 'user',
+        route: '/activities/fat-fish?period=ffp_one&node=ffn_visible',
+      });
+      const unlock = await screen.findByRole('button', { name: /Unlock/ });
+      await view.user.click(unlock);
+      const dialog = screen.getByRole('alertdialog');
+      expect(dialog).toHaveTextContent(visible.amounts.unlock_cost);
+      expect(writes).toEqual([]);
+      if (accept) {
+        const confirm = within(dialog).getByRole('button', { name: /Unlock/ });
+        await act(async () => {
+          confirm.click();
+          confirm.click();
+        });
+        await waitFor(() => expect(writes).toHaveLength(1));
+        expect(writes[0]).toContain('/unlock');
+        return;
+      }
+      await view.user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(writes).toEqual([]);
+      await view.user.click(unlock);
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      view.unmount();
+      await act(async () => undefined);
+      expect(writes).toEqual([]);
+    },
+  );
   it('disposes an in-flight recovery on challenge change and unmount without adopting late results', async () => {
     const challenge: FatFishChallenge = {
       id: 'ffc_first', state: 'active', period_id: 'ffp_one', node_id: 'ffn_visible',

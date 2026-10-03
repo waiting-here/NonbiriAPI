@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Fold, Note } from '@shared/components/ui';
 import { Card, ErrorState, StatusBadge } from '@shared/components/States';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -78,21 +79,11 @@ function stateDanger(state: string): boolean {
 
 export function ActivitiesMasterNotice({ snapshot }: { snapshot: ActivitiesSnapshot }) {
   const { t } = useTranslation();
+  if (snapshot.master.available) return null;
   return (
-    <Card className="economy-master-card">
-      <div className="card-title-row">
-        <div>
-          <p className="eyebrow">{t('user.activities.masterEyebrow')}</p>
-          <h2>{t('user.activities.masterTitle')}</h2>
-        </div>
-        <StatusBadge
-          active={snapshot.master.available}
-          danger={snapshot.master.reason === 'configuration_error'}
-          label={t(`user.activities.masterState.${snapshot.master.reason}`)}
-        />
-      </div>
-      <p>{t(`user.activities.masterBody.${snapshot.master.reason}`)}</p>
-    </Card>
+    <Note tone={snapshot.master.reason === 'configuration_error' ? 'warn' : 'info'}>
+      {t('user.activities.presentation.closed')}
+    </Note>
   );
 }
 
@@ -115,13 +106,11 @@ export function ActivityConnectionNotice({
         : reconciled
           ? 'reconciled'
           : 'connected';
+  if (!recoveryError && connection !== 'disconnected') return null;
   return (
-    <p
-      className={`inline-notice economy-stream-state economy-stream-state--${connection}`}
-      role={recoveryError ? 'alert' : 'status'}
-    >
-      {t(`user.activities.stream.${key}`)}
-    </p>
+    <div className="economy-stream-state">
+      <Note tone="warn">{t(`user.activities.stream.${key}`)}</Note>
+    </div>
   );
 }
 
@@ -184,8 +173,7 @@ export function WelfareCard({
         />
       </div>
       <p>{t(`user.activities.welfare.body.${welfare.state}`)}</p>
-      <p>{t('user.activities.welfare.funding')}</p>
-      <div className="economy-stat-grid">
+      <div className="nb-stats economy-stat-grid">
         <section>
           <span>{t('user.activities.welfare.poolBalance')}</span>
           <strong>
@@ -205,16 +193,19 @@ export function WelfareCard({
           </strong>
         </section>
       </div>
-      <dl className="detail-grid economy-activity-details">
-        <div className="detail-row">
-          <dt>{t('user.activities.siteDay')}</dt>
-          <dd>{welfare.siteDay || '—'}</dd>
-        </div>
-        <div className="detail-row">
-          <dt>{t('user.activities.welfare.claimedToday')}</dt>
-          <dd>{t(welfare.claimedToday ? 'common.yes' : 'common.no')}</dd>
-        </div>
-      </dl>
+      <Fold plain title={t('user.activities.presentation.rules')}>
+        <p>{t('user.activities.welfare.funding')}</p>
+        <dl className="detail-grid economy-activity-details">
+          <div className="detail-row">
+            <dt>{t('user.activities.siteDay')}</dt>
+            <dd>{welfare.siteDay || '—'}</dd>
+          </div>
+          <div className="detail-row">
+            <dt>{t('user.activities.welfare.claimedToday')}</dt>
+            <dd>{t(welfare.claimedToday ? 'common.yes' : 'common.no')}</dd>
+          </div>
+        </dl>
+      </Fold>
       {welfare.state === 'empty' ? (
         <p className="inline-notice economy-notice" role="note">
           {t('user.activities.welfare.zeroAward')}
@@ -251,7 +242,7 @@ function ThursdayResult({ thursday }: { thursday: ThursdayView }) {
     <section className="economy-thursday-result" aria-labelledby="thursday-result-title">
       <p className="eyebrow">{t('user.activities.thursday.lastResultEyebrow')}</p>
       <h3 id="thursday-result-title">{t('user.activities.thursday.lastResultTitle')}</h3>
-      <div className="economy-stat-grid">
+      <div className="nb-stats economy-stat-grid">
         <section>
           <span>{t('user.activities.thursday.resultCount')}</span>
           <strong>
@@ -347,7 +338,7 @@ export function ThursdayCard({
       {current?.literature ? (
         <MarkdownText className="economy-literature">{current.literature}</MarkdownText>
       ) : null}
-      <div className="economy-stat-grid">
+      <div className="nb-stats economy-stat-grid">
         {current ? (
           <section>
             <span>{t('user.activities.thursday.currentPoolBalance')}</span>
@@ -376,12 +367,6 @@ export function ThursdayCard({
                 <ExactCount value={String(current.perUserLimit)} />
               </strong>
             </section>
-            <section>
-              <span>{t('user.activities.thursday.myContributed')}</span>
-              <strong>
-                <CreditAmount value={current.myContributed} />
-              </strong>
-            </section>
           </>
         ) : null}
       </div>
@@ -397,52 +382,60 @@ export function ThursdayCard({
           }
         />
       ) : null}
-      {thursday.next ? (
-        <section
-          className="economy-thursday-preview"
-          aria-label={t('user.activities.thursday.nextPreview')}
-        >
-          <h3>{t('user.activities.thursday.nextPreview')}</h3>
-          {thursday.next.literature ? (
-            <MarkdownText className="economy-literature">{thursday.next.literature}</MarkdownText>
-          ) : null}
-          <div className="economy-stat-grid">
-            <section>
-              <span>{t('user.activities.thursday.nextPoolBalance')}</span>
-              <strong>
-                <CreditAmount value={thursday.next.poolBalance} />
-              </strong>
-            </section>
-            <section>
-              <span>{t('user.activities.thursday.fixedEntry')}</span>
-              <strong>
-                <CreditAmount value={thursday.next.entry} />
-              </strong>
-            </section>
-            <section>
-              <span>{t('user.activities.thursday.perUserLimit')}</span>
-              <strong>
-                <ExactCount value={String(thursday.next.perUserLimit)} />
-              </strong>
-            </section>
-          </div>
-          <Countdown
-            key={`next:${thursday.serverNow}:${thursday.next.opensAt}`}
-            serverNow={thursday.serverNow}
-            target={thursday.next.opensAt}
-            labelKey="user.activities.thursday.opensIn"
-          />
+      <Fold plain title={t('user.activities.presentation.rules')}>
+        {current ? (
           <p>
-            {t('user.activities.thursday.closesAt')} {formatDateTime(thursday.next.closesAt)}
+            {t('user.activities.thursday.myContributed')}:{' '}
+            <CreditAmount value={current.myContributed} />
           </p>
-        </section>
-      ) : null}
-      {thursday.state === 'settling' ? (
-        <p className="inline-notice economy-notice" role="status">
-          {t('user.activities.thursday.noPrediction')}
-        </p>
-      ) : null}
-      <ThursdayResult thursday={thursday} />
+        ) : null}
+        {thursday.next ? (
+          <section
+            className="economy-thursday-preview"
+            aria-label={t('user.activities.thursday.nextPreview')}
+          >
+            <h3>{t('user.activities.thursday.nextPreview')}</h3>
+            {thursday.next.literature ? (
+              <MarkdownText className="economy-literature">{thursday.next.literature}</MarkdownText>
+            ) : null}
+            <div className="nb-stats economy-stat-grid">
+              <section>
+                <span>{t('user.activities.thursday.nextPoolBalance')}</span>
+                <strong>
+                  <CreditAmount value={thursday.next.poolBalance} />
+                </strong>
+              </section>
+              <section>
+                <span>{t('user.activities.thursday.fixedEntry')}</span>
+                <strong>
+                  <CreditAmount value={thursday.next.entry} />
+                </strong>
+              </section>
+              <section>
+                <span>{t('user.activities.thursday.perUserLimit')}</span>
+                <strong>
+                  <ExactCount value={String(thursday.next.perUserLimit)} />
+                </strong>
+              </section>
+            </div>
+            <Countdown
+              key={`next:${thursday.serverNow}:${thursday.next.opensAt}`}
+              serverNow={thursday.serverNow}
+              target={thursday.next.opensAt}
+              labelKey="user.activities.thursday.opensIn"
+            />
+            <p>
+              {t('user.activities.thursday.closesAt')} {formatDateTime(thursday.next.closesAt)}
+            </p>
+          </section>
+        ) : null}
+        {thursday.state === 'settling' ? (
+          <p className="inline-notice economy-notice" role="status">
+            {t('user.activities.thursday.noPrediction')}
+          </p>
+        ) : null}
+        <ThursdayResult thursday={thursday} />
+      </Fold>
       {mutationNotice(authorityAdvanced ? null : mutation.error, success, t)}
       {waitingForAuthority && mutation.reconcileError ? (
         <ErrorState

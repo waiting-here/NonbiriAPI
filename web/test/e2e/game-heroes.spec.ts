@@ -70,6 +70,8 @@ for (const fixture of cases) {
             box.right <= cardBox.right + 0.5 &&
             box.top >= cardBox.top - 0.5 &&
             box.bottom <= cardBox.bottom + 0.5,
+          thumbWidth: box.width,
+          leftOfBody: bodyBox !== undefined && box.right <= bodyBox.left + 0.5,
           aboveBody: bodyBox !== undefined && box.bottom <= bodyBox.top + 0.5,
         };
       }),
@@ -85,9 +87,14 @@ for (const fixture of cases) {
         objectFit: 'cover',
         sameHeroBounds: true,
         containedByCard: true,
-        aboveBody: true,
       });
-      expect(measurement.ratio).toBeCloseTo(2, 2);
+      if (fixture.width < 640) {
+        expect(measurement.leftOfBody).toBe(true);
+        expect(measurement.thumbWidth).toBeCloseTo(112, 0);
+      } else {
+        expect(measurement.aboveBody).toBe(true);
+        expect(measurement.ratio).toBeCloseTo(2, 2);
+      }
     }
 
     expect(

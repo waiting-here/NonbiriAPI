@@ -1,3 +1,4 @@
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
@@ -73,6 +74,30 @@ function canEnter(period: FatFishPeriod): boolean {
 function Content({ account }: { account: string }) {
   const text = useActivityText(),
     client = useQueryClient();
+  const [confirmation, setConfirmation] = useState<{
+    body: string;
+    label: string;
+    danger: boolean;
+  } | null>(null);
+  const confirmationResult = useRef<((accepted: boolean) => void) | null>(null);
+  useEffect(
+    () => () => {
+      confirmationResult.current?.(false);
+      confirmationResult.current = null;
+    },
+    [],
+  );
+  const confirm = (body: string, label: string, danger = false) =>
+    new Promise<boolean>((resolve) => {
+      confirmationResult.current?.(false);
+      confirmationResult.current = resolve;
+      setConfirmation({ body, label, danger });
+    });
+  const finishConfirmation = (accepted: boolean) => {
+    confirmationResult.current?.(accepted);
+    confirmationResult.current = null;
+    setConfirmation(null);
+  };
   const textRef = useRef(text);
   useEffect(() => {
     textRef.current = text;
@@ -195,9 +220,10 @@ function Content({ account }: { account: string }) {
     const target = node.data;
     if (!target?.revision || !target.amounts || working) return;
     if (
-      !window.confirm(
+      !(await confirm(
         text('common.unlockForGeneralCredits', { unlock_cost: target.amounts.unlock_cost }),
-      )
+        text('common.unlockNode'),
+      ))
     )
       return;
     setWorking(true);
@@ -249,11 +275,12 @@ function Content({ account }: { account: string }) {
     const challenge = controller?.snapshot().challenge;
     if (!challenge || working) return;
     if (
-      !window.confirm(
+      !(await confirm(
         text('common.startingChargesGeneralCreditsPreparationIsFree', {
           ticket_price: challenge.ticket_price,
         }),
-      )
+        text('common.confirmTicketAndStart'),
+      ))
     )
       return;
     setWorking(true);
@@ -276,7 +303,14 @@ function Content({ account }: { account: string }) {
     void refresh();
   };
   const abandonReadOnly = async (challenge: FatFishChallenge) => {
-    if (!window.confirm(text('common.abandonThisChallengeAChargedTicketIs'))) return;
+    if (
+      !(await confirm(
+        text('common.abandonThisChallengeAChargedTicketIs'),
+        text('common.abandonChallenge'),
+        true,
+      ))
+    )
+      return;
     setWorking(true);
     setError(null);
     try {
@@ -321,6 +355,15 @@ function Content({ account }: { account: string }) {
   const activeController = controller?.snapshot().challenge?.id === active?.id ? controller : null;
   return (
     <div className="page fatfish-page">
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation?.label ?? ''}
+        description={confirmation?.body}
+        confirmLabel={confirmation?.label ?? ''}
+        danger={confirmation?.danger}
+        onConfirm={() => finishConfirmation(true)}
+        onCancel={() => finishConfirmation(false)}
+      />
       <PageHeader
         eyebrow={text('common.limitedTimeActivity')}
         title={text('common.raiseABigFish')}

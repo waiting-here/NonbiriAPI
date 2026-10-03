@@ -241,8 +241,7 @@ test('RPS separates past reveals from hidden choices and keeps its hidden ending
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${USER_ORIGIN}/games/rps`);
   await page.getByRole('button', { name: 'Skip for now' }).click();
-  await page.locator('.game-onboarding button').click();
-  await expect(page.locator('.game-onboarding button')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.game-onboarding details')).not.toHaveAttribute('open');
   await expect(page.locator('.rps-hidden-gesture')).toHaveCount(3);
   await expect(page.locator('.rps-tie-marks .is-lit')).toHaveCount(5);
   await expect(page.locator('.rps-round-reveal')).toBeVisible();
