@@ -4,6 +4,7 @@ export function SaveBar({
   dirtyCount,
   scope,
   busy,
+  saveDisabled,
   onSave,
   onDiscard,
   saveLabel,
@@ -13,6 +14,7 @@ export function SaveBar({
   dirtyCount: number;
   scope?: ReactNode;
   busy?: boolean;
+  saveDisabled?: boolean;
   onSave: () => void;
   onDiscard: () => void;
   saveLabel: string;
@@ -35,7 +37,12 @@ export function SaveBar({
         >
           {discardLabel}
         </button>
-        <button type="button" className="nb-btn nb-btn--primary" disabled={busy} onClick={onSave}>
+        <button
+          type="button"
+          className="nb-btn nb-btn--primary"
+          disabled={busy || saveDisabled}
+          onClick={onSave}
+        >
           {saveLabel}
         </button>
       </span>
