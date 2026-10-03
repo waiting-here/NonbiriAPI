@@ -503,10 +503,13 @@ for (const scenario of scenarios) {
     const editor = page.locator('.card').filter({
       has: page.getByRole('heading', { name: MODEL_NAME }),
     });
-    const transport = editor.getByRole('combobox', { name: ruleLabel });
-    await expect(transport).toHaveValue('passthrough');
-    await expect(transport.locator('option')).toHaveText(options);
-    await transport.selectOption(rule);
+    const transport = editor.getByRole('radiogroup', { name: ruleLabel });
+    await expect(transport.getByRole('radio', { name: options[0], exact: true })).toBeChecked();
+    await expect(transport.locator('label > span')).toHaveText(options);
+    await transport
+      .getByRole('radio', { name: options[chinese ? 2 : 1], exact: true })
+      .locator('..')
+      .click();
     await expect(transport).toHaveAccessibleDescription(
       chinese
         ? '以流式读取服务商回复。客户端选择流式时边读边返回；选择非流式时收齐后返回完整结果，仍有等待时限。'
@@ -522,13 +525,16 @@ for (const scenario of scenarios) {
     await expect.poll(() => state.patchBodies).toHaveLength(1);
     expect(state.patchBodies[0]).toMatchObject({ expected_revision: '1', transport_rule: rule });
     await page.reload();
-    await expect(transport).toHaveValue(rule);
+    await expect(
+      transport.getByRole('radio', { name: options[chinese ? 2 : 1], exact: true }),
+    ).toBeChecked();
     expect(state.patchBodies).toHaveLength(1);
     await saveScreenshot(page, `${scenario.name}-transport-saved`);
     await assertPresentation(page, scenario, consoleGuard);
 
     await page.goto(scenario.origin + (scenario.frame === 'admin' ? '/logs' : '/steward?tab=logs'));
     const filters = page.getByTestId('log-filters');
+    await filters.locator('summary').click();
     const charity = filters.getByRole('textbox', {
       name: chinese ? '调用的公益模型' : 'Called charity model',
     });
@@ -559,9 +565,10 @@ for (const scenario of scenarios) {
       .toBe(nameFragment);
     expect(new URL(page.url()).searchParams.get('page')).toBe('1');
 
+    await page.locator('.log-export summary').click();
     for (const format of ['csv', 'json'] as const) {
       const link = page.getByRole('link', {
-        name: `${chinese ? '导出' : 'Export'} ${format.toUpperCase()}`,
+        name: `${chinese ? '导出' : 'Export'} ${format.toUpperCase()}${chinese ? (format === 'csv' ? '（表格软件）' : '（程序处理）') : format === 'csv' ? ' (spreadsheets)' : ' (programs)'}`,
         exact: true,
       });
       const href = await link.getAttribute('href');
@@ -593,6 +600,7 @@ for (const scenario of scenarios) {
       nameFragment,
     ]);
     await page.reload();
+    await filters.locator('summary').click();
     await expect(charity).toHaveValue(nameFragment);
     expect(logReads.at(-1)?.searchParams.get('charity_model')).toBe(nameFragment);
     await saveScreenshot(page, `${scenario.name}-charity-log-filter`);

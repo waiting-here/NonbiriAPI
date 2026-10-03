@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { transportRules, type TransportRule } from '@shared/transportRule';
@@ -11,14 +11,22 @@ function Editor() {
 describe('shared model transport field', () => {
   it.each(['en', 'zh'] as const)('explains the selected rule in %s', async (locale) => {
     const view = await renderWithProviders(<Editor />, { locale, station: 'user' });
-    const select = screen.getByRole('combobox', {
+    const group = screen.getByRole('radiogroup', {
       name: view.i18n.t('common.transportRule.label'),
     });
-    expect(select).toHaveValue('passthrough');
+    expect(
+      within(group).getByRole('radio', {
+        name: view.i18n.t('common.transportRule.options.passthrough'),
+      }),
+    ).toBeChecked();
     for (const rule of transportRules) {
-      await view.user.selectOptions(select, rule);
-      expect(select).toHaveValue(rule);
-      expect(select).toHaveAccessibleDescription(view.i18n.t(`common.transportRule.help.${rule}`));
+      const radio = within(group).getByRole('radio', {
+        name: view.i18n.t(`common.transportRule.options.${rule}`),
+      });
+      await view.user.click(radio);
+      expect(radio).toBeChecked();
+      expect(radio).toHaveAttribute('value', rule);
+      expect(group).toHaveAccessibleDescription(view.i18n.t(`common.transportRule.help.${rule}`));
     }
   });
 });

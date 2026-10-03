@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type MouseEvent, type ReactNode } from 'react';
 
 export interface DataColumn<Row> {
   key: string;
@@ -18,6 +18,7 @@ export function DataTable<Row>({
   selectedKey,
   dense,
   renderDetail,
+  onRowClick,
 }: {
   caption: string;
   columns: readonly DataColumn<Row>[];
@@ -26,6 +27,7 @@ export function DataTable<Row>({
   selectedKey?: string;
   dense?: boolean;
   renderDetail?: (row: Row) => ReactNode;
+  onRowClick?: (row: Row, event: MouseEvent<HTMLTableRowElement>) => void;
 }) {
   return (
     <div className="nb-table-wrap">
@@ -50,7 +52,10 @@ export function DataTable<Row>({
             const detail = renderDetail?.(row);
             return (
               <Fragment key={key}>
-                <tr aria-selected={selectedKey === key ? true : undefined}>
+                <tr
+                  onClick={onRowClick ? (event) => onRowClick(row, event) : undefined}
+                  aria-selected={selectedKey === key ? true : undefined}
+                >
                   {columns.map((column) => (
                     <td
                       key={column.key}
