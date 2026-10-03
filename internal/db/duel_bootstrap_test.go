@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -149,9 +148,7 @@ func TestDuelBootstrapRollbackAndPartialSourceRejection(t *testing.T) {
 				if err == nil {
 					t.Fatal("missing rejection")
 				}
-				if !reflect.DeepEqual(before, snapshotBootstrapSources(t, path)) {
-					t.Fatal("rejected source changed")
-				}
+				assertBootstrapSourcesUnchanged(t, path, before)
 				return
 			}
 			hostileMustExec(t, store.DB(), `VACUUM`)

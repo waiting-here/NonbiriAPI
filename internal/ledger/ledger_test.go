@@ -64,6 +64,9 @@ VALUES(?,?,'openai_chat_completions','model','accepted',1,'reserved',100,'user',
 		outstanding[0].ResourceID != requestID || !outstanding[0].Ref.equal(ref) || outstanding[0].Rows.Big().Cmp(one.Big()) != 0 {
 		t.Fatalf("recover accepted request = (%+v,%v)", outstanding, err)
 	}
+	if active, err := RecoverNonterminal(db.ActiveRecoveryContext(ctx), tx); err != nil || len(active) != 1 || active[0].ResourceID != requestID {
+		t.Fatal("active reservation recovery", active, err)
+	}
 	reserveMeta := Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 1}
 	reservePlan, err := NewForwardReserve(reserveMeta, requestID, wallet.ID, forward.ID, AmountFromMilli(100))
 	if err != nil {
@@ -187,11 +190,17 @@ VALUES(?,?,'openai_chat_completions','model','accepted',1,'reserved',0,'user',?,
 	if err := ValidateRecovery(ctx, tx); !errors.Is(err, ErrInvariant) {
 		t.Fatalf("capacity mismatch error = %v", err)
 	}
+	if err := ValidateRecovery(db.ActiveRecoveryContext(ctx), tx); !errors.Is(err, ErrInvariant) {
+		t.Fatalf("active capacity mismatch: %v", err)
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE credit_capacity SET reserved_future_rows=?,last_ledger_seq=1 WHERE id=1`, db.EncodeU128(one)); err != nil {
 		t.Fatal(err)
 	}
 	if err := ValidateRecovery(ctx, tx); !errors.Is(err, ErrInvariant) {
 		t.Fatalf("sequence mismatch error = %v", err)
+	}
+	if err := ValidateRecovery(db.ActiveRecoveryContext(ctx), tx); !errors.Is(err, ErrInvariant) {
+		t.Fatalf("active sequence mismatch: %v", err)
 	}
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)

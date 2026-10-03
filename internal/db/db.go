@@ -31,9 +31,8 @@ type Store struct {
 }
 
 // Open classifies path as either completely fresh or current Generation 2.
-// Existing databases are validated from a private read-only snapshot before
-// SQLite is allowed to open the source path. Only the exact supported prior
-// Generation 2 schema receives the additive routing table; no repair is attempted.
+// Existing databases receive read-only identity, schema and credential checks
+// before recovery. Only registered prior schemas receive an additive upgrade.
 func Open(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultStartupTimeout)
 	defer cancel()
@@ -74,7 +73,7 @@ func OpenContext(ctx context.Context, path string, secrets secret.GenerationTwoC
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}
-	return openGenerationTwo(ctx, path, secrets)
+	return openGenerationTwo(ActiveRecoveryContext(ctx), path, secrets)
 }
 
 // prepareDBDirectory validates every existing parent component before it
@@ -198,7 +197,7 @@ func (s *Store) CloseContext(ctx context.Context) error {
 			s.closeErr = s.db.Close()
 			// database/sql may return before a cancelled transaction releases its
 			// connection. SQLite must finish rollback and close its files before
-			// a subsequent startup can capture a stable database snapshot.
+			// a subsequent startup can acquire SQLite ownership.
 			if s.db.Stats().OpenConnections != 0 {
 				ticker := time.NewTicker(time.Millisecond)
 				defer ticker.Stop()

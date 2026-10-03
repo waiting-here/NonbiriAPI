@@ -209,7 +209,7 @@ func FinalizeRequestTx(ctx context.Context, tx *sql.Tx, requestID string, comple
 	return err
 }
 
-// ReconcileCounters is a startup maintenance operation, never a request hook.
+// ReconcileCounters is an explicit repair operation, never a startup hook.
 func (r *Repository) ReconcileCounters(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE observability_state SET raw_body_bytes=(SELECT COALESCE(SUM(bytes_saved),0) FROM request_error_bodies),access_rows=(SELECT count(*) FROM audit_access_events) WHERE id=1`)
 	return err
@@ -310,4 +310,17 @@ func SourceTx(ctx context.Context, tx *sql.Tx, logID int64) (*Source, error) {
 		return nil, err
 	}
 	return &source, nil
+}
+
+// VerifyCounters checks the counters maintained by writes and retention.
+func (r *Repository) VerifyCounters(ctx context.Context) error {
+	var mismatch bool
+	err := r.db.QueryRowContext(ctx, `SELECT raw_body_bytes<>(SELECT COALESCE(SUM(bytes_saved),0) FROM request_error_bodies) OR access_rows<>(SELECT count(*) FROM audit_access_events) FROM observability_state WHERE id=1`).Scan(&mismatch)
+	if err != nil {
+		return err
+	}
+	if mismatch {
+		return ErrUnavailable
+	}
+	return nil
 }

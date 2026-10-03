@@ -17,7 +17,11 @@ func ValidateState(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	var used, held, actualRows, actualHeld int64
-	err := tx.QueryRowContext(ctx, `SELECT rows_used,rows_held,(SELECT COUNT(*) FROM donation_quota_periods)+(SELECT COUNT(*) FROM donation_quota_buckets),(SELECT COUNT(*) FROM donation_quota_receipts WHERE capacity_state='held') FROM donation_quota_capacity WHERE id=1`).Scan(&used, &held, &actualRows, &actualHeld)
+	query := `SELECT rows_used,rows_held,(SELECT COUNT(*) FROM donation_quota_periods)+(SELECT COUNT(*) FROM donation_quota_buckets),(SELECT COUNT(*) FROM donation_quota_receipts WHERE capacity_state='held') FROM donation_quota_capacity WHERE id=1`
+	if db.IsActiveRecovery(ctx) {
+		query = `SELECT rows_used,rows_held,rows_used,(SELECT COUNT(*) FROM donation_quota_receipts WHERE capacity_state='held') FROM donation_quota_capacity WHERE id=1`
+	}
+	err := tx.QueryRowContext(ctx, query).Scan(&used, &held, &actualRows, &actualHeld)
 	if err != nil {
 		return err
 	}
@@ -37,7 +41,11 @@ func ValidateState(ctx context.Context, tx *sql.Tx) error {
 	lastID := ""
 	lastNumber := int64(0)
 	for {
-		rows, err := tx.QueryContext(ctx, `SELECT `+epochColumns+` FROM donation_quota_epochs e JOIN donation_quota_rules r ON r.id=e.rule_id WHERE (e.rule_id,e.epoch)>(?,?) ORDER BY e.rule_id,e.epoch LIMIT 128`, lastID, lastNumber)
+		query := `SELECT ` + epochColumns + ` FROM donation_quota_epochs e JOIN donation_quota_rules r ON r.id=e.rule_id WHERE (e.rule_id,e.epoch)>(?,?)`
+		if db.IsActiveRecovery(ctx) {
+			query += ` AND (e.retired_at IS NULL OR EXISTS(SELECT 1 FROM donation_quota_receipts x WHERE x.rule_id=e.rule_id AND x.epoch=e.epoch AND x.state<>'settled'))`
+		}
+		rows, err := tx.QueryContext(ctx, query+` ORDER BY e.rule_id,e.epoch LIMIT 128`, lastID, lastNumber)
 		if err != nil {
 			return err
 		}
@@ -89,8 +97,12 @@ func validateEpoch(ctx context.Context, tx *sql.Tx, e epoch) error {
 		return err
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT r.state,r.reserved_mag,r.remaining_reserved_mag,r.actual_mag,r.success_at,r.period_start,r.capacity_state,c.state,c.purpose,c.donation_key_id,c.dispatched_at,m.started_at,c.reserved_calls,c.reserved_tokens,c.reserved_price_milli,c.reserved_input_tokens,c.reserved_output_tokens
-FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id LEFT JOIN dispatch_response_starts m ON m.claim_id=c.id WHERE r.rule_id=? AND r.epoch=?`, e.id, e.number)
+	query := `SELECT r.state,r.reserved_mag,r.remaining_reserved_mag,r.actual_mag,r.success_at,r.period_start,r.capacity_state,c.state,c.purpose,c.donation_key_id,c.dispatched_at,m.started_at,c.reserved_calls,c.reserved_tokens,c.reserved_price_milli,c.reserved_input_tokens,c.reserved_output_tokens
+FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id LEFT JOIN dispatch_response_starts m ON m.claim_id=c.id WHERE r.rule_id=? AND r.epoch=?`
+	if db.IsActiveRecovery(ctx) {
+		query += ` AND r.state<>'settled'`
+	}
+	rows, err := tx.QueryContext(ctx, query, e.id, e.number)
 	if err != nil {
 		return err
 	}
@@ -215,11 +227,23 @@ FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id LEFT JO
 }
 
 func validateAggregates(ctx context.Context, tx *sql.Tx, e epoch, expected map[int64]expectedAggregate) error {
-	query := `SELECT success_at,NULL,used_mag,reserved_mag FROM donation_quota_buckets WHERE rule_id=? AND epoch=? ORDER BY success_at`
+	query := `SELECT success_at,NULL,used_mag,reserved_mag FROM donation_quota_buckets b WHERE rule_id=? AND epoch=?`
+	args := []any{e.id, e.number}
+	order := ` ORDER BY success_at`
 	if e.rule.Mode == "reset" {
-		query = `SELECT start_at,end_at,used_mag,reserved_mag FROM donation_quota_periods WHERE rule_id=? AND epoch=? ORDER BY start_at`
+		query = `SELECT start_at,end_at,used_mag,reserved_mag FROM donation_quota_periods p WHERE rule_id=? AND epoch=?`
+		order = ` ORDER BY start_at`
 	}
-	rows, err := tx.QueryContext(ctx, query, e.id, e.number)
+	if db.IsActiveRecovery(ctx) {
+		if e.rule.Mode == "reset" {
+			query += ` AND (end_at>? OR reserved_mag<>zeroblob(16) OR EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=p.rule_id AND r.epoch=p.epoch AND r.period_start=p.start_at AND r.state<>'settled'))`
+			args = append(args, e.observed.Int64)
+		} else {
+			query += ` AND (success_at>? OR reserved_mag<>zeroblob(16) OR EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=b.rule_id AND r.epoch=b.epoch AND r.success_at=b.success_at AND r.state<>'settled'))`
+			args = append(args, e.left.Int64)
+		}
+	}
+	rows, err := tx.QueryContext(ctx, query+order, args...)
 	if err != nil {
 		return err
 	}
@@ -274,7 +298,11 @@ func validateAggregates(ctx context.Context, tx *sql.Tx, e epoch, expected map[i
 				active = sql.NullInt64{Int64: at, Valid: true}
 			}
 			var mismatch bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_quota_receipts WHERE rule_id=? AND epoch=? AND period_start=? AND (success_at<? OR success_at>=?))`, e.id, e.number, at, at, end.Int64).Scan(&mismatch); err != nil {
+			membership := `SELECT EXISTS(SELECT 1 FROM donation_quota_receipts WHERE rule_id=? AND epoch=? AND period_start=? AND (success_at<? OR success_at>=?)`
+			if db.IsActiveRecovery(ctx) {
+				membership += ` AND state<>'settled'`
+			}
+			if err := tx.QueryRowContext(ctx, membership+")", e.id, e.number, at, at, end.Int64).Scan(&mismatch); err != nil {
 				return err
 			}
 			if mismatch {

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 func requireIndexedCleanup(t *testing.T, q *sql.DB, now int64) {
@@ -112,5 +114,45 @@ func TestDisjointWindowRetainsPendingReservationAndLateSettlement(t *testing.T) 
 	var count int
 	if err := q.QueryRow(`SELECT COUNT(*) FROM donation_quota_buckets`).Scan(&count); err != nil || count != 2 {
 		t.Fatal(count, err)
+	}
+}
+
+func TestActiveValidationKeepsStartedReceiptsOutsideCurrentWindow(t *testing.T) {
+	for _, mode := range []string{"reset", "sliding"} {
+		t.Run(mode, func(t *testing.T) {
+			q := newQuotaDB(t)
+			r := rule("calls", "5")
+			if mode == "sliding" {
+				r.Mode, r.Interval, r.Alignment = "sliding", "day", nil
+			}
+			replace(t, q, testNow, r)
+			a := Amounts{Calls: mag(1)}
+			id, err := newClaim(t, q, testNow, a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := dispatch(t, q, id, testNow); err != nil {
+				t.Fatal(err)
+			}
+			start(t, q, id, testNow)
+			if err := transaction(t, q, func(tx *sql.Tx) error {
+				epochs, err := currentEpochs(context.Background(), tx, 1)
+				if err != nil {
+					return err
+				}
+				if err := advance(context.Background(), tx, &epochs[0], testNow+86401); err != nil {
+					return err
+				}
+				return ValidateState(db.ActiveRecoveryContext(context.Background()), tx)
+			}); err != nil {
+				t.Fatal("started receipt must retain its original aggregate", err)
+			}
+			terminal(t, q, id, testNow+86402, a, true)
+			if err := transaction(t, q, func(tx *sql.Tx) error {
+				return ValidateState(db.ActiveRecoveryContext(context.Background()), tx)
+			}); err != nil {
+				t.Fatal("recovered receipt", err)
+			}
+		})
 	}
 }

@@ -565,9 +565,7 @@ func TestRetainedExtensionRejectsMixedSourcesWithoutWriting(t *testing.T) {
 			if err == nil {
 				t.Fatal("missing startup rejection")
 			}
-			if after := snapshotBootstrapSources(t, path); !reflect.DeepEqual(before, after) {
-				t.Fatal("rejected source was modified")
-			}
+			assertBootstrapSourcesUnchanged(t, path, before)
 		})
 	}
 }

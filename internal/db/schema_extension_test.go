@@ -120,11 +120,5 @@ func TestRoutingExtensionRejectsModifiedPriorSchema(t *testing.T) {
 	if !errors.As(err, &startup) {
 		t.Fatalf("expected startup rejection: %v", err)
 	}
-	after := snapshotBootstrapSources(t, path)
-	for suffix, image := range before {
-		other := after[suffix]
-		if image.present != other.present || string(image.data) != string(other.data) || image.mode != other.mode || !image.modTime.Equal(other.modTime) {
-			t.Fatalf("rejected update modified %q", suffix)
-		}
-	}
+	assertBootstrapSourcesUnchanged(t, path, before)
 }

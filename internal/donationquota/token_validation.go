@@ -4,15 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 func validateTokenReservations(ctx context.Context, tx *sql.Tx) error {
 	var mismatch bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_usage_reservations u
+	query := `SELECT EXISTS(SELECT 1 FROM donation_usage_reservations u
  JOIN dispatch_claims c ON c.id=u.claim_id WHERE u.tokens_reserved<>c.reserved_tokens
- OR u.input_tokens_reserved IS NOT c.reserved_input_tokens OR u.output_tokens_reserved IS NOT c.reserved_output_tokens)`).Scan(&mismatch); err != nil {
+ OR u.input_tokens_reserved IS NOT c.reserved_input_tokens OR u.output_tokens_reserved IS NOT c.reserved_output_tokens)`
+	if db.IsActiveRecovery(ctx) {
+		query = strings.Replace(query, " WHERE ", " WHERE u.state='reserved' AND (", 1) + ")"
+	}
+	if err := tx.QueryRowContext(ctx, query).Scan(&mismatch); err != nil {
 		return err
 	}
 	if mismatch {

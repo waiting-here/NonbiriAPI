@@ -500,6 +500,16 @@ func TestColdValidationRejectsPeriodAndSettledCallCorruption(t *testing.T) {
 				if !errors.Is(err, ErrInvariant) {
 					t.Fatal("accepted corrupt state", err)
 				}
+				activeErr := transaction(t, q, func(tx *sql.Tx) error {
+					return ValidateState(db.ActiveRecoveryContext(context.Background()), tx)
+				})
+				if corrupt == "settled calls changed" {
+					if activeErr != nil {
+						t.Fatal("terminal receipt belongs to explicit verification", activeErr)
+					}
+				} else if !errors.Is(activeErr, ErrInvariant) {
+					t.Fatal("accepted corrupt current period", activeErr)
+				}
 			})
 		}
 	}

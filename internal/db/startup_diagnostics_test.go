@@ -57,7 +57,7 @@ func TestStartupCancellationAtEveryDatabaseStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer clear(content)
-	for _, target := range []StartupStage{StagePathPreflight, StageSnapshotCopy, StageSnapshotValidation,
+	for _, target := range []StartupStage{StagePathPreflight, StageIdentityValidation, StageSchemaValidation, StageCredentialValidation,
 		StageSourceRecheck, StageRawHandlesClosed, StageSourceOpen, StageSchemaUpgrade, StageDomainRecovery} {
 		t.Run(string(target), func(t *testing.T) {
 			path := bootstrapTestPath(t, string(target)+".sqlite")
@@ -91,7 +91,7 @@ func TestStartupCancellationAtEveryDatabaseStage(t *testing.T) {
 			}
 			waitForStartupOwnershipRelease(t, path)
 			switch target {
-			case StagePathPreflight, StageSnapshotCopy, StageSnapshotValidation, StageSourceRecheck,
+			case StagePathPreflight, StageIdentityValidation, StageSchemaValidation, StageCredentialValidation, StageSourceRecheck,
 				StageRawHandlesClosed, StageSourceOpen:
 				assertBootstrapSourcesUnchanged(t, path, before)
 				if trace.Snapshot().LastCommittedPhase != "" {
