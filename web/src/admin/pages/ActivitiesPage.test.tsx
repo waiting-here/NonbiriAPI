@@ -128,6 +128,27 @@ describe('automatic activity schedules', () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-11T12:00:00Z'));
   });
 
+  it('updates the loan example with exact thousandth precision without submitting', async () => {
+    const writes = installActivities(null);
+    await renderActivities();
+    expect(
+      await screen.findByText(
+        'Borrow 10,000 → receive 9,000 game credits; repay 13,000 general credits.',
+      ),
+    ).toBeVisible();
+    const panel = screen.getByRole('heading', { name: 'Cyber loan' }).closest('section')!;
+    const amount = within(panel).getAllByRole('textbox')[0];
+    fireEvent.change(amount, { target: { value: '10001' } });
+    fireEvent.change(screen.getByLabelText('Disbursement ratio'), { target: { value: '0.333' } });
+    fireEvent.change(screen.getByLabelText('Repayment ratio'), { target: { value: '1.111' } });
+    expect(
+      screen.getByText(
+        'Borrow 10,001 → receive 3,330.333 game credits; repay 11,111.111 general credits.',
+      ),
+    ).toBeVisible();
+    expect(writes).toHaveLength(0);
+  });
+
   it.each([null, previousPeriod])(
     'creates the next Thursday from the activity revision with prior state %j',
     async (initial) => {
@@ -142,7 +163,7 @@ describe('automatic activity schedules', () => {
       await view.user.type(view.entry, '2');
       await view.user.clear(screen.getByLabelText('Literature'));
       await view.user.type(screen.getByLabelText('Literature'), 'Next announcement');
-      await view.user.click(screen.getByRole('button', { name: 'Save next period' }));
+      await view.user.click(screen.getByRole('button', { name: 'Save and schedule' }));
       await waitFor(() => expect(writes).toHaveLength(1));
       expect(writes[0]).toEqual(
         expect.objectContaining({
@@ -163,7 +184,7 @@ describe('automatic activity schedules', () => {
     await waitFor(() => expect(view.entry).toBeEnabled());
     await view.user.type(view.entry, '1');
     const literature = screen.getByLabelText('Literature');
-    const save = screen.getByRole('button', { name: 'Save next period' });
+    const save = screen.getByRole('button', { name: 'Save and schedule' });
     expect(save).toBeEnabled();
     fireEvent.change(literature, { target: { value: '界'.repeat(1025) } });
     expect(literature).toHaveAttribute('aria-invalid', 'true');
@@ -188,7 +209,7 @@ describe('automatic activity schedules', () => {
     await view.user.clear(fee);
     await view.user.type(fee, '1.25');
     expect(fee).toHaveValue(1.25);
-    await view.user.click(screen.getByRole('button', { name: 'Save next period' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save and schedule' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].pumps_bp).toEqual({ platform: 125, welfare: 0, next_pool: 0 });
   });
@@ -220,7 +241,7 @@ describe('automatic activity schedules', () => {
     await view.user.type(view.entry, '1');
     await view.user.type(screen.getByLabelText('Literature'), 'After midnight');
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-12-30T16:00:00Z'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save next period' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save and schedule' }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toEqual(
       expect.objectContaining({
@@ -250,7 +271,7 @@ describe('automatic activity schedules', () => {
     await screen.findByText('The activity is open or settling; its rules cannot be edited.');
     expect(view.entry).toBeDisabled();
     expect(screen.getByLabelText('Literature')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save next period' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save and schedule' })).toBeDisabled();
     expect(writes).toHaveLength(0);
   });
 });

@@ -6,6 +6,7 @@
   max-height: 100dvh;
   height: 100dvh;
   color: var(--nb-color-text);
+  grid-template-columns: minmax(0, 1fr);
 }
 .nb-form-drawer:not([open]) {
   display: none;
@@ -16,6 +17,21 @@
 .nb-form-drawer .nb-drawer__head h2 {
   margin: 0;
   font-size: var(--nb-font-size-lg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.nb-form-drawer .nb-drawer__body {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.nb-form-drawer .nb-drawer__foot {
+  flex-wrap: wrap;
+}
+.nb-form-drawer .nb-drawer__foot > button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 40rem) {
   .nb-form-drawer {

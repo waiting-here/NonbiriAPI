@@ -221,7 +221,6 @@
       "nav": "Games",
       "title": "Game configuration",
       "masterEnabled": "Games master switch",
-      "fishingEnabled": "Fishing enabled",
       "fishingRake": "{{pump}} fee (%)",
       "worm": "Worm bait",
       "lure": "Lure bait",
@@ -234,15 +233,12 @@
       "saved": "Game settings saved.",
       "save": "Save game configuration",
       "controls": {
-        "globalGate": "Games master switch",
         "settings": "Game settings",
-        "priceCredits": "{{field}} price (credits)",
         "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
       },
       "counts": {
         "active": "Active",
         "empty": "No in-flight games",
-        "emptyBody": "No active session or waiting queue is currently reported.",
         "games": "Games",
         "mode": "Mode: {{value}}",
         "phase": "Phase: {{value}}",
@@ -253,8 +249,6 @@
         "unknown": "Unknown value ({{value}})"
       },
       "linklink": {
-        "enabled": "LinkLink enabled",
-        "entryPrice": "{{spec}} entry price (credits)",
         "specEnabled": "{{spec}} enabled",
         "specs": {
           "10x10": "10×10",
@@ -262,7 +256,6 @@
           "8x8": "8×8"
         }
       },
-      "operationsDescription": "Configure future game acceptance while monitoring independent in-flight and queue counts.",
       "restoreAuthorityValues": "Restore saved settings",
       "rps": {
         "base": "{{mode}} base (credits)",
@@ -274,7 +267,6 @@
           "gesture": "Gesture deadline",
           "queue": "Queue deadline"
         },
-        "enabled": "Three-player RPS enabled",
         "modeEnabled": "{{mode}} mode enabled",
         "modes": {
           "deathmatch": "Deathmatch",
@@ -332,7 +324,6 @@
       },
       "config": {
         "masterEnabled": "Master enabled",
-        "revisionHint": "Save activity switches and claim rules together. Configure the Thursday activity below before enabling it. Open activities keep their existing rules.",
         "save": "Save activity settings",
         "thursdayEnabled": "Thursday enabled",
         "title": "Activity configuration",
@@ -358,7 +349,6 @@
         "windowBeijing": "Activity time (Beijing, UTC+8)",
         "perUserLimit": "Per-user limit",
         "platformBp": "Platform fee (%)",
-        "save": "Save next period",
         "updateTitle": "Update configured next period",
         "welfareBp": "Welfare pool fee (%)",
         "literatureInvalid": "Shorten the literature or remove special control characters. Newlines and tabs are allowed."
@@ -404,8 +394,7 @@
         "payoutRollover": "Payout / rollover",
         "periodRevision": "Period",
         "processed": "Processed",
-        "resume": "Resume existing settlement checkpoint",
-        "title": "Thursday activity status"
+        "resume": "Resume existing settlement checkpoint"
       },
       "title": "Activities and pools",
       "units": {

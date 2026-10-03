@@ -369,12 +369,14 @@ for (const width of [1440, 390]) {
         }
         return route.fulfill({ json: activity });
       });
-      await page.goto(ADMIN_ORIGIN + '/limited-activities');
+      await page.goto(ADMIN_ORIGIN + '/limited-activities?activity=picture-book');
+      await page.getByRole('tab', { name: 'Image generation service', exact: true }).click();
       await expect(page.getByLabel(/JSON|pointer|RPM|Concurrent generation/)).toHaveCount(0);
       await page.getByLabel('Service base URL').fill('https://images.example.invalid/v1');
       await page.getByLabel('Activity key').fill('synthetic-image-key');
       await page.getByRole('button', { name: 'Save service settings' }).click();
       await expect(page.getByLabel('Activity key')).toHaveCount(0);
+      await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
       await page.getByRole('button', { name: 'Refresh model catalog', exact: true }).click();
       await expect(page.getByRole('option', { name: /synthetic-image-1/ })).toBeAttached();
       const editor = page
@@ -409,6 +411,7 @@ for (const width of [1440, 390]) {
         await expect(editor.getByLabel('Sketch paper per image')).toBeEnabled();
       }
       await page.reload();
+      await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
       await expect(page.getByRole('option', { name: /synthetic-image-1/ })).toBeAttached();
       await page.getByLabel('Choose a model to configure').selectOption(ids[0]);
       const initialCatalogIDs = modelRows.map((model) => model.id);
@@ -427,6 +430,7 @@ for (const width of [1440, 390]) {
       await expect.poll(() => saves.length).toBe(5);
       expect(saves[4].body.expected_revision).toBe('2');
       expect(modelRows.map((model) => model.id)).toEqual(initialCatalogIDs);
+      await page.getByRole('tab', { name: 'Image generation service', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save service settings' })).toBeEnabled();
       await page.getByRole('button', { name: 'Save service settings' }).click();
       await expect

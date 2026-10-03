@@ -221,7 +221,6 @@
       "nav": "游戏",
       "title": "游戏配置",
       "masterEnabled": "游戏总开关",
-      "fishingEnabled": "启用池塘垂钓",
       "fishingRake": "{{pump}}费用（%）",
       "worm": "蚯蚓鱼饵",
       "lure": "拟饵",
@@ -234,15 +233,12 @@
       "saved": "游戏设置已保存。",
       "save": "保存游戏配置",
       "controls": {
-        "globalGate": "小游戏总开关",
         "settings": "游戏设置",
-        "priceCredits": "{{field}}价格（积分）",
         "revisionTerms": "可同时调整多项，保存后生效；已经开始的游戏继续使用开始时的设置。"
       },
       "counts": {
         "active": "进行中",
         "empty": "没有进行中的游戏",
-        "emptyBody": "当前没有上报活动对局或等待队列。",
         "games": "对局",
         "mode": "模式：{{value}}",
         "phase": "阶段：{{value}}",
@@ -253,8 +249,6 @@
         "unknown": "未知值（{{value}}）"
       },
       "linklink": {
-        "enabled": "启用连连看",
-        "entryPrice": "{{spec}}入场价格（积分）",
         "specEnabled": "启用 {{spec}}",
         "specs": {
           "10x10": "10×10",
@@ -262,7 +256,6 @@
           "8x8": "8×8"
         }
       },
-      "operationsDescription": "配置后续游戏准入，同时监控独立的进行中对局与排队数量。",
       "restoreAuthorityValues": "恢复已保存设置",
       "rps": {
         "base": "{{mode}}基础金额（积分）",
@@ -274,7 +267,6 @@
           "gesture": "出拳时限",
           "queue": "排队时限"
         },
-        "enabled": "启用三人猜拳",
         "modeEnabled": "启用{{mode}}模式",
         "modes": {
           "deathmatch": "生死斗",
@@ -332,7 +324,6 @@
       },
       "config": {
         "masterEnabled": "启用活动总开关",
-        "revisionHint": "统一保存活动开关与领取规则。启用星期四活动前，请先在下方配置活动。已经开放的活动保留原有规则。",
         "save": "保存活动设置",
         "thursdayEnabled": "启用星期四活动",
         "title": "活动配置",
@@ -358,7 +349,6 @@
         "windowBeijing": "活动时间（北京时间）",
         "perUserLimit": "每位用户上限",
         "platformBp": "平台费用（%）",
-        "save": "保存下一活动周期",
         "updateTitle": "更新已配置的下一周期",
         "welfareBp": "低保池费用（%）",
         "literatureInvalid": "文案过长或含特殊控制字符，请修改后再试；可使用换行和制表符。"
@@ -404,8 +394,7 @@
         "payoutRollover": "发放 / 结转",
         "periodRevision": "期次",
         "processed": "已处理",
-        "resume": "恢复现有结算检查点",
-        "title": "星期四活动状态"
+        "resume": "恢复现有结算检查点"
       },
       "title": "活动与共享池",
       "units": {

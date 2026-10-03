@@ -29,6 +29,7 @@ describe('limited activity configuration', () => {
     );
     const view = await renderWithProviders(<LimitedActivitiesPage />, {
       station: 'admin',
+      route: '/limited-activities?activity=picture-book',
       role: 'admin',
     });
     const opening = await screen.findByLabelText('Opening time');
@@ -67,9 +68,10 @@ describe('limited activity configuration', () => {
     );
     const rendered = await renderWithProviders(<LimitedActivitiesPage />, {
       station: 'admin',
+      route: '/limited-activities?activity=picture-book',
       role: 'admin',
     });
-    const visibility = await screen.findByRole('checkbox', { name: 'Show in activity directory' });
+    const visibility = await screen.findByRole('switch', { name: 'Show in activity directory' });
     fireEvent.click(visibility);
     await rendered.user.click(screen.getByRole('button', { name: 'Save settings' }));
     await screen.findByText(/save result is unconfirmed/i);
@@ -99,6 +101,7 @@ describe('limited activity configuration', () => {
     );
     const rendered = await renderWithProviders(<LimitedActivitiesPage />, {
       station: 'admin',
+      route: '/limited-activities?activity=picture-book',
       role: 'admin',
     });
     const cap = await screen.findByLabelText('Total cumulative brush exchange cap');

@@ -127,9 +127,9 @@ for (const scenario of [
     const history = page.getByRole('dialog');
     await expect(history.locator('.loan-facts dt')).toHaveCount(5);
     await expect(history.locator('.loan-facts')).not.toContainText(/系数|coefficient|→/);
-    await history.locator('select').selectOption('100');
-    await expect.poll(() => pages.length).toBe(2);
-    expect(pages[1]).toBe('?page=1&page_size=100');
+    await expect(history.locator('select')).toHaveCount(0);
+    await expect(history.getByText(zh ? '共 1 项' : '1 items', { exact: true })).toBeVisible();
+    expect(pages).toEqual(['?page=1&page_size=20']);
     expect(await history.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await history.getByRole('button', { name: zh ? '关闭' : 'Close', exact: true }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

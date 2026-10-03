@@ -1,16 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
+import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { useOptionalToast } from '@shared/components/Toast';
 import {
   adminEconomyKeys,
@@ -19,17 +12,19 @@ import {
   getGamesConfig,
   patchGamesConfig,
   type GamesConfig,
-  type RPSModeConfig,
 } from '../features/operations/economy';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import { DuelConfiguration } from '../features/games/Configuration';
-import { GameConfigurationDetails } from '../features/games/ConfigurationDetails';
+import { FishingFields, LinklinkFields, RPSFields } from '../features/games/GameFields';
+import { Drawer } from '@shared/components/ui/Drawer';
+import { Note, Panel, PanelBody, SaveBar, Toggle } from '@shared/components/ui';
+import '../features/games/configuration.css';
 import {
   BlackjackConfiguration,
   validateBlackjackConfiguration,
 } from '../features/games/BlackjackConfiguration';
-import { percentBP, validateDuelConfigurations } from '../features/games/config';
-import { fishingChanceFromPercent, fishingChanceValid } from '../features/games/fishing';
+import { validateDuelConfigurations } from '../features/games/config';
+import { fishingChanceValid } from '../features/games/fishing';
 import { gameLabel, modeLabel, useGameAdminText } from '../features/games/copy';
 import '@shared/operations/operations.css';
 
@@ -106,129 +101,177 @@ function amountMilli(value: string): bigint | null {
 const validInteger = (value: number, minimum: number, maximum: number) =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
-function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
+type ConfigGame = GameName | 'bidding' | 'likes' | 'blackjack';
+type GameProblem = { game: ConfigGame | null; message: string; field?: string };
+
+function validateGamesDraft(draft: GamesConfig, t: TFunction): GameProblem | null {
+  let game: ConfigGame | null = null;
+  let field: string | undefined;
+  const invalid = (message: string): GameProblem => ({ game, message, field });
   if (
     !draft.master_enabled &&
     (draft.fishing.enabled || draft.linklink.enabled || draft.rps.enabled)
   )
-    return t('admin.games.validation.masterRequired');
+    return invalid(t('admin.games.validation.masterRequired'));
+  game = 'fishing';
   for (const bait of ['worm', 'lure', 'premium'] as const) {
+    field = `fishing.bait_prices.${bait}`;
     const value = amountMilli(draft.fishing.bait_prices[bait]);
     if (value === null || value < 1n)
-      return t('admin.games.validation.amountMinimum', {
-        field: t(BAIT_LABEL_KEYS[bait]),
-        minimum: '0.001',
-      });
+      return invalid(
+        t('admin.games.validation.amountMinimum', {
+          field: t(BAIT_LABEL_KEYS[bait]),
+          minimum: '0.001',
+        }),
+      );
   }
   for (const mode of ['standard', 'premium'] as const) {
+    field = `fishing.rtp_percent.${mode}`;
     if (!validInteger(draft.fishing.rtp_percent[mode], 0, 100))
-      return t('admin.games.validation.integerRange', {
-        field: t(FISHING_RTP_LABEL_KEYS[mode]),
-        minimum: 0,
-        maximum: 100,
-      });
+      return invalid(
+        t('admin.games.validation.integerRange', {
+          field: t(FISHING_RTP_LABEL_KEYS[mode]),
+          minimum: 0,
+          maximum: 100,
+        }),
+      );
   }
   for (const pump of ['platform', 'welfare', 'thursday'] as const) {
+    field = `fishing.rake_bp.${pump}`;
     if (!validInteger(draft.fishing.rake_bp[pump], 0, 9_999))
-      return t('admin.games.validation.feeRange', {
-        field: t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) }),
-      });
+      return invalid(
+        t('admin.games.validation.feeRange', {
+          field: t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) }),
+        }),
+      );
   }
+  field = 'fishing.rake_bp.platform';
   if (
     draft.fishing.rake_bp.platform +
       draft.fishing.rake_bp.welfare +
       draft.fishing.rake_bp.thursday >=
     10_000
   )
-    return t('admin.games.validation.totalCuts', {
-      mode: t('admin.games.sections.fishing'),
-      maximum: 100,
-    });
+    return invalid(
+      t('admin.games.validation.totalCuts', {
+        mode: t('admin.games.sections.fishing'),
+        maximum: 100,
+      }),
+    );
   for (const treasure of ['bottle', 'clover', 'shell'] as const) {
+    field = `fishing.treasure_multipliers.${treasure}`;
     if (!validInteger(draft.fishing.treasure_multipliers[treasure], 0, 1_000_000)) {
-      return t('admin.games.validation.integerRange', {
-        field: t(TREASURE_LABEL_KEYS[treasure]),
-        minimum: 0,
-        maximum: 1_000_000,
-      });
+      return invalid(
+        t('admin.games.validation.integerRange', {
+          field: t(TREASURE_LABEL_KEYS[treasure]),
+          minimum: 0,
+          maximum: 1_000_000,
+        }),
+      );
     }
   }
+  game = 'linklink';
   for (const spec of ['6x8', '8x8', '10x10'] as const) {
+    field = `linklink.${spec}.price`;
     if (
       draft.linklink.specs[spec].enabled &&
       (!draft.linklink.enabled || amountMilli(draft.linklink.specs[spec].price) === 0n)
     )
-      return t('admin.games.validation.specRequiresPrice', { spec });
+      return invalid(t('admin.games.validation.specRequiresPrice', { spec }));
     if (amountMilli(draft.linklink.specs[spec].price) === null)
-      return t('admin.games.validation.amountNonNegative', {
-        field: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
-      });
+      return invalid(
+        t('admin.games.validation.amountNonNegative', {
+          field: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
+        }),
+      );
   }
+  game = 'rps';
   for (const mode of RPS_MODES) {
+    field = `rps.${mode}.base`;
     const value = draft.rps.modes[mode];
     if (value.enabled && (!draft.rps.enabled || amountMilli(value.base) === 0n))
-      return t('admin.games.validation.modeRequiresStake', { mode: t(RPS_MODE_LABEL_KEYS[mode]) });
+      return invalid(
+        t('admin.games.validation.modeRequiresStake', { mode: t(RPS_MODE_LABEL_KEYS[mode]) }),
+      );
     if (amountMilli(value.base) === null)
-      return t('admin.games.validation.amountNonNegative', {
-        field: t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) }),
-      });
+      return invalid(
+        t('admin.games.validation.amountNonNegative', {
+          field: t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) }),
+        }),
+      );
     for (const pump of ['platform', 'welfare', 'thursday'] as const) {
+      field = `rps.${mode}.pumps_bp.${pump}`;
       if (!validInteger(value.pumps_bp[pump], 0, 9_999))
-        return t('admin.games.validation.feeRange', {
-          field: t('admin.games.rps.cut', {
-            mode: t(RPS_MODE_LABEL_KEYS[mode]),
-            pump: t(RPS_PUMP_LABEL_KEYS[pump]),
+        return invalid(
+          t('admin.games.validation.feeRange', {
+            field: t('admin.games.rps.cut', {
+              mode: t(RPS_MODE_LABEL_KEYS[mode]),
+              pump: t(RPS_PUMP_LABEL_KEYS[pump]),
+            }),
           }),
-        });
+        );
     }
+    field = `rps.${mode}.pumps_bp.platform`;
     if (value.pumps_bp.platform + value.pumps_bp.welfare + value.pumps_bp.thursday >= 10_000) {
-      return t('admin.games.validation.totalCuts', {
-        mode: t(RPS_MODE_LABEL_KEYS[mode]),
-        maximum: 100,
-      });
+      return invalid(
+        t('admin.games.validation.totalCuts', {
+          mode: t(RPS_MODE_LABEL_KEYS[mode]),
+          maximum: 100,
+        }),
+      );
     }
+    field = `rps.${mode}.queue_seconds`;
     if (!validInteger(value.queue_seconds, 30, 120))
-      return t('admin.games.validation.integerRange', {
-        field: t('admin.games.rps.deadline', {
-          mode: t(RPS_MODE_LABEL_KEYS[mode]),
-          deadline: t(RPS_DEADLINE_LABEL_KEYS.queue_seconds),
+      return invalid(
+        t('admin.games.validation.integerRange', {
+          field: t('admin.games.rps.deadline', {
+            mode: t(RPS_MODE_LABEL_KEYS[mode]),
+            deadline: t(RPS_DEADLINE_LABEL_KEYS.queue_seconds),
+          }),
+          minimum: 30,
+          maximum: 120,
         }),
-        minimum: 30,
-        maximum: 120,
-      });
+      );
+    field = `rps.${mode}.gesture_seconds`;
     if (!validInteger(value.gesture_seconds, 5, 20))
-      return t('admin.games.validation.integerRange', {
-        field: t('admin.games.rps.deadline', {
-          mode: t(RPS_MODE_LABEL_KEYS[mode]),
-          deadline: t(RPS_DEADLINE_LABEL_KEYS.gesture_seconds),
+      return invalid(
+        t('admin.games.validation.integerRange', {
+          field: t('admin.games.rps.deadline', {
+            mode: t(RPS_MODE_LABEL_KEYS[mode]),
+            deadline: t(RPS_DEADLINE_LABEL_KEYS.gesture_seconds),
+          }),
+          minimum: 5,
+          maximum: 20,
         }),
-        minimum: 5,
-        maximum: 20,
-      });
+      );
+    field = `rps.${mode}.dealer_seconds`;
     if (!validInteger(value.dealer_seconds, 5, 15))
-      return t('admin.games.validation.integerRange', {
-        field: t('admin.games.rps.deadline', {
-          mode: t(RPS_MODE_LABEL_KEYS[mode]),
-          deadline: t(RPS_DEADLINE_LABEL_KEYS.dealer_seconds),
+      return invalid(
+        t('admin.games.validation.integerRange', {
+          field: t('admin.games.rps.deadline', {
+            mode: t(RPS_MODE_LABEL_KEYS[mode]),
+            deadline: t(RPS_DEADLINE_LABEL_KEYS.dealer_seconds),
+          }),
+          minimum: 5,
+          maximum: 15,
         }),
-        minimum: 5,
-        maximum: 15,
-      });
+      );
+    field = `rps.${mode}.follower_seconds`;
     if (!validInteger(value.follower_seconds, 5, 15))
-      return t('admin.games.validation.integerRange', {
-        field: t('admin.games.rps.deadline', {
-          mode: t(RPS_MODE_LABEL_KEYS[mode]),
-          deadline: t(RPS_DEADLINE_LABEL_KEYS.follower_seconds),
+      return invalid(
+        t('admin.games.validation.integerRange', {
+          field: t('admin.games.rps.deadline', {
+            mode: t(RPS_MODE_LABEL_KEYS[mode]),
+            deadline: t(RPS_DEADLINE_LABEL_KEYS.follower_seconds),
+          }),
+          minimum: 5,
+          maximum: 15,
         }),
-        minimum: 5,
-        maximum: 15,
-      });
+      );
   }
   return null;
 }
 
-const numberInput = (value: number): string | number => (Number.isNaN(value) ? '' : value);
-const numberFromInput = (value: string): number => (value === '' ? Number.NaN : Number(value));
 function canonicalGamesDraft(draft: GamesConfig): GamesConfig {
   const result = structuredClone(draft);
   const canonical = (value: string) => {
@@ -259,474 +302,239 @@ function GamesEditor({
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
-  const duelText = useGameAdminText();
+  const text = useGameAdminText();
   const toast = useOptionalToast();
   const [draft, setDraft] = useState(authority);
-  const [validation, setValidation] = useState<string | null>(null);
+  const [active, setActive] = useState<ConfigGame | null>(null);
+  const opening = useRef<GamesConfig | null>(null);
   const save = useRetainedOperation<GamesConfig, GamesConfig>(
     (input, key) => patchGamesConfig(gamesConfigPatch(canonicalGamesDraft(input)), key),
     refresh,
   );
   const edit = (updater: (current: GamesConfig) => GamesConfig) => {
     save.reset();
-    setValidation(null);
     setDraft(updater);
   };
-  const setGameEnabled = (game: GameName, enabled: boolean) => {
-    edit((current) => ({ ...current, [game]: { ...current[game], enabled } }));
-  };
-  const setRPSMode = (mode: RPSMode, patch: Partial<RPSModeConfig>) => {
-    edit((current) => ({
-      ...current,
-      rps: {
-        ...current.rps,
-        modes: { ...current.rps.modes, [mode]: { ...current.rps.modes[mode], ...patch } },
-      },
-    }));
-  };
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const error =
-      validateGamesDraft(draft, t) ??
-      validateDuelConfigurations(draft, duelText) ??
-      validateBlackjackConfiguration(draft, duelText) ??
-      (fishingChanceValid(draft.fishing.blue_fish_chance_bps)
-        ? null
-        : duelText(
+  const label = (game: ConfigGame) =>
+    game === 'bidding' || game === 'likes' || game === 'blackjack'
+      ? gameLabel(game, text)
+      : t(GAME_LABEL_KEYS[game]);
+  const problem = (): GameProblem | null => {
+    const basic = validateGamesDraft(draft, t);
+    if (basic) return basic;
+    for (const game of ['bidding', 'likes'] as const) {
+      const message = validateDuelConfigurations(
+        { master_enabled: draft.master_enabled, [game]: draft[game] },
+        text,
+      );
+      if (message) return { game, message };
+    }
+    const blackjack = validateBlackjackConfiguration(draft, text);
+    if (blackjack) return { game: 'blackjack', message: blackjack };
+    return fishingChanceValid(draft.fishing.blue_fish_chance_bps)
+      ? null
+      : {
+          game: 'fishing',
+          field: 'fishing.blue_fish_chance_bps',
+          message: text(
             '蓝色大肥鱼概率必须为0%至100%，最多两位小数。',
             'Blue-fish probability must be between 0% and 100%, with at most two decimal places.',
-          ));
-    setValidation(error);
-    if (error === null && changed && !stale && !save.isPending) {
-      void save
-        .mutateAsync(draft)
-        .then((result) => {
-          setDraft(result);
-          toast?.push({ message: t('admin.games.saved'), tone: 'success' });
-        })
-        .catch(() => undefined);
-    }
+          ),
+        };
+  };
+  const formError = problem();
+  const changed = JSON.stringify(canonicalGamesDraft(draft)) !== JSON.stringify(authority);
+  const stale = draft.revision !== authority.revision;
+  const dirtyCount = (Object.keys(draft) as (keyof GamesConfig)[]).filter(
+    (key) => key !== 'revision' && JSON.stringify(draft[key]) !== JSON.stringify(authority[key]),
+  ).length;
+  const submit = () => {
+    if (formError || !changed || stale || save.isPending) return;
+    void save
+      .mutateAsync(draft)
+      .then((result) => {
+        setDraft(result);
+        setActive(null);
+        toast?.push({ message: t('admin.games.saved'), tone: 'success' });
+      })
+      .catch(() => undefined);
   };
   const restore = () => {
     save.reset();
-    setValidation(null);
     setDraft(authority);
   };
-  const formError =
-    validation ??
-    validateGamesDraft(draft, t) ??
-    validateDuelConfigurations(draft, duelText) ??
-    validateBlackjackConfiguration(draft, duelText) ??
-    (fishingChanceValid(draft.fishing.blue_fish_chance_bps)
-      ? null
-      : duelText(
-          '蓝色大肥鱼概率必须为0%至100%，最多两位小数。',
-          'Blue-fish probability must be between 0% and 100%, with at most two decimal places.',
-        ));
-  const changed = JSON.stringify(canonicalGamesDraft(draft)) !== JSON.stringify(authority);
-  const stale = draft.revision !== authority.revision;
-
+  const close = () => {
+    if (save.isPending) return;
+    if (active && opening.current) {
+      const original = opening.current[active];
+      edit((current) => ({ ...current, [active]: original }));
+    }
+    setActive(null);
+  };
+  const open = (game: ConfigGame) => {
+    opening.current = structuredClone(draft);
+    setActive(game);
+    if (formError?.game === game)
+      requestAnimationFrame(() => {
+        const drawer = document.querySelector('.nb-form-drawer');
+        const field =
+          (formError.field
+            ? drawer?.querySelector<HTMLElement>(`[name="${CSS.escape(formError.field)}"]`)
+            : null) ??
+          drawer?.querySelector<HTMLElement>(':invalid') ??
+          drawer?.querySelector<HTMLElement>('input:not([type="checkbox"])');
+        let disclosure = field?.closest('details');
+        while (disclosure) {
+          disclosure.open = true;
+          disclosure = disclosure.parentElement?.closest('details') ?? null;
+        }
+        field?.scrollIntoView({ block: 'center' });
+        field?.focus();
+      });
+  };
+  const enabledSummary = (values: { enabled: boolean }[]) =>
+    text(
+      `${values.length} 种模式 · ${values.filter((value) => value.enabled).length} 种开放`,
+      `${values.length} modes · ${values.filter((value) => value.enabled).length} enabled`,
+    );
+  const summary = (game: ConfigGame) => {
+    if (game === 'fishing')
+      return `${Object.values(draft.fishing.bait_prices).join(' / ')} ${text('积分', 'credits')} · ${text('抽成', 'fees')} ${Object.values(draft.fishing.rake_bp).reduce((a, b) => a + b, 0) / 100}%`;
+    if (game === 'linklink') return enabledSummary(Object.values(draft.linklink.specs));
+    if (game === 'rps') return enabledSummary(Object.values(draft.rps.modes));
+    if (game === 'blackjack')
+      return text('单桌 9 席 · 每 30 秒一局', '9 seats · a round every 30 seconds');
+    return enabledSummary(Object.values(draft[game]?.modes ?? {}));
+  };
   return (
-    <form className="ops-stack" noValidate onSubmit={submit}>
-      <Card>
-        <h2>{t('admin.games.controls.globalGate')}</h2>
-        <p>{t('admin.games.controls.revisionTerms')}</p>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
+    <form
+      className="nb-stack"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <Panel>
+        <PanelBody>
+          <Toggle
+            label={t('admin.games.masterEnabled')}
+            description={t('admin.games.controls.revisionTerms')}
             checked={draft.master_enabled}
             disabled={save.isPending}
-            onChange={(event) =>
-              edit((current) => ({ ...current, master_enabled: event.target.checked }))
-            }
+            onChange={(master_enabled) => edit((current) => ({ ...current, master_enabled }))}
           />
-          <span>{t('admin.games.masterEnabled')}</span>
-        </label>
-      </Card>
-      <Card>
-        <h2>{t('admin.games.sections.fishing')}</h2>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.fishing.enabled}
-            disabled={save.isPending}
-            onChange={(event) => setGameEnabled('fishing', event.target.checked)}
-          />
-          <span>{t('admin.games.fishingEnabled')}</span>
-        </label>
-        <GameConfigurationDetails enabled={draft.fishing.enabled}>
-          <div className="ops-field-grid">
-            {(['worm', 'lure', 'premium'] as const).map((bait) => (
-              <label key={bait}>
-                <span>
-                  {t('admin.games.controls.priceCredits', { field: t(BAIT_LABEL_KEYS[bait]) })}
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0.001"
-                  max="9000000000000"
-                  step="0.001"
-                  value={draft.fishing.bait_prices[bait]}
-                  disabled={save.isPending}
-                  onChange={(event) =>
-                    edit((current) => ({
-                      ...current,
-                      fishing: {
-                        ...current.fishing,
-                        bait_prices: { ...current.fishing.bait_prices, [bait]: event.target.value },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            ))}
-            {(['standard', 'premium'] as const).map((mode) => (
-              <label key={mode}>
-                <span>{t(FISHING_RTP_LABEL_KEYS[mode])}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={numberInput(draft.fishing.rtp_percent[mode])}
-                  disabled={save.isPending}
-                  onChange={(event) =>
-                    edit((current) => ({
-                      ...current,
-                      fishing: {
-                        ...current.fishing,
-                        rtp_percent: {
-                          ...current.fishing.rtp_percent,
-                          [mode]: numberFromInput(event.target.value),
-                        },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            ))}
-            <label>
-              <span>
-                {duelText(
-                  '传奇鱼变为蓝色大肥鱼的概率（%）',
-                  'Blue-fish probability after a legendary catch (%)',
-                )}
-              </span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                max="100"
-                step="0.01"
-                value={numberInput(draft.fishing.blue_fish_chance_bps / 100)}
-                disabled={save.isPending}
-                onChange={(event) =>
-                  edit((current) => ({
-                    ...current,
-                    fishing: {
-                      ...current.fishing,
-                      blue_fish_chance_bps: fishingChanceFromPercent(event.target.value),
-                    },
-                  }))
-                }
-              />
-              <small>
-                {duelText(
-                  '只影响新受理的批次；0%关闭，100%必定变为蓝色大肥鱼。原鱼种奖励与长度分布保持不变。',
-                  'Applies to newly accepted batches. 0% disables it; 100% always decorates a legendary catch. Original species rewards and length distribution remain unchanged.',
-                )}
-              </small>
-            </label>
-            {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
-              <label key={pump}>
-                <span>{t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99.99"
-                  step="0.01"
-                  value={numberInput(draft.fishing.rake_bp[pump] / 100)}
-                  disabled={save.isPending}
-                  onChange={(event) =>
-                    edit((current) => ({
-                      ...current,
-                      fishing: {
-                        ...current.fishing,
-                        rake_bp: {
-                          ...current.fishing.rake_bp,
-                          [pump]: percentBP(event.target.value),
-                        },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            ))}
-            {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
-              <label key={treasure}>
-                <span>{t(TREASURE_LABEL_KEYS[treasure])}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="1"
-                  value={numberInput(draft.fishing.treasure_multipliers[treasure])}
-                  disabled={save.isPending}
-                  onChange={(event) =>
-                    edit((current) => ({
-                      ...current,
-                      fishing: {
-                        ...current.fishing,
-                        treasure_multipliers: {
-                          ...current.fishing.treasure_multipliers,
-                          [treasure]: numberFromInput(event.target.value),
-                        },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
-        </GameConfigurationDetails>
-      </Card>
-      <Card>
-        <h2>{t('admin.games.sections.linklink')}</h2>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.linklink.enabled}
-            disabled={save.isPending}
-            onChange={(event) => setGameEnabled('linklink', event.target.checked)}
-          />
-          <span>{t('admin.games.linklink.enabled')}</span>
-        </label>
-        <GameConfigurationDetails enabled={draft.linklink.enabled}>
-          <div className="ops-field-grid">
-            {(['6x8', '8x8', '10x10'] as const).map((spec) => (
-              <div key={spec} className="ops-subcard">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={draft.linklink.specs[spec].enabled}
-                    disabled={save.isPending}
-                    onChange={(event) =>
-                      edit((current) => ({
-                        ...current,
-                        linklink: {
-                          ...current.linklink,
-                          specs: {
-                            ...current.linklink.specs,
-                            [spec]: {
-                              ...current.linklink.specs[spec],
-                              enabled: event.target.checked,
-                            },
-                          },
-                        },
-                      }))
-                    }
-                  />
-                  <span>
-                    {t('admin.games.linklink.specEnabled', {
-                      spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
-                    })}
-                  </span>
-                </label>
-                <label>
-                  <span>
-                    {t('admin.games.linklink.entryPrice', {
-                      spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
-                    })}
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    max="9000000000000"
-                    step="0.001"
-                    value={draft.linklink.specs[spec].price}
-                    disabled={save.isPending}
-                    onChange={(event) =>
-                      edit((current) => ({
-                        ...current,
-                        linklink: {
-                          ...current.linklink,
-                          specs: {
-                            ...current.linklink.specs,
-                            [spec]: { ...current.linklink.specs[spec], price: event.target.value },
-                          },
-                        },
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-            ))}
-          </div>
-        </GameConfigurationDetails>
-      </Card>
-      <Card>
-        <h2>{t('admin.games.sections.rps')}</h2>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.rps.enabled}
-            disabled={save.isPending}
-            onChange={(event) => setGameEnabled('rps', event.target.checked)}
-          />
-          <span>{t('admin.games.rps.enabled')}</span>
-        </label>
-        <GameConfigurationDetails enabled={draft.rps.enabled}>
-          <div className="ops-stack">
-            {RPS_MODES.map((mode) => {
-              const value = draft.rps.modes[mode];
-              return (
-                <section key={mode} className="ops-subcard">
-                  <h3>{t(RPS_MODE_LABEL_KEYS[mode])}</h3>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={value.enabled}
-                      disabled={save.isPending}
-                      onChange={(event) => setRPSMode(mode, { enabled: event.target.checked })}
-                    />
-                    <span>
-                      {t('admin.games.rps.modeEnabled', {
-                        mode: t(RPS_MODE_LABEL_KEYS[mode]),
-                      })}
-                    </span>
-                  </label>
-                  <div className="ops-field-grid">
-                    <label>
-                      <span>
-                        {t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}
+          <div className="admin-game-list">
+            {(['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const)
+              .filter((game) => draft[game])
+              .map((game) => (
+                <div className="admin-game-row" key={game}>
+                  <div>
+                    <h2>{label(game)}</h2>
+                    <p>{summary(game)}</p>
+                    {formError?.game === game ? (
+                      <span className="nb-badge nb-badge--bad">
+                        {text('请检查设置', 'Check settings')}
                       </span>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        max="9000000000000"
-                        step="0.001"
-                        value={value.base}
-                        disabled={save.isPending}
-                        onChange={(event) => setRPSMode(mode, { base: event.target.value })}
-                      />
-                    </label>
-                    {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
-                      <label key={pump}>
-                        <span>
-                          {t('admin.games.rps.cut', {
-                            mode: t(RPS_MODE_LABEL_KEYS[mode]),
-                            pump: t(RPS_PUMP_LABEL_KEYS[pump]),
-                          })}
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="99.99"
-                          step="0.01"
-                          value={numberInput(value.pumps_bp[pump] / 100)}
-                          disabled={save.isPending}
-                          onChange={(event) =>
-                            setRPSMode(mode, {
-                              pumps_bp: {
-                                ...value.pumps_bp,
-                                [pump]: percentBP(event.target.value),
-                              },
-                            })
-                          }
-                        />
-                      </label>
-                    ))}
-                    {(
-                      [
-                        'queue_seconds',
-                        'gesture_seconds',
-                        'dealer_seconds',
-                        'follower_seconds',
-                      ] as const
-                    ).map((field: RPSSeconds) => {
-                      const bounds =
-                        field === 'queue_seconds'
-                          ? [30, 120]
-                          : field === 'gesture_seconds'
-                            ? [5, 20]
-                            : [5, 15];
-                      return (
-                        <label key={field}>
-                          <span>
-                            {t('admin.games.rps.deadline', {
-                              mode: t(RPS_MODE_LABEL_KEYS[mode]),
-                              deadline: t(RPS_DEADLINE_LABEL_KEYS[field]),
-                            })}
-                          </span>
-                          <input
-                            type="number"
-                            min={bounds[0]}
-                            max={bounds[1]}
-                            step="1"
-                            value={numberInput(value[field])}
-                            disabled={save.isPending}
-                            onChange={(event) =>
-                              setRPSMode(mode, { [field]: numberFromInput(event.target.value) })
-                            }
-                          />
-                        </label>
-                      );
-                    })}
+                    ) : null}
                   </div>
-                </section>
-              );
-            })}
+                  <Toggle
+                    label={
+                      <span className="nb-sr">
+                        {text('启用', 'Enable ')}
+                        {label(game)}
+                      </span>
+                    }
+                    checked={draft[game]!.enabled}
+                    disabled={save.isPending}
+                    onChange={(enabled) =>
+                      edit((current) => ({ ...current, [game]: { ...current[game], enabled } }))
+                    }
+                  />
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    type="button"
+                    disabled={save.isPending}
+                    aria-label={`${label(game)} ${t('admin.games.controls.settings')}`}
+                    onClick={() => open(game)}
+                  >
+                    {t('admin.games.controls.settings')}
+                  </button>
+                </div>
+              ))}
           </div>
-        </GameConfigurationDetails>
-      </Card>
-      {(['bidding', 'likes'] as const).map(
-        (game) =>
-          draft[game] && (
-            <DuelConfiguration
-              key={game}
-              game={game}
-              value={draft[game]}
-              disabled={save.isPending}
-              onChange={(value) => edit((current) => ({ ...current, [game]: value }))}
-            />
-          ),
-      )}
-      <BlackjackConfiguration
-        value={draft.blackjack}
-        disabled={save.isPending}
-        onChange={(value) => edit((current) => ({ ...current, blackjack: value }))}
+        </PanelBody>
+      </Panel>
+      {formError ? <Note tone="bad">{formError.message}</Note> : null}
+      {stale ? <Note tone="bad">{t('admin.games.validation.changedElsewhere')}</Note> : null}
+      {save.error && !active ? <ErrorState error={save.error} /> : null}
+      <SaveBar
+        dirtyCount={changed ? Math.max(1, dirtyCount) : 0}
+        busy={save.isPending}
+        saveDisabled={!!formError || stale}
+        onSave={submit}
+        onDiscard={restore}
+        saveLabel={t('admin.games.save')}
+        discardLabel={t('admin.games.restoreAuthorityValues')}
+        dirtyLabel={(count) => text(`${count} 项未保存`, `${count} unsaved changes`)}
       />
-      {formError ? (
-        <p className="field-error" role="alert">
-          {formError}
-        </p>
-      ) : null}
-      {stale ? (
-        <p className="field-error" role="alert">
-          {t('admin.games.validation.changedElsewhere')}
-        </p>
-      ) : null}
-      {save.error ? <ErrorState error={save.error} /> : null}
-      <div className="ops-actions">
-        <button
-          className="btn btn-primary"
-          type="submit"
-          disabled={save.isPending || !changed || Boolean(formError) || stale}
-        >
-          {save.isPending ? t('common.working') : t('admin.games.save')}
-        </button>
-        <button
-          className="btn btn-secondary"
-          type="button"
-          disabled={save.isPending}
-          onClick={restore}
-        >
-          {t('admin.games.restoreAuthorityValues')}
-        </button>
-      </div>
+      <Drawer
+        open={active !== null}
+        title={active ? label(active) : ''}
+        closeLabel={t('common.close')}
+        onClose={close}
+        busy={save.isPending}
+        footer={
+          <>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={save.isPending}
+              onClick={close}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              disabled={save.isPending || !changed || !!formError || stale}
+              onClick={submit}
+            >
+              {text('保存', 'Save ')}
+              {active ? label(active) : ''}
+              {text('设置', ' settings')}
+            </button>
+          </>
+        }
+      >
+        {formError ? <Note tone="bad">{formError.message}</Note> : null}
+        {stale ? <Note tone="bad">{t('admin.games.validation.changedElsewhere')}</Note> : null}
+        {save.error ? <ErrorState error={save.error} /> : null}
+        {active === 'fishing' ? (
+          <FishingFields draft={draft} edit={edit} disabled={save.isPending} />
+        ) : null}
+        {active === 'linklink' ? (
+          <LinklinkFields draft={draft} edit={edit} disabled={save.isPending} />
+        ) : null}
+        {active === 'rps' ? (
+          <RPSFields draft={draft} edit={edit} disabled={save.isPending} />
+        ) : null}
+        {(active === 'bidding' || active === 'likes') && draft[active] ? (
+          <DuelConfiguration
+            game={active}
+            value={draft[active]}
+            disabled={save.isPending}
+            onChange={(value) => edit((current) => ({ ...current, [active]: value }))}
+          />
+        ) : null}
+        {active === 'blackjack' ? (
+          <BlackjackConfiguration
+            value={draft.blackjack}
+            disabled={save.isPending}
+            onChange={(value) => edit((current) => ({ ...current, blackjack: value }))}
+          />
+        ) : null}
+      </Drawer>
     </form>
   );
 }
@@ -750,106 +558,109 @@ export function GamesPage() {
     <div className="page ops-page">
       <PageHeader
         title={t('admin.games.title')}
-        description={t('admin.games.operationsDescription')}
-      />
-      <Card>
-        <h2>{t('admin.games.counts.title')}</h2>
-        {counts.isPending ? (
-          <LoadingState />
-        ) : counts.error ? (
-          <ErrorState error={counts.error} onRetry={() => void counts.refetch()} />
-        ) : counts.data.games.length === 0 && counts.data.queues.length === 0 ? (
-          <EmptyState
-            title={t('admin.games.counts.empty')}
-            body={t('admin.games.counts.emptyBody')}
-          />
-        ) : (
-          <div className="ops-grid">
-            <section>
-              <h3>{t('admin.games.counts.games')}</h3>
-              {counts.data.games.map((row, index) => {
-                const dimensions =
-                  [
-                    row.mode
-                      ? t('admin.games.counts.mode', {
-                          value:
-                            row.game === 'bidding' ||
-                            row.game === 'likes' ||
-                            row.game === 'blackjack'
-                              ? modeLabel(row.mode, duelText)
-                              : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
-                        })
-                      : null,
-                    row.spec
-                      ? t('admin.games.counts.spec', {
-                          value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec),
-                        })
-                      : null,
-                    row.phase
-                      ? t('admin.games.counts.phase', {
-                          value:
-                            row.game === 'bidding' ||
-                            row.game === 'likes' ||
-                            row.game === 'blackjack'
-                              ? ({
-                                  plan: duelText('选招', 'Choosing skills'),
-                                  settlement: duelText('结算展示', 'Settlement presentation'),
-                                  joker: duelText('王的决定', 'Joker choice'),
-                                  bid: duelText('竞标', 'Bidding'),
-                                  seating: duelText('落座', 'Seating'),
-                                  decision: duelText('决策', 'Decisions'),
-                                }[row.phase] ?? row.phase)
-                              : enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
-                        })
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || t('admin.games.counts.active');
-                return (
-                  <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
-                    <StatusBadge
-                      active
-                      label={
-                        row.game === 'bidding' || row.game === 'likes' || row.game === 'blackjack'
-                          ? gameLabel(row.game, duelText)
-                          : enumLabel(t, GAME_LABEL_KEYS, row.game)
-                      }
-                    />{' '}
-                    {dimensions} · {row.count}
-                  </p>
-                );
-              })}
-            </section>
-            <section>
-              <h3>{duelText('匹配队列', 'Matchmaking queues')}</h3>
-              {counts.data.queues.map((row) => (
-                <p key={`${row.game}:${row.mode}`}>
-                  {row.game === 'rps'
-                    ? `${t('admin.games.sections.rps')} · ${enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode)}`
-                    : `${gameLabel(row.game, duelText)} · ${modeLabel(row.mode, duelText)}`}
-                  : {row.count}
-                </p>
-              ))}
-            </section>
-          </div>
+        description={duelText(
+          '开关和规则保存后对新对局生效；进行中的对局按开始时的规则结束。',
+          'Saved settings apply to new matches; active matches finish with their starting rules.',
         )}
-      </Card>
-      {config.data?.bidding && config.data.likes && (
+        actions={
+          <>
+            {config.data?.bidding && config.data.likes ? (
+              <Link className="nb-btn nb-btn--secondary" to="/games/history">
+                {duelText('对战历史与导出', 'Match history and exports')}
+              </Link>
+            ) : null}
+            <Link className="nb-btn nb-btn--secondary" to="/games/blackjack/history">
+              {duelText('二十一点历史', 'Blackjack history')}
+            </Link>
+          </>
+        }
+      />
+      {counts.data &&
+      !counts.error &&
+      counts.data.games.length === 0 &&
+      counts.data.queues.length === 0 ? (
+        <Note>{t('admin.games.counts.empty')}</Note>
+      ) : (
         <Card>
-          <h2>{duelText('对战历史与导出', 'Match history and exports')}</h2>
-          <Link className="btn btn-secondary" to="/games/history">
-            {duelText(
-              '查看竞标对决与回合制对战小游戏（测试）历史',
-              'Browse Bidding Duel and Turn-based Battle Minigame (Test) history',
-            )}
-          </Link>
+          <h2>{t('admin.games.counts.title')}</h2>
+          {counts.isPending ? (
+            <LoadingState />
+          ) : counts.error ? (
+            <ErrorState error={counts.error} onRetry={() => void counts.refetch()} />
+          ) : counts.data.games.length === 0 && counts.data.queues.length === 0 ? (
+            <Note>{t('admin.games.counts.empty')}</Note>
+          ) : (
+            <div className="ops-grid">
+              <section>
+                <h3>{t('admin.games.counts.games')}</h3>
+                {counts.data.games.map((row, index) => {
+                  const dimensions =
+                    [
+                      row.mode
+                        ? t('admin.games.counts.mode', {
+                            value:
+                              row.game === 'bidding' ||
+                              row.game === 'likes' ||
+                              row.game === 'blackjack'
+                                ? modeLabel(row.mode, duelText)
+                                : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
+                          })
+                        : null,
+                      row.spec
+                        ? t('admin.games.counts.spec', {
+                            value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec),
+                          })
+                        : null,
+                      row.phase
+                        ? t('admin.games.counts.phase', {
+                            value:
+                              row.game === 'bidding' ||
+                              row.game === 'likes' ||
+                              row.game === 'blackjack'
+                                ? ({
+                                    plan: duelText('选招', 'Choosing skills'),
+                                    settlement: duelText('结算展示', 'Settlement presentation'),
+                                    joker: duelText('王的决定', 'Joker choice'),
+                                    bid: duelText('竞标', 'Bidding'),
+                                    seating: duelText('落座', 'Seating'),
+                                    decision: duelText('决策', 'Decisions'),
+                                  }[row.phase] ?? row.phase)
+                                : enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
+                          })
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || t('admin.games.counts.active');
+                  return (
+                    <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
+                      <StatusBadge
+                        active
+                        label={
+                          row.game === 'bidding' || row.game === 'likes' || row.game === 'blackjack'
+                            ? gameLabel(row.game, duelText)
+                            : enumLabel(t, GAME_LABEL_KEYS, row.game)
+                        }
+                      />{' '}
+                      {dimensions} · {row.count}
+                    </p>
+                  );
+                })}
+              </section>
+              <section>
+                <h3>{duelText('匹配队列', 'Matchmaking queues')}</h3>
+                {counts.data.queues.map((row) => (
+                  <p key={`${row.game}:${row.mode}`}>
+                    {row.game === 'rps'
+                      ? `${t('admin.games.sections.rps')} · ${enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode)}`
+                      : `${gameLabel(row.game, duelText)} · ${modeLabel(row.mode, duelText)}`}
+                    : {row.count}
+                  </p>
+                ))}
+              </section>
+            </div>
+          )}
         </Card>
       )}
-      <Card>
-        <Link className="btn btn-secondary" to="/games/blackjack/history">
-          {duelText('二十一点历史与导出', 'Blackjack history and exports')}
-        </Link>
-      </Card>
       {config.isPending ? (
         <LoadingState />
       ) : initialConfigFailure ? (

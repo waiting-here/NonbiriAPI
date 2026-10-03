@@ -1,7 +1,6 @@
-import { Card } from '@shared/components/States';
-import { gameLabel, modeLabel, modesFor, useGameAdminText, type GameID } from './copy';
+import { Affix, Field, Note, Toggle } from '@shared/components/ui';
+import { modeLabel, modesFor, useGameAdminText, type GameID } from './copy';
 import { percentBP, type DuelGameConfig } from './config';
-import { GameConfigurationDetails } from './ConfigurationDetails';
 
 export function DuelConfiguration({
   game,
@@ -14,85 +13,83 @@ export function DuelConfiguration({
   disabled: boolean;
   onChange: (value: DuelGameConfig) => void;
 }) {
-  const t = useGameAdminText();
+  const text = useGameAdminText();
   return (
-    <Card>
-      <h2>{gameLabel(game, t)}</h2>
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={value.enabled}
-          disabled={disabled}
-          onChange={(e) => onChange({ ...value, enabled: e.target.checked })}
-        />
-        {t('开启游戏', 'Enable game')}
-      </label>
-      <GameConfigurationDetails enabled={value.enabled}>
-        <p>
-          {t(
-            '已入队和正在进行的对局沿用进入时的票价与抽水。关闭后，队列按原币种退款，在局玩家可以完成对战。',
-            'Queued and active matches keep their entry terms. Closing refunds queued entries to their original wallets and lets active matches finish.',
-          )}
-        </p>
-        <div className="ops-stack">
-          {modesFor(game).map((mode) => {
-            const m = value.modes[mode],
-              update = (patch: Partial<typeof m>) =>
-                onChange({ ...value, modes: { ...value.modes, [mode]: { ...m, ...patch } } });
-            return (
-              <section className="ops-subcard" key={mode}>
-                <h3>{modeLabel(mode, t)}</h3>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={m.enabled}
-                    disabled={disabled}
-                    onChange={(e) => update({ enabled: e.target.checked })}
-                  />
-                  {t('开启场次', 'Enable mode')}
-                </label>
-                <div className="ops-field-grid">
-                  <label>
-                    <span>{t('每人票价（积分）', 'Entry per player (credits)')}</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      maxLength={20}
-                      value={m.ticket}
-                      disabled={disabled}
-                      onChange={(e) => update({ ticket: e.target.value })}
-                    />
-                  </label>
-                  {(['platform', 'welfare', 'thursday'] as const).map((field) => (
-                    <label key={field}>
-                      <span>
-                        {
-                          {
-                            platform: t('平台抽水（%）', 'Platform cut (%)'),
-                            welfare: t('低保池抽水（%）', 'Welfare pool cut (%)'),
-                            thursday: t('周四池抽水（%）', 'Thursday pool cut (%)'),
-                          }[field]
-                        }
-                      </span>
-                      <input
+    <>
+      <Note>
+        {text(
+          '已入队和进行中的对局沿用进入时的票价与费用。关闭后，排队费用按原币种退还。',
+          'Queued and active matches keep their entry terms. Closing refunds queued entries to their original wallets.',
+        )}
+      </Note>
+      {modesFor(game).map((mode) => {
+        const current = value.modes[mode];
+        const update = (patch: Partial<typeof current>) =>
+          onChange({ ...value, modes: { ...value.modes, [mode]: { ...current, ...patch } } });
+        return (
+          <fieldset className="nb-fieldset admin-game-mode" key={mode} disabled={disabled}>
+            <legend>{modeLabel(mode, text)}</legend>
+            <Toggle
+              label={text('开启场次', 'Enable mode')}
+              checked={current.enabled}
+              disabled={disabled}
+              onChange={(enabled) => update({ enabled })}
+            />
+            <Field label={text('每人票价', 'Entry per player')}>
+              {(props) => (
+                <Affix
+                  {...props}
+                  unit={text('积分', 'credits')}
+                  type="text"
+                  inputMode="decimal"
+                  maxLength={20}
+                  value={current.ticket}
+                  onChange={(event) => update({ ticket: event.target.value })}
+                />
+              )}
+            </Field>
+            <fieldset className="nb-fieldset">
+              <legend>{text('抽成去向', 'Fee destinations')}</legend>
+              <p className="nb-fieldset__hint">
+                {text('三项合计须小于 100%。', 'The total must be below 100%.')}
+              </p>
+              <div className="nb-grid nb-grid--3">
+                {(['platform', 'welfare', 'thursday'] as const).map((field) => (
+                  <Field
+                    key={field}
+                    label={
+                      {
+                        platform: text('平台', 'Platform'),
+                        welfare: text('低保池', 'Welfare pool'),
+                        thursday: text('周四池', 'Thursday pool'),
+                      }[field]
+                    }
+                  >
+                    {(props) => (
+                      <Affix
+                        {...props}
+                        unit="%"
                         type="number"
                         min="0"
                         max="99.99"
                         step="0.01"
-                        value={Number.isNaN(m.rake_bp[field]) ? '' : m.rake_bp[field] / 100}
-                        disabled={disabled}
-                        onChange={(e) =>
-                          update({ rake_bp: { ...m.rake_bp, [field]: percentBP(e.target.value) } })
+                        value={
+                          Number.isNaN(current.rake_bp[field]) ? '' : current.rake_bp[field] / 100
+                        }
+                        onChange={(event) =>
+                          update({
+                            rake_bp: { ...current.rake_bp, [field]: percentBP(event.target.value) },
+                          })
                         }
                       />
-                    </label>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      </GameConfigurationDetails>
-    </Card>
+                    )}
+                  </Field>
+                ))}
+              </div>
+            </fieldset>
+          </fieldset>
+        );
+      })}
+    </>
   );
 }

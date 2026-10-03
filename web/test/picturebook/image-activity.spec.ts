@@ -476,8 +476,10 @@ test('real administrator editor and narrow bilingual user pages preserve role an
   const admin = await context(browser, 0, 'en', true);
   try {
     const page = await admin.newPage();
-    await page.goto(fixture().admin_url + '/limited-activities');
+    await page.goto(fixture().admin_url + '/limited-activities?activity=picture-book');
+    await page.getByRole('tab', { name: 'Image generation service', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Image generation service' })).toBeVisible();
+    await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
     const model = await (
       await api(admin, adminBase + '/models/' + fixture().model_id, 'GET', undefined, true)
     ).json();
@@ -616,7 +618,8 @@ test('real linked size editors preserve drafts and quote all four modes without 
     expect(models).toHaveLength(5);
     const model = models.find((item) => item.id === fixture().model_id)!;
     const beforeIDs = models.map((item) => item.id).sort();
-    await page.goto(fixture().admin_url + '/limited-activities');
+    await page.goto(fixture().admin_url + '/limited-activities?activity=picture-book');
+    await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
     const editor = page
       .getByRole('heading', { name: 'Model availability and pricing' })
       .locator('..');
