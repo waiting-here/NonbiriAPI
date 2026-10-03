@@ -375,7 +375,7 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
   });
 
   await page.goto(`${ADMIN_ORIGIN}/mainstream-channels`);
-  await expect(page.getByRole('heading', { name: 'Mainstream channels' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mainstream channels', level: 1 })).toBeVisible();
   await page.getByRole('button', { name: /New channel/ }).click();
   await page.getByLabel('Channel name').fill('Fixture channel');
   await page
