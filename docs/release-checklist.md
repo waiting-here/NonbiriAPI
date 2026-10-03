@@ -10,15 +10,17 @@ This checklist does not itself assert a pass.
 
 - Synchronize version metadata, bilingual README/changelog, API, configuration,
   lifecycle, game, legal and deployment documentation.
-- Validate the supported rc.3 repair source at
-  `37e060ab0d0f29d632fe6b8036839b413388812a` when upgrading to rc.4.
+- Validate the supported rc.4 source at
+  `8a46c72d911a914eabcb7ef17c537e7ac12d6969` and the exact preceding deployed
+  source `77e7f41646d6c720b6ae4ddc6dbb4dd9e0b31604` when upgrading to rc.5.
+  Retain the registered historical-source tests.
   Generate populated samples with that exact old code. Include
   wide and negative balances, manual donation-credit adjustments, historical
   empty descriptions, bans, active/terminal games, reward holds, nine Blackjack
   seats and a waiter, saved catalogs, configuration and credentials.
 - Check exact fresh/upgrade manifest equality, injected-failure rollback,
   repeated startup, unknown/partial schema zero-write rejection and old-binary
-  rejection. Unreleased intermediate schemas are outside this guarantee.
+  rejection. Unregistered intermediate schemas are outside this guarantee.
 - Preserve old account/entry IDs, settled charges, saved rules, configured games,
   security roots and legal overrides. Preserve already configured loans, quick
   stakes, charity achievement and the game-statistics start. Keep new activities
@@ -133,8 +135,10 @@ unavailable scans. Never classify unavailable evidence as a pass.
   Save the successful run's original PR association record and checksum before
   normal protected merge.
 - Synchronize local master and verify its tree equals the tested candidate.
-  Dispatch CI on `master` and bind its successful result to the exact merge
-  commit. Tags, prereleases and deployment each require their own authorization;
+  Reuse full candidate evidence when the merge tree and relevant inputs match;
+  otherwise run the affected checks and obtain full evidence for the resulting
+  candidate. Verify the independently triggered CodeQL result on `master`.
+  Tags, prereleases and deployment each require their own authorization;
   merging a development PR does not publish or deploy a version.
 - When a release is authorized, create its annotated tag and source prerelease
   at the approved commit. Public precompiled attachments require a supported
