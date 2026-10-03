@@ -53,11 +53,19 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${ADMIN_ORIGIN}/users`);
-  const table = page.locator('.ops-users-table');
-  await expect(table.getByRole('columnheader', { name: 'User ID', exact: true })).toBeVisible();
-  const cells = table.locator('tbody tr td');
-  await expect(cells.nth(0)).toHaveText('7');
-  await expect(cells.nth(1)).toHaveText('fixture-user');
+  const table = page.locator('.nb-md__list .nb-table');
+  await expect(table.getByRole('columnheader', { name: 'Username', exact: true })).toBeVisible();
+  const identity = table.locator('tbody tr td').first();
+  await expect(identity).toContainText('fixture-user');
+  await expect(identity).toContainText('#7');
+  await expect(identity).toContainText('1234…6789');
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/users/7',
+    body: user,
+  });
+  await identity.getByRole('button', { name: 'fixture-user', exact: true }).click();
   await page.getByRole('button', { name: 'Copy Discord ID', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(user.discord_id);
   for (const width of [320, 390, 1440, 1935]) {
@@ -65,8 +73,13 @@ test('user management separates identifiers and copies Discord IDs exactly at de
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    await expect(table.getByText(user.discord_id, { exact: true })).toBeVisible();
-    const box = await table.getByText(user.discord_id, { exact: true }).boundingBox();
+    await expect(
+      page.locator('.nb-md__detail').getByText(user.discord_id, { exact: true }),
+    ).toBeVisible();
+    const box = await page
+      .locator('.nb-md__detail')
+      .getByText(user.discord_id, { exact: true })
+      .boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
   }

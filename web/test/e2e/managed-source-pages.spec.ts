@@ -476,7 +476,14 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
     overflowing: [...document.querySelectorAll<HTMLElement>('body *')]
       .filter(
         (element) =>
-          element.getClientRects().length && element.getBoundingClientRect().right > innerWidth + 1,
+          element.getClientRects().length &&
+          element.getBoundingClientRect().right > innerWidth + 1 &&
+          !(
+            element.matches('.ops-page > .nb-tabs > button[role="tab"]') &&
+            ['用户管理', '黑名单', '公告管理', '维护模式'].includes(
+              element.textContent?.trim() ?? '',
+            )
+          ),
       )
       .slice(-20)
       .map((element) => ({
@@ -487,6 +494,25 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
   }));
   expect(layout.scrollWidth, JSON.stringify(layout)).toBeLessThanOrEqual(layout.width);
   expect(layout.overflowing, JSON.stringify(layout)).toEqual([]);
+  if (layout.width === 390 && page.url().includes('/steward')) {
+    const tabs = page.locator('.ops-page > .nb-tabs').first();
+    const bounds = (await tabs.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(layout.width);
+    await expect(tabs).toHaveCSS('overflow-x', 'auto');
+    const initialScroll = await tabs.evaluate((element) => element.scrollLeft);
+    for (const name of ['用户管理', '黑名单', '公告管理', '维护模式']) {
+      const tab = tabs.getByRole('tab', { name, exact: true });
+      await tab.scrollIntoViewIfNeeded();
+      await tab.click({ trial: true });
+      const box = (await tab.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x - 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
+    }
+    await tabs.evaluate((element, scroll) => {
+      element.scrollLeft = scroll;
+    }, initialScroll);
+  }
   const boundedSelectors = [
     '.charity-source-browser__source-address',
     '.charity-source-browser__key-heading p',

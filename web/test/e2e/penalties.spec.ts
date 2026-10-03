@@ -199,16 +199,29 @@ for (const role of ['user', 'admin', 'steward'] as const) {
             };
       return route.fulfill({ json: detail });
     });
-    await page.goto(origin + (role === 'steward' ? '/steward' : '/logs'));
+    await page.goto(origin + (role === 'steward' ? '/steward?tab=logs' : '/logs'));
+    await page.getByTestId('log-filters').locator('summary').click();
     await page
       .getByRole('combobox', { name: 'Request stage', exact: true })
       .selectOption('pre_handler');
     await page.getByRole('button', { name: 'Apply filter', exact: true }).click();
     await expect.poll(() => filters.some((q) => q.includes('phase=pre_handler'))).toBe(true);
-    await expect(page.getByRole('link', { name: 'Export JSON' })).toHaveAttribute(
+    await page.locator('.log-export > summary').click();
+    await expect(page.getByRole('link', { name: 'Export JSON (programs)' })).toHaveAttribute(
       'href',
       path + '/export.json?phase=pre_handler',
     );
+    const exportLink = page.getByRole('link', { name: 'Export JSON (programs)' });
+    await exportLink.click({ trial: true });
+    const exportBounds = (await exportLink.boundingBox())!;
+    expect(exportBounds.x).toBeGreaterThanOrEqual(0);
+    expect(exportBounds.x + exportBounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    if (process.env.NONBIRI_VISUAL_DIR) {
+      mkdirSync(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
+      await page.screenshot({
+        path: join(process.env.NONBIRI_VISUAL_DIR, `log-export-${role}.png`),
+      });
+    }
     await page.getByRole('button', { name: 'Details', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('Rejected before a call', { exact: true })).toBeVisible();

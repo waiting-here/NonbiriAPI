@@ -68,7 +68,7 @@ for (const state of states)
         ? page.locator('.legal-toc--desktop')
         : page.locator('.legal-toc--mobile');
     if (state.width < 1024) await nav.locator('summary').click();
-    expect(await nav.locator('a').count()).toBe(await headings.count());
+    await expect(nav.locator('a')).toHaveCount(await headings.count());
     const link = nav.locator('a').nth(3);
     const href = await link.getAttribute('href');
     await link.click();
