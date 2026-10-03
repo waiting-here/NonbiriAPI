@@ -45,3 +45,20 @@ func TestInvalidCapabilitiesFailWithoutEchoingConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitCacheRequiresAnthropicAndExactTarget(t *testing.T) {
+	config, err := Parse(`{"models":[{"base_url":"https://gateway.example/native","model":"anthropic/verified","adapter":"anthropic_effort","max_output_tokens":128000,"cache":"anthropic_explicit"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Lookup("https://gateway.example/native/", "anthropic/verified").Cache != AnthropicExplicitCache {
+		t.Fatal("explicit mapping lost")
+	}
+	if config.Lookup("https://other.example/native", "anthropic/verified").Cache != "" || config.Lookup("https://gateway.example/native", "anthropic/other").Cache != "" {
+		t.Fatal("cache escaped exact target")
+	}
+	_, _, err = Validate(Entry{BaseURL: "https://gateway.example/native", Model: "openai/model", Policy: Policy{Adapter: OpenAIChat, Cache: AnthropicExplicitCache}})
+	if err == nil {
+		t.Fatal("OpenAI adapter accepted Anthropic explicit caching")
+	}
+}
