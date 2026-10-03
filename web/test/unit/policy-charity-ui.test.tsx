@@ -633,24 +633,54 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
-    await screen.findByRole('heading', { name: 'Endpoint details' });
-    const keyCard = (await screen.findByText('sk-a…tail')).closest('li');
+    await screen.findByRole('heading', { name: 'primary' });
+    const keyCard = (await screen.findByText('sk-a…tail')).closest('tr');
     if (!keyCard) throw new Error('EndpointKey card not found');
-    await rendered.user.click(within(keyCard).getByRole('button', { name: 'Require store=false' }));
+    await rendered.user.click(
+      within(keyCard).getByRole('button', { name: 'More actions · key note' }),
+    );
+    await rendered.user.click(
+      await screen.findByRole('menuitem', { name: 'Ask the provider not to store chats' }),
+    );
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
         force_store_false: true,
         expected_revision: '1',
       }),
     );
-    await screen.findByRole('button', { name: 'Stop requiring store=false' });
+    await rendered.user.click(
+      within(keyCard).getByRole('button', { name: 'More actions · key note' }),
+    );
+    await screen.findByRole('menuitem', { name: 'Stop asking the provider not to store chats' });
 
-    await rendered.user.click(within(keyCard).getByRole('button', { name: 'Edit' }));
-    await rendered.user.clear(screen.getByLabelText('Maximum concurrency'));
-    await rendered.user.type(screen.getByLabelText('Maximum concurrency'), '3');
-    await rendered.user.clear(screen.getByLabelText('Maximum RPM'));
-    await rendered.user.type(screen.getByLabelText('Maximum RPM'), '50');
-    await rendered.user.click(within(keyCard).getByRole('button', { name: 'Save' }));
+    await rendered.user.click(screen.getByRole('menuitem', { name: 'Edit note and limits' }));
+    await rendered.user.clear(
+      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+        'Maximum concurrency',
+      ),
+    );
+    await rendered.user.type(
+      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+        'Maximum concurrency',
+      ),
+      '3',
+    );
+    await rendered.user.clear(
+      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+        'Maximum RPM',
+      ),
+    );
+    await rendered.user.type(
+      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByLabelText(
+        'Maximum RPM',
+      ),
+      '50',
+    );
+    await rendered.user.click(
+      within(screen.getByRole('dialog', { name: 'Edit note and limits' })).getByRole('button', {
+        name: 'Save',
+      }),
+    );
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
         note: coreEndpointKey.note,
@@ -659,19 +689,34 @@ describe('experimental policy and charity controls', () => {
         expected_revision: '2',
       }),
     );
-    await waitFor(() => expect(within(keyCard).queryByLabelText('Maximum RPM')).toBeNull());
-    await within(keyCard).findByText('Maximum RPM: 50');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit note and limits' })).toBeNull(),
+    );
+    await within(keyCard).findByText(/RPM: 50/);
 
-    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
-    await rendered.user.type(screen.getByLabelText('Service key'), marker);
-    await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
-    await rendered.user.clear(screen.getByLabelText('Maximum concurrency'));
-    await rendered.user.type(screen.getByLabelText('Maximum concurrency'), '2');
-    await rendered.user.clear(screen.getByLabelText('Maximum RPM'));
-    await rendered.user.type(screen.getByLabelText('Maximum RPM'), '30');
+    await rendered.user.click(screen.getByRole('button', { name: '＋ Add key' }));
+    await rendered.user.type(screen.getByLabelText('Key'), marker);
+    await rendered.user.type(
+      within(screen.getByLabelText('Key').closest('form')!).getByLabelText('Key note'),
+      'created key',
+    );
+    await rendered.user.clear(
+      within(screen.getByLabelText('Key').closest('form')!).getByLabelText('Maximum concurrency'),
+    );
+    await rendered.user.type(
+      within(screen.getByLabelText('Key').closest('form')!).getByLabelText('Maximum concurrency'),
+      '2',
+    );
+    await rendered.user.clear(
+      within(screen.getByLabelText('Key').closest('form')!).getByLabelText('Maximum RPM'),
+    );
+    await rendered.user.type(
+      within(screen.getByLabelText('Key').closest('form')!).getByLabelText('Maximum RPM'),
+      '30',
+    );
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
-    await rendered.user.click(screen.getByLabelText('Do not save chat requests (store=false)'));
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
+    await rendered.user.click(screen.getByLabelText('Ask the provider not to store chats'));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/endpoints/1/keys')).toEqual({
         secret: marker,
@@ -710,10 +755,15 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/4',
     });
-    await screen.findByRole('heading', { name: 'Endpoint details' });
-    expect(screen.queryByRole('button', { name: 'Require store=false' })).toBeNull();
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
-    expect(screen.queryByLabelText('Do not save chat requests (store=false)')).toBeNull();
+    await screen.findByRole('heading', { name: 'primary' });
+    await rendered.user.click(
+      await screen.findByRole('button', { name: 'More actions · key note' }),
+    );
+    expect(
+      screen.queryByRole('menuitem', { name: 'Ask the provider not to store chats' }),
+    ).toBeNull();
+    await rendered.user.click(screen.getByRole('button', { name: '＋ Add key' }));
+    expect(screen.queryByLabelText('Ask the provider not to store chats')).toBeNull();
     expect(fetchMock).toHaveBeenCalled();
   });
 
@@ -749,13 +799,13 @@ describe('experimental policy and charity controls', () => {
       route: '/endpoints/1',
     });
 
-    await rendered.user.click(await screen.findByText('Manual catalog'));
+    await rendered.user.click(await screen.findByRole('button', { name: 'View models' }));
     const entryRow = (await screen.findByText('Vendor/Exact')).closest('li');
     if (!entryRow) throw new Error('Manual catalog row not found');
     await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
 
     expect(await within(entryRow).findByRole('alert')).toHaveTextContent(
-      /affected model connections could not be checked/i,
+      /affected sources could not be checked/i,
     );
     const deleteButton = within(entryRow).getByRole('button', {
       name: 'Delete entry',
@@ -766,9 +816,9 @@ describe('experimental policy and charity controls', () => {
     expect(deleteButton).toBeDisabled();
     expect(updateButton).toBeEnabled();
 
-    await rendered.user.clear(within(entryRow).getByLabelText('Exact service model ID'));
+    await rendered.user.clear(within(entryRow).getByLabelText('Provider model name'));
     await rendered.user.type(
-      within(entryRow).getByLabelText('Exact service model ID'),
+      within(entryRow).getByLabelText('Provider model name'),
       'Vendor/Changed',
     );
     expect(updateButton).toBeDisabled();
@@ -805,18 +855,24 @@ describe('experimental policy and charity controls', () => {
       if (method === 'PATCH' && path === '/api/models/3') {
         return jsonResponse({ error: { code: 'conflict', message: 'conflict' } }, 409);
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit model' }));
+    await rendered.user.click(screen.getByText('Advanced behavior'));
     await rendered.user.click(
-      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await expect(screen.findByText(/The data changed/)).resolves.toBeVisible();
+    await expect(screen.findByText(/This was changed elsewhere/)).resolves.toBeVisible();
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
     expect(
       fetchMock.mock.calls.filter(
@@ -862,19 +918,27 @@ describe('experimental policy and charity controls', () => {
           409,
         );
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit model' }));
+    await rendered.user.click(screen.getByText('Advanced behavior'));
     await rendered.user.click(
-      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' })).toBeChecked();
+    expect(
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
+    ).toBeChecked();
   });
 
   test('refetches key authority after a lost response and keeps the committed store policy', async () => {
@@ -916,10 +980,18 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
-    const action = await screen.findByRole('button', { name: 'Require store=false' });
+    await rendered.user.click(
+      await screen.findByRole('button', { name: 'More actions · key note' }),
+    );
+    const action = await screen.findByRole('menuitem', {
+      name: 'Ask the provider not to store chats',
+    });
     await rendered.user.click(action);
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    expect(await screen.findByRole('button', { name: 'Stop requiring store=false' })).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'More actions · key note' }));
+    expect(
+      await screen.findByRole('menuitem', { name: 'Stop asking the provider not to store chats' }),
+    ).toBeVisible();
     expect(
       fetchMock.mock.calls.filter(
         (call) =>
@@ -952,18 +1024,24 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (method === 'PATCH' && path === '/api/models/3') return jsonResponse({ committed: true });
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit model' }));
+    await rendered.user.click(screen.getByText('Advanced behavior'));
     await rendered.user.click(
-      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await expect(screen.findByText(/The response was lost/)).resolves.toBeVisible();
+    await expect(screen.findByText(/Could not confirm the result/)).resolves.toBeVisible();
     expect(modelReads).toBeGreaterThan(1);
     const check = screen.getByRole('button', { name: 'Check result' });
     expect(check).toBeVisible();
@@ -1040,14 +1118,17 @@ describe('experimental policy and charity controls', () => {
       route: '/endpoints/1',
     });
     await screen.findByText('sk-a…tail');
-    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
-    await rendered.user.type(screen.getByLabelText('Service key'), marker);
-    await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
+    await rendered.user.click(screen.getByRole('button', { name: '＋ Add key' }));
+    await rendered.user.type(screen.getByLabelText('Key'), marker);
+    await rendered.user.type(
+      within(screen.getByLabelText('Key').closest('form')!).getByLabelText('Key note'),
+      'created key',
+    );
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
+    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
     await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    expect(screen.queryByLabelText('Service key')).toBeNull();
+    expect(screen.queryByLabelText('Key')).toBeNull();
     const original = fetchMock.mock.calls.find(
       (call) => requestPath(call[0]) === '/api/endpoints/1/keys' && call[1]?.method === 'POST',
     )!;
@@ -1095,14 +1176,19 @@ describe('experimental policy and charity controls', () => {
           503,
         );
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Create platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Create model' }));
     const createForm = within(screen.getByLabelText('Model name').closest('form')!);
-    const providerInput = createForm.getByLabelText('Service provider') as HTMLInputElement;
+    const providerInput = createForm.getByLabelText('Prefix') as HTMLInputElement;
     const nameInput = createForm.getByLabelText('Model name') as HTMLInputElement;
     expect(providerInput.maxLength).toBeGreaterThanOrEqual(provider.length);
     expect(nameInput.maxLength).toBeGreaterThanOrEqual(name.length);
@@ -1164,10 +1250,10 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints/4/keys?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([anthropicKey]));
       if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?')) {
-        const params = new URL(path, window.location.origin).searchParams;
-        return jsonResponse(
-          coreNumberedPage(params.get('source') === 'automatic' ? [candidate] : []),
-        );
+        return jsonResponse({
+          ...coreNumberedPage([candidate]),
+          pagination: { page: '1', page_size: 10, total_items: '1', total_pages: '1' },
+        });
       }
       if (method === 'POST' && path === '/api/models/3/bindings/batch') {
         return jsonResponse(
@@ -1179,14 +1265,10 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(
-      await screen.findByRole('button', { name: /upstream\.test.*Anthropic-compatible/ }),
-    );
-    await rendered.user.click(await screen.findByRole('button', { name: /sk-a…tail/ }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
     await rendered.user.click(await screen.findByRole('button', { name: /claude-3/ }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected connection(s)' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch')).toEqual({
         expected_binding_revision: '0',
@@ -1194,7 +1276,7 @@ describe('experimental policy and charity controls', () => {
       }),
     );
     await waitFor(() => expect(bindingReads).toBeGreaterThan(1));
-    expect(screen.getByRole('button', { name: 'Add 1 selected connection(s)' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Add 1 selected sources' })).toBeEnabled();
     expect(
       fetchMock.mock.calls.filter(
         (call) =>
@@ -1236,13 +1318,21 @@ describe('experimental policy and charity controls', () => {
         };
         return jsonResponse(currentModel);
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click((await screen.findAllByRole('button', { name: 'Move down' }))[0]);
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(
+      await screen.findByRole('button', { name: 'Source actions for gpt-a' }),
+    );
+    await rendered.user.click(await screen.findByRole('menuitem', { name: 'Move down' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save complete order' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({
@@ -1250,9 +1340,10 @@ describe('experimental policy and charity controls', () => {
         order: ['11', '10'],
       }),
     );
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit platform model' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Edit model' }));
+    await rendered.user.click(screen.getByText('Advanced behavior'));
     await rendered.user.click(
-      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+      screen.getByRole('switch', { name: 'Turn tool calls into plain text (chat only)' }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
@@ -1316,13 +1407,16 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    const remove = await screen.findByRole('button', { name: 'Remove connection' });
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(
+      await screen.findByRole('button', { name: 'Source actions for gpt-a' }),
+    );
+    const remove = await screen.findByRole('menuitem', { name: 'Remove source' });
     expect(remove).toBeEnabled();
     await rendered.user.click(remove);
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Remove connection' }));
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Remove source' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'DELETE', '/api/models/3/bindings/10')).toEqual({
         expected_binding_revision: '2',
@@ -1492,9 +1586,11 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
     });
     await screen.findByText('[公益]provider/charity-model');
-    await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Choose keys…' }));
     await rendered.user.click(await screen.findByRole('button', { name: /^primary/ }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Done' }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
       screen.getByRole('checkbox', {
@@ -1503,9 +1599,10 @@ describe('experimental policy and charity controls', () => {
     );
     expect(screen.queryByPlaceholderText(/new key/i)).toBeNull();
     expect(screen.queryByPlaceholderText(/base url/i)).toBeNull();
-    await rendered.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Accept a public Discord thank-you' }),
-      'no',
+    await rendered.user.click(
+      within(
+        screen.getByRole('radiogroup', { name: 'Accept a public Discord thank-you' }),
+      ).getByRole('radio', { name: 'No' }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Submit for review' }));
 
@@ -1558,7 +1655,7 @@ describe('experimental policy and charity controls', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const rendered = await renderWithProviders(<CharityPage />, { station: 'user', role: 'user' });
-    await rendered.user.click(await screen.findByRole('tab', { name: 'Donate resources' }));
+    await rendered.user.click(await screen.findByRole('tab', { name: 'Donate my keys' }));
     const alerts = await screen.findAllByRole('alert');
     expect(alerts.some((alert) => /invalid response/i.test(alert.textContent ?? ''))).toBe(true);
     expect(alerts[0]).toBeVisible();
@@ -1587,7 +1684,10 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
-    await expect(screen.findByRole('alert')).resolves.toBeVisible();
+    const errors = await screen.findAllByRole('alert');
+    expect(
+      errors.some((alert) => /Could not load this section/.test(alert.textContent ?? '')),
+    ).toBe(true);
   });
 
   test('fails closed when a binding order exceeds the frozen range', async () => {
@@ -1599,6 +1699,14 @@ describe('experimental policy and charity controls', () => {
         body: coreNumberedPage([coreModel]),
       },
       { method: 'GET', path: '/api/models/3', body: coreModel },
+      {
+        method: 'GET',
+        path: '/api/models/3/binding-candidates?page=1&page_size=10',
+        body: {
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        },
+      },
       {
         method: 'GET',
         path: '/api/models/3/bindings',
@@ -1614,9 +1722,13 @@ describe('experimental policy and charity controls', () => {
       },
     ]);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await expect(screen.findByRole('alert')).resolves.toBeVisible();
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    const errors = await screen.findAllByRole('alert');
+    expect(rendered.queryClient.getQueryData(coreKeys.bindings('1', '3'))).toBeUndefined();
+    expect(
+      errors.some((alert) => /Could not load this section/.test(alert.textContent ?? '')),
+    ).toBe(true);
   });
 
   test('rejects a non-empty invalid reviewer expiry and sends no PATCH', async () => {
@@ -1853,13 +1965,10 @@ describe('experimental policy and charity controls', () => {
       const flattenLabel =
         frame === 'admin'
           ? 'Experimental: flatten tool calls (chat only)'
-          : '[Experimental] Flatten tool calls (chat only)';
+          : '[Experimental] Turn tool calls into plain text (chat only)';
       await rendered.user.click(
         await screen.findByRole('tab', {
-          name:
-            frame === 'admin'
-              ? 'Charity models and bindings'
-              : 'Charity models and service connections',
+          name: frame === 'admin' ? 'Charity models and bindings' : 'Charity models and sources',
         }),
       );
       await screen.findByText('[公益]provider/charity-model');
@@ -1967,7 +2076,7 @@ describe('experimental policy and charity controls', () => {
       role: 'level5',
     });
     await rendered.user.click(
-      await screen.findByRole('tab', { name: 'Charity models and service connections' }),
+      await screen.findByRole('tab', { name: 'Charity models and sources' }),
     );
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
@@ -1978,7 +2087,7 @@ describe('experimental policy and charity controls', () => {
     if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
       within(editForm).getByRole('checkbox', {
-        name: '[Experimental] Flatten tool calls (chat only)',
+        name: '[Experimental] Turn tool calls into plain text (chat only)',
       }),
     );
     await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
@@ -1986,7 +2095,9 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
       expect(
-        screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls (chat only)' }),
+        screen.queryByRole('checkbox', {
+          name: '[Experimental] Turn tool calls into plain text (chat only)',
+        }),
       ).toBeNull();
       expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
     });
@@ -2270,9 +2381,7 @@ describe('experimental policy and charity controls', () => {
       role: 'level5',
     });
     await rendered.user.click(await screen.findByRole('tab', { name: 'Charity management' }));
-    await rendered.user.click(
-      screen.getByRole('tab', { name: 'Charity models and service connections' }),
-    );
+    await rendered.user.click(screen.getByRole('tab', { name: 'Charity models and sources' }));
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
     const description = screen
@@ -2285,9 +2394,10 @@ describe('experimental policy and charity controls', () => {
     });
     expect(description).toBeInTheDocument();
     expect(description).toHaveValue('Unsubmitted description');
-    expect(
-      screen.getByRole('tab', { name: 'Charity models and service connections' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Charity models and sources' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
 
     accountID = '2';
     await act(async () => {
@@ -2383,9 +2493,7 @@ describe('experimental policy and charity controls', () => {
     });
     await screen.findByText('No logs');
     await rendered.user.click(screen.getByRole('tab', { name: 'Charity management' }));
-    await rendered.user.click(
-      screen.getByRole('tab', { name: 'Charity models and service connections' }),
-    );
+    await rendered.user.click(screen.getByRole('tab', { name: 'Charity models and sources' }));
     await screen.findByText('[公益]provider/charity-model');
     const modelPageKey = [...charityKeys.root('steward'), 'model-pages'];
     expect(
@@ -2397,7 +2505,9 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText(/does not have confirmed steward access/i);
     expect(rendered.queryClient.getQueriesData({ queryKey: modelPageKey })).toEqual([]);
     expect(
-      screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls (chat only)' }),
+      screen.queryByRole('checkbox', {
+        name: '[Experimental] Turn tool calls into plain text (chat only)',
+      }),
     ).toBeNull();
     expect(
       fetchMock.mock.calls.some((call) => {
@@ -3031,7 +3141,8 @@ describe('experimental policy and charity controls', () => {
     rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
     expect(rendered.queryClient.getQueryState(coreKeys.endpoints('1'))?.isInvalidated).toBe(false);
     await screen.findByText('sk-a…tail');
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete key' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'More actions · key note' }));
+    await rendered.user.click(await screen.findByRole('menuitem', { name: 'Delete key…' }));
     const dialog = screen.getByRole('alertdialog');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete key' }));
     await waitFor(() => expect(screen.queryByText('sk-a…tail')).toBeNull());
@@ -3084,13 +3195,13 @@ describe('experimental policy and charity controls', () => {
     rendered.queryClient.setQueryDefaults(coreKeys.endpointsRoot('1'), { staleTime: Infinity });
     rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
 
-    await screen.findByRole('heading', { name: 'Endpoint details' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
+    await screen.findByRole('heading', { name: 'primary' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
     await rendered.user.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete endpoint' }),
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete service' }),
     );
 
-    expect(await screen.findByText('No endpoints yet')).toBeVisible();
+    expect(await screen.findByText('No services added yet')).toBeVisible();
     expect(listReads).toBe(1);
     expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1')).toEqual({
       expected_revision: '1',
@@ -3138,17 +3249,22 @@ describe('experimental policy and charity controls', () => {
     rendered.queryClient.setQueryDefaults(coreKeys.endpointsRoot('1'), { staleTime: Infinity });
     rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
 
-    await screen.findByRole('heading', { name: 'Endpoint details' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
+    await screen.findByRole('heading', { name: 'primary' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
     await rendered.user.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete endpoint' }),
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete service' }),
     );
 
-    expect(await screen.findByText(/The response was lost/)).toBeVisible();
+    expect(await screen.findByText(/Could not confirm the result/)).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Check latest status' }));
+    await rendered.user.click(
+      within(screen.getByText(/Could not confirm the result/).closest('[role="alert"]')!).getByRole(
+        'button',
+        { name: 'Check again' },
+      ),
+    );
 
-    expect(await screen.findByText('No endpoints yet')).toBeVisible();
+    expect(await screen.findByText('No services added yet')).toBeVisible();
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBeGreaterThanOrEqual(3);
   });
@@ -3176,18 +3292,21 @@ describe('experimental policy and charity controls', () => {
         deleted = true;
         return new Response(null, { status: 204 });
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete model' }));
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(
-      within(dialog).getByRole('button', { name: 'Delete platform model' }),
-    );
-    await screen.findByText('No platform models');
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete model' }));
+    await screen.findByText('No models');
     expect(lastBody(fetchMock, 'DELETE', '/api/models/3')).toEqual({ expected_revision: '1' });
   });
 
@@ -3219,21 +3338,26 @@ describe('experimental policy and charity controls', () => {
         deleteCalls += 1;
         throw new TypeError('connection reset after commit');
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     rendered.queryClient.setQueryDefaults(coreKeys.modelsRoot('1'), { staleTime: Infinity });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete model' }));
     await rendered.user.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Delete platform model',
+        name: 'Delete model',
       }),
     );
 
-    expect(await screen.findByText('No platform models')).toBeVisible();
+    expect(await screen.findByText('No models')).toBeVisible();
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBe(2);
   });
@@ -3271,25 +3395,35 @@ describe('experimental policy and charity controls', () => {
         deleteCalls += 1;
         throw new TypeError('connection reset before authority was readable');
       }
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?'))
+        return jsonResponse({
+          ...coreNumberedPage([]),
+          pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     rendered.queryClient.setQueryDefaults(coreKeys.modelsRoot('1'), { staleTime: Infinity });
-    await screen.findByRole('heading', { name: 'Platform models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
+    await screen.findByRole('heading', { name: 'My models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete model' }));
     await rendered.user.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Delete platform model',
+        name: 'Delete model',
       }),
     );
 
-    expect(await screen.findByText(/The response was lost/)).toBeVisible();
+    expect(await screen.findByText(/Could not confirm the result/)).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Check latest status' }));
+    await rendered.user.click(
+      within(screen.getByText(/Could not confirm the result/).closest('[role="alert"]')!).getByRole(
+        'button',
+        { name: 'Check again' },
+      ),
+    );
 
-    expect(await screen.findByText('No platform models')).toBeVisible();
+    expect(await screen.findByText('No models')).toBeVisible();
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBe(3);
   });
