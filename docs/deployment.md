@@ -174,6 +174,14 @@ Allow sufficient process memory beyond the activity's default 512 MiB budget, da
 
 Raw error retention defaults to 30 days, 1 MiB per event and a 1 GiB raw-payload budget. Database, indexes, WAL, summaries and backups need additional disk capacity; the payload cap is not a disk-size cap. Held bodies count toward it. Full capacity omits new originals, leaving safe summaries and API service available. Restrict diagnostic pages and snapshots: original errors can contain prompts or credentials echoed by an upstream, despite the absence of active request-body logging. Review instance legal overrides for these source/error policies before opening the new behavior; they are preserved, not automatically rewritten by upgrade.
 
+## Proxy maintenance page
+
+Install [maintenance.html](../deploy/maintenance.html) as /usr/share/nonbiriapi/maintenance.html, readable by Nginx. Include [the map example](../deploy/nginx-maintenance-map.conf.example) once in the http block and [the server example](../deploy/nginx-maintenance-server.conf.example) in each existing user/admin server block. Keep the existing TLS, proxy headers, SSE, trusted-proxy and rate-limit settings. Ensure each application proxy location inherits proxy_intercept_errors off and the fallback error_page directive; a location with its own error_page needs the same fallback rule.
+
+The shared page works without the application and offers Chinese/English text, light/dark colors and a keyboard-accessible refresh button. Nginx-generated 502/503/504 responses become 503 with Retry-After: 30 and Cache-Control: no-store. /admin/api, /api, /v1 and their subpaths, plus /healthz and /readyz, receive JSON. Application responses, including application 4xx/5xx, pass through unchanged because [proxy_intercept_errors](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_intercept_errors) is off.
+
+This fallback also covers proxy timeouts or invalid upstream responses before response headers reach the client. It cannot replace an interrupted response after headers were sent, or handle failures before the request reaches Nginx. Test the actual layout with nginx -t before reload, then check both hosts with an unavailable upstream, an application-generated error and recovery.
+
 <a id="beta1-database-compatibility-and-version-changes"></a>
 
 ## Database compatibility and version changes

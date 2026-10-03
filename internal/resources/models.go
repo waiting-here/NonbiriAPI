@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/modelname"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 const (
@@ -28,6 +29,7 @@ const (
 )
 
 type modelRow struct {
+	transportRule                                                     transportpolicy.Rule
 	rolePolicy                                                        string
 	id, revision, bindingRevision, bindingCount, createdAt, updatedAt int64
 	provider, model, fullName, routeStrategy                          string
@@ -36,7 +38,7 @@ type modelRow struct {
 
 func (row modelRow) dto() (Model, error) {
 	policy, policyErr := rolepolicy.Decode(row.rolePolicy)
-	if policyErr != nil {
+	if policyErr != nil || !row.transportRule.Valid() {
 		return Model{}, ErrUnavailable
 	}
 	id, err := decimalID(row.id)
@@ -46,7 +48,7 @@ func (row modelRow) dto() (Model, error) {
 		return Model{}, ErrUnavailable
 	}
 	return Model{
-		RolePolicy: policy, ID: id, Provider: row.provider, Model: row.model, FullName: row.fullName,
+		TransportRule: row.transportRule, RolePolicy: policy, ID: id, Provider: row.provider, Model: row.model, FullName: row.fullName,
 		RouteStrategy: row.routeStrategy, SilentRetry: row.silentRetry == 1,
 		FlattenToolCalls: row.flattenToolCalls == 1, Revision: strconv.FormatInt(row.revision, 10),
 		BindingRevision: strconv.FormatInt(row.bindingRevision, 10), BindingCount: strconv.FormatInt(row.bindingCount, 10),
@@ -58,7 +60,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (Model, error) {
 	var row modelRow
 	if err := scanner.Scan(&row.id, &row.provider, &row.model, &row.fullName, &row.routeStrategy,
 		&row.silentRetry, &row.flattenToolCalls, &row.revision, &row.bindingRevision, &row.bindingCount,
-		&row.createdAt, &row.updatedAt, &row.rolePolicy); err != nil {
+		&row.createdAt, &row.updatedAt, &row.rolePolicy, &row.transportRule); err != nil {
 		return Model{}, err
 	}
 	return row.dto()
@@ -67,7 +69,7 @@ func scanModel(scanner interface{ Scan(...any) error }) (Model, error) {
 const modelSelect = `
 SELECT m.id,m.provider,m.model,m.full_name,m.route_strategy,m.silent_retry,m.flatten_tool_calls,
        m.revision,m.binding_revision,(SELECT count(*) FROM model_bindings b WHERE b.model_id=m.id),
-       m.created_at,m.updated_at,m.role_policy
+       m.created_at,m.updated_at,m.role_policy,m.transport_rule
 FROM models m`
 
 func (r *Repository) ListModels(ctx context.Context, userID int64, limit int, cursor string) (Page[Model], error) {
@@ -170,11 +172,14 @@ func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation Con
 	if policyErr != nil {
 		return MutationResult[Model]{}, ErrInvalidRequest
 	}
+	if input.TransportRule == "" {
+		input.TransportRule = transportpolicy.Passthrough
+	}
 	if input.RouteStrategy == "" {
 		input.RouteStrategy = "ordered"
 	}
 	if r == nil || userID <= 0 || mutation.Route != routeModels || mutation.Method != http.MethodPost || !mutationPathIDs(mutation) || mutation.Query != "" ||
-		!validModelIdentity(input.Provider, input.Model) || !validRouteStrategy(input.RouteStrategy) {
+		!input.TransportRule.Valid() || !validModelIdentity(input.Provider, input.Model) || !validRouteStrategy(input.RouteStrategy) {
 		return MutationResult[Model]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -206,10 +211,10 @@ func (r *Repository) CreateModel(ctx context.Context, userID int64, mutation Con
 		return MutationResult[Model]{}, ErrResourceLimit
 	}
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,role_policy,revision,binding_revision,created_at,updated_at)
-SELECT ?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`,
+INSERT INTO models(user_id,provider,model,full_name,route_strategy,silent_retry,flatten_tool_calls,role_policy,transport_rule,revision,binding_revision,created_at,updated_at)
+SELECT ?,?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0)`,
 		userID, input.Provider, input.Model, input.Provider+"/"+input.Model, input.RouteStrategy,
-		boolInt(input.SilentRetry), boolInt(input.FlattenToolCalls), encodedPolicy, now, now, userID)
+		boolInt(input.SilentRetry), boolInt(input.FlattenToolCalls), encodedPolicy, input.TransportRule, now, now, userID)
 	if err != nil {
 		return MutationResult[Model]{}, conflictOrError("create model", err)
 	}
@@ -254,9 +259,10 @@ SELECT ?,?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND i
 
 func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, mutation ControlMutation, input PatchModelInput) (MutationResult[Model], error) {
 	if r == nil || userID <= 0 || modelID <= 0 || mutation.Route != routeModel || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, modelID) || mutation.Query != "" || input.ExpectedRevision < 1 ||
-		(input.Provider == nil && input.Model == nil && input.RouteStrategy == nil && input.SilentRetry == nil && input.FlattenToolCalls == nil && input.RolePolicy == nil) ||
+		(input.Provider == nil && input.Model == nil && input.RouteStrategy == nil && input.SilentRetry == nil && input.FlattenToolCalls == nil && input.RolePolicy == nil && input.TransportRule == nil) ||
 		(input.Provider != nil && !validPersonalModelProvider(*input.Provider)) ||
 		(input.Model != nil && !validateExactText(*input.Model, 1, maxModelNameRunes)) ||
+		(input.TransportRule != nil && !input.TransportRule.Valid()) ||
 		(input.RouteStrategy != nil && !validRouteStrategy(*input.RouteStrategy)) {
 		return MutationResult[Model]{}, ErrInvalidRequest
 	}
@@ -295,6 +301,10 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 	}
 	provider, modelName, strategy := current.Provider, current.Model, current.RouteStrategy
 	silentRetry, flatten := current.SilentRetry, current.FlattenToolCalls
+	transportRule := current.TransportRule
+	if input.TransportRule != nil {
+		transportRule = *input.TransportRule
+	}
 	if input.Provider != nil {
 		provider = *input.Provider
 	}
@@ -311,9 +321,9 @@ func (r *Repository) PatchModel(ctx context.Context, userID, modelID int64, muta
 		flatten = *input.FlattenToolCalls
 	}
 	result, err := tx.ExecContext(ctx, `
-UPDATE models SET provider=?,model=?,full_name=?,route_strategy=?,silent_retry=?,flatten_tool_calls=?,role_policy=?,revision=revision+1,updated_at=?
+UPDATE models SET provider=?,model=?,full_name=?,route_strategy=?,silent_retry=?,flatten_tool_calls=?,role_policy=?,transport_rule=?,revision=revision+1,updated_at=?
 WHERE id=? AND user_id=? AND revision=?`, provider, modelName, provider+"/"+modelName, strategy,
-		boolInt(silentRetry), boolInt(flatten), encodedPolicy, now, modelID, userID, input.ExpectedRevision)
+		boolInt(silentRetry), boolInt(flatten), encodedPolicy, transportRule, now, modelID, userID, input.ExpectedRevision)
 	if err != nil {
 		return MutationResult[Model]{}, conflictOrError("patch model", err)
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 const (
@@ -46,6 +47,7 @@ type CallerKeyResolver interface {
 
 // PersonalPreflight contains candidate-free owner-scoped logical facts.
 type PersonalPreflight struct {
+	TransportRule    transportpolicy.Rule
 	RolePolicy       rolepolicy.Policy
 	ModelID          int64
 	OwnerUserID      int64
@@ -61,6 +63,7 @@ type PersonalPreflight struct {
 
 // CharityPreflight contains candidate-free charity policy and price facts.
 type CharityPreflight struct {
+	TransportRule    transportpolicy.Rule
 	RolePolicy       rolepolicy.Policy
 	Revision         int64
 	ModelID          int64
@@ -74,6 +77,7 @@ type CharityPreflight struct {
 // CharityRequestPolicy contains no physical candidates or credentials.
 // Exclusions are frozen before optional request fields are interpreted.
 type CharityRequestPolicy struct {
+	TransportRule         transportpolicy.Rule
 	RolePolicy            rolepolicy.Policy
 	Revision              int64
 	ModelID               int64

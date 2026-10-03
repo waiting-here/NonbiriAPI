@@ -62,6 +62,7 @@ func (s *Service) decodeIngress(ctx context.Context, user int64, body []byte, op
 		role := policy.RolePolicy.Clone()
 		request.roleSnapshot = &role
 		request.policyRevision = policy.Revision
+		request.transportRule = policy.TransportRule
 	}
 	if err != nil {
 		if request != nil {
@@ -91,6 +92,7 @@ func (s *Service) bindDirectPolicy(ctx context.Context, user int64, request *val
 	role := policy.RolePolicy.Clone()
 	copy.roleSnapshot = &role
 	copy.policyRevision = policy.Revision
+	copy.transportRule = policy.TransportRule
 	if err = copy.excludeFields(policy.ExcludedRequestFields); err != nil {
 		copy.Clear()
 		return nil, nil, nil, err

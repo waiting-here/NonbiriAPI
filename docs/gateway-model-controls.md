@@ -42,7 +42,7 @@ Replace the example with evidence for the actual gateway, provider implementatio
 | `efforts` | Verified levels for this model; defaults to empty |
 | `max_output_tokens` | Verified maximum preserving the requested budget; positive and at most 2147483647. Required for Anthropic profiles because the provider may clamp known-model budgets. Optional elsewhere; omitted or zero adds no local model ceiling. |
 | `storage` | `reject` by default, `openai`, or explicit lossy `omit_false` |
-| `cache` | `reject` by default; `anthropic` enables the verified Anthropic mapping |
+| `cache` | `reject` by default; `anthropic` keeps root-native controls, while `anthropic_explicit` lowers them to an explicit end marker. Both require a verified Anthropic target. |
 
 ## Reasoning
 
@@ -80,20 +80,20 @@ OpenAI storage control governs the provider's documented storage behavior. It do
 
 ## Prompt caching
 
-For a verified Anthropic adapter, enable the Anthropic cache mapping. The caller may place `cache_control:{"type":"ephemeral"}` at the request root, on a text content block, or on a function-tool definition. Optional `ttl` is `5m` or `1h`; omitted TTL keeps the provider default.
+For a verified Anthropic adapter, select `anthropic` or `anthropic_explicit` for that exact target. The caller may place `cache_control:{"type":"ephemeral"}` at the request root, on a text content block, on a function-tool definition or on the final text block of a tool-result array. Optional `ttl` is `5m` or `1h`; omitted TTL is 5m.
 
-The root maps to `providerOptions.anthropic.cacheControl`. Text blocks and tool definitions carry the same option at their own native position. System text blocks retain their order and individual markers. Unsupported markers or undeclared mappings reject explicitly. This follows the [LanguageModelV3 Anthropic implementation](https://github.com/vercel/ai/tree/def2c64454c32abc35b03b412f8127b8f360ce5e/packages/anthropic); the gateway must also execute the option.
+With `anthropic`, the root maps to `providerOptions.anthropic.cacheControl`. With `anthropic_explicit`, the root lowers to the final eligible prompt block, including a tool result, and no automatic root marker is sent. Existing explicit markers retain their native positions and TTLs. An identical final marker merges; a conflicting TTL rejects. At most four effective points are allowed, and all 1h points must precede 5m points in the provider's final effective order. No eligible block or an unrepresentable position rejects before dispatch. Tool-result arrays preserve all text; their final marker maps to the whole native result, while an intermediate marker rejects rather than moving. This follows the [LanguageModelV3 Anthropic implementation](https://github.com/vercel/ai/tree/def2c64454c32abc35b03b412f8127b8f360ce5e/packages/anthropic); the gateway must also execute the option.
 
-The model or binding request-adaptation editor can add an automatic cache default. Any caller cache marker takes priority, including text-block and tool markers. Ordinary and tool-flattening bindings share the exact upstream declaration while retaining their own adaptation defaults.
+The model or binding request-adaptation editor can add an automatic cache default. Any caller cache marker takes priority, including text-block, tool-definition and tool-result markers. Ordinary and tool-flattening bindings share the exact upstream declaration while retaining their own adaptation defaults.
 
 Reported usage includes `prompt_tokens_details.cached_tokens` and `cache_write_tokens`; `cache_creation_tokens` remains as an alias for existing clients. Counts come from upstream usage. Configuring a marker does not prove a cache hit or a particular price.
 
 ## Idle streaming
 
-Accepted streaming Chat Completions emit an SSE comment after 20 seconds without output, including while waiting for upstream headers or an allowed retry. Clients should ignore comments. Keepalives do not mark success, consume charity credit or reset failure counts. A final failure after HTTP has started ends with one SSE error. Client cancellation, write failure and the total request deadline stop both upstream work and keepalives. Non-streaming responses retain JSON behavior.
+Accepted streaming Chat Completions emit an SSE comment after 20 seconds without output, including while waiting for upstream headers or an allowed retry. Clients should ignore comments. Keepalives do not mark success, consume charity credit or reset failure counts. A final failure after HTTP has started ends with one SSE error. Client cancellation, write failure and the total request deadline stop both upstream work and keepalives. Per-model `transport_rule` can force upstream JSON or SSE while retaining the caller's requested format. SSE callers waiting for forced JSON receive comments, then complete-result chunks. JSON callers waiting for forced SSE receive one JSON only after valid termination, with no early 200 or whitespace keepalive; client/proxy idle timeouts still apply. See the [transport contract](api-contract.md#22-post-v1chatcompletions). A valid empty content-filter/refusal termination is accepted with actual usage. Charity settlement follows validated upstream generation even when buffered output is not delivered; disconnect still immediately cancels upstream.
 
 ## Existing adaptation and diagnostics
 
-Role policies, intentional field exclusions and body replacement rules still run before target validation. Unknown fields remain unsupported unless covered by an existing explicit native-extension declaration. `reasoning_effort` cannot be declared as a native root: it must pass the model check. Native extensions that would overwrite translated budgets, effort, thinking mode or storage control reject, including Bedrock native overrides of canonical Anthropic options; unrelated native extensions keep their existing behavior.
+Role policies, intentional field exclusions and body replacement rules still run before target validation. Unknown fields remain unsupported unless covered by an existing explicit native-extension declaration. `reasoning_effort` cannot be declared as a native root: it must pass the model check. Native extensions that would overwrite translated budgets, effort, thinking mode, storage, cache markers or the compiled prompt/tools reject, including Bedrock native overrides of canonical Anthropic options; unrelated native extensions keep their existing behavior.
 
 Candidate checks use the final adapted request. A compatible candidate can remain eligible when another model rejects it. If no candidate is compatible, the response identifies the supported field category and reason. Authorized live Debug traces also identify the rejection stage. These reasons contain fixed text, without field values, message bodies, endpoint/model identities or credentials. Existing response warnings and stream validation remain active.

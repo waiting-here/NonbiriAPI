@@ -623,6 +623,7 @@ test('administrator saves automatic Gateway cache defaults and level 6 reads the
       model: 'cache',
       enabled: true,
       is_mainstream: false,
+      transport_rule: 'passthrough',
       flatten_tool_calls: false,
       pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
       discount: { enabled: false, percent: 100, start_at: null, end_at: null },

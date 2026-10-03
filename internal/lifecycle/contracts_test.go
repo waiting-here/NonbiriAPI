@@ -83,7 +83,7 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 		Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel",
 	}, "kind", "channel_id", "name")
 
-	assertClosedJSONKeys(t, ModelExport{}, "role_policy", "id", "provider", "model", "full_name", "route_strategy", "silent_retry", "flatten_tool_calls", "created_at", "updated_at", "bindings")
+	assertClosedJSONKeys(t, ModelExport{}, "transport_rule", "role_policy", "id", "provider", "model", "full_name", "route_strategy", "silent_retry", "flatten_tool_calls", "created_at", "updated_at", "bindings")
 	assertClosedJSONKeys(t, DonationExport{},
 		"id", "status", "description", "review_result", "keys", "created_at", "updated_at")
 	assertClosedJSONKeys(t, DonationKeyExport{},

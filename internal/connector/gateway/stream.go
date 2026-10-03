@@ -263,7 +263,7 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				}
 			}
 			finish, err = finishReason(part["finishReason"])
-			if err != nil || (finish == "tool_calls") != (len(tools) > 0) || len(texts)+len(tools) == 0 {
+			if err != nil || (finish == "tool_calls") != (len(tools) > 0) || len(texts)+len(tools) == 0 && finish != "content_filter" {
 				return failure("upstream finish was invalid", upstreamerror.Detail{})
 			}
 			usage, err = parseUsage(part["usage"])

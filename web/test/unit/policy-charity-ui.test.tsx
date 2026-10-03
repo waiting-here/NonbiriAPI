@@ -95,6 +95,7 @@ const model = {
   full_name: 'provider/model',
   route_strategy: 'ordered',
   silent_retry: false,
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   binding_count: 2,
   created_at: 1,
@@ -135,6 +136,7 @@ const coreModel = {
   full_name: 'provider/model',
   route_strategy: 'ordered',
   silent_retry: false,
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '2',
@@ -235,6 +237,7 @@ const managedModel = {
   model: 'charity-model',
   full_name: 'provider/charity-model',
   enabled: true,
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   pricing_mode: 'per_request',
   prices: {
@@ -269,6 +272,7 @@ const managedModelFixture = {
   public_description: '',
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '1',
@@ -474,6 +478,7 @@ function ManagedModelMutationProbe() {
             provider: 'provider',
             model: 'charity-model',
             pricing_mode: 'per_request',
+            transport_rule: 'passthrough',
             flatten_tool_calls: false,
             prices: managedModel.prices,
             discount: { percent: 100, enabled: false, start_at: null, end_at: null },
@@ -826,6 +831,7 @@ describe('experimental policy and charity controls', () => {
     let modelReads = 0;
     const committed = {
       ...coreModel,
+      transport_rule: 'passthrough',
       flatten_tool_calls: true,
       revision: '2',
       updated_at: 1_700_000_002,
@@ -962,6 +968,7 @@ describe('experimental policy and charity controls', () => {
     const check = screen.getByRole('button', { name: 'Check result' });
     expect(check).toBeVisible();
     expect(rendered.queryClient.getQueryData(coreKeys.model('1', '3'))).toMatchObject({
+      transport_rule: 'passthrough',
       flatten_tool_calls: false,
       revision: '1',
     });
@@ -1122,6 +1129,7 @@ describe('experimental policy and charity controls', () => {
     const anthropicKey = { ...coreEndpointKey, id: '5', endpoint_id: '4' };
     const anthropicModel = {
       ...coreModel,
+      transport_rule: 'passthrough',
       flatten_tool_calls: true,
       binding_revision: '0',
       binding_count: '0',
@@ -1221,6 +1229,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'PATCH' && path === '/api/models/3') {
         currentModel = {
           ...currentModel,
+          transport_rule: 'passthrough',
           flatten_tool_calls: true,
           revision: '2',
           updated_at: 1_700_000_002,
@@ -1252,6 +1261,7 @@ describe('experimental policy and charity controls', () => {
         model: 'model',
         route_strategy: 'ordered',
         silent_retry: false,
+        transport_rule: 'passthrough',
         flatten_tool_calls: true,
         role_policy: { default_action: 'native', rules: {} },
         expected_revision: '1',
@@ -1831,6 +1841,7 @@ describe('experimental policy and charity controls', () => {
             provider: 'new-provider',
             model: 'new-model',
             full_name: '[公益]new-provider/new-model',
+            transport_rule: 'passthrough',
             flatten_tool_calls: true,
           },
         },
@@ -1866,6 +1877,7 @@ describe('experimental policy and charity controls', () => {
       await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
       await waitFor(() =>
         expect(lastBody(fetchMock, 'PATCH', `${basePath}/charity-models/7`)).toMatchObject({
+          transport_rule: 'passthrough',
           flatten_tool_calls: true,
         }),
       );
@@ -1886,6 +1898,7 @@ describe('experimental policy and charity controls', () => {
       );
       await waitFor(() =>
         expect(lastBody(fetchMock, 'POST', `${basePath}/charity-models`)).toMatchObject({
+          transport_rule: 'passthrough',
           flatten_tool_calls: true,
         }),
       );

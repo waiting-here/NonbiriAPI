@@ -1,3 +1,4 @@
+import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
 import { apiFetch } from '@shared/query/http';
 import { decoded, idempotentOptions, queryPath } from './api';
 import { excludedFields } from './charityScope';
@@ -689,6 +690,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
 }
 
 export interface CharityModel {
+  transport_rule: TransportRule;
   role_policy?: RolePolicy;
   is_mainstream?: boolean;
   excluded_request_fields?: string[];
@@ -768,6 +770,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'pricing',
     'discount',
     'flatten_tool_calls',
+    'transport_rule',
     'revision',
     'binding_revision',
     'binding_count',
@@ -898,6 +901,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
       start_at: startAt,
       end_at: endAt,
     },
+    transport_rule: normalizeTransportRule(root.transport_rule),
     flatten_tool_calls: boolean(root.flatten_tool_calls, `${label} flatten tool calls`),
     role_policy: normalizeRolePolicy(root.role_policy, `${label} role policy`),
     revision: decimal(root.revision, `${label} revision`, { positive: true }),

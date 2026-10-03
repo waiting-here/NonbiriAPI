@@ -358,7 +358,7 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           set -euo pipefail
-          go test -c -tags dist -o "$RUNNER_TEMP/browser-fixture" ..
+          go test -c -tags dist -o "$RUNNER_TEMP/browser-fixture" ../internal/app
           printf 'NONBIRI_BROWSER_FIXTURE_BINARY=%s\n' "$RUNNER_TEMP/browser-fixture" >> "$GITHUB_ENV"
       - name: Image activity browser integration
         if: matrix.suite == 'integration'

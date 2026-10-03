@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"math"
 	"math/big"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -82,6 +83,17 @@ func validateLedgerState(ctx context.Context, tx *sql.Tx, domainTotal *big.Int) 
 	}
 	if new(big.Int).Add(big.NewInt(capacity.LastLedgerSeq), domainTotal).Cmp(big.NewInt(math.MaxInt64)) > 0 {
 		return ErrInvariant
+	}
+
+	if db.IsActiveRecovery(ctx) {
+		var maximum int64
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ledger_seq),0) FROM credit_operations`).Scan(&maximum); err != nil {
+			return err
+		}
+		if maximum != capacity.LastLedgerSeq {
+			return ErrInvariant
+		}
+		return nil
 	}
 
 	rows, err := tx.QueryContext(ctx, `
@@ -185,9 +197,8 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 			return ErrInvariant
 		}
 		total.Add(total, rows.Big())
-		// Terminal rows retain canonical zero remaining until their normal
-		// lifecycle cleanup. Validation still scans them, but only live work is
-		// retained in memory for RecoverNonterminal's scheduling result.
+		// Only outstanding work is returned to the owning recovery worker.
+		// Explicit verification also checks terminal zero values.
 		if includeOutstanding && rows.Big().Sign() > 0 {
 			reservations = append(reservations, OutstandingReservation{
 				Ref: ref, Domain: domain, ResourceID: resourceID, ParentID: parentID, Rows: rows,
@@ -231,7 +242,24 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 		queries = append(queries, reservationQuery{"image_task", `SELECT id,ledger_rows_remaining FROM image_activity_tasks ORDER BY id`, reservationImageTask})
 	}
 	for _, item := range queries {
-		rows, err := tx.QueryContext(ctx, item.query)
+		query := item.query
+		if db.IsActiveRecovery(ctx) {
+			predicate := "ledger_rows_remaining<>zeroblob(16)"
+			switch item.domain {
+			case "logical_request":
+				predicate = "state IN ('accepted','running')"
+			case "fishing_batch", "blackjack_payment":
+				predicate = "state='reserved'"
+			case "thursday_period":
+				predicate = "state IN ('configured','open','settling','configuration_error')"
+			case "duel_session":
+				predicate = "game_key IN ('bidding','likes') AND state='active'"
+			case "image_task":
+				predicate = "finance_state='reserved'"
+			}
+			query = strings.Replace(query, " ORDER BY", " WHERE "+predicate+" ORDER BY", 1)
+		}
+		rows, err := tx.QueryContext(ctx, query)
 		if err != nil {
 			return nil, nil, classifySQLError("read "+item.domain+" reservations", err)
 		}
@@ -261,9 +289,12 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 		}
 	}
 
-	participantRows, err := tx.QueryContext(ctx, `
-SELECT period_id,participant_ref,ledger_rows_remaining
-FROM thursday_participants ORDER BY period_id,participant_ref`)
+	participantQuery := `SELECT period_id,participant_ref,ledger_rows_remaining FROM thursday_participants`
+	if db.IsActiveRecovery(ctx) {
+		participantQuery += ` WHERE period_id IN (SELECT id FROM thursday_periods WHERE state IN ('configured','open','settling','configuration_error')) AND settled=0`
+	}
+	participantQuery += ` ORDER BY period_id,participant_ref`
+	participantRows, err := tx.QueryContext(ctx, participantQuery)
 	if err != nil {
 		return nil, nil, classifySQLError("read thursday participant reservations", err)
 	}

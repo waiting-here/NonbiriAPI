@@ -1,0 +1,524 @@
+package app
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"sync/atomic"
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/announcements"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/charity"
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	"github.com/waiting-here/NonbiriAPI/internal/continuity"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/debug"
+	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/issues"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	lifecycleadapters "github.com/waiting-here/NonbiriAPI/internal/lifecycle/adapters"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
+	"github.com/waiting-here/NonbiriAPI/internal/logapi"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/reports"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
+)
+
+var (
+	_ lifecycle.UserFinalAuthorizer  = (*roleFinalTxAuthorizer)(nil)
+	_ lifecycle.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+)
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeFreshUser(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorizeFresh(ctx, tx, userID, authz.ActorUserSession, authz.RoleUser)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeFreshAdmin(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorizeFresh(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) authorizeFresh(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	kind authz.ActorKind,
+	role authz.Role,
+) error {
+	if authorizer == nil || authorizer.authorizer == nil || ctx == nil || tx == nil {
+		return authz.ErrUnauthorized
+	}
+	actor, ok := auth.ActorFromContext(ctx)
+	if !ok || actor.Kind != kind || actor.UserID != userID {
+		return authz.ErrUnauthorized
+	}
+	_, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{
+		Role: role, FreshElevation: true,
+	})
+	return err
+}
+
+type lifecycleRouteRegistrar struct{ runtime *auth.Runtime }
+
+func (registrar lifecycleRouteRegistrar) RegisterUserRoute(method, pattern string, handler lifecycle.AuthorizedUserHandler) error {
+	return registerUserAdapter(registrar.runtime, method, pattern, handler, func(userID int64) lifecycle.UserPrincipal { return lifecycle.UserPrincipal{UserID: userID} })
+}
+
+type productionHeldReadAuthorizer struct {
+	coordinator *lifecycle.Coordinator
+	steward     logapi.StewardAuthorizer
+}
+
+func (authorizer productionHeldReadAuthorizer) AuthorizeStewardHeldDonationRead(ctx context.Context, tx *sql.Tx, userID, donationID, now int64) (bool, error) {
+	allowed, err := authorizer.coordinator.AuthorizeStewardHeldObjectRead(ctx, tx, userID, lifecycle.HeldDonation, strconv.FormatInt(donationID, 10), now, authorizer.steward)
+	if err != nil {
+		return false, translateDonationHeldReadError(err)
+	}
+	return allowed, nil
+}
+
+func (authorizer productionHeldReadAuthorizer) AuthorizeStewardHeldRequestLogRead(ctx context.Context, tx *sql.Tx, userID, requestLogID, now int64) (bool, error) {
+	allowed, err := authorizer.coordinator.AuthorizeStewardHeldObjectRead(ctx, tx, userID, lifecycle.HeldRequestLog, strconv.FormatInt(requestLogID, 10), now, authorizer.steward)
+	if err != nil {
+		return false, translateLogHeldReadError(err)
+	}
+	return allowed, nil
+}
+
+func (authorizer productionHeldReadAuthorizer) AuthorizeHeldDonationRead(
+	ctx context.Context,
+	tx *sql.Tx,
+	donationID int64,
+	decisionNow int64,
+) (bool, error) {
+	adminID, err := heldReadAdminID(ctx)
+	if err != nil {
+		return false, donation.ErrUnauthorized
+	}
+	allowed, err := authorizer.coordinator.AuthorizeHeldObjectRead(
+		ctx, tx, adminID, lifecycle.HeldDonation, strconv.FormatInt(donationID, 10), decisionNow,
+	)
+	if err != nil {
+		return false, translateDonationHeldReadError(err)
+	}
+	return allowed, nil
+}
+
+func (authorizer productionHeldReadAuthorizer) AuthorizeHeldRequestLogRead(
+	ctx context.Context,
+	tx *sql.Tx,
+	requestLogID int64,
+	decisionNow int64,
+) (bool, error) {
+	adminID, err := heldReadAdminID(ctx)
+	if err != nil {
+		return false, logapi.ErrForbidden
+	}
+	allowed, err := authorizer.coordinator.AuthorizeHeldObjectRead(
+		ctx, tx, adminID, lifecycle.HeldRequestLog, strconv.FormatInt(requestLogID, 10), decisionNow,
+	)
+	if err != nil {
+		return false, translateLogHeldReadError(err)
+	}
+	return allowed, nil
+}
+
+func heldReadAdminID(ctx context.Context) (int64, error) {
+	actor, ok := auth.ActorFromContext(ctx)
+	if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+		return 0, authz.ErrUnauthorized
+	}
+	return actor.UserID, nil
+}
+
+func translateDonationHeldReadError(err error) error {
+	var target error
+	switch {
+	case errors.Is(err, lifecycle.ErrInvalid):
+		target = donation.ErrInvalidRequest
+	case errors.Is(err, lifecycle.ErrUnauthorized), errors.Is(err, authz.ErrUnauthorized):
+		target = donation.ErrUnauthorized
+	case errors.Is(err, lifecycle.ErrForbidden), errors.Is(err, authz.ErrForbidden):
+		target = donation.ErrForbidden
+	case errors.Is(err, lifecycle.ErrNotFound):
+		target = donation.ErrNotFound
+	case errors.Is(err, lifecycle.ErrConflict):
+		target = donation.ErrConflict
+	case errors.Is(err, lifecycle.ErrInvariant):
+		target = donation.ErrInvariant
+	default:
+		target = donation.ErrUnavailable
+	}
+	return fmt.Errorf("%w: %v", target, err)
+}
+
+func translateLogHeldReadError(err error) error {
+	var target error
+	switch {
+	case errors.Is(err, lifecycle.ErrInvalid):
+		target = logapi.ErrInvalid
+	case errors.Is(err, lifecycle.ErrUnauthorized), errors.Is(err, lifecycle.ErrForbidden),
+		errors.Is(err, authz.ErrUnauthorized), errors.Is(err, authz.ErrForbidden):
+		target = logapi.ErrForbidden
+	case errors.Is(err, lifecycle.ErrNotFound):
+		target = logapi.ErrNotFound
+	case errors.Is(err, lifecycle.ErrConflict):
+		target = logapi.ErrConflict
+	case errors.Is(err, lifecycle.ErrInvariant):
+		target = logapi.ErrInvariant
+	default:
+		target = logapi.ErrUnavailable
+	}
+	return fmt.Errorf("%w: %v", target, err)
+}
+
+func (registrar lifecycleRouteRegistrar) RegisterAdminRoute(
+	method, pattern string,
+	handler lifecycle.AuthorizedAdminHandler,
+) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			actor, ok := auth.ActorFromContext(request.Context())
+			if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+				httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+				return
+			}
+			handler(writer, request, lifecycle.AdminPrincipal{UserID: actor.UserID})
+		}))
+}
+
+type productionRetirementBoundary struct {
+	gate  *lifecyclegate.Gate
+	flow  *flowcontrol.Controller
+	games *game.StartLimiter
+}
+
+func (boundary *productionRetirementBoundary) BeginUserRetirement(
+	ctx context.Context,
+	userID int64,
+) (lifecycle.Retirement, error) {
+	if boundary == nil || boundary.gate == nil || boundary.flow == nil || boundary.games == nil ||
+		ctx == nil || userID <= 0 {
+		return nil, lifecycle.ErrInvalid
+	}
+	gateRetirement, err := boundary.gate.BeginUserRetirementExcludingContext(ctx, userID)
+	if err != nil {
+		return nil, translateRetirementError(err)
+	}
+	flowRetirement, err := boundary.flow.BeginUserRetirement(userID)
+	if err != nil {
+		gateRetirement.Abort()
+		return nil, translateRetirementError(err)
+	}
+	gameCommit, gameAbort, err := boundary.games.BeginUserDeletionContext(ctx, userID)
+	if err != nil {
+		flowRetirement.Abort()
+		gateRetirement.Abort()
+		return nil, translateRetirementError(err)
+	}
+	return &productionRetirement{
+		gate: gateRetirement, flow: flowRetirement,
+		gameCommit: gameCommit, gameAbort: gameAbort,
+	}, nil
+}
+
+func translateRetirementError(err error) error {
+	switch {
+	case errors.Is(err, lifecyclegate.ErrInvalid), errors.Is(err, flowcontrol.ErrInvalidUser):
+		return fmt.Errorf("%w: %v", lifecycle.ErrInvalid, err)
+	case errors.Is(err, lifecyclegate.ErrRetiring), errors.Is(err, game.ErrUserDeleting):
+		return fmt.Errorf("%w: %v", lifecycle.ErrConflict, err)
+	default:
+		return fmt.Errorf("%w: %v", lifecycle.ErrUnavailable, err)
+	}
+}
+
+type productionRetirement struct {
+	gate       *lifecyclegate.UserRetirement
+	flow       *flowcontrol.UserRetirement
+	gameCommit func() bool
+	gameAbort  func() bool
+	done       atomic.Bool
+}
+
+type restrictionRetirement struct {
+	gate *lifecyclegate.UserRetirement
+	flow *flowcontrol.UserRetirement
+	done atomic.Bool
+}
+
+func beginRestrictionRetirement(ctx context.Context, gate *lifecyclegate.Gate, flow *flowcontrol.Controller, userID int64) (*restrictionRetirement, error) {
+	if ctx == nil || gate == nil || flow == nil {
+		return nil, lifecycle.ErrInvalid
+	}
+	identityAndUser, err := gate.BeginUserRetirementExcludingContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	admission, err := flow.BeginUserRetirement(userID)
+	if err != nil {
+		identityAndUser.Abort()
+		return nil, err
+	}
+	return &restrictionRetirement{gate: identityAndUser, flow: admission}, nil
+}
+
+func (r *restrictionRetirement) Commit() bool {
+	if r == nil || !r.done.CompareAndSwap(false, true) {
+		return false
+	}
+	r.flow.Commit()
+	r.gate.Commit()
+	return true
+}
+
+func (r *restrictionRetirement) Abort() bool {
+	if r == nil || !r.done.CompareAndSwap(false, true) {
+		return false
+	}
+	r.flow.Abort()
+	r.gate.Abort()
+	return true
+}
+
+func (retirement *productionRetirement) Commit() bool {
+	if retirement == nil || !retirement.done.CompareAndSwap(false, true) {
+		return false
+	}
+	retirement.gameCommit()
+	retirement.flow.Commit()
+	retirement.gate.Commit()
+	return true
+}
+
+func (retirement *productionRetirement) Abort() bool {
+	if retirement == nil || !retirement.done.CompareAndSwap(false, true) {
+		return false
+	}
+	retirement.gameAbort()
+	retirement.flow.Abort()
+	retirement.gate.Abort()
+	return true
+}
+
+func newLifecycleCoordinator(
+	store *db.Store,
+	vault *secret.Vault,
+	authRuntime *auth.Runtime,
+	roleAuthorizer *roleFinalTxAuthorizer,
+	forwardRuntime *publicForwardRuntime,
+	gameRuntimes *gameRuntimeBundle,
+	claimService *claim.Service,
+	resourceRepository *resources.Repository,
+	issueService *issues.Service,
+	logRepository *logapi.Repository,
+	activityService *activities.Service,
+	activityRepository *activities.Repository,
+	donationService *donation.Service,
+	charityService *charity.Service,
+	reportRepository *reports.Repository,
+	announcementRepository *announcements.Repository,
+	maintenanceService *maintenance.Service,
+	activityEvents *accountstream.Hub,
+	debugHub *debug.Hub,
+	now func() time.Time,
+	audits *auditRuntime,
+	activityEngines *activityRuntime,
+	automation *stewardautomation.Service,
+) (*lifecycle.Coordinator, error) {
+	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
+		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil || forwardRuntime.adaptations == nil ||
+		gameRuntimes == nil || gameRuntimes.Service == nil || gameRuntimes.Limiter() == nil || claimService == nil ||
+		resourceRepository == nil || issueService == nil || logRepository == nil ||
+		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
+		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
+		activityEvents == nil || debugHub == nil || audits == nil || activityEngines == nil || activityEngines.fish == nil || automation == nil {
+		return nil, lifecycle.ErrInvalid
+	}
+
+	if err := gameRuntimes.Limiter().AttachContinuity(continuity.StartWindows{Service: authRuntime.IdentityContinuity()}); err != nil {
+		return nil, err
+	}
+	if err := authRuntime.IdentityContinuity().AttachWindowPreservers(forwardRuntime.flow, gameRuntimes.Limiter(), forwardRuntime.abuse); err != nil {
+		return nil, err
+	}
+	accountResources, err := lifecycleadapters.NewAccountResources(
+		authRuntime, resourceRepository, issueService.Sources(), logRepository,
+	)
+	if err != nil {
+		return nil, err
+	}
+	authDelete, err := lifecycleadapters.NewAuthDeleteAdapter(authRuntime)
+	if err != nil {
+		return nil, err
+	}
+	resourceDelete, err := lifecycleadapters.NewResourceDeleteAdapter(resourceRepository)
+	if err != nil {
+		return nil, err
+	}
+	claimLogDelete, err := lifecycleadapters.NewClaimLogDeleteAdapter(claimService, logRepository)
+	if err != nil {
+		return nil, err
+	}
+	runtimeMemory, err := lifecycleadapters.NewRuntimeMemoryDeleteAdapter(activityEvents, debugHub, forwardRuntime.abuse.ForgetUser, audits.collector.ForgetUser)
+	if err != nil {
+		return nil, err
+	}
+	maintenanceRetention, err := maintenance.NewLifecycleRetention(store.DB())
+	if err != nil {
+		return nil, err
+	}
+
+	ledgerAdapter := lifecycleadapters.NewLedgerAdapter()
+	routingLifecycle, err := claim.NewCharityRoutingLifecycle(store.DB())
+	if err != nil {
+		return nil, err
+	}
+	activityAdapter := lifecycleadapters.NewActivity(activityRepository)
+	donationAdapter := lifecycleadapters.NewDonation(donationService)
+	charityAdapter := lifecycleadapters.NewCharity(charityService)
+	fishingAdapter := lifecycleadapters.NewRegisteredFishing(gameRuntimes.Service)
+	linkLinkAdapter := lifecycleadapters.NewRegisteredLinkLink(gameRuntimes.Service)
+	rpsAdapter := lifecycleadapters.NewRegisteredRPS(gameRuntimes.Service)
+	biddingAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.BiddingID)
+	likesAdapter := lifecycleadapters.NewRegisteredDuel(gameRuntimes.Service, game.LikesID)
+	blackjackAdapter := lifecycleadapters.NewRegisteredBlackjack(gameRuntimes.Service)
+	reportAdapter := lifecycleadapters.NewReportLifecycle(reportRepository)
+	announcementAdapter := lifecycleadapters.NewAnnouncementAuditLifecycle(announcementRepository)
+	secretAdapter := lifecycleadapters.NewOrphanSecretRecovery(claimService)
+	fatFishAdapter := activityEngines.fish.LifecycleAdapter()
+	idempotencyAdapter := lifecycleadapters.NewIdempotencyMaintenance(
+		idempotency.NewMaintenance(store.DB()),
+	)
+
+	coordinator, err := lifecycle.New(lifecycle.Config{
+		Store: store, UserAuth: roleAuthorizer, AdminAuth: roleAuthorizer, CursorKeys: vault, Now: now,
+		Retirement: &productionRetirementBoundary{
+			gate: forwardRuntime.lifecycle, flow: forwardRuntime.flow, games: gameRuntimes.Limiter(),
+		},
+		Ledger: ledgerAdapter,
+		Export: lifecycle.ExportAdapters{
+			PersonalAutomation: automation,
+			RequestAdaptation:  forwardRuntime.adaptations,
+			Continuity:         authRuntime.IdentityContinuity(),
+			FatFish:            fatFishAdapter,
+			Governance:         activityEngines,
+			Identity:           accountResources, Resources: accountResources, Issues: accountResources,
+			Ledger: ledgerAdapter, Activities: activityAdapter, Donations: donationAdapter,
+			Charity: charityAdapter, Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			Randomness: lifecycleadapters.RandomnessAdapter{},
+			Rankings:   lifecycleadapters.RankingAdapter{}, Penalties: lifecycleadapters.PenaltyAdapter{},
+		},
+		Delete: lifecycle.DeleteAdapters{
+			PersonalAutomation:   automation,
+			FatFish:              fatFishAdapter,
+			RequestAdaptation:    forwardRuntime.adaptations,
+			Continuity:           authRuntime.IdentityContinuity(),
+			CharityRouting:       routingLifecycle,
+			Governance:           activityEngines,
+			AuthSessionCallerKey: authDelete, Resources: resourceDelete, ClaimLog: claimLogDelete,
+			IssuesAnnouncements: lifecycleadapters.NewIssueAnnouncementDelete(issueService.Sources()),
+			Donations:           donationAdapter, Activities: activityAdapter, Reports: reportAdapter,
+			Fishing: fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			DebugAccountStream: runtimeMemory,
+		},
+		Recovery: lifecycle.RecoveryAdapters{
+			PersonalAutomation: automation,
+			FatFish:            fatFishAdapter,
+			CharityRouting:     routingLifecycle,
+			Governance:         activityEngines,
+			Idempotency:        idempotencyAdapter,
+			Discovery:          lifecycleadapters.NewDiscoveryRecovery(resourceRepository),
+			Claims:             lifecycleadapters.NewClaimRecovery(claimService),
+			Thursday:           lifecycleadapters.NewThursdayRecovery(activityService),
+			Reports:            reportAdapter,
+			Fishing:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
+			LinkLink:           lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
+			RPS:                lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
+			Bidding:            lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BiddingID),
+			Likes:              lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LikesID),
+			Blackjack:          lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.BlackjackID),
+			Donations:          lifecycleadapters.NewDonationRecovery(donationService),
+			Secrets:            secretAdapter,
+		},
+		Retention: lifecycle.RetentionAdapters{
+			PersonalAutomation: automation,
+			FatFish:            fatFishAdapter,
+			RequestAdaptation:  forwardRuntime.adaptations,
+			Continuity:         authRuntime.IdentityContinuity(),
+			CharityRouting:     routingLifecycle,
+			Governance:         activityEngines,
+			Sessions:           lifecycleadapters.NewAuthSessionRetention(authRuntime),
+			RequestLogs:        lifecycleadapters.NewRequestLogRetention(logRepository),
+			Audits:             lifecycleadapters.NewAuditRetention(maintenanceRetention, announcementRepository),
+			Observability:      diagnosticRetention{audits.observations},
+			RiskAudit:          riskRetention{repository: audits.risk, clientGuard: forwardRuntime.clientGuard},
+			Issues:             lifecycleadapters.NewIssueRetention(issueService),
+			Fishing:            fishingAdapter, LinkLink: linkLinkAdapter, RPS: rpsAdapter,
+			Bidding: biddingAdapter, Likes: likesAdapter, Blackjack: blackjackAdapter,
+			Reports: reportAdapter, Donations: donationAdapter, Charity: charityAdapter,
+			Idempotency: idempotencyAdapter, Secrets: secretAdapter,
+		},
+		HeldObjects: lifecycle.HeldObjectAdapters{
+			MaintenanceEvent: lifecycleadapters.NewMaintenanceHeldObject(maintenanceService),
+			ReportCase:       reportAdapter, AnnouncementAudit: announcementAdapter,
+			Donation:   lifecycleadapters.NewDonationHeldObject(donationService),
+			RequestLog: lifecycleadapters.NewRequestLogHeldObject(logRepository),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	heldRead := productionHeldReadAuthorizer{coordinator: coordinator, steward: roleAuthorizer}
+	if err := donationService.AttachAdminHeldReadAuthorizer(heldRead); err != nil {
+		_ = coordinator.Close()
+		return nil, err
+	}
+	if err := logRepository.AttachAdminHeldReadAuthorizer(heldRead); err != nil {
+		_ = coordinator.Close()
+		return nil, err
+	}
+	return coordinator, nil
+}
+
+func startLifecycleWorker(parent context.Context, coordinator *lifecycle.Coordinator) (context.CancelFunc, <-chan struct{}, error) {
+	if parent == nil || coordinator == nil {
+		return nil, nil, lifecycle.ErrInvalid
+	}
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(lifecycle.WorkerSweepInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := coordinator.RunDue(ctx); err != nil && ctx.Err() == nil && !errors.Is(err, lifecycle.ErrClosed) {
+					slog.Error("account lifecycle maintenance pass failed", "err", err)
+				}
+			}
+		}
+	}()
+	return cancel, done, nil
+}

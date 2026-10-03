@@ -141,12 +141,13 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 	if !validOptionalText(filter.EndpointBaseURL, 4096, false) ||
 		!validOptionalText(filter.UpstreamModel, 2048, true) ||
 		!validOptionalText(filter.Model, 512, true) ||
+		!validOptionalText(filter.CharityModel, 512, false) ||
 		!validOptionalCode(filter.ErrorCode) {
 		return ListFilter{}, ErrInvalid
 	}
 	switch role {
 	case "user":
-		if filter.UserID != nil || filter.EndpointKeyID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil || filter.UsageTotalMismatch != nil {
+		if filter.UserID != nil || filter.EndpointKeyID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil || filter.CharityModel != nil || filter.UsageTotalMismatch != nil {
 			return ListFilter{}, ErrInvalid
 		}
 	case "admin", "steward":
@@ -316,6 +317,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	}
 	if filter.EndpointKeyID != nil {
 		writePart("endpoint_key_id=" + optionalInt64(filter.EndpointKeyID))
+	}
+	if filter.CharityModel != nil {
+		writePart("charity_model=" + optionalString(filter.CharityModel))
 	}
 	return role + ":" + hex.EncodeToString(hash.Sum(nil))
 }

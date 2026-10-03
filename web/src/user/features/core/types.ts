@@ -1,3 +1,4 @@
+import type { TransportRule } from '@shared/transportRule';
 import type { RolePolicy } from '@shared/rolePolicy';
 export type { RoleAction, RolePolicy } from '@shared/rolePolicy';
 import type { AutomaticRestriction } from '@shared/operations/restrictions';
@@ -208,6 +209,7 @@ export interface CatalogView {
 }
 
 export interface Model {
+  transport_rule: TransportRule;
   id: string;
   provider: string;
   model: string;
@@ -319,6 +321,7 @@ export interface EndpointKeyPatchInput {
 }
 
 export interface ModelCreateInput {
+  transport_rule?: TransportRule;
   provider: string;
   model: string;
   route_strategy?: RouteStrategy;
@@ -328,6 +331,7 @@ export interface ModelCreateInput {
 }
 
 export interface ModelPatchInput {
+  transport_rule?: TransportRule;
   provider?: string;
   model?: string;
   route_strategy?: RouteStrategy;

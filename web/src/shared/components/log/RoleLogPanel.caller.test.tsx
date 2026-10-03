@@ -89,6 +89,48 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(['admin', 'steward'] as const)(
+  'restores the %s charity model filter from the URL and carries it to export',
+  async (role) => {
+    const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+    const literal = 'Model%_Case';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), window.location.origin);
+      const body = url.pathname.endsWith('/time-zones')
+        ? { version: 'go1.26.6-zoneinfo', zones: ['UTC'] }
+        : {
+            data: [],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role: role === 'admin' ? 'admin' : 'level6',
+      route: '/logs?charity_model=Model%25_Case',
+    });
+    expect(
+      screen.getByLabelText(view.i18n.t('common.operations.logs.charityModelFilter')),
+    ).toHaveValue(literal);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        `${root}?charity_model=Model%25_Case&page=1&page_size=20`,
+      ),
+    );
+    expect(
+      screen.getByRole('link', { name: view.i18n.t('common.operations.logs.exportCsv') }),
+    ).toHaveAttribute('href', `${root}/export.csv?charity_model=Model%25_Case`);
+    expect(
+      screen.getByRole('link', { name: view.i18n.t('common.operations.logs.exportJson') }),
+    ).toHaveAttribute('href', `${root}/export.json?charity_model=Model%25_Case`);
+  },
+);
+
 describe('steward caller identity', () => {
   it('shows the complete identity in the list and detail and copies the full ID', async () => {
     const discordID = '1'.repeat(18);
@@ -282,7 +324,7 @@ for (const role of ['admin', 'steward'] as const) {
     expect(await screen.findByRole('cell', { name: model })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
     const drawer = await screen.findByRole('dialog');
-    expect(within(drawer).getByText('Requested charity model')).toBeVisible();
+    expect(within(drawer).getByText('Called charity model')).toBeVisible();
     expect(within(drawer).getByText(model)).toBeVisible();
     expect(drawer.querySelector('example')).toBeNull();
   });

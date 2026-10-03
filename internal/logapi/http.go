@@ -294,6 +294,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 		allowed["endpoint_key_id"] = true
 		allowed["endpoint_base_url"] = true
 		allowed["upstream_model"] = true
+		allowed["charity_model"] = true
 	default:
 		return ListFilter{}, ErrInvalid
 	}
@@ -335,6 +336,8 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 				return ListFilter{}, ErrInvalid
 			}
 			filter.EndpointKeyID = &parsed
+		case "charity_model":
+			filter.CharityModel = &value
 		case "upstream_model":
 			if !utf8.ValidString(value) {
 				return ListFilter{}, ErrInvalid

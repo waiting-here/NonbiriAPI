@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -108,6 +107,9 @@ func TestDuelFreshAndUpgradeSchemaIdentity(t *testing.T) {
 	if err := applyRecurrenceExtension(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
+	if err := applyTransportExtension(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
 	got, err := readGenerationManifest(ctx, tx)
 	if err != nil || generationManifestDigest(got) != generationManifestDigest(want) {
 		t.Fatal("fresh and upgraded structures differ", generationManifestDigest(got), err)
@@ -149,9 +151,7 @@ func TestDuelBootstrapRollbackAndPartialSourceRejection(t *testing.T) {
 				if err == nil {
 					t.Fatal("missing rejection")
 				}
-				if !reflect.DeepEqual(before, snapshotBootstrapSources(t, path)) {
-					t.Fatal("rejected source changed")
-				}
+				assertBootstrapSourcesUnchanged(t, path, before)
 				return
 			}
 			hostileMustExec(t, store.DB(), `VACUUM`)

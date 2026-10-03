@@ -1,3 +1,5 @@
+import { TransportRuleField } from '@shared/components/TransportRuleField';
+import type { TransportRule } from '@shared/transportRule';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -40,6 +42,7 @@ import type { CatalogEntry, ConnectorType, Endpoint, Model } from './types';
 import './quickstart.css';
 
 interface ModelChoice {
+  transportRule?: TransportRule;
   id: string;
   upstream: string;
   provider: string;
@@ -394,7 +397,11 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
           const saved = await run({
             kind: 'model',
             row: row.id,
-            input: { provider: row.provider, model: row.name },
+            input: {
+              provider: row.provider,
+              model: row.name,
+              transport_rule: row.transportRule ?? 'passthrough',
+            },
           });
           if (!saved || saved.kind !== 'model') break;
           model = saved.model;
@@ -1061,6 +1068,13 @@ export function Quickstart({ accountId, onClose }: { accountId: string; onClose:
                               />
                               <small>{text('nameHelp')}</small>
                             </label>
+                            {!row.existing ? (
+                              <TransportRuleField
+                                value={row.transportRule ?? 'passthrough'}
+                                onChange={(transportRule) => updateRow(row.id, { transportRule })}
+                                disabled={locked || Boolean(row.model)}
+                              />
+                            ) : null}
                             <code>
                               {row.provider}/{row.name}
                             </code>

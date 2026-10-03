@@ -11,7 +11,7 @@ export async function browserFixtureBinary(root, directory) {
   }
   const binary = resolve(directory, process.platform === 'win32' ? 'fixture.exe' : 'fixture');
   const build = spawn(process.env.GO_BINARY || 'go',
-    ['test', '-c', '-tags', 'dist', '-o', binary, '.'],
+    ['test', '-c', '-tags', 'dist', '-o', binary, './internal/app'],
     { cwd: root, env: { ...process.env, CGO_ENABLED: '0' },
       windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

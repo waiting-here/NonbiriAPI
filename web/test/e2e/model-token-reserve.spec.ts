@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from './test';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
@@ -139,6 +139,7 @@ function initialModel(): JSONRecord {
     token_reserve_credits: '1.234',
     pricing: tokenPricing(),
     discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+    transport_rule: 'passthrough',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: '0',
@@ -231,6 +232,7 @@ async function installManagementRoutes(page: Page, scenario: Scenario, state: Fi
       state.model = {
         ...state.model,
         pricing,
+        ...(Object.hasOwn(body, 'transport_rule') ? { transport_rule: body.transport_rule } : {}),
         ...(Object.hasOwn(body, 'token_reserve_credits')
           ? { token_reserve_credits: body.token_reserve_credits }
           : {}),
@@ -441,5 +443,159 @@ for (const scenario of scenarios) {
     page,
   }) => {
     await exerciseScenario(page, context, scenario);
+  });
+
+  test(`${scenario.name} saves a transport rule once and exports the applied charity log filter`, async ({
+    context,
+    page,
+  }) => {
+    const state: FixtureState = { model: initialModel(), patchBodies: [], conflictNext: false };
+    const consoleGuard = await prepare(context, page, scenario);
+    if (scenario.frame === 'admin') await page.setViewportSize({ width: 1440, height: 900 });
+    await installManagementRoutes(page, scenario, state);
+    const logReads: URL[] = [];
+    const exportReads: URL[] = [];
+    await page.route('**/*', async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() !== 'GET' || url.origin !== scenario.origin) {
+        await route.fallback();
+        return;
+      }
+      if (url.pathname === `${scenario.root}/logs`) {
+        assertNumberedPage(url);
+        logReads.push(url);
+        await fulfillJSON(route, numberedResponse([], '1', PAGE_SIZE));
+        return;
+      }
+      const format = ['csv', 'json'].find(
+        (format) => url.pathname === `${scenario.root}/logs/export.${format}`,
+      );
+      if (format) {
+        exportReads.push(url);
+        await route.fulfill({
+          status: 200,
+          headers: {
+            'content-type': format === 'csv' ? 'text/csv' : 'application/json',
+            'content-disposition': `attachment; filename="logs.${format}"`,
+            'cache-control': 'no-store',
+          },
+          body: format === 'csv' ? 'request_id,charity_model\n' : '[]',
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    const chinese = scenario.locale === 'zh';
+    const rule = chinese ? 'force_stream' : 'force_non_stream';
+    const ruleLabel = chinese ? '传输规则' : 'Transport rule';
+    const options = chinese
+      ? ['透传（默认）', '假流式（强制非流）', '假非流（强制流式）']
+      : [
+          'Pass through (default)',
+          'Simulated streaming (force non-stream)',
+          'Buffered non-streaming (force stream)',
+        ];
+    await page.goto(scenario.origin + scenario.pagePath);
+    const row = page.locator('.ops-table tbody tr').filter({ hasText: MODEL_NAME });
+    await row.getByRole('button', { name: /Manage|管理/ }).click();
+    const editor = page.locator('.card').filter({
+      has: page.getByRole('heading', { name: MODEL_NAME }),
+    });
+    const transport = editor.getByRole('combobox', { name: ruleLabel });
+    await expect(transport).toHaveValue('passthrough');
+    await expect(transport.locator('option')).toHaveText(options);
+    await transport.selectOption(rule);
+    await expect(transport).toHaveAccessibleDescription(
+      chinese
+        ? '收齐上游流后，向非流式调用方返回 JSON；非流请求仍受代理等待时限。'
+        : 'Streaming callers receive keepalives while waiting, then the complete upstream result.',
+    );
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url() === `${scenario.origin}${scenario.root}/charity-models/${MODEL_ID}` &&
+        response.request().method() === 'PATCH',
+    );
+    await editor.getByRole('button', { name: /Save model|保存模型/ }).click();
+    expect((await saved).status()).toBe(200);
+    await expect.poll(() => state.patchBodies).toHaveLength(1);
+    expect(state.patchBodies[0]).toMatchObject({ expected_revision: '1', transport_rule: rule });
+    await page.reload();
+    await expect(transport).toHaveValue(rule);
+    expect(state.patchBodies).toHaveLength(1);
+    await saveScreenshot(page, `${scenario.name}-transport-saved`);
+    await assertPresentation(page, scenario, consoleGuard);
+
+    await page.goto(scenario.origin + (scenario.frame === 'admin' ? '/logs' : '/steward?tab=logs'));
+    const filters = page.getByTestId('log-filters');
+    const charity = filters.getByRole('textbox', {
+      name: chinese ? '调用的公益模型' : 'Called charity model',
+    });
+    await expect(charity).toHaveAttribute(
+      'placeholder',
+      chinese
+        ? '按名称片段搜索；英文大小写无关'
+        : 'Search by part of the name; English letter case ignored',
+    );
+    await expect.poll(() => logReads.length).toBeGreaterThan(0);
+    const readsBeforeTyping = logReads.length;
+    const nameFragment = 'MiXeD%_公益';
+    await charity.fill(nameFragment);
+    expect(new URL(page.url()).searchParams.has('charity_model')).toBe(false);
+    expect(logReads).toHaveLength(readsBeforeTyping);
+    const filtered = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.origin === scenario.origin &&
+        url.pathname === `${scenario.root}/logs` &&
+        url.searchParams.get('charity_model') === nameFragment
+      );
+    });
+    await filters.getByRole('button', { name: chinese ? '应用筛选' : 'Apply filter' }).click();
+    expect((await filtered).status()).toBe(200);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('charity_model'))
+      .toBe(nameFragment);
+    expect(new URL(page.url()).searchParams.get('page')).toBe('1');
+
+    for (const format of ['csv', 'json'] as const) {
+      const link = page.getByRole('link', {
+        name: `${chinese ? '导出' : 'Export'} ${format.toUpperCase()}`,
+        exact: true,
+      });
+      const href = await link.getAttribute('href');
+      expect(href).not.toBeNull();
+      const exportURL = new URL(href!, scenario.origin);
+      expect(exportURL.pathname).toBe(`${scenario.root}/logs/export.${format}`);
+      expect(exportURL.searchParams.get('charity_model')).toBe(nameFragment);
+      expect(exportURL.searchParams.has('page')).toBe(false);
+      await expect(link).toHaveAttribute('download', '');
+      // Chromium download-only requests bypass these routes without a CDP
+      // networkId, and the fixture server has no per-test HTTP export hook.
+      // The attachment response checks the URL and bytes; the native download
+      // attribute is checked above, but its download behavior is not exercised.
+      await link.evaluate((element) => element.removeAttribute('download'));
+      const downloaded = page.waitForEvent('download');
+      await link.click();
+      const download = await downloaded;
+      expect(download.url()).toBe(exportURL.href);
+      expect(download.suggestedFilename()).toBe(`logs.${format}`);
+      expect(await download.failure()).toBeNull();
+      const path = await download.path();
+      expect(path).not.toBeNull();
+      expect(await readFile(path!, 'utf8')).toBe(
+        format === 'csv' ? 'request_id,charity_model\n' : '[]',
+      );
+    }
+    expect(exportReads.map((url) => url.searchParams.get('charity_model'))).toEqual([
+      nameFragment,
+      nameFragment,
+    ]);
+    await page.reload();
+    await expect(charity).toHaveValue(nameFragment);
+    expect(logReads.at(-1)?.searchParams.get('charity_model')).toBe(nameFragment);
+    await saveScreenshot(page, `${scenario.name}-charity-log-filter`);
+    await assertPresentation(page, scenario, consoleGuard);
   });
 }

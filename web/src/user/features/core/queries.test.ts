@@ -25,6 +25,7 @@ const model = (id: string, revision = '0'): Model => ({
   full_name: `provider/model-${id}`,
   route_strategy: 'ordered',
   silent_retry: false,
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: revision,

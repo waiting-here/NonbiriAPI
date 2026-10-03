@@ -333,6 +333,7 @@ const charityModel = (start: number, end: number): CharityModel => ({
   token_reserve_credits: null,
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: start, end_at: end },
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',
@@ -910,6 +911,7 @@ describe('CharityManagement corrective controls', () => {
       public_description: '',
       pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
       discount: { enabled: true, percent: 10, start_at: start, end_at: end },
+      transport_rule: 'passthrough',
       flatten_tool_calls: false,
     });
     expect(patchBodies[0]).not.toHaveProperty('pricing_mode');
@@ -1231,9 +1233,14 @@ describe('CharityManagement corrective controls', () => {
     if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
     const editor = within(card);
     const textarea = editor.getByLabelText('Public description (plain text, optional)');
+    await view.user.selectOptions(
+      editor.getByRole('combobox', { name: 'Transport rule' }),
+      'force_non_stream',
+    );
     fireEvent.change(textarea, { target: { value: 'submitted' } });
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
     await waitFor(() => expect(patchBodies).toHaveLength(1));
+    expect(patchBodies[0]).toHaveProperty('transport_rule', 'force_non_stream');
     fireEvent.change(textarea, { target: { value: 'new draft' } });
 
     current = { ...current, revision: '2', public_description: 'submitted', updated_at: 2 };

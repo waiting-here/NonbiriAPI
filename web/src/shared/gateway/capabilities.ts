@@ -23,7 +23,7 @@ export interface GatewayCapabilityPolicy {
   efforts: GatewayEffort[];
   max_output_tokens: number;
   storage: 'reject' | 'openai' | 'omit_false';
-  cache: 'reject' | 'anthropic';
+  cache: 'reject' | 'anthropic' | 'anthropic_explicit';
 }
 
 export function gatewayAdapterEfforts(adapter: GatewayAdapter): readonly GatewayEffort[] {
@@ -55,6 +55,10 @@ export function normalizeGatewayCapabilityPolicy(
     ),
     max_output_tokens: integer(policy.max_output_tokens, `${label} output ceiling`, 0, 2147483647),
     storage: oneOf(policy.storage, ['reject', 'openai', 'omit_false'], `${label} storage policy`),
-    cache: oneOf(policy.cache, ['reject', 'anthropic'], `${label} cache policy`),
+    cache: oneOf(
+      policy.cache,
+      ['reject', 'anthropic', 'anthropic_explicit'],
+      `${label} cache policy`,
+    ),
   };
 }

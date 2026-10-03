@@ -85,23 +85,13 @@ type Service struct {
 }
 
 func New(o Options) (*Service, error) {
-	if o.Database == nil || o.Rules == nil || o.Finance == nil || o.UserAuthorizer == nil || o.Continuation == nil || o.Limiter == nil || o.Pools == nil || o.Publisher == nil || o.Keys == nil || o.Descriptor.Codec == nil || o.Descriptor.ID != o.Rules.ID() || o.Descriptor.Version != 1 {
+	if o.Finance == nil || o.UserAuthorizer == nil || o.Continuation == nil || o.Limiter == nil || o.Pools == nil || o.Publisher == nil || o.Keys == nil {
 		return nil, ErrInvariant
 	}
 	s := &Service{database: o.Database, descriptor: o.Descriptor, rules: o.Rules, finance: o.Finance, authorizer: o.UserAuthorizer, continuation: o.Continuation, limiter: o.Limiter, pools: o.Pools, publisher: o.Publisher, now: o.Now, generateID: o.GenerateID, reportError: o.ReportError, actions: map[int64][]time.Time{}}
 	s.adminAuthorizer, s.adminAudit, s.exporting = o.AdminAuthorizer, o.AdminAudit, map[int64]bool{}
-	switch s.rules.ID() {
-	case "bidding":
-		s.queuePrefix = "bidq_"
-		s.sessionPrefix = "bid_"
-	case "likes":
-		s.queuePrefix = "likq_"
-		s.sessionPrefix = "lik_"
-	default:
-		return nil, ErrInvariant
-	}
-	if s.now == nil {
-		s.now = time.Now
+	if err := s.initializeReader(); err != nil {
+		return nil, err
 	}
 	if s.generateID == nil {
 		s.generateID = db.GenerateOpaqueID
@@ -120,6 +110,29 @@ func New(o Options) (*Service, error) {
 	}
 	return s, nil
 }
+
+// initializeReader sets the identities shared by persistence reads and runtime.
+// It does not open resources, derive keys or access the database.
+func (s *Service) initializeReader() error {
+	if s.database == nil || s.rules == nil || s.descriptor.Codec == nil || s.descriptor.ID != s.rules.ID() || s.descriptor.Version != 1 {
+		return ErrInvariant
+	}
+	switch s.rules.ID() {
+	case "bidding":
+		s.queuePrefix = "bidq_"
+		s.sessionPrefix = "bid_"
+	case "likes":
+		s.queuePrefix = "likq_"
+		s.sessionPrefix = "lik_"
+	default:
+		return ErrInvariant
+	}
+	if s.now == nil {
+		s.now = time.Now
+	}
+	return nil
+}
+
 func (s *Service) begin(ctx context.Context) (*sql.Tx, int64, error) {
 	if s == nil || s.closed.Load() {
 		return nil, 0, ErrUnavailable

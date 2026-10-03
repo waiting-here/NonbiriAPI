@@ -1,3 +1,5 @@
+import { TransportRuleField } from '@shared/components/TransportRuleField';
+import type { TransportRule } from '@shared/transportRule';
 import { Link, useLocation } from 'react-router';
 import { DonationKeyModels } from './DonationKeyModels';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
@@ -1776,6 +1778,7 @@ function DonationsPanel({
 }
 
 interface ModelDraft {
+  transportRule: TransportRule;
   rolePolicy: RolePolicyDraft;
   isMainstream: boolean;
   excluded: string;
@@ -1807,6 +1810,7 @@ const zeroPrices = (): TokenPrices => ({
 
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
+    transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
     isMainstream: model?.is_mainstream ?? false,
     excluded: (model?.excluded_request_fields ?? []).join(', '),
@@ -1841,6 +1845,7 @@ function modelBody(
   const rolePolicy = buildRolePolicy(draft.rolePolicy);
   if (rolePolicy.error) throw new Error('Role fields are not ready');
   const body = {
+    transport_rule: draft.transportRule,
     role_policy: rolePolicy.policy,
     is_mainstream: draft.isMainstream,
     excluded_request_fields: excludedFields(draft.excluded) ?? [],
@@ -2117,6 +2122,10 @@ function ModelForm({
               <small>{t('common.operations.charity.routeAffinityTTLHelp')}</small>
             </label>
           ) : null}
+          <TransportRuleField
+            value={draft.transportRule}
+            onChange={(transportRule) => setDraft({ ...draft, transportRule })}
+          />
           <label className="checkbox-label">
             <input
               type="checkbox"

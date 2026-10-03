@@ -219,7 +219,7 @@ func translateChat(raw []byte, model string, created int64) ([]byte, contract.Us
 		return nil, usage, err
 	}
 	var content []json.RawMessage
-	if json.Unmarshal(root["content"], &content) != nil || len(content) == 0 || len(content) > 4096 {
+	if json.Unmarshal(root["content"], &content) != nil || content == nil || len(content) == 0 && reason != "content_filter" || len(content) > 4096 {
 		return nil, usage, errResponse
 	}
 	var textContent, reasoningContent strings.Builder

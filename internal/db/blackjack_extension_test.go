@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -140,9 +139,10 @@ func TestBlackjackPartialSourceRejectedWithoutWriting(t *testing.T) {
 		store.Close()
 		t.Fatal("partial schema accepted")
 	}
-	if err == nil || !reflect.DeepEqual(before, snapshotBootstrapSources(t, path)) {
-		t.Fatal("rejection modified source", err)
+	if err == nil {
+		t.Fatal("missing startup rejection", err)
 	}
+	assertBootstrapSourcesUnchanged(t, path, before)
 }
 
 func TestBlackjackNineSeatFreshConstraintAndRepeatedOpenNoOp(t *testing.T) {

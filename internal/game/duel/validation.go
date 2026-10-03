@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -26,6 +28,9 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 		`SELECT COUNT(*) FROM game_duel_sessions g WHERE g.game_key=? AND ((SELECT COUNT(*) FROM game_duel_seats p WHERE p.session_id=g.id)<>2 OR (g.state='active' AND (SELECT COUNT(*) FROM game_duel_user_slots u WHERE u.session_id=g.id AND u.game_key=g.game_key)<>2) OR (g.state='terminal' AND EXISTS(SELECT 1 FROM game_duel_user_slots u WHERE u.session_id=g.id)))`,
 	} {
 		var n int
+		if db.IsActiveRecovery(ctx) && strings.Contains(check, "FROM game_duel_sessions g WHERE") {
+			check = strings.Replace(check, "g.game_key=? AND", "g.game_key=? AND g.state='active' AND", 1)
+		}
 		if err := tx.QueryRowContext(ctx, check, s.rules.ID()).Scan(&n); err != nil {
 			return err
 		}
@@ -40,7 +45,11 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 		}
 		after := ""
 		for {
-			rows, err := tx.QueryContext(ctx, `SELECT id FROM `+table+` WHERE game_key=? AND id>? ORDER BY id LIMIT 100`, s.rules.ID(), after)
+			query := `SELECT id FROM ` + table + ` WHERE game_key=? AND id>?`
+			if kind == "session" && db.IsActiveRecovery(ctx) {
+				query += ` AND state='active'`
+			}
+			rows, err := tx.QueryContext(ctx, query+` ORDER BY id LIMIT 100`, s.rules.ID(), after)
 			if err != nil {
 				return err
 			}
@@ -82,6 +91,9 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 			}
 			after = ids[len(ids)-1]
 		}
+	}
+	if db.IsActiveRecovery(ctx) {
+		return nil
 	}
 	return s.validateArchives(ctx, tx)
 }
@@ -281,4 +293,13 @@ func (s *Service) validateArchives(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return rows.Err()
+}
+
+// VerifyPersistedState audits live and archived records without runtime setup.
+func VerifyPersistedState(ctx context.Context, database *sql.DB, descriptor game.ModuleDescriptor, rules Rules) error {
+	service := &Service{database: database, descriptor: descriptor, rules: rules}
+	if err := service.initializeReader(); err != nil {
+		return err
+	}
+	return service.ValidatePersistedState(ctx)
 }

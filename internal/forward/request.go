@@ -8,6 +8,7 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 // validatedRequest owns exactly one protocol snapshot. Metadata and capability
@@ -19,6 +20,7 @@ type validatedRequest struct {
 	Model             string
 	Stream            bool
 	roleSnapshot      *rolepolicy.Policy
+	transportRule     transportpolicy.Rule
 	policyRevision    int64
 	policyModelID     int64
 	policyDecisionNow int64
@@ -95,6 +97,7 @@ func (r *validatedRequest) CloneForAttempt() *validatedRequest {
 		result.roleSnapshot = &policy
 	}
 	result.policyRevision = r.policyRevision
+	result.transportRule = r.transportRule
 	result.excluded = append([]string(nil), r.excluded...)
 	return result
 }

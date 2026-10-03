@@ -49,3 +49,6 @@ func scanManagementCommon(scanner rowScanner, extra ...any) (commonLogRecord, *C
 	}
 	return record, &CallerIdentity{DiscordNickname: textPointer(nickname), DiscordID: textPointer(discordID)}, nil
 }
+
+// Match the call-time platform name; instr treats SQL wildcard characters literally.
+const charityModelPredicate = " AND l.route_kind IN ('charity_chat_completions','charity_embeddings') AND instr(lower(l.model),lower(?))>0"
