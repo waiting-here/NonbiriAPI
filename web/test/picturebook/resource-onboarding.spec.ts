@@ -277,6 +277,7 @@ test('same call names require only an actual collision choice and retain existin
       model: 'chat',
       route_strategy: 'random',
       silent_retry: false,
+      transport_rule: 'passthrough',
       flatten_tool_calls: true,
     });
     expect(response.status()).toBe(201);
@@ -298,6 +299,7 @@ test('same call names require only an actual collision choice and retain existin
       id: previous.id,
       route_strategy: 'random',
       silent_retry: false,
+      transport_rule: 'passthrough',
       flatten_tool_calls: true,
       binding_count: '1',
     });

@@ -24,4 +24,5 @@ export const gatewayStorageLabels: Record<GatewayCapabilityPolicy['storage'], st
 export const gatewayCacheLabels: Record<GatewayCapabilityPolicy['cache'], string> = {
   reject: 'gatewayCapabilities.cacheOptions.reject',
   anthropic: 'gatewayCapabilities.cacheOptions.anthropic',
+  anthropic_explicit: 'gatewayCapabilities.cacheOptions.anthropic_explicit',
 };

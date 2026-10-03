@@ -1,3 +1,4 @@
+import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
 import { clearResourceNavigation } from '@shared/operations/resourceNavigation';
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,6 +38,7 @@ export interface ManagementPriceSet {
 }
 
 export interface ManagementCharityModel {
+  transport_rule: TransportRule;
   id: string;
   provider: string;
   model: string;
@@ -248,8 +250,11 @@ export function stationSessionMatches(
   const authority = sessionAuthority(client, frame);
   const sessionKey = frame === 'admin' ? ['admin', 'session'] : ['user', 'session'];
   const cachedIdentity = managementSessionIdentity(frame, client.getQueryData(sessionKey));
-  return authority.generation === snapshot.generation && authority.subject === snapshot.subject &&
-    cachedIdentity?.subject === snapshot.subject;
+  return (
+    authority.generation === snapshot.generation &&
+    authority.subject === snapshot.subject &&
+    cachedIdentity?.subject === snapshot.subject
+  );
 }
 
 /** Bind one account-scoped request to the exact station subject and generation. */
@@ -1026,6 +1031,7 @@ export function normalizeManagementCharityModel(value: unknown): ManagementChari
     ...(record.role_policy
       ? { role_policy: record.role_policy as ManagementCharityModel['role_policy'] }
       : {}),
+    transport_rule: normalizeTransportRule(recordValue(record, 'transport_rule')),
     flatten_tool_calls: requiredPolicyBoolean(
       recordValue(record, 'flatten_tool_calls'),
       'charity tool-call policy',
@@ -1363,6 +1369,7 @@ export function useDeleteManagedDonation(frame: CharityManagementFrame) {
 }
 
 export interface CharityModelPayload {
+  transport_rule?: TransportRule;
   provider: string;
   model: string;
   pricing_mode: CharityPricingMode;

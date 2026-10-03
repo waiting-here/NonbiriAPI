@@ -139,6 +139,7 @@ function initialModel(): JSONRecord {
     token_reserve_credits: '1.234',
     pricing: tokenPricing(),
     discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+    transport_rule: 'passthrough',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: '0',

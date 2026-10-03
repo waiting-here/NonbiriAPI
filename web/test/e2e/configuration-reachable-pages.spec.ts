@@ -140,6 +140,7 @@ const currentCharityModel = {
   token_reserve_credits: null,
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',
@@ -836,6 +837,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
     if (route.request().method() === 'PATCH') {
       savedModel = {
         ...currentCharityModel,
+        transport_rule: 'passthrough',
         flatten_tool_calls: true,
         revision: '2',
         updated_at: 3,

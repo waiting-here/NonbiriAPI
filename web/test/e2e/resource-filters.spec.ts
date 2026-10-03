@@ -160,6 +160,7 @@ test('personal models send all filters before pagination and preserve them throu
     full_name: 'Vendor/Logical',
     route_strategy: 'ordered',
     silent_retry: false,
+    transport_rule: 'passthrough',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: '1',

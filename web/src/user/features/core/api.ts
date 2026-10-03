@@ -1,3 +1,4 @@
+import { normalizeTransportRule } from '@shared/transportRule';
 import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import { ApiError, isApiError } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
@@ -931,7 +932,7 @@ export async function createModel(
   const record = exactInput(
     input,
     ['provider', 'model'],
-    ['route_strategy', 'silent_retry', 'flatten_tool_calls', 'role_policy'],
+    ['route_strategy', 'silent_retry', 'flatten_tool_calls', 'role_policy', 'transport_rule'],
     'logical model creation input',
   );
   const routeStrategy = record.route_strategy;
@@ -947,6 +948,9 @@ export async function createModel(
       : {}),
     ...(Object.hasOwn(record, 'flatten_tool_calls')
       ? { flatten_tool_calls: exactBooleanInput(record.flatten_tool_calls, 'tool call setting') }
+      : {}),
+    ...(Object.hasOwn(record, 'transport_rule')
+      ? { transport_rule: normalizeTransportRule(record.transport_rule) }
       : {}),
     ...(Object.hasOwn(record, 'role_policy')
       ? { role_policy: rolePolicyInput(record.role_policy) }
@@ -971,7 +975,15 @@ export async function patchModel(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['provider', 'model', 'route_strategy', 'silent_retry', 'flatten_tool_calls', 'role_policy'],
+    [
+      'provider',
+      'model',
+      'route_strategy',
+      'silent_retry',
+      'flatten_tool_calls',
+      'role_policy',
+      'transport_rule',
+    ],
     'logical model update input',
   );
   if (
@@ -982,6 +994,7 @@ export async function patchModel(
       'silent_retry',
       'flatten_tool_calls',
       'role_policy',
+      'transport_rule',
     ].some((key) => Object.hasOwn(record, key))
   ) {
     throw new ApiError('invalid_request', 'Invalid logical model update input.', 400);
@@ -1009,6 +1022,9 @@ export async function patchModel(
       : {}),
     ...(Object.hasOwn(record, 'flatten_tool_calls')
       ? { flatten_tool_calls: exactBooleanInput(record.flatten_tool_calls, 'tool call setting') }
+      : {}),
+    ...(Object.hasOwn(record, 'transport_rule')
+      ? { transport_rule: normalizeTransportRule(record.transport_rule) }
       : {}),
     ...(Object.hasOwn(record, 'role_policy')
       ? { role_policy: rolePolicyInput(record.role_policy) }

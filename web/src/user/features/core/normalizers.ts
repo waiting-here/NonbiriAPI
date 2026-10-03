@@ -1,3 +1,4 @@
+import { normalizeTransportRule } from '@shared/transportRule';
 import { normalizeRolePolicy } from '@shared/rolePolicy';
 import { normalizeAnnouncementSummary } from '../operations/data';
 import { oneOf } from '@shared/operations/wire';
@@ -1280,6 +1281,7 @@ export function normalizeModel(value: unknown): Model {
       'model',
       'full_name',
       'route_strategy',
+      'transport_rule',
       'silent_retry',
       'flatten_tool_calls',
       'revision',
@@ -1311,6 +1313,7 @@ export function normalizeModel(value: unknown): Model {
     provider,
     model,
     full_name: fullName,
+    transport_rule: normalizeTransportRule(record.transport_rule),
     route_strategy: record.route_strategy,
     silent_retry: exactBoolean(record.silent_retry, 'silent retry setting'),
     flatten_tool_calls: exactBoolean(record.flatten_tool_calls, 'tool call setting'),

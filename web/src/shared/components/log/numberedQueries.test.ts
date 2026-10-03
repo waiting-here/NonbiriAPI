@@ -1,3 +1,4 @@
+import { roleLogExportPath } from './data';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures } from '../../../../test/unit/support';
 import {
@@ -360,4 +361,30 @@ describe('numbered log requests', () => {
       requestID,
     );
   });
+});
+
+describe('charity model log filtering', () => {
+  it.each(['admin', 'steward'] as const)(
+    'preserves literal %s filter in list and export',
+    async (role) => {
+      const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+      const filter = { charity_model: 'MODEL%_Case' };
+      const mock = installJsonFetchFixtures([
+        {
+          method: 'GET',
+          path: `${root}?charity_model=MODEL%25_Case&page=1&page_size=20`,
+          body: list([], pagination('1', 20, 0)),
+        },
+      ]);
+      await getRoleLogsPage(role, '1', 20, filter);
+      expect(mock).toHaveBeenCalledTimes(1);
+      expect(numberedLogKeys.list(role, 'viewer', '1', 20, filter)).not.toEqual(
+        numberedLogKeys.list(role, 'viewer', '1', 20, { charity_model: 'other' }),
+      );
+      await expect(getRoleLogsPage('user', '1', 20, filter)).rejects.toThrow();
+      expect(roleLogExportPath(role, filter, 'csv')).toBe(
+        `${root}/export.csv?charity_model=MODEL%25_Case`,
+      );
+    },
+  );
 });

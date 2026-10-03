@@ -121,11 +121,16 @@ describe('personal model role editor', () => {
       screen.getByRole('combobox', { name: 'Default action for unlisted roles' }),
       'reject',
     );
+    await view.user.selectOptions(
+      screen.getByRole('combobox', { name: 'Transport rule' }),
+      'force_stream',
+    );
     await addRule(view, 'developer', 'system');
     await addRule(view, 'critic', 'user');
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(f.writes).toHaveLength(1));
     expect(f.writes[0]).toMatchObject({
+      transport_rule: 'force_stream',
       expected_revision: original.revision,
       role_policy: { default_action: 'reject', rules: { developer: 'system', critic: 'user' } },
     });
