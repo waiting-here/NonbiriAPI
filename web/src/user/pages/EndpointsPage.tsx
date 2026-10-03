@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { Drawer } from '@shared/components/ui/Drawer';
 import { useResourceFilters, useResourceListScroll } from '../features/core/useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from '../features/core/ResourceFilterControls';
 import { useState } from 'react';
@@ -11,14 +13,10 @@ import {
   CoreEmpty,
   CoreErrorPanel,
   CoreLoading,
-  CoreTime,
   CoreUserGate,
-  SafeCopyValue,
 } from '../features/core/components';
 import { EndpointDetail } from '../features/core/EndpointDetail';
-import { EndpointBrowseSummary } from '../features/core/ResourceBrowse';
 import { Quickstart } from '../features/core/Quickstart';
-import { useQuickstartCopy } from '../features/core/quickstartCopy';
 import { EndpointWizard } from '../features/core/EndpointWizard';
 import { useCoreCopy } from '../features/core/copy';
 import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
@@ -28,7 +26,7 @@ import '../features/core/core.css';
 
 function EndpointList({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
-  const { t: text } = useQuickstartCopy();
+  const { t: ui } = useTranslation();
   const [search, setSearch] = useSearchParams();
   const quickstart = search.get('quickstart') === '1';
   const location = useLocation();
@@ -53,7 +51,7 @@ function EndpointList({ user }: { user: UserProfile }) {
   const [creating, setCreating] = useState(false);
 
   const pageData = endpoints.data;
-  useResourceListScroll(user.id, Boolean(pageData) && !endpoints.isFetching);
+  useResourceListScroll(user.id, Boolean(pageData) && !endpoints.isFetching, !quickstart);
   const returnTo = pageData
     ? (() => {
         const params = new URLSearchParams(location.search);
@@ -69,37 +67,32 @@ function EndpointList({ user }: { user: UserProfile }) {
     return <CoreErrorPanel error={endpoints.error} onRetry={() => void endpoints.refetch()} />;
   }
 
-  return (
-    <div className="page core-page core-stack">
-      <PageHeader
-        icon="resources"
-        title={t('endpoints.title')}
-        description={t('endpoints.description')}
-        actions={
-          <div className="core-row-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() =>
-                setSearch((previous) => {
-                  const next = new URLSearchParams(previous);
-                  next.set('quickstart', '1');
-                  return next;
-                })
-              }
-            >
-              {text('start')}
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setCreating(true)}>
-              {text('advanced')}
-            </button>
-          </div>
-        }
+  const start = () =>
+    setSearch((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('quickstart', '1');
+      return next;
+    });
+  const manualWizard = creating ? (
+    <Drawer
+      open
+      onClose={() => setCreating(false)}
+      title={t('endpoints.wizardTitle')}
+      closeLabel={t('common.close')}
+    >
+      <EndpointWizard
+        accountId={user.id}
+        onClose={() => setCreating(false)}
+        onCreated={() => void endpoints.refetch()}
       />
-
-      {quickstart ? (
+    </Drawer>
+  ) : null;
+  if (quickstart)
+    return (
+      <div className="page core-page services-quickstart-page">
         <Quickstart
           accountId={user.id}
+          onManual={() => setCreating(true)}
           onClose={() =>
             setSearch((previous) => {
               const next = new URLSearchParams(previous);
@@ -108,108 +101,122 @@ function EndpointList({ user }: { user: UserProfile }) {
             })
           }
         />
-      ) : null}
-      {creating ? (
-        <EndpointWizard
-          accountId={user.id}
-          onClose={() => setCreating(false)}
-          onCreated={() => void endpoints.refetch()}
-        />
-      ) : null}
-
-      <ResourceFilterBar control={filters} />
-      {endpoints.isPending && !pageData ? (
-        <CoreLoading />
-      ) : endpoints.error && !pageData ? (
-        <CoreErrorPanel error={endpoints.error} onRetry={() => void endpoints.refetch()} />
-      ) : pageData ? (
-        <section className="core-card" aria-busy={endpoints.isFetching}>
-          {endpoints.error ? (
-            <CoreErrorPanel
-              compact
-              error={endpoints.error}
-              onRetry={() => void endpoints.refetch()}
-            />
-          ) : null}
-          {pageData.data.length === 0 && filters.active ? (
-            <FilteredResourceEmpty control={filters} />
-          ) : pageData.data.length === 0 ? (
-            <CoreEmpty
-              title={t('endpoints.emptyTitle')}
-              body={t('endpoints.emptyBody')}
-              action={
-                <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-                  {t('endpoints.create')}
-                </button>
-              }
-            />
-          ) : (
-            <ul className="core-endpoint-list">
-              {pageData.data.map((endpoint) => (
-                <li key={endpoint.id} className="core-endpoint-card">
-                  <div className="core-endpoint-card__top">
-                    <div>
-                      <strong>
-                        {endpoint.origin.kind === 'mainstream' ? (
-                          t('endpoints.originMainstream', { name: endpoint.origin.name })
-                        ) : (
-                          <ConnectorLabel value={endpoint.connector_type} />
-                        )}
-                      </strong>
-                    </div>
-                  </div>
-                  <EndpointBrowseSummary endpoint={endpoint} />
-                  <dl className="core-detail-list">
-                    {endpoint.origin.kind === 'mainstream' ? (
-                      <div>
-                        <dt>{t('endpoints.connector')}</dt>
-                        <dd>
-                          <ConnectorLabel value={endpoint.connector_type} />
-                        </dd>
-                      </div>
-                    ) : null}
-                    <div>
-                      <dt>{t('endpoints.baseUrl')}</dt>
-                      <dd>
-                        <SafeCopyValue value={endpoint.base_url} label={t('endpoints.baseUrl')} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('endpoints.note')}</dt>
-                      <dd>{endpoint.note || t('common.notSet')}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('common.updated')}</dt>
-                      <dd>
-                        <CoreTime value={endpoint.updated_at} />
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="core-row-actions">
-                    <span />
-                    <Link
-                      className="btn btn-secondary"
-                      to={CORE_ROUTE_PATHS.endpointDetail(endpoint.id)}
-                      state={returnTo ? { ...location.state, returnTo } : undefined}
-                    >
-                      {t('endpoints.manage')}
+        {manualWizard}
+      </div>
+    );
+  return (
+    <div className="page core-page core-stack services-page">
+      <PageHeader
+        icon="resources"
+        title={t('endpoints.title')}
+        description={ui('user.services.description')}
+        actions={
+          <button type="button" className="nb-btn nb-btn--primary" onClick={start}>
+            ＋ {ui('user.services.add')}
+          </button>
+        }
+      />
+      {manualWizard}
+      <section className="nb-panel" aria-busy={endpoints.isFetching}>
+        <div className="nb-panel__body">
+          <ResourceFilterBar control={filters} />
+        </div>
+        {endpoints.isPending && !pageData ? (
+          <CoreLoading />
+        ) : endpoints.error && !pageData ? (
+          <CoreErrorPanel error={endpoints.error} onRetry={() => void endpoints.refetch()} />
+        ) : pageData ? (
+          <>
+            {endpoints.error ? (
+              <CoreErrorPanel
+                compact
+                error={endpoints.error}
+                onRetry={() => void endpoints.refetch()}
+              />
+            ) : null}
+            {pageData.data.length === 0 && filters.active ? (
+              <FilteredResourceEmpty control={filters} />
+            ) : pageData.data.length === 0 ? (
+              <CoreEmpty
+                title={ui('user.services.emptyTitle')}
+                body={ui('user.services.emptyBody')}
+                action={
+                  <div className="nb-inline">
+                    <button type="button" className="nb-btn nb-btn--primary" onClick={start}>
+                      {ui('user.services.add')}
+                    </button>
+                    <Link className="nb-btn nb-btn--secondary" to="/charity">
+                      {ui('user.services.charity')}
                     </Link>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <PagePagination
-            metadata={pageData.pagination}
-            requestedPage={pager.page}
-            busy={endpoints.isFetching}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        </section>
-      ) : (
-        <CoreLoading />
-      )}
+                }
+              />
+            ) : (
+              <ul className="nb-list services-list">
+                {pageData.data.map((item) => {
+                  const name =
+                    item.note ||
+                    (item.origin.kind === 'mainstream' ? item.origin.name : item.base_url);
+                  return (
+                    <li key={item.id}>
+                      <Link
+                        className="nb-row core-endpoint-card"
+                        to={CORE_ROUTE_PATHS.endpointDetail(item.id)}
+                        state={returnTo ? { ...location.state, returnTo } : undefined}
+                      >
+                        <span className="nb-row__icon" aria-hidden="true">
+                          {Array.from(name)[0]?.toUpperCase()}
+                        </span>
+                        <span className="nb-row__main">
+                          <span className="nb-row__title">
+                            <strong>{name}</strong>
+                            <span
+                              className={`nb-badge nb-badge--${item.browse?.state === 'available' ? 'ok' : 'warn'}`}
+                            >
+                              {item.browse
+                                ? t(`browse.endpoint.${item.browse.state}`)
+                                : t('common.unknown')}
+                            </span>
+                          </span>
+                          <span className="nb-row__sub nb-mono" title={item.base_url}>
+                            {item.base_url}
+                          </span>
+                          <span className="nb-row__facts">
+                            <span>
+                              <ConnectorLabel value={item.connector_type} /> ·{' '}
+                              {item.origin.kind === 'mainstream'
+                                ? t('filters.mainstream')
+                                : t('filters.custom')}
+                            </span>
+                            <span>{t('browse.keyCount', { count: item.key_count })}</span>
+                            <span>
+                              {t('browse.modelCount', { count: item.browse?.model_count ?? '—' })}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="nb-row__end">
+                          <span className="nb-btn nb-btn--secondary nb-btn--sm">
+                            {t('endpoints.manage')}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <PagePagination
+              metadata={pageData.pagination}
+              requestedPage={pager.page}
+              busy={endpoints.isFetching}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          </>
+        ) : (
+          <CoreLoading />
+        )}
+      </section>
     </div>
   );
 }

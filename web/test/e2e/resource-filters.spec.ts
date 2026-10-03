@@ -11,7 +11,7 @@ const endpoints = Array.from({ length: 23 }, (_, index) => ({
   note: `Needle resource ${index + 1}`,
   enabled: true,
   revision: '1',
-  key_count: '0',
+  key_count: '12',
   created_at: 1_700_000_000,
   updated_at: 1_700_000_001,
 }));
@@ -64,6 +64,7 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('1');
     await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Needle');
+    await form.locator('summary').click();
     await form
       .getByRole('combobox', { name: locale === 'en' ? 'Source' : '来源', exact: true })
       .selectOption('custom');
@@ -77,11 +78,12 @@ for (const locale of ['en', 'zh'] as const) {
     await page.locator('a[href="/endpoints/19"]').click();
     await expect(
       page.getByRole('heading', {
-        name: locale === 'en' ? 'Service details' : '服务详情',
+        name: 'Needle resource 19',
         exact: true,
       }),
     ).toBeVisible();
     await form.getByRole('searchbox').fill('masked-tail');
+    await form.locator('summary').click();
     await form
       .getByRole('button', { name: locale === 'en' ? 'Search' : '搜索', exact: true })
       .click();
@@ -106,8 +108,9 @@ for (const locale of ['en', 'zh'] as const) {
         ),
       )
       .toBe(true);
-    await page.getByRole('link', { name: locale === 'en' ? 'Back' : '返回', exact: true }).click();
+    await page.getByRole('link', { name: locale === 'en' ? /My services/ : /我的服务/ }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('2');
+    await expect(form.locator('details')).toHaveAttribute('open', '');
     expect(new URL(page.url()).searchParams.get('q')).toBe('Needle');
     expect(new URL(page.url()).searchParams.get('source')).toBe('custom');
     await expect
