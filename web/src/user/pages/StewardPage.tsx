@@ -20,6 +20,16 @@ import { TimeContextProvider } from '@shared/components/TimeContext';
 import { operationsKeys, useUserAuthority } from '../features/operations/data';
 import '@shared/operations/operations.css';
 
+const sectionKeys = {
+  risk: 'common.audit.risk',
+  logs: 'user.steward.logsTab',
+  charity: 'user.steward.charityTab',
+  users: 'user.steward.usersTab',
+  blacklist: 'user.steward.blacklistTab',
+  announcements: 'user.steward.announcementsTab',
+  maintenance: 'user.steward.maintenanceTab',
+} as const;
+
 export function StewardPage() {
   return <StewardPageContent />;
 }
@@ -117,12 +127,7 @@ function StewardPageContent() {
               ] as const)
           ).map((value) => ({
             value,
-            label:
-              value === 'risk'
-                ? t('common.audit.risk')
-                : value === 'blacklist'
-                  ? t('user.steward.blacklistTab')
-                  : t('user.steward.' + value + 'Tab'),
+            label: t(sectionKeys[value]),
           }))}
         />
         {!trainee && section === 'logs' ? (

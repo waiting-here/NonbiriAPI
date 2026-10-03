@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { Fold } from '@shared/components/ui';
 import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/core/onboarding';
 import { useNumberedModels } from '../features/core/modelNumberedQueries';
@@ -42,6 +42,36 @@ import type {
 import { HomeAnnouncements } from '../features/operations/HomeAnnouncements';
 import '../features/core/core.css';
 import '../features/core/home.css';
+
+const pageCopyKeys = {
+  'user.home.apiAccess': 'user.home.apiAccess',
+  'user.home.calls': 'user.home.calls',
+  'user.home.charity': 'user.home.charity',
+  'user.home.checkinRules': 'user.home.checkinRules',
+  'user.home.clientGuide': 'user.home.clientGuide',
+  'user.home.clientHelp': 'user.home.clientHelp',
+  'user.home.clientStep': 'user.home.clientStep',
+  'user.home.collapseHelp': 'user.home.collapseHelp',
+  'user.home.create': 'user.home.create',
+  'user.home.getStarted': 'user.home.getStarted',
+  'user.home.hide': 'user.home.hide',
+  'user.home.introAddress': 'user.home.introAddress',
+  'user.home.introAddressBody': 'user.home.introAddressBody',
+  'user.home.introCharity': 'user.home.introCharity',
+  'user.home.introCharityBody': 'user.home.introCharityBody',
+  'user.home.introGames': 'user.home.introGames',
+  'user.home.introGamesBody': 'user.home.introGamesBody',
+  'user.home.keyHelp': 'user.home.keyHelp',
+  'user.home.keyStep': 'user.home.keyStep',
+  'user.home.modelHelp': 'user.home.modelHelp',
+  'user.home.modelStep': 'user.home.modelStep',
+  'user.home.noCalls': 'user.home.noCalls',
+  'user.home.progress': 'user.home.progress',
+  'user.home.services': 'user.home.services',
+  'user.home.setupDone': 'user.home.setupDone',
+  'user.home.usage': 'user.home.usage',
+  'user.home.view': 'user.home.view',
+} as const;
 
 const GAME_PATHS: Record<HomeGameSummary['route_id'], string> = {
   'game-fishing': '/games/fishing',
@@ -101,7 +131,7 @@ async function accountScopedHomeLoad<T>(
 
 function SignedOutHome() {
   const { t } = useCoreCopy();
-  const { t: text } = useTranslation();
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
   return (
     <div className="page core-page core-stack home-page">
       <section className="nb-panel home-intro">
@@ -131,7 +161,7 @@ function SignedOutHome() {
 
 function EconomyCard({ accountId }: { accountId: string }) {
   const { t } = useCoreCopy();
-  const { t: text } = useTranslation();
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
   const me = useCoreMe(accountId);
   return (
     <section className="nb-panel home-wallet">
@@ -199,7 +229,7 @@ function OnboardingChecklist({
   accountId: string;
   sessionReady: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t } = useRegisteredCopy(pageCopyKeys);
   const clientDone = useOnboardingFlag('client');
   const hidden = useOnboardingFlag('hidden');
   const enabled = sessionReady && !hidden;
@@ -312,7 +342,7 @@ function CheckinCard({
   asset: CreditAsset;
 }) {
   const { t } = useCoreCopy();
-  const { t: text } = useTranslation();
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
   const queryClient = useQueryClient();
   const [committed, setCommitted] = useState<CommittedCheckin | null>(null);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);

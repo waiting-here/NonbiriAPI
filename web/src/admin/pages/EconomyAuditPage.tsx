@@ -201,12 +201,11 @@ function Stock({ summary }: { readonly summary: Summary }) {
             className={`nb-badge nb-badge--${r.status === 'matched' ? 'ok' : r.status === 'mismatch' ? 'bad' : 'warn'}`}
           >
             {copy(
-              'admin.economyAudit.presentation.' +
-                (r.status === 'matched'
-                  ? 'matched'
-                  : r.status === 'mismatch'
-                    ? 'mismatch'
-                    : 'incomplete'),
+              r.status === 'matched'
+                ? 'admin.economyAudit.presentation.matched'
+                : r.status === 'mismatch'
+                  ? 'admin.economyAudit.presentation.mismatch'
+                  : 'admin.economyAudit.presentation.incomplete',
             )}
           </span>
         }

@@ -18,7 +18,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { type PageSize } from '@shared/operations/pageNumbers';
 import { Fold, Note } from '@shared/components/ui';
-import { LogResultBadge, logResult } from './LogResult';
+import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { CallerIdentity } from './CallerIdentity';
 import { LogOriginIdentity } from './LogOriginIdentity';
@@ -579,12 +579,11 @@ function ScopedRoleLogPanel({
 
   const routeSummary = (route: LogRouteKind) =>
     t(
-      'common.operations.logs.presentation.' +
-        (route === 'model_discovery'
-          ? 'models'
-          : route.endsWith('embeddings')
-            ? 'embeddings'
-            : 'chat'),
+      route === 'model_discovery'
+        ? 'common.operations.logs.presentation.models'
+        : route.endsWith('embeddings')
+          ? 'common.operations.logs.presentation.embeddings'
+          : 'common.operations.logs.presentation.chat',
     );
   const modelCell = (row: RoleLogRow) => (
     <>
@@ -593,8 +592,9 @@ function ScopedRoleLogPanel({
         {row.route_kind === 'model_discovery'
           ? ''
           : t(
-              'common.operations.logs.presentation.' +
-                (row.route_kind.startsWith('charity_') ? 'charity' : 'personal'),
+              row.route_kind.startsWith('charity_')
+                ? 'common.operations.logs.presentation.charity'
+                : 'common.operations.logs.presentation.personal',
             ) + ' · '}
         {routeSummary(row.route_kind)}
       </span>
@@ -688,7 +688,13 @@ function ScopedRoleLogPanel({
 
   const resultHint = (row: RoleLogRow) => {
     const result = logResult(row);
-    return 'hint' in result ? t('common.operations.logs.presentation.' + result.hint) : null;
+    const hintKeys = {
+      creditsHint: 'common.operations.logs.presentation.creditsHint',
+      keyHint: 'common.operations.logs.presentation.keyHint',
+      rateHint: 'common.operations.logs.presentation.rateHint',
+      retryHint: 'common.operations.logs.presentation.retryHint',
+    } as const;
+    return result.hint ? t(hintKeys[result.hint]) : null;
   };
 
   let detailBody: ReactNode = null;
@@ -901,8 +907,9 @@ function ScopedRoleLogPanel({
               {(['csv', 'json'] as const).map((format) => (
                 <a key={format} href={roleLogExportPath(role, filter, format)} download>
                   {t(
-                    'common.operations.logs.presentation.' +
-                      (format === 'csv' ? 'exportCsv' : 'exportJson'),
+                    format === 'csv'
+                      ? 'common.operations.logs.presentation.exportCsv'
+                      : 'common.operations.logs.presentation.exportJson',
                   )}
                 </a>
               ))}
@@ -984,12 +991,9 @@ function ScopedRoleLogPanel({
           detailRequest ? (
             <Note
               tone={logResult(detailRequest).tone}
-              title={t(
-                (role === 'user'
-                  ? 'user.logs.result.'
-                  : 'common.operations.logs.presentation.result.') + logResult(detailRequest).key,
-                { status: detailRequest.caller_status ?? '—' },
-              )}
+              title={t(logResultCopyKey(role, logResult(detailRequest).key), {
+                status: detailRequest.caller_status ?? '—',
+              })}
             >
               {resultHint(detailRequest)}
             </Note>

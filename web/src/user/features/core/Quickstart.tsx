@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { Fold, Note, OptionCards, Segmented } from '@shared/components/ui';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
 import type { TransportRule } from '@shared/transportRule';
@@ -37,6 +37,31 @@ import {
 import type { CatalogEntry, ConnectorType, Endpoint, Model } from './types';
 import './quickstart.css';
 
+const pageCopyKeys = {
+  'user.services.addModels': 'user.services.addModels',
+  'user.services.apiKeyLink': 'user.services.apiKeyLink',
+  'user.services.back': 'user.services.back',
+  'user.services.commonService': 'user.services.commonService',
+  'user.services.commonServiceHelp': 'user.services.commonServiceHelp',
+  'user.services.connectorHelp': 'user.services.connectorHelp',
+  'user.services.done': 'user.services.done',
+  'user.services.existingService': 'user.services.existingService',
+  'user.services.existingServiceHelp': 'user.services.existingServiceHelp',
+  'user.services.foundModels': 'user.services.foundModels',
+  'user.services.manualLink': 'user.services.manualLink',
+  'user.services.manualModels': 'user.services.manualModels',
+  'user.services.manualName': 'user.services.manualName',
+  'user.services.modelSearch': 'user.services.modelSearch',
+  'user.services.otherService': 'user.services.otherService',
+  'user.services.otherServiceHelp': 'user.services.otherServiceHelp',
+  'user.services.prefix': 'user.services.prefix',
+  'user.services.quickTitle': 'user.services.quickTitle',
+  'user.services.retryDiscovery': 'user.services.retryDiscovery',
+  'user.services.retryModels': 'user.services.retryModels',
+  'user.services.skip': 'user.services.skip',
+  'user.services.sourceQuestion': 'user.services.sourceQuestion',
+} as const;
+
 interface ModelChoice {
   transportRule?: TransportRule;
   id: string;
@@ -61,7 +86,7 @@ export function Quickstart({
   onClose: () => void;
   onManual?: () => void;
 }) {
-  const { t: ui } = useTranslation();
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const [modelQuery, setModelQuery] = useState('');
   const client = useQueryClient(),
     { t: core } = useCoreCopy(),

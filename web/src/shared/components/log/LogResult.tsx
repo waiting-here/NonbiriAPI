@@ -28,15 +28,48 @@ export function logResult(
   return { key: 'failed', tone: 'bad' } as const;
 }
 
+const userResultKeys = {
+  success: 'user.logs.result.success',
+  pending: 'user.logs.result.pending',
+  cancelled: 'user.logs.result.cancelled',
+  credits: 'user.logs.result.credits',
+  missingModel: 'user.logs.result.missingModel',
+  rejected: 'user.logs.result.rejected',
+  keyRejected: 'user.logs.result.keyRejected',
+  rateLimited: 'user.logs.result.rateLimited',
+  timeout: 'user.logs.result.timeout',
+  upstream: 'user.logs.result.upstream',
+  failed: 'user.logs.result.failed',
+} as const;
+
+const resultKeys = {
+  success: 'common.operations.logs.presentation.result.success',
+  pending: 'common.operations.logs.presentation.result.pending',
+  cancelled: 'common.operations.logs.presentation.result.cancelled',
+  credits: 'common.operations.logs.presentation.result.credits',
+  missingModel: 'common.operations.logs.presentation.result.missingModel',
+  rejected: 'common.operations.logs.presentation.result.rejected',
+  keyRejected: 'common.operations.logs.presentation.result.keyRejected',
+  rateLimited: 'common.operations.logs.presentation.result.rateLimited',
+  timeout: 'common.operations.logs.presentation.result.timeout',
+  upstream: 'common.operations.logs.presentation.result.upstream',
+  failed: 'common.operations.logs.presentation.result.failed',
+} as const;
+
+export function logResultCopyKey(
+  role: RoleLogRow['role'],
+  key: ReturnType<typeof logResult>['key'],
+) {
+  return (role === 'user' ? userResultKeys : resultKeys)[key];
+}
+
 export function LogResultBadge({ row }: { row: RoleLogRow }) {
   const { t } = useTranslation();
   const result = logResult(row);
-  const prefix =
-    row.role === 'user' ? 'user.logs.result.' : 'common.operations.logs.presentation.result.';
   return (
     <span className="log-result">
       <span className={`nb-badge nb-badge--${result.tone}`}>
-        {t(prefix + result.key, { status: row.caller_status ?? '—' })}
+        {t(logResultCopyKey(row.role, result.key), { status: row.caller_status ?? '—' })}
       </span>
       {row.role !== 'user' && row.caller_error_code ? (
         <span className="nb-sub mono">{row.caller_error_code}</span>

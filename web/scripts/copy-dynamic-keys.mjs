@@ -30,8 +30,6 @@ function anchorFor(key, defaultAnchor) {
   if (key.endsWith('.withdrawBody') || key.endsWith('.terminateBody')) {
     return "user.charity.${confirmation === 'withdraw' ? 'withdrawBody' : 'terminateBody'}";
   }
-  if (key.includes('.masterBody.'))
-    return 't(`user.activities.masterBody.${snapshot.master.reason}`)';
   if (key.includes('.welfare.body.')) return 't(`user.activities.welfare.body.${welfare.state}`)';
   if (key.includes('.thursday.body.'))
     return 't(`user.activities.thursday.body.${thursday.state}`)';
@@ -469,23 +467,6 @@ const dynamicCopyKeys = [
     ),
   ),
 
-  // User activity master state/body domains are finite normalized states.
-  ...[
-    'user.activities.masterState.available',
-    'user.activities.masterState.disabled',
-    'user.activities.masterState.configuration_error',
-    'user.activities.masterBody.available',
-    'user.activities.masterBody.disabled',
-    'user.activities.masterBody.configuration_error',
-  ].map((key) =>
-    entry(
-      'user',
-      key,
-      activitiesPanels,
-      anchorFor(key, 't(`user.activities.masterState.${snapshot.master.reason}`)'),
-      'Master reason is normalized to available/disabled/configuration_error.',
-    ),
-  ),
   // User activity stream states are finite connection/recovery states.
   ...[
     'user.activities.stream.connecting',

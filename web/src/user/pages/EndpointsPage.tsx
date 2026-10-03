@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { Drawer } from '@shared/components/ui/Drawer';
 import { useResourceFilters, useResourceListScroll } from '../features/core/useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from '../features/core/ResourceFilterControls';
@@ -24,9 +24,17 @@ import { useNumberedEndpoints } from '../features/core/numberedQueries';
 import type { UserProfile } from '../features/core/types';
 import '../features/core/core.css';
 
+const pageCopyKeys = {
+  'user.services.add': 'user.services.add',
+  'user.services.charity': 'user.services.charity',
+  'user.services.description': 'user.services.description',
+  'user.services.emptyBody': 'user.services.emptyBody',
+  'user.services.emptyTitle': 'user.services.emptyTitle',
+} as const;
+
 function EndpointList({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
-  const { t: ui } = useTranslation();
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const [search, setSearch] = useSearchParams();
   const quickstart = search.get('quickstart') === '1';
   const location = useLocation();

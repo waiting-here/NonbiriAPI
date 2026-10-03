@@ -407,9 +407,13 @@ test('administrator applies log filters, exports them and downloads retained ori
     expect(logs.data.every((row: { caller_status: number }) => row.caller_status === 503)).toBe(
       true,
     );
+    await page.locator('.log-export > summary').click();
     const exportDownload = page.waitForEvent('download');
     await page
-      .getByRole('link', { name: commonEn.common.operations.logs.exportCsv, exact: true })
+      .getByRole('link', {
+        name: commonEn.common.operations.logs.presentation.exportCsv,
+        exact: true,
+      })
       .click();
     const csv = await exportDownload;
     expect(readFileSync((await csv.path())!, 'utf8')).toContain('caller_status');

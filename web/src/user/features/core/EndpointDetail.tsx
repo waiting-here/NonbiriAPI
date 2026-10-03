@@ -1,6 +1,6 @@
 import { Fold, MoreMenu, OutcomeNote } from '@shared/components/ui';
 import { Drawer } from '@shared/components/ui/Drawer';
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
@@ -64,6 +64,24 @@ import type {
   EndpointKeyCreateInput,
   EndpointKeyPatchInput,
 } from './types';
+
+const pageCopyKeys = {
+  'common.keyLimits.unlimited': 'common.keyLimits.unlimited',
+  'user.services.adaptation': 'user.services.adaptation',
+  'user.services.adaptationCount': 'user.services.adaptationCount',
+  'user.services.adaptationHelp': 'user.services.adaptationHelp',
+  'user.services.adaptationNone': 'user.services.adaptationNone',
+  'user.services.blockedAction': 'user.services.blockedAction',
+  'user.services.deleteImpact': 'user.services.deleteImpact',
+  'user.services.donated': 'user.services.donated',
+  'user.services.editKey': 'user.services.editKey',
+  'user.services.editName': 'user.services.editName',
+  'user.services.inUse': 'user.services.inUse',
+  'user.services.keyLimits': 'user.services.keyLimits',
+  'user.services.modelsUsing': 'user.services.modelsUsing',
+  'user.services.more': 'user.services.more',
+  'user.services.viewModels': 'user.services.viewModels',
+} as const;
 
 type ActionOutcome = 'conflict' | 'unknown' | 'error' | null;
 
@@ -904,7 +922,7 @@ function EndpointKeyCard({
   onRefresh: () => void;
 }) {
   const { t } = useCoreCopy();
-  const { t: ui } = useTranslation();
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1422,7 +1440,7 @@ export function EndpointDetail({
   endpointId: string;
 }) {
   const { t } = useCoreCopy();
-  const { t: ui } = useTranslation();
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const [adaptationCount, setAdaptationCount] = useState<number | null>(null);
   const [usingModels, setUsingModels] = useState(false);
   const location = useLocation();

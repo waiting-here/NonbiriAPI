@@ -1,5 +1,5 @@
 import { Fold, Note, OutcomeNote } from '@shared/components/ui';
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { Link, useLocation } from 'react-router';
 import { ApiAddressCopy, apiAddress, markOnboarding } from '../features/core/onboarding';
 import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
@@ -28,6 +28,22 @@ import type { CallerKeyAuthority } from '../features/core/types';
 import '../features/core/core.css';
 import '../features/core/home.css';
 
+const pageCopyKeys = {
+  'user.core.keys.apiAddress': 'user.core.keys.apiAddress',
+  'user.core.keys.charityModels': 'user.core.keys.charityModels',
+  'user.core.keys.clientHelp': 'user.core.keys.clientHelp',
+  'user.core.keys.clientKey': 'user.core.keys.clientKey',
+  'user.core.keys.clientTitle': 'user.core.keys.clientTitle',
+  'user.core.keys.copyModel': 'user.core.keys.copyModel',
+  'user.core.keys.curlHelp': 'user.core.keys.curlHelp',
+  'user.core.keys.curlPlaceholder': 'user.core.keys.curlPlaceholder',
+  'user.core.keys.curlTitle': 'user.core.keys.curlTitle',
+  'user.core.keys.metadataTitle': 'user.core.keys.metadataTitle',
+  'user.core.keys.modelName': 'user.core.keys.modelName',
+  'user.core.keys.ownModels': 'user.core.keys.ownModels',
+  'user.core.keys.supportedPaths': 'user.core.keys.supportedPaths',
+} as const;
+
 function pageInstanceIdentity(): string {
   return createOperationIdentity().actionId;
 }
@@ -50,7 +66,7 @@ type SecretCopyResult = {
 };
 
 function ClientInstructions() {
-  const { t } = useTranslation();
+  const { t } = useRegisteredCopy(pageCopyKeys);
   const location = useLocation();
   useEffect(() => {
     if (location.hash === '#client') markOnboarding('client');

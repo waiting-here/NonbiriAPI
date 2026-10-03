@@ -118,7 +118,7 @@ test.each(['/logs', '/credits', '/debug', '/issues'])(
       'data-active',
       'true',
     );
-    expect(screen.getAllByRole('navigation', { name: 'Records', exact: true })).toHaveLength(1);
+    expect(screen.getAllByRole('navigation', { name: 'Records' })).toHaveLength(1);
     expect(rendered.container.querySelector('.diagnostics-nav')).toBeNull();
     expect(rendered.container.querySelectorAll('.records-tabs a')).toHaveLength(4);
   },

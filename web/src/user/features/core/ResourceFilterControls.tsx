@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { FilterBar } from '@shared/components/ui';
 import { useEffect, useState } from 'react';
 import { useCoreCopy } from './copy';
@@ -6,6 +6,11 @@ import { CoreEmpty, ConnectorLabel } from './components';
 import { useEndpointCreateOptions } from './queries';
 import type { ResourceFilters } from './resourceFilters';
 import type { ResourceFilterControl } from './useResourceFilters';
+
+const pageCopyKeys = {
+  'user.services.filters': 'user.services.filters',
+  'user.services.removeFilter': 'user.services.removeFilter',
+} as const;
 
 function ConnectorFilter({ control }: { control: ResourceFilterControl }) {
   const { t } = useCoreCopy();
@@ -47,7 +52,7 @@ export function ResourceFilterBar({ control }: { control: ResourceFilterControl 
 
 function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
   const { t } = useCoreCopy();
-  const { t: ui } = useTranslation();
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const [query, setQuery] = useState(control.filters.q ?? '');
   const [provider, setProvider] = useState(control.filters.provider ?? '');
   const [invalid, setInvalid] = useState(false);
@@ -116,7 +121,7 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
         return {
           key,
           label: `${labels[key]}: ${shown}`,
-          removeLabel: ui('user.services.removeFilter', { label: labels[key] }),
+          removeLabel: ui('user.services.removeFilter', { label: labels[key] ?? key }),
           onRemove: () => control.update((current) => ({ ...current, [key]: '' })),
         };
       });
