@@ -1,0 +1,7 @@
+# Include once inside http {}.
+# This map is evaluated before the internal error redirect and keeps its value.
+map $uri $nonbiri_maintenance_uri {
+    default /_nonbiri_maintenance_html;
+    ~^/(?:admin/api|api|v1)(?:/|$) /_nonbiri_maintenance_json;
+    ~^/(?:healthz|readyz)$ /_nonbiri_maintenance_json;
+}

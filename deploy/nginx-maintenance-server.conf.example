@@ -1,0 +1,21 @@
+# Include inside each existing user/admin server {}.
+# Preserve the existing TLS, proxy, streaming, trust and rate-limit settings.
+proxy_intercept_errors off;
+error_page 502 503 504 =503 $nonbiri_maintenance_uri;
+
+location = /_nonbiri_maintenance_html {
+    internal;
+    alias /usr/share/nonbiriapi/maintenance.html;
+    default_type text/html;
+    charset utf-8;
+    add_header Retry-After "30" always;
+    add_header Cache-Control "no-store" always;
+}
+
+location = /_nonbiri_maintenance_json {
+    internal;
+    default_type application/json;
+    add_header Retry-After "30" always;
+    add_header Cache-Control "no-store" always;
+    return 503 '{"error":{"code":"service_unavailable","message":"Service is temporarily unavailable. Please try again shortly."}}';
+}
