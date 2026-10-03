@@ -77,7 +77,7 @@ for (const locale of ['en', 'zh'] as const) {
     await page.locator('a[href="/endpoints/19"]').click();
     await expect(
       page.getByRole('heading', {
-        name: locale === 'en' ? 'Endpoint details' : '端点详情',
+        name: locale === 'en' ? 'Service details' : '服务详情',
         exact: true,
       }),
     ).toBeVisible();
@@ -192,12 +192,10 @@ test('personal models send all filters before pagination and preserve them throu
   await page.goto(`${USER_ORIGIN}/models`);
   const form = page.getByRole('form', { name: 'Resource filters' });
   await form.getByRole('searchbox').fill('upstream-identifier');
-  await form.getByRole('textbox', { name: 'Service provider', exact: true }).fill('Vendor');
+  await form.getByRole('textbox', { name: 'Prefix', exact: true }).fill('Vendor');
   await form.getByRole('button', { name: 'Search', exact: true }).click();
-  await form.getByRole('combobox', { name: 'Connection strategy' }).selectOption('ordered');
-  await form
-    .getByRole('combobox', { name: 'Connections', exact: true })
-    .selectOption('unconfigured');
+  await form.getByRole('combobox', { name: 'Order' }).selectOption('ordered');
+  await form.getByRole('combobox', { name: 'Sources', exact: true }).selectOption('unconfigured');
   await expect
     .poll(() =>
       requests.some(
@@ -213,8 +211,6 @@ test('personal models send all filters before pagination and preserve them throu
   await expect.poll(() => new URL(page.url()).searchParams.get('model_id')).toBe('7');
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(form.getByRole('searchbox')).toHaveValue('upstream-identifier');
-  await expect(form.getByRole('textbox', { name: 'Service provider', exact: true })).toHaveValue(
-    'Vendor',
-  );
+  await expect(form.getByRole('textbox', { name: 'Prefix', exact: true })).toHaveValue('Vendor');
   guard.assertNone();
 });

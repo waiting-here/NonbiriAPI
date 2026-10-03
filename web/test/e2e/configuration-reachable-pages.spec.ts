@@ -489,11 +489,13 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible();
-  await page.getByRole('link', { name: 'Manage endpoint' }).click();
-  await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
-  await expect(page.getByText('Do not save chat requests (store=false)')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Stop requiring store=false' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
+  await page.getByRole('link', { name: 'Manage' }).click();
+  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
+  await expect(page.getByText('Ask the provider not to store chats')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Stop asking the provider not to store chats' }),
+  ).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
 

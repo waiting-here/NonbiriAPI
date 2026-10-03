@@ -4,9 +4,7 @@ import { collectConsoleViolations, mockJson, mockPublicConfig, mockRoleSession }
 import { numberedResponse } from './numbered-fixtures';
 
 for (const locale of ['zh', 'en'] as const) {
-  test(`shared page descriptions use available width in both stations ${locale}`, async ({
-    page,
-  }) => {
+  test(`shared page descriptions remain readable in both stations ${locale}`, async ({ page }) => {
     const guard = collectConsoleViolations(page);
     await page.addInitScript((lang) => {
       localStorage.setItem('nb.lang', lang);
@@ -39,7 +37,7 @@ for (const locale of ['zh', 'en'] as const) {
       await expect(description).toBeVisible();
       const headerBox = (await header.boundingBox())!;
       const descriptionBox = (await description.boundingBox())!;
-      expect(descriptionBox.width).toBeGreaterThan(headerBox.width * 0.8);
+      expect(descriptionBox.width).toBeLessThanOrEqual(Math.min(headerBox.width, 52 * 16) + 1);
       const lineHeight = await description.evaluate((node) =>
         parseFloat(getComputedStyle(node).lineHeight),
       );

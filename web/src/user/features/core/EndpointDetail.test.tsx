@@ -168,7 +168,7 @@ describe('endpoint detail numbered resource panels', () => {
     );
 
     expect(await screen.findByText('key note')).toBeVisible();
-    await rendered.user.click(screen.getByText('Manual catalog', { selector: 'summary' }));
+    await rendered.user.click(screen.getByText('Manually added models', { selector: 'summary' }));
     expect(await screen.findByText('Vendor/Manual')).toBeVisible();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       '/api/endpoints/11/keys?page=1&page_size=20',
@@ -261,7 +261,7 @@ describe('endpoint detail numbered resource panels', () => {
       ),
     ).toBe(true);
 
-    const summaries = screen.getAllByText('Manual catalog', { selector: 'summary' });
+    const summaries = screen.getAllByText('Manually added models', { selector: 'summary' });
     expect(summaries).toHaveLength(2);
     await rendered.user.click(summaries[0]);
     expect(await screen.findByText('Vendor/Manual-0')).toBeVisible();
@@ -336,10 +336,10 @@ describe('endpoint detail numbered resource panels', () => {
     );
     rendered.queryClient.setQueryData(coreQueries.coreKeys.session, session);
 
-    expect(await screen.findByRole('heading', { name: 'Endpoint details' })).toBeVisible();
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
+    expect(await screen.findByRole('heading', { name: 'Service details' })).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete service' }));
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete endpoint' }));
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete service' }));
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=3&page_size=50'),
     );

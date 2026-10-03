@@ -4,6 +4,7 @@ import { Icon, type IconName } from '@shared/components/Icon';
 import { copyText } from '@shared/utils/clipboard';
 import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { useCoreCopy } from './copy';
+import { OutcomeNote } from '@shared/components/ui';
 import { callerSafeError } from './request';
 import { useCoreMe, useCoreSession, type CoreSessionBoundary } from './queries';
 import type { ConnectorType, DiscoveryEvidence, UserProfile } from './types';
@@ -267,20 +268,31 @@ export function DiscoveryStatus({ evidence }: { evidence: DiscoveryEvidence }) {
 
 export function MutationNotice({
   outcome,
+  onCheck,
+  onReload,
+  busy,
+  body,
 }: {
   outcome: 'success' | 'conflict' | 'unknown' | 'error' | null;
+  onCheck?: () => void;
+  onReload?: () => void;
+  busy?: boolean;
+  body?: string;
 }) {
   const { t } = useCoreCopy();
-  if (!outcome || outcome === 'success') return null;
-  const message =
-    outcome === 'conflict'
-      ? t('common.conflict')
-      : outcome === 'unknown'
-        ? t('common.outcomeUnknown')
-        : t('common.errorBody');
   return (
-    <p className="core-inline-error" role="alert">
-      {message}
-    </p>
+    <OutcomeNote
+      busy={busy}
+      body={body}
+      outcome={
+        outcome === 'conflict'
+          ? { kind: 'conflict', reload: onReload ?? onCheck }
+          : outcome === 'unknown'
+            ? { kind: 'unknown', recheck: onCheck }
+            : outcome === 'error'
+              ? { kind: 'failed', message: t('common.errorBody') }
+              : { kind: 'idle' }
+      }
+    />
   );
 }

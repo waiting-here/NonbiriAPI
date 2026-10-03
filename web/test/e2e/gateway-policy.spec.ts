@@ -290,14 +290,14 @@ test('Gateway attribution defaults off and uses the normal administrator save fl
   });
   await page.goto(ADMIN_ORIGIN + '/settings');
   const input = page.getByLabel(label, { exact: true });
-  if (!(await input.isVisible())) await page.getByText('Connectors', { exact: true }).click();
+  if (!(await input.isVisible())) await page.getByText('API format', { exact: true }).click();
   await expect(input).toHaveValue('false');
   for (const value of ['true', 'false']) {
     await input.selectOption(value);
     await page.getByRole('button', { name: 'Save all changes' }).click();
     await expect.poll(() => enabled).toBe(value === 'true');
     await page.reload();
-    if (!(await input.isVisible())) await page.getByText('Connectors', { exact: true }).click();
+    if (!(await input.isVisible())) await page.getByText('API format', { exact: true }).click();
     await expect(input).toHaveValue(value);
   }
   expect(patches).toHaveLength(2);

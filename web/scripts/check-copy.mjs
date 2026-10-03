@@ -116,10 +116,16 @@ function sameValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function visibleValueChecks(catalog, language, entries) {
+export function visibleValueChecks(catalog, language, entries) {
+  const technicalCopyPrefixes = ['user.personalAutomation.', 'user.debug.'];
+  const userTerminology =
+    language === 'zh'
+      ? /端点|平台模型|CallerKey|透传|假流式|假非流|扁平化|JSON Pointer|RFC 6901/u
+      : /\bendpoint\b|platform model|CallerKey|passthrough|flatten|JSON Pointer/iu;
   const forbidden = /model_fetch_failed|default_locale|_milli/i;
   const userJargon = language === 'zh' ? /权威|门禁/u : /\bauthoritative\b|\bauthority gate\b/iu;
   for (const [key, value] of entries) {
+    const visibleText = value.replace(/[{][{][^}]*[}][}]/gu, '');
     if (forbidden.test(value)) {
       throw new Error(`${catalog}/${language} ${key} exposes a forbidden internal identifier.`);
     }
@@ -129,6 +135,15 @@ function visibleValueChecks(catalog, language, entries) {
       if (!nativeLanguageName && /[\u3400-\u9fff]/u.test(withoutReservedPrefix)) {
         throw new Error(`${catalog}/en ${key} contains unexpected Chinese copy.`);
       }
+    }
+    if (
+      catalog === 'user' &&
+      !key.startsWith('user.legal.') &&
+      !technicalCopyPrefixes.some((prefix) => key.startsWith(prefix)) &&
+      (userTerminology.test(visibleText) ||
+        (language === 'zh' && visibleText.includes('store=false') && !key.endsWith('storeHelp')))
+    ) {
+      throw new Error(`${catalog}/${language} ${key} exposes user-facing technical terminology.`);
     }
     if (catalog === 'user' && /milli-credits?|毫积分/i.test(value)) {
       throw new Error(`${catalog}/${language} ${key} exposes an internal accounting unit.`);

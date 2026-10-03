@@ -1,3 +1,4 @@
+import { OutcomeNote } from '@shared/components/ui';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
@@ -10,7 +11,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
 import { disabledAccountLifecycleAdapter } from './adapters';
 import { patchLanguage } from './api';
-import { CoreErrorPanel, CoreLoading, CoreTime, MutationNotice, SafeCopyValue } from './components';
+import { CoreErrorPanel, CoreLoading, CoreTime, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
 import { MusicQualityPreference } from './MusicQualityPreference';
 import {
@@ -158,12 +159,22 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
           </select>
         </label>
       </div>
-      {operation.isSuccess ? (
-        <p className="core-inline-success" role="status">
-          {t('account.languageSaved')}
-        </p>
-      ) : null}
-      <MutationNotice outcome={outcome} />
+      <OutcomeNote
+        busy={operation.isPending}
+        outcome={
+          operation.outcome === 'refresh-failed'
+            ? { kind: 'savedRefreshFailed', recheck: () => void operation.refresh() }
+            : operation.isSuccess
+              ? { kind: 'saved' }
+              : outcome === 'conflict'
+                ? { kind: 'conflict', inputPreserved: false, reload: () => void operation.check() }
+                : outcome === 'unknown'
+                  ? { kind: 'unknown', recheck: () => void operation.check() }
+                  : outcome === 'error'
+                    ? { kind: 'failed', message: t('common.errorBody') }
+                    : { kind: 'idle' }
+        }
+      />
       <div className="core-form-actions">
         <span />
         <button
