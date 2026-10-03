@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -71,6 +72,7 @@ func newAuditFixtureFromSource(t *testing.T, source string) *auditFixture {
 	if source == "" {
 		dbfixture.Materialize(t, path)
 	} else {
+		dbtest.EnsureOwnerOnlyParent(t, path)
 		image, err := os.ReadFile(source)
 		if err != nil {
 			t.Fatal(err)
