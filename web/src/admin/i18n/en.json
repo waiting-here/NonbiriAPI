@@ -157,7 +157,7 @@
         "alerts": "Alerts",
         "announcements": "Announcements",
         "charity": "Charity",
-        "connector": "Connectors",
+        "connector": "API format",
         "economy": "Economy",
         "games": "Games",
         "identity": "Identity and appearance",
@@ -199,7 +199,23 @@
       },
       "customizedCount": "{{count}} customized",
       "groupDefaults": "Using defaults",
-      "searchHelp": "Find a setting by name or purpose"
+      "searchHelp": "Find a setting by name or purpose",
+      "modified": "Modified",
+      "original": "Previously {{value}}",
+      "gatewayGroup": "Gateway model capabilities",
+      "legalHoldGroup": "Legal holds",
+      "maintenanceGroup": "Maintenance mode",
+      "gameRewardRange": "Game check-in reward",
+      "rewardRange": "Check-in reward",
+      "rewardRangeHelp": "Each check-in awards an amount within this range.",
+      "levelNames": "Level display names",
+      "levelNamesHelp": "Leave a name empty to use its default.",
+      "navigation": "Setting groups",
+      "cautious": "Use with care",
+      "regular": "General",
+      "otherConfiguration": "Other configuration",
+      "confirmationHint": "Settings requiring care will be confirmed before saving.",
+      "confirmTitle": "Save settings requiring care?"
     },
     "games": {
       "nav": "Games",
@@ -429,7 +445,8 @@
         "create": "Create channel",
         "view": "View",
         "save": "Save changes",
-        "retire": "Archive channel"
+        "retire": "Archive channel",
+        "new": "New channel"
       },
       "form": {
         "name": "Channel name",
@@ -473,7 +490,8 @@
       "empty": {
         "title": "No mainstream channels",
         "body": "No channel matches the selected state."
-      }
+      },
+      "available": "Available for adding services"
     },
     "reports": {
       "nav": "Reports",
@@ -503,7 +521,7 @@
         "confirmApproveTitle": "Approve protected-key deletion?",
         "confirmRejectBody": "This releases all protected targets and records the review reason.",
         "confirmRejectTitle": "Reject this report?",
-        "connector": "Connector",
+        "connector": "API format",
         "continuationBody": "This state cannot be re-decided or released. Resume only restarts the existing checkpoint with the same target version.",
         "continuationTitle": "Processing continuation",
         "deadline": "Deadline",
@@ -641,7 +659,7 @@
         "custom": "Custom donation key",
         "mainstreamSubscription": "【Mainstream subscription】{{name}}",
         "mainstreamApiPlatform": "【Mainstream API platform】{{name}}",
-        "connector": "Connector",
+        "connector": "API format",
         "baseUrl": "API base URL",
         "channelRevision": "Channel version when added",
         "keyHeading": "Key {{id}} · {{head}}…{{tail}}",

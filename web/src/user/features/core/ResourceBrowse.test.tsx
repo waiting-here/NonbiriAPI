@@ -89,7 +89,7 @@ describe('resource connection browsing', () => {
     });
     expect(screen.getAllByRole('link')).toHaveLength(3);
     expect(fetchMock).not.toHaveBeenCalled();
-    await rendered.user.click(screen.getByRole('button', { name: 'Browse all 21 connections' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Browse all 21 sources' }));
     expect(await screen.findByText('Page 1 of 2 · Total: 21')).toBeVisible();
     expect(screen.getAllByRole('link')).toHaveLength(20);
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
@@ -106,7 +106,7 @@ describe('resource connection browsing', () => {
     expect(await screen.findByText('Page 2 of 2 · Total: 21')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Browser forward' }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Browse all 21 connections' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: 'Browse all 21 sources' })).toHaveAttribute(
         'aria-expanded',
         'false',
       ),

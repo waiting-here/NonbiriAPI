@@ -153,16 +153,14 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await mockRoleSession(page, 'user', 'user');
   await installEndpointRoutes(page);
 
-  await page.goto(
-    `${USER_ORIGIN}/endpoints?page=2&page_size=10`,
-  );
-  await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible();
+  await page.goto(`${USER_ORIGIN}/endpoints?page=2&page_size=10`);
+  await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
   await page.locator('a[href="/endpoints/11"]').click();
-  await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints/11`);
 
-  const showAll = page.getByRole('button', { name: 'Browse all 11 connections', exact: true });
+  const showAll = page.getByRole('button', { name: 'Browse all 11 sources', exact: true });
   await showAll.click();
   await expect(page).toHaveURL(/\/endpoints\/11\?routes_2_page=1/);
   await expect(page.getByText('Vendor/Model-1', { exact: true })).toBeVisible();
@@ -170,7 +168,7 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   const routingCard = page
     .locator('section.core-card')
     .filter({
-      has: page.getByRole('heading', { name: 'Model connection status', exact: true }),
+      has: page.getByRole('heading', { name: 'Source status', exact: true }),
     })
     .last();
   const nestedPagination = routingCard.locator('.page-pagination');
@@ -188,13 +186,13 @@ test('endpoint detail keeps list return state through nested paging, refresh, an
   await page.goForward();
   await expect(page).toHaveURL(/routes_2_page=2&routes_2_page_size=10/);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
   await page.getByRole('link', { name: 'Back', exact: true }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints?page=2&page_size=10`);
   await expect(page.getByText(endpoint.note, { exact: true })).toBeVisible();
 
   await page.goto(`${USER_ORIGIN}/endpoints/11?routes_2_page=1&routes_2_page_size=10`);
-  await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
   await page.getByRole('link', { name: 'Back', exact: true }).click();
   await expect(page).toHaveURL(`${USER_ORIGIN}/endpoints`);
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);

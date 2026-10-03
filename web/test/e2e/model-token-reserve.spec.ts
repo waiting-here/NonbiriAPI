@@ -94,7 +94,7 @@ const scenarios: readonly Scenario[] = [
     locale: 'zh',
     theme: 'dark',
     pagePath: '/steward?tab=charity&charity_section=models',
-    modelsTab: '公益模型与服务连接',
+    modelsTab: '公益模型与来源',
     pricingLabel: '计价模式',
     perRequest: '按次',
     perToken: '按 token',
@@ -489,13 +489,13 @@ for (const scenario of scenarios) {
 
     const chinese = scenario.locale === 'zh';
     const rule = chinese ? 'force_stream' : 'force_non_stream';
-    const ruleLabel = chinese ? '传输规则' : 'Transport rule';
+    const ruleLabel = chinese ? '流式输出' : 'Streaming';
     const options = chinese
-      ? ['透传（默认）', '假流式（强制非流）', '假非流（强制流式）']
+      ? ['跟随客户端（默认）', '总是等完整结果', '总是用流式取回']
       : [
-          'Pass through (default)',
-          'Simulated streaming (force non-stream)',
-          'Buffered non-streaming (force stream)',
+          'Follow the client (default)',
+          'Always wait for the full reply',
+          'Always fetch as a stream',
         ];
     await page.goto(scenario.origin + scenario.pagePath);
     const row = page.locator('.ops-table tbody tr').filter({ hasText: MODEL_NAME });
@@ -509,8 +509,8 @@ for (const scenario of scenarios) {
     await transport.selectOption(rule);
     await expect(transport).toHaveAccessibleDescription(
       chinese
-        ? '收齐上游流后，向非流式调用方返回 JSON；非流请求仍受代理等待时限。'
-        : 'Streaming callers receive keepalives while waiting, then the complete upstream result.',
+        ? '以流式读取服务商回复。客户端选择流式时边读边返回；选择非流式时收齐后返回完整结果，仍有等待时限。'
+        : 'Wait for the provider’s full reply, then return it at once. Keep the connection active while waiting when the client uses streaming.',
     );
     const saved = page.waitForResponse(
       (response) =>
