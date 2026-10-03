@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>暂时无法访问 · Temporarily unavailable · NonbiriAPI</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f3f5f3; --card: #fff; --ink: #20342d; --muted: #53675e; --line: #cdd8d1; --accent: #27634b; --button-ink: #fff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; padding: 24px; display: grid; place-items: center; background: var(--bg); color: var(--ink); font: 16px/1.65 system-ui, sans-serif; }
+    main { width: min(100%, 540px); padding: clamp(24px, 6vw, 48px); background: var(--card); border: 1px solid var(--line); border-radius: 24px; }
+    .brand { margin: 0 0 28px; font-size: 14px; font-weight: 650; letter-spacing: .08em; }
+    .symbol { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--accent); font-size: 28px; }
+    h1 { margin: 20px 0 4px; font-size: clamp(26px, 6vw, 34px); line-height: 1.3; }
+    .english-title { margin: 0 0 24px; font-size: 20px; font-weight: 600; }
+    .message { margin: 0 0 8px; }
+    .english { color: var(--muted); }
+     .actions { margin: 28px 0 0; }
+     .refresh { display: inline-block; text-decoration: none; text-align: center; min-height: 48px; padding: 10px 20px; border: 2px solid transparent; border-radius: 12px; background: var(--accent); color: var(--button-ink); font: inherit; font-weight: 650; cursor: pointer; }
+     .refresh:hover { filter: brightness(1.1); }
+     .refresh:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #14221d; --card: #1d3027; --ink: #e5eee9; --muted: #b5c8be; --line: #425e4f; --accent: #9ed2b6; --button-ink: #132e21; } }
+    @media (max-width: 360px) { body { padding: 12px; } main { padding: 24px 20px; border-radius: 18px; }  .refresh { width: 100%; } }
+  </style>
+</head>
+<body>
+  <main aria-labelledby="title">
+    <p class="brand">NonbiriAPI</p>
+    <div class="symbol" aria-hidden="true">↻</div>
+    <h1 id="title">暂时无法访问</h1>
+    <p class="english-title" lang="en">Temporarily unavailable</p>
+    <p class="message">服务正在恢复，请稍后刷新重试。</p>
+    <p class="message english" lang="en">The service is recovering. Please refresh and try again shortly.</p>
+    <p class="actions">
+      <a class="refresh" href="">刷新重试 <span lang="en">/ Refresh</span></a>
+    </p>
+  </main>
+</body>
+</html>
