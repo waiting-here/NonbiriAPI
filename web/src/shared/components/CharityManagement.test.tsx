@@ -1041,7 +1041,11 @@ describe('CharityManagement corrective controls', () => {
       if (fixture.frame === 'steward') {
         expect(editor.queryByLabelText('关联有效时长（秒）')).not.toBeInTheDocument();
       }
-      await view.user.click(editor.getByText(fixture.locale === 'zh' ? '额度与预留' : 'Quota and reserve', { selector: 'strong' }));
+      await view.user.click(
+        editor.getByText(fixture.locale === 'zh' ? '额度与预留' : 'Quota and reserve', {
+          selector: 'strong',
+        }),
+      );
       const reserve = editor.getByLabelText(fixture.reserveLabel);
       expect(reserve).toHaveValue('1.234');
       expect(editor.getByText(fixture.reserveHelp)).toBeVisible();
@@ -1234,10 +1238,7 @@ describe('CharityManagement corrective controls', () => {
     if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
     const editor = within(card);
     const textarea = editor.getByLabelText('Public description (plain text, optional)');
-    await view.user.selectOptions(
-      editor.getByRole('combobox', { name: 'Streaming' }),
-      'force_non_stream',
-    );
+    await view.user.click(editor.getByRole('radio', { name: 'Always wait for the full reply' }));
     fireEvent.change(textarea, { target: { value: 'submitted' } });
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
     await waitFor(() => expect(patchBodies).toHaveLength(1));

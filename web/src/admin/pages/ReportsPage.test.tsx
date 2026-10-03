@@ -105,10 +105,7 @@ describe('ReportsPage numbered pagination', () => {
       '/reports?status=pending_review&page=3&page_size=50',
     );
 
-    const jump = screen.getByRole('textbox');
-    await view.user.clear(jump);
-    await view.user.type(jump, '2');
-    await view.user.click(screen.getByRole('button', { name: 'Go' }));
+    await view.user.click(screen.getByRole('button', { name: '2' }));
     expect(screen.getByTestId('location')).toHaveTextContent(
       'status=pending_review&page=2&page_size=50',
     );

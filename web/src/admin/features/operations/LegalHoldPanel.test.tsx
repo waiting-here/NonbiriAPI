@@ -180,7 +180,8 @@ describe('administrator legal hold panel', () => {
     expect(screen.getByRole('combobox', { name: 'State' })).toHaveValue('active');
     expect(screen.getAllByRole('combobox', { name: 'Object kind' })[0]).toHaveValue('report_case');
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('50');
-    expect(screen.getByText('Page 2 of 2 · Total: 51')).toBeVisible();
+    expect(screen.getByText('51 items')).toBeVisible();
+    expect(screen.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       '?hold_state=active&hold_kind=report_case&hold_page=2&hold_page_size=50',
     );
@@ -330,14 +331,15 @@ describe('administrator legal hold panel', () => {
     expect(await screen.findByText(REPORT_ID)).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'State' })).toHaveValue('');
     expect(screen.getAllByRole('combobox', { name: 'Object kind' })[0]).toHaveValue('');
-    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
+    expect(screen.getByText('21 items')).toBeVisible();
+    expect(screen.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       '?hold_page=999&hold_page_size=20',
     );
   });
 
-  it('keeps the pager visible for an empty filtered collection', async () => {
+  it('reads an empty filtered collection without redundant pager controls', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: session() },
       {
@@ -354,8 +356,8 @@ describe('administrator legal hold panel', () => {
     });
 
     expect(await screen.findByText('No legal-hold metadata')).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Items per page' })).not.toBeInTheDocument();
   });
 
   it('restores the previous filter and page context on browser back', async () => {
@@ -856,9 +858,7 @@ describe('administrator legal hold panel', () => {
       reason: 'retire',
       confirmation: true,
     });
-    expect((releaseCall?.[1]?.headers as Headers).get('X-Elevated-Token')).toBe(
-      ELEVATION_TOKEN,
-    );
+    expect((releaseCall?.[1]?.headers as Headers).get('X-Elevated-Token')).toBe(ELEVATION_TOKEN);
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       `?hold_kind=report_case&hold_page=2&hold_page_size=20&hold_id=${HOLD_ID}`,
     );

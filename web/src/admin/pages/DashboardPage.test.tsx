@@ -74,13 +74,9 @@ describe('dashboard endpoint overview', () => {
         station: 'admin',
         locale: 'en',
       });
-      expect(
-        await screen.findByText(
-          'There are 37 endpoint groups. Open the endpoints page for details.',
-        ),
-      ).toBeVisible();
+      expect(await screen.findByText('37', { exact: true })).toBeVisible();
       expect(screen.queryByText(/payload is too large/)).not.toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /endpoints/i })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Endpoint overview' })).toHaveAttribute(
         'href',
         '/endpoints',
       );
@@ -119,8 +115,6 @@ describe('dashboard endpoint overview', () => {
     const error = await screen.findByRole('alert');
     await user.click(within(error).getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(attempts).toBe(2));
-    expect(
-      await screen.findByText('The administrator API returned no endpoint overview records.'),
-    ).toBeVisible();
+    expect(await screen.findByText('0', { exact: true })).toBeVisible();
   });
 });
