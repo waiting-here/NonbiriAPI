@@ -19,6 +19,23 @@ Object.defineProperties(HTMLElement.prototype, {
   },
 });
 
+// jsdom does not implement the browser's modal dialog lifecycle.
+Object.defineProperties(HTMLDialogElement.prototype, {
+  showModal: {
+    configurable: true,
+    value(this: HTMLDialogElement) {
+      this.open = true;
+    },
+  },
+  close: {
+    configurable: true,
+    value(this: HTMLDialogElement) {
+      this.open = false;
+      this.dispatchEvent(new Event('close'));
+    },
+  },
+});
+
 afterEach(async () => {
   cleanup();
   await disposeTestProviders();
