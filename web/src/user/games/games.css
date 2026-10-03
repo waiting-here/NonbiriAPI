@@ -295,3 +295,318 @@
     justify-content: center;
   }
 }
+
+.game-center-card {
+  color: var(--nb-color-text);
+  text-decoration: none;
+  transition: border-color var(--nb-motion-micro);
+}
+.game-center-card:hover {
+  border-color: var(--nb-color-accent);
+}
+.game-center-card:focus-visible {
+  outline: none;
+  box-shadow: var(--nb-focus-ring);
+}
+.game-center-card__hero {
+  position: relative;
+}
+.game-center-card__hero > .nb-badge {
+  position: absolute;
+  top: var(--nb-space-3);
+  right: var(--nb-space-3);
+  background: var(--nb-color-surface-raised);
+}
+.game-center-card.is-closed .game-hero {
+  filter: grayscale(0.6);
+}
+.game-center-card__body {
+  gap: var(--nb-space-2);
+}
+.game-center-card__body h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+.game-card-foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--nb-space-2);
+  align-items: center;
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.game-center-wallet {
+  display: grid;
+  gap: var(--nb-space-2);
+  font-size: var(--nb-font-size-sm);
+}
+.game-center-rankings {
+  margin-top: var(--nb-space-5);
+}
+.game-center-rankings .game-leaderboards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nb-space-4);
+}
+.game-center-rankings .progression-ranking {
+  margin: 0;
+  box-shadow: none;
+  border: 0;
+  padding: 0;
+}
+.game-center-rankings .game-privacy-control {
+  margin: 0;
+  max-width: 26rem;
+}
+.game-center-rankings .nb-toggle {
+  padding: 0;
+}
+.game-center-rankings .nb-toggle__text > span {
+  font-size: var(--nb-font-size-xs);
+}
+.rank-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--nb-space-3);
+}
+.rank-heading .rank-privacy {
+  margin: 0;
+  max-width: 30rem;
+}
+.game-onboarding .nb-fold > summary {
+  min-height: 2.5rem;
+}
+.game-onboarding__note {
+  display: none;
+}
+@media (width >= 64rem) {
+  .game-onboarding--compact > .nb-fold {
+    display: none;
+  }
+  .game-onboarding--compact .game-onboarding__note {
+    display: block;
+  }
+}
+@media (width < 48rem) {
+  .game-center-rankings .game-leaderboards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (width < 40rem) {
+  .game-center-grid {
+    gap: var(--nb-space-3);
+  }
+  .game-center-card {
+    grid-template-columns: 7rem minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+  .game-center-card__hero {
+    aspect-ratio: auto;
+    min-height: 7rem;
+  }
+  .game-center-card__hero > .nb-badge {
+    top: var(--nb-space-2);
+    right: auto;
+    left: var(--nb-space-2);
+    font-size: var(--nb-font-size-xs);
+  }
+  .game-center-card__body {
+    padding: var(--nb-space-3);
+  }
+  .game-center-card__body h2 {
+    font-size: var(--nb-font-size-md);
+  }
+  .game-center-card__body p {
+    font-size: var(--nb-font-size-xs);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .game-card-foot {
+    font-size: var(--nb-font-size-xs);
+    flex-wrap: wrap;
+  }
+}
+
+.game-actionbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+.game-actionbar__cost {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  font-size: var(--nb-text-xs);
+}
+.game-actionbar__cost strong {
+  font-size: var(--nb-text-md);
+}
+.game-actionbar > button {
+  margin-left: auto;
+  min-height: 44px;
+}
+.likes-loadout-step {
+  display: contents;
+}
+.likes-loadout-step > summary {
+  display: none;
+}
+.likes-loadout-step > .nb-fold__body {
+  padding: 0;
+  content-visibility: visible;
+}
+.likes-loadout-step::details-content {
+  content-visibility: visible;
+}
+.likes-tutorial-invite {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.likes-tutorial-invite .nb-note > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+@media (min-width: 64rem) {
+  .fishing-layout {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    align-items: start;
+  }
+  .fishing-controls {
+    position: sticky;
+    top: 5rem;
+  }
+}
+@media (max-width: 39.999rem) {
+  .game-page:has(.game-actionbar),
+  .bidding-game:has(.game-actionbar),
+  .likes-game:has(.game-actionbar) {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+  .game-actionbar {
+    position: fixed;
+    inset: auto 0 0;
+    width: auto;
+    z-index: 30;
+    margin: 0;
+    border-radius: 0;
+    padding: 0.65rem max(1rem, env(safe-area-inset-left))
+      calc(0.65rem + env(safe-area-inset-bottom));
+    background: var(--nb-color-surface);
+    border-top: 1px solid var(--nb-color-border);
+    box-shadow: 0 -3px 15px rgb(0 0 0 / 0.08);
+  }
+  .game-actionbar > button {
+    flex: 0 1 auto;
+    max-width: 68%;
+  }
+  .likes-game .likes-loadout-step {
+    display: block;
+    margin: 0.6rem 0;
+  }
+  .likes-game .likes-loadout-step > summary {
+    display: flex;
+    min-height: 48px;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+  .likes-game .likes-loadout-step > .nb-fold__body {
+    padding: 0.75rem;
+  }
+  .likes-game .likes-loadout-step:not([open]) > .nb-fold__body {
+    display: none;
+  }
+  .likes-game .likes-loadout-step::details-content {
+    content-visibility: hidden;
+  }
+  .likes-game .likes-loadout-step[open]::details-content {
+    content-visibility: visible;
+  }
+  .likes-loadout-step .likes-role-grid,
+  .likes-loadout-step .likes-harness-grid,
+  .likes-loadout-step .likes-skill-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .likes-loadout-step .likes-role-option > small,
+  .likes-loadout-step .likes-effect-summary {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .likes-loadout-step .likes-role-option > .likes-art,
+  .likes-loadout-step .likes-harness-option .likes-art {
+    max-height: 6rem;
+  }
+  .likes-reader {
+    margin: auto 0 0;
+    width: 100%;
+    max-width: none;
+    max-height: 88dvh;
+    border-radius: 1rem 1rem 0 0;
+  }
+  .bj-controls,
+  .bid-control-panel,
+  .rps-action-controls {
+    scroll-margin-bottom: 6rem;
+  }
+}
+
+.likes-game .likes-heading,
+.bidding-game .bid-heading {
+  margin-bottom: 1rem;
+  border: 0;
+  padding-bottom: 0;
+}
+.likes-game .likes-heading h1,
+.bidding-game .bid-heading h1 {
+  font-size: var(--nb-text-xl);
+  letter-spacing: normal;
+}
+.likes-game .likes-heading p,
+.bidding-game .bid-heading p {
+  display: none;
+}
+.likes-game .likes-tutorial-invite {
+  border: 0;
+  padding: 0;
+  margin: 0.75rem 0;
+  background: transparent;
+}
+.likes-game .likes-tutorial-invite .duel-actions {
+  margin: 0;
+}
+.likes-game .likes-tutorial-invite .duel-actions button {
+  padding: 0.25rem 0.5rem;
+  min-height: 40px;
+  font-size: var(--nb-text-xs);
+}
+.likes-game .game-actionbar {
+  background: var(--l-panel);
+}
+.bidding-game .game-actionbar {
+  background: var(--bid-paper);
+  border-color: var(--bid-line);
+}
+
+.game-header-tool {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0.35rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.game-header-tool[aria-pressed='true'] {
+  color: var(--nb-color-accent);
+  background: var(--nb-color-surface-muted);
+}

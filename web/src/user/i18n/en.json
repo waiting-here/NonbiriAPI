@@ -971,7 +971,7 @@
         },
         "ranking": {
           "stayAnonymousOnTheTrueCharityLeaderboard": "Stay anonymous on the True Charity leaderboard",
-          "thisChoiceAppliesOnlyToTrueCharity": "This choice applies only to True Charity, independently of game privacy. Banned accounts stay anonymous and regain their saved choice when the restriction ends.",
+          "thisChoiceAppliesOnlyToTrueCharity": "Applies only to the charity board; banned accounts stay anonymous.",
           "trueCharity": "True Charity",
           "anonymousTruePhilanthropist": "Anonymous true philanthropist",
           "gameCharity": "Game Charity",
@@ -1507,6 +1507,23 @@
             "resultBody": "The complete result appears on this page before you can join another RPS match. If you return later, your own result remains available until the page confirms that you have viewed it."
           }
         }
+      },
+      "presentation": {
+        "description": "Play a few rounds with game credits.",
+        "activityWallet": "Get game credits from activities →",
+        "unavailable": "Not open",
+        "test": "Test",
+        "learn": "View rules and records →",
+        "enter": "Enter →",
+        "rankings": "Rankings · Last 7×24 hours",
+        "calculation": "How it is calculated",
+        "cost": "Cost this time",
+        "stepMode": "1 · Mode",
+        "stepRole": "2 · Character",
+        "stepHarness": "3 · Harness",
+        "stepSkills": "4 · Skills",
+        "creditHistory": "Credit history",
+        "overallRankings": "Overall rankings"
       }
     },
     "debug": {
@@ -2241,6 +2258,12 @@
           "account_banned": "The account was banned at settlement.",
           "account_deleted": "The account was deleted before settlement."
         }
+      },
+      "presentation": {
+        "closed": "Activities are temporarily closed. You can still view previous results.",
+        "unavailable": "Not open",
+        "rules": "Rules",
+        "records": "Credit records"
       }
     },
     "core": {

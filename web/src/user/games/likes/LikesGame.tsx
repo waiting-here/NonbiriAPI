@@ -1,3 +1,8 @@
+import { GameHeaderTool } from '../common/GameHeader';
+import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
+import { Note } from '@shared/components/ui/Note';
+import { GameActionBar } from '../common/GameActionBar';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -23,7 +28,7 @@ import { assertArtCoverage, characterSlot } from './art';
 import { LikesArt } from './LikesArt';
 import { Arena, CompactScores } from './Arena';
 import { Glossary } from './Glossary';
-import { LoadoutEditor } from './Loadout';
+import { LoadoutEditor, LoadoutStep, type LoadoutDisclosure, type LoadoutStepID } from './Loadout';
 import { CustomPresets } from './CustomPresets';
 import { initialSelection, selectionProblem } from './selection';
 import { LikesRoundLog } from './Log';
@@ -130,7 +135,9 @@ function Lobby({
   onQueue,
   onInspect,
   onEdit,
+  disclosure,
 }: {
+  readonly disclosure: LoadoutDisclosure;
   readonly catalog: ModeCatalog;
   readonly catalogs: Readonly<Record<'quick' | 'standard', ModeCatalog>>;
   readonly context: DuelLobbyContext;
@@ -151,6 +158,7 @@ function Lobby({
   return (
     <>
       <LoadoutEditor
+        disclosure={disclosure}
         catalog={catalog}
         value={selection}
         onChange={(next) => {
@@ -159,14 +167,15 @@ function Lobby({
         }}
         disabled={blocked}
         onInspect={onInspect}
-      />
-      <CustomPresets
-        catalogs={catalogs}
-        mode={catalog.mode}
-        selection={selection}
-        blocked={blocked}
-        onLoad={onPresetLoad}
-      />
+      >
+        <CustomPresets
+          catalogs={catalogs}
+          mode={catalog.mode}
+          selection={selection}
+          blocked={blocked}
+          onLoad={onPresetLoad}
+        />
+      </LoadoutEditor>
       {mode && <DuelTerms mode={mode} />}
       <div className="likes-enqueue">
         <span>
@@ -174,23 +183,32 @@ function Lobby({
           {catalog.parameters.TARGET_LIKES} ♥ · {catalog.parameters.MAX_ROUNDS}{' '}
           {text('likes.roundLimit')}
         </span>
-        <button
-          type="button"
-          className="likes-primary"
-          disabled={blocked || !!unavailable || !enough || !!selectionProblem(catalog, selection)}
-          onClick={() => onQueue(selection)}
-        >
-          {unavailable
-            ? entryMessage(unavailable, text)
-            : !enough
-              ? text('bidding.insufficientCredits')
-              : text('bidding.payEntryAndFindAMatch')}
-        </button>
+        <GameActionBar cost={mode?.ticket ?? '0'}>
+          <button
+            type="button"
+            className="likes-primary"
+            disabled={blocked || !!unavailable || !enough || !!selectionProblem(catalog, selection)}
+            onClick={() => onQueue(selection)}
+          >
+            {unavailable
+              ? entryMessage(unavailable, text)
+              : !enough
+                ? text('bidding.insufficientCredits')
+                : text('bidding.payEntryAndFindAMatch')}
+          </button>
+        </GameActionBar>
       </div>
     </>
   );
 }
 export function LikesGame(context: DuelLobbyContext) {
+  const { t } = useTranslation();
+  const [activeStep, setActiveStep] = useState<LoadoutStepID | null>('mode');
+  const disclosure: LoadoutDisclosure = {
+    active: activeStep,
+    onToggle: (id, open) =>
+      setActiveStep((previous) => (open ? id : previous === id ? null : previous)),
+  };
   const text = useDuelText();
   const duel = useDuel(likesCodec, context.refreshWallets);
   const catalogQuery = useQuery({
@@ -310,8 +328,10 @@ export function LikesGame(context: DuelLobbyContext) {
   return (
     <div className="likes-game">
       <header className="likes-heading">
+        <Link className="game-back-link" to="/games">
+          {text('blackjack.gameCenter')}
+        </Link>
         <div>
-          <span className="likes-eyebrow">LIKES // DUEL</span>
           <h1>{text('likes.turnBasedBattleMinigameTest')}</h1>
           <BattleAtmosphere
             reduced={reduced}
@@ -325,40 +345,67 @@ export function LikesGame(context: DuelLobbyContext) {
           <p>{text('likes.oneBatteryIndependentChoicesASimultaneousReveal')}</p>
         </div>
         <div className="duel-actions">
+          <GameWallets wallets={context.wallets} />
           <ArcadeAudioControls
+            compact
             sound={audio.sound}
             music={audio.music}
             unavailable={audio.unavailable}
           />
-          <button type="button" disabled={!c} onClick={() => setRules(true)}>
-            {text('likes.rules')}
-          </button>
-          <button type="button" disabled={!c} onClick={() => setGuide('')}>
-            {text('likes.fieldGuide')}
-          </button>
-          <button type="button" disabled={!c} onClick={() => setHistory(true)}>
-            {text('bidding.gameHistory')}
-          </button>
-          <button type="button" disabled={!canTeach} onClick={() => setTutorial(true)}>
-            {text('likes.tutorial')}
-          </button>
+          <GameHeaderTool
+            icon="?"
+            label={text('likes.rules')}
+            type="button"
+            disabled={!c}
+            onClick={() => setRules(true)}
+          />
+          <GameHeaderTool
+            icon="▤"
+            label={text('likes.fieldGuide')}
+            type="button"
+            disabled={!c}
+            onClick={() => setGuide('')}
+          />
+          <GameHeaderTool
+            icon="◷"
+            label={text('bidding.gameHistory')}
+            type="button"
+            disabled={!c}
+            onClick={() => setHistory(true)}
+          />
+          <GameHeaderTool
+            icon="▶"
+            label={text('likes.tutorial')}
+            type="button"
+            disabled={!canTeach}
+            onClick={() => setTutorial(true)}
+          />
+          <Link
+            className="btn btn-secondary game-header-tool"
+            to="/games#game-rankings"
+            aria-label={t('user.games.presentation.overallRankings')}
+            title={t('user.games.presentation.overallRankings')}
+          >
+            <span aria-hidden="true">▥</span>
+          </Link>
         </div>
       </header>
-      <GameWallets wallets={context.wallets} />
-      {context.onboarding && <OnboardingCard game="likes" progress={context.onboarding} />}
+      {context.onboarding && (
+        <OnboardingCard game="likes" progress={context.onboarding} compactNote />
+      )}
       {!tutorialSeen && canTeach && (
-        <section className="likes-tutorial-invite">
-          <h2>{text('likes.newHereTryAGuidedMatch')}</h2>
-          <p>{text('likes.learnTheGameFromLoadoutToA')}</p>
-          <div className="duel-actions">
-            <button type="button" className="likes-primary" onClick={() => setTutorial(true)}>
-              {text('likes.startTutorial')}
-            </button>
-            <button type="button" onClick={() => exitTutorial('skipped')}>
-              {text('likes.skipForNow')}
-            </button>
-          </div>
-        </section>
+        <div className="likes-tutorial-invite">
+          <Note tone="info" title={text('likes.newHereTryAGuidedMatch')}>
+            <div className="duel-actions">
+              <button type="button" className="likes-primary" onClick={() => setTutorial(true)}>
+                {text('likes.startTutorial')}
+              </button>
+              <button type="button" onClick={() => exitTutorial('skipped')}>
+                {text('likes.skipForNow')}
+              </button>
+            </div>
+          </Note>
+        </div>
       )}
       <RandomnessProof
         game="likes"
@@ -524,27 +571,37 @@ export function LikesGame(context: DuelLobbyContext) {
                   </button>
                 </>
               )}
-              <div className="likes-modes" role="group" aria-label={text('likes.mode')}>
-                {(['quick', 'standard'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    aria-pressed={mode === m}
-                    disabled={duel.pending || duel.uncertain || !!entryProblem(context, m)}
-                    onClick={() => {
-                      setMode(m);
-                      editLobby();
-                    }}
-                  >
-                    <strong>{m === 'quick' ? text('likes.quick') : text('likes.standard')}</strong>
-                    <span>
-                      {catalogQuery.data!.modes[m].parameters.TARGET_LIKES} ♥ ·{' '}
-                      {catalogQuery.data!.modes[m].parameters.MAX_ROUNDS} {text('likes.rounds')}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <LoadoutStep
+                id="mode"
+                title={t('user.games.presentation.stepMode')}
+                summary={mode === 'quick' ? text('likes.quickMode') : text('likes.standardMode')}
+                disclosure={disclosure}
+              >
+                <div className="likes-modes" role="group" aria-label={text('likes.mode')}>
+                  {(['quick', 'standard'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={mode === m}
+                      disabled={duel.pending || duel.uncertain || !!entryProblem(context, m)}
+                      onClick={() => {
+                        setMode(m);
+                        editLobby();
+                      }}
+                    >
+                      <strong>
+                        {m === 'quick' ? text('likes.quick') : text('likes.standard')}
+                      </strong>
+                      <span>
+                        {catalogQuery.data!.modes[m].parameters.TARGET_LIKES} ♥ ·{' '}
+                        {catalogQuery.data!.modes[m].parameters.MAX_ROUNDS} {text('likes.rounds')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </LoadoutStep>
               <Lobby
+                disclosure={disclosure}
                 catalog={c}
                 catalogs={catalogQuery.data!.modes}
                 context={context}

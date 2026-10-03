@@ -1,3 +1,5 @@
+import { Fold } from '@shared/components/ui/Fold';
+import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GamePrivacyLink } from '../common/GamePrivacyControl';
 import { useQueryClient } from '@tanstack/react-query';
@@ -1142,7 +1144,7 @@ export function RPSGame() {
         game="rps"
         sound={sound}
         onRules={() => setRulesOpen(true)}
-        compact={Boolean(session)}
+        rankingsAvailable={Boolean(snapshot.data) && home?.kind !== 'pending_result'}
       >
         {!session ? (
           <button
@@ -1288,50 +1290,68 @@ export function RPSGame() {
               {text('rps.insufficient')}
             </p>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!canQueue || operationState !== 'idle'}
-            onClick={() => {
-              if (displayedMode === 'deathmatch') setDeathmatchReview(true);
-              else
-                void execute({
-                  kind: 'queue',
-                  mode: displayedMode,
-                  token: rpsDeviceToken(),
-                  confirmed: false,
-                  key: createIdempotencyKey(),
-                });
-            }}
+          <GameActionBar
+            cost={
+              <GameMoney
+                value={
+                  selectedConfig && available
+                    ? queueCommitment(displayedMode, selectedConfig.base, available.total)
+                    : '0'
+                }
+              />
+            }
           >
-            {text('rps.queue', { mode: text(`rps.mode.${displayedMode}`) })}
-          </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!canQueue || operationState !== 'idle'}
+              onClick={() => {
+                if (displayedMode === 'deathmatch') setDeathmatchReview(true);
+                else
+                  void execute({
+                    kind: 'queue',
+                    mode: displayedMode,
+                    token: rpsDeviceToken(),
+                    confirmed: false,
+                    key: createIdempotencyKey(),
+                  });
+              }}
+            >
+              {text('rps.queue', { mode: text(`rps.mode.${displayedMode}`) })}
+            </button>
+          </GameActionBar>
         </Card>
       ) : null}
       {snapshot.data && home?.kind !== 'pending_result' ? (
-        <section className="rps-leaderboards">
-          <div className="rps-board-heading">
-            <h2>{text('rps.leaderboard.title')}</h2>
-            <span>{text(`rps.mode.${displayedMode}`)}</span>
-          </div>
-          {profit.isPending || net.isPending ? (
-            <LoadingState label={text('common.loading')} />
-          ) : null}
-          {profit.error ? (
-            <ErrorState error={profit.error} onRetry={() => void profit.refetch()} />
-          ) : null}
-          {net.error ? <ErrorState error={net.error} onRetry={() => void net.refetch()} /> : null}
-          {(!profit.isPending && !profit.error) || (!net.isPending && !net.error) ? (
-            <div className="rps-board-grid">
-              {!profit.isPending && !profit.error ? (
-                <Leaderboard data={profit.data} board="profit_rate" />
+        <div id="game-rankings">
+          <Fold title={text('rps.leaderboard.title')}>
+            <section className="rps-leaderboards">
+              <div className="rps-board-heading">
+                <h2>{text('rps.leaderboard.title')}</h2>
+                <span>{text(`rps.mode.${displayedMode}`)}</span>
+              </div>
+              {profit.isPending || net.isPending ? (
+                <LoadingState label={text('common.loading')} />
               ) : null}
-              {!net.isPending && !net.error ? (
-                <Leaderboard data={net.data} board="net_profit" />
+              {profit.error ? (
+                <ErrorState error={profit.error} onRetry={() => void profit.refetch()} />
               ) : null}
-            </div>
-          ) : null}
-        </section>
+              {net.error ? (
+                <ErrorState error={net.error} onRetry={() => void net.refetch()} />
+              ) : null}
+              {(!profit.isPending && !profit.error) || (!net.isPending && !net.error) ? (
+                <div className="rps-board-grid">
+                  {!profit.isPending && !profit.error ? (
+                    <Leaderboard data={profit.data} board="profit_rate" />
+                  ) : null}
+                  {!net.isPending && !net.error ? (
+                    <Leaderboard data={net.data} board="net_profit" />
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+          </Fold>
+        </div>
       ) : null}
       {deathmatchReview ? (
         <div

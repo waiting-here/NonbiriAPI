@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { Card } from '@shared/components/States';
+import { useEffect, useRef, useState } from 'react';
+import { Fold, Note } from '@shared/components/ui';
+import { useTranslation } from 'react-i18next';
 import { useOptionalToast } from '@shared/components/Toast';
 import { useGameCopy } from '../copy';
 import { formatCredits, sumCredits } from './strict';
@@ -32,18 +33,23 @@ const taskCopy = {
 export function OnboardingCard({
   game,
   progress,
+  compactNote = false,
 }: {
   readonly game: OnboardingGameID;
   readonly progress: OnboardingProgress;
+  readonly compactNote?: boolean;
 }) {
   const { text } = useGameCopy();
-  const [expanded, setExpanded] = useState(true);
-  const listID = useId();
+  const { t } = useTranslation();
+  const [dismissed, setDismissed] = useState(false);
   const previous = useRef(progress);
   const pushToast = useOptionalToast()?.push;
   useEffect(() => {
     for (const item of progress.items) {
-      if (item.completed && previous.current.items.some((old) => old.key === item.key && !old.completed)) {
+      if (
+        item.completed &&
+        previous.current.items.some((old) => old.key === item.key && !old.completed)
+      ) {
         pushToast?.({
           tone: 'success',
           title: text('onboarding.awarded', { reward: formatCredits(item.reward) }),
@@ -56,31 +62,44 @@ export function OnboardingCard({
 
   if (progress.allCompleted) return null;
   const pending = progress.items.filter((item) => !item.completed);
+  const summary = text('onboarding.remaining', {
+    count: pending.length,
+    reward: formatCredits(sumCredits(pending.map((item) => item.reward))),
+  });
   return (
-    <Card className="game-onboarding">
-      <h2>
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={listID}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <span>{text('onboarding.title')}</span>
-          <span>{text('onboarding.remaining', { count: pending.length, reward: formatCredits(sumCredits(pending.map((item) => item.reward))) })}</span>
-          <span aria-hidden="true">{expanded ? '−' : '+'}</span>
-        </button>
-      </h2>
-      <div id={listID} hidden={!expanded}>
+    <div className={`game-onboarding${compactNote ? ' game-onboarding--compact' : ''}`}>
+      <Fold title={text('onboarding.title')} summary={summary}>
         <p>{text(`onboarding.${game}Help`)}</p>
         <ul>
           {pending.map((item) => (
             <li key={item.key}>
               <span>{text(taskCopy[item.key])}</span>
-              <span><strong>+{formatCredits(item.reward)}</strong> {text('common.generalBalance')}</span>
+              <span>
+                <strong>+{formatCredits(item.reward)}</strong> {text('common.generalBalance')}
+              </span>
             </li>
           ))}
         </ul>
-      </div>
-    </Card>
+      </Fold>
+      {compactNote && !dismissed ? (
+        <div className="game-onboarding__note">
+          <Note
+            title={text('onboarding.title')}
+            action={
+              <button
+                type="button"
+                className="btn btn-quiet"
+                aria-label={t('common.close')}
+                onClick={() => setDismissed(true)}
+              >
+                ×
+              </button>
+            }
+          >
+            {summary}
+          </Note>
+        </div>
+      ) : null}
+    </div>
   );
 }

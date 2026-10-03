@@ -34,7 +34,7 @@ const nextStep = {
   unconfigured: 'common.nextUnconfigured',
   open: 'common.nextOpen',
 } as const;
-export function LimitedActivitiesSection() {
+export function LimitedActivitiesSection({ hideEmpty = false }: { hideEmpty?: boolean } = {}) {
   const text = useActivityText(),
     { t: lakeText } = useLakeCopy(),
     session = useUserSession(),
@@ -45,6 +45,7 @@ export function LimitedActivitiesSection() {
     queryFn: () => economySessionRequest(client, getDirectory, account),
     enabled: !!account && !session.error && !session.isFetching,
   });
+  if (hideEmpty && query.data?.length === 0 && !query.error) return null;
   return (
     <section aria-labelledby="limited-activities-heading">
       <h2 id="limited-activities-heading">{text('common.limitedTimeActivities')}</h2>
@@ -64,7 +65,11 @@ export function LimitedActivitiesSection() {
               ? text('common.pictureBook')
               : text('common.raiseABigFish');
           return (
-            <Card key={activity.key} className="limited-entry">
+            <Link
+              key={activity.key}
+              className="card limited-entry"
+              to={'/activities/' + activity.key}
+            >
               <div className={`limited-entry__cover limited-entry__cover--${activity.cover_key}`}>
                 {isLake ? (
                   <LakeCover />
@@ -103,11 +108,11 @@ export function LimitedActivitiesSection() {
                   </p>
                 )}
                 <p>{text(nextStep[activity.status])}</p>
-                <Link className="btn btn-secondary" to={'/activities/' + activity.key}>
+                <span className="limited-entry__action">
                   {text('common.viewActivity')}: {name}
-                </Link>
+                </span>
               </div>
-            </Card>
+            </Link>
           );
         })}
       </div>

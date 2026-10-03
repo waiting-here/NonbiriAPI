@@ -1,3 +1,5 @@
+import { GameHeaderTool } from '../common/GameHeader';
+import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -252,13 +254,15 @@ function QueueForm({
           aria-invalid={!valid}
         />
       </label>
-      <button
-        className="btn btn-primary"
-        type="submit"
-        disabled={blocked || !accepting || !valid || !current}
-      >
-        {accepting ? text('blackjack.joinQueue') : text('blackjack.gameClosed')}
-      </button>
+      <GameActionBar cost={stake}>
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={blocked || !accepting || !valid || !current}
+        >
+          {accepting ? text('blackjack.joinQueue') : text('blackjack.gameClosed')}
+        </button>
+      </GameActionBar>
       {!!config.quick_stakes?.length && (
         <div
           className="bj-quick-stakes"
@@ -370,24 +374,35 @@ export function BlackjackGame() {
       <div ref={surface} className="bidding-game blackjack-game">
         <header className="bid-heading">
           <div>
-            <span className="bid-eyebrow">BLACKJACK · ONE TABLE · 30s</span>
             <h1>{text('blackjack.blackjack')}</h1>
             <p>{text('blackjack.oneTableYourOwnHandAgainstThe')}</p>
           </div>
           <div className="duel-actions">
+            {snapshot.data && <GameWallets wallets={snapshot.data} />}
             <Link className="btn btn-secondary" to="/games">
               {text('blackjack.gameCenter')}
             </Link>
-            <button className="btn btn-secondary" onClick={() => setPanel('rules')}>
-              {text('bidding.rules')}
-            </button>
-            <button className="btn btn-secondary" onClick={() => setPanel('history')}>
-              {text('blackjack.history')}
-            </button>
-            <ArcadeAudioControls sound={sound} unavailable={audio.unavailable} />
+            <GameHeaderTool
+              icon="?"
+              label={text('bidding.rules')}
+              onClick={() => setPanel('rules')}
+            />
+            <GameHeaderTool
+              icon="◷"
+              label={text('blackjack.history')}
+              onClick={() => setPanel('history')}
+            />
+            <ArcadeAudioControls compact sound={sound} unavailable={audio.unavailable} />
+            <a
+              className="btn btn-secondary game-header-tool"
+              href="#game-rankings"
+              aria-label={text('ranking.leaderboards')}
+              title={text('ranking.leaderboards')}
+            >
+              <span aria-hidden="true">▥</span>
+            </a>
           </div>
         </header>
-        {snapshot.data && <GameWallets wallets={snapshot.data} />}
         {snapshot.data && (
           <OnboardingCard game="blackjack" progress={snapshot.data.onboarding.blackjack} />
         )}
@@ -548,20 +563,22 @@ export function BlackjackGame() {
         )}
         {panel === 'rules' && <Rules close={close} />}
         {panel === 'history' && <History close={close} />}
-        <LeaderboardTabs
-          items={[
-            {
-              id: 'net-profit',
-              label: text('blackjack.cardMasterLeaderboard'),
-              content: <Leaderboard board="blackjack_net_profit" />,
-            },
-            {
-              id: 'profit',
-              label: text('blackjack.profitLeaderboard'),
-              content: <Leaderboard board="blackjack" />,
-            },
-          ]}
-        />
+        <div id="game-rankings">
+          <LeaderboardTabs
+            items={[
+              {
+                id: 'net-profit',
+                label: text('blackjack.cardMasterLeaderboard'),
+                content: <Leaderboard board="blackjack_net_profit" />,
+              },
+              {
+                id: 'profit',
+                label: text('blackjack.profitLeaderboard'),
+                content: <Leaderboard board="blackjack" />,
+              },
+            ]}
+          />
+        </div>
       </div>
     </main>
   );
