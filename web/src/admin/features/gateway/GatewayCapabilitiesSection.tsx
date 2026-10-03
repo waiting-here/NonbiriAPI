@@ -329,9 +329,14 @@ export default function GatewayCapabilitiesSection() {
                 >
                   <option value="reject">{t('gatewayCapabilities.cacheOptions.reject')}</option>
                   {anthropic ? (
-                    <option value="anthropic">
-                      {t('gatewayCapabilities.cacheOptions.anthropic')}
-                    </option>
+                    <>
+                      <option value="anthropic">
+                        {t('gatewayCapabilities.cacheOptions.anthropic')}
+                      </option>
+                      <option value="anthropic_explicit">
+                        {t('gatewayCapabilities.cacheOptions.anthropic_explicit')}
+                      </option>
+                    </>
                   ) : null}
                 </select>
                 <small className="muted" id={`${prefix}-cache-hint`}>

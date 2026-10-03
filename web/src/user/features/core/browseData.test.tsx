@@ -75,6 +75,7 @@ const OLD_MODEL = {
   full_name: 'logical/primary',
   route_strategy: 'ordered',
   silent_retry: true,
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '5',
   binding_revision: '6',

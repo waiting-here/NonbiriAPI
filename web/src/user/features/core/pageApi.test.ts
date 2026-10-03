@@ -107,6 +107,7 @@ const model = {
   full_name: 'Vendor/Exact',
   route_strategy: 'ordered',
   silent_retry: false,
+  transport_rule: 'passthrough',
   flatten_tool_calls: false,
   revision: '1',
   binding_revision: '0',

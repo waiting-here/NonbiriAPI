@@ -64,6 +64,7 @@ function modelRecord(id: string, bindingCount = '0'): Model {
     full_name: `provider-${id}/model-${id}`,
     route_strategy: 'ordered',
     silent_retry: false,
+    transport_rule: 'passthrough',
     flatten_tool_calls: false,
     revision: '1',
     binding_revision: '1',

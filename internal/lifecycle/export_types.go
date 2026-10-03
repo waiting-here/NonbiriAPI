@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 // ExportDocument is the only value encoded by the export handler. Every
@@ -150,17 +151,18 @@ type CatalogPairExport struct {
 }
 
 type ModelExport struct {
-	RolePolicy       rolepolicy.Policy `json:"role_policy"`
-	ID               string            `json:"id"`
-	Provider         string            `json:"provider"`
-	Model            string            `json:"model"`
-	FullName         string            `json:"full_name"`
-	RouteStrategy    string            `json:"route_strategy"`
-	SilentRetry      bool              `json:"silent_retry"`
-	FlattenToolCalls bool              `json:"flatten_tool_calls"`
-	CreatedAt        int64             `json:"created_at"`
-	UpdatedAt        int64             `json:"updated_at"`
-	Bindings         []BindingExport   `json:"bindings"`
+	TransportRule    transportpolicy.Rule `json:"transport_rule"`
+	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
+	ID               string               `json:"id"`
+	Provider         string               `json:"provider"`
+	Model            string               `json:"model"`
+	FullName         string               `json:"full_name"`
+	RouteStrategy    string               `json:"route_strategy"`
+	SilentRetry      bool                 `json:"silent_retry"`
+	FlattenToolCalls bool                 `json:"flatten_tool_calls"`
+	CreatedAt        int64                `json:"created_at"`
+	UpdatedAt        int64                `json:"updated_at"`
+	Bindings         []BindingExport      `json:"bindings"`
 }
 
 type BindingExport struct {

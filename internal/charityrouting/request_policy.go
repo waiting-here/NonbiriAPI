@@ -9,11 +9,13 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 // RequestPolicy is a candidate-free ingress snapshot. The caller binds its
 // model identity to admission and retains the same exclusions for retries.
 type RequestPolicy struct {
+	TransportRule         transportpolicy.Rule
 	RolePolicy            rolepolicy.Policy
 	Revision              int64
 	ModelID               int64
@@ -65,8 +67,8 @@ FROM users u JOIN site_config c ON c.key='charity_enabled' WHERE u.id=?`, userID
 		return result, ErrCharitySuspended
 	}
 	var encoded, encodedRole string
-	err = tx.QueryRowContext(ctx, `SELECT id,full_name,excluded_request_fields,role_policy,revision FROM charity_models WHERE full_name=? AND enabled=1`, fullName).
-		Scan(&result.ModelID, &result.FullName, &encoded, &encodedRole, &result.Revision)
+	err = tx.QueryRowContext(ctx, `SELECT id,full_name,excluded_request_fields,role_policy,revision,transport_rule FROM charity_models WHERE full_name=? AND enabled=1`, fullName).
+		Scan(&result.ModelID, &result.FullName, &encoded, &encodedRole, &result.Revision, &result.TransportRule)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrNotFound
 	}
@@ -79,6 +81,9 @@ FROM users u JOIN site_config c ON c.key='charity_enabled' WHERE u.id=?`, userID
 		return RequestPolicy{}, ErrNotFound
 	} else if err != nil {
 		return RequestPolicy{}, err
+	}
+	if !result.TransportRule.Valid() {
+		return RequestPolicy{}, ErrInvariant
 	}
 	result.RolePolicy, err = rolepolicy.Decode(encodedRole)
 	if err != nil {

@@ -350,7 +350,9 @@
         "syntheticExplanation": "这条记录由平台生成，当时未能确认上游响应结果。下方状态码由平台记录。",
         "notes": "端点 / 密钥备注",
         "recordedStatus": "记录的状态码",
-        "upstreamStatus": "上游 HTTP 状态码"
+        "upstreamStatus": "上游 HTTP 状态码",
+        "charityModelFilter": "调用的公益模型",
+        "charityModelFilterHint": "按名称片段搜索；英文大小写无关"
       },
       "charity": {
         "selectedKeyMissing": "所选密钥已不在这份捐赠中。",
@@ -1286,7 +1288,20 @@
         "nextOpen": "查看活动规则、资格和费用后参加。"
       }
     },
-    "remove": "删除"
+    "remove": "删除",
+    "transportRule": {
+      "label": "传输规则",
+      "options": {
+        "passthrough": "透传（默认）",
+        "force_non_stream": "假流式（强制非流）",
+        "force_stream": "假非流（强制流式）"
+      },
+      "help": {
+        "passthrough": "跟随调用方选择的流式或非流式。",
+        "force_non_stream": "等待上游完整结果，期间向流式调用方保活，收到结果后完整返回。",
+        "force_stream": "收齐上游流后，向非流式调用方返回 JSON；非流请求仍受代理等待时限。"
+      }
+    }
   },
   "logs": {
     "charityModel": "调用的公益模型",
@@ -1537,10 +1552,11 @@
     },
     "omitWarning": "省略 store:false 后，上游不会收到存储指令。这不能保证提供方不留存数据。",
     "cache": "提示词缓存控制",
-    "cacheHint": "默认拒绝缓存控制。Anthropic 映射保留请求指定的缓存位置和有效期；不会自动加缓存，也不保证命中。",
+    "cacheHint": "Anthropic 保留请求指定的缓存点和有效期。末尾缓存点选项会把自动缓存放在最后一段可缓存内容上。是否命中由上游决定。",
     "cacheOptions": {
       "reject": "拒绝缓存控制（默认）",
-      "anthropic": "Anthropic 提示词缓存"
+      "anthropic": "Anthropic 提示词缓存",
+      "anthropic_explicit": "Anthropic：末尾缓存点"
     },
     "absent": "该目标尚未声明能力，请求中指定的能力控制可能被拒绝。",
     "deleteTitle": "删除模型能力？",

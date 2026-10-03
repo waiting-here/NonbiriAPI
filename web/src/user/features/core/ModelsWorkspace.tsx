@@ -1,3 +1,5 @@
+import { TransportRuleField, TransportRuleSummary } from '@shared/components/TransportRuleField';
+import type { TransportRule } from '@shared/transportRule';
 import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
@@ -165,6 +167,9 @@ function ModelEditor({
   const [modelName, setModelName] = useState(initial?.model ?? '');
   const [strategy, setStrategy] = useState<RouteStrategy>(initial?.route_strategy ?? 'ordered');
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
+  const [transportRule, setTransportRule] = useState<TransportRule>(
+    initial?.transport_rule ?? 'passthrough',
+  );
   const [flattenTools, setFlattenTools] = useState(initial?.flatten_tool_calls ?? false);
   const [roleDraft, setRoleDraft] = useState(() => draftFromRolePolicy(initial?.role_policy));
   const roleResult = buildRolePolicy(roleDraft);
@@ -289,6 +294,7 @@ function ModelEditor({
         model: modelName,
         route_strategy: strategy,
         silent_retry: silentRetry,
+        transport_rule: transportRule,
         flatten_tool_calls: flattenTools,
         role_policy: roleResult.policy,
         ...(initial ? { expected_revision: initial.revision } : {}),
@@ -379,6 +385,7 @@ function ModelEditor({
       </label>
       <p className="core-muted">{text('retryHelp')}</p>
       <p className="core-muted">{text('toolsHelp')}</p>
+      <TransportRuleField value={transportRule} onChange={setTransportRule} disabled={hasAttempt} />
       <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
 
       {validation ? (
@@ -1615,6 +1622,7 @@ function ModelDetail({
                 <SafeCopyValue value={model.data.full_name} label={t('models.fullName')} />
               </dd>
             </div>
+            <TransportRuleSummary value={model.data.transport_rule} />
             <div>
               <dt>{t('models.strategy')}</dt>
               <dd>
@@ -1856,6 +1864,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
                   </div>
                   <ModelBrowseSummary model={model} />
                   <dl className="core-detail-list">
+                    <TransportRuleSummary value={model.transport_rule} />
                     <div>
                       <dt>{t('models.silentRetry')}</dt>
                       <dd>{model.silent_retry ? t('common.yes') : t('common.no')}</dd>

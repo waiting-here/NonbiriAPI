@@ -329,6 +329,7 @@ function ScopedRoleLogPanel({
             'endpoint_key_id',
             'endpoint_base_url',
             'upstream_model',
+            'charity_model',
             'error_code',
             'status',
             'phase',
@@ -483,6 +484,13 @@ function ScopedRoleLogPanel({
         name: 'upstream_model',
         label: t('logs.upstreamModel'),
         ariaLabel: t('logs.upstreamModel'),
+        maxLength: 512,
+      });
+      values.push({
+        name: 'charity_model',
+        label: t('common.operations.logs.charityModelFilter'),
+        ariaLabel: t('common.operations.logs.charityModelFilter'),
+        placeholder: t('common.operations.logs.charityModelFilterHint'),
         maxLength: 512,
       });
     }

@@ -464,6 +464,7 @@ describe('Generation 2 charity management policy', () => {
             typeof body.token_reserve_credits === 'string' ? body.token_reserve_credits : null,
           pricing: body.pricing as CharityModel['pricing'],
           discount: body.discount as CharityModel['discount'],
+          transport_rule: 'passthrough',
           flatten_tool_calls: false,
           revision: '1',
           binding_revision: '0',

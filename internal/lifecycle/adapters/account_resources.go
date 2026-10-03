@@ -168,7 +168,7 @@ func (adapter *AccountResources) ExportResources(
 			RolePolicy: model.RolePolicy.Clone(),
 			ID:         model.ID, Provider: model.Provider, Model: model.Model, FullName: model.FullName,
 			RouteStrategy: model.RouteStrategy, SilentRetry: model.SilentRetry,
-			FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
+			TransportRule: model.TransportRule, FlattenToolCalls: model.FlattenToolCalls, CreatedAt: model.CreatedAt, UpdatedAt: model.UpdatedAt,
 			Bindings: make([]lifecycle.BindingExport, 0, len(model.Bindings)),
 		}
 		for _, binding := range model.Bindings {

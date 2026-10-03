@@ -63,6 +63,16 @@ describe('Gateway capability management', () => {
       await user.click(screen.getByRole('button', { name: i18n.t('gatewayCapabilities.add') }));
       await user.type(screen.getByLabelText(i18n.t('gatewayCapabilities.baseUrl')), entry.base_url);
       await user.type(screen.getByLabelText(i18n.t('gatewayCapabilities.model')), entry.model);
+      await user.selectOptions(
+        screen.getByLabelText(i18n.t('gatewayCapabilities.adapter')),
+        'anthropic_always_adaptive',
+      );
+      await user.selectOptions(
+        screen.getByLabelText(i18n.t('gatewayCapabilities.cache')),
+        'anthropic_explicit',
+      );
+      await user.clear(screen.getByLabelText(i18n.t('gatewayCapabilities.output')));
+      await user.type(screen.getByLabelText(i18n.t('gatewayCapabilities.output')), '1024');
       await user.click(screen.getByRole('button', { name: i18n.t('common.save') }));
       await waitFor(() =>
         expect(document.querySelectorAll('.nb-operation-feedback--confirmed')).toHaveLength(1),
@@ -70,7 +80,7 @@ describe('Gateway capability management', () => {
       expect(writes).toHaveLength(1);
       expect(writes[0].json).toMatchObject({
         expected_revision: '0',
-        entry: { max_output_tokens: 0, storage: 'reject', cache: 'reject' },
+        entry: { max_output_tokens: 1024, storage: 'reject', cache: 'anthropic_explicit' },
       });
       expect(writes[0].key).toMatch(/^[A-Za-z0-9_-]{22}$/);
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
