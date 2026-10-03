@@ -25,6 +25,7 @@ const (
 	OmitFalse               = "omit_false"
 	RejectCache             = "reject"
 	AnthropicCache          = "anthropic"
+	AnthropicExplicitCache  = "anthropic_explicit"
 	MaxEntries              = 128
 )
 
@@ -133,7 +134,7 @@ func Validate(entry Entry) (Entry, Model, error) {
 	case "":
 		m.Cache = RejectCache
 	case RejectCache:
-	case AnthropicCache:
+	case AnthropicCache, AnthropicExplicitCache:
 		if !strings.HasPrefix(entry.Adapter, "anthropic_") {
 			return Entry{}, Model{}, invalid("cache")
 		}

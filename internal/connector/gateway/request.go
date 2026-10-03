@@ -335,6 +335,9 @@ func compileChatWithModel(request *openai.ChatRequest, attribution string, model
 	if len(providerOptions) != 0 {
 		output["providerOptions"] = providerOptions
 	}
+	if err := finalizeCache(output, model); err != nil {
+		return nil, err
+	}
 	return json.Marshal(output)
 }
 
@@ -375,12 +378,15 @@ func compilePrompt(raw []byte, model *gatewaypolicy.Model) ([]any, error) {
 		}
 		if role == "tool" {
 			id, ok := text(message["tool_call_id"])
-			value, contentOK := text(message["content"])
-			if !only(message, "role", "content", "tool_call_id") || !ok || !contentOK || calls[id] == "" || finished[id] {
+			if !only(message, "role", "content", "tool_call_id") || !ok || calls[id] == "" || finished[id] {
 				return nil, errRequest
 			}
+			entry, err := compileToolResult(message["content"], id, calls[id], model)
+			if err != nil {
+				return nil, err
+			}
 			finished[id] = true
-			result = append(result, map[string]any{"role": "tool", "content": []any{map[string]any{"type": "tool-result", "toolCallId": id, "toolName": calls[id], "output": map[string]string{"type": "text", "value": value}}}})
+			result = append(result, map[string]any{"role": "tool", "content": []any{entry}})
 			continue
 		}
 		if role != "user" && role != "assistant" || !only(message, "role", "content", "tool_calls") {
@@ -465,7 +471,7 @@ func compileContent(raw []byte, role string, model *gatewaypolicy.Model) ([]any,
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, map[string]string{"type": "file", "data": value, "mediaType": media})
+			out = append(out, map[string]any{"type": "file", "data": value, "mediaType": media})
 		default:
 			return nil, errRequest
 		}
@@ -588,28 +594,23 @@ func CompileWithModel(request *openai.ChatRequest, attribution string, model gat
 	if err != nil {
 		return nil, err
 	}
-	var options struct {
-		ProviderOptions struct {
-			Anthropic struct {
-				CacheControl json.RawMessage `json:"cacheControl"`
-			} `json:"anthropic"`
-		} `json:"providerOptions"`
-	}
-	if err := json.Unmarshal(merged, &options); err != nil {
+	var output map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(merged))
+	decoder.UseNumber()
+	if decoder.Decode(&output) != nil {
 		clear(merged)
 		return nil, errRequest
 	}
-	if raw := options.ProviderOptions.Anthropic.CacheControl; len(raw) != 0 {
-		if _, err := cacheControl(raw, &model, "providerOptions.anthropic.cacheControl"); err != nil {
-			clear(merged)
-			return nil, err
-		}
+	if err := finalizeCache(output, &model); err != nil {
+		clear(merged)
+		return nil, err
 	}
-	return merged, nil
+	clear(merged)
+	return json.Marshal(output)
 }
 
 func validateControlExtensions(request *openai.ChatRequest, native map[string]json.RawMessage) error {
-	var protected []string
+	protected := []string{"/prompt", "/tools"}
 	for _, name := range []string{"max_tokens", "max_completion_tokens", "reasoning_effort", "store", "cache_control"} {
 		raw, present := request.RawField(name)
 		active := present && !isNull(raw)
@@ -625,7 +626,7 @@ func validateControlExtensions(request *openai.ChatRequest, native map[string]js
 		case "store":
 			protected = append(protected, "/providerOptions/openai/store")
 		case "cache_control":
-			protected = append(protected, "/providerOptions/anthropic/cacheControl")
+			protected = append(protected, "/providerOptions/anthropic/cacheControl", "/providerOptions/anthropic/cache_control")
 		}
 	}
 	for path := range native {
@@ -681,4 +682,40 @@ func validateProviderControls(fields object, model gatewaypolicy.Model, forceRea
 		}
 	}
 	return nil
+}
+
+func compileToolResult(raw []byte, id, name string, model *gatewaypolicy.Model) (map[string]any, error) {
+	entry := map[string]any{"type": "tool-result", "toolCallId": id, "toolName": name}
+	if value, ok := text(raw); ok {
+		entry["output"] = map[string]string{"type": "text", "value": value}
+		return entry, nil
+	}
+	var parts []json.RawMessage
+	if json.Unmarshal(raw, &parts) != nil || len(parts) == 0 || len(parts) > 4096 {
+		return nil, reject("native compile", "messages[role=tool].content", "expected text or text blocks")
+	}
+	blocks := make([]any, 0, len(parts))
+	for i, rawPart := range parts {
+		part, err := parseObject(rawPart)
+		kind, kindOK := text(part["type"])
+		value, textOK := text(part["text"])
+		if err != nil || !kindOK || kind != "text" || !textOK || !only(part, "type", "text", "cache_control") {
+			return nil, reject("native compile", "messages[role=tool].content", "only text blocks are supported")
+		}
+		blocks = append(blocks, map[string]string{"type": "text", "text": value})
+		if cache, present := part["cache_control"]; present {
+			if i != len(parts)-1 {
+				return nil, reject("native compile", "messages[role=tool].content[].cache_control", "an intermediate tool-result cache position cannot be represented")
+			}
+			if err := applyCache(entry, cache, model, "messages[role=tool].content[].cache_control"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if len(parts) == 1 {
+		entry["output"] = map[string]string{"type": "text", "value": blocks[0].(map[string]string)["text"]}
+	} else {
+		entry["output"] = map[string]any{"type": "content", "value": blocks}
+	}
+	return entry, nil
 }
