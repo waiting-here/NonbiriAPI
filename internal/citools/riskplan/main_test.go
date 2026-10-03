@@ -47,6 +47,7 @@ func TestVerificationClosure(t *testing.T) {
 		{name: "unknown", files: []string{"assets/input.bin"}, full: true, web: true, race: true},
 		{name: "schema", files: []string{"internal/db/schema.go"}, full: true, web: true, race: true},
 		{name: "root wiring", files: []string{"bootstrap.go"}, full: true, web: true, race: true},
+		{name: "application wiring", files: []string{"internal/app/application_wiring.go"}, full: true, web: true, race: true},
 		{name: "lock", files: []string{"web/package-lock.json"}, full: true, web: true, race: true},
 		{name: "gate", files: []string{"scripts/check-go.sh"}, full: true, web: true, race: true},
 		{name: "web", files: []string{"web/src/user/Page.tsx"}, web: true, expected: []string{}},

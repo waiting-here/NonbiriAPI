@@ -53,7 +53,7 @@ export NONBIRI_DUAL_BLACKJACK_FIXTURE="$temporary/data/blackjack.db"
 )
 "$go_command" test -count=1 -v -run '^TestGovernanceUpgradeFromReleasedBinary$' ./internal/db
 NONBIRI_DUAL_GAMEPLAY_FIXTURE="$NONBIRI_GAMEPLAY_FIXTURE" NONBIRI_DUAL_BILLING_FIXTURE="$NONBIRI_BILLING_FIXTURE" \
-    "$go_command" test -count=1 -v -run '^TestReleased(DualAsset(Gameplay|Billing)|Progression)Upgrade$' .
+    "$go_command" test -count=1 -v -run '^TestReleased(DualAsset(Gameplay|Billing)|Progression)Upgrade$' ./internal/app
 "$temporary/released-wallet.test" -test.run '^TestReleasedRejectsDuelUpgrade$' -test.v -test.timeout 2m
 printf 'Released source: %s\n' "$released_commit"
 "$go_command" version

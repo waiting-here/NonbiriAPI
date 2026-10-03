@@ -15,7 +15,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/resources",
     "github.com/waiting-here/NonbiriAPI/internal/checkin",
     "github.com/waiting-here/NonbiriAPI/internal/resourcebridge",
-    "github.com/waiting-here/NonbiriAPI",
+    "github.com/waiting-here/NonbiriAPI/internal/app",
     "github.com/waiting-here/NonbiriAPI/internal/donation",
     "github.com/waiting-here/NonbiriAPI/internal/lifecycle",
     "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance",
@@ -40,7 +40,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/resources": 68,
     "github.com/waiting-here/NonbiriAPI/internal/checkin": 28,
     "github.com/waiting-here/NonbiriAPI/internal/resourcebridge": 34,
-    "github.com/waiting-here/NonbiriAPI": 85,
+    "github.com/waiting-here/NonbiriAPI/internal/app": 85,
     "github.com/waiting-here/NonbiriAPI/internal/donation": 64,
     "github.com/waiting-here/NonbiriAPI/internal/lifecycle": 30,
     "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance": 7,
@@ -854,7 +854,7 @@
       "TestWriteEndpointSecretUsesUniqueContextAndExactAAD": 11.57,
       "TestWrittenEndpointCredentialsSurviveDatabaseRestart": 20.9
     },
-    "github.com/waiting-here/NonbiriAPI": {
+    "github.com/waiting-here/NonbiriAPI/internal/app": {
       "TestAccountEventConnectionsCancelExactUserAndClose": 0.01,
       "TestAccountEventHeaderValidation": 0.01,
       "TestAccountEventRouteAuthorizesMaintenanceBeforeRegisteringConnection": 0.01,
@@ -1182,7 +1182,7 @@
     }
   },
   "package_seconds": {
-    "github.com/waiting-here/NonbiriAPI": 2165.284,
+    "github.com/waiting-here/NonbiriAPI/internal/app": 2165.284,
     "github.com/waiting-here/NonbiriAPI/internal/accountstream": 4.337,
     "github.com/waiting-here/NonbiriAPI/internal/activities": 1940.408,
     "github.com/waiting-here/NonbiriAPI/internal/adminalerts": 228.76,
