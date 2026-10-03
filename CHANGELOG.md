@@ -10,6 +10,11 @@ Changes in development.
 
 ### Added
 
+- Personal and charity model `transport_rule` with default passthrough, forced nonstream upstream and forced stream upstream, preserving the caller format and frozen retry policy.
+- Administrator and level-6 log filtering by literal, ASCII case-insensitive call-time charity model name across lists, pagination and exports.
+- Read-only `maintenance verify` for full historical audits of a stopped database or trusted consistent copy.
+- Standalone bilingual Nginx maintenance pages and JSON API errors while the application is unavailable.
+
 - Online administrator Gateway capability configuration, exact-target matching and request snapshots, with a one-time import of existing environment settings.
 - Gateway V3 prompt-cache markers at request, text-block and tool positions, explicit lifetime mapping, adaptation defaults and the `cache_write_tokens` usage field.
 - Exact daily, weekly and monthly charity reset times with rule-zone previews, month-end recovery and preserved in-flight accounting.
@@ -25,6 +30,9 @@ Changes in development.
 
 ### Changed
 
+- Ordinary startup retains database ownership, identity/schema/credential checks and unfinished-work recovery while avoiding full copies and repeated historical scans. Application composition and lifecycle reside in `internal/app`; the root entrypoint and `go build .` remain supported.
+- Charity accounting uses validated upstream generation and actual or existing conservative unknown usage even when a buffered JSON response is not delivered; caller disconnect still immediately cancels upstream.
+
 - Administrator and steward forms group optional controls, explain defaults and units, use percentages for fees, and clear old save notices when edited. Consequential actions use one confirmation.
 - Caller-key hints now explain that calls require the full key.
 
@@ -35,6 +43,9 @@ Changes in development.
 - Risk-based checks retain full final-candidate coverage while browser integration reuses one compiled backend fixture and race selection follows actual concurrency boundaries.
 
 ### Fixed
+
+- Exact-target Gateway `anthropic_explicit` caching lowers root controls onto the final eligible prompt block, preserves caller markers and supports tool-result text arrays, with explicit rejection of conflicting TTLs, invalid TTL order, excess breakpoints or unrepresentable positions.
+- Gateway accepts valid empty content-filter/refusal termination in JSON and SSE while retaining actual usage.
 
 - Accepted streaming chat requests send idle SSE comments during upstream waits and retries, without counting them as output or consumption. Final failures after headers use one SSE error.
 - Incorrect administrator re-verification passwords preserve the current form, and successful steward maintenance actions show their saved state immediately.
