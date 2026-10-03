@@ -230,7 +230,7 @@ test('administrator deletes a disposable account after correcting a fresh passwo
     expect(history.data[0].deleted.former_user_id).toBe(id);
     await page.goto(state.admin_url + '/users?account_state=deleted&user_id=' + id);
     await expect(
-      page.getByRole('cell', { name: copy.userId + ' ' + id, exact: true }),
+      page.locator('.nb-table tbody').getByText('#' + id + ' ·', { exact: false }),
     ).toBeVisible();
     await page.screenshot({
       path: info.outputPath('account-deleted-zh-narrow.png'),

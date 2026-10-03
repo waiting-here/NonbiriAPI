@@ -80,15 +80,12 @@ for (const scenario of [
       return route.fallback();
     });
     await page.goto(origin + (station === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7'));
-    const opener = page.getByRole('button', {
-      name: zh ? '自动处罚记录' : 'Automatic penalties',
+    const opener = page.getByRole('tab', {
+      name: zh ? '处罚记录' : 'Penalties',
       exact: true,
     });
     await opener.click();
-    const dialog = page.getByRole('dialog', {
-      name: zh ? '自动处罚记录' : 'Automatic penalties',
-      exact: true,
-    });
+    const dialog = page.getByRole('tabpanel', { name: zh ? '处罚记录' : 'Penalties', exact: true });
     await expect(dialog.getByRole('status')).toContainText(
       zh ? '没有保存统计依据' : 'no saved statistical evidence',
     );
@@ -122,9 +119,11 @@ for (const scenario of [
       mkdirSync(folder, { recursive: true });
       await page.screenshot({ path: join(folder, `penalty-${scenario.role}.png`) });
     }
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    await expect(opener).toBeFocused();
+    await page.getByRole('tab', { name: zh ? '概览' : 'Overview', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await opener.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.loan-record')).toHaveCount(1);
     guard.assertNone();
   });
 }

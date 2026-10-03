@@ -154,7 +154,7 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     await page.getByLabel(commonEn.management.users.searchAria).fill(member.username);
     await page.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
     await expect(
-      page.locator('.ops-table tbody').getByText(member.username, { exact: true }),
+      page.locator('.nb-table tbody').getByText(member.username, { exact: true }),
     ).toBeVisible();
     const userQuery = new URL(page.url()).searchParams.get('q');
     expect(userQuery).toBe(member.username);
@@ -169,12 +169,13 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     ).toBe(true);
     await page.goto(state.admin_url + '/blacklist');
     await page.getByLabel(commonEn.common.blacklist.search).fill('Synthetic directory filter');
+    await page.getByText(commonEn.management.users.exactFilters, { exact: true }).click();
     await page.getByLabel(commonEn.common.blacklist.actorKind).selectOption('admin');
     await page
       .getByRole('button', { name: commonEn.common.blacklist.applySearch, exact: true })
       .click();
     await expect(
-      page.locator('.ops-table tbody').getByText(discordID, { exact: true }),
+      page.locator('.nb-table tbody').getByText(discordID, { exact: true }),
     ).toBeVisible();
     expect(
       (

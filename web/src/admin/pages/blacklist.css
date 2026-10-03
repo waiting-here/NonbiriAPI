@@ -1,0 +1,40 @@
+.blacklist-management .ops-field-grid > .nb-fold {
+  grid-column: 1 / -1;
+}
+.blacklist-management .ops-field-grid > button {
+  width: fit-content;
+}
+.blacklist-identity {
+  display: grid;
+  gap: var(--nb-space-1);
+}
+.blacklist-identity code {
+  font-family: var(--nb-font-mono);
+  overflow-wrap: anywhere;
+}
+.blacklist-identity small,
+.blacklist-identity a {
+  font-size: var(--nb-font-size-xs);
+}
+.blacklist-first-reason {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.blacklist-consequence {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.blacklist-management .nb-table {
+  table-layout: fixed;
+}
+.blacklist-management .nb-table th:first-child {
+  width: 24%;
+}
+@media (max-width: 37.5rem) {
+  .blacklist-management .nb-table {
+    table-layout: auto;
+  }
+}

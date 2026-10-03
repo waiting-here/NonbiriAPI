@@ -1,0 +1,25 @@
+.admin-overview .nb-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.admin-overview .nb-stat__value {
+  overflow-wrap: anywhere;
+}
+.overview-activity-disabled,
+.overview-usage-note {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+  margin-block: var(--nb-space-3);
+}
+.admin-overview .nb-facts {
+  margin-bottom: var(--nb-space-4);
+}
+@media (max-width: 64rem) {
+  .admin-overview .nb-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 37.5rem) {
+  .admin-overview .nb-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
