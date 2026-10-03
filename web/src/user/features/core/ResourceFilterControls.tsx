@@ -196,64 +196,91 @@ function ResourceFilterForm({ control }: { control: ResourceFilterControl }) {
       </>
     );
   }
+  const labels = {
+    q: t('common.search'),
+    provider: t('models.provider'),
+    route_strategy: t('models.strategy'),
+    connection_state: t('filters.connection'),
+  };
+  const choices = {
+    ordered: t('models.ordered'),
+    random: t('models.random'),
+    available: t('common.available'),
+    unavailable: t('filters.unavailable'),
+    unconfigured: t('filters.unconfigured'),
+  };
+  const chips = Object.entries(control.filters)
+    .filter(([, value]) => Boolean(value))
+    .map(([field, value]) => ({
+      key: field,
+      label: `${labels[field as keyof typeof labels]}: ${choices[value as keyof typeof choices] ?? value}`,
+      removeLabel: ui('user.services.removeFilter', {
+        label: labels[field as keyof typeof labels],
+      }),
+      onRemove: () => control.update((current) => ({ ...current, [field]: '' })),
+    }));
   return (
-    <form
-      className="core-resource-filters"
-      aria-label={t('filters.title')}
-      onSubmit={(event) => {
-        event.preventDefault();
-        try {
-          control.update((current) => ({
-            ...current,
-            q: query,
-            ...(control.kind === 'models' ? { provider } : {}),
-          }));
-          setInvalid(false);
-        } catch {
-          setInvalid(true);
+    <>
+      <FilterBar
+        ariaLabel={t('filters.title')}
+        persistKey={`user-resource-filters:models:${control.scope}`}
+        secondaryLabel={ui('user.services.filters')}
+        activeCount={chips.length}
+        chips={chips}
+        onClearAll={control.clear}
+        clearAllLabel={t('filters.clear')}
+        search={
+          <>
+            <label>
+              <span className="nb-sr">{t('common.search')}</span>
+              <input
+                value={query}
+                type="search"
+                aria-invalid={invalid}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <button type="submit" className="btn btn-secondary">
+              {t('common.search')}
+            </button>
+          </>
         }
-      }}
-    >
-      <label>
-        <span>{t('common.search')}</span>
-        <input
-          value={query}
-          type="search"
-          aria-invalid={invalid}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-      <label>
-        <span>{t('models.provider')}</span>
-        <input
-          value={provider}
-          onChange={(event) => setProvider(event.target.value)}
-          aria-invalid={invalid}
-        />
-      </label>
-      {select('route_strategy', t('models.strategy'), [
-        ['ordered', t('models.ordered')],
-        ['random', t('models.random')],
-      ])}
-      {select('connection_state', t('filters.connection'), [
-        ['available', t('common.available')],
-        ['unavailable', t('filters.unavailable')],
-        ['unconfigured', t('filters.unconfigured')],
-      ])}
-      <div className="core-row-actions">
-        <button type="submit" className="btn btn-secondary">
-          {t('common.search')}
-        </button>
-        <button type="button" className="btn btn-quiet" onClick={control.clear}>
-          {t('filters.clear')}
-        </button>
-      </div>
+        secondary={
+          <>
+            <label>
+              <span>{t('models.provider')}</span>
+              <input
+                value={provider}
+                aria-invalid={invalid}
+                onChange={(event) => setProvider(event.target.value)}
+              />
+            </label>
+            {select('route_strategy', t('models.strategy'), [
+              ['ordered', t('models.ordered')],
+              ['random', t('models.random')],
+            ])}
+            {select('connection_state', t('filters.connection'), [
+              ['available', t('common.available')],
+              ['unavailable', t('filters.unavailable')],
+              ['unconfigured', t('filters.unconfigured')],
+            ])}
+          </>
+        }
+        onSubmit={() => {
+          try {
+            control.update((current) => ({ ...current, q: query, provider }));
+            setInvalid(false);
+          } catch {
+            setInvalid(true);
+          }
+        }}
+      />
       {invalid ? (
         <p role="alert" className="field-error">
           {t('filters.invalid')}
         </p>
       ) : null}
-    </form>
+    </>
   );
 }
 

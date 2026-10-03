@@ -54,16 +54,22 @@ export function RolePolicyEditor({ value, onChange, disabled, idPrefix }: RolePo
       rules: value.rules.map((row, current) => (current === index ? { ...row, ...patch } : row)),
     });
   return (
-    <details className="ops-advanced" ref={disclosure}>
+    <details className="nb-fold nb-fold--plain ops-advanced" ref={disclosure}>
       <summary>
-        <strong>{t('common.rolePolicy.title')}</strong>
-        {' · '}
-        {t('common.rolePolicy.summary', {
-          action: t(actionKeys[value.defaultAction]),
-          count: value.rules.length,
-        })}
+        <span className="nb-fold__title">
+          <strong>{t('common.rolePolicy.title')}</strong>
+          {' · '}
+          {t('common.rolePolicy.summary', {
+            action: t(actionKeys[value.defaultAction]),
+            count: value.rules.length,
+          })}
+        </span>
       </summary>
-      <fieldset className="ops-form-section" disabled={disabled} aria-describedby={`${id}-help`}>
+      <fieldset
+        className="nb-fold__body ops-form-section"
+        disabled={disabled}
+        aria-describedby={`${id}-help`}
+      >
         <legend>{t('common.rolePolicy.title')}</legend>
         <p id={`${id}-help`}>{t('common.rolePolicy.help')}</p>
         <label>

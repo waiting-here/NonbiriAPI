@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type MouseEvent, type ReactNode } from 'react';
 
 export interface DataColumn<Row> {
   key: string;
@@ -17,6 +17,7 @@ export function DataTable<Row>({
   rowKey,
   selectedKey,
   dense,
+  onRowClick,
 }: {
   caption: string;
   columns: readonly DataColumn<Row>[];
@@ -24,6 +25,7 @@ export function DataTable<Row>({
   rowKey: (row: Row) => string;
   selectedKey?: string;
   dense?: boolean;
+  onRowClick?: (row: Row, event: MouseEvent<HTMLTableRowElement>) => void;
 }) {
   return (
     <div className="nb-table-wrap">
@@ -46,7 +48,11 @@ export function DataTable<Row>({
           {rows.map((row) => {
             const key = rowKey(row);
             return (
-              <tr key={key} aria-selected={selectedKey === key ? true : undefined}>
+              <tr
+                key={key}
+                onClick={onRowClick ? (event) => onRowClick(row, event) : undefined}
+                aria-selected={selectedKey === key ? true : undefined}
+              >
                 {columns.map((column) => (
                   <td
                     key={column.key}

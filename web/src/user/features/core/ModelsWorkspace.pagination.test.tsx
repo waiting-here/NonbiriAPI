@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
@@ -223,20 +223,29 @@ describe('ModelsWorkspace numbered pagination', () => {
           deleted = true;
           return jsonResponse(null, 204);
         }
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
 
     const rendered = await renderWorkspace('/models?page=9&page_size=10');
     expect(await screen.findByText('provider-21/model-21')).toBeInTheDocument();
-    expect(screen.getByText('Page 3 of 3 · Total: 25')).toBeInTheDocument();
+    expect(screen.getByText('25 items')).toBeInTheDocument();
     expect(
       screen.getByText('That page is no longer available. Showing page 3.'),
     ).toBeInTheDocument();
 
     await rendered.user.click(
-      within(screen.getByText('provider-21/model-21').closest('li')!).getByRole('button', {
-        name: 'Manage sources',
+      within(screen.getByText('provider-21/model-21').closest('tr')!).getByRole('button', {
+        name: 'Edit model',
       }),
     );
     await waitFor(() =>
@@ -253,117 +262,118 @@ describe('ModelsWorkspace numbered pagination', () => {
       expect(screen.getByTestId('location-search')).not.toHaveTextContent('model_id'),
     );
     expect(calls).toContain('DELETE /api/models/21');
-    await screen.findByText('Page 3 of 3 · Total: 24');
+    await screen.findByText('24 items');
     expect(screen.queryByText('provider-21/model-21')).not.toBeInTheDocument();
     expect(calls.filter((path) => path === 'GET /api/models/21')).toHaveLength(1);
     expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '21'))).toBeUndefined();
   });
 
-  it('keeps endpoint, key, and candidate choices across numbered pages', async () => {
+  it('searches all services, retains unique selections across pages and applies an optional paged service filter', async () => {
     const selectedModel = modelRecord('31');
     const endpoints = Array.from({ length: 20 }, (_, index) => endpointRecord(String(index + 1)));
     const endpoint21 = endpointRecord('21');
-    const key21 = keyRecord('211', '21');
-    const automaticCandidates = Array.from({ length: 11 }, (_, index) =>
-      candidateRecord('211', `auto-${index + 1}`, 'automatic'),
-    );
-    const automaticOne = automaticCandidates[0];
-    const automaticTwo = automaticCandidates[10];
-    const manualOne = candidateRecord('211', 'manual-one', 'manual');
-    const selections: unknown[] = [];
-
+    const candidates = Array.from({ length: 11 }, (_, index) => ({
+      ...candidateRecord(
+        index === 10 ? '221' : '211',
+        `gpt-${index + 1}`,
+        index === 10 ? 'manual' : 'automatic',
+      ),
+      endpoint_note: index === 10 ? 'second service' : 'first service',
+    }));
+    const bodies: unknown[] = [];
+    const calls: URL[] = [];
+    let bound: Binding[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = requestURL(input);
         const method = requestMethod(input, init);
+        calls.push(url);
         if (method === 'GET' && url.pathname === '/api/models/31')
           return jsonResponse(selectedModel);
-        if (method === 'GET' && url.pathname === '/api/models/31/bindings') {
-          return jsonResponse({ bindings: [], binding_revision: '1' });
-        }
+        if (method === 'GET' && url.pathname.endsWith('/bindings'))
+          return jsonResponse({ bindings: bound, binding_revision: bound.length ? '2' : '1' });
         if (method === 'GET' && url.pathname === '/api/endpoints') {
           const page = url.searchParams.get('page') ?? '1';
           return jsonResponse(numbered(page === '2' ? [endpoint21] : endpoints, page, 20, 21));
         }
-        if (method === 'GET' && url.pathname === '/api/endpoints/21/keys') {
-          return jsonResponse(numbered([key21], url.searchParams.get('page') ?? '1', 20, 1));
-        }
-        if (method === 'GET' && url.pathname === '/api/models/31/binding-candidates') {
-          const source = url.searchParams.get('source');
-          const page = url.searchParams.get('page') ?? '1';
-          const pageSize = Number(url.searchParams.get('page_size') ?? '20');
-          if (source === 'automatic') {
-            const candidates = automaticCandidates;
-            const offset = (Number(page) - 1) * pageSize;
-            return jsonResponse(
-              numbered(
-                candidates.slice(offset, offset + pageSize),
-                page,
-                pageSize,
-                candidates.length,
-              ),
-            );
-          }
-          return jsonResponse(numbered([manualOne], page, pageSize, 1));
-        }
-        if (method === 'POST' && url.pathname === '/api/models/31/bindings/batch') {
-          selections.push(JSON.parse(String(init?.body)));
-          return jsonResponse(
-            {
-              bindings: [automaticOne, automaticTwo].map((candidate, index) => ({
-                ...candidate,
-                id: String(index + 1),
-                ord: index,
-              })),
-              binding_revision: '2',
-            },
-            201,
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates')) {
+          expect(url.searchParams.has('key_id')).toBe(false);
+          expect(url.searchParams.has('source')).toBe(false);
+          const page = url.searchParams.get('page') ?? '1',
+            size = Number(url.searchParams.get('page_size'));
+          const filtered = candidates.filter(
+            (candidate) =>
+              candidate.upstream_model_id.includes(url.searchParams.get('q') ?? '') &&
+              (!url.searchParams.has('endpoint_id') || candidate.endpoint_key_id === '211'),
           );
+          const offset = (Number(page) - 1) * size;
+          return jsonResponse(
+            numbered(filtered.slice(offset, offset + size), page, size, filtered.length),
+          );
+        }
+        if (method === 'POST' && url.pathname.endsWith('/bindings/batch')) {
+          const body = JSON.parse(String(init?.body));
+          bodies.push(body);
+          bound = body.selections.map((selection: BindingCandidate, index: number) => ({
+            ...candidates.find(
+              (candidate) =>
+                candidate.endpoint_key_id === selection.endpoint_key_id &&
+                candidate.upstream_model_id === selection.upstream_model_id,
+            ),
+            id: String(index + 1),
+            ord: index,
+          }));
+          return jsonResponse({ bindings: bound, binding_revision: '2' }, 201);
         }
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
-
     const rendered = await renderWorkspace('/models?model_id=31');
-    await screen.findByRole('heading', { name: 'Add sources' });
-    const endpointSection = screen.getByRole('heading', { name: '1 · Service' }).closest('section');
-    expect(endpointSection).not.toBeNull();
-    await rendered.user.click(within(endpointSection!).getByRole('button', { name: 'Next' }));
-    await rendered.user.click(
-      await within(endpointSection!).findByRole('button', { name: /endpoint-21/ }),
+    const results = await screen.findByRole('region', { name: 'Add sources' });
+    await within(results).findByText('gpt-1');
+    expect(
+      calls
+        .filter((url) => url.pathname.endsWith('/binding-candidates'))
+        .every((url) => !url.searchParams.has('endpoint_id')),
+    ).toBe(true);
+    await rendered.user.type(screen.getByRole('searchbox', { name: 'Add sources' }), 'gpt');
+    await waitFor(() =>
+      expect(calls.some((url) => url.searchParams.get('q') === 'gpt')).toBe(true),
     );
-
-    const keySection = screen.getByRole('heading', { name: '2 · Key' }).closest('section');
-    expect(keySection).not.toBeNull();
-    await rendered.user.click(await within(keySection!).findByRole('button', { name: /key-211/ }));
-
-    const automaticSection = screen
-      .getByRole('heading', { name: 'Automatically found models' })
-      .closest('section');
-    expect(automaticSection).not.toBeNull();
+    await within(results).findByText('gpt-1');
+    await rendered.user.click(within(results).getByText('gpt-1').closest('button')!);
+    await rendered.user.click(within(results).getByRole('button', { name: 'Next' }));
+    await rendered.user.click((await within(results).findByText('gpt-11')).closest('button')!);
+    await rendered.user.click(screen.getByText('Filter by service', { selector: 'summary' }));
+    const filter = screen
+      .getByText('Filter by service', { selector: 'summary' })
+      .closest('details')!;
+    await rendered.user.click(within(filter).getByRole('button', { name: 'Next' }));
     await rendered.user.selectOptions(
-      await within(automaticSection!).findByRole('combobox', { name: 'Items per page' }),
-      '10',
+      within(filter).getByRole('combobox', { name: 'Service' }),
+      '21',
     );
-    await rendered.user.click(
-      (await within(automaticSection!).findByText('auto-1')).closest('button')!,
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (url) =>
+            url.searchParams.get('endpoint_id') === '21' &&
+            url.searchParams.get('q') === 'gpt' &&
+            url.searchParams.get('page') === '1',
+        ),
+      ).toBe(true),
     );
-    await rendered.user.click(within(automaticSection!).getByRole('button', { name: 'Next' }));
-    await rendered.user.click(
-      (await within(automaticSection!).findByText('auto-11')).closest('button')!,
-    );
-
     expect(
       screen.getByText('2 unique model(s) selected across filters and pages.'),
     ).toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'Add 2 selected sources' }));
-    await waitFor(() => expect(selections).toHaveLength(1));
-    expect(selections[0]).toEqual({
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({
       expected_binding_revision: '1',
       selections: [
-        { endpoint_key_id: '211', upstream_model_id: 'auto-1' },
-        { endpoint_key_id: '211', upstream_model_id: 'auto-11' },
+        { endpoint_key_id: '211', upstream_model_id: 'gpt-1' },
+        { endpoint_key_id: '221', upstream_model_id: 'gpt-11' },
       ],
     });
   });
@@ -395,6 +405,15 @@ describe('ModelsWorkspace numbered pagination', () => {
           }));
           return jsonResponse({ bindings: reordered, binding_revision: '2' });
         }
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
@@ -410,7 +429,11 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.selectOptions(pageSize, '10');
     await rendered.user.click(within(section!).getByRole('button', { name: 'Next' }));
     await within(section!).findByText('upstream-11');
-    await rendered.user.click(within(section!).getAllByRole('button', { name: 'Move down' })[0]);
+    const row = within(section!).getByText('upstream-11').closest('li')!;
+    await rendered.user.click(
+      within(row).getByRole('button', { name: 'Source actions for upstream-11' }),
+    );
+    await rendered.user.click(within(row).getByRole('menuitem', { name: 'Move down' }));
     await rendered.user.click(
       within(section!).getByRole('button', { name: 'Save complete order' }),
     );
@@ -454,12 +477,21 @@ describe('ModelsWorkspace numbered pagination', () => {
         if (method === 'GET' && url.pathname === '/api/endpoints') {
           return jsonResponse(numbered([], url.searchParams.get('page') ?? '1', 20, 0));
         }
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
 
     const rendered = await renderWorkspace('/models?model_id=51', account);
-    await screen.findByText('provider-51/model-51');
+    await screen.findByRole('heading', { name: 'provider-51/model-51' });
     rendered.queryClient.setQueryData(coreKeys.session, { user: otherAccount });
     rendered.rerender(
       <>
@@ -468,7 +500,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       </>,
     );
 
-    await screen.findByText('second-provider/model-51');
+    await screen.findByRole('heading', { name: 'second-provider/model-51' });
     expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '51'))).toEqual({
       ...firstModel,
       role_policy: { default_action: 'native', rules: {} },
@@ -494,14 +526,23 @@ describe('ModelsWorkspace numbered pagination', () => {
         if (method === 'GET' && url.pathname === '/api/endpoints') {
           return jsonResponse(numbered([], url.searchParams.get('page') ?? '1', 20, 0));
         }
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
 
     const rendered = await renderWorkspace('/models?model_id=56');
-    await screen.findByText('provider-56/model-56');
+    await screen.findByRole('heading', { name: 'provider-56/model-56' });
     rendered.queryClient.setQueryData(coreKeys.session, null);
-    await waitFor(() => expect(screen.queryByText('provider-56/model-56')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryAllByText('provider-56/model-56')).toHaveLength(0));
     expect(screen.queryByRole('button', { name: 'Edit model' })).not.toBeInTheDocument();
   });
 
@@ -529,13 +570,20 @@ describe('ModelsWorkspace numbered pagination', () => {
           return jsonResponse({ error: { code: 'permission_denied', message: 'forbidden' } }, 403);
         }
         if (method === 'POST') throw new Error('candidate writes must be unavailable');
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
 
-    const rendered = await renderWorkspace('/models?model_id=61');
-    await rendered.user.click(await screen.findByRole('button', { name: /endpoint-61/ }));
-    await rendered.user.click(await screen.findByRole('button', { name: /key-611/ }));
+    await renderWorkspace('/models?model_id=61');
     expect(
       await screen.findAllByText('Your current session no longer permits this operation.'),
     ).not.toHaveLength(0);
@@ -569,7 +617,7 @@ describe('ModelsWorkspace numbered pagination', () => {
         if (method === 'GET' && url.pathname === '/api/models/81/binding-candidates') {
           const page = url.searchParams.get('page') ?? '1';
           const pageSize = Number(url.searchParams.get('page_size') ?? '20');
-          return url.searchParams.get('source') === 'automatic'
+          return !url.searchParams.has('source')
             ? jsonResponse(numbered([candidate], page, pageSize, 1))
             : jsonResponse(numbered([], page, pageSize, 0));
         }
@@ -577,13 +625,20 @@ describe('ModelsWorkspace numbered pagination', () => {
           writes.push(String(init?.body));
           return jsonResponse({ error: { code: 'permission_denied', message: 'forbidden' } }, 403);
         }
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
 
     const rendered = await renderWorkspace('/models?model_id=81');
-    await rendered.user.click(await screen.findByRole('button', { name: /endpoint-81/ }));
-    await rendered.user.click(await screen.findByRole('button', { name: /key-811/ }));
     await rendered.user.click((await screen.findByText('write-candidate')).closest('button')!);
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
 
@@ -603,6 +658,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
     const searchedCandidate = candidateRecord('711', 'needle-result', 'automatic');
     const requests: string[] = [];
+    let searchSignal: AbortSignal | undefined;
     let resolveSearch: ((response: Response) => void) | undefined;
     const slowSearch = new Promise<Response>((resolve) => {
       resolveSearch = resolve;
@@ -630,8 +686,20 @@ describe('ModelsWorkspace numbered pagination', () => {
           const pageSize = Number(url.searchParams.get('page_size') ?? '20');
           const source = url.searchParams.get('source');
           const query = url.searchParams.get('q');
-          if (source === 'automatic' && query === 'needle') return slowSearch;
-          if (source === 'automatic') {
+          if (!source && query === 'needle') {
+            searchSignal = init?.signal ?? undefined;
+            return slowSearch;
+          }
+          if (!source && query === 'latest')
+            return jsonResponse(
+              numbered(
+                [{ ...searchedCandidate, upstream_model_id: 'latest-result' }],
+                '1',
+                pageSize,
+                1,
+              ),
+            );
+          if (!source) {
             const offset = (Number(page) - 1) * pageSize;
             return jsonResponse(
               numbered(
@@ -644,17 +712,21 @@ describe('ModelsWorkspace numbered pagination', () => {
           }
           return jsonResponse(numbered([], page, pageSize, 0));
         }
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse(
+            numbered(
+              [],
+              url.searchParams.get('page') ?? '1',
+              Number(url.searchParams.get('page_size')),
+              0,
+            ),
+          );
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
     );
 
     const rendered = await renderWorkspace('/models?model_id=71');
-    await rendered.user.click(await screen.findByRole('button', { name: /endpoint-71/ }));
-    await rendered.user.click(await screen.findByRole('button', { name: /key-711/ }));
-    const automaticSection = screen
-      .getByRole('heading', { name: 'Automatically found models' })
-      .closest('section');
-    expect(automaticSection).not.toBeNull();
+    const automaticSection = await screen.findByRole('region', { name: 'Add sources' });
     await within(automaticSection!).findByText('searchable-1');
     await rendered.user.selectOptions(
       within(automaticSection!).getByRole('combobox', { name: 'Items per page' }),
@@ -663,10 +735,9 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(within(automaticSection!).getByRole('button', { name: 'Next' }));
     await within(automaticSection!).findByText('searchable-11');
 
-    const searchInput = screen.getByRole('textbox', { name: 'Search provider model names' });
+    const searchInput = screen.getByRole('searchbox', { name: 'Add sources' });
     await rendered.user.type(searchInput, 'needle');
     expect(requests.some((request) => request.includes('q=needle'))).toBe(false);
-    await rendered.user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
       expect(requests.some((request) => request.includes('q=needle&page=1&page_size=10'))).toBe(
         true,
@@ -675,8 +746,201 @@ describe('ModelsWorkspace numbered pagination', () => {
     expect(automaticSection).toHaveAttribute('aria-busy', 'true');
     expect(within(automaticSection!).queryByText('searchable-11')).not.toBeInTheDocument();
 
-    resolveSearch!(jsonResponse(numbered([searchedCandidate], '1', 10, 1)));
-    await within(automaticSection!).findByText('needle-result');
-    expect(within(automaticSection!).getByText('Page 1 of 1 · Total: 1')).toBeInTheDocument();
+    await rendered.user.clear(searchInput);
+    await rendered.user.type(searchInput, 'latest');
+    await within(automaticSection).findByText('latest-result');
+    expect(searchSignal?.aborted).toBe(true);
+    await act(async () => resolveSearch!(jsonResponse(numbered([searchedCandidate], '1', 10, 1))));
+    expect(within(automaticSection).queryByText('needle-result')).not.toBeInTheDocument();
+    expect(within(automaticSection).getByText('latest-result')).toBeInTheDocument();
+    expect(within(automaticSection).getByText('1 items')).toBeInTheDocument();
   });
+  it('drops source selections, search and late query results across account boundaries', async () => {
+    let actor = 'first';
+    let finish!: (response: Response) => void;
+    let oldSignal: AbortSignal | undefined;
+    const slow = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestURL(input),
+          method = requestMethod(input, init);
+        if (method === 'GET' && url.pathname === '/api/models/91')
+          return jsonResponse({
+            ...modelRecord('91'),
+            full_name: `${actor}/model-91`,
+            provider: actor,
+          });
+        if (method === 'GET' && url.pathname.endsWith('/bindings'))
+          return jsonResponse({ bindings: [], binding_revision: '1' });
+        if (method === 'GET' && url.pathname === '/api/endpoints')
+          return jsonResponse(numbered([], '1', 20, 0));
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates')) {
+          if (actor === 'first' && url.searchParams.get('q') === 'private-search') {
+            oldSignal = init?.signal ?? undefined;
+            return slow;
+          }
+          return jsonResponse(
+            numbered(
+              [
+                candidateRecord(
+                  actor === 'first' ? '911' : '921',
+                  actor === 'first' ? 'private-first' : 'second-only',
+                  'automatic',
+                ),
+              ],
+              '1',
+              10,
+              1,
+            ),
+          );
+        }
+        throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+      }),
+    );
+    const view = await renderWorkspace('/models?model_id=91');
+    await view.user.click((await screen.findByText('private-first')).closest('button')!);
+    await view.user.type(screen.getByRole('searchbox', { name: 'Add sources' }), 'private-search');
+    await waitFor(() => expect(oldSignal).toBeDefined());
+    actor = 'second';
+    view.queryClient.setQueryData(coreKeys.session, { user: otherAccount });
+    view.rerender(
+      <>
+        <ModelsWorkspace user={otherAccount} />
+        <LocationProbe />
+      </>,
+    );
+    await screen.findByText('second-only');
+    expect(screen.getByRole('searchbox', { name: 'Add sources' })).toHaveValue('');
+    expect(
+      screen.queryByRole('button', { name: 'Add 1 selected sources' }),
+    ).not.toBeInTheDocument();
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () =>
+      finish(
+        jsonResponse(numbered([candidateRecord('911', 'private-late', 'automatic')], '1', 10, 1)),
+      ),
+    );
+    expect(screen.queryByText('private-late')).not.toBeInTheDocument();
+    expect(screen.queryByText('private-first')).not.toBeInTheDocument();
+    expect(screen.getByText('second-only')).toBeInTheDocument();
+  });
+  it.each([false, true])(
+    'keeps manual catalog creation separate from binding and recovers a recorded unknown result (%s)',
+    async (unknown) => {
+      const model = modelRecord('101'),
+        endpoint = endpointRecord('11'),
+        key = keyRecord('111', '11');
+      const entry = {
+        id: '151',
+        source_type: 'manual',
+        upstream_model_id: 'typed-model',
+        provider: '',
+        source_revision: '1',
+        pair_revision: '1',
+        created_at: 1700000000,
+        updated_at: 1700000001,
+      };
+      const evidence = {
+        state: 'unknown',
+        revision: '1',
+        result: null,
+        safe_class: 'none',
+        observed_at: null,
+        count: null,
+      };
+      let made = false;
+      let bound: Binding[] = [];
+      const manualWrites: unknown[] = [];
+      const bindingWrites: unknown[] = [];
+      const identities: string[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = requestURL(input),
+            method = requestMethod(input, init);
+          if (method === 'GET' && url.pathname === '/api/models/101') return jsonResponse(model);
+          if (method === 'GET' && url.pathname.endsWith('/bindings'))
+            return jsonResponse({ bindings: bound, binding_revision: bound.length ? '2' : '1' });
+          if (method === 'GET' && url.pathname === '/api/endpoints')
+            return jsonResponse(numbered([endpoint], '1', 20, 1));
+          if (method === 'GET' && url.pathname === '/api/endpoints/11/keys')
+            return jsonResponse(numbered([key], '1', 20, 1));
+          if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+            return jsonResponse(
+              numbered(
+                made ? [candidateRecord('111', 'typed-model', 'manual')] : [],
+                '1',
+                10,
+                made ? 1 : 0,
+              ),
+            );
+          if (method === 'GET' && url.pathname === '/api/endpoints/11/keys/111/models')
+            return jsonResponse({
+              evidence,
+              automatic_entries: [],
+              manual_entries: made ? [entry] : [],
+              next_cursor: null,
+            });
+          if (method === 'POST' && url.pathname.endsWith('/models/manual')) {
+            manualWrites.push(JSON.parse(String(init?.body)));
+            identities.push(new Headers(init?.headers).get('Idempotency-Key')!);
+            made = true;
+            if (unknown) throw new TypeError('Failed to fetch');
+            return jsonResponse({ entries: [entry] }, 201);
+          }
+          if (method === 'POST' && url.pathname === '/api/resource-operation-status')
+            return jsonResponse({
+              status: 'recorded',
+              stage: 'catalog_manual',
+              result: { endpoint_id: '11', endpoint_key_id: '111', entry_ids: ['151'] },
+            });
+          if (method === 'POST' && url.pathname.endsWith('/bindings/batch')) {
+            bindingWrites.push(JSON.parse(String(init?.body)));
+            identities.push(new Headers(init?.headers).get('Idempotency-Key')!);
+            bound = [{ ...candidateRecord('111', 'typed-model', 'manual'), id: '161', ord: 0 }];
+            return jsonResponse({ bindings: bound, binding_revision: '2' }, 201);
+          }
+          throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
+        }),
+      );
+      const view = await renderWorkspace('/models?model_id=101');
+      await view.user.click(await screen.findByText('Filter by service', { selector: 'summary' }));
+      await view.user.selectOptions(screen.getByRole('combobox', { name: 'Service' }), '11');
+      await view.user.click(screen.getByRole('button', { name: 'Enter a model name manually' }));
+      await view.user.selectOptions(await screen.findByRole('combobox', { name: 'Key' }), '111');
+      await view.user.type(
+        screen.getByRole('textbox', { name: 'Service model name' }),
+        'typed-model',
+      );
+      await view.user.click(screen.getByRole('button', { name: 'Add manual entry' }));
+      await screen.findByText('Saved to the model list. You can now add it as a source.');
+      expect(manualWrites).toEqual([
+        { entries: [{ upstream_model_id: 'typed-model', provider: '' }] },
+      ]);
+      expect(bindingWrites).toHaveLength(0);
+      await view.user.type(
+        screen.getByRole('textbox', {
+          name: unknown ? 'Service model name' : view.i18n.t('user.core.endpoints.manualProvider'),
+        }),
+        '-next',
+      );
+      expect([
+        screen.queryByText(view.i18n.t('common.outcome.saved')),
+        screen.queryByText('Saved to the model list. You can now add it as a source.'),
+      ]).toEqual([null, null]);
+      await view.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
+      await waitFor(() => expect(bindingWrites).toHaveLength(1));
+      expect(bindingWrites[0]).toEqual({
+        expected_binding_revision: '1',
+        selections: [{ endpoint_key_id: '111', upstream_model_id: 'typed-model' }],
+      });
+      expect(identities).toHaveLength(2);
+      expect(identities.every(Boolean)).toBe(true);
+      expect(identities[0]).not.toBe(identities[1]);
+      expect(manualWrites).toHaveLength(1);
+    },
+  );
 });

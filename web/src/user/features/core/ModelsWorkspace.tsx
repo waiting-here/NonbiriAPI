@@ -1,4 +1,20 @@
-import { OutcomeNote } from '@shared/components/ui';
+import { Link } from 'react-router';
+import { useModelText } from './models/copy';
+import { ManualSource } from './models/ManualSource';
+import {
+  Panel,
+  PanelHead,
+  PanelBody,
+  PanelFoot,
+  Fold,
+  Toggle,
+  Segmented,
+  SaveBar,
+  MoreMenu,
+  DataTable,
+  type DataColumn,
+  OutcomeNote,
+} from '@shared/components/ui';
 import { TransportRuleField, TransportRuleSummary } from '@shared/components/TransportRuleField';
 import type { TransportRule } from '@shared/transportRule';
 import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
@@ -15,16 +31,16 @@ import {
   useState,
   type DragEvent,
   type FormEvent,
+  type ReactNode,
 } from 'react';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { readResourceResult, resourceStatus } from './resourceOperation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { ChoiceList } from '@shared/components/ChoiceList';
 import { PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { usePagePager, type PagePager } from '@shared/operations/usePagePager';
+import { usePagePager } from '@shared/operations/usePagePager';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
@@ -38,17 +54,13 @@ import {
   patchModel,
 } from './api';
 import { getBindingCandidatesPage } from './pageApi';
-import { ModelBrowseSummary } from './ResourceBrowse';
 import { validateResourceId } from './normalizers';
 import {
-  ConnectorLabel,
   CoreEmpty,
   CoreErrorPanel,
   CoreLoading,
-  CoreTime,
   MutationNotice,
   SafeCopyValue,
-  StatusPill,
 } from './components';
 import { useQuickstartCopy } from './quickstartCopy';
 import { useCoreCopy } from './copy';
@@ -72,7 +84,6 @@ import type {
   EndpointKey,
   BindingsResponse,
   BindingSelection,
-  CatalogSourceType,
   Model,
   ModelCreateInput,
   ModelPatchInput,
@@ -80,7 +91,6 @@ import type {
   UserProfile,
 } from './types';
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
-import type { NumberedPage } from './pageTypes';
 
 type VisibleOutcome = 'conflict' | 'unknown' | 'error' | null;
 type PermissionLoss = { scope: string; error: unknown };
@@ -164,9 +174,17 @@ function ModelEditor({
   onCancel,
   onSaved,
   onCapabilityLoss,
+  sources,
+  initialStrategy,
 }: {
   accountId: string;
   initial?: Model;
+  initialStrategy?: RouteStrategy;
+  sources?: (
+    strategy: RouteStrategy,
+    onChange: (value: RouteStrategy) => void,
+    locked: boolean,
+  ) => ReactNode;
   onCancel: () => void;
   onSaved: (model: Model) => void;
   onCapabilityLoss?: (error: unknown) => void;
@@ -175,7 +193,9 @@ function ModelEditor({
   const queryClient = useQueryClient();
   const [provider, setProvider] = useState(initial?.provider ?? '');
   const [modelName, setModelName] = useState(initial?.model ?? '');
-  const [strategy, setStrategy] = useState<RouteStrategy>(initial?.route_strategy ?? 'ordered');
+  const [strategy, setStrategy] = useState<RouteStrategy>(
+    initialStrategy ?? initial?.route_strategy ?? 'ordered',
+  );
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
   const [transportRule, setTransportRule] = useState<TransportRule>(
     initial?.transport_rule ?? 'passthrough',
@@ -183,6 +203,8 @@ function ModelEditor({
   const [flattenTools, setFlattenTools] = useState(initial?.flatten_tool_calls ?? false);
   const [roleDraft, setRoleDraft] = useState(() => draftFromRolePolicy(initial?.role_policy));
   const roleResult = buildRolePolicy(roleDraft);
+  const textModel = useModelText();
+  const formRef = useRef<HTMLFormElement>(null);
   const { t: text } = useQuickstartCopy();
   const [validation, setValidation] = useState(false);
   const [permissionLost, setPermissionLost] = useState<unknown>(null);
@@ -321,83 +343,117 @@ function ModelEditor({
     );
   }
 
+  const dirtyCount = initial
+    ? [
+        provider !== initial.provider,
+        modelName !== initial.model,
+        strategy !== initial.route_strategy,
+        silentRetry !== initial.silent_retry,
+        transportRule !== initial.transport_rule,
+        flattenTools !== initial.flatten_tool_calls,
+        !roleResult.policy || !sameRolePolicy(initial.role_policy, roleResult.policy),
+      ].filter(Boolean).length
+    : 0;
+  const isDefault =
+    !silentRetry &&
+    !flattenTools &&
+    transportRule === 'passthrough' &&
+    roleResult.policy &&
+    sameRolePolicy(undefined, roleResult.policy);
+  const discard = () => {
+    if (!initial || hasAttempt) return;
+    setProvider(initial.provider);
+    setModelName(initial.model);
+    setStrategy(initial.route_strategy);
+    setSilentRetry(initial.silent_retry);
+    setTransportRule(initial.transport_rule);
+    setFlattenTools(initial.flatten_tool_calls);
+    setRoleDraft(draftFromRolePolicy(initial.role_policy));
+  };
   return (
-    <form className="core-card core-wizard core-form" onSubmit={(event) => void submit(event)}>
-      <div className="core-card__header">
-        <h2>{initial ? t('models.editModel') : t('models.create')}</h2>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={busy || hasAttempt}
-          onClick={onCancel}
-        >
-          {t('common.cancel')}
-        </button>
-      </div>
-      <p className="core-muted">{t('models.namingHelp')}</p>
-      <div className="core-field-grid">
-        <label>
-          <span>{t('models.provider')}</span>
-          <input
-            value={provider}
-            maxLength={128}
-            required
-            disabled={hasAttempt}
-            onChange={(event) => setProvider(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>{t('models.model')}</span>
-          <input
-            value={modelName}
-            maxLength={128}
-            required
-            disabled={hasAttempt}
-            onChange={(event) => setModelName(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>{t('models.strategy')}</span>
-          <select
-            value={strategy}
-            disabled={hasAttempt}
-            onChange={(event) => setStrategy(event.target.value as RouteStrategy)}
+    <form ref={formRef} className="model-editor core-form" onSubmit={(event) => void submit(event)}>
+      <Panel>
+        <PanelHead
+          title={initial ? textModel('callName') : t('models.create')}
+          actions={
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={hasAttempt}
+              onClick={onCancel}
+            >
+              {t('common.cancel')}
+            </button>
+          }
+        />
+        <PanelBody>
+          <div className="core-field-grid">
+            <label>
+              <span>{t('models.provider')}</span>
+              <input
+                aria-label={t('models.provider')}
+                className="core-mono"
+                value={provider}
+                maxLength={128}
+                required
+                disabled={hasAttempt}
+                onChange={(event) => setProvider(event.target.value)}
+              />
+              <small>{textModel('prefixHelp')}</small>
+            </label>
+            <label>
+              <span>{t('models.model')}</span>
+              <input
+                className="core-mono"
+                value={modelName}
+                maxLength={128}
+                required
+                disabled={hasAttempt}
+                onChange={(event) => setModelName(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="core-model-preview">
+            <span>{textModel('clientValue')}</span>
+            <SafeCopyValue
+              value={`${provider || t('models.provider')}/${modelName || t('models.model')}`}
+              label={textModel('callName')}
+            />
+          </div>
+        </PanelBody>
+      </Panel>
+      {initial ? (
+        <>
+          {sources?.(strategy, setStrategy, hasAttempt)}
+          <Fold
+            title={textModel('advanced')}
+            summary={textModel('advancedHelp')}
+            persistKey="model-advanced"
+            meta={textModel(isDefault ? 'default' : 'customized')}
           >
-            <option value="ordered">{t('models.ordered')}</option>
-            <option value="random">{t('models.random')}</option>
-          </select>
-        </label>
-      </div>
-      <p className="core-muted">{text('strategyHelp')}</p>
-      <div className="core-model-preview">
-        <span>{t('models.namePreview')}</span>
-        <output className="core-mono">
-          {provider || t('models.provider')}/{modelName || t('models.model')}
-        </output>
-      </div>
-      <label className="core-checkbox">
-        <input
-          type="checkbox"
-          checked={silentRetry}
-          disabled={hasAttempt}
-          onChange={(event) => setSilentRetry(event.target.checked)}
-        />
-        <span>{t('models.silentRetry')}</span>
-      </label>
-      <label className="core-checkbox">
-        <input
-          type="checkbox"
-          checked={flattenTools}
-          disabled={hasAttempt}
-          onChange={(event) => setFlattenTools(event.target.checked)}
-        />
-        <span>{t('models.flattenTools')}</span>
-      </label>
-      <p className="core-muted">{text('retryHelp')}</p>
-      <p className="core-muted">{text('toolsHelp')}</p>
-      <TransportRuleField value={transportRule} onChange={setTransportRule} disabled={hasAttempt} />
-      <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
-
+            <Toggle
+              label={t('models.silentRetry')}
+              description={textModel('retryHelp')}
+              checked={silentRetry}
+              disabled={hasAttempt}
+              onChange={setSilentRetry}
+            />
+            <TransportRuleField
+              value={transportRule}
+              onChange={setTransportRule}
+              disabled={hasAttempt}
+            />
+            <Toggle
+              label={t('models.flattenTools')}
+              description={textModel('toolsHelp')}
+              checked={flattenTools}
+              disabled={hasAttempt}
+              onChange={setFlattenTools}
+            />
+            <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
+          </Fold>
+        </>
+      ) : null}
       {validation ? (
         <p className="core-inline-error" role="alert">
           {t('models.invalidName')}
@@ -409,16 +465,28 @@ function ModelEditor({
         busy,
         operation.outcome === 'refresh-failed',
       )}
-      <div className="core-form-actions">
-        <span />
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={busy || (!hasAttempt && !!roleResult.error)}
-        >
-          {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
-        </button>
-      </div>
+      {initial && dirtyCount > 3 && !hasAttempt ? (
+        <SaveBar
+          dirtyCount={dirtyCount}
+          busy={busy}
+          saveDisabled={!!roleResult.error}
+          onSave={() => formRef.current?.requestSubmit()}
+          onDiscard={discard}
+          saveLabel={t('common.save')}
+          discardLabel={textModel('discard')}
+          dirtyLabel={(count) => textModel('dirtyCount', { count })}
+        />
+      ) : (
+        <PanelFoot>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={busy || (!hasAttempt && !!roleResult.error)}
+          >
+            {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
+          </button>
+        </PanelFoot>
+      )}
     </form>
   );
 }
@@ -429,100 +497,20 @@ function candidateIdentity(
   return `${candidate.endpoint_key_id}\u0000${candidate.upstream_model_id}`;
 }
 
-function CandidateSource({
-  source,
-  page,
-  pending,
-  busy,
-  error,
-  selected,
-  bound,
-  onToggle,
-  onRetry,
-  pager,
-  locked = false,
+function BindingSelector({
+  accountId,
+  model,
+  focusSearch = false,
+  onSearchFocused,
 }: {
-  source: CatalogSourceType;
-  page: NumberedPage<BindingCandidate> | undefined;
-  pending: boolean;
-  busy: boolean;
-  error: unknown;
-  selected: ReadonlySet<string>;
-  bound: ReadonlySet<string>;
-  onToggle: (candidate: BindingCandidate) => void;
-  onRetry: () => void;
-  pager: PagePager;
-  locked?: boolean;
+  accountId: string;
+  model: Model;
+  focusSearch?: boolean;
+  onSearchFocused?: () => void;
 }) {
   const { t } = useCoreCopy();
-  return (
-    <section className="core-selector__level" aria-busy={busy}>
-      <div className="core-card__header">
-        <h3>{source === 'automatic' ? t('models.automatic') : t('models.manual')}</h3>
-      </div>
-      {pending ? (
-        <CoreLoading compact />
-      ) : error ? (
-        <CoreErrorPanel compact error={error} onRetry={onRetry} />
-      ) : !page || page.data.length === 0 ? (
-        <p className="core-muted">{t('models.candidateEmpty')}</p>
-      ) : (
-        <ChoiceList
-          searchable={false}
-          items={page.data}
-          getKey={candidateIdentity}
-          getSearchText={(candidate) => candidate.upstream_model_id}
-          label={source === 'automatic' ? t('models.automatic') : t('models.manual')}
-        >
-          {(candidate) => {
-            const identity = candidateIdentity(candidate);
-            const isSelected = selected.has(identity);
-            const isBound = bound.has(identity);
-            return (
-              <button
-                key={`${source}:${identity}`}
-                type="button"
-                className={`core-choice${isSelected ? ' is-selected' : ''}`}
-                aria-pressed={isSelected}
-                disabled={isBound || locked || busy}
-                onClick={() => onToggle(candidate)}
-              >
-                <strong className="core-mono">{candidate.upstream_model_id}</strong>
-                <span>
-                  {candidate.source_types
-                    .map((value) =>
-                      value === 'automatic' ? t('models.automatic') : t('models.manual'),
-                    )
-                    .join(' + ')}
-                </span>
-                <span className="core-muted">
-                  {isBound
-                    ? t('models.alreadyBound')
-                    : isSelected
-                      ? t('models.candidateSelected')
-                      : candidate.endpoint_key_note || t('common.notSet')}
-                </span>
-              </button>
-            );
-          }}
-        </ChoiceList>
-      )}
-      {page ? (
-        <PagePagination
-          metadata={page.pagination}
-          requestedPage={pager.page}
-          busy={busy || locked}
-          onPageChange={pager.setPage}
-          onPageSizeChange={pager.setPageSize}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-function BindingSelector({ accountId, model }: { accountId: string; model: Model }) {
-  const { t } = useCoreCopy();
   const queryClient = useQueryClient();
+  const textModel = useModelText();
   const bindings = useBindings(accountId, model.id);
   const [endpointQuery, setEndpointQuery] = useState(''),
     [keyQuery, setKeyQuery] = useState('');
@@ -547,17 +535,16 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     scopeKey: `${accountId}\u0000${model.id}`,
     resetKey: `${endpointId}:${keyQuery}`,
   });
-  const automaticPager = usePagePager({
+  const [manualOpen, setManualOpen] = useState(false);
+  const serviceFilter = useRef<HTMLDetailsElement>(null);
+  const [candidatePageSize, setCandidatePageSize] = useState<PageSize>(10);
+  const [manualLocked, setManualLocked] = useState(false);
+  const [manualSaved, setManualSaved] = useState(false);
+  const candidatePager = usePagePager({
     station: 'user',
-    listType: 'models-binding-candidates-automatic',
+    listType: 'models-binding-candidates',
     scopeKey: `${accountId}\u0000${model.id}`,
-    resetKey: `${endpointId}\u0000${keyId}\u0000${modelQuery}`,
-  });
-  const manualPager = usePagePager({
-    station: 'user',
-    listType: 'models-binding-candidates-manual',
-    scopeKey: `${accountId}\u0000${model.id}`,
-    resetKey: `${endpointId}\u0000${keyId}\u0000${modelQuery}`,
+    resetKey: `${endpointId}\u0000${modelQuery}\u0000${candidatePageSize}`,
   });
   const endpoints = useNumberedEndpoints(
     accountId,
@@ -569,44 +556,35 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     accountId,
     endpointId || undefined,
     { page: keyPager.page, pageSize: keyPager.pageSize },
-    Boolean(endpointId),
+    Boolean(manualOpen && endpointId),
     { q: keyQuery },
   );
-  const automatic = useNumberedBindingCandidates(
+  const candidates = useNumberedBindingCandidates(
     accountId,
     model.id,
-    {
-      endpointId: endpointId || undefined,
-      keyId: keyId || undefined,
-      source: 'automatic',
-      query: modelQuery,
-    },
-    { page: automaticPager.page, pageSize: automaticPager.pageSize },
-    Boolean(endpointId && keyId),
+    { endpointId: endpointId || undefined, query: modelQuery },
+    { page: candidatePager.page, pageSize: candidatePageSize },
   );
-  const manual = useNumberedBindingCandidates(
-    accountId,
-    model.id,
-    {
-      endpointId: endpointId || undefined,
-      keyId: keyId || undefined,
-      source: 'manual',
-      query: modelQuery,
-    },
-    { page: manualPager.page, pageSize: manualPager.pageSize },
-    Boolean(endpointId && keyId),
-  );
+  useEffect(() => {
+    const timer = window.setTimeout(() => setModelQuery(queryDraft.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [queryDraft]);
   const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () =>
     initialBindingDraftState(accountId, model.id, model.binding_revision),
   );
   const bindingsKnown = Boolean(bindings.data);
-  const queryPermissionError = [
-    bindings.error,
-    endpoints.error,
-    keys.error,
-    automatic.error,
-    manual.error,
-  ].find((error) => isAccessLoss(error));
+  const searchInput = useRef<HTMLInputElement>(null);
+  const focusedSearch = useRef(false);
+  useEffect(() => {
+    if (focusSearch && bindingsKnown && !focusedSearch.current) {
+      searchInput.current?.focus();
+      focusedSearch.current = true;
+      onSearchFocused?.();
+    }
+  }, [focusSearch, bindingsKnown, onSearchFocused]);
+  const queryPermissionError = [bindings.error, endpoints.error, keys.error, candidates.error].find(
+    (error) => isAccessLoss(error),
+  );
   const resetDraft = useEffectEvent(() =>
     dispatch({
       type: 'boundary',
@@ -655,17 +633,13 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     setSelectedKey(undefined);
     setEndpointId(next);
     setKeyId('');
-    setModelQuery('');
-    setQueryDraft('');
+    setManualSaved(false);
   };
-
   const chooseKey = (next: string) => {
     setSelectedKey(keys.data?.data.find((entry) => entry.id === next));
     setKeyId(next);
-    setModelQuery('');
-    setQueryDraft('');
+    setManualSaved(false);
   };
-
   const toggleCandidate = (candidate: BindingCandidate) => {
     setSelectionDetails((current) => ({ ...current, [candidateIdentity(candidate)]: candidate }));
     dispatch({ type: 'toggle', accountId, modelId: model.id, candidate });
@@ -805,237 +779,263 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       {!bindings.data && bindings.error ? (
         <CoreErrorPanel compact error={bindings.error} onRetry={() => void bindings.refetch()} />
       ) : null}
-      <nav className="core-selector-path" aria-label={t('models.selectorTitle')}>
-        <button
-          type="button"
-          className="btn btn-quiet"
-          onClick={() => chooseEndpoint('')}
-          aria-current={!endpointId ? 'step' : undefined}
-        >
-          {t('models.levelEndpoint')}
-        </button>
-        {endpointId ? (
-          <>
-            <span aria-hidden="true">/</span>
-            <button
-              type="button"
-              className="btn btn-quiet"
-              onClick={() => chooseKey('')}
-              aria-current={!keyId ? 'step' : undefined}
-            >
-              {t('models.levelKey')}
-            </button>
-          </>
-        ) : null}
-        {keyId ? (
-          <>
-            <span aria-hidden="true">/</span>
-            <span aria-current="step">{t('models.levelCandidate')}</span>
-          </>
-        ) : null}
-      </nav>
-      {endpointId ? (
-        <p className="core-muted core-selector-context">
-          {selectedEndpoint?.note} · {selectedEndpoint?.base_url}
-          {keyId
-            ? ` / ${selectedKey?.note || ''} · ${selectedKey?.display_head || ''}…${selectedKey?.display_tail || ''}`
-            : ''}
-        </p>
-      ) : null}
-      <div className="core-selector">
-        <section className="core-selector__level" hidden={Boolean(endpointId)}>
-          <h3>{t('models.levelEndpoint')}</h3>
+      <label className="model-source-search">
+        <span>{textModel('sourceSearch')}</span>
+        <input
+          type="search"
+          ref={searchInput}
+          data-testid="model-source-search"
+          aria-label={textModel('sourceSearch')}
+          maxLength={256}
+          placeholder={textModel('sourcePlaceholder')}
+          value={queryDraft}
+          disabled={!bindingsKnown || operation.isPending || Boolean(replayAttempt)}
+          onChange={(event) => setQueryDraft(event.target.value)}
+        />
+        <small>{textModel('sourceSearchHelp')}</small>
+      </label>
+      <details ref={serviceFilter} className="nb-fold nb-fold--plain model-service-filter">
+        <summary>
+          {textModel('filterService')}
+          {selectedEndpoint ? ` · ${selectedEndpoint.note || selectedEndpoint.base_url}` : ''}
+        </summary>
+        <div className="nb-fold__body core-form">
           <label>
-            {text('serviceSearch')}
+            <span>{text('serviceSearch')}</span>
             <input
               type="search"
-              maxLength={128}
               value={endpointQuery}
-              onChange={(e) => setEndpointQuery(e.target.value)}
+              maxLength={128}
+              disabled={manualLocked || operation.isPending || Boolean(replayAttempt)}
+              onChange={(event) => setEndpointQuery(event.target.value)}
             />
-            <small>{text('searchHelp')}</small>
           </label>
-          {endpoints.isPending ? (
-            <CoreLoading compact />
-          ) : endpoints.error ? (
+          <label>
+            <span>{textModel('service')}</span>
+            <select
+              value={endpointId}
+              disabled={
+                manualLocked ||
+                endpoints.isFetching ||
+                operation.isPending ||
+                Boolean(replayAttempt)
+              }
+              onChange={(event) => chooseEndpoint(event.target.value)}
+            >
+              <option value="">{textModel('allServices')}</option>
+              {selectedEndpoint &&
+              !endpoints.data?.data.some((endpoint) => endpoint.id === endpointId) ? (
+                <option value={selectedEndpoint.id}>
+                  {selectedEndpoint.note || selectedEndpoint.base_url}
+                </option>
+              ) : null}
+              {endpoints.data?.data.map((endpoint) => (
+                <option key={endpoint.id} value={endpoint.id} disabled={!endpoint.enabled}>
+                  {endpoint.note || endpoint.base_url}
+                </option>
+              ))}
+            </select>
+          </label>
+          {endpoints.error ? (
             <CoreErrorPanel
               compact
               error={endpoints.error}
               onRetry={() => void endpoints.refetch()}
             />
-          ) : endpoints.data.data.length === 0 ? (
-            <p className="core-muted">{t('models.endpointEmpty')}</p>
-          ) : (
-            <ChoiceList
-              items={endpoints.data.data}
-              getKey={(endpoint) => endpoint.id}
-              getSearchText={(endpoint) =>
-                `${endpoint.note} ${endpoint.base_url} ${endpoint.connector_type}`
-              }
-              label={t('models.levelEndpoint')}
-              searchable={false}
-            >
-              {(endpoint) => (
-                <button
-                  key={endpoint.id}
-                  type="button"
-                  className={`core-choice${endpointId === endpoint.id ? ' is-selected' : ''}`}
-                  disabled={
-                    !bindingsKnown ||
-                    Boolean(replayAttempt) ||
-                    !endpoint.enabled ||
-                    endpoints.isFetching
-                  }
-                  onClick={() => chooseEndpoint(endpoint.id)}
-                >
-                  <strong>{endpoint.note || endpoint.base_url}</strong>
-                  <span className="core-mono">{endpoint.base_url}</span>
-                  <span>
-                    <ConnectorLabel value={endpoint.connector_type} />
-                    {!endpoint.enabled ? ` · ${t('common.disabled')}` : ''}
-                  </span>
-                </button>
-              )}
-            </ChoiceList>
-          )}
+          ) : null}
           {endpoints.data ? (
             <PagePagination
               metadata={endpoints.data.pagination}
               requestedPage={endpointPager.page}
-              busy={endpoints.isFetching || Boolean(replayAttempt)}
+              busy={endpoints.isFetching || manualLocked}
               onPageChange={endpointPager.setPage}
               onPageSizeChange={endpointPager.setPageSize}
             />
           ) : null}
-        </section>
-
-        <section className="core-selector__level" hidden={!endpointId || Boolean(keyId)}>
-          <h3>{t('models.levelKey')}</h3>
-          <label>
-            {text('keySearch')}
-            <input
-              type="search"
-              maxLength={128}
-              value={keyQuery}
-              onChange={(e) => setKeyQuery(e.target.value)}
+        </div>
+      </details>
+      <section
+        className="model-source-results"
+        aria-label={textModel('sourceSearch')}
+        aria-busy={candidates.isFetching}
+      >
+        {candidates.isPending || queryDraft.trim() !== modelQuery ? (
+          <CoreLoading compact />
+        ) : candidates.error ? (
+          <CoreErrorPanel
+            compact
+            error={candidates.error}
+            onRetry={() => void candidates.refetch()}
+          />
+        ) : !candidates.data?.data.length ? (
+          <p className="core-muted">{t('models.candidateEmpty')}</p>
+        ) : (
+          <ul className="model-source-list">
+            {candidates.data.data.map((candidate) => {
+              const identity = candidateIdentity(candidate);
+              return (
+                <li key={identity}>
+                  <button
+                    type="button"
+                    className="model-source-result"
+                    aria-pressed={selected.has(identity)}
+                    disabled={
+                      bound.has(identity) ||
+                      !bindingsKnown ||
+                      candidates.isFetching ||
+                      operation.isPending ||
+                      Boolean(replayAttempt)
+                    }
+                    onClick={() => toggleCandidate(candidate)}
+                  >
+                    <span className="model-source-main">
+                      <strong className="core-mono">{candidate.upstream_model_id}</strong>
+                      <span className="nb-sub">
+                        {candidate.endpoint_note || candidate.endpoint_base_url} ·{' '}
+                        {candidate.endpoint_key_note ||
+                          `${candidate.endpoint_key_display_head}…${candidate.endpoint_key_display_tail}`}{' '}
+                        ·{' '}
+                        {candidate.source_types
+                          .map((source) =>
+                            source === 'automatic' ? t('models.automatic') : t('models.manual'),
+                          )
+                          .join(' + ')}
+                      </span>
+                    </span>
+                    <span className="nb-badge">
+                      {bound.has(identity)
+                        ? t('models.alreadyBound')
+                        : selected.has(identity)
+                          ? t('models.candidateSelected')
+                          : text('choose')}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {candidates.data && queryDraft.trim() === modelQuery ? (
+          <>
+            <p className="core-muted">
+              {textModel('searchCount', { count: candidates.data.pagination.total_items })}
+            </p>
+            <PagePagination
+              metadata={candidates.data.pagination}
+              requestedPage={candidatePager.page}
+              busy={candidates.isFetching || operation.isPending || Boolean(replayAttempt)}
+              onPageChange={candidatePager.setPage}
+              onPageSizeChange={setCandidatePageSize}
             />
-            <small>{text('searchHelp')}</small>
-          </label>
+          </>
+        ) : null}
+      </section>
+      <button
+        type="button"
+        className="btn btn-quiet"
+        aria-expanded={manualOpen}
+        disabled={manualLocked || operation.isPending || Boolean(replayAttempt)}
+        onClick={() => {
+          if (!manualOpen && serviceFilter.current) serviceFilter.current.open = true;
+          setManualOpen(!manualOpen);
+        }}
+      >
+        {textModel('manual')}
+      </button>
+      {manualOpen ? (
+        <section className="model-manual core-form">
           {!endpointId ? (
             <p className="core-muted">{t('models.chooseEndpoint')}</p>
-          ) : keys.isPending ? (
-            <CoreLoading compact />
-          ) : keys.error ? (
-            <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
-          ) : keys.data.data.length === 0 ? (
-            <p className="core-muted">{t('models.keyEmpty')}</p>
           ) : (
-            <ChoiceList
-              items={keys.data.data}
-              getKey={(key) => key.id}
-              getSearchText={(key) => `${key.note} ${key.display_head} ${key.display_tail}`}
-              label={t('models.levelKey')}
-              searchable={false}
-            >
-              {(key) => {
-                const unavailable = !key.enabled || key.suspension_state !== 'none';
-                return (
-                  <button
-                    key={key.id}
-                    type="button"
-                    className={`core-choice${keyId === key.id ? ' is-selected' : ''}`}
-                    disabled={
-                      !bindingsKnown || Boolean(replayAttempt) || unavailable || keys.isFetching
-                    }
-                    onClick={() => chooseKey(key.id)}
-                  >
-                    <strong>{key.note || `${key.display_head}…${key.display_tail}`}</strong>
-                    <span className="core-mono">
-                      {key.display_head}…{key.display_tail}
-                    </span>
-                    {unavailable ? (
-                      <span>
-                        {key.suspension_state === 'security_processing'
-                          ? t('models.securityLocked')
-                          : t('common.disabled')}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              }}
-            </ChoiceList>
+            <>
+              <label>
+                <span>{text('keySearch')}</span>
+                <input
+                  type="search"
+                  value={keyQuery}
+                  maxLength={128}
+                  disabled={manualLocked}
+                  onChange={(event) => setKeyQuery(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>{textModel('key')}</span>
+                <select
+                  value={keyId}
+                  disabled={manualLocked || keys.isFetching}
+                  onChange={(event) => chooseKey(event.target.value)}
+                >
+                  <option value="">{t('models.chooseKey')}</option>
+                  {selectedKey && !keys.data?.data.some((key) => key.id === keyId) ? (
+                    <option value={selectedKey.id}>{selectedKey.note}</option>
+                  ) : null}
+                  {keys.data?.data.map((key) => (
+                    <option
+                      key={key.id}
+                      value={key.id}
+                      disabled={!key.enabled || key.suspension_state !== 'none'}
+                    >
+                      {key.note || `${key.display_head}…${key.display_tail}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {keys.error ? (
+                <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
+              ) : null}
+              {keys.data ? (
+                <PagePagination
+                  metadata={keys.data.pagination}
+                  requestedPage={keyPager.page}
+                  busy={keys.isFetching || manualLocked}
+                  onPageChange={keyPager.setPage}
+                  onPageSizeChange={keyPager.setPageSize}
+                />
+              ) : null}
+              {keyId && selectedKey && selectedEndpoint ? (
+                <ManualSource
+                  key={`${accountId}:${endpointId}:${keyId}`}
+                  accountId={accountId}
+                  endpointId={endpointId}
+                  keyId={keyId}
+                  onLock={setManualLocked}
+                  onEdit={() => setManualSaved(false)}
+                  onCreated={(upstreamModel) => {
+                    if (
+                      !bound.has(
+                        candidateIdentity({
+                          endpoint_key_id: keyId,
+                          upstream_model_id: upstreamModel,
+                        }),
+                      ) &&
+                      !selected.has(
+                        candidateIdentity({
+                          endpoint_key_id: keyId,
+                          upstream_model_id: upstreamModel,
+                        }),
+                      )
+                    )
+                      toggleCandidate({
+                        endpoint_key_id: keyId,
+                        endpoint_base_url: selectedEndpoint.base_url,
+                        connector_type: selectedEndpoint.connector_type,
+                        endpoint_note: selectedEndpoint.note,
+                        endpoint_key_display_head: selectedKey.display_head,
+                        endpoint_key_display_tail: selectedKey.display_tail,
+                        endpoint_key_note: selectedKey.note,
+                        upstream_model_id: upstreamModel,
+                        source_types: ['manual'],
+                      });
+                    setManualSaved(true);
+                  }}
+                />
+              ) : null}
+            </>
           )}
-          {keys.data ? (
-            <PagePagination
-              metadata={keys.data.pagination}
-              requestedPage={keyPager.page}
-              busy={keys.isFetching || Boolean(replayAttempt)}
-              onPageChange={keyPager.setPage}
-              onPageSizeChange={keyPager.setPageSize}
-            />
-          ) : null}
+          {manualSaved ? <p role="status">{textModel('manualSaved')}</p> : null}
         </section>
+      ) : null}
 
-        <section className="core-selector__level" hidden={!keyId}>
-          <h3>{t('models.levelCandidate')}</h3>
-          <form
-            className="core-selector-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setModelQuery(queryDraft.trim());
-            }}
-          >
-            <label>
-              <span>{t('models.searchCandidates')}</span>
-              <input
-                value={queryDraft}
-                onChange={(event) => setQueryDraft(event.target.value)}
-                maxLength={256}
-                disabled={!bindingsKnown || Boolean(replayAttempt)}
-              />
-            </label>
-            <button
-              type="submit"
-              className="btn btn-secondary"
-              disabled={!bindingsKnown || Boolean(replayAttempt)}
-            >
-              {t('common.search')}
-            </button>
-          </form>
-          {!keyId ? (
-            <p className="core-muted">{t('models.chooseKey')}</p>
-          ) : (
-            <div className="core-selector__sources">
-              <CandidateSource
-                source="automatic"
-                page={automatic.data}
-                pending={automatic.isPending}
-                busy={automatic.isFetching}
-                error={automatic.error}
-                selected={selected}
-                bound={bound}
-                onToggle={toggleCandidate}
-                onRetry={() => void automatic.refetch()}
-                pager={automaticPager}
-                locked={!bindingsKnown || Boolean(replayAttempt)}
-              />
-              <CandidateSource
-                source="manual"
-                page={manual.data}
-                pending={manual.isPending}
-                busy={manual.isFetching}
-                error={manual.error}
-                selected={selected}
-                bound={bound}
-                onToggle={toggleCandidate}
-                onRetry={() => void manual.refetch()}
-                pager={manualPager}
-                locked={!bindingsKnown || Boolean(replayAttempt)}
-              />
-            </div>
-          )}
-        </section>
-      </div>
       <p className="core-muted">{t('models.selectedCount', { count: draft.selections.length })}</p>
       {draft.selections.length ? (
         <ul className="core-selection-list">
@@ -1144,6 +1144,7 @@ function localBindingPagination(
 
 function BindingOrder({ accountId, model }: { accountId: string; model: Model }) {
   const { t } = useCoreCopy();
+  const textModel = useModelText();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
   const pager = usePagePager({
@@ -1337,69 +1338,58 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => drop(event, binding.id)}
                   >
-                    <div className="core-binding-row__top">
-                      <div>
-                        <strong className="core-mono">{binding.upstream_model_id}</strong>
-                        <div className="core-muted">
-                          <ConnectorLabel value={binding.connector_type} /> ·{' '}
-                          {binding.endpoint_base_url}
-                        </div>
-                      </div>
-                      <StatusPill tone="neutral">#{absoluteIndex + 1}</StatusPill>
-                    </div>
-                    <div className="core-muted core-mono">
-                      {binding.endpoint_key_display_head}…{binding.endpoint_key_display_tail}
-                    </div>
-                    {binding.endpoint_key_note ? <div>{binding.endpoint_key_note}</div> : null}
-                    {binding.endpoint_note ? (
-                      <div className="core-muted">{binding.endpoint_note}</div>
+                    <span className="model-source-number">{absoluteIndex + 1}</span>
+                    <span className="model-source-main">
+                      <strong className="core-mono">{binding.upstream_model_id}</strong>
+                      <span className="nb-sub">
+                        {binding.endpoint_note || binding.endpoint_base_url} ·{' '}
+                        {binding.endpoint_key_note ||
+                          `${binding.endpoint_key_display_head}…${binding.endpoint_key_display_tail}`}
+                      </span>
+                    </span>
+                    {model.browse?.preview.find((entry) => entry.id === binding.id)?.state ? (
+                      <span className="nb-badge">
+                        {t(
+                          `browse.state.${model.browse.preview.find((entry) => entry.id === binding.id)!.state}`,
+                        )}
+                      </span>
                     ) : null}
-                    <div className="core-row-actions">
-                      <div className="core-order-controls">
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          disabled={
+                    <MoreMenu
+                      label={textModel('moreSource', { name: binding.upstream_model_id })}
+                      items={[
+                        {
+                          label: t('models.moveUp'),
+                          disabled:
                             busy ||
                             reconciliationRequired ||
                             Boolean(replayAttempt) ||
-                            absoluteIndex === 0
-                          }
-                          onClick={() =>
+                            absoluteIndex === 0,
+                          onSelect: () =>
                             setOrder((current) =>
                               moveBinding(current, absoluteIndex, absoluteIndex - 1),
-                            )
-                          }
-                        >
-                          {t('models.moveUp')}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          disabled={
+                            ),
+                        },
+                        {
+                          label: t('models.moveDown'),
+                          disabled:
                             busy ||
                             reconciliationRequired ||
                             Boolean(replayAttempt) ||
-                            absoluteIndex === order.length - 1
-                          }
-                          onClick={() =>
+                            absoluteIndex === order.length - 1,
+                          onSelect: () =>
                             setOrder((current) =>
                               moveBinding(current, absoluteIndex, absoluteIndex + 1),
-                            )
-                          }
-                        >
-                          {t('models.moveDown')}
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-danger"
-                        disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
-                        onClick={() => setRemoving(binding)}
-                      >
-                        {t('models.removeBinding')}
-                      </button>
-                    </div>
+                            ),
+                        },
+                        'separator',
+                        {
+                          label: t('models.removeBinding'),
+                          danger: true,
+                          disabled: busy || reconciliationRequired || Boolean(replayAttempt),
+                          onSelect: () => setRemoving(binding),
+                        },
+                      ]}
+                    />
                   </li>
                 );
               })}
@@ -1469,18 +1459,72 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
   );
 }
 
+function ModelSources({
+  accountId,
+  model,
+  strategy,
+  onStrategy,
+  locked = false,
+  focusSearch = false,
+  onSearchFocused,
+}: {
+  accountId: string;
+  model: Model;
+  strategy: RouteStrategy;
+  onStrategy: (value: RouteStrategy) => void;
+  locked?: boolean;
+  focusSearch?: boolean;
+  onSearchFocused?: () => void;
+}) {
+  const { t } = useCoreCopy();
+  const text = useModelText();
+  return (
+    <Panel className="model-sources">
+      <PanelHead
+        title={text('sources')}
+        actions={
+          <Segmented
+            label={t('models.strategy')}
+            value={strategy}
+            onChange={onStrategy}
+            disabled={locked}
+            options={[
+              { value: 'ordered', label: t('models.ordered') },
+              { value: 'random', label: t('models.random') },
+            ]}
+          />
+        }
+      />
+      <PanelBody>
+        <BindingOrder accountId={accountId} model={model} />
+        <BindingSelector
+          accountId={accountId}
+          model={model}
+          focusSearch={focusSearch}
+          onSearchFocused={onSearchFocused}
+        />
+      </PanelBody>
+    </Panel>
+  );
+}
+
 function ModelDetail({
   accountId,
   modelId,
   onBack,
   onDeleted,
+  focusSources = false,
 }: {
   accountId: string;
   modelId: string;
+  focusSources?: boolean;
   onBack: () => void;
   onDeleted: () => void;
 }) {
   const { t } = useCoreCopy();
+  const textModel = useModelText();
+  const [sourceFocusPending, setSourceFocusPending] = useState(focusSources);
+  const [requestedStrategy, setRequestedStrategy] = useState<RouteStrategy>();
   const queryClient = useQueryClient();
   const model = useModel(accountId, modelId);
   const [editing, setEditing] = useState<Model | null>(null);
@@ -1558,7 +1602,7 @@ function ModelDetail({
 
   if (accessLossError)
     return (
-      <div className="page core-page core-stack">
+      <div className="page core-page core-stack models-workspace">
         <PageHeader
           icon="models"
           title={t('models.detailTitle')}
@@ -1574,13 +1618,13 @@ function ModelDetail({
     );
   if (model.isPending && !model.data)
     return (
-      <div className="page core-page">
+      <div className="page core-page models-workspace">
         <CoreLoading />
       </div>
     );
   if (!model.data)
     return (
-      <div className="page core-page">
+      <div className="page core-page models-workspace">
         <CoreErrorPanel
           error={model.error ?? new Error('The model details are unavailable.')}
           onRetry={() => void model.refetch()}
@@ -1589,11 +1633,10 @@ function ModelDetail({
     );
 
   return (
-    <div className="page core-page core-stack">
+    <div className="page core-page core-stack models-workspace">
       <PageHeader
         icon="models"
-        title={t('models.detailTitle')}
-        description={t('models.detailDescription')}
+        title={model.data.full_name}
         back={
           <button type="button" className="btn btn-quiet" onClick={onBack}>
             {t('common.back')}
@@ -1610,63 +1653,85 @@ function ModelDetail({
           </button>
         }
       />
-      {editing ? (
-        <ModelEditor
-          accountId={accountId}
-          key={editing.revision}
-          initial={editing}
-          onCancel={() => setEditing(null)}
-          onSaved={() => setEditing(null)}
-          onCapabilityLoss={(error) => setPermissionLost({ scope: permissionScope, error })}
-        />
-      ) : (
-        <section className="core-card">
-          <div className="core-card__header">
-            <h2>{t('models.configurationTitle')}</h2>
-          </div>
-          <dl className="core-detail-list">
-            <div>
-              <dt>{t('models.fullName')}</dt>
-              <dd>
-                <SafeCopyValue value={model.data.full_name} label={t('models.fullName')} />
-              </dd>
-            </div>
-            <TransportRuleSummary value={model.data.transport_rule} />
-            <div>
-              <dt>{t('models.strategy')}</dt>
-              <dd>
-                {model.data.route_strategy === 'ordered' ? t('models.ordered') : t('models.random')}
-              </dd>
-            </div>
-            <div>
-              <dt>{t('models.silentRetry')}</dt>
-              <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
-            </div>
-            <div>
-              <dt>{t('models.flattenTools')}</dt>
-              <dd>{model.data.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
-            </div>
-            <div>
-              <dt>{t('models.bindingCount')}</dt>
-              <dd className="core-number">{model.data.binding_count}</dd>
-            </div>
-            <div>
-              <dt>{t('common.updated')}</dt>
-              <dd>
-                <CoreTime value={model.data.updated_at} />
-              </dd>
-            </div>
-          </dl>
-        </section>
-      )}
-      {!editing ? <ModelRoleSummary policy={model.data.role_policy} /> : null}
-      <BindingSelector accountId={accountId} model={model.data} />
-      <BindingOrder accountId={accountId} model={model.data} />
+      <div className="model-detail-body">
+        {editing ? (
+          <ModelEditor
+            accountId={accountId}
+            key={editing.revision}
+            initial={editing}
+            initialStrategy={requestedStrategy}
+            onCancel={() => {
+              setEditing(null);
+              setRequestedStrategy(undefined);
+            }}
+            onSaved={() => {
+              setEditing(null);
+              setRequestedStrategy(undefined);
+            }}
+            onCapabilityLoss={(error) => setPermissionLost({ scope: permissionScope, error })}
+            sources={(strategy, onChange, locked) => (
+              <ModelSources
+                accountId={accountId}
+                model={model.data!}
+                strategy={strategy}
+                onStrategy={onChange}
+                locked={locked}
+              />
+            )}
+          />
+        ) : (
+          <>
+            <Panel>
+              <PanelHead title={textModel('callName')} />
+              <PanelBody>
+                <SafeCopyValue value={model.data.full_name} label={textModel('callName')} />
+              </PanelBody>
+            </Panel>
+            <ModelSources
+              accountId={accountId}
+              model={model.data}
+              focusSearch={sourceFocusPending}
+              onSearchFocused={() => setSourceFocusPending(false)}
+              strategy={model.data.route_strategy}
+              locked={reconciliationRequired || Boolean(replayAttempt)}
+              onStrategy={(strategy) => {
+                setRequestedStrategy(strategy);
+                setEditing(model.data ?? null);
+              }}
+            />
+            <Fold
+              title={textModel('advanced')}
+              summary={textModel('advancedHelp')}
+              meta={textModel(
+                !model.data.silent_retry &&
+                  !model.data.flatten_tool_calls &&
+                  model.data.transport_rule === 'passthrough' &&
+                  sameRolePolicy(model.data.role_policy, { default_action: 'native', rules: {} })
+                  ? 'default'
+                  : 'customized',
+              )}
+            >
+              <dl className="core-detail-list">
+                <TransportRuleSummary value={model.data.transport_rule} />
+                <div>
+                  <dt>{t('models.silentRetry')}</dt>
+                  <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
+                </div>
+                <div>
+                  <dt>{t('models.flattenTools')}</dt>
+                  <dd>{model.data.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
+                </div>
+              </dl>
+              <ModelRoleSummary policy={model.data.role_policy} />
+            </Fold>
+          </>
+        )}
+      </div>
       <section className="core-card core-danger-zone">
         <div className="core-card__header">
-          <h2>{t('endpoints.dangerTitle')}</h2>
+          <h2>{t('models.deleteModel')}</h2>
         </div>
-        <p>{t('models.deleteModelBody')}</p>
+        <p>{textModel('deleteHelp', { name: model.data.full_name })}</p>
         {asNotice(
           outcome,
           () => void (operation.isSuccess ? operation.refresh() : operation.check()),
@@ -1698,7 +1763,7 @@ function ModelDetail({
           ) : null}
           <button
             type="button"
-            className="btn btn-danger"
+            className="nb-btn nb-btn--danger-outline"
             disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
             onClick={() => setDeleteOpen(true)}
           >
@@ -1724,6 +1789,8 @@ function ModelDetail({
 
 export function ModelsWorkspace({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
+  const textModel = useModelText();
+  const [sourceFocusId, setSourceFocusId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const session = useCoreSession(false);
   const [searchParams, setSearchParams] = useSearchState();
@@ -1779,9 +1846,87 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
     });
   };
 
+  const columns: DataColumn<Model>[] = [
+    {
+      key: 'name',
+      header: textModel('callName'),
+      cell: 'title',
+      render: (model) => (
+        <>
+          <button
+            type="button"
+            className="model-name-link core-mono"
+            disabled={models.isFetching || Boolean(models.error)}
+            onClick={() => setSelectedModelID(model.id)}
+          >
+            {model.full_name}
+          </button>
+          <span className="nb-sub">
+            {textModel(model.route_strategy === 'ordered' ? 'orderedSummary' : 'randomSummary')}
+            {model.silent_retry ? ` · ${textModel('retrySummary')}` : ''}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: 'sources',
+      header: textModel('sources'),
+      mobileLabel: textModel('sources'),
+      cell: 'meta',
+      render: (model) =>
+        model.browse
+          ? textModel('sourceCount', {
+              total: model.binding_count,
+              available: model.browse.available_binding_count,
+            })
+          : textModel('sourceTotal', { total: model.binding_count }),
+    },
+    {
+      key: 'status',
+      header: t('filters.connection'),
+      cell: 'status',
+      render: (model) => {
+        const state =
+          model.binding_count === '0'
+            ? 'unconfigured'
+            : !model.browse
+              ? 'unknown'
+              : model.browse.available_binding_count === '0'
+                ? 'unavailable'
+                : 'available';
+        return (
+          <span
+            className={`nb-badge nb-badge--${state === 'available' ? 'ok' : state === 'unavailable' ? 'bad' : 'plain'}`}
+          >
+            {state === 'available'
+              ? t('common.available')
+              : state === 'unknown'
+                ? t('common.unknown')
+                : t(`filters.${state}`)}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: t('models.editModel'),
+      cell: 'action',
+      align: 'action',
+      render: (model) => (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={models.isFetching || Boolean(models.error)}
+          onClick={() => setSelectedModelID(model.id)}
+        >
+          {t('models.editModel')}
+        </button>
+      ),
+    },
+  ];
   if (!scopeReady) {
     return (
-      <div className="page core-page">
+      <div className="page core-page models-workspace">
         {session.error ? <CoreErrorPanel error={session.error} /> : <CoreLoading />}
       </div>
     );
@@ -1793,6 +1938,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
         key={`${user.id}:${selectedModelId}`}
         accountId={user.id}
         modelId={selectedModelId}
+        focusSources={sourceFocusId === selectedModelId}
         onBack={() => setSelectedModelID(null)}
         onDeleted={() => {
           deletedModelRef.current = { accountId: user.id, id: selectedModelId };
@@ -1809,19 +1955,23 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
 
   if (accessLossError) {
     return (
-      <div className="page core-page core-stack">
-        <PageHeader icon="models" title={t('models.title')} description={t('models.description')} />
+      <div className="page core-page core-stack models-workspace">
+        <PageHeader
+          icon="models"
+          title={t('models.title')}
+          description={textModel('description')}
+        />
         <CoreErrorPanel error={accessLossError} />
       </div>
     );
   }
 
   return (
-    <div className="page core-page core-stack">
+    <div className="page core-page core-stack models-workspace">
       <PageHeader
         icon="models"
         title={t('models.title')}
-        description={t('models.description')}
+        description={textModel('description')}
         actions={
           <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
             {t('models.create')}
@@ -1836,6 +1986,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           onCapabilityLoss={(error) => setPermissionLost({ scope: user.id, error })}
           onSaved={(saved) => {
             setCreating(false);
+            setSourceFocusId(saved.id);
             setSelectedModelID(saved.id);
           }}
         />
@@ -1855,59 +2006,37 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           ) : models.data.data.length === 0 ? (
             <CoreEmpty
               title={t('models.emptyTitle')}
-              body={t('models.emptyBody')}
+              body={textModel('emptyBody')}
               action={
-                <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-                  {t('models.create')}
-                </button>
+                <span className="nb-inline">
+                  <Link className="btn btn-secondary" to="/endpoints?quickstart=1">
+                    {textModel('addService')}
+                  </Link>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setCreating(true)}
+                  >
+                    {t('models.create')}
+                  </button>
+                </span>
               }
             />
           ) : (
-            <ul className="core-endpoint-list">
-              {models.data.data.map((model) => (
-                <li key={model.id} className="core-endpoint-card">
-                  <div className="core-endpoint-card__top">
-                    <div>
-                      <strong className="core-mono">{model.full_name}</strong>
-                      <div className="core-muted">
-                        {model.route_strategy === 'ordered'
-                          ? t('models.ordered')
-                          : t('models.random')}
-                      </div>
-                    </div>
-                  </div>
-                  <ModelBrowseSummary model={model} />
-                  <dl className="core-detail-list">
-                    <TransportRuleSummary value={model.transport_rule} />
-                    <div>
-                      <dt>{t('models.silentRetry')}</dt>
-                      <dd>{model.silent_retry ? t('common.yes') : t('common.no')}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('models.flattenTools')}</dt>
-                      <dd>{model.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('common.updated')}</dt>
-                      <dd>
-                        <CoreTime value={model.updated_at} />
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="core-row-actions">
-                    <span />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={models.isFetching || Boolean(models.error)}
-                      onClick={() => setSelectedModelID(model.id)}
-                    >
-                      {t('models.manage')}
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <DataTable
+              caption={t('models.title')}
+              columns={columns}
+              rows={models.data.data}
+              rowKey={(model) => model.id}
+              onRowClick={(model, event) => {
+                if (
+                  !models.isFetching &&
+                  !models.error &&
+                  !(event.target as HTMLElement).closest('button,a,input,select,textarea,summary')
+                )
+                  setSelectedModelID(model.id);
+              }}
+            />
           )}
           <PagePagination
             metadata={models.data.pagination}
