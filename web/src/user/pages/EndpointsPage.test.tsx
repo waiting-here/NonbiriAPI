@@ -145,7 +145,7 @@ describe('user endpoint list page', () => {
       role: 'user',
       route: '/endpoints',
     });
-    expect(await screen.findByText('No endpoints yet')).toBeVisible();
+    expect(await screen.findByText('No services yet')).toBeVisible();
     expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
@@ -194,8 +194,8 @@ describe('user endpoint list page', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/endpoints?page=999&page_size=20');
     expect(requests).toContain('/api/endpoints?page=999&page_size=20');
 
-    await rendered.user.click(screen.getByRole('link', { name: 'Manage endpoint' }));
-    expect(await screen.findByRole('heading', { name: 'Endpoint details' })).toBeVisible();
+    await rendered.user.click(screen.getByRole('link', { name: 'Manage' }));
+    expect(await screen.findByRole('heading', { name: 'Service details' })).toBeVisible();
     expect(screen.getByTestId('location')).toHaveTextContent('/endpoints/11');
     await rendered.user.click(screen.getByRole('link', { name: 'Back' }));
     expect(await screen.findByText('endpoint-11')).toBeVisible();

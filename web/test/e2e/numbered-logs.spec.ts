@@ -66,7 +66,13 @@ function row(role: Role, index: number, charity = false) {
         : usage,
   };
   if (role === 'admin')
-    return { ...common, user_id: '7', caller_identity: null, attempt_count: '23', usage_total_mismatch: false };
+    return {
+      ...common,
+      user_id: '7',
+      caller_identity: null,
+      attempt_count: '23',
+      usage_total_mismatch: false,
+    };
   if (role === 'steward')
     return {
       ...common,
@@ -225,8 +231,11 @@ for (const scenario of [
     await expect(page.getByText(embeddingLabel, { exact: true }).first()).toBeVisible();
     await dialog.getByLabel(labels.size).selectOption('10');
     await expect(dialog.locator('.log-attempt')).toHaveCount(10);
-    await dialog.getByLabel(labels.jump).fill('3');
-    await dialog.getByRole('button', { name: labels.go, exact: true }).click();
+    for (let step = 0; step < 2; step++) {
+      await dialog
+        .getByRole('button', { name: locale === 'zh' ? '下一页' : 'Next', exact: true })
+        .click();
+    }
     await expect(dialog.locator('.log-attempt')).toHaveCount(3);
     expect(new URL(page.url()).searchParams.get('page')).toBe('3');
     expect(new URL(page.url()).searchParams.get('attempt_page')).toBe('3');
@@ -266,8 +275,11 @@ for (const scenario of [
     total = 5;
     await page.reload();
     await expect(page.getByRole('button', { name: labels.details, exact: true })).toHaveCount(5);
-    await expect(page.getByLabel(labels.jump)).toHaveValue('1');
-    await expect(page.getByLabel(labels.size)).toHaveValue('10');
+    await expect(page.getByLabel(labels.jump)).toHaveCount(0);
+    await expect(page.getByLabel(labels.size)).toHaveCount(0);
+    await expect(page.locator('.page-pagination [role="status"]')).toContainText(
+      locale === 'zh' ? '1' : 'page 1',
+    );
     expect(requests.some((url) => url.searchParams.get('attempt_page') === '3')).toBe(true);
     guard.assertNone();
   });

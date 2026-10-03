@@ -1,3 +1,4 @@
+import { OutcomeNote } from '@shared/components/ui';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 import { ResourceFilterBar, FilteredResourceEmpty } from './ResourceFilterControls';
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
@@ -33,6 +34,7 @@ import {
   CoreEmpty,
   CoreErrorPanel,
   CoreLoading,
+  MutationNotice,
   CoreTime,
   DiscoveryStatus,
   SafeCopyValue,
@@ -75,17 +77,21 @@ function manualCatalogPagerParams(keyId: string): {
   };
 }
 
-function OutcomeNotice({ outcome }: { outcome: ActionOutcome }) {
-  const { t } = useCoreCopy();
-  if (!outcome) return null;
-  return (
-    <p className={outcome === 'error' ? 'core-inline-error' : 'core-inline-warning'} role="alert">
-      {outcome === 'conflict'
-        ? t('common.conflict')
-        : outcome === 'unknown'
-          ? t('common.outcomeUnknown')
-          : t('common.errorBody')}
-    </p>
+function OutcomeNotice({
+  outcome,
+  onCheck,
+  busy,
+  savedRefreshFailed,
+}: {
+  outcome: ActionOutcome;
+  onCheck: () => void;
+  busy?: boolean;
+  savedRefreshFailed?: boolean;
+}) {
+  return savedRefreshFailed ? (
+    <OutcomeNote outcome={{ kind: 'savedRefreshFailed', recheck: onCheck }} busy={busy} />
+  ) : (
+    <MutationNotice outcome={outcome} onCheck={onCheck} busy={busy} />
   );
 }
 
@@ -280,7 +286,12 @@ function AddEndpointKeyForm({
       <p className="core-inline-warning">{t('endpoints.costWarning')}</p>
       {outcome === 'unknown' && needsSecret ? <p>{text('secretAgain')}</p> : null}
       {draft.message && !outcome ? <p className="core-inline-error">{draft.message}</p> : null}
-      <OutcomeNotice outcome={outcome} />
+      <OutcomeNotice
+        outcome={outcome}
+        savedRefreshFailed={operation.outcome === 'refresh-failed'}
+        onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+        busy={busy}
+      />
       <div className="core-form-actions">
         <span />
         <button type="submit" className="btn btn-primary" disabled={busy}>
@@ -603,7 +614,12 @@ function ManualEntryRow({
               onPageSizeChange={impactPager.setPageSize}
             />
           ) : null}
-          <OutcomeNotice outcome={outcome} />
+          <OutcomeNotice
+            outcome={outcome}
+            savedRefreshFailed={operation.outcome === 'refresh-failed'}
+            onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+            busy={busy}
+          />
           <div className="core-form-actions">
             <button
               type="button"
@@ -753,12 +769,10 @@ function ManualCatalog({
       }),
       invalidateResourceDependents(queryClient, accountId, { endpointId }),
     ]);
-    return (
-      !queryClient
-        .getQueryCache()
-        .findAll({ queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId) })
-        .some((query) => query.state.status === 'error')
-    );
+    return !queryClient
+      .getQueryCache()
+      .findAll({ queryKey: coreKeys.catalogRoot(accountId, endpointId, keyId) })
+      .some((query) => query.state.status === 'error');
   };
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -810,7 +824,12 @@ function ManualCatalog({
             />
           </label>
         </div>
-        <OutcomeNotice outcome={outcome} />
+        <OutcomeNotice
+          outcome={outcome}
+          savedRefreshFailed={operation.outcome === 'refresh-failed'}
+          onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+          busy={busy}
+        />
         <div className="core-form-actions">
           <span />
           <button
@@ -1108,7 +1127,12 @@ function EndpointKeyCard({
           <ManualCatalog accountId={accountId} endpointId={endpoint.id} keyId={keyData.id} />
         ) : null}
       </details>
-      <OutcomeNotice outcome={outcome} />
+      <OutcomeNotice
+        outcome={outcome}
+        savedRefreshFailed={operation.outcome === 'refresh-failed'}
+        onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+        busy={busy}
+      />
       {reconciliationRequired ? (
         <button
           type="button"
@@ -1532,7 +1556,12 @@ export function EndpointDetail({
             {endpoint.data.enabled ? t('endpoints.toggleOff') : t('endpoints.toggleOn')}
           </button>
         </div>
-        <OutcomeNotice outcome={outcome} />
+        <OutcomeNotice
+          outcome={outcome}
+          savedRefreshFailed={operation.outcome === 'refresh-failed'}
+          onCheck={() => void (operation.isSuccess ? operation.refresh() : operation.check())}
+          busy={busy}
+        />
         {reconciliationRequired ? (
           <button
             type="button"

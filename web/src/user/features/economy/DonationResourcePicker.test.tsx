@@ -290,7 +290,7 @@ describe('DonationResourcePicker', () => {
       { station: 'user', role: 'user' },
     );
 
-    expect(await screen.findByText('No matching endpoints')).toBeVisible();
+    expect(await screen.findByText('No matching services')).toBeVisible();
     const navigation = screen.getByRole('navigation', { name: 'Pagination' });
     expect(navigation).toHaveTextContent('Page 1 of 1 · Total: 0');
     expect(within(navigation).getByRole('combobox')).toHaveValue('20');
@@ -400,7 +400,7 @@ describe('DonationResourcePicker', () => {
     await rendered.user.click(within(keyNavigations[1]!).getByRole('button', { name: 'Next' }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /key-21/ }));
 
-    await rendered.user.click(screen.getByRole('button', { name: 'Back to endpoints' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Back to services' }));
     const endpointNavigations = screen.getAllByRole('navigation', { name: 'Pagination' });
     await rendered.user.click(
       within(endpointNavigations[0]!).getByRole('button', { name: 'Next' }),
@@ -409,7 +409,7 @@ describe('DonationResourcePicker', () => {
     await rendered.user.click(await screen.findByRole('checkbox', { name: /key-22/ }));
 
     expect(screen.getByTestId('selected-ids')).toHaveTextContent('1:1,1:21,2:22');
-    await rendered.user.click(screen.getByRole('button', { name: 'Back to endpoints' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Back to services' }));
     const pageTwoNavigation = screen.getAllByRole('navigation', { name: 'Pagination' })[0]!;
     await rendered.user.click(within(pageTwoNavigation).getByRole('button', { name: 'Next' }));
     expect(await screen.findByRole('button', { name: /^endpoint-3(?!\d)/ })).toBeVisible();
@@ -467,7 +467,7 @@ describe('DonationResourcePicker', () => {
     );
 
     expect(await screen.findByRole('button', { name: /^endpoint-2(?!\d)/ })).toBeVisible();
-    const endpointSearch = screen.getByRole('searchbox', { name: 'Search endpoints' });
+    const endpointSearch = screen.getByRole('searchbox', { name: 'Search services' });
     await rendered.user.type(endpointSearch, 'needle');
     await rendered.user.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
     expect(await screen.findByTestId('location-search')).toHaveTextContent(
@@ -477,7 +477,7 @@ describe('DonationResourcePicker', () => {
 
     await rendered.user.click(screen.getByRole('button', { name: 'pop back' }));
     expect(await screen.findByRole('button', { name: /^endpoint-2(?!\d)/ })).toBeVisible();
-    expect(screen.getByRole('searchbox', { name: 'Search endpoints' })).toHaveValue('');
+    expect(screen.getByRole('searchbox', { name: 'Search services' })).toHaveValue('');
     // The control does not fan out key requests for endpoints that have not
     // been selected.
     expect(
@@ -641,7 +641,7 @@ describe('DonationResourcePicker', () => {
     );
 
     expect(await screen.findByRole('button', { name: /^endpoint-1(?!\d)/ })).toBeVisible();
-    const endpointSearch = screen.getByRole('searchbox', { name: 'Search endpoints' });
+    const endpointSearch = screen.getByRole('searchbox', { name: 'Search services' });
     const withinLimit = '😀'.repeat(128);
     fireEvent.change(endpointSearch, { target: { value: withinLimit } });
     expect(endpointSearch).toHaveValue(withinLimit);
@@ -723,7 +723,7 @@ describe('DonationResourcePicker', () => {
         await screen.findByRole('checkbox', { name: /key-101/ });
       }
       const input = screen.getByRole('searchbox', {
-        name: kind === 'endpoint' ? 'Search endpoints' : 'Search keys',
+        name: kind === 'endpoint' ? 'Search services' : 'Search keys',
       });
       await rendered.user.type(input, 'new-filter');
       await rendered.user.click(
@@ -735,7 +735,7 @@ describe('DonationResourcePicker', () => {
       else expect(screen.queryByRole('checkbox', { name: /key-101/ })).toBeNull();
       release!(jsonResponse(numberedPage([], '1', 0)));
       expect(
-        await screen.findByText(kind === 'endpoint' ? 'No matching endpoints' : 'No matching keys'),
+        await screen.findByText(kind === 'endpoint' ? 'No matching services' : 'No matching keys'),
       ).toBeVisible();
     },
   );
@@ -830,7 +830,7 @@ describe('DonationResourcePicker', () => {
     expect(screen.getByRole('checkbox', { name: /key-already/ })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: /key-security/ })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: /key-physical/ })).toBeDisabled();
-    expect(screen.getByText(/physically disabled/i)).toBeVisible();
+    expect(screen.getByText(/disabled but can still be donated/i)).toBeVisible();
     expect(screen.getByText(/Already included in another donation/)).toBeVisible();
     expect(screen.getByText(/Security processing is still in progress/)).toBeVisible();
 
@@ -974,7 +974,7 @@ describe('DonationResourcePicker', () => {
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible();
     expect(screen.queryByRole('checkbox')).toBeNull();
 
-    const endpointSearch = screen.getByRole('searchbox', { name: 'Search endpoints' });
+    const endpointSearch = screen.getByRole('searchbox', { name: 'Search services' });
     fireEvent.change(endpointSearch, { target: { value: 'bad\u0001' } });
     await rendered.user.click(screen.getAllByRole('button', { name: 'Search' })[0]!);
     expect(screen.getByText(/control characters/i)).toBeVisible();

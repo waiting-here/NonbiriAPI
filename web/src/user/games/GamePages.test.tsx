@@ -341,7 +341,7 @@ describe('beta.1 game pages', () => {
       route: '/games',
       role: 'user',
     });
-    expect(await screen.findByRole('heading', { name: 'Choose your pace' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Games' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Open')).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: 'Closed' })).toHaveLength(4);

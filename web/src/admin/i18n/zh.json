@@ -157,7 +157,7 @@
         "alerts": "告警",
         "announcements": "公告",
         "charity": "公益",
-        "connector": "连接器",
+        "connector": "接口格式",
         "economy": "经济",
         "games": "游戏",
         "identity": "标识与外观",
@@ -199,7 +199,23 @@
       },
       "customizedCount": "{{count}} 项已调整",
       "groupDefaults": "使用默认设置",
-      "searchHelp": "按名称或用途查找设置"
+      "searchHelp": "按名称或用途查找设置",
+      "modified": "已修改",
+      "original": "原来 {{value}}",
+      "gatewayGroup": "Gateway 模型能力",
+      "legalHoldGroup": "法律保全",
+      "maintenanceGroup": "维护模式",
+      "gameRewardRange": "游戏积分签到奖励",
+      "rewardRange": "通用积分签到奖励",
+      "rewardRangeHelp": "每次签到在这个范围内随机发放。",
+      "levelNames": "等级显示名",
+      "levelNamesHelp": "留空使用内置名称。",
+      "navigation": "参数分组",
+      "cautious": "需谨慎",
+      "regular": "常规",
+      "otherConfiguration": "其他配置",
+      "confirmationHint": "包含需谨慎的设置，保存前会再确认一次。",
+      "confirmTitle": "保存需谨慎的设置？"
     },
     "games": {
       "nav": "游戏",
@@ -320,9 +336,9 @@
         "save": "保存活动设置",
         "thursdayEnabled": "启用星期四活动",
         "title": "活动配置",
-        "welfareCap": "公益上限（积分）",
-        "welfareEnabled": "启用公益活动",
-        "welfareThreshold": "公益门槛（积分）",
+        "welfareCap": "低保上限（积分）",
+        "welfareEnabled": "启用低保活动",
+        "welfareThreshold": "低保门槛（积分）",
         "masterRequired": "请开启活动总开关，或同时关闭低保和疯狂星期四。",
         "periodRequired": "请先在下方填写疯狂星期四的文案和参与规则并保存，再开启活动。",
         "changedElsewhere": "活动设置已更新。请取消当前修改，再基于最新设置编辑。"
@@ -429,7 +445,8 @@
         "create": "创建渠道",
         "view": "查看",
         "save": "保存修改",
-        "retire": "归档渠道"
+        "retire": "归档渠道",
+        "new": "新建渠道"
       },
       "form": {
         "name": "渠道名称",
@@ -473,7 +490,8 @@
       "empty": {
         "title": "没有主流渠道",
         "body": "当前状态筛选下没有渠道。"
-      }
+      },
+      "available": "可用于添加服务"
     },
     "reports": {
       "nav": "举报",
@@ -503,7 +521,7 @@
         "confirmApproveTitle": "批准删除受保护密钥？",
         "confirmRejectBody": "此操作将解除所有目标的保护，并记录审核原因。",
         "confirmRejectTitle": "驳回此举报？",
-        "connector": "连接器",
+        "connector": "接口格式",
         "continuationBody": "此状态不能重新裁决或解除保护；恢复操作只会使用同一目标版本重启现有检查点。",
         "continuationTitle": "继续处理",
         "deadline": "截止时间",
@@ -641,7 +659,7 @@
         "custom": "自定义捐赠密钥",
         "mainstreamSubscription": "【主流订阅】{{name}}",
         "mainstreamApiPlatform": "【主流 API 平台】{{name}}",
-        "connector": "连接器",
+        "connector": "接口格式",
         "baseUrl": "API 基础地址",
         "channelRevision": "添加时的渠道版本",
         "keyHeading": "密钥 {{id}} · {{head}}…{{tail}}",

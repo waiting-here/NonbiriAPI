@@ -1,3 +1,4 @@
+import { OutcomeNote } from '@shared/components/ui';
 import { TransportRuleField, TransportRuleSummary } from '@shared/components/TransportRuleField';
 import type { TransportRule } from '@shared/transportRule';
 import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
@@ -84,8 +85,17 @@ import type { NumberedPage } from './pageTypes';
 type VisibleOutcome = 'conflict' | 'unknown' | 'error' | null;
 type PermissionLoss = { scope: string; error: unknown };
 
-function asNotice(outcome: VisibleOutcome) {
-  return outcome ? <MutationNotice outcome={outcome} /> : null;
+function asNotice(
+  outcome: VisibleOutcome,
+  onCheck: () => void,
+  busy: boolean,
+  savedRefreshFailed = false,
+) {
+  return savedRefreshFailed ? (
+    <OutcomeNote busy={busy} outcome={{ kind: 'savedRefreshFailed', recheck: onCheck }} />
+  ) : (
+    <MutationNotice outcome={outcome} onCheck={onCheck} busy={busy} />
+  );
 }
 
 function isAccessLoss(error: unknown): boolean {
@@ -393,19 +403,11 @@ function ModelEditor({
           {t('models.invalidName')}
         </p>
       ) : null}
-      {operation.outcome === 'refresh-failed' ? (
-        <p role="status">
-          {text('savedRefresh')}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void operation.refresh()}
-          >
-            {t('common.refresh')}
-          </button>
-        </p>
-      ) : (
-        asNotice(outcome)
+      {asNotice(
+        outcome,
+        () => void (operation.isSuccess ? operation.refresh() : operation.check()),
+        busy,
+        operation.outcome === 'refresh-failed',
       )}
       <div className="core-form-actions">
         <span />
@@ -1070,6 +1072,8 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
         <p className="core-inline-warning">{t('models.selectionInvalid')}</p>
       ) : null}
       <MutationNotice
+        onCheck={() => void reconcileAuthority()}
+        busy={operation.isPending}
         outcome={
           replayAttempt
             ? 'unknown'
@@ -1410,7 +1414,12 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
           />
         </>
       )}
-      {asNotice(outcome)}
+      {asNotice(
+        outcome,
+        () => void (operation.isSuccess ? operation.refresh() : operation.check()),
+        busy,
+        operation.outcome === 'refresh-failed',
+      )}
       <div className="core-form-actions">
         {reconciliationRequired ? (
           <button
@@ -1658,7 +1667,12 @@ function ModelDetail({
           <h2>{t('endpoints.dangerTitle')}</h2>
         </div>
         <p>{t('models.deleteModelBody')}</p>
-        {asNotice(outcome)}
+        {asNotice(
+          outcome,
+          () => void (operation.isSuccess ? operation.refresh() : operation.check()),
+          busy,
+          operation.outcome === 'refresh-failed',
+        )}
         <div className="core-form-actions">
           {reconciliationRequired ? (
             <button

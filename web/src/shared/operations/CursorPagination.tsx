@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import './pagePagination.css';
 
 export function CursorPagination({
   page,
@@ -18,19 +19,27 @@ export function CursorPagination({
   const nextLabel = labels?.next ?? t('common.next');
   const pageLabel = labels ? `${labels.page} ${page}` : t('common.page', { page });
 
+  if (page <= 1 && !nextCursor) return null;
   return (
-    <nav className="pagination" aria-label={t('common.pagination')}>
-      <button type="button" className="btn btn-secondary" disabled={page <= 1} onClick={onPrevious}>
-        {previousLabel}
+    <nav className="pagination nb-pager" aria-label={t('common.pagination')}>
+      <button
+        type="button"
+        aria-label={previousLabel}
+        className="btn btn-secondary"
+        disabled={page <= 1}
+        onClick={onPrevious}
+      >
+        <span aria-hidden="true">‹</span>
       </button>
       <span aria-live="polite">{pageLabel}</span>
       <button
         type="button"
+        aria-label={nextLabel}
         className="btn btn-secondary"
         disabled={!nextCursor}
         onClick={() => nextCursor && onNext(nextCursor)}
       >
-        {nextLabel}
+        <span aria-hidden="true">›</span>
       </button>
     </nav>
   );

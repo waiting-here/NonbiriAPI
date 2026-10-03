@@ -440,7 +440,7 @@ describe('home independent capability states', () => {
     const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
-    expect(await screen.findByText(/response was lost/i)).toBeVisible();
+    expect(await screen.findByText(/Could not confirm the result/i)).toBeVisible();
     expect(submit).toHaveBeenCalledTimes(1);
     expect(load).toHaveBeenCalledTimes(2);
 
@@ -740,7 +740,7 @@ describe('account language commit boundary', () => {
     expect(save).toBeEnabled();
     await rendered.user.click(save);
 
-    expect(await screen.findByText('语言已保存。')).toBeVisible();
+    expect(await screen.findByText('已保存。')).toBeVisible();
     const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
     expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({ lang: 'zh' });
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
@@ -771,7 +771,7 @@ describe('account language commit boundary', () => {
     expect(window.localStorage.getItem('nb.lang')).toBeNull();
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('语言已保存。')).toBeVisible();
+    expect(await screen.findByText('已保存。')).toBeVisible();
     const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
     expect(patchCall?.[0]).toBe('/api/me');
     expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({ lang: 'zh' });
@@ -781,7 +781,7 @@ describe('account language commit boundary', () => {
     expect(document.documentElement.lang).toBe('zh-CN');
     expect(window.localStorage.getItem('nb.lang')).toBe('zh');
     await rendered.user.selectOptions(screen.getByLabelText('语言'), 'en');
-    expect(screen.queryByText('语言已保存。')).not.toBeInTheDocument();
+    expect(screen.queryByText('已保存。')).not.toBeInTheDocument();
     expect(rendered.queryClient.getQueryData(coreKeys.me(envelope.user.id))).toEqual(updated);
     expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual({
       user: { ...session.user, lang: 'zh' },
@@ -812,7 +812,7 @@ describe('account language commit boundary', () => {
     await rendered.user.selectOptions(await screen.findByLabelText('Language'), 'zh');
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('语言已保存。')).toBeVisible();
+    expect(await screen.findByText('已保存。')).toBeVisible();
     expect(screen.getByLabelText('语言')).toHaveValue('zh');
   });
 
@@ -842,7 +842,7 @@ describe('account language commit boundary', () => {
     await waitFor(() => expect(screen.getByLabelText('Language')).toHaveValue('en'));
     expect(document.documentElement.lang).toBe('en');
     expect(window.localStorage.getItem('nb.lang')).toBeNull();
-    expect(screen.getByText(/The response was lost/)).toBeVisible();
+    expect(screen.getByText(/Could not confirm the result/)).toBeVisible();
   });
 
   it('GET-reconciles a lost language response and explicitly reuses the exact operation identity', async () => {
@@ -878,13 +878,13 @@ describe('account language commit boundary', () => {
 
     await rendered.user.selectOptions(screen.getByLabelText('Language'), 'zh');
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    const replay = await screen.findByRole('button', { name: 'Retry the same operation' });
+    const replay = await screen.findByRole('button', { name: 'Retry' });
     expect(screen.getByLabelText('Language')).toHaveValue('en');
     expect(document.documentElement.lang).toBe('en');
 
     await rendered.user.click(replay);
 
-    expect(await screen.findByText('语言已保存。')).toBeVisible();
+    expect(await screen.findByText('已保存。')).toBeVisible();
     expect(patchKeys).toHaveLength(2);
     expect(patchKeys[0]).toBe(patchKeys[1]);
     expect(patchBodies).toEqual([{ lang: 'zh' }, { lang: 'zh' }]);
@@ -935,7 +935,7 @@ describe('account language commit boundary', () => {
     expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual(nextSession);
     expect(document.documentElement.lang).toBe('en');
     expect(window.localStorage.getItem('nb.lang')).toBeNull();
-    expect(screen.queryByText('语言已保存。')).not.toBeInTheDocument();
+    expect(screen.queryByText('已保存。')).not.toBeInTheDocument();
   });
 });
 
