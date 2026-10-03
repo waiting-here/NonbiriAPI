@@ -11,7 +11,7 @@ const preTransportManifestHash = "950934669d973f4329edc39768d413fccd085f284fe533
 const transportRulesMarker = "\n-- Model chat transport rules\n"
 
 func preTransportSchema() string {
-	previous, _, _ := strings.Cut(generationTwoSchema, transportRulesMarker)
+	previous, _, _ := strings.Cut(preEconomyAuditChannelsSchema(), transportRulesMarker)
 	return previous
 }
 
@@ -23,7 +23,7 @@ func applyTransportExtension(ctx context.Context, tx *sql.Tx) error {
 	if generationManifestDigest(manifest) != preTransportManifestHash {
 		return errors.New("unrecognized model transport source manifest")
 	}
-	_, additive, ok := strings.Cut(generationTwoSchema, transportRulesMarker)
+	_, additive, ok := strings.Cut(preEconomyAuditChannelsSchema(), transportRulesMarker)
 	if !ok {
 		return errors.New("canonical model transport schema is missing")
 	}
