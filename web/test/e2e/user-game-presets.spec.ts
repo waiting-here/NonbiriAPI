@@ -92,6 +92,10 @@ for (const locale of ['en', 'zh'] as const) {
         [390, 1],
       ] as const) {
         await page.setViewportSize({ width, height: 1000 });
+        const skillsStep = page.locator('.likes-loadout-step').filter({ has: workspace });
+        if (width < 640 && !(await skillsStep.getAttribute('open')))
+          await skillsStep.locator(':scope > summary').click();
+        await expect(workspace).toBeVisible();
         await workspace.scrollIntoViewIfNeeded();
         const layout = await workspace.evaluate((element) => {
           const grid = element.querySelector('.likes-custom-presets-grid')!;

@@ -210,7 +210,7 @@ test('personal models send all filters before pagination and preserve them throu
       ),
     )
     .toBe(true);
-  await page.locator('.core-endpoint-card').getByRole('button').click();
+  await page.getByRole('button', { name: 'Edit model', exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('model_id')).toBe('7');
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(form.getByRole('searchbox')).toHaveValue('upstream-identifier');
