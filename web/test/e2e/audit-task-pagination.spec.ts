@@ -57,33 +57,42 @@ test('user audit task pages restore URL state on desktop and mobile', async ({ p
       const pages = Math.ceil(41 / size);
       const current = Math.min(requested, pages);
       const start = (current - 1) * size;
-      await route.fulfill({ json: {
-        scan,
-        items: Array.from({ length: Math.min(size, 41 - start) }, (_, index) => user(start + index + 1)),
-        page: String(current), page_size: size, total_items: '41', total_pages: String(pages), coverage: 'complete',
-      } });
+      await route.fulfill({
+        json: {
+          scan,
+          items: Array.from({ length: Math.min(size, 41 - start) }, (_, index) =>
+            user(start + index + 1),
+          ),
+          page: String(current),
+          page_size: size,
+          total_items: '41',
+          total_pages: String(pages),
+          coverage: 'complete',
+        },
+      });
       return;
     }
     await route.fulfill({ status: 404, json: { error: 'unmatched audit fixture' } });
   });
   await page.goto(ADMIN_ORIGIN + '/abuse-audit?audit_tab=users&audit_users_scan=' + scanID);
   const pager = page.getByRole('navigation', { name: 'Pagination', exact: true });
-  await expect(pager).toContainText('Page 1 of 3 · Total: 41');
+  await expect(pager).toContainText('41 items');
   await pager.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(pager).toContainText('Page 2 of 3');
   await expect(page.getByText('User ID: 21', { exact: true })).toBeVisible();
-  await pager.locator('input').fill('3');
-  await pager.locator('input').press('Enter');
+  await pager.getByRole('button', { name: '3', exact: true }).click();
   await expect(pager).toContainText('Page 3 of 3');
   await page.reload();
   await expect(pager).toContainText('Page 3 of 3');
   await page.goBack();
   await expect(pager).toContainText('Page 2 of 3');
   await pager.locator('select').selectOption('50');
-  await expect(pager).toContainText('Page 1 of 1 · Total: 41');
+  await expect(pager).toContainText('41 items');
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+      true,
+    );
   }
   await errors.assertNone();
 });

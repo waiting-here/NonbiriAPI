@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { Icon, type IconName } from './Icon';
+import '../operations/pagePagination.css';
 import emptyStateURL from '@shared/assets/state-empty.svg';
 import maintenanceStateURL from '@shared/assets/state-maintenance.svg';
 
@@ -205,10 +206,11 @@ export function Pagination({
     if (!Number.isSafeInteger(target) || target < 1 || target === page) return;
     onJumpToPage(target);
   };
+  if (page <= 1 && !hasNext) return null;
   return (
-    <nav className="pagination" aria-label={t('common.pagination')}>
+    <nav className="pagination nb-pager" aria-label={t('common.pagination')}>
       {canPickSize ? (
-        <label className="pagination-option">
+        <label className="pagination-option nb-pager__size">
           <span className="pagination-label">{t('common.pageSize')}</span>
           <select
             value={String(pageSize)}
@@ -229,23 +231,25 @@ export function Pagination({
       ) : null}
       <button
         type="button"
+        aria-label={t('common.previous')}
         className="btn btn-secondary"
         disabled={page <= 1}
         onClick={() => onChange(Math.max(1, page - 1))}
       >
-        {t('common.previous')}
+        <span aria-hidden="true">‹</span>
       </button>
       <span aria-live="polite">{t('common.page', { page })}</span>
       <button
         type="button"
+        aria-label={t('common.next')}
         className="btn btn-secondary"
         disabled={!hasNext}
         onClick={() => onChange(page + 1)}
       >
-        {t('common.next')}
+        <span aria-hidden="true">›</span>
       </button>
       {onJumpToPage ? (
-        <label className="pagination-option">
+        <label className="pagination-option nb-pager__number">
           <span className="pagination-label">{t('common.jumpToPage')}</span>
           <input
             type="number"
