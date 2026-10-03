@@ -1,0 +1,35 @@
+.alerts-page .nb-table {
+  min-width: 0;
+}
+.alerts-page .nb-table-wrap {
+  overflow: visible;
+}
+.alerts-page .nb-table td {
+  overflow-wrap: anywhere;
+  max-width: 24rem;
+}
+.alerts-page .alert-actions {
+  display: flex;
+  gap: var(--nb-space-2);
+  align-items: center;
+}
+.alerts-page .alert-actions button,
+.alerts-page summary,
+.alerts-page .checkbox-label {
+  min-height: 2.5rem;
+}
+.alerts-page .alert-deletion-facts {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (width < 48rem) {
+  .alerts-page .nb-table td {
+    max-width: none;
+  }
+  .alerts-page .alert-actions > button {
+    flex: 1;
+  }
+  .alerts-page .nb-table td[data-cell='status'] {
+    max-width: 9rem;
+    white-space: normal;
+  }
+}

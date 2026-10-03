@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Fold, DataTable, Tabs } from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
@@ -135,11 +137,11 @@ function Coverage({ meta }: { readonly meta: Metadata }) {
 function MetricCards({ metrics }: { readonly metrics: Metrics }) {
   const t = useEconomyText();
   return (
-    <dl className="audit-metrics">
+    <dl className="nb-stats audit-metrics">
       {metricKeys.map((key) => (
-        <div key={key}>
-          <dt>{metricLabel(key, t)}</dt>
-          <dd>{displayAmount(metrics[key])}</dd>
+        <div className="nb-stat" key={key}>
+          <dt className="nb-stat__label">{metricLabel(key, t)}</dt>
+          <dd className="nb-stat__value">{displayAmount(metrics[key])}</dd>
         </div>
       ))}
     </dl>
@@ -147,6 +149,7 @@ function MetricCards({ metrics }: { readonly metrics: Metrics }) {
 }
 
 function Stock({ summary }: { readonly summary: Summary }) {
+  const { t: copy } = useTranslation();
   const t = useEconomyText(),
     s = summary.inventory,
     r = summary.reconciliation;
@@ -156,59 +159,96 @@ function Stock({ summary }: { readonly summary: Summary }) {
     [t('冻结与预扣', 'Frozen and reserved'), s.frozen],
     [t('奖池', 'Pools'), s.pools],
     [t('平台持有', 'Platform holdings'), s.platform],
+    [t('净存量', 'Net stock'), s.net],
+  ];
+  const negative = [
     [t('用户负余额', 'Negative user balances'), s.negative_users],
     [t('冻结账户负余额', 'Negative reserve balances'), s.negative_frozen],
     [t('奖池负余额', 'Negative pool balances'), s.negative_pools],
     [t('平台负余额', 'Negative platform balances'), s.negative_platform],
-    [t('净存量', 'Net stock'), s.net],
   ];
+  const hasNegative = negative.some(([, value]) => BigInt(value) !== 0n);
   return (
     <section>
       <h2>{t('当前库存', 'Current stock')}</h2>
-      <dl className="audit-metrics">
+      <dl className="nb-stats audit-metrics">
         {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{displayAmount(value)}</dd>
+          <div className="nb-stat" key={label}>
+            <dt className="nb-stat__label">{label}</dt>
+            <dd className="nb-stat__value">{displayAmount(value)}</dd>
           </div>
         ))}
       </dl>
-      <p className={r.status === 'mismatch' ? 'audit-warning' : undefined}>
-        {r.status === 'matched'
-          ? t(
-              '保留账本对账一致：净存量 = 累计发行 − 累计回收。',
-              'Retained-ledger reconciliation matches: net stock = issuance − retirement.',
-            )
-          : r.status === 'mismatch'
+      {hasNegative ? (
+        <Fold key="negative" title={copy('admin.economyAudit.presentation.negative')} defaultOpen>
+          <dl className="nb-stats audit-metrics">
+            {negative.map(([label, value]) => (
+              <div className="nb-stat audit-warning" key={label}>
+                <dt className="nb-stat__label">{label}</dt>
+                <dd className="nb-stat__value">{displayAmount(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </Fold>
+      ) : (
+        <p>{copy('admin.economyAudit.presentation.negativeZero')}</p>
+      )}
+      <Fold
+        plain
+        title={copy('admin.economyAudit.presentation.reconciliation')}
+        meta={
+          <span
+            className={`nb-badge nb-badge--${r.status === 'matched' ? 'ok' : r.status === 'mismatch' ? 'bad' : 'warn'}`}
+          >
+            {copy(
+              'admin.economyAudit.presentation.' +
+                (r.status === 'matched'
+                  ? 'matched'
+                  : r.status === 'mismatch'
+                    ? 'mismatch'
+                    : 'incomplete'),
+            )}
+          </span>
+        }
+      >
+        <p className={r.status === 'mismatch' ? 'audit-warning' : undefined}>
+          {r.status === 'matched'
             ? t(
-                '对账不一致，请检查库存与账本。',
-                'Reconciliation does not match. Review inventory and ledger records.',
+                '保留账本对账一致：净存量 = 累计发行 − 累计回收。',
+                'Retained-ledger reconciliation matches: net stock = issuance − retirement.',
               )
-            : t(
-                '对账覆盖不完整，请查看统计说明。',
-                'Reconciliation coverage is incomplete; see the coverage details.',
-              )}
-      </p>
-      {r.interval_opening_net !== null &&
-        r.interval_closing_net !== null &&
-        r.interval_net_change !== null && (
-          <p>
-            {t('所选币种的区间净存量', 'Interval net stock for the selected asset')}:{' '}
-            {displayAmount(r.interval_closing_net)} − {displayAmount(r.interval_opening_net)} ={' '}
-            {displayAmount(r.interval_net_change)}
-          </p>
-        )}
-      <p>
-        {t(
-          '库存对应当前快照；区间收支对应上方时间筛选。渠道筛选不会改变整个币种的库存。',
-          'Inventory belongs to the current snapshot; flows belong to the selected interval. A channel filter does not change the stock of the entire asset.',
-        )}
-      </p>
+            : r.status === 'mismatch'
+              ? t(
+                  '对账不一致，请检查库存与账本。',
+                  'Reconciliation does not match. Review inventory and ledger records.',
+                )
+              : t(
+                  '对账覆盖不完整，请查看统计说明。',
+                  'Reconciliation coverage is incomplete; see the coverage details.',
+                )}
+        </p>
+        {r.interval_opening_net !== null &&
+          r.interval_closing_net !== null &&
+          r.interval_net_change !== null && (
+            <p>
+              {t('所选币种的区间净存量', 'Interval net stock for the selected asset')}:{' '}
+              {displayAmount(r.interval_closing_net)} − {displayAmount(r.interval_opening_net)} ={' '}
+              {displayAmount(r.interval_net_change)}
+            </p>
+          )}
+        <p>
+          {t(
+            '库存对应当前快照；区间收支对应上方时间筛选。渠道筛选不会改变整个币种的库存。',
+            'Inventory belongs to the current snapshot; flows belong to the selected interval. A channel filter does not change the stock of the entire asset.',
+          )}
+        </p>
+      </Fold>
     </section>
   );
 }
 
 function Trend({ filter }: { readonly filter: AuditFilter }) {
+  const { t: copy } = useTranslation();
   const t = useEconomyText(),
     session = useAdminSession();
   const q = useQuery({
@@ -226,29 +266,32 @@ function Trend({ filter }: { readonly filter: AuditFilter }) {
       {q.data.metadata.coverage.status !== 'catching_up' && (
         <>
           <EconomyTrendChart series={q.data} />
-          <div className="audit-table">
-            <table>
-              <caption>{t('分时段收支', 'Flows by time bucket')}</caption>
-              <thead>
-                <tr>
-                  <th>{t('区间起点', 'Interval start')}</th>
-                  {metricKeys.map((key) => (
-                    <th key={key}>{metricLabel(key, t)}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {q.data.data.map((p) => (
-                  <tr key={p.start}>
-                    <th>{time(p.start, q.data.metadata.offset_minutes)}</th>
-                    {metricKeys.map((key) => (
-                      <td key={key}>{displayAmount(p.metrics[key])}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Fold
+            title={copy('admin.economyAudit.presentation.periods', { count: q.data.data.length })}
+          >
+            <DataTable
+              caption={t('分时段收支', 'Flows by time bucket')}
+              rows={q.data.data}
+              rowKey={(point) => String(point.start)}
+              columns={[
+                {
+                  key: 'start',
+                  header: t('区间起点', 'Interval start'),
+                  cell: 'title',
+                  render: (point) => time(point.start, q.data.metadata.offset_minutes),
+                },
+                ...metricKeys.map((key) => ({
+                  key,
+                  header: metricLabel(key, t),
+                  mobileLabel: metricLabel(key, t),
+                  cell: 'meta' as const,
+                  align: 'num' as const,
+                  render: (point: (typeof q.data.data)[number]) =>
+                    displayAmount(point.metrics[key]),
+                })),
+              ]}
+            />
+          </Fold>
         </>
       )}
     </>
@@ -276,40 +319,48 @@ function ChannelDetails({
   return (
     <>
       <Coverage meta={q.data.metadata} />
-      <div className="audit-table">
-        <table>
-          <caption>
-            {t('点击渠道查看对应分录', 'Open a channel to inspect its ledger entries')}
-          </caption>
-          <thead>
-            <tr>
-              <th>{t('渠道 / 操作', 'Channel / operation')}</th>
-              {metricKeys.map((key) => (
-                <th key={key}>{metricLabel(key, t)}</th>
-              ))}
-              <th>{t('操作数', 'Operations')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {q.data.data.map((c) => (
-              <tr key={`${c.kind}/${c.source_type}/${c.channel}`}>
-                <th>
-                  <button className="btn btn-secondary" onClick={() => select(c.kind, c.channel)}>
-                    {channelLabel(c.channel, t)}
-                  </button>
-                  <br />
-                  <code>{c.kind}</code>
-                  {!c.known && <strong>{t('未分类', 'Unclassified')}</strong>}
-                </th>
-                {metricKeys.map((key) => (
-                  <td key={key}>{displayAmount(c.metrics[key])}</td>
-                ))}
-                <td>{c.metrics.operations}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        caption={t('点击渠道查看对应分录', 'Open a channel to inspect its ledger entries')}
+        rows={q.data.data}
+        rowKey={(channel) => `${channel.kind}/${channel.source_type}/${channel.channel}`}
+        columns={[
+          {
+            key: 'channel',
+            header: t('渠道 / 操作', 'Channel / operation'),
+            cell: 'title',
+            render: (channel) => (
+              <>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => select(channel.kind, channel.channel)}
+                >
+                  {channelLabel(channel.channel, t)}
+                </button>
+                <span className="nb-sub">
+                  <code>{channel.kind}</code>
+                  {!channel.known ? t('未分类', 'Unclassified') : null}
+                </span>
+              </>
+            ),
+          },
+          ...metricKeys.map((key) => ({
+            key,
+            header: metricLabel(key, t),
+            mobileLabel: metricLabel(key, t),
+            cell: 'meta' as const,
+            align: 'num' as const,
+            render: (channel: (typeof q.data.data)[number]) => displayAmount(channel.metrics[key]),
+          })),
+          {
+            key: 'operations',
+            header: t('操作数', 'Operations'),
+            mobileLabel: t('操作数', 'Operations'),
+            cell: 'meta',
+            align: 'num',
+            render: (channel) => channel.metrics.operations,
+          },
+        ]}
+      />
       {q.data.data.length === 0 && q.data.metadata.coverage.status !== 'catching_up' && (
         <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
       )}
@@ -349,31 +400,43 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
           <p>
             <code>{o.id}</code> · {o.source_type}: <code>{o.source_id}</code>
           </p>
-          <div className="audit-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('资产', 'Asset')}</th>
-                  <th>{t('账户', 'Account')}</th>
-                  <th>{t('用户', 'User')}</th>
-                  <th>{t('变动', 'Delta')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {o.entries.map((e, i) => (
-                  <tr key={i}>
-                    <td>{assetLabel(e.asset, t)}</td>
-                    <td>{e.account_kind}</td>
-                    <td>
-                      {e.user_id ??
-                        (e.account_kind === 'user' ? t('已去身份', 'Deidentified') : '—')}
-                    </td>
-                    <td>{displayAmount(e.delta)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            caption={t('分录', 'Ledger')}
+            rows={o.entries}
+            rowKey={(entry) => String(o.entries.indexOf(entry))}
+            columns={[
+              {
+                key: 'asset',
+                header: t('资产', 'Asset'),
+                cell: 'title',
+                render: (entry) => assetLabel(entry.asset, t),
+              },
+              {
+                key: 'account',
+                header: t('账户', 'Account'),
+                mobileLabel: t('账户', 'Account'),
+                cell: 'meta',
+                render: (entry) => entry.account_kind,
+              },
+              {
+                key: 'user',
+                header: t('用户', 'User'),
+                mobileLabel: t('用户', 'User'),
+                cell: 'meta',
+                render: (entry) =>
+                  entry.user_id ??
+                  (entry.account_kind === 'user' ? t('已去身份', 'Deidentified') : '—'),
+              },
+              {
+                key: 'delta',
+                header: t('变动', 'Delta'),
+                mobileLabel: t('变动', 'Delta'),
+                cell: 'meta',
+                align: 'num',
+                render: (entry) => displayAmount(entry.delta),
+              },
+            ]}
+          />
         </details>
       ))}
       {q.data.data.length === 0 && (
@@ -545,23 +608,17 @@ export function EconomyAuditPage() {
         )}
       </Card>
       <Card>
-        <div className="audit-actions" role="group" aria-label={t('审计视图', 'Audit view')}>
-          {(['series', 'channels', 'operations'] as const).map((v) => (
-            <button
-              key={v}
-              className={`btn ${view === v ? 'btn-primary' : 'btn-secondary'}`}
-              aria-pressed={view === v}
-              onClick={() => setView(v)}
-            >
-              {
-                {
-                  series: t('趋势', 'Trends'),
-                  channels: t('渠道', 'Channels'),
-                  operations: t('分录', 'Ledger'),
-                }[v]
-              }
-            </button>
-          ))}
+        <Tabs
+          label={t('审计视图', 'Audit view')}
+          value={view}
+          onChange={setView}
+          tabs={[
+            { value: 'series', label: t('趋势', 'Trends') },
+            { value: 'channels', label: t('渠道', 'Channels') },
+            { value: 'operations', label: t('分录', 'Ledger') },
+          ]}
+        />
+        <div className="audit-actions">
           {filter.kind && (
             <button
               className="btn btn-secondary"

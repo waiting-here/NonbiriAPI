@@ -96,12 +96,11 @@ test('completed scans paginate matches, restore history and refresh without resc
   await page.goto(ADMIN_ORIGIN + '/abuse-audit?audit_tab=clients');
   await page.getByRole('button', { name: 'Start new scan', exact: true }).click();
   const pager = page.getByRole('navigation', { name: 'Pagination', exact: true });
-  await expect(pager).toContainText('Page 1 of 6 · Total: 119');
+  await expect(pager).toContainText('119 items');
   await pager.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(pager).toContainText('Page 2 of 6');
   await expect(page.getByText('matched-request-21', { exact: true })).toBeVisible();
-  await pager.locator('input').fill('6');
-  await pager.locator('input').press('Enter');
+  await pager.getByRole('button', { name: '6', exact: true }).click();
   await expect(pager).toContainText('Page 6 of 6');
   await page.reload();
   await expect(pager).toContainText('Page 6 of 6');

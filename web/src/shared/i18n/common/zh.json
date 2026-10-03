@@ -78,7 +78,11 @@
       "sourceSnapshot": "本次来源快照上界",
       "lastSource": "最近已检查的来源编号",
       "distinctDiscord": "不同Discord身份",
-      "openLogs": "查看窗口内原请求"
+      "openLogs": "查看窗口内原请求",
+      "presentation": {
+        "note": "命中只是线索，不证明盗用；自动封禁只对新的公益调用生效。",
+        "basis": "审计依据说明"
+      }
     },
     "donationDiscovery": {
       "title": "捐赠密钥模型拉取",
@@ -356,7 +360,47 @@
         "recordedStatus": "记录的状态码",
         "upstreamStatus": "上游 HTTP 状态码",
         "charityModelFilter": "调用的公益模型",
-        "charityModelFilterHint": "按名称片段搜索；英文大小写无关"
+        "charityModelFilterHint": "按名称片段搜索；英文大小写无关",
+        "presentation": {
+          "more": "更多条件",
+          "customTime": "自定义…",
+          "technical": "技术信息",
+          "copyForAdmin": "复制给管理员",
+          "export": "导出",
+          "exportCsv": "导出 CSV（表格软件）",
+          "exportJson": "导出 JSON（程序处理）",
+          "personal": "自用",
+          "charity": "公益",
+          "chat": "聊天",
+          "embeddings": "向量",
+          "models": "读取模型列表",
+          "usage": "入 {{input}} · 出 {{output}}",
+          "cacheRead": "缓存读 {{tokens}}",
+          "cacheWrite": "缓存写 {{tokens}}",
+          "time": "时间",
+          "duration": "耗时",
+          "seconds": "{{seconds}} 秒",
+          "storage": "错误原文存储",
+          "storageSummary": "已用 {{used}} / {{budget}} MiB · {{count}} 条未保存",
+          "storageFailures": "读取或保存失败 {{count}} 条。容量不包含数据库页、索引和 WAL。",
+          "retryHint": "稍后重试，或在模型里添加第二个来源。",
+          "keyHint": "检查这个服务的密钥是否有效。",
+          "rateHint": "服务商限制了频率，稍后再试。",
+          "creditsHint": "去签到或活动获取积分。",
+          "result": {
+            "success": "成功",
+            "pending": "处理中",
+            "upstream": "服务商出错 {{status}}",
+            "keyRejected": "服务商拒绝了密钥",
+            "rateLimited": "服务商限制频率",
+            "timeout": "请求超时",
+            "credits": "余额不足",
+            "missingModel": "模型不存在",
+            "rejected": "调用前被拒绝",
+            "cancelled": "已取消",
+            "failed": "失败（{{status}}）"
+          }
+        }
       },
       "charity": {
         "selectedKeyMissing": "所选密钥已不在这份捐赠中。",

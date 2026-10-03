@@ -276,7 +276,7 @@ describe('Risk audit access and evidence presentation', () => {
         station: 'admin',
         role: 'admin',
       });
-      await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+      await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
       await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
       await view.user.click(screen.getByRole('button', { name }));
       expect(screen.getByLabelText('Rule name')).toHaveValue(name);
@@ -307,12 +307,13 @@ describe('Risk audit access and evidence presentation', () => {
     });
   });
   it('keeps large user IDs exact and explains incomplete evidence', async () => {
-    await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
+    const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {
       station: 'admin',
       role: 'admin',
       route: selectedScanRoute,
     });
     expect(await screen.findByText(/User ID: 9007199254740993/)).toBeVisible();
+    await view.user.click(screen.getByText('Audit basis', { exact: true }));
     expect(screen.getByText(/not proof of identity or misuse/)).toBeVisible();
     expect(screen.getByText(/Incomplete minutes/)).toBeVisible();
   });
@@ -320,7 +321,7 @@ describe('Risk audit access and evidence presentation', () => {
     const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
       station: 'user',
     });
-    await view.user.click(screen.getByRole('button', { name: 'Thresholds' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Thresholds' }));
     expect(await screen.findByText('Only administrators can change thresholds.')).toBeVisible();
     for (const input of screen.getAllByRole('spinbutton')) expect(input).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
@@ -336,7 +337,7 @@ describe('Risk audit access and evidence presentation', () => {
       station: 'admin',
       role: 'admin',
     });
-    await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
     await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
     await view.user.type(screen.getByLabelText('Rule name'), 'Example app');
     await view.user.type(screen.getByLabelText('Match value'), 'ExampleApp/');
@@ -368,7 +369,7 @@ it('builds a two-condition website and title rule without silently saving it', a
     station: 'admin',
     role: 'admin',
   });
-  await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+  await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
   await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
   await view.user.click(
     screen.getByRole('button', { name: 'Source website and application title' }),
@@ -387,7 +388,7 @@ it('converts a bounded administrator ban duration exactly and keeps it off ordin
     role: 'admin',
   });
   view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
-  await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+  await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
   await view.user.click(await screen.findByRole('button', { name: 'New rule' }));
   await view.user.click(screen.getByRole('button', { name: 'Tavo' }));
   await view.user.selectOptions(screen.getByRole('combobox', { name: 'Ban duration' }), 'days');
@@ -446,7 +447,7 @@ it('blocks steward editing of a bound rule even when its ban is disabled', async
   const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
     station: 'user',
   });
-  await view.user.click(screen.getByRole('button', { name: 'Client rules' }));
+  await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
   expect(
     await screen.findByText(/Only an administrator can edit or remove this bound rule/),
   ).toBeVisible();

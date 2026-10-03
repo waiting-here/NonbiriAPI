@@ -78,7 +78,11 @@
       "sourceSnapshot": "Source snapshot upper bound",
       "lastSource": "Latest examined source identifier",
       "distinctDiscord": "Distinct Discord identities",
-      "openLogs": "View original requests in this window"
+      "openLogs": "View original requests in this window",
+      "presentation": {
+        "note": "Matches are clues, not proof of misuse. Automatic bans apply to new charity calls.",
+        "basis": "Audit basis"
+      }
     },
     "donationDiscovery": {
       "title": "Donation model discovery",
@@ -356,7 +360,47 @@
         "recordedStatus": "Recorded status",
         "upstreamStatus": "Upstream HTTP status",
         "charityModelFilter": "Called charity model",
-        "charityModelFilterHint": "Search by part of the name; English letter case ignored"
+        "charityModelFilterHint": "Search by part of the name; English letter case ignored",
+        "presentation": {
+          "more": "More filters",
+          "customTime": "Custom…",
+          "technical": "Technical information",
+          "copyForAdmin": "Copy for administrator",
+          "export": "Export",
+          "exportCsv": "Export CSV (spreadsheets)",
+          "exportJson": "Export JSON (programs)",
+          "personal": "Personal",
+          "charity": "Charity",
+          "chat": "Chat",
+          "embeddings": "Embeddings",
+          "models": "Model listing",
+          "usage": "In {{input}} · Out {{output}}",
+          "cacheRead": "Cache read {{tokens}}",
+          "cacheWrite": "Cache write {{tokens}}",
+          "time": "Time",
+          "duration": "Duration",
+          "seconds": "{{seconds}} seconds",
+          "storage": "Error text storage",
+          "storageSummary": "Used {{used}} / {{budget}} MiB · {{count}} not saved",
+          "storageFailures": "Read or storage failures: {{count}}. Excludes database pages, indexes and WAL.",
+          "retryHint": "Retry later, or add a second source to the model.",
+          "keyHint": "Check that this service key is valid.",
+          "rateHint": "The provider limited the rate. Try again later.",
+          "creditsHint": "Get credits through check-in or activities.",
+          "result": {
+            "success": "Success",
+            "pending": "In progress",
+            "upstream": "Provider error {{status}}",
+            "keyRejected": "Provider rejected the key",
+            "rateLimited": "Provider rate limited",
+            "timeout": "Request timed out",
+            "credits": "Insufficient credits",
+            "missingModel": "Model not found",
+            "rejected": "Rejected before dispatch",
+            "cancelled": "Cancelled",
+            "failed": "Failed ({{status}})"
+          }
+        }
       },
       "charity": {
         "selectedKeyMissing": "The selected key is no longer in this donation.",

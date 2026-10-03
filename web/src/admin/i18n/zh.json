@@ -114,7 +114,16 @@
       "generalBalance": "通用悠哉积分余额",
       "gameBalance": "游戏悠哉积分余额",
       "donationCredit": "捐赠额度",
-      "sketchAssets": "画纸 / 画笔"
+      "sketchAssets": "画纸 / 画笔",
+      "presentation": {
+        "running": "运行",
+        "security": "安全",
+        "games": "游戏",
+        "accounts": "账号",
+        "worker": "后台任务检查点失败",
+        "actions": "告警操作",
+        "deletionSnapshot": "删除前余额"
+      }
     },
     "settings": {
       "nav": "站点参数",
@@ -1067,6 +1076,17 @@
     },
     "picturebook": {
       "saveSelectedModels": "保存选中模型"
+    },
+    "economyAudit": {
+      "presentation": {
+        "negativeZero": "负余额：全部为 0",
+        "negative": "负余额",
+        "reconciliation": "对账说明",
+        "matched": "一致",
+        "mismatch": "不一致",
+        "incomplete": "覆盖不完整",
+        "periods": "分时明细（{{count}} 个时段）"
+      }
     }
   },
   "user": {
