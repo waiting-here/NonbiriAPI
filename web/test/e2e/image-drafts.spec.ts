@@ -134,16 +134,23 @@ test('administrator preview and draft guard save prices without generation', asy
       },
     });
   });
-  await page.goto(ADMIN_ORIGIN + '/limited-activities');
+  await page.goto(ADMIN_ORIGIN + '/limited-activities?activity=picture-book');
+  await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
   await expect(page.getByLabel(/JSON/)).toHaveCount(0);
   await expect(page.getByRole('option', { name: /synthetic-image/ })).toBeAttached();
   await page.getByLabel('Choose a model to configure').selectOption(modelID);
   await page.getByLabel('Sketch paper per image').fill('5');
+  await page.getByRole('tab', { name: 'Image generation service', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Save service settings', exact: true }),
+  ).toBeDisabled();
+  await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
+  await expect(page.getByLabel('Sketch paper per image')).toHaveValue('5');
   await page.getByText('Try parameters and prices (no charge)', { exact: true }).click();
   await expect(page.getByLabel(/^Prompt/)).toBeVisible();
   await page.locator('a[href="/"]').first().click();
   await expect(page.getByRole('button', { name: 'Save and leave' })).toBeVisible();
-  await expect(page).toHaveURL(ADMIN_ORIGIN + '/limited-activities');
+  await expect(page).toHaveURL(ADMIN_ORIGIN + '/limited-activities?activity=picture-book');
   await page.getByRole('button', { name: 'Continue editing' }).click();
   await expect(page.getByLabel('Sketch paper per image')).toHaveValue('5');
   errors.assertNone();

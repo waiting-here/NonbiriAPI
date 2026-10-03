@@ -17,7 +17,19 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { amount } from '@shared/operations/wire';
-import { validLoanConfig } from '@shared/operations/loans';
+import { loanMilli, validLoanConfig } from '@shared/operations/loans';
+import {
+  Affix,
+  DataTable,
+  Field,
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+  SaveBar,
+  Toggle,
+} from '@shared/components/ui';
+import { formatCount } from '@shared/utils/formatNumber';
 import { useLoanText } from '@shared/components/loanCopy';
 import { percentBP } from '../features/games/config';
 import { formatBeijingTime, nextThursdaySchedule } from '../features/operations/thursdaySchedule';
@@ -52,70 +64,103 @@ function LoanConfiguration({
 }) {
   const text = useLoanText();
   const { t } = useTranslation();
+  const valid = validLoanConfig(config);
+  const principal = valid ? BigInt(config.loan_tiers[0]) : 0n;
+  const credits = (milli: bigint) => {
+    const fraction = (milli % 1000n).toString().padStart(3, '0').replace(/0+$/, '');
+    return `${formatCount(milli / 1000n).display}${fraction ? `.${fraction}` : ''}`;
+  };
   return (
-    <fieldset disabled={disabled}>
-      <legend>{text('赛博网贷', 'Cyber loan')}</legend>
-      <div className="ops-field-grid">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
+    <Panel>
+      <PanelHead
+        title={text('赛博网贷', 'Cyber loan')}
+        actions={
+          <Toggle
+            label={text('启用借款', 'Enable loans')}
             checked={config.loan_enabled}
-            onChange={(event) => onChange({ ...config, loan_enabled: event.target.checked })}
+            disabled={disabled}
+            onChange={(loan_enabled) => onChange({ ...config, loan_enabled })}
           />
-          <span>{text('启用借款', 'Enable loans')}</span>
-        </label>
-        {config.loan_tiers.map((value, index) => (
-          <label key={index}>
-            <span>
-              {t('common.operations.management.loanTier')} {index + 1}
-            </span>
-            <input
-              inputMode="numeric"
-              maxLength={13}
-              value={value}
-              onChange={(event) => {
-                const loan_tiers: [string, string, string] = [...config.loan_tiers];
-                loan_tiers[index] = event.target.value;
-                onChange({ ...config, loan_tiers });
-              }}
-            />
-          </label>
-        ))}
-        <label>
-          <span>{text('到账系数 A（0 ＜ A ＜ 1）', 'Disbursement coefficient A (0 < A < 1)')}</span>
-          <input
-            inputMode="decimal"
-            maxLength={17}
-            value={config.loan_a}
-            onChange={(event) => onChange({ ...config, loan_a: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>{text('本息系数 B（B ＞ 1）', 'Repayment coefficient B (B > 1)')}</span>
-          <input
-            inputMode="decimal"
-            maxLength={17}
-            value={config.loan_b}
-            onChange={(event) => onChange({ ...config, loan_b: event.target.value })}
-          />
-        </label>
-      </div>
-      <p>
-        {text(
-          '三档额度为递增正整数；系数最多三位小数。游戏积分到账为额度 × A，通用积分扣除为额度 × B。',
-          'Use three increasing positive whole-number amounts. Coefficients allow up to three decimal places. Game credits received equal the amount × A; general credits deducted equal the amount × B.',
+        }
+      />
+      <PanelBody>
+        <fieldset className="nb-grid nb-grid--3" disabled={disabled}>
+          <legend>{text('借款额度', 'Loan amounts')}</legend>
+          {config.loan_tiers.map((value, index) => (
+            <Field key={index} label={`${t('common.operations.management.loanTier')} ${index + 1}`}>
+              {(props) => (
+                <Affix
+                  {...props}
+                  unit={t('admin.activities.units.credits')}
+                  inputMode="numeric"
+                  maxLength={13}
+                  value={value}
+                  onChange={(event) => {
+                    const loan_tiers: [string, string, string] = [...config.loan_tiers];
+                    loan_tiers[index] = event.target.value;
+                    onChange({ ...config, loan_tiers });
+                  }}
+                />
+              )}
+            </Field>
+          ))}
+        </fieldset>
+        <fieldset className="nb-grid nb-grid--2" disabled={disabled}>
+          <legend>{text('到账与还款', 'Disbursement and repayment')}</legend>
+          <Field
+            label={text('到账比例', 'Disbursement ratio')}
+            help={text(
+              '大于 0、小于 1，最多三位小数。',
+              'Between 0 and 1, with up to three decimal places.',
+            )}
+          >
+            {(props) => (
+              <Affix
+                {...props}
+                unit={text('× 额度', '× amount')}
+                inputMode="decimal"
+                maxLength={17}
+                value={config.loan_a}
+                onChange={(event) => onChange({ ...config, loan_a: event.target.value })}
+              />
+            )}
+          </Field>
+          <Field
+            label={text('还款比例', 'Repayment ratio')}
+            help={text(
+              '大于 1，最多三位小数。',
+              'Greater than 1, with up to three decimal places.',
+            )}
+          >
+            {(props) => (
+              <Affix
+                {...props}
+                unit={text('× 额度', '× amount')}
+                inputMode="decimal"
+                maxLength={17}
+                value={config.loan_b}
+                onChange={(event) => onChange({ ...config, loan_b: event.target.value })}
+              />
+            )}
+          </Field>
+        </fieldset>
+        {valid ? (
+          <Note>
+            {text(
+              `借 ${formatCount(principal).display} → 到账 ${credits(principal * loanMilli(config.loan_a))} 游戏积分，需还 ${credits(principal * loanMilli(config.loan_b))} 通用积分。`,
+              `Borrow ${formatCount(principal).display} → receive ${credits(principal * loanMilli(config.loan_a))} game credits; repay ${credits(principal * loanMilli(config.loan_b))} general credits.`,
+            )}
+          </Note>
+        ) : (
+          <Note tone="bad">
+            {text(
+              '请检查三档递增额度和比例；各项金额不得超过 9000000000000 积分。',
+              'Check the three increasing amounts and ratios. No resulting amount may exceed 9000000000000 credits.',
+            )}
+          </Note>
         )}
-      </p>
-      <p className="muted">{t('common.operations.management.loanExample')}</p>
-      {!validLoanConfig(config) ? (
-        <p className="field-error" role="alert">
-          {text(
-            '请检查三档额度和系数；各项金额不得超过 9000000000000 积分。',
-            'Check the three amounts and coefficients. No resulting amount may exceed 9000000000000 credits.',
-          )}
-        </p>
-      ) : null}
-    </fieldset>
+      </PanelBody>
+    </Panel>
   );
 }
 
@@ -170,6 +215,7 @@ interface ActivitiesPageContentProps {
 }
 
 function ActivitiesPageContent({ account, scopeReady, sessionError }: ActivitiesPageContentProps) {
+  const text = useLoanText();
   const { t } = useTranslation();
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
@@ -440,444 +486,482 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       <PageHeader
         title={t('admin.activities.title')}
         description={t('admin.activities.description')}
+        actions={
+          configDraft ? (
+            <Toggle
+              label={t('admin.activities.config.masterEnabled')}
+              checked={configDraft.master_enabled}
+              disabled={!scopeReady || saveConfig.isPending}
+              onChange={(master_enabled) => editConfig({ ...configDraft, master_enabled })}
+            />
+          ) : undefined
+        }
       />
-      <Card>
-        <h2>{t('admin.activities.config.title')}</h2>
-        {sessionError ? (
-          <ErrorState error={sessionError} />
-        ) : config.error ? (
-          <ErrorState error={config.error} onRetry={() => void config.refetch()} />
-        ) : config.isPending || !configDraft ? (
-          <LoadingState />
-        ) : (
-          <>
-            <p>{t('admin.activities.config.revisionHint')}</p>
-            <div className="ops-field-grid">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={configDraft.master_enabled}
-                  disabled={!scopeReady || saveConfig.isPending}
-                  onChange={(event) =>
-                    editConfig({ ...configDraft, master_enabled: event.target.checked })
-                  }
-                />
-                <span>{t('admin.activities.config.masterEnabled')}</span>
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
+      {sessionError ? (
+        <ErrorState error={sessionError} />
+      ) : config.error ? (
+        <ErrorState error={config.error} onRetry={() => void config.refetch()} />
+      ) : config.isPending || !configDraft ? (
+        <LoadingState />
+      ) : (
+        <>
+          {!configDraft.master_enabled &&
+          (configDraft.welfare.enabled || configDraft.thursday.enabled) ? (
+            <Note tone="warn">{t('admin.activities.config.masterRequired')}</Note>
+          ) : null}
+          <Panel>
+            <PanelHead
+              title={text('每日游戏低保', 'Daily game welfare')}
+              actions={
+                <Toggle
+                  label={t('admin.activities.config.welfareEnabled')}
                   checked={configDraft.welfare.enabled}
                   disabled={!scopeReady || saveConfig.isPending}
-                  onChange={(event) =>
-                    editConfig({
-                      ...configDraft,
-                      welfare: { ...configDraft.welfare, enabled: event.target.checked },
-                    })
+                  onChange={(enabled) =>
+                    editConfig({ ...configDraft, welfare: { ...configDraft.welfare, enabled } })
                   }
                 />
-                <span>{t('admin.activities.config.welfareEnabled')}</span>
-              </label>
-              <label>
-                <span>{t('admin.activities.config.welfareThreshold')}</span>
-                <input
-                  value={configDraft.welfare.threshold}
-                  disabled={!scopeReady || saveConfig.isPending}
-                  onChange={(event) =>
-                    editConfig({
-                      ...configDraft,
-                      welfare: { ...configDraft.welfare, threshold: event.target.value },
-                    })
-                  }
-                />
-              </label>
-              <label>
-                <span>{t('admin.activities.config.welfareCap')}</span>
-                <input
-                  value={configDraft.welfare.cap}
-                  disabled={!scopeReady || saveConfig.isPending}
-                  onChange={(event) =>
-                    editConfig({
-                      ...configDraft,
-                      welfare: { ...configDraft.welfare, cap: event.target.value },
-                    })
-                  }
-                />
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={configDraft.thursday.enabled}
-                  disabled={!scopeReady || saveConfig.isPending}
-                  onChange={(event) =>
-                    editConfig({ ...configDraft, thursday: { enabled: event.target.checked } })
-                  }
-                />
-                <span>{t('admin.activities.config.thursdayEnabled')}</span>
-              </label>
-            </div>
-            {saveConfig.error ? <ErrorState error={saveConfig.error} /> : null}
-            <LoanConfiguration
-              config={configDraft}
-              disabled={!scopeReady || saveConfig.isPending}
-              onChange={editConfig}
+              }
             />
-            {configDependency ? (
-              <p role="alert" className="field-error">
-                {configDependency}
-              </p>
-            ) : null}
-            {configStale ? (
-              <p role="alert" className="field-error">
-                {t('admin.activities.config.changedElsewhere')}
-              </p>
-            ) : null}
-            <button
-              className="btn btn-primary"
-              type="button"
-              disabled={
-                !scopeReady ||
-                saveConfig.isPending ||
-                configUnchanged ||
-                configStale ||
-                !validLoanConfig(configDraft) ||
-                Boolean(configDependency)
-              }
-              onClick={() =>
-                saveConfig.mutate(configDraft, { onSuccess: () => setConfigOverride(null) })
-              }
-            >
-              {t('admin.activities.config.save')}
-            </button>
-            {configOverride ? (
-              <button
-                type="button"
-                className="btn btn-secondary"
+            <PanelBody>
+              <div className="nb-grid nb-grid--2">
+                <Field
+                  label={t('admin.activities.config.welfareThreshold')}
+                  help={text(
+                    '游戏积分（含进行中对局的预扣）低于这个数才能领。',
+                    'Game credits, including amounts held for active games, must be below this threshold.',
+                  )}
+                >
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit={t('admin.activities.units.credits')}
+                      value={configDraft.welfare.threshold}
+                      disabled={!scopeReady || saveConfig.isPending}
+                      onChange={(event) =>
+                        editConfig({
+                          ...configDraft,
+                          welfare: { ...configDraft.welfare, threshold: event.target.value },
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label={t('admin.activities.config.welfareCap')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit={t('admin.activities.units.credits')}
+                      value={configDraft.welfare.cap}
+                      disabled={!scopeReady || saveConfig.isPending}
+                      onChange={(event) =>
+                        editConfig({
+                          ...configDraft,
+                          welfare: { ...configDraft.welfare, cap: event.target.value },
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+              </div>
+            </PanelBody>
+          </Panel>
+          <LoanConfiguration
+            config={configDraft}
+            disabled={!scopeReady || saveConfig.isPending}
+            onChange={editConfig}
+          />
+          {saveConfig.error ? <ErrorState error={saveConfig.error} /> : null}
+          {configStale ? (
+            <Note tone="warn">{t('admin.activities.config.changedElsewhere')}</Note>
+          ) : null}
+        </>
+      )}
+      <Panel>
+        <PanelHead
+          title={text('疯狂星期四', 'Thursday event')}
+          actions={
+            configDraft ? (
+              <Toggle
+                label={t('admin.activities.config.thursdayEnabled')}
+                checked={configDraft.thursday.enabled}
                 disabled={!scopeReady || saveConfig.isPending}
-                onClick={() => setConfigOverride(null)}
-              >
-                {t('common.cancel')}
-              </button>
-            ) : null}
-          </>
-        )}
-      </Card>
-      <Card>
-        <h2>{t('admin.activities.thursday.title')}</h2>
-        {sessionError ? (
-          <ErrorState error={sessionError} />
-        ) : thursday.isPending ? (
-          <LoadingState />
-        ) : thursday.error ? (
-          <ErrorState error={thursday.error} onRetry={() => void thursday.refetch()} />
-        ) : period ? (
-          <>
-            <dl className="ops-kv">
-              <dt>{t('admin.activities.fields.state')}</dt>
-              <dd>
-                <StatusBadge
-                  active={period.state === 'open'}
-                  danger={period.state === 'configuration_error'}
-                  label={periodStateLabels[period.state]}
-                />
-              </dd>
-              <dt>{t('admin.activities.thursday.periodRevision')}</dt>
-              <dd>{period.period_key}</dd>
-              <dt>{t('admin.activities.period.windowBeijing')}</dt>
-              <dd>
-                {formatBeijingTime(period.opens_at)} — {formatBeijingTime(period.closes_at)}
-              </dd>
-              <dt>{t('admin.activities.thursday.entryLimit')}</dt>
-              <dd>
-                {period.entry} {t('admin.activities.units.credits')} / {period.per_user_limit}
-              </dd>
-              <dt>{t('admin.activities.thursday.literature')}</dt>
-              <dd>{period.literature}</dd>
-              {period.settlement ? (
-                <>
-                  <dt>{t('admin.activities.thursday.processed')}</dt>
-                  <dd>
-                    {period.settlement.processed_count} / {period.settlement.contribution_count}
-                  </dd>
-                  <dt>{t('admin.activities.thursday.payoutRollover')}</dt>
-                  <dd>
-                    {period.settlement.payout_total} / {period.settlement.rollover}
-                  </dd>
-                </>
-              ) : null}
-            </dl>
-            {period.state === 'settling' ? (
-              <button
-                className="btn btn-danger"
-                type="button"
-                disabled={!scopeReady || resume.isPending}
-                onClick={() => resume.mutate({ id: period.id, revision: period.revision })}
-              >
-                {t('admin.activities.thursday.resume')}
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <EmptyState
-            title={t('admin.activities.thursday.emptyTitle')}
-            body={t('admin.activities.thursday.emptyBody')}
-          />
-        )}
-      </Card>
-      <Card>
-        <h2>
-          {scheduledPeriod
-            ? t('admin.activities.period.updateTitle')
-            : t('admin.activities.period.createTitle')}
-        </h2>
-        {sessionError ? (
-          <ErrorState error={sessionError} />
-        ) : !scopeReady ? (
-          <LoadingState />
-        ) : (
-          <>
-            <p>
-              {periodLocked
-                ? t('admin.activities.period.lockedHint')
-                : scheduledPeriod
-                  ? t('admin.activities.period.configuredHint')
-                  : t('admin.activities.period.scheduleHint')}
-            </p>
-            <dl className="ops-kv">
-              <dt>{t('admin.activities.period.windowBeijing')}</dt>
-              <dd>
-                {formatBeijingTime(schedule.opens_at)} — {formatBeijingTime(schedule.closes_at)}
-              </dd>
-            </dl>
-            <fieldset
-              className="ops-field-grid"
-              disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
-            >
-              <label>
-                <span>{t('admin.activities.period.entry')}</span>
-                <input
-                  value={periodDraft.entry}
-                  onChange={(event) => editPeriod({ entry: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('admin.activities.period.perUserLimit')}</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={periodDraft.per_user_limit}
-                  onChange={(event) => editPeriod({ per_user_limit: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>{t('admin.activities.period.platformBp')}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99.99"
-                  step="0.01"
-                  value={
-                    Number.isNaN(Number(periodDraft.platform))
-                      ? ''
-                      : Number(periodDraft.platform) / 100
-                  }
-                  onChange={(event) =>
-                    editPeriod({ platform: String(percentBP(event.target.value)) })
-                  }
-                />
-              </label>
-              <label>
-                <span>{t('admin.activities.period.welfareBp')}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99.99"
-                  step="0.01"
-                  value={
-                    Number.isNaN(Number(periodDraft.welfare))
-                      ? ''
-                      : Number(periodDraft.welfare) / 100
-                  }
-                  onChange={(event) =>
-                    editPeriod({ welfare: String(percentBP(event.target.value)) })
-                  }
-                />
-              </label>
-              <label>
-                <span>{t('admin.activities.period.nextPoolBp')}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99.99"
-                  step="0.01"
-                  value={
-                    Number.isNaN(Number(periodDraft.next_pool))
-                      ? ''
-                      : Number(periodDraft.next_pool) / 100
-                  }
-                  onChange={(event) =>
-                    editPeriod({ next_pool: String(percentBP(event.target.value)) })
-                  }
-                />
-              </label>
-            </fieldset>
-            <p className="muted">{t('common.operations.management.feeHelp')}</p>
-            <label className="ops-form-field">
-              <span>{t('admin.activities.period.literature')}</span>
-              <textarea
-                disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
-                aria-invalid={Boolean(literatureError)}
-                aria-describedby={literatureError ? 'thursday-literature-error' : undefined}
-                value={periodDraft.literature}
-                onChange={(event) => editPeriod({ literature: event.target.value })}
+                onChange={(enabled) => editConfig({ ...configDraft, thursday: { enabled } })}
               />
-            </label>
-            {literatureError ? (
-              <p id="thursday-literature-error" role="alert" className="inline-notice">
-                {literatureError}
+            ) : undefined
+          }
+        />
+        <PanelBody>
+          {configDraft?.thursday.enabled && !period ? (
+            <Note tone="warn">{t('admin.activities.config.periodRequired')}</Note>
+          ) : null}
+          {sessionError ? (
+            <ErrorState error={sessionError} />
+          ) : thursday.isPending ? (
+            <LoadingState />
+          ) : thursday.error ? (
+            <ErrorState error={thursday.error} onRetry={() => void thursday.refetch()} />
+          ) : period ? (
+            <>
+              <dl className="ops-kv">
+                <dt>{t('admin.activities.fields.state')}</dt>
+                <dd>
+                  <StatusBadge
+                    active={period.state === 'open'}
+                    danger={period.state === 'configuration_error'}
+                    label={periodStateLabels[period.state]}
+                  />
+                </dd>
+                <dt>{t('admin.activities.thursday.periodRevision')}</dt>
+                <dd>{period.period_key}</dd>
+                <dt>{t('admin.activities.period.windowBeijing')}</dt>
+                <dd>
+                  {formatBeijingTime(period.opens_at)} — {formatBeijingTime(period.closes_at)}
+                </dd>
+                <dt>{t('admin.activities.thursday.entryLimit')}</dt>
+                <dd>
+                  {period.entry} {t('admin.activities.units.credits')} / {period.per_user_limit}
+                </dd>
+                <dt>{t('admin.activities.thursday.literature')}</dt>
+                <dd>{period.literature}</dd>
+                {period.settlement ? (
+                  <>
+                    <dt>{t('admin.activities.thursday.processed')}</dt>
+                    <dd>
+                      {period.settlement.processed_count} / {period.settlement.contribution_count}
+                    </dd>
+                    <dt>{t('admin.activities.thursday.payoutRollover')}</dt>
+                    <dd>
+                      {period.settlement.payout_total} / {period.settlement.rollover}
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+              {period.state === 'settling' ? (
+                <button
+                  className="btn btn-danger"
+                  type="button"
+                  disabled={!scopeReady || resume.isPending}
+                  onClick={() => resume.mutate({ id: period.id, revision: period.revision })}
+                >
+                  {t('admin.activities.thursday.resume')}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <Note>
+              {t('admin.activities.thursday.emptyTitle')} ·{' '}
+              {t('admin.activities.thursday.emptyBody')}
+            </Note>
+          )}
+          <hr />
+          <h3>
+            {scheduledPeriod
+              ? t('admin.activities.period.updateTitle')
+              : t('admin.activities.period.createTitle')}
+          </h3>
+          {sessionError ? (
+            <ErrorState error={sessionError} />
+          ) : !scopeReady ? (
+            <LoadingState />
+          ) : (
+            <>
+              <p>
+                {periodLocked
+                  ? t('admin.activities.period.lockedHint')
+                  : scheduledPeriod
+                    ? t('admin.activities.period.configuredHint')
+                    : t('admin.activities.period.scheduleHint')}
               </p>
-            ) : null}
-            {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
-            <button
-              className="btn btn-primary"
-              type="button"
-              disabled={
-                !scopeReady ||
-                !periodAuthorityReady ||
-                periodLocked ||
-                savePeriod.isPending ||
-                Boolean(literatureError) ||
-                !validPositiveAmount(periodDraft.entry)
-              }
-              onClick={submitPeriod}
-            >
-              {t('admin.activities.period.save')}
-            </button>
-            {periodOverride ? (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!scopeReady || savePeriod.isPending}
-                onClick={() => setPeriodOverride(null)}
+              <Note>
+                {t('admin.activities.period.windowBeijing')} ·{' '}
+                <span>
+                  {formatBeijingTime(schedule.opens_at)} — {formatBeijingTime(schedule.closes_at)}
+                </span>
+              </Note>
+              <fieldset
+                className="nb-grid nb-grid--2"
+                disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
               >
-                {t('common.cancel')}
+                <Field label={t('admin.activities.period.entry')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit={t('admin.activities.units.credits')}
+                      value={periodDraft.entry}
+                      onChange={(event) => editPeriod({ entry: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('admin.activities.period.perUserLimit')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit={text('次', 'times')}
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value={periodDraft.per_user_limit}
+                      onChange={(event) => editPeriod({ per_user_limit: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('admin.activities.period.platformBp')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit="%"
+                      type="number"
+                      min="0"
+                      max="99.99"
+                      step="0.01"
+                      value={
+                        Number.isNaN(Number(periodDraft.platform))
+                          ? ''
+                          : Number(periodDraft.platform) / 100
+                      }
+                      onChange={(event) =>
+                        editPeriod({ platform: String(percentBP(event.target.value)) })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label={t('admin.activities.period.welfareBp')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit="%"
+                      type="number"
+                      min="0"
+                      max="99.99"
+                      step="0.01"
+                      value={
+                        Number.isNaN(Number(periodDraft.welfare))
+                          ? ''
+                          : Number(periodDraft.welfare) / 100
+                      }
+                      onChange={(event) =>
+                        editPeriod({ welfare: String(percentBP(event.target.value)) })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label={t('admin.activities.period.nextPoolBp')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit="%"
+                      type="number"
+                      min="0"
+                      max="99.99"
+                      step="0.01"
+                      value={
+                        Number.isNaN(Number(periodDraft.next_pool))
+                          ? ''
+                          : Number(periodDraft.next_pool) / 100
+                      }
+                      onChange={(event) =>
+                        editPeriod({ next_pool: String(percentBP(event.target.value)) })
+                      }
+                    />
+                  )}
+                </Field>
+              </fieldset>
+              <p className="muted">{t('common.operations.management.feeHelp')}</p>
+              <label className="ops-form-field">
+                <span>{t('admin.activities.period.literature')}</span>
+                <textarea
+                  disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
+                  aria-invalid={Boolean(literatureError)}
+                  aria-describedby={literatureError ? 'thursday-literature-error' : undefined}
+                  value={periodDraft.literature}
+                  onChange={(event) => editPeriod({ literature: event.target.value })}
+                />
+              </label>
+              {literatureError ? (
+                <p id="thursday-literature-error" role="alert" className="inline-notice">
+                  {literatureError}
+                </p>
+              ) : null}
+              {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={
+                  !scopeReady ||
+                  !periodAuthorityReady ||
+                  periodLocked ||
+                  savePeriod.isPending ||
+                  Boolean(literatureError) ||
+                  !validPositiveAmount(periodDraft.entry)
+                }
+                onClick={submitPeriod}
+              >
+                {text('保存并排期', 'Save and schedule')}
               </button>
-            ) : null}
-          </>
-        )}
-      </Card>
-      <Card>
-        <h2>{t('admin.activities.pools.title')}</h2>
-        <div className="ops-toolbar">
-          <label>
-            <span>{t('admin.activities.pools.filterType')}</span>
-            <select
-              value={poolType}
-              disabled={!scopeReady}
-              onChange={(event) =>
-                commitPoolFilters(event.target.value as '' | Pool['pool_type'], poolState)
-              }
-            >
-              <option value="">{t('admin.activities.pools.allTypes')}</option>
-              <option value="welfare">{poolTypeLabels.welfare}</option>
-              <option value="thursday">{poolTypeLabels.thursday}</option>
-            </select>
-          </label>
-          <label>
-            <span>{t('admin.activities.pools.filterState')}</span>
-            <select
-              value={poolState}
-              disabled={!scopeReady}
-              onChange={(event) =>
-                commitPoolFilters(poolType, event.target.value as '' | Pool['state'])
-              }
-            >
-              <option value="">{t('admin.activities.pools.allStates')}</option>
-              <option value="open">{poolStateLabels.open}</option>
-              <option value="closed">{poolStateLabels.closed}</option>
-            </select>
-          </label>
-        </div>
-        {sessionError ? (
-          <ErrorState error={sessionError} />
-        ) : pools.isPending ? (
-          <LoadingState />
-        ) : pools.error ? (
-          <ErrorState error={pools.error} onRetry={() => void pools.refetch()} />
-        ) : pools.data.data.length === 0 ? (
-          <EmptyState
-            title={t('admin.activities.pools.emptyTitle')}
-            body={t('admin.activities.pools.emptyBody')}
-          />
-        ) : (
-          <div aria-busy={pools.isFetching}>
-            {pools.isFetching ? <LoadingState /> : null}
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t('admin.activities.pools.typeState')}</th>
-                    <th>{t('admin.activities.pools.period')}</th>
-                    <th>{t('admin.activities.pools.balance')}</th>
-                    <th>{t('admin.activities.pools.adjust')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pools.data.data.map((pool) => (
-                    <tr key={pool.id}>
-                      <td data-label={t('admin.activities.pools.typeState')}>
-                        {poolTypeLabels[pool.pool_type]} / {poolStateLabels[pool.state]}
-                      </td>
-                      <td data-label={t('admin.activities.pools.period')}>
-                        {pool.period_id ??
-                          t(
-                            pool.pool_type === 'welfare'
-                              ? 'admin.activities.pools.singleton'
-                              : 'admin.activities.pools.unboundPeriod',
-                          )}
-                      </td>
-                      <td data-label={t('admin.activities.pools.balance')}>
-                        {pool.balance} {t('admin.activities.units.credits')}
-                      </td>
-                      <td className="ops-cell-wide" data-label={t('admin.activities.pools.adjust')}>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          disabled={!scopeReady || pool.state !== 'open'}
-                          onClick={() => {
-                            adjust.reset();
-                            setConfirmAdjustment(false);
-                            setAdjustment({
-                              poolId: pool.id,
-                              revision: pool.revision,
-                              authorityRevision: authorityPeriodRevision,
-                              direction: 'increase',
-                              amount: '',
-                              reason: '',
-                            });
-                          }}
-                        >
-                          {t('admin.activities.pools.select')}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              {periodOverride ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={!scopeReady || savePeriod.isPending}
+                  onClick={() => setPeriodOverride(null)}
+                >
+                  {t('common.cancel')}
+                </button>
+              ) : null}
+            </>
+          )}
+        </PanelBody>
+      </Panel>
+      {configDraft ? (
+        <SaveBar
+          dirtyCount={configUnchanged ? 0 : 1}
+          scope={t('admin.activities.config.title')}
+          busy={!scopeReady || saveConfig.isPending}
+          saveDisabled={configStale || !validLoanConfig(configDraft) || Boolean(configDependency)}
+          onSave={() =>
+            saveConfig.mutate(configDraft, { onSuccess: () => setConfigOverride(null) })
+          }
+          onDiscard={() => setConfigOverride(null)}
+          saveLabel={t('admin.activities.config.save')}
+          discardLabel={t('common.cancel')}
+          dirtyLabel={() =>
+            text('活动设置有未保存的修改', 'Activity settings have unsaved changes')
+          }
+        />
+      ) : null}
+      <Panel>
+        <PanelHead title={t('admin.activities.pools.title')} />
+        <PanelBody>
+          <div className="ops-toolbar">
+            <label>
+              <span>{t('admin.activities.pools.filterType')}</span>
+              <select
+                value={poolType}
+                disabled={!scopeReady}
+                onChange={(event) =>
+                  commitPoolFilters(event.target.value as '' | Pool['pool_type'], poolState)
+                }
+              >
+                <option value="">{t('admin.activities.pools.allTypes')}</option>
+                <option value="welfare">{poolTypeLabels.welfare}</option>
+                <option value="thursday">{poolTypeLabels.thursday}</option>
+              </select>
+            </label>
+            <label>
+              <span>{t('admin.activities.pools.filterState')}</span>
+              <select
+                value={poolState}
+                disabled={!scopeReady}
+                onChange={(event) =>
+                  commitPoolFilters(poolType, event.target.value as '' | Pool['state'])
+                }
+              >
+                <option value="">{t('admin.activities.pools.allStates')}</option>
+                <option value="open">{poolStateLabels.open}</option>
+                <option value="closed">{poolStateLabels.closed}</option>
+              </select>
+            </label>
           </div>
-        )}
-        {scopeReady && !sessionError && !pools.error && pools.data ? (
-          <PagePagination
-            metadata={pools.data.pagination}
-            requestedPage={poolPager.page}
-            busy={pools.isFetching}
-            onPageChange={poolPager.setPage}
-            onPageSizeChange={poolPager.setPageSize}
-          />
-        ) : null}
-      </Card>
+          {sessionError ? (
+            <ErrorState error={sessionError} />
+          ) : pools.isPending ? (
+            <LoadingState />
+          ) : pools.error ? (
+            <ErrorState error={pools.error} onRetry={() => void pools.refetch()} />
+          ) : pools.data.data.length === 0 ? (
+            <EmptyState
+              title={t('admin.activities.pools.emptyTitle')}
+              body={t('admin.activities.pools.emptyBody')}
+            />
+          ) : (
+            <div aria-busy={pools.isFetching}>
+              {pools.isFetching ? <LoadingState /> : null}
+              <DataTable
+                dense
+                caption={t('admin.activities.pools.title')}
+                rows={pools.data.data}
+                rowKey={(pool) => pool.id}
+                selectedKey={adjustment.poolId}
+                columns={[
+                  {
+                    key: 'pool',
+                    header: t('admin.activities.pools.typeState'),
+                    cell: 'title',
+                    render: (pool) => (
+                      <>
+                        <strong>{poolTypeLabels[pool.pool_type]}</strong>
+                        <span className="nb-sub">{poolStateLabels[pool.state]}</span>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'period',
+                    header: t('admin.activities.pools.period'),
+                    mobileLabel: t('admin.activities.pools.period'),
+                    cell: 'meta',
+                    render: (pool) =>
+                      pool.period_id ??
+                      t(
+                        pool.pool_type === 'welfare'
+                          ? 'admin.activities.pools.singleton'
+                          : 'admin.activities.pools.unboundPeriod',
+                      ),
+                  },
+                  {
+                    key: 'balance',
+                    header: t('admin.activities.pools.balance'),
+                    mobileLabel: t('admin.activities.pools.balance'),
+                    cell: 'meta',
+                    align: 'num',
+                    render: (pool) => (
+                      <>
+                        {pool.balance} {t('admin.activities.units.credits')}
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'action',
+                    header: t('admin.activities.pools.adjust'),
+                    cell: 'action',
+                    align: 'action',
+                    render: (pool) => (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={!scopeReady || pool.state !== 'open'}
+                        onClick={() => {
+                          adjust.reset();
+                          setConfirmAdjustment(false);
+                          setAdjustment({
+                            poolId: pool.id,
+                            revision: pool.revision,
+                            authorityRevision: authorityPeriodRevision,
+                            direction: 'increase',
+                            amount: '',
+                            reason: '',
+                          });
+                        }}
+                      >
+                        {t('admin.activities.pools.select')}
+                      </button>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
+          {scopeReady && !sessionError && !pools.error && pools.data ? (
+            <PagePagination
+              metadata={pools.data.pagination}
+              requestedPage={poolPager.page}
+              busy={pools.isFetching}
+              onPageChange={poolPager.setPage}
+              onPageSizeChange={poolPager.setPageSize}
+            />
+          ) : null}
+        </PanelBody>
+      </Panel>
       {scopeReady && adjustment.poolId ? (
         <Card className={adjustment.direction === 'decrease' ? 'ops-danger' : ''}>
           <h2>
@@ -896,7 +980,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               {t('admin.activities.adjustment.decreaseBlocked')}
             </p>
           ) : null}
-          <div className="ops-field-grid">
+          <div className="nb-grid nb-grid--2">
             <label>
               <span>{t('admin.activities.adjustment.direction')}</span>
               <select

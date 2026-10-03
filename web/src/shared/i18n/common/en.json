@@ -618,8 +618,7 @@
         "loanTier": "Loan amount (credits)",
         "feeHelp": "The three fees must total less than 100%; 0 means no fee for that item.",
         "periodActions": "Change period status",
-        "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating.",
-        "loanExample": "For example, an amount of 10,000 with A = 0.9 and B = 1.3 gives 9,000 game credits and costs 13,000 general credits to repay."
+        "periodActionHelp": "Confirm “{{action}}” for this period. This changes whether users can start or continue participating."
       }
     },
     "failureReset": {
