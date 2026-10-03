@@ -144,31 +144,25 @@ describe('administrator paged operation pages', () => {
     ['endpoints', '/admin/api/overview/endpoints', EndpointsPage],
     ['activities', '/admin/api/pools', ActivitiesPage],
   ] as const)(
-    'keeps page-size controls usable for an empty %s list',
+    'loads an empty %s list without pagination controls',
     async (route, path, Component) => {
       const requests = installFetch((url) => {
         if (url.pathname === path)
           return page([], '1', Number(url.searchParams.get('page_size')), 0);
         return ancillaryResponse(url);
       });
-      const view = await renderWithProviders(<Component />, {
+      await renderWithProviders(<Component />, {
         station: 'admin',
         role: 'admin',
         route: `/${route}?page=99&page_size=20`,
       });
-      const size = await screen.findByLabelText('Items per page');
-      expect(size).toHaveValue('20');
-      await view.user.selectOptions(size, '100');
-      await waitFor(() =>
-        expect(
-          requests.some(
-            (url) =>
-              url.pathname === path &&
-              url.searchParams.get('page') === '1' &&
-              url.searchParams.get('page_size') === '100',
-          ),
-        ).toBe(true),
-      );
+      await waitFor(() => expect(requests.some((url) => url.pathname === path)).toBe(true));
+      expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Items per page')).not.toBeInTheDocument();
+      const listRequests = requests.filter((url) => url.pathname === path);
+      expect(listRequests).toHaveLength(1);
+      expect(listRequests[0].searchParams.get('page')).toBe('99');
+      expect(listRequests[0].searchParams.get('page_size')).toBe('20');
     },
   );
 

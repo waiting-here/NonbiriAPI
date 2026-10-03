@@ -131,14 +131,10 @@
       "catalogIndependentGate": "相关设置与限制",
       "charityModelPricing": "公益模型计价（公益板块）",
       "catalogDurationPreview": "人类可读时长：{{value}}",
-      "catalogMilliPreview": "{{credits}} 积分",
       "restoreFallback": "移除覆盖值",
       "legalBytes": "UTF-8 字节：{{count}} / {{max}}",
       "timezonePreview": "预览：{{value}}",
       "dangerousDescription": "访问、滥用控制和法律文本变更可能影响准入或已发布政策；保存前请核对服务端说明。",
-      "dangerousEmpty": "没有危险设置",
-      "dangerousEmptyBody": "没有危险目录项符合当前搜索。",
-      "dangerousTitle": "危险与法律设置",
       "enumValue": "枚举参数",
       "enumValues": {
         "disabled": "已停用",
@@ -168,7 +164,6 @@
       },
       "ordinaryEmpty": "没有普通设置",
       "ordinaryEmptyBody": "没有普通目录项符合当前搜索。",
-      "ordinaryTitle": "普通设置",
       "remoteLogoWarning": "远程站点标志会让浏览器公开请求第三方地址，并可能独立失败；切勿在该 URL 中放置秘密。",
       "restoreAuthorityValue": "撤销此项修改",
       "unknownCatalogGate": "其他限制（{{key}}）",
@@ -197,8 +192,6 @@
         "levels": "已启用的等级门槛必须按 2 至 4 级依次递增。",
         "timezoneLocked": "已有每日活动记录，站点时区已锁定，无法修改。"
       },
-      "customizedCount": "{{count}} 项已调整",
-      "groupDefaults": "使用默认设置",
       "searchHelp": "按名称或用途查找设置",
       "modified": "已修改",
       "original": "原来 {{value}}",
@@ -414,7 +407,7 @@
     },
     "mainstreamChannels": {
       "nav": "主流渠道",
-      "title": "主流渠道管理",
+      "title": "主流渠道",
       "description": "维护用户添加服务时可选的渠道。修改或停用渠道不会改变已添加的服务。",
       "category": {
         "subscription": "主流订阅",
@@ -435,7 +428,7 @@
       "table": {
         "name": "名称",
         "category": "类别",
-        "connector": "API 类型",
+        "connector": "接口格式",
         "baseUrl": "API 基础地址",
         "enabled": "可用于添加服务",
         "updated": "更新时间",
@@ -451,7 +444,7 @@
       "form": {
         "name": "渠道名称",
         "category": "类别",
-        "connector": "API 类型",
+        "connector": "接口格式",
         "baseUrl": "API 基础地址",
         "enabled": "可用于添加服务",
         "baseUrlHelp": "填写服务的 API 基础地址，例如 https://api.example.com/v1。"
@@ -653,7 +646,7 @@
       "donationsTitle": "捐赠审核队列",
       "modelsTitle": "公益模型与绑定",
       "nav": "公益",
-      "title": "公益与捐赠管理",
+      "title": "公益",
       "description": "审核捐赠、管理公益模型及连接，调整使用限制。",
       "group": {
         "custom": "自定义捐赠密钥",

@@ -565,20 +565,24 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     },
   });
   await page.goto(`${ADMIN_ORIGIN}/settings`);
-  await expect(page.getByRole('button', { name: /Identity and appearance/ })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  );
+  await page.getByRole('searchbox').fill('default');
   await expect(page.getByLabel('Default Anthropic max output tokens')).toBeVisible();
+  await page.getByRole('searchbox').fill('Site timezone offset');
   const timezoneInput = page.getByLabel('Site timezone offset');
   await timezoneInput.fill('345');
-  const timezoneForm = page.locator('.ops-setting').filter({ has: timezoneInput });
+  const timezoneForm = page.locator('.nb-setting').filter({ has: timezoneInput });
   await expect(timezoneForm.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
   await timezoneForm.locator('summary').click();
   await expect(page.getByText(/Hard range -720–840 · step 30/)).toBeVisible();
+  await page.getByRole('searchbox').fill('');
+  await page
+    .locator('.nb-setting')
+    .filter({ has: page.getByLabel('RPM auto-ban duration') })
+    .locator('summary')
+    .click();
   await expect(page.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
-  await expect(page.getByText('9,000,000,000,000 credits', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Check-in credit threshold')).toHaveValue('9000000000000');
   for (const width of [900, 1280, 1920]) {
     await page.setViewportSize({ width, height: 1080 });
     await assertResponsiveAndClean(page, guard);
@@ -589,6 +593,7 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
+  await page.getByRole('button', { name: /^Identity and appearance/ }).click();
   await expect(page.getByLabel('Site name')).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
@@ -655,19 +660,21 @@ test('reachable admin settings saves legacy legal text with LF line endings', as
   await page.getByText('Legal text', { exact: true }).click();
   const textarea = page.getByLabel('Terms override (English)');
   const save = page.getByRole('button', { name: 'Save all changes' });
-  await expect(save).toBeDisabled();
+  await expect(save).toHaveCount(0);
   expect(patches).toHaveLength(0);
   await textarea.fill('alpha\nbeta\n!');
   await expect(textarea).toHaveValue('alpha\nbeta\n!');
   await save.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Save all changes' }).click();
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0]).toBe('alpha\nbeta\n!');
   expect(patches[0]).not.toContain('\r');
-  await expect(save).toBeDisabled();
+  await expect(save).toHaveCount(0);
   await textarea.fill(original.replaceAll('\r\n', '\n'));
   await save.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Save all changes' }).click();
   await expect.poll(() => patches.length).toBe(2);
-  await expect(save).toBeDisabled();
+  await expect(save).toHaveCount(0);
   expect(state).toBe(original.replaceAll('\r\n', '\n'));
   await assertResponsiveAndClean(page, guard);
 });
@@ -723,7 +730,7 @@ test('reachable admin charity opens the corrected pending review query without i
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
-  await expect(page.getByRole('heading', { name: '公益与捐赠管理' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '公益', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '审核' }).click();
   await expect(page).toHaveURL(/donation_id=9(?:&|$)/);
   await expect(page.getByRole('heading', { name: '捐赠审核', exact: true })).toBeVisible();

@@ -404,7 +404,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
     page.locator('.status-badge').filter({ hasText: 'Pending follow-up' }).first(),
   ).toBeVisible();
   await expect(
-    page.locator('.ops-table tbody').getByText('Synthetic pending donation', { exact: true }),
+    page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
   expect(listReads).toContain('?page=1&page_size=20');
   expect(listReads).toContain('?handling=pending&page=1&page_size=20');
@@ -455,6 +455,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await saveScreenshot(page, 'admin-processed-320-light-en');
   await page.reload();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending&donation_id=7`);
+  await page.locator('.charity-donations .nb-filter__more summary').click();
   await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
     'pending',
   );
@@ -473,7 +474,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Follow-up status', exact: true }).selectOption('');
   await expect(
-    page.locator('.ops-table tbody').getByText('Synthetic pending donation', { exact: true }),
+    page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
@@ -561,7 +562,15 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
       await fulfillJSON(route, catalogPage([catalogModel('21', 'page-two')], 2, pageSize, 21));
       return;
     }
-    await fulfillJSON(route, catalogPage(firstModels, 1, pageSize, 21));
+    await fulfillJSON(
+      route,
+      catalogPage(
+        pageSize >= 21 ? [...firstModels, catalogModel('21', 'page-two')] : firstModels,
+        1,
+        pageSize,
+        21,
+      ),
+    );
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
@@ -592,6 +601,10 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
     .getByRole('button', { name: '下一页', exact: true })
     .click();
   await expect(page.getByText('[公益]provider/page-two', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1_280, height: 900 });
+  await page.getByRole('combobox', { name: '每页条数', exact: true }).selectOption('50');
+  await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveValue('50');
+  await page.setViewportSize({ width: 320, height: 900 });
   const search = page.getByRole('searchbox');
   const requestCountBeforeTyping = catalogRequests.length;
   await search.fill('needle');
@@ -602,7 +615,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
     '/api/charity/models?view=catalog&page=2&page_size=20&allowed_for_me=true&currently_available=true',
   );
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=true&currently_available=true',
+    '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=true&currently_available=true',
   );
 
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
@@ -612,11 +625,10 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   );
   await expect(page.getByText('本人等级不允许', { exact: true })).toBeVisible();
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=false&currently_available=true',
+    '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false&currently_available=true',
   );
 
-  await page.getByRole('combobox', { name: '每页条数', exact: true }).selectOption('50');
-  await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveValue('50');
+  await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveCount(0);
   await expect.poll(() => catalogRequests.length).toBeGreaterThanOrEqual(4);
   expect(catalogRequests).toContain(
     '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false&currently_available=true',

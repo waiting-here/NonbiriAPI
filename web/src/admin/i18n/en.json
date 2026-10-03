@@ -131,14 +131,10 @@
       "catalogIndependentGate": "Related settings and limits",
       "charityModelPricing": "Charity model pricing (Charity page)",
       "catalogDurationPreview": "Human-readable duration: {{value}}",
-      "catalogMilliPreview": "{{credits}} credits",
       "restoreFallback": "Remove override",
       "legalBytes": "{{count}} / {{max}} UTF-8 bytes",
       "timezonePreview": "Preview: {{value}}",
       "dangerousDescription": "Access, abuse, and legal changes can affect admission or published policy. Review each server description before saving.",
-      "dangerousEmpty": "No dangerous settings",
-      "dangerousEmptyBody": "No dangerous catalog entry matches the search.",
-      "dangerousTitle": "Dangerous and legal settings",
       "enumValue": "Enumerated setting",
       "enumValues": {
         "disabled": "Disabled",
@@ -168,7 +164,6 @@
       },
       "ordinaryEmpty": "No ordinary settings",
       "ordinaryEmptyBody": "No ordinary catalog entry matches the search.",
-      "ordinaryTitle": "Ordinary settings",
       "remoteLogoWarning": "A remote logo makes a public third-party browser request and may fail independently. Never place a secret in this URL.",
       "restoreAuthorityValue": "Undo this change",
       "unknownCatalogGate": "Other limit ({{key}})",
@@ -197,8 +192,6 @@
         "levels": "Enabled level thresholds must increase from level 2 to level 4.",
         "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
       },
-      "customizedCount": "{{count}} customized",
-      "groupDefaults": "Using defaults",
       "searchHelp": "Find a setting by name or purpose",
       "modified": "Modified",
       "original": "Previously {{value}}",
@@ -414,7 +407,7 @@
     },
     "mainstreamChannels": {
       "nav": "Mainstream channels",
-      "title": "Mainstream channel management",
+      "title": "Mainstream channels",
       "description": "Manage channels users can choose when adding services. Channel changes leave existing services intact.",
       "category": {
         "subscription": "Mainstream subscription",
@@ -435,7 +428,7 @@
       "table": {
         "name": "Name",
         "category": "Category",
-        "connector": "API type",
+        "connector": "API format",
         "baseUrl": "API base URL",
         "enabled": "Available for adding services",
         "updated": "Updated",
@@ -451,7 +444,7 @@
       "form": {
         "name": "Channel name",
         "category": "Category",
-        "connector": "API type",
+        "connector": "API format",
         "baseUrl": "API base URL",
         "enabled": "Available for adding services",
         "baseUrlHelp": "Enter the service API base URL, for example https://api.example.com/v1."
@@ -653,7 +646,7 @@
       "nav": "Charity",
       "donationsTitle": "Donation review queue",
       "modelsTitle": "Charity models and bindings",
-      "title": "Charity and donation management",
+      "title": "Charity",
       "description": "Review donations, manage shared models and connections, and adjust usage limits.",
       "group": {
         "custom": "Custom donation key",

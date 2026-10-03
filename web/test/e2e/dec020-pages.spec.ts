@@ -375,10 +375,23 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
   });
 
   await page.goto(`${ADMIN_ORIGIN}/mainstream-channels`);
-  await expect(page.getByRole('heading', { name: 'Mainstream channel management' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mainstream channels' })).toBeVisible();
+  await page.getByRole('button', { name: /New channel/ }).click();
   await page.getByLabel('Channel name').fill('Fixture channel');
-  await page.getByLabel('Category').selectOption('api_platform');
-  await page.getByLabel('API type').selectOption('anthropic-compatible');
+  await page
+    .getByRole('radiogroup', { name: 'Category', exact: true })
+    .getByText('Mainstream API platform', { exact: true })
+    .click();
+  await expect(
+    page.getByRole('radio', { name: 'Mainstream API platform', exact: true }),
+  ).toBeChecked();
+  await page
+    .getByRole('radiogroup', { name: 'API format', exact: true })
+    .getByText('Anthropic-compatible', { exact: true })
+    .click();
+  await expect(
+    page.getByRole('radio', { name: 'Anthropic-compatible', exact: true }),
+  ).toBeChecked();
   await page.getByLabel('API base URL').fill('https://channel.example.test/v1');
   await page.getByRole('button', { name: 'Create channel' }).click();
 
@@ -390,7 +403,7 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
     base_url: 'https://channel.example.test/v1',
     enabled: true,
   });
-  const editName = page.getByLabel('Channel name').nth(1);
+  const editName = page.getByLabel('Channel name');
   await editName.fill('Renamed channel');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Renamed channel')).toBeVisible();
