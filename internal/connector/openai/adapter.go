@@ -270,7 +270,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		errorContext.ContainsSecret = func(value []byte) bool { return len(value) != 0 }
 	}
 	var sourceGuard *responseGuard
-	if request.Stream && policy.FlattenToolCalls {
+	if request.Stream {
 		sourceGuard = newResponseGuard(target.credential.bearer, target.credential.ciphertext)
 		defer sourceGuard.Clear()
 	}
@@ -308,7 +308,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		if policy.FlattenToolCalls {
 			return a.flattenStream(ctx, writer, response, guard, sourceGuard, errorContext)
 		}
-		return a.stream(ctx, writer, response, guard, errorContext)
+		return a.stream(ctx, writer, response, guard, sourceGuard, errorContext)
 	}
 
 	if !validResponseMediaType(response, "application/json") {
@@ -411,7 +411,7 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 	}
 }
 
-func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, errorContext upstreamerror.Context) AttemptResult {
+func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard, sourceGuard *responseGuard, errorContext upstreamerror.Context) AttemptResult {
 	// Do not drive parser delivery from response.Request.Context: the egress
 	// managed body cancels that internal context on ordinary EOF to release its
 	// permit. A caller-derived parser context lets already-parsed events drain
@@ -430,6 +430,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 	committed := false
 	seenChunk := false
+	identity := streamResponseIdentity{}
 	usage := Usage{}
 	usageState := cumulativeUsage{}
 	var leadingUsageFrame []byte
@@ -479,9 +480,16 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if len(event.Data) == 0 || len(event.Data) > a.maxSSEEventBytes || !validProtocolBytes([]byte(event.Data)) {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
 		}
-		compact, chunkUsage, chunkUsageMalformed, err := validateChunk([]byte(event.Data))
+		compact, chunkUsage, chunkUsageMalformed, err := validateStreamChunk([]byte(event.Data), &identity, sourceGuard)
+		if errors.Is(err, errStreamSourceRejected) {
+			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream was rejected")
+		}
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
+		}
+		if !identity.withinBounds(compact, a.maxSSEEventBytes, a.maxSSELineBytes, a.maxStreamBytes) {
+			clear(compact)
+			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
 		}
 		hasChoices := chunkHasChoices(compact)
 		frame := make([]byte, 0, len(compact)+8)
@@ -548,6 +556,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 	var usage Usage
 	usageState := cumulativeUsage{}
 	seenChunk := false
+	identity := streamResponseIdentity{}
 	hasToolsSeen := false
 	controller := http.NewResponseController(writer)
 	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
@@ -655,15 +664,16 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		if len(event.Data) == 0 || len(event.Data) > a.maxSSEEventBytes || !validProtocolBytes([]byte(event.Data)) {
 			return failure("upstream stream chunk exceeded protocol bounds")
 		}
-		compact, chunkUsage, chunkMalformed, err := validateChunk([]byte(event.Data))
+		compact, chunkUsage, chunkMalformed, err := validateStreamChunk([]byte(event.Data), &identity, sourceGuard)
+		if errors.Is(err, errStreamSourceRejected) {
+			return failure("upstream stream was rejected")
+		}
 		if err != nil {
 			return failure("upstream stream chunk was invalid")
 		}
-		// Inspect every source frame before replacing a cumulative snapshot.
-		// Only the last usage frame is retained for the terminal rewrite.
-		if sourceGuard.ContainsJSON(compact, compact) {
+		if !identity.withinBounds(compact, a.maxSSEEventBytes, a.maxSSELineBytes, a.maxStreamBytes) {
 			clear(compact)
-			return failure("upstream stream was rejected")
+			return failure("upstream stream chunk exceeded protocol bounds")
 		}
 		var root map[string]json.RawMessage
 		if json.Unmarshal(compact, &root) != nil {
@@ -704,11 +714,11 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 		frame := append([]byte("data: "), compact...)
 		frame = append(frame, '\n', '\n')
-		clear(compact)
 		if firstRoot == nil && len(choices) > 0 {
 			firstRoot = root
 		}
-		_, toolsSeen, err := accumulateStreamChunk([]byte(event.Data), states)
+		_, toolsSeen, err := accumulateStreamChunk(compact, states)
+		clear(compact)
 		if err != nil {
 			clear(frame)
 			return failure("upstream stream chunk was invalid")
@@ -731,7 +741,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			return sinkFailureWithCommit(committed, usage)
 		}
 		if !toolsSeen && !hasToolsSeen {
-			if _, writeErr := writeFrame(frame, []byte(event.Data)); writeErr != nil {
+			if _, writeErr := writeFrame(frame, streamFramePayload(frame)); writeErr != nil {
 				clear(frame)
 				if errors.Is(writeErr, errFlattenStreamRejected) {
 					return failure("upstream stream was rejected")
