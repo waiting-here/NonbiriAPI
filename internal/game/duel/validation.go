@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -298,6 +297,9 @@ func (s *Service) validateArchives(ctx context.Context, tx *sql.Tx) error {
 
 // VerifyPersistedState audits live and archived records without runtime setup.
 func VerifyPersistedState(ctx context.Context, database *sql.DB, descriptor game.ModuleDescriptor, rules Rules) error {
-	service := &Service{database: database, descriptor: descriptor, rules: rules, now: time.Now}
+	service := &Service{database: database, descriptor: descriptor, rules: rules}
+	if err := service.initializeReader(); err != nil {
+		return err
+	}
 	return service.ValidatePersistedState(ctx)
 }
