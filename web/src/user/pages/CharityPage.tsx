@@ -32,7 +32,8 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
   const session = useUserSession();
   const accountID = session.data?.user.id;
   const location = useLocation();
-  const returnTo = listReturnPath(location.state, '/charity');
+  const listReturn = listReturnPath(location.state, '/charity');
+  const returnTo = listReturn === '/charity' ? '/charity?tab=donations' : listReturn;
   const valid = validDonationID(donationID);
   const donation = useDonation(valid ? donationID : undefined, valid);
   return (
@@ -41,18 +42,14 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
         title={t('user.charity.donationDetailTitle')}
         description={t('user.charity.donationDetailDescription')}
         icon="charity"
-        back={
-          <Link to={returnTo === '/charity' ? '/charity?tab=donations' : returnTo}>
-            {t('user.charity.backToDonations')}
-          </Link>
-        }
+        back={<Link to={returnTo}>{t('user.charity.backToDonations')}</Link>}
       />
       {!valid ? (
         <EmptyState
           title={t('user.charity.donationNotFound')}
           body={t('user.charity.donationNotFoundBody')}
           action={
-            <Link className="btn btn-secondary" to="/charity">
+            <Link className="btn btn-secondary" to={returnTo}>
               {t('user.charity.backToDonations')}
             </Link>
           }
@@ -64,7 +61,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
           title={t('user.charity.donationNotFound')}
           body={t('user.charity.donationNotFoundBody')}
           action={
-            <Link className="btn btn-secondary" to="/charity">
+            <Link className="btn btn-secondary" to={returnTo}>
               {t('user.charity.backToDonations')}
             </Link>
           }

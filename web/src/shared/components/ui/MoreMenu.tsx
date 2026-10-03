@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 
 export function MoreMenu({
   label,
@@ -10,6 +18,7 @@ export function MoreMenu({
   )[];
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const [open, setOpen] = useState(false);
   const close = () => {
@@ -29,6 +38,31 @@ export function MoreMenu({
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
   }, []);
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const trigger = ref.current?.querySelector('summary');
+    if (!open || !menu || !trigger) return;
+    menu.showPopover();
+    const position = () => {
+      const anchor = trigger.getBoundingClientRect();
+      const bounds = menu.getBoundingClientRect();
+      const width = document.documentElement.clientWidth;
+      const height = window.innerHeight;
+      const below = anchor.bottom + 4;
+      const top = below + bounds.height <= height - 8 ? below : anchor.top - bounds.height - 4;
+      menu.style.left = `${Math.max(8, Math.min(anchor.right - bounds.width, width - bounds.width - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(top, height - bounds.height - 8))}px`;
+    };
+    position();
+    menu.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    return () => {
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+      menu.hidePopover();
+    };
+  }, [open]);
   const enabledItems = () =>
     Array.from(
       ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [],
@@ -63,10 +97,10 @@ export function MoreMenu({
       className="nb-more"
       onKeyDown={onKeyDown}
       onToggle={(event) => {
+        if (event.target !== event.currentTarget) return;
         const next = event.currentTarget.open;
         setOpen(next);
-        if (next) enabledItems()[0]?.focus();
-        else if (event.currentTarget.contains(document.activeElement))
+        if (!next && event.currentTarget.contains(document.activeElement))
           event.currentTarget.querySelector('summary')?.focus();
       }}
     >
@@ -80,7 +114,15 @@ export function MoreMenu({
       >
         <span aria-hidden="true">⋯</span>
       </summary>
-      <div id={menuId} className="nb-more__menu" role="menu" aria-label={label}>
+      <div
+        ref={menuRef}
+        id={menuId}
+        popover="manual"
+        hidden={!open}
+        className="nb-more__menu"
+        role="menu"
+        aria-label={label}
+      >
         {items.map((item, index) =>
           item === 'separator' ? (
             <hr key={`sep-${index}`} role="separator" />

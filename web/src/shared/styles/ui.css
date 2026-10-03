@@ -294,16 +294,21 @@
   display: none;
 }
 .nb-more__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: var(--nb-z-overlay);
+  position: fixed;
+  inset: auto;
+  margin: 0;
   min-width: 12rem;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   padding: var(--nb-space-1);
   background: var(--nb-color-surface-raised);
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-md);
   box-shadow: var(--nb-elevation-overlay);
+  display: none;
+}
+.nb-more__menu:popover-open {
   display: grid;
 }
 .nb-more__menu button {
