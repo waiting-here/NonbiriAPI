@@ -333,7 +333,7 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
   const consoleGuard = await prepareDebug(context, page, 'en', 'light', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: 'Debug', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Records', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
   const start = page.getByRole('button', { name: 'Start Debug' }).first();
   await tabTo(page, start);
@@ -401,7 +401,7 @@ test('Debug reconnect accepts a fresh bounded snapshot after stream closure', as
   const consoleGuard = await prepareDebug(context, page, 'en', 'dark', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: 'Debug', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Records', exact: true })).toBeVisible();
   const connection = page.locator('.card').filter({
     has: page.getByRole('heading', { name: 'Connection and mode' }),
   });
@@ -432,7 +432,7 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
   const consoleGuard = await prepareDebug(context, page, 'zh', 'dark', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: '调试', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '记录', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '开始调试' }).first().click();
   const connection = page.locator('.card').filter({
     has: page.getByRole('heading', { name: '连接与模式' }),
@@ -450,7 +450,7 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
-  await expect(page.getByRole('heading', { name: '调试', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '记录', exact: true })).toBeVisible();
   expect(fixture.eventConnections).toBe(1);
   expect(
     fixture.requestURLs.every(

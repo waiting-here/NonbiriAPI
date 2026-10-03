@@ -18,8 +18,11 @@ async function layout(page: import('@playwright/test').Page, name: string) {
         .locator('.audit-page button, .inactivity-editor button')
         .evaluateAll(
           (nodes) =>
-            nodes.filter((n) => n.getAttribute('role') !== 'tab' && !n.classList.contains('btn'))
-              .length,
+            nodes.filter(
+              (n) =>
+                n.getAttribute('role') !== 'tab' &&
+                !n.matches('.btn, .nb-btn, .nb-more__menu button, .nb-pager button'),
+            ).length,
         ),
     ).toBe(0);
     expect(
@@ -227,13 +230,13 @@ test('inactivity settings validate, preview exact human-readable amounts and sav
   await page.getByRole('button', { name: 'Preview accounts', exact: true }).click();
   expect(previews).toBe(0);
   await page.getByLabel('Inactive days', { exact: true }).fill('30');
-  await page.getByLabel('Interval (days)', { exact: true }).fill('7');
+  await page.getByLabel('Interval', { exact: true }).fill('7');
   await page
     .getByRole('group', { name: 'General credits', exact: true })
     .getByLabel('Decay this currency')
     .check();
-  await page.getByLabel('Decay per period (%)', { exact: true }).fill('1.25');
-  await page.getByLabel('Balance floor (credits)', { exact: true }).fill('12.345');
+  await page.getByLabel('Decay per period', { exact: true }).fill('1.25');
+  await page.getByLabel('Balance floor', { exact: true }).fill('12.345');
   await page.getByRole('button', { name: 'Preview accounts', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Candidate policy preview', exact: true }),

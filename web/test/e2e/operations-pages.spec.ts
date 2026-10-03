@@ -489,7 +489,11 @@ test('administrator dashboard accepts the runtime activity day contract', async 
   });
 
   await page.goto(`${ADMIN_ORIGIN}/`);
-  await expect(page.getByRole('heading', { name: '产品活动', exact: true })).toBeVisible();
+  const activity = page
+    .locator('.nb-fold')
+    .filter({ has: page.locator('summary').filter({ hasText: '产品活动' }) });
+  await activity.locator('summary').click();
+  await expect(activity).toBeVisible();
   await expect(page.getByText('2026-09-04')).toBeVisible();
   await expect(page.getByText('有活动')).toBeVisible();
   await expect(page.getByText('无活动')).toBeVisible();

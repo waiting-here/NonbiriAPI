@@ -192,12 +192,17 @@ for (const role of ['owner', 'admin', 'steward'] as const) {
     );
     const donationList = role === 'owner' ? page : page.locator('.nb-table tbody');
     await expect(donationList.getByText('Gateway policy fixture', { exact: true })).toBeVisible();
-    await page
-      .getByRole('button', {
-        name: role === 'owner' ? userEn.user.charity.ownerPages.keys : 'Review',
-        exact: true,
-      })
-      .click();
+    if (role === 'owner') {
+      await page
+        .getByRole('button', {
+          name: userEn.user.charity.presentation.donationActions,
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole('menuitem', { name: userEn.user.charity.ownerPages.keys, exact: true })
+        .click();
+    } else await page.getByRole('button', { name: 'Review', exact: true }).click();
     if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();
     const control = page.locator('.failure-policy-control').first();
     await expect(control).toBeVisible();

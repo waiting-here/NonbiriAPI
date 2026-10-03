@@ -127,8 +127,11 @@ for (const scenario of [
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(origin + (station === 'admin' ? '/charity' : '/steward?tab=charity'));
+    const operations = (scenario.language === 'zh' ? zh : en).common.operations.charity;
+    await page.getByRole('button', { name: operations.batchActions, exact: true }).click();
+    await page.getByRole('menuitem', { name: operations.batchFailureReset, exact: true }).click();
     const control = page.locator('.failure-reset-control').first();
-    await control.locator('summary').click();
+    await expect(control).toHaveAttribute('open', '');
     await control.getByRole('button', { name: copy.all, exact: true }).click();
     await expect(control.getByRole('button', { name: copy.resume, exact: true })).toBeVisible();
     expect(requests.map((r) => r.path.endsWith('/selection'))).toEqual([true, true, false]);

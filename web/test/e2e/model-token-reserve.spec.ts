@@ -328,6 +328,10 @@ async function exerciseScenario(
   await expect(pricing.locator('option[value="per_request"]')).toHaveText(scenario.perRequest);
   await expect(pricing.locator('option[value="per_token"]')).toHaveText(scenario.perToken);
   await expect(pricing).toHaveValue('per_token');
+  await editor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   await expect(reserve).toHaveValue('1.234');
   await expect(editor.getByText(scenario.reserveHelp)).toBeVisible();
   await saveScreenshot(page, `${scenario.name}-initial`);
@@ -350,6 +354,10 @@ async function exerciseScenario(
 
   await page.reload();
   await expect(page.getByRole('tab', { name: scenario.modelsTab })).toBeVisible();
+  await editor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   reserve = editor.getByRole('textbox', { name: scenario.reserveLabel });
   await expect(reserve).toHaveValue('1.111');
 
@@ -378,6 +386,10 @@ async function exerciseScenario(
 
   consoleGuard.beforeConflict();
   await pricing.selectOption('per_token');
+  await editor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   reserve = editor.getByRole('textbox', { name: scenario.reserveLabel });
   await expect(reserve).toHaveValue('0');
   await expect(save).toBeDisabled();
@@ -407,6 +419,10 @@ async function exerciseScenario(
   expect(state.model.token_reserve_credits).toBe('9.876');
 
   await reloadedPricing.selectOption('per_token');
+  await reloadedEditor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   const reloadedReserve = reloadedEditor.getByRole('textbox', { name: scenario.reserveLabel });
   await expect(reloadedReserve).toHaveValue('9.876');
   const clear = reloadedEditor.getByRole('button', { name: /Save model|保存模型/ });
@@ -432,6 +448,10 @@ async function exerciseScenario(
   await expect(clearedEditor.getByRole('combobox', { name: scenario.pricingLabel })).toHaveValue(
     'per_token',
   );
+  await clearedEditor
+    .locator('.nb-fold > summary')
+    .filter({ hasText: /Quota and reserve|额度与预留/ })
+    .click();
   await expect(clearedEditor.getByRole('textbox', { name: scenario.reserveLabel })).toHaveValue('');
   await saveScreenshot(page, `${scenario.name}-cleared`);
   await assertPresentation(page, scenario, consoleGuard);
@@ -571,6 +591,7 @@ for (const scenario of scenarios) {
         name: `${chinese ? '导出' : 'Export'} ${format.toUpperCase()}${chinese ? (format === 'csv' ? '（表格软件）' : '（程序处理）') : format === 'csv' ? ' (spreadsheets)' : ' (programs)'}`,
         exact: true,
       });
+      await expect(link).toBeVisible();
       const href = await link.getAttribute('href');
       expect(href).not.toBeNull();
       const exportURL = new URL(href!, scenario.origin);

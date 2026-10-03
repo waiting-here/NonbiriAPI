@@ -478,7 +478,7 @@ async function installManagementRoutes(
 }
 
 function donationListRow(page: Page, id = DETAIL_DONATION_ID): Locator {
-  return page.locator('.ops-table tbody tr').filter({
+  return page.getByRole('row').filter({
     has: page.getByText('Reviewable donation ' + id, { exact: true }),
   });
 }
@@ -1022,6 +1022,8 @@ for (const station of ['admin', 'user'] as const) {
         root +
         'charity_section=donations&handling=pending&donations_page=2&donations_page_size=10',
     );
+    await page.getByRole('button', { name: 'Batch actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Discover all donations', exact: true }).click();
     await page
       .getByRole('button', { name: 'Fetch models for all available donation keys', exact: true })
       .click();
@@ -1105,7 +1107,9 @@ for (const station of ['admin', 'user'] as const) {
       await expect(
         list.getByRole('heading', { name: '[公益]DetailProvider/detail-model-1', exact: true }),
       ).toBeVisible();
+      if (station === 'user') await page.setViewportSize({ width: 1280, height: 900 });
       await list.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
+      if (station === 'user') await page.setViewportSize({ width: 375, height: 900 });
       await list.getByRole('button', { name: 'Next', exact: true }).click();
       const card = list.locator('section.ops-subcard').filter({
         has: page.getByRole('heading', {

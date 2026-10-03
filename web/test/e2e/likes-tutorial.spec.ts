@@ -159,6 +159,7 @@ test('Chinese rules support related reading and versions on a narrow dark screen
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
+  await page.locator('.likes-loadout-step > summary').filter({ hasText: '4 · 技能' }).click();
   await page
     .locator('.likes-skill-option')
     .filter({ has: page.locator('[data-guide="equip:GPT01"]') })
