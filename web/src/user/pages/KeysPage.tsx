@@ -1,4 +1,7 @@
-import { OutcomeNote } from '@shared/components/ui';
+import { Fold, Note, OutcomeNote } from '@shared/components/ui';
+import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router';
+import { ApiAddressCopy, apiAddress, markOnboarding } from '../features/core/onboarding';
 import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -6,7 +9,13 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
 import { useOperation } from '@shared/operations/useOperation';
 import { regenerateCallerKey } from '../features/core/api';
-import { CoreErrorPanel, CoreLoading, CoreTime, CoreUserGate } from '../features/core/components';
+import {
+  CoreErrorPanel,
+  CoreLoading,
+  CoreTime,
+  CoreUserGate,
+  SafeCopyValue,
+} from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
 import { coreKeys, coreSessionMatchesAccount, useCallerKey } from '../features/core/queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from '../features/core/request';
@@ -17,6 +26,7 @@ import {
 } from '../features/core/stateMachines';
 import type { CallerKeyAuthority } from '../features/core/types';
 import '../features/core/core.css';
+import '../features/core/home.css';
 
 function pageInstanceIdentity(): string {
   return createOperationIdentity().actionId;
@@ -38,6 +48,66 @@ type SecretCopyResult = {
   actionId: string;
   status: 'copied' | 'failed';
 };
+
+function ClientInstructions() {
+  const { t } = useTranslation();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === '#client') markOnboarding('client');
+  }, [location.hash]);
+  const curl = `curl "${apiAddress()}/chat/completions" \\
+  -H "Authorization: Bearer $NONBIRI_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"my/model","messages":[{"role":"user","content":"Hello"}]}'`;
+  return (
+    <>
+      <section className="nb-panel" id="client" aria-labelledby="client-title">
+        <div className="nb-panel__head">
+          <div>
+            <h2 id="client-title">{t('user.core.keys.clientTitle')}</h2>
+            <p>{t('user.core.keys.clientHelp')}</p>
+          </div>
+        </div>
+        <div className="nb-panel__body">
+          <dl className="nb-facts nb-facts--inline">
+            <div>
+              <dt>{t('user.core.keys.apiAddress')}</dt>
+              <dd>
+                <ApiAddressCopy />
+              </dd>
+            </div>
+            <div>
+              <dt>{t('user.core.keys.metadataTitle')}</dt>
+              <dd>{t('user.core.keys.clientKey')}</dd>
+            </div>
+            <div>
+              <dt>{t('user.core.keys.modelName')}</dt>
+              <dd>
+                <p>
+                  <Link to="/charity">{t('user.core.keys.charityModels')}</Link> ·{' '}
+                  <code>[公益]…</code>
+                </p>
+                <p>
+                  <Link to="/models">{t('user.core.keys.ownModels')}</Link> · <code>my/…</code>
+                </p>
+                <span className="nb-small nb-muted">{t('user.core.keys.copyModel')}</span>
+              </dd>
+            </div>
+          </dl>
+          <p className="nb-small nb-muted api-paths">
+            <code>/v1/chat/completions</code> · <code>/v1/embeddings</code>
+            <br />
+            {t('user.core.keys.supportedPaths')} <code>/v1/models</code>
+          </p>
+        </div>
+      </section>
+      <Fold title={t('user.core.keys.curlTitle')} summary={t('user.core.keys.curlHelp')}>
+        <p>{t('user.core.keys.curlPlaceholder')}</p>
+        <SafeCopyValue value={curl} label={t('user.core.keys.curlTitle')} />
+      </Fold>
+    </>
+  );
+}
 
 export function CallerKeyPanel({ accountId }: { accountId: string }) {
   const { t } = useCoreCopy();
@@ -257,23 +327,23 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
     Boolean(state.reveal);
 
   return (
-    <div className="page core-page core-stack">
+    <div className="page core-page core-stack api-access-page">
       <PageHeader icon="keys" title={t('keys.title')} description={t('keys.description')} />
 
       {state.reveal ? (
-        <section className="core-card core-secret-panel" aria-live="polite">
-          <div className="core-card__header">
+        <section className="nb-panel core-secret-panel api-secret-panel" aria-live="polite">
+          <div className="nb-panel__head">
             <h2>{t('keys.oneTimeTitle')}</h2>
           </div>
           <p>{t('keys.oneTimeBody')}</p>
-          <code className="core-secret-value">{state.reveal.secret}</code>
-          {state.readState === 'error' ? (
-            <p className="core-inline-warning">{t('keys.refreshError')}</p>
-          ) : null}
-          <div className="core-form-actions">
+          <div className="nb-copy api-secret-copy">
+            <code className="core-secret-value">{state.reveal.secret}</code>
+            {state.readState === 'error' ? (
+              <p className="core-inline-warning">{t('keys.refreshError')}</p>
+            ) : null}
             <button
               type="button"
-              className="btn btn-secondary"
+              className="nb-btn nb-btn--primary"
               onClick={() => {
                 if (state.reveal) copyReveal(state.reveal);
               }}
@@ -282,7 +352,9 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
                 ? t('common.copied')
                 : t('common.copy')}
             </button>
-            <button type="button" className="btn btn-danger" onClick={closeReveal}>
+          </div>
+          <div className="core-form-actions">
+            <button type="button" className="nb-btn nb-btn--secondary" onClick={closeReveal}>
               {t('keys.closeReveal')}
             </button>
           </div>
@@ -294,12 +366,12 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
         </section>
       ) : null}
 
-      <section className="core-card">
-        <div className="core-card__header">
+      <section className="nb-panel">
+        <div className="nb-panel__head">
           <h2>{t('keys.metadataTitle')}</h2>
           <button
             type="button"
-            className="btn btn-primary"
+            className={metadata ? 'nb-btn nb-btn--secondary' : 'nb-btn nb-btn--primary'}
             disabled={actionDisabled}
             onClick={trigger}
           >
@@ -319,7 +391,7 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
             onRetry={() => void authority.refetch()}
           />
         ) : state.authority && metadata ? (
-          <dl className="core-detail-list">
+          <dl className="nb-facts">
             <div>
               <dt>{t('keys.display')}</dt>
               <dd>
@@ -340,12 +412,7 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
             </div>
           </dl>
         ) : state.authority ? (
-          <div className="core-state core-state--empty">
-            <div>
-              <strong>{t('keys.noKeyTitle')}</strong>
-              <p>{t('keys.noKeyBody')}</p>
-            </div>
-          </div>
+          <Note title={t('keys.noKeyTitle')}>{t('keys.noKeyBody')}</Note>
         ) : null}
         <OutcomeNote
           busy={regeneration.isPending || authority.isFetching}
@@ -360,6 +427,8 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
           }
         />
       </section>
+
+      <ClientInstructions />
 
       <ConfirmDialog
         open={confirmOpen}
@@ -383,7 +452,7 @@ export function KeysPage() {
       {(user) => (
         <>
           <CallerKeyPanel key={user.id} accountId={user.id} />
-          <div className="page core-page">
+          <div className="page core-page api-access-page">
             <PersonalAutomationGuide />
           </div>
         </>

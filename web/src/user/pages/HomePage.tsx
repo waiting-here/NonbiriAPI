@@ -7,27 +7,28 @@ import {
 } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
+import { Fold } from '@shared/components/ui';
+import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/core/onboarding';
+import { useNumberedModels } from '../features/core/modelNumberedQueries';
+import { useCharityCatalog } from '../features/economy/catalog';
 import { PageHeader } from '@shared/components/States';
 import { isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
   CoreErrorPanel,
   CoreLoading,
   CoreProfileGate,
-  CoreTime,
   CoreUnavailable,
-  ExactCount,
   ExactCredits,
-  StatusPill,
 } from '../features/core/components';
-import { useQuickstartCopy } from '../features/core/quickstartCopy';
 import { useCoreCopy } from '../features/core/copy';
-import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
 import { CapabilityUnavailableError, productionHomeAdapters } from '../features/core/adapters';
 import {
   coreKeys,
   coreSessionMatchesAccount,
   useCoreMe,
   useCoreSession,
+  useCallerKey,
 } from '../features/core/queries';
 import { isConflict, isOutcomeUnknown } from '../features/core/request';
 import type {
@@ -40,6 +41,7 @@ import type {
 } from '../features/core/types';
 import { HomeAnnouncements } from '../features/operations/HomeAnnouncements';
 import '../features/core/core.css';
+import '../features/core/home.css';
 
 const GAME_PATHS: Record<HomeGameSummary['route_id'], string> = {
   'game-fishing': '/games/fishing',
@@ -99,139 +101,203 @@ async function accountScopedHomeLoad<T>(
 
 function SignedOutHome() {
   const { t } = useCoreCopy();
+  const { t: text } = useTranslation();
   return (
-    <div className="page core-page core-stack">
-      <section className="core-card">
-        <div className="core-card__header">
+    <div className="page core-page core-stack home-page">
+      <section className="nb-panel home-intro">
+        <h1>{t('home.signedOutTitle')}</h1>
+        <p>{t('home.signedOutBody')}</p>
+        <div className="home-intro-points">
           <div>
-            <h2>{t('home.signedOutTitle')}</h2>
-            <p className="core-muted">{t('home.signedOutBody')}</p>
+            <h2>{text('user.home.introCharity')}</h2>
+            <p>{text('user.home.introCharityBody')}</p>
           </div>
-          <a className="btn btn-primary" href="/api/auth/discord/start">
-            {t('home.signIn')}
-          </a>
+          <div>
+            <h2>{text('user.home.introAddress')}</h2>
+            <p>{text('user.home.introAddressBody')}</p>
+          </div>
+          <div>
+            <h2>{text('user.home.introGames')}</h2>
+            <p>{text('user.home.introGamesBody')}</p>
+          </div>
         </div>
+        <a className="nb-btn nb-btn--primary" href="/api/auth/discord/start">
+          {t('home.signIn')}
+        </a>
       </section>
     </div>
   );
 }
 
-function ProfileCard({ user }: { user: UserProfile }) {
-  const { t } = useCoreCopy();
-  return (
-    <section className="core-card">
-      <div className="core-card__header">
-        <h2>{t('home.profileTitle')}</h2>
-      </div>
-      <dl className="core-detail-list">
-        <div>
-          <dt>{t('home.username')}</dt>
-          <dd>{user.guild_nick || user.username}</dd>
-        </div>
-        <div>
-          <dt>{t('home.accountStatus')}</dt>
-          <dd>
-            <StatusPill tone={user.is_banned ? 'danger' : 'success'}>
-              {user.is_banned ? t('home.banned') : t('home.active')}
-            </StatusPill>
-          </dd>
-        </div>
-        <div>
-          <dt>{t('common.created')}</dt>
-          <dd>
-            <CoreTime value={user.created_at} />
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
 function EconomyCard({ accountId }: { accountId: string }) {
   const { t } = useCoreCopy();
+  const { t: text } = useTranslation();
   const me = useCoreMe(accountId);
   return (
-    <section className="core-card">
-      <div className="core-card__header">
+    <section className="nb-panel home-wallet">
+      <div className="nb-between">
         <h2>{t('home.economyTitle')}</h2>
-        <Link className="btn btn-secondary" to="/credits">
-          {t('home.creditHistory')}
-        </Link>
+        <Link to="/credits">{t('home.creditHistory')} →</Link>
       </div>
       {me.isPending ? (
         <CoreLoading compact />
       ) : me.error ? (
         <CoreErrorPanel error={me.error} compact onRetry={() => void me.refetch()} />
       ) : (
-        <div className="core-metrics">
-          <div className="core-metric">
-            <span>{t('home.balance')}</span>
-            <strong>
-              <ExactCredits value={me.data.user.balance} />
-            </strong>
+        <>
+          <div className="nb-stats">
+            <div className="nb-stat">
+              <div className="nb-stat__label">{t('home.balance')}</div>
+              <div className="nb-stat__value">
+                <ExactCredits value={me.data.user.balance} />
+              </div>
+            </div>
+            <div className="nb-stat">
+              <div className="nb-stat__label">{t('home.gameBalance')}</div>
+              <div className="nb-stat__value">
+                <ExactCredits value={me.data.user.game_balance} />
+              </div>
+            </div>
           </div>
-          <div className="core-metric">
-            <span>{t('home.gameBalance')}</span>
-            <strong>
-              <ExactCredits value={me.data.user.game_balance} />
-            </strong>
-          </div>
-          <div className="core-metric">
-            <span>{t('home.donationCredit')}</span>
-            <strong>
-              <ExactCredits value={me.data.user.donation_credit} />
-            </strong>
-          </div>
-          <div className="core-metric">
-            <span>{t('home.level')}</span>
-            <strong>
-              {me.data.user.level_display_name === `Lv${me.data.user.effective_level}`
-                ? me.data.user.level_display_name
-                : t('home.levelValue', {
-                    level: me.data.user.effective_level,
-                    name: me.data.user.level_display_name,
-                  })}
-            </strong>
-          </div>
-        </div>
+          <dl className="nb-facts nb-facts--inline nb-small">
+            <div>
+              <dt>{t('home.level')}</dt>
+              <dd>
+                {me.data.user.level_display_name === `Lv${me.data.user.effective_level}`
+                  ? me.data.user.level_display_name
+                  : t('home.levelValue', {
+                      level: me.data.user.effective_level,
+                      name: me.data.user.level_display_name,
+                    })}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('home.donationCredit')}</dt>
+              <dd>
+                <ExactCredits value={me.data.user.donation_credit} />
+              </dd>
+            </div>
+            <div>
+              <dt>{text('user.home.usage')}</dt>
+              <dd>
+                {me.data.user.usage.total_requests === '0'
+                  ? text('user.home.noCalls')
+                  : text('user.home.calls', { count: me.data.user.usage.total_requests })}
+              </dd>
+            </div>
+          </dl>
+        </>
       )}
     </section>
   );
 }
 
-function UsageCard({ user }: { user: UserProfile }) {
-  const { t } = useCoreCopy();
+function OnboardingChecklist({
+  accountId,
+  sessionReady,
+}: {
+  accountId: string;
+  sessionReady: boolean;
+}) {
+  const { t } = useTranslation();
+  const clientDone = useOnboardingFlag('client');
+  const hidden = useOnboardingFlag('hidden');
+  const enabled = sessionReady && !hidden;
+  const key = useCallerKey(accountId, enabled);
+  const models = useNumberedModels(accountId, { page: '1', pageSize: 10 }, enabled);
+  const charity = useCharityCatalog(
+    accountId,
+    {
+      page: '1',
+      pageSize: 10,
+      query: '',
+      allowedForMe: 'true',
+      allowedLevel: 'all',
+      currentlyAvailable: 'all',
+    },
+    enabled,
+  );
+  const keyDone = Boolean(key.data?.metadata);
+  const modelDone = Boolean(models.data?.data.length || charity.data?.models.length);
+  const complete = keyDone && modelDone && clientDone;
+  if (hidden) return null;
   return (
-    <section className="core-card">
-      <div className="core-card__header">
-        <h2>{t('home.usageTitle')}</h2>
+    <section
+      className={`nb-panel home-start${complete ? ' home-start--complete' : ''}`}
+      aria-labelledby="home-start-title"
+    >
+      <div className="nb-between">
+        <h2 id="home-start-title">
+          {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
+        </h2>
+        {!complete ? (
+          <span className="nb-muted nb-small">
+            {t('user.home.progress', {
+              count: Number(keyDone) + Number(modelDone) + Number(clientDone),
+            })}
+          </span>
+        ) : null}
+        {complete ? <Link to="/keys">{t('user.home.apiAccess')}</Link> : null}
       </div>
-      <div className="core-metrics">
-        <div className="core-metric">
-          <span>{t('home.requests')}</span>
-          <strong>
-            <ExactCount value={user.usage.total_requests} />
-          </strong>
-        </div>
-        <div className="core-metric">
-          <span>{t('home.promptTokens')}</span>
-          <strong>
-            <ExactCount value={user.usage.total_prompt_tokens} />
-          </strong>
-        </div>
-        <div className="core-metric">
-          <span>{t('home.outputTokens')}</span>
-          <strong>
-            <ExactCount value={user.usage.total_output_tokens} />
-          </strong>
-        </div>
-        <div className="core-metric">
-          <span>{t('home.unknownUsage')}</span>
-          <strong>
-            <ExactCount value={user.usage.total_unknown_usage_requests} />
-          </strong>
-        </div>
-      </div>
+      {!complete ? (
+        <ol className="home-checklist">
+          <li data-done={keyDone || undefined}>
+            <span className="home-step-dot" aria-hidden="true">
+              {keyDone ? '✓' : '1'}
+            </span>
+            <div>
+              <strong>{t('user.home.keyStep')}</strong>
+              <p>{t('user.home.keyHelp')}</p>
+            </div>
+            <Link
+              className={`nb-btn nb-btn--sm ${keyDone ? 'nb-btn--ghost' : 'nb-btn--primary'}`}
+              to="/keys"
+            >
+              {keyDone ? t('user.home.view') : t('user.home.create')}
+            </Link>
+          </li>
+          <li data-done={modelDone || undefined}>
+            <span className="home-step-dot" aria-hidden="true">
+              {modelDone ? '✓' : '2'}
+            </span>
+            <div>
+              <strong>{t('user.home.modelStep')}</strong>
+              <p>{t('user.home.modelHelp')}</p>
+            </div>
+            <span className="nb-inline">
+              <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/charity">
+                {t('user.home.charity')}
+              </Link>
+              <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/endpoints?quickstart=1">
+                {t('user.home.services')}
+              </Link>
+            </span>
+          </li>
+          <li data-done={clientDone || undefined}>
+            <span className="home-step-dot" aria-hidden="true">
+              {clientDone ? '✓' : '3'}
+            </span>
+            <div>
+              <strong>{t('user.home.clientStep')}</strong>
+              <ApiAddressCopy />
+              <p>{t('user.home.clientHelp')}</p>
+            </div>
+            <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/keys#client">
+              {t('user.home.clientGuide')}
+            </Link>
+          </li>
+        </ol>
+      ) : null}
+      <p className="nb-small nb-muted">
+        {!complete ? t('user.home.collapseHelp') : null}{' '}
+        <button
+          className="nb-btn nb-btn--ghost nb-btn--sm"
+          type="button"
+          onClick={() => markOnboarding('hidden')}
+        >
+          {t('user.home.hide')}
+        </button>
+      </p>
     </section>
   );
 }
@@ -246,6 +312,7 @@ function CheckinCard({
   asset: CreditAsset;
 }) {
   const { t } = useCoreCopy();
+  const { t: text } = useTranslation();
   const queryClient = useQueryClient();
   const [committed, setCommitted] = useState<CommittedCheckin | null>(null);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
@@ -340,6 +407,26 @@ function CheckinCard({
     <section className="core-card core-checkin-card">
       <div className="core-card__header">
         <h2>{t(asset === 'game' ? 'home.gameCheckinTitle' : 'home.checkinTitle')}</h2>
+        {capability.state === 'available' &&
+        !outcomeUnknown &&
+        !status.isPending &&
+        displayedAuthority ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--primary"
+            disabled={
+              checkedIn ||
+              blockedByOtherCheckin ||
+              mutation.isPending ||
+              status.isFetching ||
+              status.error !== null ||
+              capReached
+            }
+            onClick={() => void submit()}
+          >
+            {mutation.isPending ? t('common.working') : t('home.checkin.submit')}
+          </button>
+        ) : null}
       </div>
       {capability.state === 'unavailable' ? (
         <CoreUnavailable compact />
@@ -366,41 +453,47 @@ function CheckinCard({
         <p className="core-muted">{t('home.checkin.unavailable')}</p>
       ) : (
         <>
-          <div className="core-metrics">
-            <div className="core-metric">
-              <span>{t('home.checkin.today')}</span>
-              <strong>
-                {checkedIn
-                  ? t('home.checkin.checkedIn')
-                  : blockedByOtherCheckin
-                    ? t('home.checkin.otherChosen')
-                    : t('home.checkin.notCheckedIn')}
-              </strong>
+          <p className="home-checkin-status">
+            <span>
+              {checkedIn
+                ? t('home.checkin.checkedIn')
+                : blockedByOtherCheckin
+                  ? t('home.checkin.otherChosen')
+                  : t('home.checkin.notCheckedIn')}
+            </span>
+            <span className="nb-muted">
+              {' '}
+              · <ExactCredits value={displayedAuthority.award_min} />–
+              <ExactCredits value={displayedAuthority.award_max} />
+            </span>
+          </p>
+          <Fold title={text('user.home.checkinRules')} plain>
+            <div className="core-metrics">
+              <div className="core-metric">
+                <span>{t(asset === 'game' ? 'home.gameBalance' : 'home.balance')}</span>
+                <strong>
+                  <ExactCredits value={committed?.result.balance ?? displayedAuthority.balance} />
+                </strong>
+              </div>
+              <div className="core-metric">
+                <span>{t('home.checkin.awardRange')}</span>
+                <strong>
+                  <ExactCredits value={displayedAuthority.award_min} />–
+                  <ExactCredits value={displayedAuthority.award_max} />
+                </strong>
+              </div>
+              <div className="core-metric">
+                <span>{t('home.checkin.threshold')}</span>
+                <strong>
+                  {displayedAuthority.balance_cap === '0' ? (
+                    t('home.checkin.thresholdNone')
+                  ) : (
+                    <ExactCredits value={displayedAuthority.balance_cap} />
+                  )}
+                </strong>
+              </div>
             </div>
-            <div className="core-metric">
-              <span>{t(asset === 'game' ? 'home.gameBalance' : 'home.balance')}</span>
-              <strong>
-                <ExactCredits value={committed?.result.balance ?? displayedAuthority.balance} />
-              </strong>
-            </div>
-            <div className="core-metric">
-              <span>{t('home.checkin.awardRange')}</span>
-              <strong>
-                <ExactCredits value={displayedAuthority.award_min} />–
-                <ExactCredits value={displayedAuthority.award_max} />
-              </strong>
-            </div>
-            <div className="core-metric">
-              <span>{t('home.checkin.threshold')}</span>
-              <strong>
-                {displayedAuthority.balance_cap === '0' ? (
-                  t('home.checkin.thresholdNone')
-                ) : (
-                  <ExactCredits value={displayedAuthority.balance_cap} />
-                )}
-              </strong>
-            </div>
-          </div>
+          </Fold>
           {blockedByOtherCheckin ? (
             <p className="core-status-message">{t('home.checkin.otherChosenHint')}</p>
           ) : null}
@@ -437,21 +530,6 @@ function CheckinCard({
           {mutation.error && !isOutcomeUnknown(mutation.error) && !isConflict(mutation.error) ? (
             <CoreErrorPanel error={mutation.error} compact />
           ) : null}
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={
-              checkedIn ||
-              blockedByOtherCheckin ||
-              mutation.isPending ||
-              status.isFetching ||
-              status.error !== null ||
-              capReached
-            }
-            onClick={() => void submit()}
-          >
-            {mutation.isPending ? t('common.working') : t('home.checkin.submit')}
-          </button>
         </>
       )}
     </section>
@@ -567,60 +645,24 @@ export function HomeDashboard({
   sessionReady?: boolean;
 }) {
   const { t } = useCoreCopy();
-  const { t: text } = useQuickstartCopy();
   return (
-    <div className="page core-page core-stack">
+    <div className="page core-page core-stack home-page">
       <PageHeader
         icon="home"
         title={t('home.title', { name: user.guild_nick || user.username })}
         description={t('home.description')}
       />
-      <section className="core-card">
-        <h2>{text('title')}</h2>
-        <p>{text('body')}</p>
-        <div className="core-row-actions">
-          <Link className="btn btn-primary" to="/endpoints?quickstart=1">
-            {text('start')}
-          </Link>
-          <Link className="btn btn-secondary" to="/charity">
-            {text('community')}
-          </Link>
-        </div>
-      </section>
+      <div className="home-hero">
+        <OnboardingChecklist key={user.id} accountId={user.id} sessionReady={sessionReady} />
+        <EconomyCard accountId={user.id} />
+      </div>
+      <CapabilitySections accountId={user.id} adapters={adapters} />
       <HomeAnnouncements
         accountId={user.id}
         language={user.lang}
         capability={adapters.announcements}
         sessionReady={sessionReady}
       />
-      <div className="core-grid core-grid--wide">
-        <ProfileCard user={user} />
-        <EconomyCard accountId={user.id} />
-      </div>
-      <UsageCard user={user} />
-      <CapabilitySections accountId={user.id} adapters={adapters} />
-      <section className="core-card">
-        <div className="core-card__header">
-          <h2>{t('home.quickTitle')}</h2>
-        </div>
-        <div className="core-choice-grid">
-          <Link className="core-choice" to={CORE_ROUTE_PATHS.endpoints}>
-            {t('home.endpoints')}
-          </Link>
-          <Link className="core-choice" to={CORE_ROUTE_PATHS.models}>
-            {t('home.models')}
-          </Link>
-          <Link className="core-choice" to={CORE_ROUTE_PATHS.keys}>
-            {t('home.callerKey')}
-          </Link>
-          <Link className="core-choice" to="/activities">
-            {t('home.activities')}
-          </Link>
-          <Link className="core-choice" to="/games">
-            {t('home.games')}
-          </Link>
-        </div>
-      </section>
     </div>
   );
 }

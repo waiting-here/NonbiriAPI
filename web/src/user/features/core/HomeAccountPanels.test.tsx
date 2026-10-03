@@ -347,8 +347,8 @@ describe('home independent capability states', () => {
 
     await renderHomeDashboard(envelope.user, adapters);
 
-    expect(screen.getByText('Guild Alice')).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Lifetime usage' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Hello, Guild Alice' })).toBeVisible();
+    expect(await screen.findByText('Lifetime calls')).toBeVisible();
     expect(await screen.findByText('-1.5')).toBeVisible();
     expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(screen.getByText('Could not load this section')).toBeVisible();

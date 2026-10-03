@@ -54,8 +54,8 @@ describe('CallerKey authority response ordering', () => {
     rendered.queryClient.setQueryData(coreKeys.session, {
       user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
     });
-    await screen.findByText('No site API key');
-    await rendered.user.click(screen.getByRole('button', { name: 'Create site API key' }));
+    await screen.findByText('No key yet');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create key' }));
     await waitFor(() => expect(posts).toBe(1));
     await act(async () => {
       await rendered.queryClient.refetchQueries({ queryKey: coreKeys.callerKey('1'), exact: true });
@@ -96,7 +96,7 @@ describe('CallerKey authority response ordering', () => {
     rendered.queryClient.setQueryData(coreKeys.session, {
       user: { id: '1', username: 'account-1', level: 2, effective_level: 2 },
     });
-    await screen.findByText('No site API key');
+    await screen.findByText('No key yet');
     const pending = rendered.queryClient.refetchQueries({
       queryKey: coreKeys.callerKey('1'),
       exact: true,
@@ -114,7 +114,7 @@ describe('CallerKey authority response ordering', () => {
       generation: '1',
       metadata,
     });
-    expect(screen.getByRole('button', { name: 'Replace site API key' })).toBeEnabled();
-    expect(screen.queryByText('No site API key')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Replace key…' })).toBeEnabled();
+    expect(screen.queryByText('No key yet')).not.toBeInTheDocument();
   });
 });
