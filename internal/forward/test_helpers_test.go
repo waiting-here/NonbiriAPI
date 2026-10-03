@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 type fixedSubkeyDeriver struct{ key []byte }
@@ -79,7 +80,7 @@ func (router *fakeCharityRouter) RequestPolicy(_ context.Context, _ int64, model
 	if router.policyModelID != 0 {
 		id = router.policyModelID
 	}
-	return CharityRequestPolicy{RolePolicy: router.preflight.RolePolicy.Clone(), Revision: router.preflight.Revision, ModelID: id, FullName: model, ExcludedRequestFields: append([]string(nil), router.policyFields...)}, router.policyErr
+	return CharityRequestPolicy{TransportRule: router.preflight.TransportRule, RolePolicy: router.preflight.RolePolicy.Clone(), Revision: router.preflight.Revision, ModelID: id, FullName: model, ExcludedRequestFields: append([]string(nil), router.policyFields...)}, router.policyErr
 }
 
 func (router *fakeCharityRouter) Preflight(_ context.Context, _ int64, _ string, _ *openai.ChatRequest, now int64) (CharityPreflight, error) {
@@ -345,8 +346,9 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	}
 	personal := &fakePersonalRouter{
 		preflight: PersonalPreflight{
-			RolePolicy: rolepolicy.Default(),
-			ModelID:    7, OwnerUserID: 1, Provider: "provider", Model: "model", FullName: "provider/model",
+			TransportRule: transportpolicy.Passthrough,
+			RolePolicy:    rolepolicy.Default(),
+			ModelID:       7, OwnerUserID: 1, Provider: "provider", Model: "model", FullName: "provider/model",
 			RouteStrategy: "ordered", Revision: 1, BindingRevision: 1,
 		},
 	}
@@ -355,7 +357,8 @@ func newServiceFixture(t *testing.T, capture DebugCapture) *serviceFixture {
 	charityCandidate.EndpointID, charityCandidate.EndpointKeyID, charityCandidate.DonationKeyID = 21, 22, 23
 	charity := &fakeCharityRouter{
 		preflight: CharityPreflight{
-			RolePolicy: rolepolicy.Default(), Revision: 1,
+			TransportRule: transportpolicy.Passthrough,
+			RolePolicy:    rolepolicy.Default(), Revision: 1,
 			ModelID: 8, Provider: "care", Model: "model", FullName: "[公益]care/model", ReservedMilli: 10,
 		},
 	}

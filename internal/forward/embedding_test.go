@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 func callDebugModelForTest(t *testing.T, f *serviceFixture, w http.ResponseWriter, embedding, charity bool) {
@@ -108,6 +109,10 @@ func TestEmbeddingSelectsOperationAndSkipsChatPolicies(t *testing.T) {
 		for _, unsupported := range []bool{false, true} {
 			t.Run(fmt.Sprintf("charity=%t/unsupported=%t", charity, unsupported), func(t *testing.T) {
 				f := newServiceFixture(t, nil)
+				f.personal.preflight.TransportRule = transportpolicy.ForceStream
+				f.personal.snapshot.TransportRule = transportpolicy.ForceStream
+				f.charity.preflight.TransportRule = transportpolicy.ForceStream
+				f.charity.snapshot.TransportRule = transportpolicy.ForceStream
 				f.personal.preflight.FlattenToolCalls = true
 				f.personal.snapshot.FlattenToolCalls = true
 				f.charity.preflight.FlattenToolCalls = true

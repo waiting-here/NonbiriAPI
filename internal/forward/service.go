@@ -34,6 +34,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 const (
@@ -73,6 +74,7 @@ type Service struct {
 }
 
 type logicalAdmission struct {
+	transportRule transportpolicy.Rule
 	rolePolicy    rolepolicy.Policy
 	modelRevision int64
 	charity       bool
@@ -491,13 +493,14 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 			return logicalAdmission{charity: true}, request, nil, charityrouting.ErrNotFound
 		}
 		admission := logicalAdmission{
-			rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
+			transportRule: value.TransportRule, rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
 			silentRetry: true, flatten: value.FlattenToolCalls, reservedMilli: value.ReservedMilli,
 			decisionNow: now,
 		}
 		if request.roleSnapshot != nil {
 			admission.rolePolicy = request.roleSnapshot.Clone()
 			admission.modelRevision = request.policyRevision
+			admission.transportRule = request.transportRule
 		}
 		return prepareModelPolicy(request, admission)
 	}
@@ -506,12 +509,13 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *va
 		return logicalAdmission{}, request, nil, err
 	}
 	admission := logicalAdmission{
-		rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
+		transportRule: value.TransportRule, rolePolicy: value.RolePolicy.Clone(), modelRevision: value.Revision, modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
 		silentRetry: value.SilentRetry, flatten: value.FlattenToolCalls,
 	}
 	if request.roleSnapshot != nil {
 		admission.rolePolicy = request.roleSnapshot.Clone()
 		admission.modelRevision = request.policyRevision
+		admission.transportRule = request.transportRule
 	}
 	return prepareModelPolicy(request, admission)
 }
@@ -541,6 +545,7 @@ func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (
 	copy := chatRequest(transformed)
 	copy.policyModelID, copy.policyDecisionNow = request.policyModelID, request.policyDecisionNow
 	copy.policyRevision = admission.modelRevision
+	copy.transportRule = admission.transportRule
 	policy := admission.rolePolicy.Clone()
 	copy.roleSnapshot = &policy
 	copy.excluded = append([]string(nil), request.excluded...)
@@ -558,7 +563,12 @@ func (service *Service) snapshot(
 ) (executionPlan, error) {
 	plan := executionPlan{logicalAdmission: admission, route: requestkind.ForOperation(request.operation, admission.charity)}
 	if admission.charity {
-		connectorTypes := service.supportedCharityConnectorTypes(request, admission.flatten)
+		physical, err := request.withTransport(admission.transportRule)
+		if err != nil {
+			return executionPlan{}, err
+		}
+		connectorTypes := service.supportedCharityConnectorTypes(physical, admission.flatten)
+		physical.Clear()
 		if len(connectorTypes) == 0 {
 			return executionPlan{}, openai.ErrInvalidRequest
 		}
@@ -594,6 +604,10 @@ func (service *Service) snapshot(
 		return executionPlan{}, err
 	}
 	if err := service.freezeAdaptations(ctx, request, &plan, inbound); err != nil {
+		plan.clearPrepared()
+		return executionPlan{}, err
+	}
+	if err := freezeTransport(request, &plan); err != nil {
 		plan.clearPrepared()
 		return executionPlan{}, err
 	}
@@ -877,6 +891,12 @@ func (service *Service) runAttempts(
 		if suppressor != nil {
 			sink = suppressor.UpstreamWriter()
 		}
+		callerSink := sink
+		var converted *transportResponse
+		if request.chat != nil && attemptRequest.Stream != request.Stream {
+			converted = newTransportResponse(attemptRequest.Stream)
+			sink = converted
+		}
 		var responseStart *responseStartWriter
 		if plan.charity || request.embedding != nil {
 			sink, responseStart = checkpointResponseWriter(sink, func() error {
@@ -904,6 +924,12 @@ func (service *Service) runAttempts(
 		})
 		credential.Clear()
 		attemptRequest.Clear()
+		if converted != nil {
+			if validAttemptResult(result) {
+				result = converted.complete(executionContext, callerSink, callerIncludesUsage(request.chat), result)
+			}
+			converted.clear()
+		}
 		result.Diagnostic = diagnostic.Bound(result.Diagnostic)
 		if responseStart != nil && responseStart.started {
 			run.responseStarted = true
@@ -1216,7 +1242,7 @@ func validAdmission(value logicalAdmission) bool {
 	if value.charity {
 		maxRunes = maxCharityRunes
 	}
-	return value.modelID > 0 && validBoundedText(value.fullName, maxRunes, 4096) &&
+	return value.transportRule.Valid() && value.modelID > 0 && validBoundedText(value.fullName, maxRunes, 4096) &&
 		(value.strategy == "ordered" || value.strategy == "random") &&
 		value.reservedMilli >= 0 && value.reservedMilli <= claim.MaxMoneyMilli &&
 		(!value.charity || value.decisionNow >= 0 && value.decisionNow <= maxUnixSecond) &&
