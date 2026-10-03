@@ -142,7 +142,7 @@ func (service *Service) BackfillBatch(ctx context.Context, lastID int64, limit i
 		return lastID, 0, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM users WHERE is_admin=0 AND id>? ORDER BY id LIMIT ?`, lastID, limit)
+	rows, err := tx.QueryContext(ctx, `SELECT u.id FROM users u WHERE u.is_admin=0 AND u.id>? AND NOT EXISTS(SELECT 1 FROM user_continuity_identities c WHERE c.user_id=u.id) ORDER BY u.id LIMIT ?`, lastID, limit)
 	if err != nil {
 		return lastID, 0, err
 	}
@@ -184,4 +184,25 @@ func (service *Service) Close() error {
 	service.closed = true
 	clear(service.secret[:])
 	return nil
+}
+
+// ValidateBindings audits every current provider binding without creating rows.
+func (service *Service) ValidateBindings(ctx context.Context) error {
+	rows, err := service.database.QueryContext(ctx, `SELECT u.discord_id,c.identity_key FROM users u LEFT JOIN user_continuity_identities c ON c.user_id=u.id WHERE u.is_admin=0 ORDER BY u.id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var identity string
+		var stored []byte
+		if err := rows.Scan(&identity, &stored); err != nil {
+			return err
+		}
+		key, err := service.KeyForDiscord(identity)
+		if err != nil || len(stored) != len(key) || subtle.ConstantTimeCompare(stored, key[:]) != 1 {
+			return ErrInvariant
+		}
+	}
+	return rows.Err()
 }

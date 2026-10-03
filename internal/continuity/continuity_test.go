@@ -177,3 +177,38 @@ func TestDailyPeriodUsesOriginalSiteMidnight(t *testing.T) {
 		t.Fatalf("day=%s expiry=%d err=%v", day, expiry, err)
 	}
 }
+
+func TestBackfillOnlyMissingBindingsAndOfflineAuditRejectsConflicts(t *testing.T) {
+	database, service := fixture(t)
+	first := insertUser(t, database, "bound")
+	tx := transaction(t, database)
+	if _, err := service.BindUserTx(context.Background(), tx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	second := insertUser(t, database, "missing")
+	next, count, err := service.BackfillBatch(context.Background(), 0, 100)
+	if err != nil || count != 1 || next != second {
+		t.Fatal(next, count, err)
+	}
+	if err := service.ValidateBindings(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, count, err := service.BackfillBatch(context.Background(), 0, 100); err != nil || count != 0 {
+		t.Fatal(count, err)
+	}
+	if _, err := database.Exec(`UPDATE user_continuity_identities SET identity_key=zeroblob(32) WHERE user_id=?`, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, count, err := service.BackfillBatch(context.Background(), 0, 100); err != nil || count != 0 {
+		t.Fatal(count, err)
+	}
+	if err := service.ValidateBindings(context.Background()); !errors.Is(err, continuity.ErrInvariant) {
+		t.Fatal("offline audit ignored conflict", err)
+	}
+	if _, err := service.UserKey(context.Background(), first); !errors.Is(err, continuity.ErrInvariant) {
+		t.Fatal("normal identity operation ignored conflict", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack/engine"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 )
@@ -25,11 +26,19 @@ func (s *Service) ValidatePersistedState(ctx context.Context) error {
 		return err
 	}
 	var bad int
-	for _, query := range []string{
+	checks := []string{
 		`SELECT COUNT(*) FROM game_blackjack_entries e WHERE (state IN ('waiting','seated','playing') AND NOT EXISTS(SELECT 1 FROM game_blackjack_payments p WHERE p.entry_id=e.id AND p.kind='base' AND p.state='reserved')) OR (state IN ('settled','released') AND EXISTS(SELECT 1 FROM game_blackjack_payments p WHERE p.entry_id=e.id AND p.state='reserved'))`,
 		`SELECT COUNT(*) FROM game_blackjack_payments p JOIN game_blackjack_entries e ON e.id=p.entry_id WHERE p.amount_milli<>e.stake_milli OR p.state='reserved' AND e.state NOT IN ('waiting','seated','playing')`,
 		`SELECT COUNT(*) FROM game_blackjack_entries e JOIN game_blackjack_sessions g ON g.id=e.session_id WHERE (e.state='seated' AND g.phase<>'seating') OR (e.state='playing' AND g.phase<>'decision') OR (e.state='settled' AND g.phase<>'result') OR (e.state='released' AND g.phase<>'cancelled')`,
-	} {
+	}
+	if db.IsActiveRecovery(ctx) {
+		checks = []string{
+			`SELECT COUNT(*) FROM game_blackjack_entries e WHERE state IN ('waiting','seated','playing') AND NOT EXISTS(SELECT 1 FROM game_blackjack_payments p WHERE p.entry_id=e.id AND p.kind='base' AND p.state='reserved')`,
+			`SELECT COUNT(*) FROM game_blackjack_payments p LEFT JOIN game_blackjack_entries e ON e.id=p.entry_id WHERE p.state='reserved' AND (e.id IS NULL OR p.amount_milli<>e.stake_milli OR e.state NOT IN ('waiting','seated','playing'))`,
+			`SELECT COUNT(*) FROM game_blackjack_entries e JOIN game_blackjack_sessions g ON g.id=e.session_id WHERE (e.state='seated' AND g.phase<>'seating') OR (e.state='playing' AND g.phase<>'decision')`,
+		}
+	}
+	for _, query := range checks {
 		if err := tx.QueryRowContext(ctx, query).Scan(&bad); err != nil {
 			return err
 		}
@@ -269,4 +278,9 @@ func (s *Service) CancelUserTx(ctx context.Context, tx *sql.Tx, user, now int64)
 }
 func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int64) (host.Finalizer, error) {
 	return s.stopUserTx(ctx, tx, user, now, true)
+}
+
+// VerifyPersistedState audits payment and session relationships read-only.
+func VerifyPersistedState(ctx context.Context, database *sql.DB) error {
+	return (&Service{database: database}).ValidatePersistedState(ctx)
 }

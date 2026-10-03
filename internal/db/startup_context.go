@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -106,41 +105,7 @@ func sourceChangeReason(a, b *sourceFileSnapshot) string {
 	if a.mode != b.mode {
 		return "identity"
 	}
-	if a.digest != b.digest {
-		return "digest"
-	}
 	return ""
-}
-
-func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
-	buffer := make([]byte, 64*1024)
-	var total int64
-	for {
-		if err := ctx.Err(); err != nil {
-			return total, err
-		}
-		n, readErr := src.Read(buffer)
-		if n > 0 {
-			if err := ctx.Err(); err != nil {
-				return total, err
-			}
-			written, err := dst.Write(buffer[:n])
-			total += int64(written)
-			recordStartupProgress(ctx, 0, int64(written))
-			if err != nil {
-				return total, err
-			}
-			if written != n {
-				return total, io.ErrShortWrite
-			}
-		}
-		if readErr == io.EOF {
-			return total, nil
-		}
-		if readErr != nil {
-			return total, readErr
-		}
-	}
 }
 
 func openSQLiteContext(ctx context.Context, path, mode string) (*sql.DB, error) {

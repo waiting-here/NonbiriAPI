@@ -124,7 +124,7 @@ func TestOpenContextCanceledPreflightPreservesSource(t *testing.T) {
 	preserveBootstrapHooks(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	afterSnapshotCopyHook = cancel
+	beforeWritableOpenHook = cancel
 
 	store, err := OpenContext(ctx, path, vault)
 	if store != nil {
@@ -134,7 +134,7 @@ func TestOpenContextCanceledPreflightPreservesSource(t *testing.T) {
 		t.Fatalf("OpenContext canceled during preflight = (%v, %v), want nil and context.Canceled", store, err)
 	}
 	assertBootstrapSourcesUnchanged(t, path, before)
-	afterSnapshotCopyHook = nil
+	beforeWritableOpenHook = nil
 	if reopened, err := Open(path, vault); err != nil {
 		t.Fatalf("reopen preserved source: %v", err)
 	} else if err := reopened.Close(); err != nil {

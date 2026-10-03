@@ -20,8 +20,11 @@ import (
 // Maintenance opens the configured database without listeners or workers.
 // Operators stop the service and preserve a consistent recovery set first.
 func runMaintenance(args []string, output io.Writer) (result error) {
+	if len(args) >= 2 && args[0] == "maintenance" && args[1] == "verify" {
+		return runVerification(args[2:], output)
+	}
 	if len(args) < 2 || args[0] != "maintenance" || (args[1] != "fatfish-cleanup-plan" && args[1] != "fatfish-cleanup") {
-		return errors.New("usage: nonbiriapi maintenance {fatfish-cleanup-plan|fatfish-cleanup} --source FILE [--manifest FILE --operation-key KEY]")
+		return errors.New("usage: nonbiriapi maintenance verify; nonbiriapi maintenance {fatfish-cleanup-plan|fatfish-cleanup} --source FILE [--manifest FILE --operation-key KEY]")
 	}
 	apply := args[1] == "fatfish-cleanup"
 	flags := flag.NewFlagSet(args[1], flag.ContinueOnError)

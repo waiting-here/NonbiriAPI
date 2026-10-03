@@ -13,18 +13,25 @@ import (
 type StartupStage string
 
 const (
-	StageConfiguration      StartupStage = "configuration"
-	StagePathPreflight      StartupStage = "path_preflight"
-	StageSnapshotCopy       StartupStage = "snapshot_copy"
-	StageSnapshotValidation StartupStage = "snapshot_validation"
-	StageSourceRecheck      StartupStage = "source_recheck"
-	StageRawHandlesClosed   StartupStage = "raw_handles_closed"
-	StageSourceOpen         StartupStage = "source_open"
-	StageSchemaUpgrade      StartupStage = "schema_upgrade"
-	StageDomainRecovery     StartupStage = "domain_recovery"
-	StageRoutesReady        StartupStage = "routes_ready"
-	StageListenerBound      StartupStage = "listener_bound"
-	StageReady              StartupStage = "ready"
+	StageConfiguration        StartupStage = "configuration"
+	StageIdentityValidation   StartupStage = "identity_validation"
+	StageSchemaValidation     StartupStage = "schema_validation"
+	StageCredentialValidation StartupStage = "credential_validation"
+	StageAccountRecovery      StartupStage = "account_recovery"
+	StageGameValidation       StartupStage = "game_validation"
+	StageQuotaValidation      StartupStage = "quota_validation"
+	StageBusinessRecovery     StartupStage = "business_recovery"
+	StagePathPreflight        StartupStage = "path_preflight"
+	StageSnapshotCopy         StartupStage = "snapshot_copy"
+	StageSnapshotValidation   StartupStage = "snapshot_validation"
+	StageSourceRecheck        StartupStage = "source_recheck"
+	StageRawHandlesClosed     StartupStage = "raw_handles_closed"
+	StageSourceOpen           StartupStage = "source_open"
+	StageSchemaUpgrade        StartupStage = "schema_upgrade"
+	StageDomainRecovery       StartupStage = "domain_recovery"
+	StageRoutesReady          StartupStage = "routes_ready"
+	StageListenerBound        StartupStage = "listener_bound"
+	StageReady                StartupStage = "ready"
 )
 
 type StartupProgress struct {
@@ -73,7 +80,7 @@ func (t *StartupTrace) snapshotLocked() StartupProgress {
 
 func validStartupStage(stage StartupStage) bool {
 	switch stage {
-	case StageConfiguration, StagePathPreflight, StageSnapshotCopy, StageSnapshotValidation,
+	case StageIdentityValidation, StageSchemaValidation, StageCredentialValidation, StageAccountRecovery, StageGameValidation, StageQuotaValidation, StageBusinessRecovery, StageConfiguration, StagePathPreflight, StageSnapshotCopy, StageSnapshotValidation,
 		StageSourceRecheck, StageRawHandlesClosed, StageSourceOpen, StageSchemaUpgrade,
 		StageDomainRecovery, StageRoutesReady, StageListenerBound, StageReady:
 		return true

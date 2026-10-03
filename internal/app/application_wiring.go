@@ -139,7 +139,8 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err := startupContext.Err(); err != nil {
 		return nil, err
 	}
-	db.RecordStartupStage(startupContext, db.StageDomainRecovery)
+	startupContext = db.ActiveRecoveryContext(startupContext)
+	db.RecordStartupStage(startupContext, db.StageAccountRecovery)
 	workerContext, workerCancel := context.WithCancel(context.Background())
 	defer func() {
 		if built == nil {
@@ -443,7 +444,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("create activities service: %w", err)
 	}
-	if err := recoverAnnouncementsBeforeListener(startupContext, announcementService); err != nil {
+	if err := recoverAnnouncementsBeforeListener(startupContext, announcementRepository); err != nil {
 		return nil, err
 	}
 	if err := recoverIssuesBeforeListener(startupContext, issueService); err != nil {
@@ -654,12 +655,15 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
 	}
+	db.RecordStartupStage(startupContext, db.StageGameValidation)
 	if err := gameRuntimes.ValidatePersistedState(startupContext); err != nil {
 		return nil, fmt.Errorf("validate game persisted state: %w", err)
 	}
+	db.RecordStartupStage(startupContext, db.StageQuotaValidation)
 	if err := charityService.ValidateRecurringState(startupContext); err != nil {
 		return nil, fmt.Errorf("validate recurring charity limits: %w", err)
 	}
+	db.RecordStartupStage(startupContext, db.StageBusinessRecovery)
 	if err := recoverRankingsAndLifecycleBeforeListener(startupContext, rankingService, lifecycleCoordinator, gameNow().Unix()); err != nil {
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}
@@ -747,17 +751,16 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 
 const lifecycleRecoveryBatch = 100
 
-func recoverAnnouncementsBeforeListener(ctx context.Context, service *announcements.Service) error {
+func recoverAnnouncementsBeforeListener(ctx context.Context, service *announcements.Repository) error {
 	if ctx == nil || service == nil {
 		return errors.New("announcement recovery dependencies are required")
 	}
 	for {
-		result, err := service.RecoverBeforeListener(ctx, lifecycleRecoveryBatch)
+		result, err := service.ExpireDue(ctx, lifecycleRecoveryBatch)
 		if err != nil {
 			return fmt.Errorf("recover announcements before listener: %w", err)
 		}
-		if result.Expired < lifecycleRecoveryBatch && result.ActorsDeidentified < lifecycleRecoveryBatch &&
-			result.AuditsDeleted < lifecycleRecoveryBatch {
+		if result < lifecycleRecoveryBatch {
 			return nil
 		}
 	}
@@ -767,7 +770,7 @@ func recoverIssuesBeforeListener(ctx context.Context, service *issues.Service) e
 	if ctx == nil || service == nil {
 		return errors.New("issue recovery dependencies are required")
 	}
-	if _, _, err := service.RecoverBeforeListener(ctx, lifecycleRecoveryBatch); err != nil {
+	if _, err := service.RebuildIncomplete(ctx, lifecycleRecoveryBatch); err != nil {
 		return fmt.Errorf("recover issues before listener: %w", err)
 	}
 	return nil

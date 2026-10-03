@@ -95,14 +95,13 @@ func generationError(actual uint32) error {
 }
 
 type sourceFileSnapshot struct {
-	path   string
-	role   string
-	file   *os.File
-	info   os.FileInfo
-	size   int64
-	mtime  int64
-	mode   os.FileMode
-	digest [sha256.Size]byte
+	path  string
+	role  string
+	file  *os.File
+	info  os.FileInfo
+	size  int64
+	mtime int64
+	mode  os.FileMode
 }
 
 type sourceSnapshotSet struct {
@@ -182,19 +181,10 @@ func captureSourceFile(ctx context.Context, path, role string) (snapshot *source
 	if err := validateSourceFile(f, info); err != nil {
 		return nil, startupError(StartupUnsafePath)
 	}
-	h := sha256.New()
-	if _, err := copyWithContext(ctx, h, f); err != nil {
-		return nil, startupIOError(ctx, err)
-	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, startupIOError(ctx, err)
-	}
-	var digest [sha256.Size]byte
-	copy(digest[:], h.Sum(nil))
 	closeOnFailure = false
 	return &sourceFileSnapshot{
 		path: path, role: role, file: f, info: info, size: info.Size(),
-		mtime: info.ModTime().UnixNano(), mode: info.Mode(), digest: digest,
+		mtime: info.ModTime().UnixNano(), mode: info.Mode(),
 	}, nil
 }
 
@@ -203,7 +193,7 @@ func equalSourceFile(a, b *sourceFileSnapshot) bool {
 		return a == nil && b == nil
 	}
 	return os.SameFile(a.info, b.info) && a.size == b.size && a.mtime == b.mtime &&
-		a.mode == b.mode && a.digest == b.digest
+		a.mode == b.mode
 }
 
 func recheckSourceSet(ctx context.Context, path string, original *sourceSnapshotSet) (result error) {
@@ -244,10 +234,20 @@ func openGenerationTwo(ctx context.Context, path string, secrets secret.Generati
 		}
 		return createFreshGenerationTwo(ctx, path, secrets)
 	}
-	if err := validateCurrentSnapshot(ctx, path, initial, secrets); err != nil {
+	if err := validateCurrentSource(ctx, path, initial, secrets); err != nil {
 		return nil, err
 	}
-	return openValidatedSource(ctx, path, initial, secrets)
+	// Read-only WAL access may create its shared-memory sidecar. Capture the
+	// current metadata only, with no source descriptor left open for SQLite.
+	current, err := captureSourceSet(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { result = appendStartupError(result, current.close()) }()
+	if !equalSourceFile(initial.main, current.main) {
+		return nil, startupError(StartupSourceChanged)
+	}
+	return openValidatedSource(ctx, path, current, secrets)
 }
 
 func validateHeader(main *sourceFileSnapshot) error {
@@ -281,13 +281,6 @@ func validateHeader(main *sourceFileSnapshot) error {
 	return nil
 }
 
-type validationWorkspace struct {
-	dir      string
-	mainPath string
-	dirInfo  os.FileInfo
-	owned    map[string]ownedFileEvidence
-}
-
 type ownedFileEvidence struct {
 	info  os.FileInfo
 	size  int64
@@ -311,247 +304,6 @@ func (e ownedFileEvidence) matches(info os.FileInfo) bool {
 // pre-creation identity proof.
 func (e ownedFileEvidence) matchesIdentity(info os.FileInfo) bool {
 	return e.info != nil && info != nil && os.SameFile(e.info, info)
-}
-
-func newValidationWorkspace() (*validationWorkspace, error) {
-	dir, err := os.MkdirTemp("", "nonbiri-db-validate-")
-	if err != nil {
-		return nil, startupError(StartupInitialization)
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		_ = os.Remove(dir)
-		return nil, startupError(StartupInitialization)
-	}
-	dirInfo, err := os.Lstat(dir)
-	if err != nil || !dirInfo.IsDir() {
-		_ = os.Remove(dir)
-		return nil, startupError(StartupInitialization)
-	}
-	return &validationWorkspace{
-		dir: dir, mainPath: filepath.Join(dir, "database.sqlite"), dirInfo: dirInfo,
-		owned: make(map[string]ownedFileEvidence),
-	}, nil
-}
-
-func (w *validationWorkspace) recordOwned(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return startupError(StartupInitialization)
-	}
-	w.owned[filepath.Base(path)] = makeOwnedFileEvidence(info)
-	return nil
-}
-
-func (w *validationWorkspace) recordSQLiteSidecars() error {
-	for _, suffix := range []string{"-wal", "-shm"} {
-		path := w.mainPath + suffix
-		info, err := os.Lstat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return startupError(StartupInitialization)
-		}
-		name := filepath.Base(path)
-		if prior, ok := w.owned[name]; ok && !os.SameFile(prior.info, info) {
-			return startupError(StartupSourceChanged)
-		}
-		w.owned[name] = makeOwnedFileEvidence(info)
-	}
-	return nil
-}
-
-func (w *validationWorkspace) cleanup() error {
-	if w == nil || w.dir == "" {
-		return nil
-	}
-	currentDir, err := os.Lstat(w.dir)
-	if err != nil || !currentDir.IsDir() || !os.SameFile(w.dirInfo, currentDir) {
-		return startupError(StartupCleanupFailure)
-	}
-	entries, err := os.ReadDir(w.dir)
-	if err != nil {
-		return startupError(StartupCleanupFailure)
-	}
-	allowed := map[string]bool{
-		"database.sqlite": true, "database.sqlite-wal": true, "database.sqlite-shm": true,
-	}
-	for _, entry := range entries {
-		owned, ok := w.owned[entry.Name()]
-		if !allowed[entry.Name()] || !ok {
-			return startupError(StartupCleanupFailure)
-		}
-		info, err := os.Lstat(filepath.Join(w.dir, entry.Name()))
-		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || !owned.matches(info) {
-			return startupError(StartupCleanupFailure)
-		}
-	}
-	for _, name := range []string{"database.sqlite-shm", "database.sqlite-wal", "database.sqlite"} {
-		p := filepath.Join(w.dir, name)
-		info, err := os.Lstat(p)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return startupError(StartupCleanupFailure)
-		}
-		owned, ok := w.owned[name]
-		if !ok || !owned.matches(info) {
-			return startupError(StartupCleanupFailure)
-		}
-		if err := os.Remove(p); err != nil {
-			return startupError(StartupCleanupFailure)
-		}
-	}
-	if err := os.Remove(w.dir); err != nil {
-		return startupError(StartupCleanupFailure)
-	}
-	w.dir = ""
-	return nil
-}
-
-func copySnapshot(ctx context.Context, source *sourceFileSnapshot, destination string) (result error) {
-	if source == nil || source.file == nil {
-		return startupError(StartupSourceChanged)
-	}
-	if _, err := source.file.Seek(0, io.SeekStart); err != nil {
-		return startupIOError(ctx, err)
-	}
-	out, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return startupError(StartupWriteIO)
-	}
-	createdInfo, err := out.Stat()
-	if err != nil {
-		_ = out.Close()
-		return startupError(StartupInitialization)
-	}
-	copyOK := false
-	outClosed := false
-	defer func() {
-		if !copyOK {
-			if !outClosed {
-				if err := out.Close(); err != nil {
-					result = appendStartupError(result, startupError(StartupCleanupFailure))
-				}
-			}
-			if current, err := os.Lstat(destination); err == nil && current.Mode().IsRegular() &&
-				current.Mode()&os.ModeSymlink == 0 && os.SameFile(createdInfo, current) {
-				if err := os.Remove(destination); err != nil {
-					result = appendStartupError(result, startupError(StartupCleanupFailure))
-				}
-			}
-		}
-	}()
-	written, err := copyWithContext(ctx, out, source.file)
-	if err != nil {
-		return startupIOError(ctx, err)
-	}
-	if written != source.size {
-		return &StartupError{Kind: StartupSourceChanged, Reason: "size"}
-	}
-	if err := out.Sync(); err != nil {
-		return startupError(StartupWriteIO)
-	}
-	outClosed = true
-	if err := out.Close(); err != nil {
-		return startupError(StartupCleanupFailure)
-	}
-	copied, err := os.Open(destination)
-	if err != nil {
-		return startupIOError(ctx, err)
-	}
-	h := sha256.New()
-	_, hashErr := copyWithContext(ctx, h, copied)
-	closeErr := copied.Close()
-	if hashErr != nil {
-		if closeErr != nil {
-			return appendStartupError(startupIOError(ctx, hashErr), startupError(StartupCleanupFailure))
-		}
-		return startupIOError(ctx, hashErr)
-	}
-	if closeErr != nil {
-		return startupError(StartupCleanupFailure)
-	}
-	if !equalDigest(h.Sum(nil), source.digest) {
-		return &StartupError{Kind: StartupSourceChanged, Reason: "digest"}
-	}
-	copyOK = true
-	return nil
-}
-
-func equalDigest(sum []byte, expected [sha256.Size]byte) bool {
-	return len(sum) == len(expected) && string(sum) == string(expected[:])
-}
-
-func validateCurrentSnapshot(ctx context.Context, path string, source *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) error {
-	RecordStartupStage(ctx, StageSnapshotCopy)
-	workspace, err := newValidationWorkspace()
-	if err != nil {
-		return err
-	}
-	var validationErr error
-	if err := copySnapshot(ctx, source.main, workspace.mainPath); err != nil {
-		validationErr = err
-	} else if err := workspace.recordOwned(workspace.mainPath); err != nil {
-		validationErr = err
-	} else if source.wal != nil {
-		validationErr = copySnapshot(ctx, source.wal, workspace.mainPath+"-wal")
-		if validationErr == nil {
-			validationErr = workspace.recordOwned(workspace.mainPath + "-wal")
-		}
-	}
-	if validationErr == nil {
-		if afterSnapshotCopyHook != nil {
-			afterSnapshotCopyHook()
-		}
-		validationErr = recheckSourceSet(ctx, path, source)
-	}
-	if validationErr == nil {
-		// The source path is never opened for a raw header read. Validate the
-		// copied main bytes first, then let the read-only SQLite validation see
-		// the copied main+WAL view. This keeps marker classification inside the
-		// private snapshot interval and ensures it cannot perform source writes.
-		validationErr = validateHeaderCopy(workspace.mainPath)
-	}
-	copyOwnsCleanup := validationErr == nil
-	if copyOwnsCleanup {
-		RecordStartupStage(ctx, StageSnapshotValidation)
-		validationErr = validateReadOnlyCopy(ctx, workspace, secrets)
-	}
-	// On success SQLite and its private workspace have closed. On cancellation
-	// its registered close operation retains cleanup ownership until it finishes.
-	recordStartupFailure(ctx, validationErr)
-	validationErr = appendStartupError(validationErr, recheckSourceSet(ctx, path, source))
-	if !copyOwnsCleanup {
-		validationErr = appendStartupError(validationErr, workspace.cleanup())
-	}
-	return validationErr
-}
-
-// validateHeaderCopy reads only the private main-file copy created for
-// current-database preflight. The source descriptor is intentionally not
-// passed here: DEC-009 treats the local filesystem as trusted, while the
-// startup contract still requires header/generation classification before any
-// SQLite read-only open of the source data.
-func validateHeaderCopy(path string) (result error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return startupError(StartupReadIO)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			result = appendStartupError(result, startupError(StartupCleanupFailure))
-		}
-	}()
-	info, err := file.Stat()
-	if err != nil {
-		return startupError(StartupReadIO)
-	}
-	if !info.Mode().IsRegular() {
-		return startupError(StartupInvalidHeader)
-	}
-	return validateHeader(&sourceFileSnapshot{file: file, size: info.Size()})
 }
 
 func sqliteFileURI(path, mode string) (string, error) {
@@ -588,23 +340,7 @@ func openSQLite(path, mode string) (*sql.DB, error) {
 	return d, nil
 }
 
-func validateReadOnlyCopy(ctx context.Context, workspace *validationWorkspace, secrets secret.GenerationTwoContextCodec) (result error) {
-	d, err := openSQLiteContext(ctx, workspace.mainPath, "ro")
-	if err != nil {
-		return appendStartupError(startupSQLFailure(ctx, err, StartupCorruptDatabase), workspace.cleanup())
-	}
-	copyStore := &Store{db: d, afterClose: func() error {
-		return appendStartupError(workspace.recordSQLiteSidecars(), workspace.cleanup())
-	}}
-	defer func() {
-		result = appendStartupError(result, copyStore.CloseContext(ctx))
-	}()
-	if _, err := d.ExecContext(ctx, `PRAGMA query_only=ON; PRAGMA foreign_keys=ON;`); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if err := workspace.recordSQLiteSidecars(); err != nil {
-		return err
-	}
+func validateReadOnlyDatabase(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) error {
 	// Page one can itself be committed in the WAL. The raw source header is the
 	// pre-SQLite gate; these PRAGMAs verify the merged main+WAL view.
 	var applicationID, userVersion uint32
@@ -646,6 +382,9 @@ func validateReadOnlyCopy(ctx context.Context, workspace *validationWorkspace, s
 	}
 	if err := validateAssetSourceConfig(ctx, d, prior); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
+	}
+	if audit, ok := ctx.Value(verificationAuditKey{}).(func(context.Context, *sql.DB) error); ok {
+		return audit(ctx, d)
 	}
 	return nil
 }
@@ -920,52 +659,11 @@ func reconcileEndpointKeySecretOrphans(ctx context.Context, d *sql.DB) error {
 	}
 }
 
-func validateWritableGenerationTwoState(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) error {
-	if d == nil {
-		return startupError(StartupInitialization)
-	}
-	var applicationID, userVersion uint32
-	if err := d.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&applicationID); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if applicationID != DatabaseApplicationID {
-		return startupError(StartupWrongIdentity)
-	}
-	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&userVersion); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if userVersion != DatabaseUserVersion {
-		return generationError(userVersion)
-	}
-	if err := foreignKeyCheck(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if err := quickCheck(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
-	}
-	if err := validateGenerationTwoManifest(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-	}
-	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-	}
-	if _, err := validateCurrentGenerationTwoSiteConfig(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-	}
-	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
-		return startupSQLFailure(ctx, err, StartupCredentialReject)
-	}
-	return nil
-}
-
 var beforeWritableOpenHook func()
-var afterSnapshotCopyHook func()
 var beforeFreshExclusiveCreateHook func()
 var freshSchemaFailureHook func() error
 
-// writableRecoveryPhaseHook is a bounded, pre-listener recovery seam. The
-// domain workers may install their recovery implementation, but the ordering
-// and the SQLite integrity checks remain owned by this package.
+// writableRecoveryPhaseHook injects bounded recovery faults in tests.
 var writableRecoveryPhaseHook func(context.Context, *sql.DB) error
 
 func checkpointAndRecoverBeforeListener(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) error {
@@ -982,32 +680,13 @@ func checkpointAndRecoverBeforeListener(ctx context.Context, d *sql.DB, secrets 
 	if logFrames < 0 || checkpointed < 0 || checkpointed > logFrames {
 		return startupError(StartupInitialization)
 	}
-	if err := foreignKeyCheck(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupInitialization)
-	}
-	if err := quickCheck(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupInitialization)
-	}
 	if writableRecoveryPhaseHook != nil {
 		if err := writableRecoveryPhaseHook(ctx, d); err != nil {
 			return preserveStartupCategory(err, StartupInitialization)
 		}
 	}
-	// The hook runs before the listener and is allowed to repair only through
-	// this narrow seam. Re-run every integrity and current-state gate after it;
-	// a hook must never be able to mutate a valid database into an invalid one
-	// and still open the listener.
-	if err := foreignKeyCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
-	}
-	if err := quickCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
-	}
 	if err := reconcileEndpointKeySecretOrphans(ctx, d); err != nil {
 		return preserveStartupCategory(err, StartupInitialization)
-	}
-	if err := validateWritableGenerationTwoState(ctx, d, secrets); err != nil {
-		return err
 	}
 	return nil
 }

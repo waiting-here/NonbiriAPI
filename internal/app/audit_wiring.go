@@ -72,9 +72,6 @@ func newAuditRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, 
 	if err != nil {
 		return nil, err
 	}
-	if err = a.observations.ReconcileCounters(ctx); err != nil {
-		return nil, err
-	}
 	return a, nil
 }
 

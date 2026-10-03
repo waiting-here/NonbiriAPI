@@ -27,8 +27,8 @@ const (
 )
 
 // bootstrapTestFileImage is intentionally limited to the four source paths.
-// A rejected startup must not rewrite bytes, replace an inode, or adjust the
-// source file mode/time while it is doing its read-only preflight.
+// Read-only preflight preserves database and existing WAL data. SQLite may
+// create empty WAL/shared-memory files for lock coordination.
 type bootstrapTestFileImage struct {
 	present bool
 	data    []byte
@@ -100,6 +100,10 @@ func assertBootstrapSourcesUnchanged(t *testing.T, path string, before map[strin
 		name := path + suffix
 		info, err := os.Lstat(name)
 		if !want.present {
+			if err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 &&
+				((suffix == "-wal" && info.Size() == 0) || (suffix == "-shm" && info.Size() == 32768)) {
+				continue
+			}
 			if !errors.Is(err, os.ErrNotExist) {
 				t.Errorf("source %s was created during rejected startup", suffix)
 			}
@@ -148,19 +152,16 @@ func assertBootstrapStartupKind(t *testing.T, err error, want StartupErrorKind) 
 func preserveBootstrapHooks(t *testing.T) {
 	t.Helper()
 	oldBefore := beforeWritableOpenHook
-	oldAfterCopy := afterSnapshotCopyHook
 	oldBeforeFreshCreate := beforeFreshExclusiveCreateHook
 	oldFreshFailure := freshSchemaFailureHook
 	oldRecovery := writableRecoveryPhaseHook
 	t.Cleanup(func() {
 		beforeWritableOpenHook = oldBefore
-		afterSnapshotCopyHook = oldAfterCopy
 		beforeFreshExclusiveCreateHook = oldBeforeFreshCreate
 		freshSchemaFailureHook = oldFreshFailure
 		writableRecoveryPhaseHook = oldRecovery
 	})
 	beforeWritableOpenHook = nil
-	afterSnapshotCopyHook = nil
 	beforeFreshExclusiveCreateHook = nil
 	freshSchemaFailureHook = nil
 	writableRecoveryPhaseHook = nil
@@ -800,7 +801,7 @@ func TestGenerationTwoCurrentRejectsSourceRecheckMutation(t *testing.T) {
 	before := snapshotBootstrapSources(t, path)
 	var hookCalled bool
 	var hookErr error
-	afterSnapshotCopyHook = func() {
+	beforeWritableOpenHook = func() {
 		hookCalled = true
 		file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {

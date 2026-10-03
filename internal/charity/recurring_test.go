@@ -337,12 +337,18 @@ func TestRecurringLimitsUseDurableMarkerAndOriginalBillingDuringRecovery(t *test
 					}
 				}
 				e.quotaViews(t)
+				if err := e.service.ValidateRecurringState(db.ActiveRecoveryContext(context.Background())); err != nil {
+					t.Fatal(err)
+				}
 				for i := 0; i < 2; i++ {
 					if _, err := rail.RecoverNonterminal(context.Background(), 100); err != nil {
 						t.Fatal(err)
 					}
 				}
 				v := e.quotaViews(t)
+				if err := e.service.ValidateRecurringState(db.ActiveRecoveryContext(context.Background())); err != nil {
+					t.Fatal(err)
+				}
 				want := []string{"0", "0", "0"}
 				if started {
 					want = []string{"1", "3", "5"}
@@ -462,6 +468,9 @@ func TestRecurringAlreadyDispatchedOldEpochSurvivesDonorDeletion(t *testing.T) {
 	deleteBillingIdentity(t, tx, e.donorID)
 	commitTestTx(t, tx)
 	if err := rail.MarkResponseStarted(context.Background(), handle); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.service.ValidateRecurringState(db.ActiveRecoveryContext(context.Background())); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := rail.RecoverNonterminal(context.Background(), 100); err != nil {
