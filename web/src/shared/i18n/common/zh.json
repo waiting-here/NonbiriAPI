@@ -1365,7 +1365,7 @@
       "reload": "载入最新版本",
       "oneTimeMissedTitle": "没能拿到新密钥",
       "oneTimeMissedBody": "再创建一次会生成新的密钥，旧的那把可能已失效。",
-      "languageConflictBody": "已读取当前语言。请重新选择后保存。"
+      "languageConflictBody": "已读取当前语言，请重新选择。"
     },
     "inactivity": {
       "activityRules": "哪些操作算活跃？"

@@ -1365,7 +1365,7 @@
       "reload": "Load latest",
       "oneTimeMissedTitle": "The new key wasn't received",
       "oneTimeMissedBody": "Creating again issues a new key; the previous one may no longer work.",
-      "languageConflictBody": "The current language was loaded. Choose your language and save again."
+      "languageConflictBody": "The current language was loaded. Choose your language again."
     },
     "inactivity": {
       "activityRules": "Which actions count as activity?"

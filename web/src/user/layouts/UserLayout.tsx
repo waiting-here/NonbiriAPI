@@ -89,7 +89,7 @@ export function UserLayout() {
   }, [restoreMenuFocus]);
 
   const location = useLocation();
-  const diagnosticsOpen = ['/logs', '/debug', '/issues'].includes(location.pathname);
+  const recordsOpen = ['/logs', '/credits', '/debug', '/issues'].includes(location.pathname);
   // The OAuth re-authorization callback always returns to the configured
   // redirect path (default "/"), not to the account page that requested it.
   // If an account action parked a pending intent in sessionStorage and the
@@ -276,7 +276,7 @@ export function UserLayout() {
               <li key={item.key}>
                 <NavLink
                   className="nb-user-header__nav-link"
-                  data-active={item.key === 'logs' && diagnosticsOpen ? 'true' : undefined}
+                  data-active={item.key === 'logs' && recordsOpen ? 'true' : undefined}
                   to={item.to}
                   end={item.end}
                   onClick={closeMenu}
@@ -380,13 +380,6 @@ export function UserLayout() {
         </div>
       ) : null}
       <main id="main" className="user-main nb-user-shell__main" tabIndex={-1}>
-        {diagnosticsOpen ? (
-          <nav className="diagnostics-nav" aria-label={t('user.diagnostics.nav')}>
-            <NavLink to="/logs">{t('user.logs.title')}</NavLink>
-            <NavLink to="/debug">{t('user.debug.nav')}</NavLink>
-            <NavLink to="/issues">{t('user.issues.title')}</NavLink>
-          </nav>
-        ) : null}
         {/* A same-tab account switch must remount every route-local form,
             mutation observer, and transient secret/result state. */}
         <Outlet key={profile?.id ?? 'signed-out'} />
