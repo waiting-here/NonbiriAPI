@@ -1,64 +1,98 @@
-.page-pagination {
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: end;
-}
-.page-pagination__overview,
-.page-pagination__navigation {
+.pagination.nb-pager {
   display: flex;
-  gap: 0.65rem;
-  align-items: end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
   min-width: 0;
+  border-top: 1px solid var(--nb-color-border);
+  padding: var(--nb-space-3) var(--nb-space-4);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  font-variant-numeric: tabular-nums;
 }
-.page-pagination__overview > span {
-  overflow-wrap: anywhere;
-  min-width: 0;
+.nb-pager__pages {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-1);
 }
-.page-pagination__size,
-.page-pagination__jump {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
+.nb-pager button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.1rem;
+  min-height: 2.1rem;
+  border: 1px solid transparent;
+  border-radius: var(--nb-radius-sm);
+  padding: var(--nb-space-1);
+  background: transparent;
+  color: var(--nb-color-text);
+  cursor: pointer;
 }
-.page-pagination__jump input {
-  width: 6.5rem;
-  max-width: 100%;
+.nb-pager button:hover:not(:disabled) {
+  background: var(--nb-color-surface-alt);
 }
-.page-pagination select {
+.nb-pager button[aria-current='page'] {
+  background: var(--nb-color-accent);
+  color: var(--nb-color-on-accent);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.nb-pager button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.nb-pager__size {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+  white-space: nowrap;
+}
+.nb-pager__size select {
   width: auto;
-  min-width: 4.5rem;
+  min-width: 4rem;
+  min-height: 2.1rem;
+  border-radius: var(--nb-radius-sm);
+  padding: var(--nb-space-1) var(--nb-space-2);
 }
-.page-pagination > span {
+.nb-pager__jump {
+  width: 4.5rem;
+  min-height: 2.1rem;
+  margin-left: var(--nb-space-2);
+  padding: var(--nb-space-1) var(--nb-space-2);
+}
+.nb-pager__notice {
+  flex-basis: 100%;
   overflow-wrap: anywhere;
-  max-width: 100%;
 }
-
-@media (max-width: 640px) {
-  .page-pagination__overview,
-  .page-pagination__navigation {
-    display: grid;
-    width: 100%;
-    gap: 0.4rem;
+.nb-pager__mobile {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (width < 40rem) {
+  .nb-pager .nb-pager__number,
+  .nb-pager__size {
+    display: none;
   }
-  .page-pagination__overview {
-    grid-template-columns: auto minmax(0, 1fr);
+  .nb-pager__mobile {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
   }
-  .page-pagination__navigation {
-    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  .nb-pager button {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
   }
-  .page-pagination__navigation .btn {
-    padding-inline: 0.5rem;
-  }
-  .page-pagination__jump input {
-    width: 100%;
-  }
-  .page-pagination__jump > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .nb-pager button,
+  .nb-pager select,
+  .nb-pager input {
+    min-height: 2.5rem;
   }
 }

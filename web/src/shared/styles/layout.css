@@ -101,7 +101,7 @@
 
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 1.25rem;
   margin-bottom: 0.45rem;
@@ -911,21 +911,6 @@ tr:first-child td {
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 80rem) {
-  .site-header {
-    flex-wrap: wrap;
-  }
-
-  .user-header .site-nav {
-    order: 4;
-    width: 100%;
-  }
-
-  .user-header .site-nav ul {
-    flex-wrap: wrap;
-  }
-}
-
 @media (max-width: 52rem) {
   .mobile-menu-btn {
     display: inline-flex !important;
@@ -950,14 +935,6 @@ tr:first-child td {
 
   .site-header .site-nav a {
     width: 100%;
-  }
-
-  .page-header {
-    flex-direction: column;
-  }
-
-  .page-header-actions {
-    justify-content: flex-start;
   }
 }
 
