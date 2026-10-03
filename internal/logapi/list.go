@@ -195,6 +195,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts fa WHERE fa.request_log_id=l.id AND fa.canonical_base_url=?)`
 		args = append(args, *filter.EndpointBaseURL)
 	}
+	if filter.CharityModel != nil {
+		query += charityModelPredicate
+		args = append(args, *filter.CharityModel)
+	}
 	if filter.UpstreamModel != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts fm WHERE fm.request_log_id=l.id AND fm.upstream_model_id=?)`
 		args = append(args, *filter.UpstreamModel)
@@ -332,6 +336,10 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	if filter.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts sa WHERE sa.request_log_id=l.id AND sa.canonical_base_url=?)`
 		args = append(args, *filter.EndpointBaseURL)
+	}
+	if filter.CharityModel != nil {
+		query += charityModelPredicate
+		args = append(args, *filter.CharityModel)
 	}
 	if filter.UpstreamModel != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts sm WHERE sm.request_log_id=l.id AND sm.upstream_model_id=?)`

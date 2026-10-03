@@ -231,6 +231,7 @@ type StewardLogDetail struct {
 }
 
 type ListFilter struct {
+	CharityModel       *string
 	Phase              string
 	UserID             *int64
 	EndpointKeyID      *int64
