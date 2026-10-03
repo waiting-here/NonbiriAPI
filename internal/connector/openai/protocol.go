@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"unicode/utf8"
@@ -66,7 +67,38 @@ func validateCompletion(body []byte) (Usage, error) {
 	return usage, nil
 }
 
+// streamResponseIdentity is local to one upstream attempt. A valid first ID
+// leaves the stream unchanged; only an invalid initial string enables repair.
+type streamResponseIdentity struct {
+	seen  bool
+	id    string
+	bytes int64
+}
+
+func (s *streamResponseIdentity) withinBounds(data []byte, maxEvent, maxLine int, maxStream int64) bool {
+	if len(data) > maxEvent || int64(len(data)) > maxStream {
+		return false
+	}
+	if s.id == "" {
+		return true
+	}
+	// Repair can enlarge a short source ID. Keep each projected data line and
+	// the cumulative repaired frames (including the terminal) bounded as well.
+	size := int64(len(data)) + 8
+	if len(data)+6 > maxLine || size > maxStream-s.bytes-14 {
+		return false
+	}
+	s.bytes += size
+	return true
+}
+
+var errStreamSourceRejected = errors.New("openai connector: stream source rejected")
+
 func validateChunk(data []byte) ([]byte, Usage, bool, error) {
+	return validateStreamChunk(data, nil, nil)
+}
+
+func validateStreamChunk(data []byte, identity *streamResponseIdentity, sourceGuard *responseGuard) ([]byte, Usage, bool, error) {
 	fields, err := decodeJSONObject(data, maxProtocolFields)
 	if err != nil {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
@@ -76,7 +108,14 @@ func validateChunk(data []byte) ([]byte, Usage, bool, error) {
 	if hasUpstreamError(root) {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
 	}
-	if !requiredString(root, "id", maxResponseIDRunes, true) ||
+	var sourceID string
+	idRaw := bytes.TrimSpace(root["id"])
+	// null, absent IDs and non-string values must never enter repair mode.
+	idString := len(idRaw) > 0 && idRaw[0] == '"' && json.Unmarshal(idRaw, &sourceID) == nil
+	idValid := idString && validOpaqueText(sourceID, maxResponseIDRunes, true)
+	repairInitial := identity != nil && !identity.seen && idString && !idValid
+	repairString := identity != nil && identity.id != "" && idString
+	if (!idValid && !repairInitial && !repairString) ||
 		!exactString(root, "object", "chat.completion.chunk") ||
 		!requiredNonNegativeInt(root, "created") ||
 		!requiredString(root, "model", MaxUpstreamModelRunes, true) {
@@ -98,6 +137,46 @@ func validateChunk(data []byte) ([]byte, Usage, bool, error) {
 	compact.Grow(len(data))
 	if err := json.Compact(&compact, data); err != nil {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
+	}
+	// Scan original source bytes and decoded strings before replacing metadata.
+	// The independent wire guard still checks the projected output afterwards.
+	if sourceGuard.ContainsJSON(compact.Bytes(), compact.Bytes()) {
+		clear(compact.Bytes())
+		return nil, Usage{}, false, errStreamSourceRejected
+	}
+	if identity != nil {
+		if repairInitial {
+			identity.id = "chatcmpl-" + rand.Text()
+		}
+		identity.seen = true
+		if identity.id != "" {
+			clear(compact.Bytes())
+			compact.Reset()
+			var rewritten bytes.Buffer
+			rewritten.Grow(len(data))
+			rewritten.WriteByte('{')
+			for i, field := range fields {
+				if i != 0 {
+					rewritten.WriteByte(',')
+				}
+				name, _ := json.Marshal(field.name)
+				rewritten.Write(name)
+				rewritten.WriteByte(':')
+				if field.name == "id" {
+					value, _ := json.Marshal(identity.id)
+					rewritten.Write(value)
+				} else {
+					rewritten.Write(field.value)
+				}
+			}
+			rewritten.WriteByte('}')
+			err := json.Compact(&compact, rewritten.Bytes())
+			clear(rewritten.Bytes())
+			if err != nil {
+				clear(compact.Bytes())
+				return nil, Usage{}, false, errInvalidUpstreamResponse
+			}
+		}
 	}
 	return compact.Bytes(), usage, malformed, nil
 }
