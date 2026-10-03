@@ -114,10 +114,11 @@ for (const scenario of [
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(origin + (station === 'admin' ? '/users?user=7' : '/steward?tab=users&user=7'));
+    await page.getByRole('tab', { name: copy.users.tabLimits, exact: true }).click();
     await page.getByLabel(copy.users.endpointLimit, { exact: true }).fill('99');
     await page.getByLabel(copy.users.rpmLimit, { exact: true }).fill('');
     await page.getByLabel(copy.users.concurrencyLimit, { exact: true }).fill('999');
-    await page.getByRole('button', { name: copy.users.saveLimits, exact: true }).click();
+    await page.getByRole('button', { name: copy.users.saveProfile, exact: true }).click();
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0].body).toMatchObject({
       endpoint_limit: '99',

@@ -151,3 +151,40 @@ it('validates enabled actions before previewing and reveals their required field
   fireEvent.click(screen.getByLabelText('Enable credit decay'));
   expect(screen.getByLabelText('Inactive days')).toBeRequired();
 });
+
+it('loads execution and policy audit history only when their folds open', async () => {
+  requests.apiFetch.mockImplementation((path: string) =>
+    Promise.resolve(
+      path.endsWith('/runs') || path.endsWith('/audits')
+        ? { data: [], next_cursor: null }
+        : configuration,
+    ),
+  );
+  mount(<InactivityPolicyPage />);
+  await screen.findByRole('switch', { name: 'Enable inactivity policy' });
+  expect(requests.apiFetch.mock.calls.map((call) => call[0])).toEqual([
+    '/admin/api/inactivity-policy',
+  ]);
+  const runs = screen.getByText('Execution records').closest('details')!;
+  fireEvent.click(runs.querySelector('summary')!);
+  await waitFor(() =>
+    expect(
+      requests.apiFetch.mock.calls.filter((call) => String(call[0]).endsWith('/runs')),
+    ).toHaveLength(1),
+  );
+  expect(requests.apiFetch.mock.calls.some((call) => String(call[0]).endsWith('/audits'))).toBe(
+    false,
+  );
+  fireEvent.click(runs.querySelector('summary')!);
+  fireEvent.click(runs.querySelector('summary')!);
+  expect(
+    requests.apiFetch.mock.calls.filter((call) => String(call[0]).endsWith('/runs')),
+  ).toHaveLength(1);
+  fireEvent.click(screen.getByText('Configuration and preview audit'));
+  await waitFor(() =>
+    expect(
+      requests.apiFetch.mock.calls.filter((call) => String(call[0]).endsWith('/audits')),
+    ).toHaveLength(1),
+  );
+  expect(requests.apiFetch.mock.calls.some((call) => call[1]?.method)).toBe(false);
+});

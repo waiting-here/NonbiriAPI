@@ -233,9 +233,9 @@ describe('administrator paged operation pages', () => {
     );
     await screen.findByText('alice');
     expect(requests.some((url) => url.pathname === '/admin/api/users')).toBe(true);
-    await view.user.click(screen.getByRole('button', { name: 'Manage' }));
+    await view.user.click(screen.getByRole('button', { name: 'alice' }));
     await screen.findByText(/Count limits/);
-    await view.user.click(screen.getByRole('button', { name: 'Close' }));
+    await view.user.click(screen.getByRole('button', { name: 'Back to list' }));
     await waitFor(() => expect(screen.queryByText(/Count limits/)).toBeNull());
     const restored = new URLSearchParams(screen.getByTestId('location').textContent ?? '');
     expect(restored.get('page')).toBe('2');
@@ -267,6 +267,7 @@ describe('administrator paged operation pages', () => {
     );
     const listCount = () => requests.filter((url) => url.pathname === '/admin/api/users').length;
     const before = listCount();
+    await view.user.click(screen.getByText('Exact filters'));
     const input = screen.getByRole('textbox', { name: 'User ID' });
     await view.user.clear(input);
     await view.user.type(input, '9223372036854775808');

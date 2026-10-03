@@ -94,10 +94,12 @@ function StewardPageContent() {
   return (
     <TimeContextProvider station="steward">
       <div className="page ops-page">
-        <PageHeader
-          title={t('user.steward.title')}
-          description={t('user.steward.presentation.description')}
-        />
+        {section !== 'users' && section !== 'blacklist' ? (
+          <PageHeader
+            title={t('user.steward.title')}
+            description={t('user.steward.presentation.description')}
+          />
+        ) : null}
         <Tabs
           label={t('user.steward.sectionsLabel')}
           value={section}
