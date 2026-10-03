@@ -24,6 +24,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 const (
@@ -127,6 +128,9 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if policyErr != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 	}
+	if input.TransportRule == "" {
+		input.TransportRule = transportpolicy.Passthrough
+	}
 	prices, err := validateModelCreate(input)
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
@@ -184,7 +188,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	}
 	excluded, _ := openai.NormalizeExcludedRequestFields(input.ExcludedRequestFields)
 	encodedExcluded, _ := json.Marshal(excluded)
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=? WHERE id=?`, input.IsMainstream, string(encodedExcluded), input.TransportRule, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
@@ -265,7 +269,7 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 	tx, scope, err := s.beginManagementTx(ctx, role, actorUserID, modelID, false, false)
 	actorID := scope.ActorID
 	if err == nil && scope.Trainee {
-		onlyRole := input.RolePolicy != nil && input.Provider == nil && input.Model == nil && input.Enabled == nil && input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil
+		onlyRole := input.RolePolicy != nil && input.Provider == nil && input.Model == nil && input.Enabled == nil && input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.TransportRule == nil
 		if !onlyRole {
 			tx.Rollback()
 			return resources.MutationResult[AdminCharityModel]{}, ErrForbidden
@@ -291,6 +295,9 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		return resources.MutationResult[AdminCharityModel]{}, ErrConflict
 	}
 	updated := current
+	if input.TransportRule != nil {
+		updated.transportRule = *input.TransportRule
+	}
 	if input.IsMainstream != nil {
 		updated.isMainstream = *input.IsMainstream
 	}
@@ -399,7 +406,7 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=? WHERE id=?`, updated.isMainstream, updated.excludedFields, modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE charity_models SET is_mainstream=?,excluded_request_fields=?,transport_rule=? WHERE id=?`, updated.isMainstream, updated.excludedFields, updated.transportRule, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.TokenReserveCredits != nil {
@@ -634,6 +641,7 @@ func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, en
 }
 
 type storedModel struct {
+	transportRule                    transportpolicy.Rule
 	rolePolicy                       string
 	isMainstream                     bool
 	excludedFields                   string
@@ -655,16 +663,19 @@ request_user_price,request_donor_reward,uncached_user_price,cache_write_user_pri
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
 discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision,
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),
-(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy
+(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id),is_mainstream,excluded_request_fields,role_policy,transport_rule
 FROM charity_models WHERE id=?`, modelID).Scan(&value.id, &value.provider, &value.model, &value.enabled, &value.mode,
 		&value.requestUser, &value.requestReward, &value.user[0], &value.user[1], &value.user[2], &value.user[3],
 		&value.reward[0], &value.reward[1], &value.reward[2], &value.reward[3], &value.discountPercent,
-		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy)
+		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription, &value.isMainstream, &value.excludedFields, &value.rolePolicy, &value.transportRule)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedModel{}, ErrNotFound
 	}
 	if err != nil {
 		return storedModel{}, fmt.Errorf("charity routing: read stored model: %w", err)
+	}
+	if !value.transportRule.Valid() {
+		return storedModel{}, ErrInvariant
 	}
 	if _, err := rolepolicy.Decode(value.rolePolicy); err != nil {
 		return storedModel{}, ErrInvariant
@@ -691,7 +702,7 @@ COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expi
 (SELECT affinity_ttl_seconds FROM charity_routing_settings WHERE model_id=cm.id),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
 (SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
-(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy
+(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cm.is_mainstream,cm.excluded_request_fields,cm.role_policy,cm.transport_rule
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -712,12 +723,15 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &affinityTTL, &mask, &value.PublicDescription, &tokenReserve, &value.IsMainstream, &excluded, &encodedPolicy, &value.TransportRule)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
 	if err != nil {
 		return AdminCharityModel{}, fmt.Errorf("charity routing: scan model: %w", err)
+	}
+	if !value.TransportRule.Valid() {
+		return AdminCharityModel{}, ErrInvariant
 	}
 	value.RolePolicy, err = rolepolicy.Decode(encodedPolicy)
 	if err != nil {
@@ -799,7 +813,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		}
 	}
 	return StewardCharityModel{
-		RolePolicy:   value.RolePolicy.Clone(),
+		TransportRule: value.TransportRule, RolePolicy: value.RolePolicy.Clone(),
 		IsMainstream: value.IsMainstream, ExcludedRequestFields: append([]string{}, value.ExcludedRequestFields...),
 		TokenReserveCredits: copyString(value.TokenReserveCredits),
 		AllowedLevels:       append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
@@ -823,6 +837,9 @@ type validatedPricing struct {
 }
 
 func validateModelCreate(input ModelCreate) (validatedPricing, error) {
+	if !input.TransportRule.Valid() {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	if _, err := openai.NormalizeExcludedRequestFields(input.ExcludedRequestFields); err != nil {
 		return validatedPricing{}, ErrInvalidRequest
 	}
@@ -842,6 +859,9 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 }
 
 func validateModelPatch(input ModelPatch) bool {
+	if input.TransportRule != nil && !input.TransportRule.Valid() {
+		return false
+	}
 	if input.ExcludedRequestFields != nil {
 		if _, err := openai.NormalizeExcludedRequestFields(*input.ExcludedRequestFields); err != nil {
 			return false
@@ -857,7 +877,7 @@ func validateModelPatch(input ModelPatch) bool {
 		return false
 	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.RolePolicy == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AffinityTTLSeconds == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil && input.IsMainstream == nil && input.ExcludedRequestFields == nil && input.TransportRule == nil && input.RolePolicy == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||

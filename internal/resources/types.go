@@ -8,6 +8,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 type Page[T any] struct {
@@ -159,20 +160,21 @@ type Binding struct {
 }
 
 type Model struct {
-	RolePolicy       rolepolicy.Policy `json:"role_policy"`
-	ID               string            `json:"id"`
-	Provider         string            `json:"provider"`
-	Model            string            `json:"model"`
-	FullName         string            `json:"full_name"`
-	RouteStrategy    string            `json:"route_strategy"`
-	SilentRetry      bool              `json:"silent_retry"`
-	FlattenToolCalls bool              `json:"flatten_tool_calls"`
-	Revision         string            `json:"revision"`
-	BindingRevision  string            `json:"binding_revision"`
-	BindingCount     string            `json:"binding_count"`
-	Browse           *ModelBrowse      `json:"browse,omitempty"`
-	CreatedAt        int64             `json:"created_at"`
-	UpdatedAt        int64             `json:"updated_at"`
+	TransportRule    transportpolicy.Rule `json:"transport_rule"`
+	RolePolicy       rolepolicy.Policy    `json:"role_policy"`
+	ID               string               `json:"id"`
+	Provider         string               `json:"provider"`
+	Model            string               `json:"model"`
+	FullName         string               `json:"full_name"`
+	RouteStrategy    string               `json:"route_strategy"`
+	SilentRetry      bool                 `json:"silent_retry"`
+	FlattenToolCalls bool                 `json:"flatten_tool_calls"`
+	Revision         string               `json:"revision"`
+	BindingRevision  string               `json:"binding_revision"`
+	BindingCount     string               `json:"binding_count"`
+	Browse           *ModelBrowse         `json:"browse,omitempty"`
+	CreatedAt        int64                `json:"created_at"`
+	UpdatedAt        int64                `json:"updated_at"`
 }
 
 type ManualEntriesResponse struct {
@@ -273,6 +275,7 @@ type DeleteManualInput struct {
 }
 
 type CreateModelInput struct {
+	TransportRule    transportpolicy.Rule
 	RolePolicy       *rolepolicy.Policy
 	Provider         string
 	Model            string
@@ -282,6 +285,7 @@ type CreateModelInput struct {
 }
 
 type PatchModelInput struct {
+	TransportRule    *transportpolicy.Rule
 	RolePolicy       *rolepolicy.Policy
 	Provider         *string
 	Model            *string

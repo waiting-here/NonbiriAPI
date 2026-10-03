@@ -6914,3 +6914,7 @@ CREATE TABLE gateway_model_capabilities_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1),
  initialized_at INTEGER NOT NULL CHECK(typeof(initialized_at)='integer' AND initialized_at BETWEEN 0 AND 253402300799)
 );
+
+-- Model chat transport rules
+ALTER TABLE models ADD COLUMN transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream'));
+ALTER TABLE charity_models ADD COLUMN transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream'));

@@ -6,6 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
+	"github.com/waiting-here/NonbiriAPI/internal/transportpolicy"
 )
 
 type httpAPI struct{ service *Service }
@@ -329,20 +330,21 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	RolePolicy            requiredField[rolepolicy.Policy] `json:"role_policy"`
-	IsMainstream          requiredField[bool]              `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]          `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]            `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]             `json:"allowed_levels"`
-	PublicDescription     requiredField[string]            `json:"public_description"`
-	RouteStrategy         requiredField[string]            `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]               `json:"affinity_ttl_seconds"`
-	Provider              requiredField[string]            `json:"provider"`
-	Model                 requiredField[string]            `json:"model"`
-	Enabled               requiredField[bool]              `json:"enabled"`
-	Pricing               requiredField[pricingWire]       `json:"pricing"`
-	Discount              requiredField[discountWire]      `json:"discount"`
-	FlattenToolCalls      requiredField[bool]              `json:"flatten_tool_calls"`
+	TransportRule         requiredField[transportpolicy.Rule] `json:"transport_rule"`
+	RolePolicy            requiredField[rolepolicy.Policy]    `json:"role_policy"`
+	IsMainstream          requiredField[bool]                 `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]             `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]               `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]                `json:"allowed_levels"`
+	PublicDescription     requiredField[string]               `json:"public_description"`
+	RouteStrategy         requiredField[string]               `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]                  `json:"affinity_ttl_seconds"`
+	Provider              requiredField[string]               `json:"provider"`
+	Model                 requiredField[string]               `json:"model"`
+	Enabled               requiredField[bool]                 `json:"enabled"`
+	Pricing               requiredField[pricingWire]          `json:"pricing"`
+	Discount              requiredField[discountWire]         `json:"discount"`
+	FlattenToolCalls      requiredField[bool]                 `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -401,6 +403,13 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 			return ModelCreate{}, nil, ErrInvalidRequest
 		}
 		canonical["public_description"] = input.PublicDescription
+	}
+	if wire.TransportRule.Set {
+		if !wire.TransportRule.Value.Valid() {
+			return ModelCreate{}, nil, ErrInvalidRequest
+		}
+		input.TransportRule = wire.TransportRule.Value
+		canonical["transport_rule"] = wire.TransportRule.Value
 	}
 	if wire.RolePolicy.Set {
 		policy := wire.RolePolicy.Value.Clone()
@@ -489,21 +498,22 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	RolePolicy            requiredField[rolepolicy.Policy] `json:"role_policy"`
-	IsMainstream          requiredField[bool]              `json:"is_mainstream"`
-	ExcludedRequestFields requiredField[[]string]          `json:"excluded_request_fields"`
-	TokenReserveCredits   nullableField[string]            `json:"token_reserve_credits"`
-	AllowedLevels         requiredField[[]int]             `json:"allowed_levels"`
-	PublicDescription     requiredField[string]            `json:"public_description"`
-	RouteStrategy         requiredField[string]            `json:"route_strategy"`
-	AffinityTTLSeconds    requiredField[int]               `json:"affinity_ttl_seconds"`
-	ExpectedRevision      requiredField[string]            `json:"expected_revision"`
-	Provider              requiredField[string]            `json:"provider"`
-	Model                 requiredField[string]            `json:"model"`
-	Enabled               requiredField[bool]              `json:"enabled"`
-	Pricing               requiredField[pricingWire]       `json:"pricing"`
-	Discount              requiredField[discountPatchWire] `json:"discount"`
-	FlattenToolCalls      requiredField[bool]              `json:"flatten_tool_calls"`
+	TransportRule         requiredField[transportpolicy.Rule] `json:"transport_rule"`
+	RolePolicy            requiredField[rolepolicy.Policy]    `json:"role_policy"`
+	IsMainstream          requiredField[bool]                 `json:"is_mainstream"`
+	ExcludedRequestFields requiredField[[]string]             `json:"excluded_request_fields"`
+	TokenReserveCredits   nullableField[string]               `json:"token_reserve_credits"`
+	AllowedLevels         requiredField[[]int]                `json:"allowed_levels"`
+	PublicDescription     requiredField[string]               `json:"public_description"`
+	RouteStrategy         requiredField[string]               `json:"route_strategy"`
+	AffinityTTLSeconds    requiredField[int]                  `json:"affinity_ttl_seconds"`
+	ExpectedRevision      requiredField[string]               `json:"expected_revision"`
+	Provider              requiredField[string]               `json:"provider"`
+	Model                 requiredField[string]               `json:"model"`
+	Enabled               requiredField[bool]                 `json:"enabled"`
+	Pricing               requiredField[pricingWire]          `json:"pricing"`
+	Discount              requiredField[discountPatchWire]    `json:"discount"`
+	FlattenToolCalls      requiredField[bool]                 `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -590,6 +600,13 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 		policy := wire.RolePolicy.Value.Clone()
 		input.RolePolicy = &policy
 		canonical["role_policy"] = policy
+	}
+	if wire.TransportRule.Set {
+		if !wire.TransportRule.Value.Valid() {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		input.TransportRule = &wire.TransportRule.Value
+		canonical["transport_rule"] = wire.TransportRule.Value
 	}
 	if wire.FlattenToolCalls.Set {
 		input.FlattenToolCalls = &wire.FlattenToolCalls.Value

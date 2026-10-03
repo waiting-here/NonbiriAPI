@@ -20,7 +20,7 @@ var recurrenceTableChanges = []struct{ before, after string }{
 // preRecurrenceSchema is the exact predecessor DDL, retained through explicit
 // inverse declarations so its manifest is independently checked on upgrade.
 func preRecurrenceSchema() string {
-	previous, _, _ := strings.Cut(generationTwoSchema, runtimeControlsMarker)
+	previous, _, _ := strings.Cut(preTransportSchema(), runtimeControlsMarker)
 	for i := len(recurrenceTableChanges) - 1; i >= 0; i-- {
 		change := recurrenceTableChanges[i]
 		previous = strings.Replace(previous, change.after, change.before, 1)
@@ -52,7 +52,7 @@ func applyRecurrenceExtension(ctx context.Context, tx *sql.Tx) error {
 	if err := rebuildStorageContractTable(ctx, tx, "donation_quota_epochs", definition, after, 1); err != nil {
 		return err
 	}
-	_, additive, ok := strings.Cut(generationTwoSchema, runtimeControlsMarker)
+	_, additive, ok := strings.Cut(preTransportSchema(), runtimeControlsMarker)
 	if !ok {
 		return errors.New("canonical runtime capability storage is missing")
 	}
