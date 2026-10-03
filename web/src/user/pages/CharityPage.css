@@ -1,10 +1,126 @@
-.charity-quick-use {
-  margin-bottom: var(--space-4, 1rem);
+.charity-catalog-workspace {
+  display: grid;
+  gap: var(--nb-space-4);
 }
-.charity-quick-use h2 {
-  margin-top: 0;
+.economy-charity-page > .nb-tabs {
+  margin-bottom: var(--nb-space-5);
 }
-.charity-quick-use p {
-  margin-bottom: 0;
-  max-width: 65ch;
+.economy-charity-page > section > .progression-ranking {
+  margin-top: var(--nb-space-5);
+}
+.charity-donation-stats {
+  margin-bottom: var(--nb-space-4);
+}
+.donate-step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--nb-space-3);
+  align-items: start;
+}
+.donate-step__number {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--nb-radius-full);
+  color: var(--nb-color-accent);
+  background: var(--nb-color-accent-soft);
+  font-weight: 700;
+}
+.donate-step h3 {
+  margin: 0 0 var(--nb-space-2);
+}
+.donate-step p {
+  margin-block: var(--nb-space-2);
+}
+.donate-step label {
+  display: grid;
+  gap: var(--nb-space-2);
+  min-width: 0;
+}
+.donate-step textarea {
+  min-height: 6rem;
+}
+.donate-step small {
+  display: block;
+  color: var(--nb-color-text-muted);
+  margin-top: var(--nb-space-2);
+}
+.economy-donation-form > form {
+  display: grid;
+  gap: var(--nb-space-5);
+}
+.economy-donation-form > .nb-fold {
+  min-width: 0;
+}
+.economy-donation-form .nb-seg label {
+  display: block;
+}
+.donation-selected-chips {
+  margin-top: var(--nb-space-3);
+}
+.donation-selected-chips .nb-chip {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.donation-selected-chips button {
+  flex-shrink: 0;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+.economy-donation-summary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-inline: 0;
+}
+.economy-donation-summary h3 {
+  font-size: var(--nb-font-size-md);
+  margin: 0;
+}
+.economy-donation-summary .nb-row__facts p {
+  margin: 0;
+}
+.economy-donation-summary .nb-fold {
+  margin: 0;
+}
+.economy-donation-summary .nb-fold > summary {
+  min-height: 2.5rem;
+}
+.donation-summary-actions {
+  display: flex;
+  gap: var(--nb-space-2);
+  align-items: center;
+}
+.economy-donation-summary .ops-source-preview {
+  padding-left: var(--nb-space-4);
+}
+@media (width < 48rem) {
+  .economy-charity-page > .nb-tabs > button {
+    flex: 1 1 0;
+    padding-inline: var(--nb-space-2);
+    white-space: normal;
+  }
+  .economy-donation-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--nb-space-2);
+  }
+  .donation-summary-actions > a,
+  .donation-summary-actions > span {
+    flex: 1;
+    text-align: center;
+  }
+  .donation-summary-actions > a {
+    min-height: 2.5rem;
+  }
+  .donate-step .nb-seg {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .donate-step .nb-seg label {
+    flex: 1;
+  }
+  .economy-donation-form .nb-panel__foot {
+    flex-wrap: wrap;
+    gap: var(--nb-space-3);
+  }
 }

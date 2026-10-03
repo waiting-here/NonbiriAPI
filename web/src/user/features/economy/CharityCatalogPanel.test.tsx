@@ -108,26 +108,42 @@ function HistoryProbe() {
 describe('charity catalog panel', () => {
   it('retains a just-selected availability filter when page size changes immediately', async () => {
     const rows = Array.from({ length: 20 }, (_, index) => catalogModel(String(index + 1)));
-    const result = (size: number, total: number) => catalogPage(rows.slice(0, size), {
-      page: '1', page_size: size, total_items: String(total), total_pages: String(Math.ceil(total / size)),
-    });
+    const result = (size: number, total: number) =>
+      catalogPage(rows.slice(0, size), {
+        page: '1',
+        page_size: size,
+        total_items: String(total),
+        total_pages: String(Math.ceil(total / size)),
+      });
     installJsonFetchFixtures([
       { method: 'GET', path: catalogPath('1', 20, '', 'all', 'all', 'true'), body: result(20, 22) },
       { method: 'GET', path: catalogPath('1', 20, '', 'all', 'all', 'all'), body: result(20, 26) },
       { method: 'GET', path: catalogPath('1', 10, '', 'all', 'all', 'true'), body: result(10, 22) },
       { method: 'GET', path: catalogPath('1', 10, '', 'all', 'all', 'all'), body: result(10, 26) },
     ]);
-    await renderWithProviders(<><CharityCatalogPanel accountID="7" /><SearchProbe /></>, {
-      station: 'user', role: 'user', route: '/charity?allowed_for_me=all&allowed_level=all&currently_available=true&page=1&page_size=20',
-    });
-    await screen.findByText('Page 1 of 2 · Total: 22');
+    await renderWithProviders(
+      <>
+        <CharityCatalogPanel accountID="7" />
+        <SearchProbe />
+      </>,
+      {
+        station: 'user',
+        role: 'user',
+        route:
+          '/charity?allowed_for_me=all&allowed_level=all&currently_available=true&page=1&page_size=20',
+      },
+    );
+    await screen.findByText('22 items');
+    fireEvent.click(screen.getByText(/^Filters/, { selector: 'summary' }));
     act(() => {
       fireEvent.change(screen.getByLabelText('Currently available'), { target: { value: 'all' } });
       fireEvent.change(screen.getByLabelText('Items per page'), { target: { value: '10' } });
     });
-    await screen.findByText('Page 1 of 3 · Total: 26');
+    await screen.findByText('26 items');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
-    expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent('currently_available=all');
+    expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
+      'currently_available=all',
+    );
   });
 
   it('renders public descriptions as text with access, availability, and exact prices', async () => {
@@ -144,18 +160,22 @@ describe('charity catalog panel', () => {
 
     expect(await screen.findByText('[公益]provider/plain')).toBeVisible();
     expect(fetchMock.mock.calls[0]?.[0]).toBe(catalogPath());
-    expect(screen.getAllByText('Applied')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Remove access filter' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Remove availability filter' })).toBeVisible();
     expect(screen.getByText(/<b>plain<\/b>/)).toBeVisible();
-    expect(screen.getByText('L1, L3, L5')).toBeVisible();
-    expect(screen.getByText('Allowed for my current level', { selector: 'dd' })).toBeVisible();
+    expect(rendered.container.querySelector('.charity-model-preview b')).toBeNull();
+    expect(screen.getByText('L1、L3、L5')).toBeVisible();
     expect(screen.getAllByText('Available now').length).toBeGreaterThanOrEqual(1);
-    const table = screen.getByRole('table', { name: 'Charity model prices' });
-    expect(within(table).getByLabelText('Original price: 3')).toBeVisible();
-    expect(within(table).getByLabelText('Offer price: 2.4')).toBeVisible();
-    const toggle = screen.getByRole('button', { name: 'Show full description' });
+    const toggle = screen.getByRole('button', { name: '[公益]provider/plain' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await rendered.user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const detail = screen.getByRole('region', { name: '[公益]provider/plain' });
+    expect(within(detail).getByText(/Allowed for my current level/)).toBeVisible();
+    expect(detail.querySelector('b')).toBeNull();
+    const table = within(detail).getByRole('table', { name: 'Charity model prices' });
+    expect(within(table).getByLabelText('Original price: 3')).toBeVisible();
+    expect(within(table).getByLabelText('Offer price: 2.4')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Copy Model name' })).toBeVisible();
   });
 
@@ -176,6 +196,11 @@ describe('charity catalog panel', () => {
     });
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: catalogPath(), body: catalogPage([initial]) },
+      {
+        method: 'GET',
+        path: catalogPath('1', 20, '', 'all', 'all', 'all'),
+        body: catalogPage([initial]),
+      },
       {
         method: 'GET',
         path: catalogPath('1', 20, '', 'true', '3', 'true'),
@@ -205,6 +230,7 @@ describe('charity catalog panel', () => {
       { station: 'user', role: 'user' },
     );
     await screen.findByText('[公益]provider/initial');
+    await rendered.user.click(screen.getByText(/^Filters/, { selector: 'summary' }));
 
     await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), '3');
     expect(await screen.findByText('[公益]provider/level-3')).toBeVisible();
@@ -218,7 +244,10 @@ describe('charity catalog panel', () => {
     expect(await screen.findByText('[公益]provider/denied-level-3')).toBeVisible();
     expect(screen.getByLabelText('Allowed for level')).toHaveValue('3');
     expect(screen.getByLabelText('Currently available')).toHaveValue('true');
-    expect(screen.getAllByText('Resource available now')).not.toHaveLength(0);
+    await rendered.user.click(
+      screen.getByRole('button', { name: '[公益]provider/denied-level-3' }),
+    );
+    expect(screen.getByText(/Resource available now/)).toBeVisible();
 
     await rendered.user.selectOptions(screen.getByLabelText('Currently available'), 'all');
     expect(await screen.findByText('[公益]provider/unavailable')).toBeVisible();
@@ -227,26 +256,28 @@ describe('charity catalog panel', () => {
 
     await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), 'all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
-    await rendered.user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Clear filters' }));
     expect(screen.getByLabelText('Allowed for level')).toHaveValue('all');
-    expect(screen.getByLabelText('Your access')).toHaveValue('true');
-    expect(screen.getByLabelText('Currently available')).toHaveValue('true');
+    expect(screen.getByLabelText('Your access')).toHaveValue('all');
+    expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
-      'allowed_for_me=true&allowed_level=all&currently_available=true&page=1',
+      'allowed_for_me=all&allowed_level=all&currently_available=all&page=1',
     );
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(catalogPath());
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       catalogPath('1', 20, '', 'false', 'all', 'all'),
     );
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
-      catalogPath('1', 20, '', 'true', 'all', 'true'),
+      catalogPath('1', 20, '', 'all', 'all', 'all'),
     );
+    await screen.findByText('[公益]provider/initial');
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
       catalogPath(),
       catalogPath('1', 20, '', 'true', '3', 'true'),
       catalogPath('1', 20, '', 'false', '3', 'true'),
       catalogPath('1', 20, '', 'false', '3', 'all'),
       catalogPath('1', 20, '', 'false', 'all', 'all'),
+      catalogPath('1', 20, '', 'all', 'all', 'all'),
     ]);
   });
 
@@ -286,7 +317,8 @@ describe('charity catalog panel', () => {
     expect(screen.getByLabelText('某等级可访问')).toHaveValue('all');
     expect(screen.getByLabelText('本人访问权限')).toHaveValue('true');
     expect(screen.getByLabelText('当前是否可用')).toHaveValue('true');
-    expect(screen.getAllByText('已应用')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '移除访问权限筛选' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '移除当前状态筛选' })).toBeVisible();
   });
 
   it('restores submitted filters and page through POP navigation and a remount', async () => {
@@ -387,7 +419,7 @@ describe('charity catalog panel', () => {
       {
         method: 'GET',
         path: catalogPath('2'),
-        body: catalogPage([catalogModel('20', 'page-two')], {
+        body: catalogPage([catalogModel('21', 'page-two')], {
           page: '2',
           page_size: 20,
           total_items: '21',
@@ -396,13 +428,13 @@ describe('charity catalog panel', () => {
       },
       {
         method: 'GET',
-        path: catalogPath('1', 20, 'needle'),
-        body: catalogPage([searchModel]),
-      },
-      {
-        method: 'GET',
-        path: catalogPath('1', 20, 'needle', 'false'),
-        body: catalogPage([deniedModel]),
+        path: catalogPath('1', 50, 'needle'),
+        body: catalogPage([searchModel], {
+          page: '1',
+          page_size: 50,
+          total_items: '1',
+          total_pages: '1',
+        }),
       },
       {
         method: 'GET',
@@ -411,6 +443,16 @@ describe('charity catalog panel', () => {
           page: '1',
           page_size: 50,
           total_items: '1',
+          total_pages: '1',
+        }),
+      },
+      {
+        method: 'GET',
+        path: catalogPath('1', 50),
+        body: catalogPage([...firstPage, catalogModel('21', 'page-two')], {
+          page: '1',
+          page_size: 50,
+          total_items: '21',
           total_pages: '1',
         }),
       },
@@ -424,33 +466,35 @@ describe('charity catalog panel', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('[公益]provider/page-two')).toBeVisible();
 
+    await rendered.user.selectOptions(screen.getByLabelText('Items per page'), '50');
+    expect(window.localStorage.getItem('nonbiri:user:charity-catalog-page-size:v1')).toBe('50');
+    await screen.findByText('[公益]provider/model-1');
     const requestCountBeforeSearch = fetchMock.mock.calls.length;
     const search = screen.getByRole('searchbox');
     fireEvent.change(search, { target: { value: 'needle' } });
     expect(fetchMock).toHaveBeenCalledTimes(requestCountBeforeSearch);
     fireEvent.submit(search.closest('form')!);
     expect(await screen.findByText('[公益]provider/needle')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
+    await rendered.user.click(screen.getByText(/^Filters/, { selector: 'summary' }));
 
     fireEvent.change(screen.getByLabelText('Your access'), { target: { value: 'false' } });
     expect(await screen.findByText('[公益]provider/denied')).toBeVisible();
-    expect(screen.getByText('Not allowed for my current level', { selector: 'dd' })).toBeVisible();
-
-    fireEvent.change(screen.getByLabelText('Items per page'), { target: { value: '50' } });
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('50'),
-    );
-    expect(window.localStorage.getItem('nonbiri:user:charity-catalog-page-size:v1')).toBe('50');
+    await rendered.user.click(screen.getByRole('button', { name: '[公益]provider/denied' }));
+    expect(
+      within(screen.getByRole('region', { name: '[公益]provider/denied' })).getByText(
+        /Not allowed for my current level/,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('combobox', { name: 'Items per page' })).toBeNull();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(catalogPath('2'));
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
-      catalogPath('1', 20, 'needle'),
-    );
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
-      catalogPath('1', 20, 'needle', 'false'),
+      catalogPath('1', 50, 'needle'),
     );
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       catalogPath('1', 50, 'needle', 'false'),
     );
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(catalogPath('1', 50));
   });
 
   it('keeps the current account query key and supports a failed read retry', async () => {

@@ -63,4 +63,34 @@ describe('charity offer boundaries', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/^Free$/);
     expect(screen.getByLabelText('Offer price: 0')).toBeVisible();
   });
+  it('keeps all four compact token prices exact as a scheduled offer becomes active', async () => {
+    const tokenRows = ['Input', 'Cache write', 'Cache read', 'Output'].map((label, index) => ({
+      label,
+      userMilli: String((index + 1) * 1234),
+      discountedUserMilli: String((index + 1) * 617),
+    }));
+    const props = {
+      compact: true,
+      mode: 'per_token' as const,
+      rows: tokenRows,
+      discount: { enabled: true, percent: 50, startAt: NOW + 30 },
+    };
+    const view = await renderWithProviders(<CharityPriceTable {...props} serverNow={NOW} />, {
+      station: 'user',
+      role: 'user',
+      locale: 'en',
+    });
+    expect(screen.getByLabelText('Offer price: 1.234')).toBeVisible();
+    expect(screen.getByLabelText('Offer price: 2.468')).toBeVisible();
+    expect(screen.getByLabelText('Offer price: 3.702')).toBeVisible();
+    expect(screen.getByLabelText('Offer price: 4.936')).toBeVisible();
+    expect(view.container.querySelectorAll('s')).toHaveLength(0);
+    view.rerender(<CharityPriceTable {...props} serverNow={NOW + 30} />);
+    expect(screen.getByLabelText('Offer price: 0.617')).toBeVisible();
+    expect(screen.getByLabelText('Offer price: 1.234')).toBeVisible();
+    expect(screen.getByLabelText('Offer price: 1.851')).toBeVisible();
+    expect(screen.getByLabelText('Offer price: 2.468')).toBeVisible();
+    expect(view.container.querySelectorAll('s')).toHaveLength(4);
+    expect(screen.getByLabelText('Original price: 4.936')).toBeVisible();
+  });
 });

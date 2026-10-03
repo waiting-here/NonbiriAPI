@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
+import { DataTable, FilterBar } from '@shared/components/ui';
 import { CopyValue } from '@shared/components/CopyValue';
 import { RecentCharitySuccess } from '@shared/components/DonationControlFacts';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { MAX_PAGE, type PageSize } from '@shared/operations/pageNumbers';
+import { type PageSize } from '@shared/operations/pageNumbers';
 import {
   canonicalCharityCatalogSearch,
   charityCatalogFilterKey,
@@ -55,6 +56,7 @@ function priceRows(model: CatalogModel, translate: (key: string) => string): Cha
     return [
       {
         label: translate('user.charity.requestPrice'),
+        compactLabel: translate('user.charity.presentation.perCall'),
         userMilli: model.pricing.userPriceMilli,
         discountedUserMilli: model.pricing.discountedUserPriceMilli,
       },
@@ -63,31 +65,29 @@ function priceRows(model: CatalogModel, translate: (key: string) => string): Cha
   return [
     {
       label: translate('user.charity.uncachedInputPrice'),
+      compactLabel: translate('user.charity.presentation.input'),
       userMilli: model.pricing.userPricesMilli.uncachedInput,
       discountedUserMilli: model.pricing.discountedUserPricesMilli.uncachedInput,
     },
     {
       label: translate('user.charity.cacheWriteInputPrice'),
+      compactLabel: translate('user.charity.presentation.cacheWrite'),
       userMilli: model.pricing.userPricesMilli.cacheWriteInput,
       discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheWriteInput,
     },
     {
       label: translate('user.charity.cacheReadInputPrice'),
+      compactLabel: translate('user.charity.presentation.cacheRead'),
       userMilli: model.pricing.userPricesMilli.cacheReadInput,
       discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheReadInput,
     },
     {
       label: translate('user.charity.outputPrice'),
+      compactLabel: translate('user.charity.presentation.output'),
       userMilli: model.pricing.userPricesMilli.output,
       discountedUserMilli: model.pricing.discountedUserPricesMilli.output,
     },
   ];
-}
-
-function descriptionToggleKey(expanded: boolean): string {
-  return expanded
-    ? 'user.charity.catalog.collapseDescription'
-    : 'user.charity.catalog.expandDescription';
 }
 
 function discountProps(model: CatalogModel) {
@@ -99,192 +99,131 @@ function discountProps(model: CatalogModel) {
   };
 }
 
-function CatalogModelCard({
-  model,
-  serverNow,
-  expanded,
-  onToggleDescription,
-}: {
-  model: CatalogModel;
-  serverNow: number;
-  expanded: boolean;
-  onToggleDescription: () => void;
-}) {
-  const { t } = useTranslation();
-  const levels = model.allowedLevels.map((level) => t('user.charity.catalog.level', { level }));
-  const description = model.publicDescription;
-  return (
-    <li className="economy-catalog-item">
-      <div className="economy-catalog-item__heading">
-        <div className="economy-catalog-item__name">
-          <CopyValue value={model.fullName} label={t('user.charity.modelName')} />
-        </div>
-        <div className="economy-catalog-item__statuses">
-          <StatusBadge
-            active={model.enabled}
-            label={model.enabled ? t('common.enabled') : t('common.disabled')}
-          />
-          <span className="economy-catalog-item__availability">
-            {t(AVAILABILITY_COPY[model.availability])}
-          </span>
-          {!model.levelAllowed ? (
-            <span
-              className={`economy-catalog-item__resource-state${model.currentlyAvailable ? ' is-available' : ''}`}
-              aria-label={t('user.charity.catalog.resourceAvailability')}
-            >
-              {model.currentlyAvailable
-                ? t('user.charity.catalog.currentlyAvailable')
-                : t('user.charity.catalog.currentlyUnavailable')}
-            </span>
-          ) : null}
-        </div>
-      </div>
-      <CharityPriceTable
-        mode={model.pricing.mode}
-        rows={priceRows(model, t)}
-        serverNow={serverNow}
-        discount={discountProps(model)}
-      />
-      <RecentCharitySuccess value={model.recentSuccess} />
-      {description ? (
-        <div className="economy-catalog-item__description-block">
-          <p className={`economy-catalog-item__description${expanded ? ' is-expanded' : ''}`}>
-            {description}
-          </p>
-          <button
-            type="button"
-            className="btn btn-quiet economy-catalog-item__description-toggle"
-            aria-expanded={expanded}
-            onClick={onToggleDescription}
-          >
-            {t(descriptionToggleKey(expanded))}
-          </button>
-        </div>
-      ) : null}
-      <dl className="economy-catalog-item__meta">
-        <div>
-          <dt>{t('user.charity.catalog.allowedLevels')}</dt>
-          <dd>
-            {levels.length > 0 ? levels.join(', ') : t('user.charity.catalog.noAllowedLevels')}
-          </dd>
-        </div>
-        <div>
-          <dt>{t('user.charity.catalog.yourAccess')}</dt>
-          <dd>
-            {model.levelAllowed
-              ? t('user.charity.catalog.allowedForMe')
-              : t('user.charity.catalog.deniedForMe')}
-          </dd>
-        </div>
-      </dl>
-    </li>
-  );
-}
-
 function CatalogFilters({
   filter,
   onQuerySubmit,
   onAccessChange,
   onLevelChange,
   onAvailabilityChange,
-  onReset,
+  onClear,
 }: {
   filter: CatalogFilter;
   onQuerySubmit: (query: string) => void;
   onAccessChange: (value: CatalogAccessFilter) => void;
   onLevelChange: (value: CatalogLevelFilter) => void;
   onAvailabilityChange: (value: CatalogAvailabilityFilter) => void;
-  onReset: () => void;
+  onClear: () => void;
 }) {
   const { t } = useTranslation();
   const [queryDraft, setQueryDraft] = useState(filter.query);
-  const appliedLabel = t('user.charity.catalog.filterApplied');
+  const chips = [
+    ...(filter.allowedForMe === 'all'
+      ? []
+      : [
+          {
+            key: 'access',
+            label: t(
+              filter.allowedForMe === 'true'
+                ? 'user.charity.catalog.accessAllowed'
+                : 'user.charity.catalog.accessDenied',
+            ),
+            removeLabel: t('user.charity.presentation.removeAccess'),
+            onRemove: () => onAccessChange('all'),
+          },
+        ]),
+    ...(filter.currentlyAvailable === 'all'
+      ? []
+      : [
+          {
+            key: 'availability',
+            label: t(
+              filter.currentlyAvailable === 'true'
+                ? 'user.charity.catalog.availabilityAllowed'
+                : 'user.charity.catalog.availabilityDenied',
+            ),
+            removeLabel: t('user.charity.presentation.removeAvailability'),
+            onRemove: () => onAvailabilityChange('all'),
+          },
+        ]),
+    ...(filter.allowedLevel === 'all'
+      ? []
+      : [
+          {
+            key: 'level',
+            label: t('user.charity.catalog.level', { level: filter.allowedLevel }),
+            removeLabel: t('user.charity.presentation.removeLevel'),
+            onRemove: () => onLevelChange('all'),
+          },
+        ]),
+  ];
   return (
     <div className="economy-catalog-filters">
-      <form
-        className="economy-catalog-search"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onQuerySubmit(queryDraft);
-        }}
-      >
-        <label>
-          <span>{t('user.charity.catalog.search')}</span>
-          <input
-            type="search"
-            value={queryDraft}
-            maxLength={MAX_QUERY_BYTES}
-            onChange={(event) => setQueryDraft(boundQueryDraft(event.target.value))}
-          />
-        </label>
-        <button type="submit" className="btn btn-secondary">
-          {t('common.search')}
-        </button>
-      </form>
-      <label
-        className={`economy-catalog-filter${filter.allowedLevel !== 'all' ? ' is-applied' : ''}`}
-      >
-        <span>{t('user.charity.catalog.levelFilter')}</span>
-        <select
-          aria-label={t('user.charity.catalog.levelFilter')}
-          value={filter.allowedLevel}
-          onChange={(event) => onLevelChange(event.target.value as CatalogLevelFilter)}
-        >
-          <option value="all">{t('user.charity.catalog.levelAll')}</option>
-          <option value="1">{t('user.charity.catalog.level', { level: 1 })}</option>
-          <option value="2">{t('user.charity.catalog.level', { level: 2 })}</option>
-          <option value="3">{t('user.charity.catalog.level', { level: 3 })}</option>
-          <option value="4">{t('user.charity.catalog.level', { level: 4 })}</option>
-          <option value="5">{t('user.charity.catalog.level', { level: 5 })}</option>
-          <option value="6">{t('user.charity.catalog.level', { level: 6 })}</option>
-        </select>
-        {filter.allowedLevel !== 'all' ? (
-          <span className="economy-catalog-filter__applied">{appliedLabel}</span>
-        ) : null}
-      </label>
-      <label
-        className={`economy-catalog-filter${filter.allowedForMe !== 'all' ? ' is-applied' : ''}`}
-      >
-        <span>{t('user.charity.catalog.accessFilter')}</span>
-        <select
-          aria-label={t('user.charity.catalog.accessFilter')}
-          value={filter.allowedForMe}
-          onChange={(event) => onAccessChange(event.target.value as CatalogAccessFilter)}
-        >
-          <option value="all">{t('user.charity.catalog.accessAll')}</option>
-          <option value="true">{t('user.charity.catalog.accessAllowed')}</option>
-          <option value="false">{t('user.charity.catalog.accessDenied')}</option>
-        </select>
-        {filter.allowedForMe !== 'all' ? (
-          <span className="economy-catalog-filter__applied">{appliedLabel}</span>
-        ) : null}
-      </label>
-      <label
-        className={`economy-catalog-filter${filter.currentlyAvailable !== 'all' ? ' is-applied' : ''}`}
-      >
-        <span>{t('user.charity.catalog.availabilityFilter')}</span>
-        <select
-          aria-label={t('user.charity.catalog.availabilityFilter')}
-          value={filter.currentlyAvailable}
-          onChange={(event) =>
-            onAvailabilityChange(event.target.value as CatalogAvailabilityFilter)
-          }
-        >
-          <option value="all">{t('user.charity.catalog.availabilityAll')}</option>
-          <option value="true">{t('user.charity.catalog.availabilityAllowed')}</option>
-          <option value="false">{t('user.charity.catalog.availabilityDenied')}</option>
-        </select>
-        {filter.currentlyAvailable !== 'all' ? (
-          <span className="economy-catalog-filter__applied">{appliedLabel}</span>
-        ) : null}
-      </label>
-      <button
-        type="button"
-        className="btn btn-quiet economy-catalog-filter-reset"
-        onClick={onReset}
-      >
-        {t('user.charity.catalog.resetFilters')}
-      </button>
+      <FilterBar
+        search={
+          <div className="economy-catalog-search">
+            <label>
+              <span>{t('user.charity.catalog.search')}</span>
+              <input
+                type="search"
+                value={queryDraft}
+                maxLength={MAX_QUERY_BYTES}
+                onChange={(event) => setQueryDraft(boundQueryDraft(event.target.value))}
+              />
+            </label>
+            <button type="submit" className="btn btn-secondary">
+              {t('common.search')}
+            </button>
+          </div>
+        }
+        secondaryLabel={t('user.charity.presentation.filters')}
+        activeCount={chips.length}
+        chips={chips}
+        onClearAll={onClear}
+        clearAllLabel={t('user.charity.presentation.clearFilters')}
+        onSubmit={() => onQuerySubmit(queryDraft)}
+        secondary={
+          <>
+            <label>
+              <span>{t('user.charity.catalog.accessFilter')}</span>
+              <select
+                value={filter.allowedForMe}
+                onChange={(event) => onAccessChange(event.target.value as CatalogAccessFilter)}
+              >
+                <option value="all">{t('user.charity.catalog.accessAll')}</option>
+                <option value="true">{t('user.charity.catalog.accessAllowed')}</option>
+                <option value="false">{t('user.charity.catalog.accessDenied')}</option>
+              </select>
+            </label>
+            <label>
+              <span>{t('user.charity.catalog.availabilityFilter')}</span>
+              <select
+                value={filter.currentlyAvailable}
+                onChange={(event) =>
+                  onAvailabilityChange(event.target.value as CatalogAvailabilityFilter)
+                }
+              >
+                <option value="all">{t('user.charity.catalog.availabilityAll')}</option>
+                <option value="true">{t('user.charity.catalog.availabilityAllowed')}</option>
+                <option value="false">{t('user.charity.catalog.availabilityDenied')}</option>
+              </select>
+            </label>
+            <label>
+              <span>{t('user.charity.catalog.levelFilter')}</span>
+              <select
+                value={filter.allowedLevel}
+                onChange={(event) => onLevelChange(event.target.value as CatalogLevelFilter)}
+              >
+                <option value="all">{t('user.charity.catalog.levelAll')}</option>
+                {[1, 2, 3, 4, 5, 6].map((level) => (
+                  <option key={level} value={level}>
+                    {t('user.charity.catalog.level', { level })}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        }
+      />
     </div>
   );
 }
@@ -355,19 +294,8 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
   const changeLevel = (allowedLevel: CatalogLevelFilter) => updateFilter({ allowedLevel });
   const changeAvailability = (currentlyAvailable: CatalogAvailabilityFilter) =>
     updateFilter({ currentlyAvailable });
-  const resetFilters = () => {
-    setExpanded(new Set());
-    setSearchParams((previous) => {
-      const current = readCharityCatalogUrlState(previous).filters;
-      const next = writeCharityCatalogFilters(previous, {
-        ...DEFAULT_CHARITY_CATALOG_FILTERS,
-        query: current.query,
-      });
-      next.delete('page');
-      next.set('page', '1');
-      return next;
-    });
-  };
+  const clearFilters = () =>
+    updateFilter({ allowedForMe: 'all', currentlyAvailable: 'all', allowedLevel: 'all' });
   const changePageSize = (pageSize: PageSize) => {
     setExpanded(new Set());
     pager.setPageSize(pageSize);
@@ -380,19 +308,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
 
   return (
     <Card className="economy-catalog-card">
-      <div className="card-title-row">
-        <div>
-          <h2>{t('user.charity.catalog.title')}</h2>
-          <p>{t('user.charity.catalog.description')}</p>
-          <p>{t('common.operations.charity.embeddingBillingHelp')}</p>
-        </div>
-        {pageData ? (
-          <StatusBadge
-            active={pageData.donationIntake === 'open'}
-            label={t(`user.charity.intakeState.${pageData.donationIntake}`)}
-          />
-        ) : null}
-      </div>
+      <h2>{t('user.charity.catalog.title')}</h2>
       <CatalogFilters
         key={urlState.filters.query}
         filter={filter}
@@ -400,7 +316,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
         onAccessChange={changeAccess}
         onLevelChange={changeLevel}
         onAvailabilityChange={changeAvailability}
-        onReset={resetFilters}
+        onClear={clearFilters}
       />
       {catalog.isPending && !pageData ? (
         <LoadingState />
@@ -409,60 +325,143 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
       ) : pageData ? (
         <div className="economy-catalog-results" aria-busy={busy}>
           {busy ? <LoadingState /> : null}
-          <div className="economy-catalog-page-summary">
-            <span aria-live="polite">
-              {t('user.charity.catalog.title')}
-              {' · '}
-              {t('common.pageControls.summary', {
-                page: pageData.pagination.page,
-                pages: pageData.pagination.total_pages,
-                total: pageData.pagination.total_items,
-              })}
-            </span>
-            {BigInt(pageData.pagination.total_pages) > 1n ? (
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  aria-label={`${t('user.charity.catalog.title')} · ${t('common.previous')}`}
-                  disabled={busy || BigInt(pageData.pagination.page) <= 1n}
-                  onClick={() => changePage((BigInt(pageData.pagination.page) - 1n).toString())}
-                >
-                  {t('common.previous')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  aria-label={`${t('user.charity.catalog.title')} · ${t('common.next')}`}
-                  disabled={
-                    busy ||
-                    BigInt(pageData.pagination.page) >= BigInt(pageData.pagination.total_pages) ||
-                    BigInt(pageData.pagination.page) >= MAX_PAGE
-                  }
-                  onClick={() => changePage((BigInt(pageData.pagination.page) + 1n).toString())}
-                >
-                  {t('common.next')}
-                </button>
-              </div>
-            ) : null}
-          </div>
           {priceCount === 0 ? (
             <EmptyState
               title={t('user.charity.catalog.emptyTitle')}
-              body={t('user.charity.catalog.emptyBody')}
+              body={
+                filter.allowedForMe === 'true' || filter.currentlyAvailable === 'true'
+                  ? t('user.charity.presentation.filteredEmpty')
+                  : t('user.charity.catalog.emptyBody')
+              }
+              action={
+                filter.allowedForMe === 'true' || filter.currentlyAvailable === 'true' ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => updateFilter({ allowedForMe: 'all', currentlyAvailable: 'all' })}
+                  >
+                    {t('user.charity.presentation.showAll')}
+                  </button>
+                ) : undefined
+              }
             />
           ) : (
-            <ul className="economy-catalog-list" aria-label={t('user.charity.catalog.modelsList')}>
-              {pageData.models.map((model) => (
-                <CatalogModelCard
-                  key={model.id}
-                  model={model}
-                  serverNow={pageData.serverNow}
-                  expanded={expanded.has(model.id)}
-                  onToggleDescription={() => toggleDescription(model.id)}
-                />
-              ))}
-            </ul>
+            <DataTable
+              caption={t('user.charity.catalog.modelsList')}
+              rows={pageData.models}
+              rowKey={(model) => model.id}
+              columns={[
+                {
+                  key: 'name',
+                  header: t('user.charity.modelName'),
+                  cell: 'title',
+                  render: (model) => (
+                    <>
+                      <button
+                        type="button"
+                        className="charity-model-name"
+                        aria-expanded={expanded.has(model.id)}
+                        aria-controls={`charity-model-${model.id}`}
+                        onClick={() => toggleDescription(model.id)}
+                      >
+                        <code>{model.fullName}</code>
+                        <span aria-hidden="true">{expanded.has(model.id) ? '−' : '+'}</span>
+                      </button>
+                      {model.publicDescription ? (
+                        <span className="nb-sub charity-model-preview">
+                          {Array.from(model.publicDescription).slice(0, 60).join('')}
+                        </span>
+                      ) : null}
+                    </>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: t('user.charity.presentation.status'),
+                  cell: 'status',
+                  render: (model) => (
+                    <StatusBadge
+                      active={model.availability === 'available'}
+                      label={t(AVAILABILITY_COPY[model.availability])}
+                    />
+                  ),
+                },
+                {
+                  key: 'price',
+                  header: t('user.charity.userPrice'),
+                  mobileLabel: t('user.charity.userPrice'),
+                  cell: 'meta',
+                  render: (model) => (
+                    <CharityPriceTable
+                      compact
+                      mode={model.pricing.mode}
+                      rows={priceRows(model, t)}
+                      serverNow={pageData.serverNow}
+                      discount={discountProps(model)}
+                    />
+                  ),
+                },
+                {
+                  key: 'levels',
+                  header: t('user.charity.catalog.allowedLevels'),
+                  mobileLabel: t('user.charity.catalog.allowedLevels'),
+                  cell: 'meta',
+                  render: (model) =>
+                    model.allowedLevels.length
+                      ? model.allowedLevels.map((level) => `L${level}`).join('、')
+                      : t('user.charity.catalog.noAllowedLevels'),
+                },
+                {
+                  key: 'copy',
+                  header: t('common.copy'),
+                  cell: 'action',
+                  align: 'action',
+                  render: (model) => (
+                    <CopyValue
+                      showValue={false}
+                      value={model.fullName}
+                      label={t('user.charity.modelName')}
+                    />
+                  ),
+                },
+              ]}
+              renderDetail={(model) =>
+                expanded.has(model.id) ? (
+                  <section
+                    id={`charity-model-${model.id}`}
+                    className="charity-model-detail"
+                    aria-label={model.fullName}
+                  >
+                    {model.publicDescription ? <p>{model.publicDescription}</p> : null}
+                    <CharityPriceTable
+                      mode={model.pricing.mode}
+                      rows={priceRows(model, t)}
+                      serverNow={pageData.serverNow}
+                      discount={discountProps(model)}
+                    />
+                    <RecentCharitySuccess value={model.recentSuccess} />
+                    <p>
+                      {t('user.charity.catalog.yourAccess')}:{' '}
+                      {t(
+                        model.levelAllowed
+                          ? 'user.charity.catalog.allowedForMe'
+                          : 'user.charity.catalog.deniedForMe',
+                      )}
+                    </p>
+                    {!model.levelAllowed ? (
+                      <p>
+                        {t('user.charity.catalog.resourceAvailability')}:{' '}
+                        {t(
+                          model.currentlyAvailable
+                            ? 'user.charity.catalog.currentlyAvailable'
+                            : 'user.charity.catalog.currentlyUnavailable',
+                        )}
+                      </p>
+                    ) : null}
+                  </section>
+                ) : null
+              }
+            />
           )}
           <div className="economy-catalog-pagination">
             <PagePagination

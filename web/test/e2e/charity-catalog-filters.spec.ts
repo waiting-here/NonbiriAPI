@@ -241,32 +241,22 @@ async function saveScreenshot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: resolve(EVIDENCE_DIR, `${name}.png`) });
 }
 
-async function assertAppliedPresentation(
-  page: Page,
-  count: number,
-  appliedText: string,
-): Promise<void> {
-  const applied = page.locator('.economy-catalog-filter.is-applied');
-  await expect(applied).toHaveCount(count);
-  await expect(applied.getByText(appliedText, { exact: true })).toHaveCount(count);
-  const styles = await applied.evaluateAll((elements) =>
-    elements.map((element) => {
-      const style = getComputedStyle(element);
-      return {
-        borderStyle: style.borderStyle,
-        borderColor: style.borderColor,
-        backgroundColor: style.backgroundColor,
-      };
-    }),
-  );
-  expect(
-    styles.every(
-      ({ borderStyle, borderColor, backgroundColor }) =>
-        borderStyle !== 'none' &&
-        borderColor !== 'rgba(0, 0, 0, 0)' &&
-        backgroundColor !== 'rgba(0, 0, 0, 0)',
-    ),
-  ).toBe(true);
+async function assertAppliedPresentation(page: Page, count: number): Promise<void> {
+  const chips = page.locator('.economy-catalog-filters .nb-chip');
+  await expect(chips).toHaveCount(count);
+  for (const chip of await chips.all()) {
+    await expect(chip).toBeVisible();
+    await expect(chip.getByRole('button')).toHaveAccessibleName(/Remove|移除/);
+    const box = await chip.getByRole('button').boundingBox();
+    expect(box && box.width >= 40 && box.height >= 40).toBeTruthy();
+  }
+}
+
+async function openFilters(page: Page) {
+  const disclosure = page.locator('.economy-catalog-filters .nb-filter__more');
+  if (!(await disclosure.evaluate((element) => element.hasAttribute('open')))) {
+    await disclosure.locator('summary').click();
+  }
 }
 
 async function assertNoHorizontalOverflow(page: Page): Promise<void> {
@@ -280,34 +270,40 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
 }
 
 for (const locale of ['zh', 'en'] as const) {
-  test(`catalog sidebar and incomplete rows use available space ${locale}`, async ({ context, page }) => {
+  test(`catalog spans the content area and moves the charity board to donations ${locale}`, async ({
+    context,
+    page,
+  }) => {
     const fixture = createCatalogFixture();
-    const setup = await installCatalogFixture(context, page, fixture, locale,
-      locale === 'zh' ? 'dark' : 'light', 1440, `catalog-layout-${locale}-ephemeral`);
+    const setup = await installCatalogFixture(
+      context,
+      page,
+      fixture,
+      locale,
+      locale === 'zh' ? 'dark' : 'light',
+      1440,
+      `catalog-layout-${locale}-ephemeral`,
+    );
     await page.goto(`${USER_ORIGIN}/charity?allowed_for_me=all&currently_available=all`);
-    await expect(page.locator('.economy-catalog-item')).toHaveCount(20);
+    await expect(page.locator('.charity-model-name')).toHaveCount(20);
     const catalog = page.locator('.economy-catalog-card');
-    const summary = page.locator('.economy-catalog-page-summary');
+    const summary = page.locator('.economy-catalog-pagination');
     for (const width of [320, 390, 768, 1440, 1920, 2560, 3766]) {
       await page.setViewportSize({ width, height: 1000 });
       await assertNoHorizontalOverflow(page);
       const box = (await catalog.boundingBox())!;
-      const notice = (await page.locator('.economy-safety-card').boundingBox())!;
-      const board = (await page.locator('.progression-ranking').boundingBox())!;
-      expect(board.y).toBeGreaterThan(notice.y + notice.height);
-      if (width >= 1440) {
-        expect(notice.x).toBeGreaterThan(box.x + box.width);
-        expect(Math.abs(notice.y - box.y)).toBeLessThan(2);
-        expect(board.y).toBeLessThan(box.y + box.height);
-      }
-      const list = (await page.locator('.economy-catalog-list').boundingBox())!;
-      const finalCard = (await page.locator('.economy-catalog-item').last().boundingBox())!;
-      expect(Math.abs(finalCard.x + finalCard.width - list.x - list.width)).toBeLessThan(2);
+      const notice = (await page.locator('.charity-catalog-workspace > .nb-fold').boundingBox())!;
+      expect(notice.y + notice.height).toBeLessThanOrEqual(box.y);
+      expect(Math.abs(notice.width - box.width)).toBeLessThan(2);
+      await expect(page.locator('.progression-ranking')).toBeHidden();
+      const list = (await page.locator('.economy-catalog-results > .nb-table-wrap').boundingBox())!;
+      expect(list.x + list.width).toBeLessThanOrEqual(box.x + box.width);
       await page.evaluate(() => scrollTo(0, 0));
-      if ([390, 1440, 3766].includes(width)) await saveScreenshot(page, `charity-layout-${locale}-${width}`);
+      if ([390, 1440, 3766].includes(width))
+        await saveScreenshot(page, `charity-layout-${locale}-${width}`);
     }
     await summary.getByRole('button', { name: /Next|下一页/ }).click();
-    await expect(page.locator('.economy-catalog-item')).toHaveCount(6);
+    await expect(page.locator('.charity-model-name')).toHaveCount(6);
     await expect(summary).toContainText('26');
     await expect(summary.getByRole('button', { name: /Next|下一页/ })).toBeDisabled();
     setup.consoleGuard.assertNone();
@@ -338,19 +334,26 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   });
   const search = page.getByRole('searchbox', { name: 'Search model name or public description' });
   const pageSize = page.getByRole('combobox', { name: 'Items per page', exact: true });
-  const reset = page.getByRole('button', { name: 'Reset filters', exact: true });
+  const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
+  const defaults = async () => {
+    await openFilters(page);
+    await level.selectOption('all');
+    await access.selectOption('true');
+    await availability.selectOption('true');
+  };
+  await openFilters(page);
 
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(14);
+  await expect(page.locator('.charity-model-name')).toHaveCount(14);
   await expect(level).toHaveValue('all');
   await expect(access).toHaveValue('true');
   await expect(availability).toHaveValue('true');
-  await assertAppliedPresentation(page, 2, 'Applied');
+  await assertAppliedPresentation(page, 2);
   expect(fixture.requests).toContain(
     '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
   );
 
   await level.selectOption('3');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(9);
+  await expect(page.locator('.charity-model-name')).toHaveCount(9);
   await expect(access).toHaveValue('true');
   await expect(availability).toHaveValue('true');
   await expect(fixture.requests.at(-1)).toBe(
@@ -359,7 +362,7 @@ test('catalog filters use a counted complete sample and restore URL-backed state
 
   await access.selectOption('false');
   await expect(page.getByText('[公益]provider/model-03', { exact: true })).toBeVisible();
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(3);
+  await expect(page.locator('.charity-model-name')).toHaveCount(3);
   await expect(level).toHaveValue('3');
   await expect(availability).toHaveValue('true');
   await expect(fixture.requests.at(-1)).toBe(
@@ -368,45 +371,50 @@ test('catalog filters use a counted complete sample and restore URL-backed state
 
   await availability.selectOption('false');
   await expect(page.getByText('[公益]provider/model-04', { exact: true })).toBeVisible();
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(2);
+  await expect(page.locator('.charity-model-name')).toHaveCount(2);
   await expect(level).toHaveValue('3');
   await expect(access).toHaveValue('false');
   await expect(fixture.requests.at(-1)).toBe(
     '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=false&allowed_level=3&currently_available=false',
   );
 
-  await reset.click();
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(14);
+  await clear.click();
+  await expect(level).toHaveValue('all');
+  await expect(access).toHaveValue('all');
+  await expect(availability).toHaveValue('all');
+  await assertAppliedPresentation(page, 0);
+  await defaults();
+  await expect(page.locator('.charity-model-name')).toHaveCount(14);
   await expect(level).toHaveValue('all');
   await expect(access).toHaveValue('true');
   await expect(availability).toHaveValue('true');
-  await assertAppliedPresentation(page, 2, 'Applied');
+  await assertAppliedPresentation(page, 2);
 
   await level.selectOption('3');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(9);
+  await expect(page.locator('.charity-model-name')).toHaveCount(9);
   await level.selectOption('all');
   await expect(access).toHaveValue('true');
   await expect(availability).toHaveValue('true');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(14);
+  await expect(page.locator('.charity-model-name')).toHaveCount(14);
   await access.selectOption('all');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(20);
+  await expect(page.locator('.charity-model-name')).toHaveCount(20);
   await availability.selectOption('all');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(20);
-  await expect(page.getByText('Page 1 of 2 · Total: 26', { exact: true })).toBeVisible();
-  expect(fixture.requests.at(-1)).toBe('/api/charity/models?view=catalog&page=1&page_size=20');
+  await expect(page.locator('.charity-model-name')).toHaveCount(20);
+  await expect(page.getByText('26 items', { exact: true })).toBeVisible();
+  expect(fixture.requests).toContain('/api/charity/models?view=catalog&page=1&page_size=20');
 
-  await reset.click();
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(14);
+  await defaults();
+  await expect(page.locator('.charity-model-name')).toHaveCount(14);
   await search.fill('needle');
   await search.press('Enter');
   await expect(page.getByText('[公益]provider/model-07', { exact: true })).toBeVisible();
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(1);
+  await expect(page.locator('.charity-model-name')).toHaveCount(1);
   await expect(page).toHaveURL(/q=needle/);
   const searchURL = page.url();
   await page.goBack();
   await expect(page).not.toHaveURL(/q=needle/);
   await expect(search).toHaveValue('');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(14);
+  await expect(page.locator('.charity-model-name')).toHaveCount(14);
   await page.goForward();
   await expect(page).toHaveURL(searchURL);
   await expect(page.getByText('[公益]provider/model-07', { exact: true })).toBeVisible();
@@ -417,14 +425,18 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   await search.press('Enter');
   await expect(page).not.toHaveURL(/q=needle/);
   await expect(search).toHaveValue('');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(14);
+  await expect(page.locator('.charity-model-name')).toHaveCount(14);
+  await openFilters(page);
   await access.selectOption('all');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(20);
+  await expect(page.locator('.charity-model-name')).toHaveCount(20);
   await availability.selectOption('all');
   await pageSize.selectOption('10');
-  await expect(page.locator('.economy-catalog-item')).toHaveCount(10);
-  await expect(page.getByText('Page 1 of 3 · Total: 26', { exact: true })).toBeVisible();
-  await page.getByRole('navigation', { name: 'Pagination', exact: true }).getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.locator('.charity-model-name')).toHaveCount(10);
+  await expect(page.getByText('26 items', { exact: true })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Pagination', exact: true })
+    .getByRole('button', { name: 'Next', exact: true })
+    .click();
   await expect(page.getByText('[公益]provider/model-11', { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/page=2&page_size=10/);
   expect(fixture.requests.at(-1)).toBe('/api/charity/models?view=catalog&page=2&page_size=10');
@@ -443,7 +455,7 @@ test('catalog filters use a counted complete sample and restore URL-backed state
 
 for (const locale of ['en', 'zh'] as const) {
   for (const theme of ['light', 'dark'] as const) {
-    for (const width of [320, 390] as const) {
+    for (const width of [390, 768, 1440] as const) {
       test(`catalog applied filters remain readable at ${width}px (${locale}, ${theme})`, async ({
         context,
         page,
@@ -480,15 +492,16 @@ for (const locale of ['en', 'zh'] as const) {
           name: copy.availability,
           exact: true,
         });
-        await expect(page.locator('.economy-catalog-item').first()).toBeVisible();
+        await expect(page.locator('.charity-model-name').first()).toBeVisible();
+        await openFilters(page);
         await expect(level).toHaveValue('all');
         await expect(access).toHaveValue('true');
         await expect(availability).toHaveValue('true');
-        await assertAppliedPresentation(page, 2, copy.applied);
+        await assertAppliedPresentation(page, 2);
 
         await level.selectOption('3');
         await expect(level).toHaveValue('3');
-        await assertAppliedPresentation(page, 3, copy.applied);
+        await assertAppliedPresentation(page, 3);
         await assertNoHorizontalOverflow(page);
         await expect(page.locator('html')).toHaveAttribute(
           'lang',
@@ -501,4 +514,77 @@ for (const locale of ['en', 'zh'] as const) {
       });
     }
   }
+}
+
+for (const [width, locale, theme] of [
+  [1440, 'en', 'light'],
+  [768, 'en', 'dark'],
+  [390, 'zh', 'dark'],
+] as const) {
+  test(`catalog empty recovery shows mixed prices at ${width} ${locale}`, async ({
+    context,
+    page,
+  }) => {
+    const tokenModel = catalogModel('2', [1, 3], true, false, 'token');
+    tokenModel.pricing = {
+      mode: 'per_token',
+      user_price_milli: null,
+      discounted_user_price_milli: null,
+      user_prices_milli: {
+        uncached_input: '1234',
+        cache_write_input: '2468',
+        cache_read_input: '3702',
+        output: '4936',
+      },
+      discounted_user_prices_milli: {
+        uncached_input: '617',
+        cache_write_input: '1234',
+        cache_read_input: '1851',
+        output: '2468',
+      },
+    };
+    tokenModel.discount = { enabled: true, percent: 50, start_at: NOW - 60, end_at: NOW + 3600 };
+    const fixture: CatalogFixture = {
+      models: [catalogModel('1', [1, 3], true, false, 'request'), tokenModel],
+      requests: [],
+    };
+    const setup = await installCatalogFixture(
+      context,
+      page,
+      fixture,
+      locale,
+      theme,
+      width,
+      'mixed-price-ephemeral',
+    );
+    await page.goto(`${USER_ORIGIN}/charity`);
+    const showAll = page.getByRole('button', {
+      name: locale === 'en' ? 'Show all models' : '显示全部模型',
+      exact: true,
+    });
+    await expect(showAll).toBeVisible();
+    await saveScreenshot(page, `catalog-empty-${width}-${locale}-${theme}`);
+    await showAll.click();
+    await expect(page.locator('.charity-model-name')).toHaveCount(2);
+    const rows = page.locator('.economy-catalog-results tbody tr');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0).locator('.charity-prices-compact')).toContainText('2.4');
+    await expect(rows.nth(1).locator('.charity-prices-compact')).toContainText('0.617');
+    await expect(rows.nth(1).locator('.charity-prices-compact')).toContainText('1.234');
+    await expect(rows.nth(1).locator('.charity-prices-compact')).toContainText('1.851');
+    await expect(rows.nth(1).locator('.charity-prices-compact')).toContainText('2.468');
+    await assertNoHorizontalOverflow(page);
+    await page.evaluate(() => scrollTo(0, 0));
+    if (EVIDENCE_DIR)
+      await page.screenshot({
+        path: resolve(EVIDENCE_DIR, `catalog-mixed-${width}-${locale}-${theme}.png`),
+        fullPage: true,
+      });
+    await page.locator('.charity-model-name').nth(1).click();
+    await expect(
+      page.getByRole('region', { name: tokenModel.full_name, exact: true }),
+    ).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+    setup.consoleGuard.assertNone();
+  });
 }

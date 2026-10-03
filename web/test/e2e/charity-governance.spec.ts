@@ -576,25 +576,24 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await page.goto(`${USER_ORIGIN}/charity`);
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  const firstCard = page.locator('.economy-catalog-item').first();
+  const firstCard = page.locator('.economy-catalog-card .nb-table > tbody > tr').first();
   await expect(firstCard).toBeVisible();
   await expect(firstCard).toContainText('<b>plain</b>');
   expect(await firstCard.locator('b').count()).toBe(0);
-  await expect(firstCard.getByText('L1, L3, L5', { exact: true })).toBeVisible();
-  await expect(firstCard.getByText('当前等级可访问', { exact: true })).toBeVisible();
+  await expect(firstCard.getByText('L1、L3、L5', { exact: true })).toBeVisible();
   await expect(firstCard.getByText('当前可用', { exact: true })).toBeVisible();
-  const priceTable = firstCard.getByRole('table', { name: '公益模型价格', exact: true });
-  await expect(priceTable).toBeVisible();
-  await expect(priceTable.locator('[aria-label="原价: 3"]')).toBeVisible();
-  await expect(priceTable.locator('[aria-label="优惠价: 2.4"]')).toBeVisible();
-  const toggle = firstCard.locator('.economy-catalog-item__description-toggle');
-  await expect(toggle).toHaveAccessibleName('展开完整说明');
+  const toggle = firstCard.locator('.charity-model-name');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(toggle).toHaveAccessibleName('收起说明');
+  const detail = page.locator('.charity-model-detail').first();
+  await expect(detail).toContainText('当前等级可访问');
+  const priceTable = detail.getByRole('table', { name: '公益模型价格', exact: true });
+  await expect(priceTable).toBeVisible();
+  await expect(priceTable.locator('[aria-label="原价: 3"]')).toBeVisible();
+  await expect(priceTable.locator('[aria-label="优惠价: 2.4"]')).toBeVisible();
   await expect(firstCard.getByRole('button', { name: '复制模型名称', exact: true })).toBeVisible();
-  await saveScreenshot(page, 'catalog-expanded-320-dark-zh', '.economy-catalog-item');
+  await saveScreenshot(page, 'catalog-expanded-320-dark-zh');
 
   await page
     .getByRole('navigation', { name: '分页', exact: true })
@@ -618,11 +617,11 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
     '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=true&currently_available=true',
   );
 
+  await page.locator('.economy-catalog-filters summary').click();
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
   await expect(page.getByText('[公益]provider/denied', { exact: true })).toBeVisible();
-  await expect(page.locator('.economy-catalog-item').first().locator('dd').nth(1)).toHaveText(
-    '当前等级不可访问',
-  );
+  await page.getByRole('button', { name: '[公益]provider/denied', exact: true }).click();
+  await expect(page.locator('.charity-model-detail')).toContainText('当前等级不可访问');
   await expect(page.getByText('本人等级不允许', { exact: true })).toBeVisible();
   expect(catalogRequests).toContain(
     '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false&currently_available=true',

@@ -26,14 +26,20 @@ const counts = {
 function summary(index: number) {
   return {
     id: String(index),
-    status: 'pending',
+    status: index === 2 || index === 3 ? 'approved' : 'pending',
     revision: '1',
     description: index === 21 ? 'needle submission' : `Submission ${index}`,
-    review_result: null,
+    review_result:
+      index === 2 || index === 3 ? { decision: 'approve', reason: '', reviewed_at: NOW } : null,
     created_at: NOW,
     updated_at: NOW,
     key_count: index === 21 ? '21' : '1',
-    state_counts: { ...counts, pending: index === 21 ? '21' : '1' },
+    state_counts: {
+      ...counts,
+      pending: index === 21 ? '21' : index === 2 || index === 3 ? '0' : '1',
+      available: index === 2 ? '1' : '0',
+      exhausted: index === 3 ? '1' : '0',
+    },
     source_count: '1',
     sources: [source],
   };
@@ -177,9 +183,27 @@ for (const [width, locale, theme] of [
     const panel = page.locator('.economy-owner-pages');
     await expect(panel.getByText('Submission 1', { exact: true })).toBeVisible();
     expect(reads.some((path) => path.includes('/keys'))).toBe(false);
+    const exhausted = panel
+      .locator('.economy-donation-summary')
+      .filter({ hasText: 'Submission 3' });
+    await exhausted.locator('summary').filter({ hasText: copy.presentation.sourceDetails }).click();
+    await expect(exhausted).toContainText(copy.keyState.exhausted);
+    if (process.env.NONBIRI_VISUAL_DIR) {
+      await mkdir(process.env.NONBIRI_VISUAL_DIR, { recursive: true });
+      await page.screenshot({
+        path: resolve(
+          process.env.NONBIRI_VISUAL_DIR,
+          `owner-states-${width}-${locale}-${theme}.png`,
+        ),
+      });
+    }
+
     await panel.getByRole('button', { name: common.next, exact: true }).click();
     await expect(panel.getByText('needle submission', { exact: true })).toBeVisible();
-    await panel.getByRole('button', { name: copy.ownerPages.keys, exact: true }).click();
+    await panel
+      .getByRole('button', { name: copy.presentation.donationActions, exact: true })
+      .click();
+    await panel.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
     const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
     await expect(keys.getByText('head1…tail', { exact: true })).toBeVisible();
     await keys.getByRole('button', { name: common.next, exact: true }).click();
@@ -227,6 +251,18 @@ for (const [width, locale, theme] of [
     await expect(page).toHaveURL(/donation_q=needle/);
     await expect(keys.getByText('head21…tail', { exact: true })).toBeVisible();
     expect(reads.every((path) => !path.includes('limit='))).toBe(true);
+    await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+    await expect(page.getByText(copy.intakeState.closed, { exact: true })).toBeVisible();
+    await expect(page.locator('.economy-donation-composer')).toHaveCount(0);
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({
+        path: resolve(
+          process.env.NONBIRI_VISUAL_DIR,
+          `donation-closed-${width}-${locale}-${theme}.png`,
+        ),
+        fullPage: true,
+      });
+
     errors.assertNone();
   });
 }

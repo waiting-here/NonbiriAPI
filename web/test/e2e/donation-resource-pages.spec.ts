@@ -217,6 +217,7 @@ test.describe('donation resource submission', () => {
         return route.fallback();
       });
       await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+      await page.getByRole('button', { name: copy.presentation.openPicker, exact: true }).click();
       const picker = page.locator('.donation-resource-picker');
       const sources = picker.locator('.donation-resource-picker__section').first();
       await sources.getByRole('button', { name: /^Source 1 / }).click();
@@ -230,11 +231,15 @@ test.describe('donation resource submission', () => {
       await sources.getByRole('button', { name: /^Source 21 / }).click();
       await keys.getByRole('checkbox', { name: /^Key 201 / }).check();
       await page
+        .getByRole('button', { name: copy.presentation.selectionDone, exact: true })
+        .click();
+      await page
         .getByRole('textbox', { name: copy.donationDescription, exact: true })
         .fill('Cross-page contribution');
       await page.getByRole('checkbox', { name: copy.ownershipAuthorization, exact: true }).check();
       await page.getByRole('tab', { name: copy.tabs.models, exact: true }).click();
       await page.getByRole('tab', { name: copy.tabs.donate, exact: true }).click();
+      await page.getByRole('button', { name: copy.presentation.openPicker, exact: true }).click();
       await expect(picker.locator('input[type="datetime-local"]').first()).toHaveValue(
         '2030-01-01T00:00',
       );
@@ -248,7 +253,9 @@ test.describe('donation resource submission', () => {
       for (const navigation of await picker
         .getByRole('navigation', { name: common.pagination })
         .all()) {
-        for (const control of await navigation.locator('button, input, select').all()) {
+        for (const control of await navigation
+          .locator('button:visible, input:visible, select:visible')
+          .all()) {
           const box = await control.boundingBox();
           expect(box && box.width > 0 && box.x >= 0 && box.x + box.width <= width).toBeTruthy();
         }
@@ -265,10 +272,15 @@ test.describe('donation resource submission', () => {
       }
       const submit = page.getByRole('button', { name: copy.submit, exact: true });
       await page
-        .getByRole('combobox', {
+        .getByRole('button', { name: copy.presentation.selectionDone, exact: true })
+        .click();
+      await expect(submit).toBeDisabled();
+      await page
+        .getByRole('radiogroup', {
           name: locale === 'en' ? 'Accept a public Discord thank-you' : '是否接受 Discord 公屏感谢',
         })
-        .selectOption('no');
+        .getByText(locale === 'en' ? 'No' : '否', { exact: true })
+        .click();
       await expect(submit).toBeEnabled();
       await submit.click();
       await expect(page.getByText(copy.submitted, { exact: true })).toBeVisible();
@@ -284,6 +296,7 @@ test.describe('donation resource submission', () => {
           ],
         },
       ]);
+      await page.getByRole('button', { name: copy.presentation.openPicker, exact: true }).click();
       await expect(picker.getByText(copy.resourcePicker.noSelected, { exact: true })).toBeVisible();
       expect(reads.some((path) => path.includes('page=2'))).toBe(true);
       expect(reads.every((path) => !path.includes('limit='))).toBe(true);

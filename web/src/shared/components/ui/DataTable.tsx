@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 export interface DataColumn<Row> {
   key: string;
@@ -17,6 +17,7 @@ export function DataTable<Row>({
   rowKey,
   selectedKey,
   dense,
+  renderDetail,
 }: {
   caption: string;
   columns: readonly DataColumn<Row>[];
@@ -24,6 +25,7 @@ export function DataTable<Row>({
   rowKey: (row: Row) => string;
   selectedKey?: string;
   dense?: boolean;
+  renderDetail?: (row: Row) => ReactNode;
 }) {
   return (
     <div className="nb-table-wrap">
@@ -45,19 +47,27 @@ export function DataTable<Row>({
         <tbody>
           {rows.map((row) => {
             const key = rowKey(row);
+            const detail = renderDetail?.(row);
             return (
-              <tr key={key} aria-selected={selectedKey === key ? true : undefined}>
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    data-cell={column.cell}
-                    data-label={column.mobileLabel}
-                    className={column.align ? `is-${column.align}` : undefined}
-                  >
-                    {column.render(row)}
-                  </td>
-                ))}
-              </tr>
+              <Fragment key={key}>
+                <tr aria-selected={selectedKey === key ? true : undefined}>
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      data-cell={column.cell}
+                      data-label={column.mobileLabel}
+                      className={column.align ? `is-${column.align}` : undefined}
+                    >
+                      {column.render(row)}
+                    </td>
+                  ))}
+                </tr>
+                {detail ? (
+                  <tr className="nb-table__detail">
+                    <td colSpan={columns.length}>{detail}</td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>

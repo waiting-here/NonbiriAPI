@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -13,6 +13,8 @@ import { listReturnPath } from '@shared/operations/listReturn';
 import { copyForRecurringLimits } from '@shared/components/recurringLimitsCopy';
 import { DonationKeyPanel } from './CharityPanels';
 import { DonationThanks } from '@shared/components/DonationControlFacts';
+import { Fold, MoreMenu } from '@shared/components/ui';
+import { DonationConnectorLabel } from './DonationConnectorLabel';
 import { economyKeys, economySessionRequest } from './queries';
 import {
   getOwnerDonationsPage,
@@ -224,7 +226,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
               body={t('user.charity.ownerPages.noMatches')}
             />
           ) : null}
-          <div className="economy-donation-list" aria-busy={query.isFetching}>
+          <div className="economy-donation-list nb-list" aria-busy={query.isFetching}>
             {query.data.data.map((item) => (
               <DonationSummary
                 key={item.id}
@@ -270,59 +272,64 @@ function DonationSummary({
 }) {
   const { t } = useTranslation();
   return (
-    <Card className="economy-donation-card">
-      <div className="item-header">
-        <h3>{t('user.charity.donationNumber', { id: item.id })}</h3>
-        <StatusBadge
-          active={item.status === 'approved'}
-          danger={['rejected', 'deleted', 'expired'].includes(item.status)}
-          label={t(`user.charity.status.${item.status}`)}
-        />
-      </div>
-      <p>{item.description}</p>
-      <DonationThanks value={item.discordPublicThanks} />
-      <p className="item-meta">{formatDateTime(item.createdAt)}</p>
-      <p>{t('user.charity.ownerPages.keyCount', { count: item.keyCount })}</p>
-      <div className="economy-status-stack">
-        {Object.entries(item.stateCounts)
-          .filter(([, count]) => count !== '0')
-          .map(([state, count]) => (
-            <span key={state}>
-              {t(`user.charity.keyState.${state}`)} · <ExactCount value={count} />
-            </span>
-          ))}
-      </div>
-      <ul className="ops-source-preview">
-        {item.sources.map((source) => (
-          <li
-            key={
-              source.kind === 'mainstream'
-                ? `channel:${source.channelId}`
-                : `${source.connectorType}:${source.baseUrl}`
-            }
-          >
-            {source.kind === 'mainstream' ? source.name : t('user.charity.customSource')} ·{' '}
-            {source.baseUrl} · {source.connectorType}
-          </li>
-        ))}
-      </ul>
-      {BigInt(item.sourceCount) > BigInt(item.sources.length) ? (
-        <p className="muted">
-          {t('user.charity.ownerPages.sourcePreview', {
-            shown: item.sources.length,
-            total: item.sourceCount,
-          })}
+    <article className="nb-row economy-donation-summary">
+      <div className="nb-row__main">
+        <div className="nb-row__title">
+          <h3>{t('user.charity.donationNumber', { id: item.id })}</h3>
+          <StatusBadge
+            active={item.status === 'approved'}
+            danger={['rejected', 'deleted', 'expired'].includes(item.status)}
+            label={t(`user.charity.status.${item.status}`)}
+          />
+        </div>
+        <p className="nb-row__sub" title={item.description}>
+          {item.description}
         </p>
-      ) : null}
-      <div className="form-actions">
-        <button
-          type="button"
-          className="btn btn-secondary"
-          disabled={disabled}
-          onClick={onOpenKeys}
-        >
-          {t('user.charity.ownerPages.keys')}
-        </button>
+        <div className="nb-row__facts">
+          <span>
+            {t('user.charity.presentation.keyFacts', {
+              total: item.keyCount,
+              available: item.stateCounts.available,
+            })}
+          </span>
+          <DonationThanks value={item.discordPublicThanks} />
+          <p className="item-meta">{formatDateTime(item.createdAt)}</p>
+        </div>
+        <Fold plain title={t('user.charity.presentation.sourceDetails')}>
+          <div className="economy-status-stack">
+            {Object.entries(item.stateCounts)
+              .filter(([, count]) => count !== '0')
+              .map(([state, count]) => (
+                <span key={state}>
+                  {t(`user.charity.keyState.${state}`)} · <ExactCount value={count} />
+                </span>
+              ))}
+          </div>
+          <ul className="ops-source-preview">
+            {item.sources.map((source) => (
+              <li
+                key={
+                  source.kind === 'mainstream'
+                    ? `channel:${source.channelId}`
+                    : `${source.connectorType}:${source.baseUrl}`
+                }
+              >
+                {source.kind === 'mainstream' ? source.name : t('user.charity.customSource')} ·{' '}
+                {source.baseUrl} · <DonationConnectorLabel value={source.connectorType} />
+              </li>
+            ))}
+          </ul>
+          {BigInt(item.sourceCount) > BigInt(item.sources.length) ? (
+            <p className="muted">
+              {t('user.charity.ownerPages.sourcePreview', {
+                shown: item.sources.length,
+                total: item.sourceCount,
+              })}
+            </p>
+          ) : null}
+        </Fold>
+      </div>
+      <div className="donation-summary-actions">
         {disabled ? (
           <span className="btn btn-quiet" aria-disabled="true">
             {t('user.charity.openDonationDetail')}
@@ -332,8 +339,12 @@ function DonationSummary({
             {t('user.charity.openDonationDetail')}
           </Link>
         )}
+        <MoreMenu
+          label={t('user.charity.presentation.donationActions')}
+          items={[{ label: t('user.charity.ownerPages.keys'), disabled, onSelect: onOpenKeys }]}
+        />
       </div>
-    </Card>
+    </article>
   );
 }
 
