@@ -1,3 +1,4 @@
+import { Segmented } from '@shared/components/ui';
 import { useState } from 'react';
 import { readMusicQuality, writeMusicQuality } from '../../games/common/audio/preferences';
 import type { MusicQuality } from '../../games/common/audio/assets';
@@ -7,25 +8,23 @@ export function MusicQualityPreference() {
   const { t } = useCoreCopy();
   const [quality, setQuality] = useState(readMusicQuality);
   return (
-    <fieldset>
-      <legend>{t('account.musicQuality')}</legend>
-      <div className="core-radio-group">
-        {(['light', 'lossless'] as const).map((value: MusicQuality) => (
-          <label key={value}>
-            <input
-              type="radio"
-              name="account-music-quality"
-              checked={quality === value}
-              onChange={() => {
-                setQuality(value);
-                writeMusicQuality(value);
-              }}
-            />
-            <span>{t(value === 'light' ? 'account.musicLight' : 'account.musicLossless')}</span>
-          </label>
-        ))}
+    <div className="account-preference-row">
+      <div>
+        <h3>{t('account.musicQuality')}</h3>
+        <p className="core-muted">{t('account.musicQualityBody')}</p>
       </div>
-      <p className="core-muted">{t('account.musicQualityBody')}</p>
-    </fieldset>
+      <Segmented
+        label={t('account.musicQuality')}
+        value={quality}
+        options={(['light', 'lossless'] as const).map((value) => ({
+          value,
+          label: t(value === 'light' ? 'account.musicLight' : 'account.musicLossless'),
+        }))}
+        onChange={(value: MusicQuality) => {
+          setQuality(value);
+          writeMusicQuality(value);
+        }}
+      />
+    </div>
   );
 }

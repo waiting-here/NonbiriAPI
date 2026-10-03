@@ -1,3 +1,5 @@
+import { Fold } from '@shared/components/ui';
+import { StatusBadge } from '@shared/components/States';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { credits, getStatus, type Policy } from './api';
@@ -48,7 +50,7 @@ export function PolicySummary({ policy, zh }: { policy: Policy; zh: boolean }) {
 
 export function InactivityStatus({ accountId }: { readonly accountId: string }) {
   const formatDateTime = useDateTimeFormatter();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const zh = Boolean(i18n.resolvedLanguage?.startsWith('zh'));
   const query = useQuery({
     queryKey: ['user', accountId, 'inactivity-status'],
@@ -73,13 +75,26 @@ export function InactivityStatus({ accountId }: { readonly accountId: string }) 
     disabled: zh ? '政策未启用' : 'Policy disabled',
   };
   return (
-    <section className="inactivity-panel" aria-label={zh ? '低活跃政策' : 'Inactivity policy'}>
-      <h2>{zh ? '账号活跃与保护' : 'Account activity and protection'}</h2>
-      <PolicySummary policy={value.configuration} zh={zh} />
-      {value.exempt_reason && <p>{reasons[value.exempt_reason] ?? value.exempt_reason}</p>}
-      <dl>
-        <dt>{zh ? '观察开始' : 'Observation started'}</dt>
-        <dd>{date(value.activity.observation_started_at)}</dd>
+    <section
+      className="core-card account-activity"
+      aria-label={zh ? '低活跃政策' : 'Inactivity policy'}
+    >
+      <div className="account-activity__heading">
+        <h2>{zh ? '账号活跃与保护' : 'Account activity and protection'}</h2>
+        <StatusBadge
+          active={value.configuration.enabled && !value.exempt_reason}
+          label={
+            value.exempt_reason
+              ? (reasons[value.exempt_reason] ?? value.exempt_reason)
+              : value.configuration.enabled
+                ? zh
+                  ? '政策已启用'
+                  : 'Policy enabled'
+                : reasons.disabled
+          }
+        />
+      </div>
+      <dl className="nb-facts nb-facts--inline">
         <dt>{zh ? '最近主动活跃' : 'Last active action'}</dt>
         <dd>{date(value.activity.last_active_at)}</dd>
         <dt>{zh ? '预计下次衰减' : 'Next projected decay'}</dt>
@@ -87,16 +102,23 @@ export function InactivityStatus({ accountId }: { readonly accountId: string }) 
         <dt>{zh ? '预计保护封禁' : 'Projected protective ban'}</dt>
         <dd>{date(value.protection_at)}</dd>
       </dl>
-      <p>
-        {zh
-          ? '本人成功登录、成功 API 调用、签到或领取福利，以及有效游戏和活动操作可刷新活跃时间。页面轮询和被动捐赠回馈不计入活跃。'
-          : 'Successful sign-ins, successful API calls, check-ins, welfare claims, and accepted game or activity actions refresh activity. Page polling and passive donation rewards do not.'}
-      </p>
-      <p>
-        {zh
-          ? '衰减仅影响正的可用通用和游戏积分，不扣冻结积分或活动币。新启用或收紧政策至少提供 7 天宽限；恢复活跃会停止后续衰减。捐赠者不因此豁免。'
-          : 'Decay affects only positive available general and game credits, excluding frozen funds and activity currencies. Enabling or tightening a policy grants at least seven days of grace. Becoming active stops subsequent decay. Donors are not exempt.'}
-      </p>
+      <Fold plain title={t('common.inactivity.activityRules')}>
+        <PolicySummary policy={value.configuration} zh={zh} />
+        <dl className="nb-facts nb-facts--inline">
+          <dt>{zh ? '观察开始' : 'Observation started'}</dt>
+          <dd>{date(value.activity.observation_started_at)}</dd>
+        </dl>
+        <p>
+          {zh
+            ? '本人成功登录、成功 API 调用、签到或领取福利，以及有效游戏和活动操作可刷新活跃时间。页面轮询和被动捐赠回馈不计入活跃。'
+            : 'Successful sign-ins, successful API calls, check-ins, welfare claims, and accepted game or activity actions refresh activity. Page polling and passive donation rewards do not.'}
+        </p>
+        <p>
+          {zh
+            ? '衰减仅影响正的可用通用和游戏积分，不扣冻结积分或活动币。新启用或收紧政策至少提供 7 天宽限；恢复活跃会停止后续衰减。捐赠者不因此豁免。'
+            : 'Decay affects only positive available general and game credits, excluding frozen funds and activity currencies. Enabling or tightening a policy grants at least seven days of grace. Becoming active stops subsequent decay. Donors are not exempt.'}
+        </p>
+      </Fold>
     </section>
   );
 }

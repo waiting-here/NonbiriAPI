@@ -735,15 +735,16 @@ describe('account language commit boundary', () => {
     });
     rendered.queryClient.setQueryData(coreKeys.session, sharedSession(legacy.user));
 
-    const save = await screen.findByRole('button', { name: '保存' });
-    expect(screen.getByLabelText('语言')).toHaveValue('zh');
-    expect(save).toBeEnabled();
-    await rendered.user.click(save);
+    const chinese = await screen.findByRole('radio', { name: '中文' });
+    expect(chinese).not.toBeChecked();
+    expect(chinese).toBeEnabled();
+    await rendered.user.click(chinese);
 
     expect(await screen.findByText('已保存。')).toBeVisible();
     const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
     expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({ lang: 'zh' });
-    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '中文' })).toBeChecked();
   });
 
   it('switches UI, document language, storage, and account-scoped cache only after PATCH succeeds', async () => {
@@ -751,10 +752,11 @@ describe('account language commit boundary', () => {
     const updated: UserEnvelope = {
       user: { ...envelope.user, lang: 'zh', updated_at: envelope.user.updated_at + 1 },
     };
+    const patch = deferred<Response>();
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       if (String(input) === '/api/me' && method === 'GET') return jsonResponse(envelope);
-      if (String(input) === '/api/me' && method === 'PATCH') return jsonResponse(updated);
+      if (String(input) === '/api/me' && method === 'PATCH') return patch.promise;
       throw new Error(`Unexpected request: ${method} ${String(input)}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -766,10 +768,13 @@ describe('account language commit boundary', () => {
     const session = sharedSession(envelope.user);
     rendered.queryClient.setQueryData(coreKeys.session, session);
 
-    await rendered.user.selectOptions(screen.getByLabelText('Language'), 'zh');
+    await rendered.user.click(screen.getByRole('radio', { name: '中文' }));
     expect(document.documentElement.lang).toBe('en');
     expect(window.localStorage.getItem('nb.lang')).toBeNull();
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await act(async () => {
+      patch.resolve(jsonResponse(updated));
+      await patch.promise;
+    });
 
     expect(await screen.findByText('已保存。')).toBeVisible();
     const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
@@ -780,8 +785,6 @@ describe('account language commit boundary', () => {
     );
     expect(document.documentElement.lang).toBe('zh-CN');
     expect(window.localStorage.getItem('nb.lang')).toBe('zh');
-    await rendered.user.selectOptions(screen.getByLabelText('语言'), 'en');
-    expect(screen.queryByText('已保存。')).not.toBeInTheDocument();
     expect(rendered.queryClient.getQueryData(coreKeys.me(envelope.user.id))).toEqual(updated);
     expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual({
       user: { ...session.user, lang: 'zh' },
@@ -809,11 +812,10 @@ describe('account language commit boundary', () => {
     });
     rendered.queryClient.setQueryData(coreKeys.session, sharedSession(envelope.user));
 
-    await rendered.user.selectOptions(await screen.findByLabelText('Language'), 'zh');
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await rendered.user.click(await screen.findByRole('radio', { name: '中文' }));
 
     expect(await screen.findByText('已保存。')).toBeVisible();
-    expect(screen.getByLabelText('语言')).toHaveValue('zh');
+    expect(screen.getByRole('radio', { name: '中文' })).toBeChecked();
   });
 
   it('restores the confirmed selection and leaves language surfaces unchanged after a failed PATCH', async () => {
@@ -836,10 +838,9 @@ describe('account language commit boundary', () => {
     });
     rendered.queryClient.setQueryData(coreKeys.session, sharedSession(envelope.user));
 
-    await rendered.user.selectOptions(screen.getByLabelText('Language'), 'zh');
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await rendered.user.click(screen.getByRole('radio', { name: '中文' }));
 
-    await waitFor(() => expect(screen.getByLabelText('Language')).toHaveValue('en'));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'English' })).toBeChecked());
     expect(document.documentElement.lang).toBe('en');
     expect(window.localStorage.getItem('nb.lang')).toBeNull();
     expect(screen.getByText(/Could not confirm the result/)).toBeVisible();
@@ -876,10 +877,9 @@ describe('account language commit boundary', () => {
     });
     rendered.queryClient.setQueryData(coreKeys.session, sharedSession(envelope.user));
 
-    await rendered.user.selectOptions(screen.getByLabelText('Language'), 'zh');
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await rendered.user.click(screen.getByRole('radio', { name: '中文' }));
     const replay = await screen.findByRole('button', { name: 'Retry' });
-    expect(screen.getByLabelText('Language')).toHaveValue('en');
+    expect(screen.getByRole('radio', { name: 'English' })).toBeChecked();
     expect(document.documentElement.lang).toBe('en');
 
     await rendered.user.click(replay);
@@ -910,8 +910,7 @@ describe('account language commit boundary', () => {
     });
     rendered.queryClient.setQueryData(coreKeys.session, sharedSession(envelope.user));
 
-    await rendered.user.selectOptions(screen.getByLabelText('Language'), 'zh');
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await rendered.user.click(screen.getByRole('radio', { name: '中文' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(true),
     );
@@ -930,7 +929,7 @@ describe('account language commit boundary', () => {
       patch.resolve(jsonResponse(updated));
       await patch.promise;
     });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'English' })).toBeChecked());
 
     expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual(nextSession);
     expect(document.documentElement.lang).toBe('en');
@@ -1128,7 +1127,7 @@ describe('account deletion confirmation', () => {
       signal: expect.any(AbortSignal),
     });
     expect(beginElevation).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Request export' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export…' })).toBeEnabled();
     expect(document.cookie).not.toContain('unknown_export_token');
   });
 });

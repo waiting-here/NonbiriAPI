@@ -1,5 +1,5 @@
-import { OutcomeNote } from '@shared/components/ui';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { OutcomeNote, Segmented } from '@shared/components/ui';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ import { disabledAccountLifecycleAdapter } from './adapters';
 import { patchLanguage } from './api';
 import { CoreErrorPanel, CoreLoading, CoreTime, SafeCopyValue } from './components';
 import { useCoreCopy } from './copy';
+import './account-preferences.css';
 import { MusicQualityPreference } from './MusicQualityPreference';
 import {
   clearCoreUserSession,
@@ -54,7 +55,7 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
   const queryClient = useQueryClient();
   const me = useCoreMe(user.id);
   const original = currentExplicitLanguage(user, i18n.resolvedLanguage);
-  const [language, setLanguage] = useState<ExplicitLanguage>(original);
+  const [language, setLanguage] = useState<ExplicitLanguage | ''>(user.lang === '' ? '' : original);
   const committed = useRef<ExplicitLanguage | null>(null);
 
   const applyLanguage = async (confirmed: ExplicitLanguage, context: OperationContext) => {
@@ -108,7 +109,7 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
       context.commit(() => setLanguage(restored));
     },
     ['user', 'core'],
-    { clearSecrets: () => setLanguage(original) },
+    { clearSecrets: () => setLanguage(user.lang === '' ? '' : original) },
   );
 
   const resetOperation = operation.reset;
@@ -116,22 +117,16 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
-      setLanguage(original);
+      setLanguage(user.lang === '' ? '' : original);
       if (committed.current === original) committed.current = null;
       else resetOperation();
     });
     return () => {
       active = false;
     };
-  }, [original, user.id, resetOperation]);
+  }, [original, user.id, user.lang, resetOperation]);
 
   const pendingIntent = operation.outcome === 'unknown' ? operation.variables : undefined;
-  const matchesAuthority = user.lang === language;
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (operation.isPending || (!pendingIntent && matchesAuthority)) return;
-    operation.mutate(pendingIntent ?? language);
-  };
   const outcome =
     operation.outcome === 'unknown'
       ? 'unknown'
@@ -141,23 +136,27 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
           ? 'error'
           : null;
   return (
-    <form className="core-form" onSubmit={submit}>
-      <p className="core-muted">{t('account.languageBody')}</p>
-      <div className="core-field-grid">
-        <label>
-          <span>{t('account.language')}</span>
-          <select
-            disabled={operation.isPending || Boolean(pendingIntent)}
-            value={language}
-            onChange={(event) => {
-              setLanguage(event.target.value === 'zh' ? 'zh' : 'en');
-              operation.reset();
-            }}
-          >
-            <option value="zh">{t('account.zh')}</option>
-            <option value="en">{t('account.en')}</option>
-          </select>
-        </label>
+    <div className="account-preference-language">
+      <div className="account-preference-row">
+        <div>
+          <h3>{t('account.language')}</h3>
+          <p className="core-muted">{t('account.languageBody')}</p>
+        </div>
+        <Segmented
+          label={t('account.language')}
+          value={language as ExplicitLanguage}
+          options={[
+            { value: 'zh', label: t('account.zh') },
+            { value: 'en', label: t('account.en') },
+          ]}
+          disabled={operation.isPending || Boolean(pendingIntent)}
+          onChange={(next) => {
+            if (next === language && user.lang === next) return;
+            setLanguage(next);
+            operation.reset();
+            operation.mutate(next);
+          }}
+        />
       </div>
       <OutcomeNote
         busy={operation.isPending}
@@ -175,21 +174,17 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
                     : { kind: 'idle' }
         }
       />
-      <div className="core-form-actions">
-        <span />
+      {pendingIntent ? (
         <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={operation.isPending || (!pendingIntent && matchesAuthority)}
+          type="button"
+          className="btn btn-secondary"
+          disabled={operation.isPending}
+          onClick={() => operation.mutate(pendingIntent)}
         >
-          {operation.isPending
-            ? t('common.working')
-            : pendingIntent
-              ? t('common.retrySame')
-              : t('common.save')}
+          {t('common.retrySame')}
         </button>
-      </div>
-    </form>
+      ) : null}
+    </div>
   );
 }
 
@@ -211,61 +206,45 @@ function LocalPreferences() {
   ];
 
   return (
-    <section className="core-card core-account-preferences">
-      <div className="core-card__header">
-        <h2>{t('account.localTitle')}</h2>
-      </div>
-      <p className="core-muted">{t('account.localBody')}</p>
+    <div className="account-local-preferences">
+      {[
+        {
+          label: t('account.theme'),
+          hint: t('accountPresentation.themeHint'),
+          value: theme,
+          options: themes,
+          change: (value: string) => setTheme(value as Theme),
+        },
+        {
+          label: t('account.density'),
+          hint: t('accountPresentation.densityHint'),
+          value: density,
+          options: densities,
+          change: (value: string) => setDensity(value as Density),
+        },
+        {
+          label: t('account.fontSize'),
+          hint: t('accountPresentation.fontHint'),
+          value: fontSize,
+          options: fontSizes,
+          change: (value: string) => setFontSize(value as FontSize),
+        },
+      ].map((preference) => (
+        <div className="account-preference-row" key={preference.label}>
+          <div>
+            <h3>{preference.label}</h3>
+            <p className="core-muted">{preference.hint}</p>
+          </div>
+          <Segmented
+            label={preference.label}
+            value={preference.value}
+            options={preference.options}
+            onChange={preference.change}
+          />
+        </div>
+      ))}
       <MusicQualityPreference />
-      <fieldset>
-        <legend>{t('account.theme')}</legend>
-        <div className="core-radio-group">
-          {themes.map((option) => (
-            <label key={option.value}>
-              <input
-                type="radio"
-                name="account-theme"
-                checked={theme === option.value}
-                onChange={() => setTheme(option.value)}
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>{t('account.density')}</legend>
-        <div className="core-radio-group">
-          {densities.map((option) => (
-            <label key={option.value}>
-              <input
-                type="radio"
-                name="account-density"
-                checked={density === option.value}
-                onChange={() => setDensity(option.value)}
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>{t('account.fontSize')}</legend>
-        <div className="core-radio-group">
-          {fontSizes.map((option) => (
-            <label key={option.value}>
-              <input
-                type="radio"
-                name="account-font"
-                checked={fontSize === option.value}
-                onChange={() => setFontSize(option.value)}
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-    </section>
+    </div>
   );
 }
 
@@ -394,8 +373,7 @@ export function AccountLifecyclePanel({
         <div className="core-card__header">
           <h2>{t('account.exportTitle')}</h2>
         </div>
-        <p>{t('account.exportBody')}</p>
-        <p className="core-muted">{t('account.reauthorize')}</p>
+        <p>{t('accountPresentation.exportBody')}</p>
         {!adapter.capabilities.exportAccount ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
@@ -417,19 +395,20 @@ export function AccountLifecyclePanel({
           )}
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-secondary"
             disabled={!adapter.capabilities.exportAccount || busy}
             onClick={() => begin('export')}
           >
-            {busy && intent === 'export' ? t('common.working') : t('account.export')}
+            {busy && intent === 'export'
+              ? t('common.working')
+              : t('accountPresentation.exportAction')}
           </button>
         </div>
       </section>
-      <section className="core-card core-danger-zone">
+      <section className="core-card nb-panel--danger account-delete-panel">
         <div className="core-card__header">
-          <h2>{t('account.dangerTitle')}</h2>
+          <h2>{t('account.deleteTitle')}</h2>
         </div>
-        <h3>{t('account.deleteTitle')}</h3>
         <p>{t('account.deleteBody')}</p>
         {!adapter.capabilities.deleteAccount ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
@@ -463,7 +442,7 @@ export function AccountLifecyclePanel({
           )}
           <button
             type="button"
-            className="btn btn-danger"
+            className="btn btn-danger-outline"
             disabled={
               !adapter.capabilities.deleteAccount ||
               busy ||
@@ -471,7 +450,9 @@ export function AccountLifecyclePanel({
             }
             onClick={() => begin('delete')}
           >
-            {busy && intent === 'delete' ? t('common.working') : t('account.delete')}
+            {busy && intent === 'delete'
+              ? t('common.working')
+              : t('accountPresentation.deleteAction')}
           </button>
         </div>
       </section>
@@ -495,14 +476,16 @@ export function AccountLifecyclePanel({
 export function AccountWorkspace({
   user,
   lifecycleAdapter,
+  activity,
 }: {
   user: UserProfile;
   lifecycleAdapter?: AccountLifecycleAdapter;
+  activity?: ReactNode;
 }) {
   const { t } = useCoreCopy();
   const me = useCoreMe(user.id);
   return (
-    <div className="page core-page core-stack">
+    <div className="page core-page core-stack account-workspace">
       <PageHeader
         icon="account"
         title={t('account.title')}
@@ -513,7 +496,7 @@ export function AccountWorkspace({
           </Link>
         }
       />
-      <div className="core-grid core-grid--wide">
+      <div className="account-profile">
         <section className="core-card">
           <div className="core-card__header">
             <h2>{t('account.profileTitle')}</h2>
@@ -527,7 +510,7 @@ export function AccountWorkspace({
               onRetry={() => void me.refetch()}
             />
           ) : (
-            <dl className="core-detail-list">
+            <dl className="nb-facts nb-facts--inline">
               <div>
                 <dt>{t('account.id')}</dt>
                 <dd>
@@ -551,24 +534,25 @@ export function AccountWorkspace({
             </dl>
           )}
         </section>
-        <section className="core-card">
-          <div className="core-card__header">
-            <h2>{t('account.languageTitle')}</h2>
-          </div>
-          {me.isPending && !me.data ? (
-            <CoreLoading compact />
-          ) : !me.data ? (
-            <CoreErrorPanel
-              compact
-              error={me.error ?? new Error('account profile is unavailable')}
-              onRetry={() => void me.refetch()}
-            />
-          ) : (
-            <AccountLanguageForm key={me.data.user.id} user={me.data.user} />
-          )}
-        </section>
       </div>
-      <LocalPreferences />
+      <section className="core-card core-account-preferences">
+        <div className="core-card__header">
+          <h2>{t('accountPresentation.preferences')}</h2>
+        </div>
+        {me.isPending && !me.data ? (
+          <CoreLoading compact />
+        ) : !me.data ? (
+          <CoreErrorPanel
+            compact
+            error={me.error ?? new Error('account profile is unavailable')}
+            onRetry={() => void me.refetch()}
+          />
+        ) : (
+          <AccountLanguageForm key={me.data.user.id} user={me.data.user} />
+        )}
+        <LocalPreferences />
+      </section>
+      {activity}
       <AccountLifecyclePanel accountId={user.id} adapter={lifecycleAdapter} />
     </div>
   );
