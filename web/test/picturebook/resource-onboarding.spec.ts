@@ -17,6 +17,7 @@ type Locale = 'en' | 'zh';
 const statePath = process.env.NONBIRI_IMAGE_BROWSER_STATE!;
 const fixture = () => JSON.parse(readFileSync(statePath, 'utf8')) as FixtureState;
 const copy = (locale: Locale) => (locale === 'zh' ? zh : en).user.quickstart;
+const servicesCopy = (locale: Locale) => (locale === 'zh' ? zh : en).user.services;
 const unique = () => randomBytes(5).toString('hex');
 async function context(browser: Browser, locale: Locale = 'en', narrow = false) {
   const state = fixture();
@@ -60,11 +61,17 @@ async function control(context: BrowserContext, mode: 'success' | 'empty' | 'fai
 }
 async function open(page: Page, locale: Locale = 'en') {
   await page.goto(fixture().user_url + '/endpoints?quickstart=1');
-  await expect(page.getByRole('heading', { name: copy(locale).title, exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: servicesCopy(locale).quickTitle, exact: true }),
+  ).toBeVisible();
 }
 async function newService(page: Page, name: string, locale: Locale = 'en') {
   const text = copy(locale);
-  await page.getByLabel(text.connector, { exact: true }).selectOption('openai-compatible');
+  await page.getByRole('radio', { name: servicesCopy(locale).otherService, exact: true }).check();
+  await page
+    .getByRole('radiogroup', { name: text.connector, exact: true })
+    .getByRole('radio', { name: 'OpenAI-compatible', exact: true })
+    .check();
   await page.getByLabel(text.address, { exact: true }).fill(fixture().upstream_url + '/v1');
   await page.getByLabel(text.serviceNote, { exact: true }).fill(name);
   await page.getByRole('button', { name: text.createService, exact: true }).click();
@@ -75,18 +82,27 @@ async function newKey(page: Page, locale: Locale = 'en') {
   await page.getByLabel(text.secret, { exact: true }).fill(fixture().private_markers[0]);
   await page.getByLabel(text.ownership, { exact: true }).check();
   await page.getByRole('button', { name: text.addKey, exact: true }).click();
-  await expect(page.getByRole('button', { name: text.check, exact: true })).toBeVisible();
+  await expect(page.getByLabel(servicesCopy(locale).prefix, { exact: true })).toBeVisible();
 }
 async function manual(page: Page, upstream: string, prefix: string, locale: Locale = 'en') {
   const text = copy(locale);
-  if ((await page.locator('.quickstart details').getAttribute('open')) === null)
-    await page.locator('.quickstart details > summary').click();
-  const form = page.locator('.quickstart details form');
+  const fold = page.locator('.quickstart details').filter({
+    has: page.getByRole('textbox', { name: text.upstream, exact: true, includeHidden: true }),
+  });
+  if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
+  const form = fold.locator('form');
   await form.getByLabel(text.upstream, { exact: true }).fill(upstream);
-  await form.getByLabel(text.provider, { exact: true }).fill(prefix);
   await form.getByRole('button', { name: text.manual, exact: true }).click();
+  await expect(page.getByLabel(upstream, { exact: true })).toBeVisible();
+  await page.getByLabel(servicesCopy(locale).prefix, { exact: true }).fill(prefix);
   await page.getByLabel(upstream, { exact: true }).check();
   return page.locator('.quickstart-model').filter({ hasText: upstream });
+}
+function connect(page: Page, locale: Locale = 'en', count = 1) {
+  return page.getByRole('button', {
+    name: servicesCopy(locale).addModels.replace('{{count}}', String(count)),
+    exact: true,
+  });
 }
 async function models(context: BrowserContext, prefix: string) {
   const response = await api(
@@ -134,14 +150,26 @@ async function service(context: BrowserContext, name: string) {
 }
 async function existing(page: Page, name: string, locale: Locale = 'en') {
   const text = copy(locale);
-  await page.getByRole('button', { name: text.existingService, exact: true }).click();
+  const source = page.getByRole('radio', {
+    name: servicesCopy(locale).existingService,
+    exact: true,
+  });
+  await source.locator('..').click();
+  await expect(source).toBeChecked();
   await page.getByLabel(text.serviceSearch, { exact: true }).fill(name);
   await expect(page.locator('.quickstart-choice-list li')).toHaveCount(1);
   await page.getByRole('button', { name: text.useService, exact: true }).click();
   await page.getByRole('button', { name: text.existingKey, exact: true }).click();
   await page.getByLabel(text.keySearch, { exact: true }).fill(name + '-key');
   await page.locator('.quickstart-choice-list button').click();
-  await expect(page.getByRole('button', { name: text.check, exact: true })).toBeVisible();
+  await expect(page.getByLabel(servicesCopy(locale).prefix, { exact: true })).toBeVisible();
+  await page
+    .locator('.quickstart details')
+    .filter({
+      has: page.getByRole('button', { name: text.check, exact: true, includeHidden: true }),
+    })
+    .locator(':scope > summary')
+    .click();
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -156,17 +184,11 @@ test('optional setup connects selected models in one action and shows real relat
     await open(page);
     await newService(page, prefix);
     await newKey(page);
-    await page.getByRole('button', { name: copy('en').check, exact: true }).click();
-    await page.locator('.quickstart-catalog input[type=checkbox]').first().check();
-    await page
-      .locator('.quickstart-model')
-      .getByLabel(copy('en').provider, { exact: true })
-      .fill(prefix);
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).focus();
+    await page.locator('.quickstart-models input[type=checkbox]').first().check();
+    await page.getByLabel(servicesCopy('en').prefix, { exact: true }).fill(prefix);
+    await connect(page).focus();
     await page.keyboard.press('Enter');
-    await expect(
-      page.getByRole('heading', { name: copy('en').finished, exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: copy('en').finished })).toBeVisible();
     const saved = await models(user, prefix);
     expect(saved).toHaveLength(1);
     expect(saved[0].binding_count).toBe('1');
@@ -175,13 +197,22 @@ test('optional setup connects selected models in one action and shows real relat
         JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
       ),
     ).not.toContain(fixture().private_markers[0]);
-    await expect(page.locator('.quickstart-catalog')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: copy('en').stop, exact: true })).toHaveCount(0);
+    await expect(page.locator('.quickstart-models')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: '← ' + servicesCopy('en').back, exact: true }),
+    ).toBeVisible();
     await screenshot(page, 'resources-connected-en-wide-light.png');
-    await page.getByRole('button', { name: copy('en').moreModels, exact: true }).click();
-    await expect(page.locator('.quickstart-catalog')).toBeVisible();
-    await page.getByRole('link', { name: prefix, exact: true }).click();
-    await expect(page.locator('.core-key-card')).toHaveCount(1);
+    await page.getByRole('button', { name: servicesCopy('en').done, exact: true }).click();
+    await expect(page).toHaveURL(/\/endpoints$/);
+    await page
+      .getByRole('link')
+      .filter({ has: page.getByText(prefix, { exact: true }) })
+      .click();
+    await expect(
+      page
+        .getByRole('table', { name: en.user.core['endpoints.key'], exact: true })
+        .locator('tbody > tr'),
+    ).toHaveCount(1);
     await screenshot(page, 'resources-relationship-en-wide.png');
 
     const caller = await api(user, '/api/caller-key');
@@ -194,7 +225,9 @@ test('optional setup connects selected models in one action and shows real relat
     const callerSecret = (await regenerated.json()).secret as string;
     await page.goto(fixture().user_url + '/debug');
     await page.getByRole('button', { name: 'Start Debug', exact: true }).click();
-    await expect(page.getByText(en.user.debug.state.mode.dry, { exact: true })).toBeVisible();
+    await expect(
+      page.locator('.ops-debug-status').getByText(en.user.debug.state.mode.dry, { exact: true }),
+    ).toBeVisible();
     const long = 'Long message line\n'.repeat(130),
       raw = '<img src=x onerror=alert(1)>';
     const intercepted = await user.request.post(fixture().user_url + '/v1/chat/completions', {
@@ -250,13 +283,12 @@ test('existing resources support empty and failed discovery plus manual setup in
     await expect(
       page.getByText(copy('zh').selected.replace('{{count}}', '1'), { exact: true }),
     ).toBeVisible();
-    await page.getByRole('button', { name: copy('zh').saveModels, exact: true }).click();
-    await expect(
-      page.getByRole('heading', { name: copy('zh').finished, exact: true }),
-    ).toBeVisible();
+    await connect(page, 'zh').click();
+    await expect(page.getByRole('status').filter({ hasText: copy('zh').finished })).toBeVisible();
     expect((await models(user, prefix))[0].binding_count).toBe('1');
     await screenshot(page, 'resources-manual-zh-narrow-dark.png');
-    await page.getByRole('link', { name: copy('zh').community, exact: true }).click();
+    await page.getByRole('link', { name: servicesCopy('zh').apiKeyLink, exact: true }).click();
+    await page.getByRole('link', { name: zh.user.core['keys.charityModels'], exact: true }).click();
     await expect(page).toHaveURL(/\/charity$/);
   } finally {
     await control(user, 'success');
@@ -286,14 +318,12 @@ test('same call names require only an actual collision choice and retain existin
     await open(page);
     await existing(page, name);
     const row = await manual(page, 'chat', prefix);
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
+    await connect(page).click();
     await expect(row.getByText(copy('en').sameName, { exact: true })).toBeVisible();
     expect(await models(user, prefix)).toHaveLength(1);
     await row.getByLabel(copy('en').append, { exact: true }).check();
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
-    await expect(
-      page.getByRole('heading', { name: copy('en').finished, exact: true }),
-    ).toBeVisible();
+    await connect(page).click();
+    await expect(page.getByRole('status').filter({ hasText: copy('en').finished })).toBeVisible();
     const saved = (await models(user, prefix))[0];
     expect(saved).toMatchObject({
       id: previous.id,
@@ -307,13 +337,11 @@ test('same call names require only an actual collision choice and retain existin
     await existing(page, name);
     const renamed = await manual(page, 'another-upstream', prefix);
     await renamed.getByLabel(copy('en').callName, { exact: true }).fill('chat');
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
+    await connect(page).click();
     await renamed.getByLabel(copy('en').rename, { exact: true }).check();
     await renamed.getByLabel(copy('en').callName, { exact: true }).fill('other-chat');
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
-    await expect(
-      page.getByRole('heading', { name: copy('en').finished, exact: true }),
-    ).toBeVisible();
+    await connect(page).click();
+    await expect(page.getByRole('status').filter({ hasText: copy('en').finished })).toBeVisible();
     expect(await models(user, prefix)).toHaveLength(2);
     await screenshot(page, 'resources-collision-rename-en.png');
   } finally {
@@ -354,16 +382,13 @@ test('lost responses for every creation stage reconcile committed real resources
     await open(page);
     await newService(page, prefix);
     await newKey(page);
-    await page.getByRole('button', { name: copy('en').check, exact: true }).click();
-    await expect(page.locator('.quickstart-catalog li').first()).toBeVisible();
+    await expect(page.locator('.quickstart-models .quickstart-model').first()).toBeVisible();
     const upstream = 'recovered-chat-' + unique();
     await manual(page, upstream, prefix);
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
+    await connect(page).click();
     await expect(page.getByText(copy('en').modelSaved, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
-    await expect(
-      page.getByRole('heading', { name: copy('en').finished, exact: true }),
-    ).toBeVisible();
+    await connect(page).click();
+    await expect(page.getByRole('status').filter({ hasText: copy('en').finished })).toBeVisible();
     expect(await models(user, prefix)).toHaveLength(1);
     expect([...counts.values()]).toEqual([1, 1, 1, 1, 1, 1]);
     await screenshot(page, 'resources-recovered-en.png');
@@ -398,7 +423,7 @@ test('partial completion keeps finished models and retries only the unfinished c
         });
       else await route.continue();
     });
-    await page.getByRole('button', { name: copy('en').saveModels, exact: true }).click();
+    await connect(page, 'en', 2).click();
     await expect(
       page.getByRole('button', { name: copy('en').checkResult, exact: true }),
     ).toBeVisible();
@@ -406,9 +431,7 @@ test('partial completion keeps finished models and retries only the unfinished c
     expect(partial).toHaveLength(2);
     expect(partial.map((model) => model.binding_count).sort()).toEqual(['0', '1']);
     await page.getByRole('button', { name: copy('en').checkResult, exact: true }).click();
-    await expect(
-      page.getByRole('heading', { name: copy('en').finished, exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: copy('en').finished })).toBeVisible();
     expect(keys).toHaveLength(3);
     expect(keys[2]).toBe(keys[1]);
     expect((await models(user, prefix)).map((model) => model.binding_count)).toEqual(['1', '1']);
@@ -444,12 +467,16 @@ test('stopping an in-flight step keeps a committed resource for explicit continu
       await route.fulfill({ response }).catch(() => undefined);
     });
     await open(page);
-    await page.getByLabel(copy('en').connector, { exact: true }).selectOption('openai-compatible');
+    await page.getByRole('radio', { name: servicesCopy('en').otherService, exact: true }).check();
+    await page
+      .getByRole('radiogroup', { name: copy('en').connector, exact: true })
+      .getByRole('radio', { name: 'OpenAI-compatible', exact: true })
+      .check();
     await page.getByLabel(copy('en').address, { exact: true }).fill(fixture().upstream_url + '/v1');
     await page.getByLabel(copy('en').serviceNote, { exact: true }).fill(name);
     await page.getByRole('button', { name: copy('en').createService, exact: true }).click();
     await saved;
-    await page.getByRole('button', { name: copy('en').stop, exact: true }).click();
+    await page.getByRole('button', { name: '← ' + servicesCopy('en').back, exact: true }).click();
     release();
     await expect(page.getByText(copy('en').stopped, { exact: true })).toBeVisible();
     await expect(page.getByLabel(copy('en').secret, { exact: true })).toHaveCount(0);

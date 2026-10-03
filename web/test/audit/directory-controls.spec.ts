@@ -395,6 +395,7 @@ test('administrator applies log filters, exports them and downloads retained ori
     const page = await admin.newPage();
     await page.goto(state.admin_url + '/logs');
     const filters = page.getByTestId('log-filters');
+    await filters.locator('.nb-filter__more > summary').click();
     await filters.getByLabel(commonEn.common.status, { exact: true }).fill('503');
     await filters.getByRole('button', { name: commonEn.common.applyFilter, exact: true }).click();
     await expect(page).toHaveURL(/status=503/);
@@ -421,10 +422,11 @@ test('administrator applies log filters, exports them and downloads retained ori
     await expect(filters.getByLabel(commonEn.common.status, { exact: true })).toHaveValue('');
     await page.goto(state.admin_url + '/logs?request_id=' + state.request_ids[0]);
     const detail = page.getByRole('dialog');
+    await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();
     await detail.getByRole('button', { name: 'Upstream error details', exact: true }).click();
     const event = detail
       .locator('details')
-      .filter({ has: page.locator('summary', { hasText: 'Error event 1' }) })
+      .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
       .first();
     await event.locator('summary').first().click();
     await event.getByRole('button', { name: 'Load original body', exact: true }).click();
