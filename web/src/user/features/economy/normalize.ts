@@ -531,18 +531,6 @@ function requireOrderedTimestamps(createdAt: number, updatedAt: number, field: s
   if (updatedAt < createdAt) invalid(field);
 }
 
-function validateUsageDimension(
-  limit: string | null,
-  used: string,
-  inflight: string,
-  field: string,
-  amount = false,
-): void {
-  const parse = amount ? amountToMilli : (input: string) => BigInt(input);
-  const total = parse(used) + parse(inflight);
-  if (total > MAX_U128 || (limit !== null && total > parse(limit))) invalid(field);
-}
-
 export function normalizeDonationKey(value: unknown): DonationKey {
   const item = record(
     value,
@@ -671,91 +659,6 @@ export function normalizeDonationKey(value: unknown): DonationKey {
     },
     endedReason,
   };
-  validateUsageDimension(
-    result.limits.price,
-    result.usage.priceUsed,
-    result.usage.priceInflight,
-    'donation price usage',
-    true,
-  );
-  validateUsageDimension(
-    result.limits.calls,
-    result.usage.callsUsed,
-    result.usage.callsInflight,
-    'donation call usage',
-  );
-  validateUsageDimension(
-    result.limits.tokens,
-    result.usage.tokensUsed,
-    result.usage.tokensInflight,
-    'donation token usage',
-  );
-  const terminal = result.charityState === 'ended' || result.charityState === 'expired';
-  if (result.endedReason !== null && !terminal) invalid('donation key ended reason');
-  if (result.endpointKeyId === null && !terminal) invalid('donation key endpoint reference');
-  if (
-    result.charityState === 'available' &&
-    (!result.physicalEnabled ||
-      result.streak.failureDisabled ||
-      isDimensionExhausted(
-        result.limits.price,
-        result.usage.priceUsed,
-        result.usage.priceInflight,
-        true,
-      ) ||
-      isDimensionExhausted(
-        result.limits.calls,
-        result.usage.callsUsed,
-        result.usage.callsInflight,
-      ) ||
-      isDimensionExhausted(
-        result.limits.tokens,
-        result.usage.tokensUsed,
-        result.usage.tokensInflight,
-      ))
-  ) {
-    invalid('available donation key state');
-  }
-  if (
-    result.charityState === 'exhausted' &&
-    (!result.physicalEnabled ||
-      result.streak.failureDisabled ||
-      (!isDimensionExhausted(
-        result.limits.price,
-        result.usage.priceUsed,
-        result.usage.priceInflight,
-        true,
-      ) &&
-        !isDimensionExhausted(
-          result.limits.calls,
-          result.usage.callsUsed,
-          result.usage.callsInflight,
-        ) &&
-        !isDimensionExhausted(
-          result.limits.tokens,
-          result.usage.tokensUsed,
-          result.usage.tokensInflight,
-        )))
-  ) {
-    invalid('exhausted donation key state');
-  }
-  if (
-    (result.charityState === 'suspended' || result.charityState === 'available') &&
-    (!result.physicalEnabled || result.streak.failureDisabled)
-  ) {
-    invalid('donation key availability state');
-  }
-  if (result.streak.failureDisabled && result.charityState !== 'disabled' && !terminal) {
-    invalid('donation key failure state');
-  }
-  if (
-    !result.physicalEnabled &&
-    result.charityState !== 'disabled' &&
-    result.charityState !== 'pending' &&
-    !terminal
-  ) {
-    invalid('donation key physical state');
-  }
   return result;
 }
 
