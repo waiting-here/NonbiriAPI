@@ -1,0 +1,26 @@
+.nb-form-drawer {
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  max-width: 100%;
+  max-height: 100dvh;
+  height: 100dvh;
+  color: var(--nb-color-text);
+}
+.nb-form-drawer:not([open]) {
+  display: none;
+}
+.nb-form-drawer::backdrop {
+  background: color-mix(in srgb, var(--nb-color-text) 50%, transparent);
+}
+.nb-form-drawer .nb-drawer__head h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+@media (max-width: 40rem) {
+  .nb-form-drawer {
+    margin-top: auto;
+    height: auto;
+    max-height: 88dvh;
+  }
+}

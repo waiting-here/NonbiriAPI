@@ -244,6 +244,9 @@ describe('shared UI patterns', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole('button', { name: 'Discard' }));
     expect(onDiscard).toHaveBeenCalledTimes(1);
+    view.rerender(<SaveBar {...props} dirtyCount={2} saveDisabled />);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled();
     view.rerender(<SaveBar {...props} dirtyCount={2} busy />);
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
