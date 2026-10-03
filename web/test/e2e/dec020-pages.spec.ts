@@ -482,9 +482,14 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await page.getByRole('button', { name: 'Create service' }).first().click();
-  const wizard = page.locator('section.core-wizard');
-  await expect(wizard.getByRole('heading', { name: 'Add service manually' })).toBeVisible();
+  await page.getByRole('button', { name: '＋ Add service', exact: true }).first().click();
+  await page
+    .getByRole('button', { name: 'Need advanced options? Set up manually', exact: true })
+    .click();
+  const wizard = page.getByRole('dialog', { name: 'Add service manually', exact: true });
+  await expect(
+    wizard.locator('.nb-drawer__head').getByRole('heading', { name: 'Add service manually' }),
+  ).toBeVisible();
   await expect(wizard.getByRole('button', { name: 'Common services' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -494,7 +499,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await expect(wizard.getByLabel('Service address')).toHaveAttribute('readonly');
   await wizard.getByLabel('Note').fill('Selected channel endpoint');
   await wizard.getByRole('button', { name: 'Create service' }).click();
-  await expect(page.getByLabel('Key')).toBeVisible();
+  await expect(page.getByLabel('Key', { exact: true })).toBeVisible();
   expect(postBody).toEqual({
     source: 'mainstream',
     channel_id: MAINSTREAM_CHANNEL_ID,
@@ -685,11 +690,14 @@ test.describe('donation expiry in UTC', () => {
     });
 
     await page.goto(`${USER_ORIGIN}/charity`);
+    await page.getByRole('button', { name: '[公益]provider/charity', exact: true }).click();
     const priceTable = page.getByRole('table', { name: 'Charity model prices' });
     await expect(priceTable).toBeVisible();
-    await expect(page.getByLabel('Original price: 3')).toBeVisible();
-    await expect(page.getByLabel('Offer price: 2.4')).toBeVisible();
-    await expect(page.getByText('20% off', { exact: true })).toBeVisible();
+    await expect(priceTable.getByLabel('Original price: 3')).toBeVisible();
+    await expect(priceTable.getByLabel('Offer price: 2.4')).toBeVisible();
+    await expect(
+      page.locator('.charity-model-detail .charity-discount').getByText('20% off', { exact: true }),
+    ).toBeVisible();
     await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
     for (const width of [320, 390, 1440, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
@@ -711,38 +719,48 @@ test.describe('donation expiry in UTC', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('tab', { name: 'My donations', exact: true }).click();
     const donations = page.locator('.economy-donation-list');
-    await expect(donations.locator('.economy-donation-card')).toHaveCount(2);
+    await expect(donations.locator('.economy-donation-summary')).toHaveCount(2);
     const first = donations
-      .locator('.economy-donation-card')
+      .locator('.economy-donation-summary')
       .filter({ has: page.getByRole('heading', { name: 'Donation #9', exact: true }) });
-    await expect(first.getByText('Keys: 2', { exact: true })).toBeVisible();
+    await expect(first.getByText('2 keys · 1 available', { exact: true })).toBeVisible();
+    await first.locator('.nb-fold > summary').filter({ hasText: 'Sources and key status' }).click();
     await expect(first.locator('.economy-status-stack')).toContainText('Available · 1');
     await expect(first.locator('.economy-status-stack')).toContainText('Charity use disabled · 1');
-    await first.getByRole('button', { name: 'View donated keys', exact: true }).click();
+    await first.getByRole('button', { name: 'Donation actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-blocked…tail' })).toBeVisible();
     const filter = page.getByRole('combobox', { name: 'Review status', exact: true });
     await filter.selectOption('expired');
-    await expect(donations.locator('.economy-donation-card')).toHaveCount(1);
-    await expect(donations.getByText('Keys: 1', { exact: true })).toBeVisible();
+    await expect(donations.locator('.economy-donation-summary')).toHaveCount(1);
+    await expect(donations.getByText('1 keys · 0 available', { exact: true })).toBeVisible();
+    await donations
+      .locator('.nb-fold > summary')
+      .filter({ hasText: 'Sources and key status' })
+      .click();
     await expect(donations.locator('.economy-status-stack')).toContainText('Expired · 1');
-    await donations.getByRole('button', { name: 'View donated keys', exact: true }).click();
+    await donations.getByRole('button', { name: 'Donation actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toHaveCount(0);
     await filter.selectOption('');
-    await expect(donations.locator('.economy-donation-card')).toHaveCount(2);
+    await expect(donations.locator('.economy-donation-summary')).toHaveCount(2);
 
-    await page.getByRole('tab', { name: 'Donate resources', exact: true }).click();
+    await page.getByRole('tab', { name: 'Donate my keys', exact: true }).click();
     const composer = page.locator('.economy-donation-composer');
     await expect(
       composer.getByRole('heading', { name: 'Submit a charity donation' }),
     ).toBeVisible();
-    const resources = composer.locator('.donation-resource-picker');
+    await composer.getByRole('button', { name: 'Choose keys…', exact: true }).click();
+    const picker = page.getByRole('dialog', { name: 'Choose keys to donate', exact: true });
+    const resources = picker.locator('.donation-resource-picker');
     await resources.getByRole('button', { name: /^Fixture endpoint / }).click();
     const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);
     await expect(keyChoices.getByRole('checkbox', { name: /key-11…tail/ })).toBeDisabled();
     await keyChoices.getByRole('checkbox', { name: /key-free…tail/ }).check();
-    await composer.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
+    await picker.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
+    await picker.getByRole('button', { name: 'Done', exact: true }).click();
     await composer
       .getByRole('checkbox', {
         name: 'I own every selected resource or have authorization to contribute its capacity.',
@@ -751,9 +769,12 @@ test.describe('donation expiry in UTC', () => {
     await composer
       .getByRole('textbox', { name: 'Donation description' })
       .fill('Per-key expiry fixture');
-    await composer
-      .getByRole('combobox', { name: 'Accept a public Discord thank-you' })
-      .selectOption('no');
+    const publicThanks = composer
+      .getByRole('radiogroup', { name: 'Accept a public Discord thank-you' })
+      .getByRole('radio', { name: 'No', exact: true });
+    await publicThanks.focus();
+    await publicThanks.press('Space');
+    await expect(publicThanks).toBeChecked();
     await composer.getByRole('button', { name: 'Submit for review' }).click();
     await expect(page.getByText('Donation submitted for review.')).toBeVisible();
     expect(donationPostBody).toMatchObject({
@@ -870,11 +891,12 @@ for (const locale of ['en', 'zh'] as const) {
       body: numberedResponse([], '1', 20),
     });
     await page.goto(`${USER_ORIGIN}/charity`);
+    await page.getByRole('button', { name: '[公益]provider/charity', exact: true }).click();
     await expect(
       page.getByRole('table', { name: locale === 'zh' ? '公益模型价格' : 'Charity model prices' }),
     ).toBeVisible();
     await expect(page.locator('.charity-price-table tbody tr')).toHaveCount(4);
-    await expect(page.locator('.charity-amount')).toHaveCount(8);
+    await expect(page.locator('.charity-price-table .charity-amount')).toHaveCount(8);
     for (const width of [320, 390, 768, 1935]) {
       await page.setViewportSize({ width, height: 900 });
       await assertPricesFit(page);

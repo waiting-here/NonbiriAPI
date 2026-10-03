@@ -81,9 +81,11 @@ for (const users of [101, 10017]) {
       });
     });
     await page.goto(ADMIN_ORIGIN);
-    await expect(
-      page.getByText('There are 37 endpoint groups. Open the endpoints page for details.'),
-    ).toBeVisible();
+    const endpointTotal = page.locator('.nb-stat').filter({
+      has: page.getByRole('link', { name: 'Endpoint overview', exact: true }),
+    });
+    await expect(endpointTotal.locator('.nb-stat__value')).toHaveText('37');
+    await expect(endpointTotal.getByRole('link')).toHaveAttribute('href', '/endpoints');
     expect(requests.length).toBeGreaterThan(0);
     expect(
       requests.every(

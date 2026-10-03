@@ -94,7 +94,7 @@ for (const locale of ['en', 'zh'] as const) {
         await page.locator('summary').filter({ hasText: copy.models.advanced }).click();
         await expect(page.getByText('developer', { exact: true })).toBeVisible();
         await page.goto(USER_ORIGIN + '/keys');
-        const guide = page.locator('.personal-automation-guide');
+        const guide = page.locator('.personal-automation-guide > .nb-fold');
         await expect(guide).not.toHaveAttribute('open');
         await guide.locator('summary').focus();
         await page.keyboard.press('Enter');

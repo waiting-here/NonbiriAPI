@@ -281,7 +281,7 @@ const SCENARIOS = [
   {
     language: 'en' as const,
     theme: 'light' as const,
-    pageTitle: 'A quiet cast, a surprise catch',
+    pageTitle: 'Pond fishing',
     blueName: 'Blue fat fish',
     originalName: 'Original legendary species: Koi',
     historicalTab: 'Historical board',
@@ -298,7 +298,7 @@ const SCENARIOS = [
   {
     language: 'zh' as const,
     theme: 'dark' as const,
-    pageTitle: '悠闲抛竿，看看收获',
+    pageTitle: '池塘垂钓',
     blueName: '蓝色大肥鱼',
     originalName: '原传奇鱼种：锦鲤',
     historicalTab: '历史榜',
@@ -315,7 +315,7 @@ const SCENARIOS = [
   {
     language: 'en' as const,
     theme: 'dark' as const,
-    pageTitle: 'A quiet cast, a surprise catch',
+    pageTitle: 'Pond fishing',
     blueName: 'Blue fat fish',
     originalName: 'Original legendary species: Koi',
     historicalTab: 'Historical board',
@@ -332,7 +332,7 @@ const SCENARIOS = [
   {
     language: 'zh' as const,
     theme: 'light' as const,
-    pageTitle: '悠闲抛竿，看看收获',
+    pageTitle: '池塘垂钓',
     blueName: '蓝色大肥鱼',
     originalName: '原传奇鱼种：锦鲤',
     historicalTab: '历史榜',
@@ -493,11 +493,9 @@ for (const scenario of SCENARIOS) {
     }
     for (const width of [1440, 1920]) {
       await assertNoHorizontalOverflow(page, width);
-      await page
-        .locator('.rank-switcher')
-        .screenshot({
-          path: '../tmp/fishing-rankings-' + scenario.language + '-' + width + '.png',
-        });
+      await page.locator('.rank-switcher').screenshot({
+        path: '../tmp/fishing-rankings-' + scenario.language + '-' + width + '.png',
+      });
     }
     await historicalTab.click();
     await page.goto(`${USER_ORIGIN}/games`);

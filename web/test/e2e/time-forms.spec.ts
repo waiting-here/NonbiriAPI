@@ -195,6 +195,9 @@ for (const scenario of cases) {
         scenario.zone === 'Asia/Kolkata' ? ['Asia/Kolkata', 'Asia/Calcutta'] : [scenario.zone],
       ).toContain(browserZone);
       const queries: URLSearchParams[] = [];
+      await page.route('**/api/limited-activities/picture-book/wallet', (route) =>
+        route.fulfill({ json: { general: '0', sketch_paper: '0', sketch_brush: '0' } }),
+      );
       await page.route('**/api/credits/history**', async (route) => {
         const params = new URL(route.request().url()).searchParams;
         queries.push(params);
@@ -226,6 +229,10 @@ for (const scenario of cases) {
         });
       });
       await page.goto(`${USER_ORIGIN}/credits`);
+      await page
+        .locator('.nb-fold > summary')
+        .filter({ hasText: scenario.locale === 'en' ? 'More filters' : '更多条件' })
+        .click();
       const from = page.locator('input[type="datetime-local"]').first();
       await from.fill(inputLocal.slice(0, 16));
       const apply = page.getByRole('button', {

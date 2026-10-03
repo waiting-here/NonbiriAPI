@@ -40,7 +40,13 @@ async function layout(
       await page
         .locator('main button')
         .evaluateAll(
-          (buttons) => buttons.filter((button) => !button.classList.contains('btn')).length,
+          (buttons) =>
+            buttons.filter(
+              (button) =>
+                !button.matches(
+                  '.btn, .nb-btn, .nb-more__menu button, .nb-pager button, .nb-tabs button',
+                ),
+            ).length,
         ),
     ).toBe(0);
     expect(
@@ -53,6 +59,18 @@ async function layout(
       ),
     ).toBe(0);
     await page.screenshot({ path: `../tmp/${name}-${width}.png`, fullPage: true });
+  }
+}
+
+async function openDeletionSnapshots(page: import('@playwright/test').Page) {
+  await expect(
+    page.locator('details.nb-fold').filter({ hasText: 'Balances before deletion' }).first(),
+  ).toBeVisible();
+  for (const fold of await page
+    .locator('details.nb-fold')
+    .filter({ hasText: 'Balances before deletion' })
+    .all()) {
+    if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click();
   }
 }
 
@@ -113,6 +131,7 @@ test('deletion alerts can be filtered and resolved in a selected batch', async (
   });
   await page.goto(`${ADMIN_ORIGIN}/alerts`);
   await page.getByLabel('Alert type').selectOption('account_deleted');
+  await openDeletionSnapshots(page);
   await expect(page.getByText('123456789012345678')).toBeVisible();
   await expect(page.getByText('-2500.125')).toBeVisible();
   await layout(page, 'deletion-alert');
@@ -208,6 +227,7 @@ test('all alert filters and retained details accept current deletion snapshots a
     });
   });
   await page.goto(`${ADMIN_ORIGIN}/alerts?resolved=all`);
+  await openDeletionSnapshots(page);
   for (const width of [1280, 1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
@@ -231,14 +251,18 @@ test('all alert filters and retained details accept current deletion snapshots a
   }
   await page.getByLabel('Resolution status').selectOption('true');
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toHaveCount(0);
+  await openDeletionSnapshots(page);
   await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
   await page.getByLabel('Resolution status').selectOption('false');
   await expect(page.getByText(deletionSnapshots.v2.discord_id)).toHaveCount(0);
+  await openDeletionSnapshots(page);
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
-  await page.getByRole('button', { name: 'Resolve', exact: true }).click();
+  await page.getByRole('button', { name: 'Alert actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Resolve', exact: true }).click();
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toHaveCount(0);
   expect(resolved).toBe(true);
   await page.getByLabel('Resolution status').selectOption('all');
+  await openDeletionSnapshots(page);
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
   await expect(page.getByText(deletionSnapshots.v2.discord_id)).toBeVisible();
   await page.getByLabel('Alert type').selectOption('all');
@@ -271,6 +295,25 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
       await route.fulfill({ status: 204 });
       return;
     }
+    if (url.pathname.endsWith('/events')) {
+      await route.fulfill({
+        json: {
+          data: [
+            {
+              id: '1',
+              actor_kind: 'admin',
+              actor_user_id: '9',
+              reason_codes: [],
+              safe_note: reason,
+              created_at: 1800000000,
+            },
+          ],
+          next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+        },
+      });
+      return;
+    }
     const data = listed
       ? [
           {
@@ -295,6 +338,7 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
     });
   });
   await page.goto(`${ADMIN_ORIGIN}/blacklist`);
+  await page.getByRole('button', { name: 'Add to blacklist', exact: true }).click();
   await page.getByLabel('Discord ID', { exact: true }).fill('123456789012345678');
   await page.getByLabel('Reason', { exact: true }).fill(reason);
   await page.getByRole('button', { name: 'Add and permanently ban' }).click();
@@ -303,14 +347,18 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
   await expect(confirmation).toContainText('123456789012345678');
   await expect(confirmation).toContainText(reason);
   await confirmation.getByRole('button', { name: 'Add and permanently ban' }).click();
-  await expect(page.getByRole('link', { name: '42', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Account #42', exact: true })).toBeVisible();
+  await expect(page.locator('.blacklist-first-reason')).toHaveText(reason);
+  await page.getByRole('button', { name: 'Action: 123456789012345678', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Events', exact: true }).click();
   const reasonNote = page.locator('.ops-blacklist-note');
   await expect(reasonNote).toBeVisible();
   expect(await reasonNote.textContent()).toBe(reason);
   await expect(reasonNote.locator('img')).toHaveCount(0);
   await layout(page, 'blacklist', reasonNote);
-  await page.getByRole('button', { name: 'Remove from blacklist' }).click();
-  await expect(page.getByRole('link', { name: '42', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Action: 123456789012345678', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Remove from blacklist' }).click();
+  await expect(page.getByRole('link', { name: 'Account #42', exact: true })).toHaveCount(0);
   expect(listed).toBe(false);
   errors.assertNone();
 });
@@ -427,11 +475,12 @@ test('level six can read administrator-origin blacklist events without a removal
   await page.goto(`${USER_ORIGIN}/steward?tab=blacklist`);
   await expect(page.getByRole('cell', { name: 'Administrator #9' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove from blacklist' })).toHaveCount(0);
-  const reasonNote = page.locator('.ops-blacklist-note').first();
-  await expect(reasonNote).toBeVisible();
-  expect(await reasonNote.textContent()).toBe(note);
-  await expect(reasonNote.locator('img')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Events' }).click();
+  const preview = page.locator('.blacklist-first-reason');
+  await expect(preview).toHaveText(note);
+  await expect(preview.locator('img')).toHaveCount(0);
+  await page.getByRole('button', { name: `Action: ${discordID}`, exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Remove from blacklist' })).toHaveCount(0);
+  await page.getByRole('menuitem', { name: 'Events', exact: true }).click();
   const event = page.getByRole('listitem').filter({ hasText: 'Additional note:' });
   const eventNote = event.getByText(note, { exact: true });
   await expect(eventNote).toBeVisible();

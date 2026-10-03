@@ -274,12 +274,23 @@ for (const scenario of [
     expect(restored.get('status')).toBe('200');
     expect(restored.has('attempt_page')).toBe(false);
     if (role !== 'user') {
+      await page.evaluate(() => scrollTo(0, 0));
       await page.locator('.log-export summary').click();
       for (const format of ['csv', 'json']) {
         const link = page.getByRole('link', {
           name: `${locale === 'zh' ? '导出' : 'Export'} ${format.toUpperCase()}`,
         });
+        await expect(link).toBeVisible();
         await expect(link).toHaveAttribute('href', `${path}/export.${format}?status=200`);
+        await expect(link).toHaveAttribute('download', '');
+        await link.click({ trial: true });
+        const bounds = await link.boundingBox();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual((await page.viewportSize())!.width);
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual((await page.viewportSize())!.height);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
       }
     }
     await page.getByRole('button', { name: labels.previous, exact: true }).click();

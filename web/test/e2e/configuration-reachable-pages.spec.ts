@@ -341,6 +341,28 @@ test('reachable user home keeps level state but removes the implementation hint'
     body: { data: [], next_cursor: null },
   });
 
+  await page.route(`${USER_ORIGIN}/api/caller-key`, (route) =>
+    route.fulfill({ json: null, headers: { 'X-Nonbiri-CallerKey-Generation': '0' } }),
+  );
+  await page.route(`${USER_ORIGIN}/api/models?**`, (route) =>
+    route.fulfill({
+      json: {
+        data: [],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+      },
+    }),
+  );
+  await page.route(`${USER_ORIGIN}/api/charity/models?**`, (route) =>
+    route.fulfill({
+      json: {
+        data: [],
+        pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        donation_intake: 'closed',
+        server_now: 1800000000,
+      },
+    }),
+  );
   await page.goto(`${USER_ORIGIN}/`);
   await expect(page.getByText('Level', { exact: true })).toBeVisible();
   await expect(page.getByText('Lv2', { exact: true })).toBeVisible();
@@ -362,7 +384,7 @@ test('reachable user home keeps level state but removes the implementation hint'
     expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  const endpointLink = page.getByRole('link', { name: 'Manage resources' });
+  const endpointLink = page.getByRole('link', { name: 'Add my service', exact: true });
   await tabTo(page, endpointLink);
   await expect(endpointLink).toBeFocused();
   await assertResponsiveAndClean(page, guard);
@@ -403,7 +425,10 @@ test('reachable user charity shows the neutral upstream warning without the stat
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
-  await expect(page.getByRole('note')).toContainText('第三方服务隐私提示');
+  await page.locator('.nb-fold > summary').filter({ hasText: '使用前请了解' }).click();
+  await expect(
+    page.locator('.nb-fold > summary').filter({ hasText: '使用前请了解' }),
+  ).toBeVisible();
   await expect(page.getByRole('note')).toContainText('第三方 AI 服务');
   await expect(page.getByRole('note')).toContainText('账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
@@ -491,10 +516,15 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await page.goto(`${USER_ORIGIN}/endpoints`);
   await expect(page.getByRole('heading', { name: 'My services' })).toBeVisible();
   await page.getByRole('link', { name: 'Manage' }).click();
-  await expect(page.getByRole('heading', { name: 'Service details' })).toBeVisible();
-  await expect(page.getByText('Ask the provider not to store chats')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'primary', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Edit note and limits', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit note and limits', exact: true });
+  await expect(editor.getByText('Ask the provider not to store chats')).toBeVisible();
+  await editor.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'More actions · key note', exact: true }).click();
   await expect(
-    page.getByRole('button', { name: 'Stop asking the provider not to store chats' }),
+    page.getByRole('menuitem', { name: 'Stop asking the provider not to store chats' }),
   ).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });

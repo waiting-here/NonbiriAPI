@@ -100,7 +100,10 @@ for (const locale of ['zh', 'en'] as const) {
           },
         });
       });
-      await page.goto(ADMIN_ORIGIN + '/limited-activities');
+      await page.goto(ADMIN_ORIGIN + '/limited-activities?activity=picture-book');
+      await page
+        .getByRole('tab', { name: zh ? '图片生成服务' : 'Image generation service', exact: true })
+        .click();
       await expect(page.getByLabel(zh ? '服务地址' : 'Service base URL')).toBeVisible();
       await expect(
         page.getByRole('heading', {
@@ -108,6 +111,7 @@ for (const locale of ['zh', 'en'] as const) {
         }),
       ).toHaveCount(0);
       await expect(page.getByLabel(/JSON/)).toHaveCount(0);
+      await page.getByRole('tab', { name: zh ? '模型目录' : 'Model catalog', exact: true }).click();
       await page
         .getByRole('button', { name: zh ? '拉取模型目录' : 'Refresh model catalog', exact: true })
         .click();

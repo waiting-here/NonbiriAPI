@@ -789,7 +789,9 @@ test.describe('RPS result presentation and amount lifecycle', () => {
       });
       if (view.large) {
         await page.goto(`${USER_ORIGIN}/account`);
-        await page.getByLabel('Large', { exact: true }).check();
+        const largeFont = page.getByRole('radio', { name: 'Large', exact: true });
+        await largeFont.focus();
+        await largeFont.press('Space');
         await expect(page.locator('html')).toHaveAttribute('data-font-size', 'large');
       }
       await page.goto(`${USER_ORIGIN}/games/rps`);
