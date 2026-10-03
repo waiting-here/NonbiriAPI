@@ -17,7 +17,9 @@ describe('optional personal automation guide', () => {
         locale,
       });
       const summary = screen.getByText(
-        locale === 'en' ? 'Manage your resources with scripts' : '用脚本管理自用资源',
+        locale === 'en'
+          ? 'Import keys and models with scripts (advanced)'
+          : '用脚本批量导入密钥和模型（进阶）',
       );
       const details = summary.closest('details')!;
       expect(details).not.toHaveAttribute('open');

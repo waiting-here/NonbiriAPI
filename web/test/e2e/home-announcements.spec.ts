@@ -254,6 +254,30 @@ async function prepare(
   );
   await mockPublicConfig(page, 'user', { announcement_epoch: EPOCH_A });
   await mockRoleSession(page, 'user', 'user');
+  await page.route(`${USER_ORIGIN}/api/caller-key`, (route) =>
+    route.fulfill({ json: null, headers: { 'X-Nonbiri-CallerKey-Generation': '0' } }),
+  );
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/models?page=1&page_size=10',
+    body: {
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+    },
+  });
+  await page.route(`${USER_ORIGIN}/api/charity/models?**`, (route) =>
+    route.fulfill({
+      json: {
+        models: [],
+        pagination: { page: '1', page_size: 10, total_items: '0', total_pages: '1' },
+        donation_intake: 'open',
+        server_now: 1800000000,
+      },
+    }),
+  );
+
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
@@ -416,7 +440,10 @@ test('Home selects the first three visible announcements across cursor pages and
   expect(state.maximumActiveDetails).toBeLessThanOrEqual(3);
   expect(
     await section.evaluate((element) =>
-      element.nextElementSibling?.classList.contains('core-grid--wide'),
+      Boolean(
+        (document.querySelector('.core-checkin-grid')?.compareDocumentPosition(element) ?? 0) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
     ),
   ).toBe(true);
   const previewSizes = await section
@@ -571,6 +598,7 @@ test('Home retains a summary while detail Retry recovers and rejects hostile HTM
   await expect(retryCard).toContainText('The full announcement could not be loaded.');
   const retry = retryCard.getByRole('button', { name: 'Retry' });
   await expect(retry).toBeVisible();
+  await retry.scrollIntoViewIfNeeded();
   const retryBox = await retry.boundingBox();
   expect(retryBox).not.toBeNull();
   if (retryBox) expect(retryBox.y + retryBox.height).toBeLessThanOrEqual(900 + 1);
