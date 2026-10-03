@@ -17,6 +17,12 @@ case "${1:-interaction}" in
         manifest_hash=3f773b6dca01058f2296f437c3666afde92a74e8eeb861fa8637756dcd859481
         upgrade_test=TestStorageContractsUpgradeFromReleasedBinary
         ;;
+    audit)
+        released_commit=77e7f41646d6c720b6ae4ddc6dbb4dd9e0b31604
+        schema_hash=a577c8c280ed0715a1be8ef437f2df1e7b7d7d1ed1f3cfed1eb61664e6ee9240
+        manifest_hash=18af84b0618afaed94c39c8470af3d1e892b365e238b3fc5a2158a2043930d34
+        upgrade_test=TestEconomyAuditChannelsUpgradeFromReleasedBinary
+        ;;
     *) printf '%s
 ' 'Unknown upgrade profile' >&2; exit 2 ;;
 esac
@@ -38,10 +44,10 @@ cleanup() {
 trap cleanup EXIT
 mkdir "$temporary/released" "$temporary/data"
 git archive "$released_commit" | tar -x -C "$temporary/released"
-"$python_command" - "$root" "$temporary" "$schema_hash" "$manifest_hash" <<'PY'
+"$python_command" - "$root" "$temporary" "$schema_hash" "$manifest_hash" "${1:-interaction}" <<'PY'
 import json, pathlib, sys
 root, temporary = map(pathlib.Path, sys.argv[1:3])
-schema_hash, manifest_hash = sys.argv[3:]
+schema_hash, manifest_hash, profile = sys.argv[3:]
 legacy = temporary / "released"
 fixture = (root / "internal/db/testdata/released_dual_wallet_fixture_test.go.txt").read_text()
 for old, new in {
@@ -51,18 +57,24 @@ for old, new in {
 }.items():
     assert fixture.count(old) == 1
     fixture = fixture.replace(old, new)
+if profile == "audit":
+    fixture = fixture.replace("seedReleasedGovernanceFacts(t, tx, vault, users)", "seedReleasedGovernanceFacts(t, tx, vault, users)\n\tseedReleasedEconomyAuditProjection(t, tx, users)")
 generated = temporary / "released-wallet-fixture.go"
 generated.write_text(fixture, encoding="utf-8", newline="\n")
 replacements = {
     str(legacy / "internal/ledger/released_governance_facts_test.go"): str(root / "internal/db/testdata/released_governance_facts_test.go.txt"),
     str(legacy / "internal/ledger/released_dual_wallet_fixture_test.go"): str(generated),
 }
+if profile == "audit":
+    replacements[str(legacy / "internal/ledger/released_economy_audit_fixture_test.go")] = str(root / "internal/db/testdata/released_economy_audit_fixture_test.go.txt")
 (temporary / "overlay.json").write_text(json.dumps({"Replace": replacements}), encoding="utf-8", newline="\n")
 PY
 export CGO_ENABLED=0
 export NONBIRI_DUAL_WALLET_FIXTURE="$temporary/data/wallet.db"
-unset NONBIRI_INTERACTION_FIXTURE NONBIRI_STORAGE_FIXTURE
-if [[ "${1:-interaction}" == storage ]]; then
+unset NONBIRI_INTERACTION_FIXTURE NONBIRI_STORAGE_FIXTURE NONBIRI_ECONOMY_AUDIT_FIXTURE
+if [[ "${1:-interaction}" == audit ]]; then
+    export NONBIRI_ECONOMY_AUDIT_FIXTURE="$NONBIRI_DUAL_WALLET_FIXTURE"
+elif [[ "${1:-interaction}" == storage ]]; then
     export NONBIRI_STORAGE_FIXTURE="$NONBIRI_DUAL_WALLET_FIXTURE"
 else
     export NONBIRI_INTERACTION_FIXTURE="$NONBIRI_DUAL_WALLET_FIXTURE"
@@ -76,6 +88,9 @@ unset NONBIRI_INTERACTION_MASTER_KEY_FILE
     "$temporary/released-wallet.test" -test.run '^TestWriteReleasedDualWalletFixture$' -test.v -test.timeout 2m
 )
 "$go_command" test -count=1 -v -timeout=10m -run "^${upgrade_test}$" ./internal/db
+if [[ "${1:-interaction}" == audit ]]; then
+    "$go_command" test -count=1 -v -timeout=2m -run '^TestEconomyAuditCatchUpFromReleasedBinary$' ./internal/economyaudit
+fi
 printf 'Released source: %s\n' "$released_commit"
 "$go_command" version
 sha256sum "$temporary/data/wallet.db"

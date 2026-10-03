@@ -1,0 +1,65 @@
+package ledger
+
+import (
+	"context"
+	"database/sql"
+	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+)
+
+// Seed a stopped projector with one completed operation and two pending
+// operations whose channels are rejected by the released audit schema.
+func seedReleasedEconomyAuditProjection(t *testing.T, tx *sql.Tx, users []int64) {
+	t.Helper()
+	ctx := context.Background()
+	var raw []byte
+	if err := tx.QueryRow(`SELECT delta_mag FROM credit_entries WHERE operation_id=(SELECT id FROM credit_operations WHERE ledger_seq=1) AND account_kind_snapshot='external'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	value, err := db.NewSM128(1, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued := value.Decimal()
+	for _, bucket := range []struct {
+		name    string
+		seconds int64
+	}{{"hour", 3600}, {"day", 86400}} {
+		local := ledgerTestNow + 330*60
+		start := local - local%bucket.seconds - 330*60
+		if _, err := tx.Exec(`INSERT INTO economy_audit_buckets VALUES('general','admin_user_adjustment','operation','admin',?,?,330,?,'0',?,'0','0',1,1,1)`, bucket.name, start, issued, issued); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tx.Exec(`UPDATE economy_audit_checkpoint SET last_ledger_seq=1,first_ledger_seq=1,first_occurred_at=?,offset_minutes=330,unclassified_operations=0,opening_known=1,updated_at=? WHERE id=1`, ledgerTestNow, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`UPDATE site_config SET value='330' WHERE key=?`, db.SiteTimezoneKey); err != nil {
+		t.Fatal(err)
+	}
+	wallet, err := UserAccount(ctx, tx, users[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	external, err := CodedAccount(ctx, tx, "external")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: users[0], CreatedAt: ledgerTestNow + 1}
+	fee, err := NewLakeEntry(meta, wallet.ID, external.ID, AmountFromMilli(25))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(ctx, tx, fee); err != nil {
+		t.Fatal(err)
+	}
+	meta = Meta{OperationID: mustLedgerID(t, "op_"), CreatedAt: ledgerTestNow + 2}
+	reward, err := NewFatFishReward(meta, external.ID, wallet.ID, AmountFromMilli(40))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(ctx, tx, reward); err != nil {
+		t.Fatal(err)
+	}
+}
