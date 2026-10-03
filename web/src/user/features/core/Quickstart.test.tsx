@@ -30,7 +30,7 @@ async function setup() {
   rendered.queryClient.setQueryData(coreKeys.session, session);
   await rendered.user.type(await screen.findByLabelText('Service URL'), 'https://example.com/v1');
   await rendered.user.click(screen.getByRole('button', { name: 'Save service and continue' }));
-  await screen.findByLabelText('Service key');
+  await screen.findByLabelText('Key');
   return rendered;
 }
 afterEach(() => vi.unstubAllGlobals());
@@ -64,20 +64,20 @@ describe('Optional resource setup recovery', () => {
     );
     const rendered = await setup();
     const secret = 'synthetic-transient-key';
-    await rendered.user.type(screen.getByLabelText('Service key'), secret);
+    await rendered.user.type(screen.getByLabelText('Key'), secret);
     await rendered.user.click(screen.getByLabelText('I have permission to use this service key'));
     await rendered.user.click(screen.getByRole('button', { name: 'Save key' }));
     const retrySecret = await screen.findByLabelText(
       'Enter the same key again to continue saving.',
     );
-    expect(screen.queryByLabelText('Service key')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Key')).not.toBeInTheDocument();
     expect(retrySecret).toHaveValue('');
     assertNoSensitiveQueryCache(rendered.queryClient, [secret]);
     await rendered.user.click(screen.getByRole('button', { name: 'Check result' }));
     expect(writes).toHaveLength(1);
     await rendered.user.type(retrySecret, secret);
     await rendered.user.click(screen.getByRole('button', { name: 'Check result' }));
-    await screen.findByRole('button', { name: 'Check for models' });
+    await screen.findByRole('button', { name: 'Load available models' });
     expect(writes).toHaveLength(2);
     expect(writes[1]).toEqual(writes[0]);
     assertNoSensitiveQueryCache(rendered.queryClient, [secret]);
@@ -167,7 +167,7 @@ it('does not resume a stopped connection when its earlier lookup returns late', 
     }),
   );
   const rendered = await setup();
-  await rendered.user.type(screen.getByLabelText('Service key'), 'synthetic-transient-key');
+  await rendered.user.type(screen.getByLabelText('Key'), 'synthetic-transient-key');
   await rendered.user.click(screen.getByLabelText('I have permission to use this service key'));
   await rendered.user.click(screen.getByRole('button', { name: 'Save key' }));
   await rendered.user.click(await screen.findByLabelText('sample-model'));

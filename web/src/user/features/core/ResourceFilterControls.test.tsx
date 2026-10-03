@@ -38,7 +38,7 @@ describe('resource search navigation', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Needle' } });
     act(() => {
       fireEvent.submit(screen.getByRole('form', { name: 'Resource filters' }));
-      fireEvent.change(screen.getByRole('combobox', { name: 'Connections' }), {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Sources' }), {
         target: { value: 'available' },
       });
     });
@@ -56,10 +56,7 @@ describe('resource search navigation', () => {
       route: '/models?page=3&page_size=10&q=Needle&provider=Vendor',
     });
     expect(screen.getByTestId('page')).toHaveTextContent('3');
-    await view.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Connections' }),
-      'available',
-    );
+    await view.user.selectOptions(screen.getByRole('combobox', { name: 'Sources' }), 'available');
     expect(screen.getByTestId('filters')).toHaveTextContent(
       'q=Needle&provider=Vendor&connection_state=available',
     );

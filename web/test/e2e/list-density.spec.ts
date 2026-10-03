@@ -330,7 +330,7 @@ test('mainstream resources retain their channel name and protocol in the list', 
   await page.goto(`${USER_ORIGIN}/endpoints`);
   const cards = page.locator('.core-endpoint-card');
   await expect(cards).toHaveCount(2);
-  await expect(cards.first().locator('strong')).toHaveText('Mainstream channel: Example Gateway');
+  await expect(cards.first().locator('strong')).toHaveText('Common services: Example Gateway');
   await expect(cards.first()).toContainText('OpenAI-compatible');
   await expect(cards.nth(1).locator('strong')).toHaveText('OpenAI-compatible');
   for (const width of [320, 390, 1935]) {
@@ -727,7 +727,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${USER_ORIGIN}/models`);
-  await page.getByRole('button', { name: 'Manage connections', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage sources', exact: true }).click();
   const level = page.locator('.core-selector > section:visible');
   await expect(level.locator('.core-choice')).toHaveCount(50);
   await screenshot(page, 'personal-endpoints-desktop');
@@ -756,7 +756,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   await level.getByRole('searchbox', { name: 'Find a service' }).fill('Endpoint 61 —');
   await expect(level.locator('.core-choice')).toHaveCount(1);
   await level.getByRole('button', { name: /Endpoint 61 —/ }).click();
-  await level.getByRole('searchbox', { name: 'Find a service key' }).fill('Key 1');
+  await level.getByRole('searchbox', { name: 'Find a key' }).fill('Key 1');
   await expect(level.locator('.core-choice')).toHaveCount(11);
   await level.getByRole('button', { name: /^Key 1 head/ }).click();
   await automatic.getByRole('button', { name: /^model-2-/ }).click();
@@ -770,7 +770,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
     .getByRole('button', { name: 'Remove', exact: true })
     .click();
   await expect(page.locator('.core-selection-list > li')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Add 2 selected connection(s)', exact: true }).click();
+  await page.getByRole('button', { name: 'Add 2 selected sources', exact: true }).click();
   await expect
     .poll(() => submitted)
     .toEqual({
@@ -1245,7 +1245,7 @@ test.describe('donation selection expiry in UTC', () => {
     const groups = picker.locator('.donation-resource-picker__endpoint-list > li');
     await expect(groups).toHaveCount(20);
     await expect(picker.getByRole('checkbox')).toHaveCount(0);
-    const filter = sources.getByRole('searchbox', { name: 'Search endpoints', exact: true });
+    const filter = sources.getByRole('searchbox', { name: 'Search services', exact: true });
     await filter.fill('Endpoint 20 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);

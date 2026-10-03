@@ -92,9 +92,9 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       ),
     );
     await reachEndpointForm(rendered.user);
-    await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Create service' }));
     for (const note of ['Primary', 'Backup']) {
-      fireEvent.change(await screen.findByLabelText('Service key'), {
+      fireEvent.change(await screen.findByLabelText('Key'), {
         target: { value: `synthetic-secret-${note}` },
       });
       await rendered.user.type(screen.getByLabelText('Key note'), note);
@@ -105,12 +105,12 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       await screen.findByRole('button', { name: 'Add another key' });
       if (note === 'Primary') {
         await rendered.user.click(screen.getByRole('button', { name: 'Add another key' }));
-        expect(screen.getByLabelText('Service key')).toHaveValue('');
+        expect(screen.getByLabelText('Key')).toHaveValue('');
         expect(screen.getByLabelText('Key note')).toHaveValue('');
       }
     }
     expect(created.map((item) => item.note)).toEqual(['Primary', 'Backup']);
-    await rendered.user.click(screen.getByRole('button', { name: 'Check models' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Load available models' }));
     await screen.findByText('Checking models');
     complete = true;
     expect(
@@ -165,7 +165,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       ),
     );
 
-    expect(await screen.findByRole('button', { name: 'Mainstream channel' })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: 'Common services' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -174,7 +174,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(url).toHaveAttribute('readonly');
     expect(url).toHaveValue('https://example.com/v1');
     await rendered.user.type(screen.getByLabelText('Note'), 'channel note');
-    await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Create service' }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
 
     const post = fetchMock.mock.calls.find(([, request]) => request?.method === 'POST');
@@ -210,16 +210,16 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       ),
     );
     await reachEndpointForm(rendered.user);
-    await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Create service' }));
 
-    const secret = await screen.findByLabelText('Service key');
+    const secret = await screen.findByLabelText('Key');
     fireEvent.change(secret, { target: { value: syntheticSecret } });
     await rendered.user.type(screen.getByLabelText('Key note'), 'note remains');
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
 
     expect(await screen.findByText(/Other fields were kept/)).toBeVisible();
-    expect(screen.getByLabelText('Service key')).toHaveValue(syntheticSecret);
+    expect(screen.getByLabelText('Key')).toHaveValue(syntheticSecret);
     expect(screen.getByLabelText('Key note')).toHaveValue('note remains');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(
@@ -228,12 +228,10 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(storageValues(window.localStorage)).not.toContain(syntheticSecret);
     expect(storageValues(window.sessionStorage)).not.toContain(syntheticSecret);
 
-    expect(
-      screen.getByText('Endpoint saved. You can add keys later from Manage endpoint.'),
-    ).toBeVisible();
+    expect(screen.getByText('Service saved. Add keys later from My services.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'Finish later' }));
-    await waitFor(() => expect(screen.getByLabelText('Service key')).toHaveValue(''));
+    await waitFor(() => expect(screen.getByLabelText('Key')).toHaveValue(''));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -268,7 +266,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     );
     await reachEndpointForm(rendered.user);
     await rendered.user.type(screen.getByLabelText('Note'), 'endpoint note');
-    await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Create service' }));
 
     const replay = await screen.findByRole('button', { name: 'Check result' });
     expect(screen.getByLabelText('Service address')).toBeDisabled();

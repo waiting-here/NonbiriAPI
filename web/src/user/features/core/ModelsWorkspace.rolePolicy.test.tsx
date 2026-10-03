@@ -74,7 +74,7 @@ async function renderEditor(create = false) {
   view.queryClient.setQueryData(coreKeys.session, { user });
   await view.user.click(
     await screen.findByRole('button', {
-      name: create ? 'Create platform model' : 'Edit platform model',
+      name: create ? 'Create model' : 'Edit model',
     }),
   );
   await view.user.click(screen.getByText(/Default:.*role rules/));
@@ -101,10 +101,7 @@ describe('personal model role editor', () => {
     const f = fixture();
     const view = await renderEditor(true);
     const form = screen.getByRole('button', { name: 'Save' }).closest('form')!;
-    await view.user.type(
-      within(form).getByRole('textbox', { name: 'Service provider' }),
-      'personal',
-    );
+    await view.user.type(within(form).getByRole('textbox', { name: 'Prefix' }), 'personal');
     await view.user.type(screen.getByRole('textbox', { name: 'Model name' }), 'primary');
     expect(screen.getByRole('combobox', { name: 'Default action for unlisted roles' })).toHaveValue(
       'native',
@@ -122,7 +119,7 @@ describe('personal model role editor', () => {
       'reject',
     );
     await view.user.selectOptions(
-      screen.getByRole('combobox', { name: 'Transport rule' }),
+      screen.getByRole('combobox', { name: 'Streaming' }),
       'force_stream',
     );
     await addRule(view, 'developer', 'system');
