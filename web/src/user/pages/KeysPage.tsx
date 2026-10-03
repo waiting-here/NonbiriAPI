@@ -1,3 +1,4 @@
+import { OutcomeNote } from '@shared/components/ui';
 import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -346,15 +347,18 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
             </div>
           </div>
         ) : null}
-        {state.mutation === 'conflict' ? (
-          <p className="core-inline-warning">{t('common.conflict')}</p>
-        ) : null}
-        {state.mutation === 'unknown' ? (
-          <p className="core-inline-warning">{t('common.outcomeUnknown')}</p>
-        ) : null}
-        {state.mutation === 'error' ? (
-          <p className="core-inline-error">{t('common.fixedFailure')}</p>
-        ) : null}
+        <OutcomeNote
+          busy={regeneration.isPending || authority.isFetching}
+          outcome={
+            state.mutation === 'conflict'
+              ? { kind: 'conflict', reload: () => void authority.refetch() }
+              : state.mutation === 'unknown'
+                ? { kind: 'unknown', oneTimeSecret: true, recheck: () => void authority.refetch() }
+                : state.mutation === 'error'
+                  ? { kind: 'oneTimeMissed' }
+                  : { kind: 'idle' }
+          }
+        />
       </section>
 
       <ConfirmDialog

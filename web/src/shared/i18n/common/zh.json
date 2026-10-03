@@ -32,20 +32,20 @@
     "operation": {
       "pending": "正在处理此操作…",
       "confirmed": "已完成。",
-      "unknown": "暂时无法确认结果。请先检查最新状态，再决定是否重试。",
-      "conflict": "此内容已发生变化。请读取最新状态，并核对您的修改。",
+      "unknown": "没能确认结果。点「重新检查」查看；不会自动重复提交。",
+      "conflict": "内容已被修改，请读取最新版本后再保存。",
       "failed": "此操作未能完成。请查看详情后重试。",
       "refreshFailed": "操作已完成，暂时无法读取最新数据。请重新读取，无需重复操作。",
       "details": "查看详情",
-      "check": "检查最新状态"
+      "check": "重新检查"
     },
     "help": {
-      "service": "服务是您要连接的上游来源。请按照服务商说明填写 API 地址，例如 https://api.example.com/v1。",
-      "serviceKey": "服务密钥由上游服务商提供，用于让本站连接该服务。请使用您持有且有权使用的密钥。",
-      "callerKey": "站内调用密钥用于让您的应用调用本站，与上游服务商提供的服务密钥不同。",
+      "service": "按服务商说明填写 API 地址，例如 https://api.example.com/v1。",
+      "serviceKey": "填写服务商提供、且你有权使用的 API 密钥。",
+      "callerKey": "在客户端填写本站 API 密钥，用来调用本站模型。",
       "upstreamModel": "填写服务商提供的模型名称。检查服务后，可以查看可用的模型名称。",
-      "callName": "这是您的应用通过本站调用自用模型时填写的名称，可以与上游模型名称不同。",
-      "storeFalse": "请求会用 store=false 向上游提出不保存的要求。上游是否遵从，取决于其自身政策。",
+      "callName": "客户端通过本站调用模型时填写此名称，可与服务商的模型名不同。",
+      "storeFalse": "向服务商提出不保存对话的要求，是否遵从取决于其政策。",
       "harness": "运行工具为模型提供完成任务的方式。请结合模型和技能一起选择。"
     },
     "messages": {
@@ -106,10 +106,10 @@
         "superseded": "已有更新的检查结果"
       },
       "reasons": {
-        "auth": "上游拒绝身份验证",
-        "rate_limit": "上游限制请求频率",
-        "timeout": "上游响应超时",
-        "protocol": "上游响应不可用",
+        "auth": "服务商拒绝了密钥",
+        "rate_limit": "服务商限制请求频率",
+        "timeout": "服务商响应超时",
+        "protocol": "服务商响应不可用",
         "transport": "网络请求失败",
         "interrupted": "检查已中断"
       }
@@ -179,7 +179,11 @@
       "jump": "跳转页码",
       "go": "跳转",
       "invalid": "请输入 1～2147483647 的整数页码。",
-      "clamped": "原页码已超出当前范围，现显示第 {{page}} 页。"
+      "clamped": "原页码已超出当前范围，现显示第 {{page}} 页。",
+      "totalOnly": "共 {{total}} 项",
+      "pageOf": "第 {{page}} / {{pages}} 页",
+      "sizeShort": "每页",
+      "jumpShort": "页码"
     },
     "time": {
       "zone": "时区：{{zone}}",
@@ -226,7 +230,7 @@
     "creditsUnit": "积分",
     "authRequiredTitle": "需要登录",
     "authRequired": "当前会话未登录，请登录后继续。",
-    "userSignInBody": "使用 Discord 登录，管理属于你的端点和模型。",
+    "userSignInBody": "使用 Discord 登录，管理自己的服务和模型。",
     "adminSignInBody": "使用服务运营方配置的管理员账号登录。",
     "forbidden": "当前账号没有权限执行此操作。",
     "elevationRequired": "请重新验证身份后再试。",
@@ -599,7 +603,13 @@
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
         },
-        "discountSummary": "已启用，价格为原价的 {{percent}}%"
+        "discountSummary": "已启用，价格为原价的 {{percent}}%",
+        "batchActions": "批量操作",
+        "batchDiscovery": "发现全部捐赠",
+        "batchFailureReset": "重置连续失败",
+        "failureStrategy": "失败策略",
+        "quotaReserve": "额度与预留",
+        "adaptationSettings": "请求适配"
       },
       "management": {
         "details": "技术详情",
@@ -689,7 +699,7 @@
       "addRule": "添加角色规则",
       "removeRule": "移除第{{number}}条规则",
       "nativeHelp": "默认沿用所选协议：OpenAI保留原角色，Anthropic将 developer 文本合入系统消息，Gateway拒绝 developer。",
-      "conversionHelp": "转换角色会影响模型对消息的理解。保留原角色需要上游支持，无法处理时请求会失败。",
+      "conversionHelp": "转换角色会影响模型对消息的理解；服务商无法处理时，请求会失败。",
       "toolsHelp": "工具消息和结果由工具处理设置控制。",
       "action": {
         "native": "按原协议处理",
@@ -1290,17 +1300,30 @@
     },
     "remove": "删除",
     "transportRule": {
-      "label": "传输规则",
+      "label": "流式输出",
       "options": {
-        "passthrough": "透传（默认）",
-        "force_non_stream": "假流式（强制非流）",
-        "force_stream": "假非流（强制流式）"
+        "passthrough": "跟随客户端（默认）",
+        "force_non_stream": "总是等完整结果",
+        "force_stream": "总是用流式取回"
       },
       "help": {
-        "passthrough": "跟随调用方选择的流式或非流式。",
-        "force_non_stream": "等待上游完整结果，期间向流式调用方保活，收到结果后完整返回。",
-        "force_stream": "收齐上游流后，向非流式调用方返回 JSON；非流请求仍受代理等待时限。"
+        "passthrough": "跟随客户端选择的流式或完整回复。",
+        "force_non_stream": "等待服务商完整回复后一次返回；客户端使用流式时，等待期间保持连接。",
+        "force_stream": "以流式读取服务商回复。客户端选择流式时边读边返回；选择非流式时收齐后返回完整结果，仍有等待时限。"
       }
+    },
+    "outcome": {
+      "saved": "已保存。",
+      "savedRefreshFailed": "已保存，但未能读取最新内容。",
+      "unknownTitle": "没能确认是否已保存",
+      "unknownBody": "没能确认结果。点「重新检查」查看；不会自动重复提交。",
+      "recheck": "重新检查",
+      "conflictTitle": "内容已被修改",
+      "conflictBody": "你填写的内容还在。载入最新版本后可以再次保存。",
+      "reload": "载入最新版本",
+      "oneTimeMissedTitle": "没能拿到新密钥",
+      "oneTimeMissedBody": "再创建一次会生成新的密钥，旧的那把可能已失效。",
+      "languageConflictBody": "已读取当前语言。请重新选择后保存。"
     }
   },
   "logs": {

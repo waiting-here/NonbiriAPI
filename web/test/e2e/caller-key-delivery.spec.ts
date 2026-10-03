@@ -228,13 +228,13 @@ test('creates one-time CallerKey on the real keys route and copies it after Clip
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
 
-  await expect(page.getByRole('heading', { name: 'Global API access', exact: true })).toBeVisible();
-  await expect(page.getByText('No account API key', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'API access', exact: true })).toBeVisible();
+  await expect(page.getByText('No site API key', { exact: true })).toBeVisible();
   await expect.poll(() => server.getCount).toBeGreaterThan(0);
   expect(server.getGenerations[0]).toBe('0');
   expect(secret).toMatch(/^nbk_[A-Za-z0-9_-]{43}$/);
 
-  await page.getByRole('button', { name: 'Create API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Create site API key', exact: true }).click();
   await expect(page.locator('.core-secret-value')).toHaveText(secret);
   expect(server.posts).toHaveLength(1);
   expect(server.posts[0].body).toEqual({ expected_generation: '0' });
@@ -269,7 +269,7 @@ test('waits for Clipboard write completion before reporting a successful copy', 
   });
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
-  await page.getByRole('button', { name: 'Create API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Create site API key', exact: true }).click();
   await expect(page.getByText(secret, { exact: true })).toBeVisible();
 
   const clipboardWrite = deferred<void>();
@@ -317,8 +317,8 @@ test('keeps the full value selectable after Clipboard rejection on Chinese dark 
   });
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
-  await expect(page.getByText('尚未创建账户 API 密钥', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '创建 API 密钥', exact: true }).click();
+  await expect(page.getByText('尚未创建本站 API 密钥', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '创建本站 API 密钥', exact: true }).click();
   await expect.poll(() => server.posts.length).toBe(1);
   await expect(page.locator('.core-secret-value')).toHaveText(secret);
 
@@ -357,17 +357,17 @@ test('requires confirmation for replacement and never recovers a closed secret a
   await expect(page.getByText(current.display, { exact: true })).toBeVisible();
   expect(server.getGenerations[0]).toBe('7');
 
-  await page.getByRole('button', { name: 'Replace API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Replace site API key', exact: true }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(server.posts).toHaveLength(0);
 
-  await page.getByRole('button', { name: 'Replace API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Replace site API key', exact: true }).click();
   await page
     .getByRole('alertdialog')
-    .getByRole('button', { name: 'Replace API key', exact: true })
+    .getByRole('button', { name: 'Replace site API key', exact: true })
     .click();
   await expect(page.getByText(secret, { exact: true })).toBeVisible();
   expect(server.posts).toHaveLength(1);
@@ -412,7 +412,7 @@ test('keeps the one-time value visible when the post-generation metadata refresh
   });
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
-  await page.getByRole('button', { name: 'Create API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Create site API key', exact: true }).click();
   await expect(page.getByText(secret, { exact: true })).toBeVisible();
   await expect(
     page.getByText(
@@ -453,16 +453,16 @@ test('does not resend a lost generation response and asks for confirmation befor
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
   await expect(page.getByText(current.display, { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Replace API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Replace site API key', exact: true }).click();
   await page
     .getByRole('alertdialog')
-    .getByRole('button', { name: 'Replace API key', exact: true })
+    .getByRole('button', { name: 'Replace site API key', exact: true })
     .click();
   await expect.poll(() => server.posts.length).toBe(1);
   postGate.resolve(undefined);
   await expect(
     page.getByText(
-      'The response was lost. The page is checking the latest status and will not resend the action.',
+      'Could not confirm the result. Select "Check again" to check; nothing is automatically resubmitted.',
       { exact: true },
     ),
   ).toBeVisible();
@@ -473,8 +473,10 @@ test('does not resend a lost generation response and asks for confirmation befor
   await page.goto(`${USER_ORIGIN}/`);
   await page.goto(`${USER_ORIGIN}/keys`);
   await expect(page.getByText(current.display, { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Replace API key', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Replace API key', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Replace site API key', exact: true }),
+  ).toBeEnabled();
+  await page.getByRole('button', { name: 'Replace site API key', exact: true }).click();
   await expect(page.getByRole('alertdialog')).toBeVisible();
   expect(server.posts).toHaveLength(1);
   await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -508,8 +510,8 @@ test('reads a higher CallerKey generation after another page advances the author
   });
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
-  await expect(page.getByText('No account API key', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Create API key', exact: true }).click();
+  await expect(page.getByText('No site API key', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create site API key', exact: true }).click();
   await expect(page.getByText(firstSecret, { exact: true })).toBeVisible();
   await expect(page.getByText(first.display, { exact: true })).toBeVisible();
   expect(server.posts).toHaveLength(1);
@@ -526,12 +528,12 @@ test('reads a higher CallerKey generation after another page advances the author
   await installCallerKeyServer(secondPage, server);
   await secondPage.goto(`${USER_ORIGIN}/keys`);
   await expect(secondPage.getByText(first.display, { exact: true })).toBeVisible();
-  await secondPage.getByRole('button', { name: 'Replace API key', exact: true }).click();
+  await secondPage.getByRole('button', { name: 'Replace site API key', exact: true }).click();
   server.postSecret = secondSecret;
   server.postMetadata = second;
   await secondPage
     .getByRole('alertdialog')
-    .getByRole('button', { name: 'Replace API key', exact: true })
+    .getByRole('button', { name: 'Replace site API key', exact: true })
     .click();
   await expect(secondPage.getByText(secondSecret, { exact: true })).toBeVisible();
   await expect(secondPage.getByText(second.display, { exact: true })).toBeVisible();
@@ -562,7 +564,7 @@ test('clears one-time plaintext across logout and a later login', async ({ conte
   });
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
-  await page.getByRole('button', { name: 'Create API key', exact: true }).click();
+  await page.getByRole('button', { name: 'Create site API key', exact: true }).click();
   await expect(page.getByText(secret, { exact: true })).toBeVisible();
 
   await page.locator('.nb-account-trigger').click();

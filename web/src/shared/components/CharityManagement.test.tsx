@@ -944,7 +944,7 @@ describe('CharityManagement corrective controls', () => {
       prefix: '/api/steward',
       sessionPath: '/api/session',
       session: stewardSession,
-      modelsTab: '公益模型与服务连接',
+      modelsTab: '公益模型与来源',
       reserveLabel: '调用前预留积分',
       reserveHelp: '留空继承全局配置。',
       pricingLabel: '计价模式',
@@ -1234,7 +1234,7 @@ describe('CharityManagement corrective controls', () => {
     const editor = within(card);
     const textarea = editor.getByLabelText('Public description (plain text, optional)');
     await view.user.selectOptions(
-      editor.getByRole('combobox', { name: 'Transport rule' }),
+      editor.getByRole('combobox', { name: 'Streaming' }),
       'force_non_stream',
     );
     fireEvent.change(textarea, { target: { value: 'submitted' } });
@@ -1395,9 +1395,7 @@ describe('CharityManagement corrective controls', () => {
       role: 'user',
     });
 
-    await view.user.click(
-      await screen.findByRole('tab', { name: 'Charity models and service connections' }),
-    );
+    await view.user.click(await screen.findByRole('tab', { name: 'Charity models and sources' }));
     await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
     const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
     const editorCard = heading.closest('.card');

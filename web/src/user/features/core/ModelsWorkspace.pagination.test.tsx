@@ -236,7 +236,7 @@ describe('ModelsWorkspace numbered pagination', () => {
 
     await rendered.user.click(
       within(screen.getByText('provider-21/model-21').closest('li')!).getByRole('button', {
-        name: 'Manage connections',
+        name: 'Manage sources',
       }),
     );
     await waitFor(() =>
@@ -245,12 +245,10 @@ describe('ModelsWorkspace numbered pagination', () => {
     expect(screen.getByTestId('location-search')).toHaveTextContent('page=9');
     expect(screen.getByTestId('location-search')).toHaveTextContent('page_size=10');
 
-    await screen.findByRole('button', { name: 'Delete platform model' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete platform model' }));
+    await screen.findByRole('button', { name: 'Delete model' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete model' }));
     const dialog = await screen.findByRole('alertdialog');
-    await rendered.user.click(
-      within(dialog).getByRole('button', { name: 'Delete platform model' }),
-    );
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete model' }));
     await waitFor(() =>
       expect(screen.getByTestId('location-search')).not.toHaveTextContent('model_id'),
     );
@@ -328,10 +326,8 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     const rendered = await renderWorkspace('/models?model_id=31');
-    await screen.findByRole('heading', { name: 'Add connections' });
-    const endpointSection = screen
-      .getByRole('heading', { name: '1 · Endpoint' })
-      .closest('section');
+    await screen.findByRole('heading', { name: 'Add sources' });
+    const endpointSection = screen.getByRole('heading', { name: '1 · Service' }).closest('section');
     expect(endpointSection).not.toBeNull();
     await rendered.user.click(within(endpointSection!).getByRole('button', { name: 'Next' }));
     await rendered.user.click(
@@ -361,7 +357,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     expect(
       screen.getByText('2 unique model(s) selected across filters and pages.'),
     ).toBeInTheDocument();
-    await rendered.user.click(screen.getByRole('button', { name: 'Add 2 selected connection(s)' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add 2 selected sources' }));
     await waitFor(() => expect(selections).toHaveLength(1));
     expect(selections[0]).toEqual({
       expected_binding_revision: '1',
@@ -405,7 +401,7 @@ describe('ModelsWorkspace numbered pagination', () => {
 
     const rendered = await renderWorkspace('/models?model_id=41');
     const orderSection = await screen.findByRole('heading', {
-      name: 'Current connections and order',
+      name: 'Sources and order',
     });
     const section = orderSection.closest('section');
     expect(section).not.toBeNull();
@@ -506,7 +502,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await screen.findByText('provider-56/model-56');
     rendered.queryClient.setQueryData(coreKeys.session, null);
     await waitFor(() => expect(screen.queryByText('provider-56/model-56')).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Edit platform model' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit model' })).not.toBeInTheDocument();
   });
 
   it('shows a permission error and no candidate write path after candidate access is revoked', async () => {
@@ -544,7 +540,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       await screen.findAllByText('Your current session no longer permits this operation.'),
     ).not.toHaveLength(0);
     expect(
-      screen.queryByRole('button', { name: 'Add 0 selected connection(s)' }),
+      screen.queryByRole('button', { name: 'Add 0 selected sources' }),
     ).not.toBeInTheDocument();
   });
 
@@ -589,12 +585,12 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(await screen.findByRole('button', { name: /endpoint-81/ }));
     await rendered.user.click(await screen.findByRole('button', { name: /key-811/ }));
     await rendered.user.click((await screen.findByText('write-candidate')).closest('button')!);
-    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected connection(s)' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
 
     expect(writes).toHaveLength(1);
     await waitFor(() => expect(rendered.queryClient.getQueryData(coreKeys.session)).toBeNull());
     expect(
-      screen.queryByRole('button', { name: 'Add 1 selected connection(s)' }),
+      screen.queryByRole('button', { name: 'Add 1 selected sources' }),
     ).not.toBeInTheDocument();
   });
 
@@ -667,7 +663,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(within(automaticSection!).getByRole('button', { name: 'Next' }));
     await within(automaticSection!).findByText('searchable-11');
 
-    const searchInput = screen.getByRole('textbox', { name: 'Search upstream models' });
+    const searchInput = screen.getByRole('textbox', { name: 'Search provider model names' });
     await rendered.user.type(searchInput, 'needle');
     expect(requests.some((request) => request.includes('q=needle'))).toBe(false);
     await rendered.user.click(screen.getByRole('button', { name: 'Search' }));

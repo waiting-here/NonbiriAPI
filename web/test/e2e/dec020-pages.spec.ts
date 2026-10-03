@@ -469,10 +469,10 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   });
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
-  await page.getByRole('button', { name: 'Create endpoint' }).first().click();
+  await page.getByRole('button', { name: 'Create service' }).first().click();
   const wizard = page.locator('section.core-wizard');
-  await expect(wizard.getByRole('heading', { name: 'Create endpoint and key' })).toBeVisible();
-  await expect(wizard.getByRole('button', { name: 'Mainstream channel' })).toHaveAttribute(
+  await expect(wizard.getByRole('heading', { name: 'Add service manually' })).toBeVisible();
+  await expect(wizard.getByRole('button', { name: 'Common services' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -480,8 +480,8 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await expect(wizard.getByLabel('Service address')).toHaveValue('https://channel.example.test/v1');
   await expect(wizard.getByLabel('Service address')).toHaveAttribute('readonly');
   await wizard.getByLabel('Note').fill('Selected channel endpoint');
-  await wizard.getByRole('button', { name: 'Create endpoint' }).click();
-  await expect(page.getByLabel('Service key')).toBeVisible();
+  await wizard.getByRole('button', { name: 'Create service' }).click();
+  await expect(page.getByLabel('Key')).toBeVisible();
   expect(postBody).toEqual({
     source: 'mainstream',
     channel_id: MAINSTREAM_CHANNEL_ID,
