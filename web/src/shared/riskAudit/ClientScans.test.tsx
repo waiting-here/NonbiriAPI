@@ -72,29 +72,43 @@ beforeEach(() => {
   api.createScan.mockResolvedValue(scan);
   api.cancelScan.mockResolvedValue({ ...scan, state: 'cancelled' });
 });
-it('restores the selected scan and supports previous, next, sizes, jumps and browser back', async () => {
+it('restores the selected scan and supports previous, next, sizes, numbered pages and browser back', async () => {
   const view = await renderWithProviders(<View />, {
     station: 'admin',
     role: 'admin',
     route: '/?audit_tab=clients&audit_scan=' + scan.id + '&audit_page=2&audit_size=20',
   });
-  expect(await screen.findByText('Page 2 of 6 · Total: 119')).toBeVisible();
+  expect(await screen.findByText('119 items')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page'),
+  );
   expect(screen.getByText('Result 21')).toBeVisible();
   await view.user.click(screen.getByRole('button', { name: 'Previous' }));
-  expect(await screen.findByText('Page 1 of 6 · Total: 119')).toBeVisible();
+  expect(await screen.findByText('119 items')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page'),
+  );
   expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
   await view.user.click(screen.getByRole('button', { name: 'Next' }));
   await screen.findByText('Result 21');
-  await view.user.clear(screen.getByLabelText('Go to page'));
-  await view.user.type(screen.getByLabelText('Go to page'), '6{Enter}');
-  expect(await screen.findByText('Page 6 of 6 · Total: 119')).toBeVisible();
+  await view.user.click(screen.getByRole('button', { name: '6' }));
+  expect(await screen.findByText('119 items')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '6' })).toHaveAttribute('aria-current', 'page'),
+  );
   expect(screen.getByText('Result 119')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   await view.user.selectOptions(screen.getByLabelText('Items per page'), '50');
-  expect(await screen.findByText('Page 1 of 3 · Total: 119')).toBeVisible();
+  expect(await screen.findByText('119 items')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page'),
+  );
   expect(screen.getByTestId('location')).toHaveTextContent('audit_size=50');
   await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
-  expect(await screen.findByText('Page 6 of 6 · Total: 119')).toBeVisible();
+  expect(await screen.findByText('119 items')).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '6' })).toHaveAttribute('aria-current', 'page'),
+  );
   expect(api.createScan).not.toHaveBeenCalled();
 });
 it('retains committed results while stopping a provisional scan', async () => {

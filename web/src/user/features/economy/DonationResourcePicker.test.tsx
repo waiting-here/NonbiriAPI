@@ -276,7 +276,7 @@ afterEach(() => {
 });
 
 describe('DonationResourcePicker', () => {
-  it('keeps endpoint pagination controls visible when the source page is empty', async () => {
+  it('reads an empty endpoint source without pagination controls', async () => {
     const fetchMock = installPickerServer((url) => {
       if (url.pathname === '/api/endpoints' && url.search === '?page=1&page_size=20') {
         return jsonResponse(numberedPage([], '1', 0));
@@ -291,15 +291,11 @@ describe('DonationResourcePicker', () => {
     );
 
     expect(await screen.findByText('No matching services')).toBeVisible();
-    const navigation = screen.getByRole('navigation', { name: 'Pagination' });
-    expect(navigation).toHaveTextContent('Page 1 of 1 · Total: 0');
-    expect(within(navigation).getByRole('combobox')).toHaveValue('20');
-    expect(within(navigation).getByRole('button', { name: 'Previous' })).toBeDisabled();
-    expect(within(navigation).getByRole('button', { name: 'Next' })).toBeDisabled();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps key pagination controls visible when the key page is empty', async () => {
+  it('reads an empty key source without pagination controls', async () => {
     const fetchMock = installPickerServer((url) => {
       if (url.pathname === '/api/endpoints' && url.search === '?page=1&page_size=20') {
         return jsonResponse(numberedPage([endpointWire('1')], '1', 1));
@@ -322,12 +318,9 @@ describe('DonationResourcePicker', () => {
     await rendered.user.click(await screen.findByRole('button', { name: /^endpoint-1(?!\d)/ }));
     expect(await screen.findByText('No matching keys')).toBeVisible();
     const navigations = screen.getAllByRole('navigation', { name: 'Pagination' });
-    expect(navigations).toHaveLength(2);
-    const navigation = navigations[1]!;
-    expect(navigation).toHaveTextContent('Page 1 of 1 · Total: 0');
-    expect(within(navigation).getByRole('combobox')).toHaveValue('20');
-    expect(within(navigation).getByRole('button', { name: 'Previous' })).toBeDisabled();
-    expect(within(navigation).getByRole('button', { name: 'Next' })).toBeDisabled();
+    expect(navigations).toHaveLength(1);
+    expect(navigations[0]).toHaveTextContent('1 items');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
       expect.arrayContaining([endpointPath(), keyPath('1')]),
     );

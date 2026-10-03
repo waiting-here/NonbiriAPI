@@ -477,7 +477,7 @@ describe('CharitySourceBrowser', () => {
     expect(within(keyPane(view.container)).getByText('Select a source')).toBeVisible();
   });
 
-  it('keeps an empty source collection paginated and sends independent filters', async () => {
+  it('reads an empty source collection without a pager and sends independent filters', async () => {
     const { fetchMock, requests } = installFetch();
     fetchMock.mockImplementationOnce(async (input) => {
       requests.push(requestURL(input));
@@ -489,8 +489,8 @@ describe('CharitySourceBrowser', () => {
     );
     const pane = sourcePane(view.container);
     expect(await within(pane).findByText('No source groups')).toBeVisible();
-    expect(within(pane).getByRole('combobox', { name: 'Items per page' })).toBeVisible();
-    expect(within(pane).getByText(/Page 1 of 1/)).toBeVisible();
+    expect(within(pane).queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+    expect(requests).toHaveLength(1);
     expect(requests[0]?.searchParams.get('scope')).toBe('all');
   });
 

@@ -367,8 +367,9 @@ describe('administrator paged operation pages', () => {
       role: 'admin',
       route: '/activities?pool_type=welfare&state=open&page=2&page_size=10',
     });
-    await screen.findByText(/Welfare \/ Open/);
-    const size = screen.getByLabelText('Items per page');
+    const poolType = await screen.findByText('Welfare', { selector: 'strong', exact: true });
+    expect(poolType.closest('td')).toHaveTextContent('Open');
+    const size = await screen.findByLabelText('Items per page');
     await view.user.selectOptions(size, '100');
     await waitFor(() =>
       expect(

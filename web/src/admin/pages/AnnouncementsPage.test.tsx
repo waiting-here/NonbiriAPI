@@ -79,22 +79,43 @@ describe('administrator announcements page', () => {
       {
         method: 'GET',
         path: '/admin/api/announcements?state=published&page=1&page_size=20',
-        body: page([announcement('filtered', 'Filtered state')]),
+        body: page(
+          Array.from({ length: 20 }, (_, index) =>
+            announcement(
+              `filtered-${index}`,
+              index === 0 ? 'Filtered state' : `Filtered state ${index}`,
+            ),
+          ),
+          { page: '1', page_size: 20, total_items: '21', total_pages: '2' },
+        ),
       },
       {
         method: 'GET',
         path: '/admin/api/announcements?state=published&severity=warning&page=1&page_size=20',
-        body: page([announcement('warning', 'Filtered severity')]),
+        body: page(
+          Array.from({ length: 20 }, (_, index) =>
+            announcement(
+              `warning-${index}`,
+              index === 0 ? 'Filtered severity' : `Filtered severity ${index}`,
+            ),
+          ),
+          { page: '1', page_size: 20, total_items: '21', total_pages: '2' },
+        ),
       },
       {
         method: 'GET',
         path: '/admin/api/announcements?state=published&severity=warning&page=1&page_size=50',
-        body: page([announcement('size', 'Filtered size')], {
-          page: '1',
-          page_size: 50,
-          total_items: '1',
-          total_pages: '1',
-        }),
+        body: page(
+          Array.from({ length: 21 }, (_, index) =>
+            announcement(`size-${index}`, index === 0 ? 'Filtered size' : `Filtered size ${index}`),
+          ),
+          {
+            page: '1',
+            page_size: 50,
+            total_items: '21',
+            total_pages: '1',
+          },
+        ),
       },
     ]);
     const rendered = await renderWithProviders(<AnnouncementsPage />, {
@@ -129,7 +150,7 @@ describe('administrator announcements page', () => {
     );
   });
 
-  it('keeps pagination metadata visible for an empty filtered result', async () => {
+  it('reads an empty filtered result without a pager', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: { admin: { username: 'root' } } },
       {
@@ -150,7 +171,7 @@ describe('administrator announcements page', () => {
     await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'State' }), 'published');
 
     expect(await screen.findByRole('heading', { name: 'No announcements' })).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Items per page' })).not.toBeInTheDocument();
   });
 });

@@ -137,12 +137,15 @@ describe('user announcements page', () => {
       {
         method: 'GET',
         path: '/api/announcements?page=1&page_size=50',
-        body: page([summary('1')], {
-          page: '1',
-          page_size: 50,
-          total_items: '1',
-          total_pages: '1',
-        }),
+        body: page(
+          Array.from({ length: 21 }, (_, index) => summary(String(index + 1))),
+          {
+            page: '1',
+            page_size: 50,
+            total_items: '21',
+            total_pages: '1',
+          },
+        ),
       },
     ]);
     const rendered = await renderWithProviders(<AnnouncementsPage />, {
@@ -169,7 +172,7 @@ describe('user announcements page', () => {
     );
   });
 
-  it('keeps pagination metadata visible for an empty result', async () => {
+  it('reads an empty result without a pager', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: session() },
       {
@@ -181,8 +184,8 @@ describe('user announcements page', () => {
     await renderWithProviders(<AnnouncementsPage />, { station: 'user', role: 'user' });
 
     expect(await screen.findByRole('heading', { name: 'No announcements' })).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Items per page' })).not.toBeInTheDocument();
   });
 
   it('drops a page response that returns after the signed-in account changes', async () => {
