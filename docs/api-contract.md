@@ -3,7 +3,7 @@
 - Status: **current source, including Unreleased rc.6 changes**. The latest published source prerelease is rc.5. Check an instance's deployed build before using new routes.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible, Anthropic-compatible and native AI SDK Gateway v3 upstreams; embeddings support OpenAI-compatible and the strict Gateway text subset. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the current source route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically. Image generation is available only through the session-authenticated limited activity, not ordinary `/v1/images/generations` or personal/charity model routes.
-- Release boundary: new source behavior is listed in [Unreleased](../CHANGELOG.md#unreleased). This document does not assert that an instance has deployed it.
+- Release boundary: new source behavior is listed in [rc.6](../CHANGELOG.md#100-rc6---unreleased). This document does not assert that an instance has deployed it.
 
 ## 1. Shared wire rules
 
