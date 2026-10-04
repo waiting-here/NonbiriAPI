@@ -316,7 +316,7 @@ FROM request_attempts a
 LEFT JOIN endpoints e ON e.id=a.endpoint_id_snapshot AND e.user_id=?
 LEFT JOIN endpoint_keys k ON k.id=a.endpoint_key_id_snapshot AND k.endpoint_id=e.id
 WHERE a.request_log_id=? AND a.attempt_seq>?`
-	query, args, metadata, err := logPageQuery(ctx, reader, query, ` ORDER BY a.attempt_seq ASC`, []any{userID, requestLogID, cursor}, filter.Page, filter.Limit)
+	query, args, metadata, err := logPageQuery(ctx, reader, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{userID, requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[UserSelfLogAttempt]{}, err
 	}
@@ -395,7 +395,7 @@ func (repository *Repository) listAdminAttemptsTx(
 	}
 	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
 WHERE a.request_log_id=? AND a.attempt_seq>?`
-	query, args, metadata, err := logPageQuery(ctx, queryer, query, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
+	query, args, metadata, err := logPageQuery(ctx, queryer, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[AdminLogAttempt]{}, err
 	}
@@ -475,7 +475,7 @@ func (repository *Repository) listStewardAttempts(
 	// Independent query and projection: no Admin/user/note/logical model column.
 	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
 WHERE a.request_log_id=? AND a.attempt_seq>?`
-	query, args, metadata, err := logPageQuery(ctx, tx, query, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
+	query, args, metadata, err := logPageQuery(ctx, tx, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[StewardLogAttempt]{}, err
 	}

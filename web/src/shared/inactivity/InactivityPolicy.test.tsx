@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InactivityPolicyPage } from './InactivityPolicyPage';
 import { InactivityStatus } from './InactivityStatus';
 import { credits, type Configuration } from './api';
+import { DisplayTimeContext } from '@shared/components/timeContextValue';
 
 const requests = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock('@shared/query/http', async (load) => ({
@@ -32,7 +33,13 @@ function mount(component: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(<QueryClientProvider client={client}>{component}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>
+      <DisplayTimeContext.Provider value={{ mode: 'site', offset_minutes: 480 }}>
+        {component}
+      </DisplayTimeContext.Provider>
+    </QueryClientProvider>,
+  );
 }
 describe('inactivity policy', () => {
   it('formats full precision balances without Number coercion', () => {
@@ -57,6 +64,7 @@ describe('inactivity policy', () => {
               },
             ],
             next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
             as_of: 1800000000,
             configuration,
           })
@@ -93,6 +101,95 @@ describe('inactivity policy', () => {
     const calls = requests.apiFetch.mock.calls.filter((call) => call[1]?.method === 'PUT');
     expect(calls[1][1].headers['Idempotency-Key']).toBe(calls[0][1].headers['Idempotency-Key']);
     expect(calls[1][1].json).toEqual(calls[0][1].json);
+  });
+  it('navigates preview pages, changes size, jumps and clears results after editing', async () => {
+    requests.apiFetch.mockImplementation(
+      (path: string, options?: { json?: { page: string; page_size: number } }) => {
+        if (!path.endsWith('/preview')) return Promise.resolve(configuration);
+        const { page, page_size: size } = options!.json!;
+        return Promise.resolve({
+          data: [
+            {
+              user_id: `account-page-${page}`,
+              action: 'none',
+              exempt_reason: 'disabled',
+              scheduled_at: null,
+              general_milli: '0',
+              game_milli: '0',
+            },
+          ],
+          next_cursor: null,
+          as_of: 1800000000,
+          configuration,
+          pagination: {
+            page,
+            page_size: size,
+            total_items: '200',
+            total_pages: String(Math.ceil(200 / size)),
+          },
+        });
+      },
+    );
+    mount(<InactivityPolicyPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview accounts' }));
+    expect(await screen.findByText('account-page-1')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'common.next' }));
+    expect(await screen.findByText('account-page-2')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'common.previous' }));
+    expect(await screen.findByText('account-page-1')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('common.pageControls.jump'), { target: { value: '8' } });
+    fireEvent.keyDown(screen.getByLabelText('common.pageControls.jump'), { key: 'Enter' });
+    expect(await screen.findByText('account-page-8')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('common.pageControls.size'), {
+      target: { value: '50' },
+    });
+    expect(await screen.findByText('account-page-1')).toBeVisible();
+    const calls = requests.apiFetch.mock.calls.filter((call) =>
+      String(call[0]).endsWith('/preview'),
+    );
+    expect(calls.map((call) => [call[1].json.page, call[1].json.page_size])).toEqual([
+      ['1', 20],
+      ['2', 20],
+      ['1', 20],
+      ['8', 20],
+      ['1', 50],
+    ]);
+    fireEvent.change(screen.getByLabelText('Execution time (optional)'), {
+      target: { value: '12:00' },
+    });
+    expect(screen.queryByText('account-page-1')).not.toBeInTheDocument();
+    expect(requests.apiFetch.mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(false);
+  });
+  it('saves and clears the optional clock while displaying the site timezone', async () => {
+    requests.apiFetch.mockImplementation(
+      (_path: string, options?: { method?: string; json?: { policy: unknown } }) =>
+        Promise.resolve(
+          options?.method === 'PUT'
+            ? {
+                ...configuration,
+                ...(options.json!.policy as object),
+                revision: '9007199254740994',
+              }
+            : configuration,
+        ),
+    );
+    mount(<InactivityPolicyPage />);
+    const input = await screen.findByLabelText('Execution time (optional)');
+    expect(input).toHaveValue('');
+    expect(screen.getByText('Site timezone: UTC+08:00')).toBeVisible();
+    fireEvent.change(input, { target: { value: '12:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save policy' }));
+    await screen.findByText('Policy saved.');
+    fireEvent.change(screen.getByLabelText('Execution time (optional)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save policy' }));
+    await waitFor(() =>
+      expect(requests.apiFetch.mock.calls.filter((call) => call[1]?.method === 'PUT')).toHaveLength(
+        2,
+      ),
+    );
+    const saved = requests.apiFetch.mock.calls.filter((call) => call[1]?.method === 'PUT');
+    expect(saved[0][1].json.policy.execution_time).toBe('12:00');
+    expect(saved[1][1].json.policy.execution_time).toBeUndefined();
   });
   it('shows the owner activity dates and donor non-exemption', async () => {
     requests.apiFetch.mockResolvedValue({

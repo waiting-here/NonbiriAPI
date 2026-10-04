@@ -6,7 +6,7 @@ import (
 )
 
 func TestCustomPresetUpgradeBoundsOwnershipAndDeletion(t *testing.T) {
-	database := interactionSourceFixture(t)
+	database := openGenerationTwoConstraintFixture(t)
 	user := hostileInsertUser(t, database, "preset owner", 0, 1)
 	other := hostileInsertUser(t, database, "another preset owner", 0, 1)
 	if err := extendKnownGenerationTwoSchema(context.Background(), database); err != nil {

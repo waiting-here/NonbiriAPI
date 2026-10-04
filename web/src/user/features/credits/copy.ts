@@ -4,7 +4,7 @@ import type { HistoryEntry, HistoryKind } from './data';
 
 const en = {
   title: 'Nonbiri credit history',
-  description: 'View your credit changes and the requests behind them.',
+  description: 'View credit changes from the last 30 days and their related requests.',
   balance: 'General credits',
   game: 'Game credits',
   general: 'General credits',
@@ -61,7 +61,7 @@ const en = {
 };
 const zh: typeof en = {
   title: '悠哉积分流水',
-  description: '查看积分的每次变化，以及相关的请求记录。',
+  description: '查看最近30天的积分变化，以及相关的请求记录。',
   balance: '通用积分',
   game: '游戏积分',
   general: '通用积分',
@@ -163,7 +163,7 @@ const reasons: Record<Exclude<HistoryKind, 'lake_entry' | 'lake_exchange'>, [str
   fatfish_refund: ['大肥鱼：门票退还', 'Fat fish: ticket refunded'],
 };
 export function useCreditCopy() {
-  const { t:lakeText } = useLakeCopy();
+  const { t: lakeText } = useLakeCopy();
   const { i18n } = useTranslation();
   const chinese = !i18n.language.startsWith('en');
   return {

@@ -128,7 +128,7 @@ func (a *LedgerAdapter) ExportLedger(
 		request.Limit <= 0 || request.Limit > lifecycle.CollectionLimit {
 		return nil, lifecycle.ErrInvalid
 	}
-	entries, err := ledger.ExportUserEntries(ctx, tx, request.UserID, request.Limit)
+	entries, err := ledger.ExportUserEntries(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
 	if errors.Is(err, ledger.ErrExportTooLarge) {
 		return nil, fmt.Errorf("%w: credit ledger", lifecycle.ErrTooLarge)
 	}

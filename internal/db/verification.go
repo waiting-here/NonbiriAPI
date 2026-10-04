@@ -124,22 +124,13 @@ func validateCurrentSource(ctx context.Context, path string, source *sourceSnaps
 		return generationError(userVersion)
 	}
 	RecordStartupStage(ctx, StageSchemaValidation)
-	prior, err := generationTwoExtensionNeeded(ctx, d)
-	if err != nil {
+	if _, err := generationTwoExtensionNeeded(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	if prior {
-		var columns int
-		if err := d.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&columns); err != nil {
-			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-		}
-		if err := validateVersionSeedManifest(ctx, d, columns == 0, true); err != nil {
-			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-		}
-	} else if err := validateStartupSeed(ctx, d); err != nil {
+	if err := validateStartupSeed(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	if err := validateAssetSourceConfig(ctx, d, prior); err != nil {
+	if err := validateSourceConfig(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	RecordStartupStage(ctx, StageCredentialValidation)

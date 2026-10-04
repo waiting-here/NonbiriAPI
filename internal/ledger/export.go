@@ -38,9 +38,10 @@ func ExportUserEntries(
 	ctx context.Context,
 	tx *sql.Tx,
 	userID int64,
+	now int64,
 	limit int,
 ) ([]UserExportEntry, error) {
-	if ctx == nil || tx == nil || userID <= 0 || limit <= 0 || limit > MaxUserExportEntries {
+	if ctx == nil || tx == nil || userID <= 0 || !validUnix(now) || limit <= 0 || limit > MaxUserExportEntries {
 		return nil, ErrInvalidExport
 	}
 	_, err := UserAccount(ctx, tx, userID)
@@ -53,8 +54,9 @@ e.asset_type,e.delta_sign,e.delta_mag
 FROM credit_entries e
 JOIN credit_operations o ON o.id=e.operation_id
 WHERE e.account_id IN (SELECT id FROM credit_accounts WHERE kind='user' AND user_id=?) AND e.account_kind_snapshot='user'
+AND o.created_at>?
 ORDER BY o.ledger_seq,e.line_no
-LIMIT ?`, userID, limit+1)
+LIMIT ?`, userID, now-DetailRetentionSeconds, limit+1)
 	if err != nil {
 		return nil, classifySQLError("export user ledger", err)
 	}

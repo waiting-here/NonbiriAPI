@@ -4,7 +4,7 @@ NonbiriAPI separates **startup security roots** from **runtime site settings**. 
 
 ## Current source additions
 
-Unreleased rc.5 adds per-model `role_policy` through model APIs, not a global site switch. Native/empty rules preserve each connector's previous behavior. Personal automation uses the existing CallerKey and creates no startup token or additional charge configuration.
+Model APIs configure `role_policy` separately for each model. Native/empty rules preserve the connector's default behavior. Personal automation uses the existing CallerKey and requires no additional startup token or charge configuration.
 
 Administrator risk-audit configuration adds `user_ip_window_hours` (integer 1–720, default 24) and `user_ip_min_ips` (2–1000, default 3), alongside existing thresholds/revision. It flags one Discord identity using at least that many trusted API addresses in a rolling window across old/current accounts. Shared-IP counts deduplicate Discord identities. Full stewards can read the settings; only administrators change them. Scans never impose a penalty.
 

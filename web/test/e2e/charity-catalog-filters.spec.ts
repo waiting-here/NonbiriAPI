@@ -270,7 +270,7 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
 }
 
 for (const locale of ['zh', 'en'] as const) {
-  test(`catalog spans the content area and moves the charity board to donations ${locale}`, async ({
+  test(`catalog shows the charity board beside or below the models ${locale}`, async ({
     context,
     page,
   }) => {
@@ -288,14 +288,20 @@ for (const locale of ['zh', 'en'] as const) {
     await expect(page.locator('.charity-model-name')).toHaveCount(20);
     const catalog = page.locator('.economy-catalog-card');
     const summary = page.locator('.economy-catalog-pagination');
+    const ranking = page.locator('.progression-ranking');
+    const sidebar = page.locator('.economy-charity-sidebar');
     for (const width of [320, 390, 768, 1440, 1920, 2560, 3766]) {
       await page.setViewportSize({ width, height: 1000 });
       await assertNoHorizontalOverflow(page);
+      await expect(ranking).toBeVisible();
       const box = (await catalog.boundingBox())!;
-      const notice = (await page.locator('.charity-catalog-workspace > .nb-fold').boundingBox())!;
-      expect(notice.y + notice.height).toBeLessThanOrEqual(box.y);
-      expect(Math.abs(notice.width - box.width)).toBeLessThan(2);
-      await expect(page.locator('.progression-ranking')).toBeHidden();
+      const side = (await sidebar.boundingBox())!;
+      const board = (await ranking.boundingBox())!;
+      const notice = (await sidebar.locator(':scope > .nb-fold').boundingBox())!;
+      if (width >= 1440) expect(side.x).toBeGreaterThanOrEqual(box.x + box.width);
+      else expect(side.y).toBeGreaterThanOrEqual(box.y + box.height);
+      expect(notice.y).toBeGreaterThanOrEqual(board.y + board.height);
+      expect(Math.abs(notice.width - side.width)).toBeLessThan(2);
       const list = (await page.locator('.economy-catalog-results > .nb-table-wrap').boundingBox())!;
       expect(list.x + list.width).toBeLessThanOrEqual(box.x + box.width);
       await page.evaluate(() => scrollTo(0, 0));

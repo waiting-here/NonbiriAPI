@@ -1,4 +1,5 @@
 import { apiFetch } from '@shared/query/http';
+import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
 
 export interface AssetRule {
   mode: 'percent' | 'fixed';
@@ -7,6 +8,7 @@ export interface AssetRule {
 }
 export interface Policy {
   enabled: boolean;
+  execution_time?: string;
   decay: {
     enabled: boolean;
     inactive_days: number | null;
@@ -16,6 +18,7 @@ export interface Policy {
   protection: { enabled: boolean; inactive_days: number | null };
 }
 export interface Configuration extends Policy {
+  site_timezone_offset_minutes?: number;
   revision: string;
   decay_grace_until: number;
   protection_grace_until: number;
@@ -47,6 +50,7 @@ export interface Preview {
   next_cursor: string | null;
   as_of: number;
   configuration: Configuration;
+  pagination: PageMetadata;
 }
 export interface Run {
   id: string;
@@ -83,10 +87,15 @@ export const putPolicy = (revision: string, policy: Policy, key: string) =>
     headers: { 'Idempotency-Key': key },
     json: { expected_revision: revision, policy },
   });
-export const previewPolicy = (revision: string, policy: Policy, cursor?: string) =>
+export const previewPolicy = (
+  revision: string,
+  policy: Policy,
+  page = '1',
+  pageSize: PageSize = 20,
+) =>
   apiFetch<Preview>(`${root}/preview`, {
     method: 'POST',
-    json: { expected_revision: revision, policy, page_size: 100, ...(cursor ? { cursor } : {}) },
+    json: { expected_revision: revision, policy, page, page_size: pageSize },
   });
 export const getRuns = (cursor?: string, signal?: AbortSignal) =>
   apiFetch<Runs>(`${root}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
@@ -96,6 +105,7 @@ export const getRuns = (cursor?: string, signal?: AbortSignal) =>
 export function policyOnly(config: Configuration): Policy {
   return {
     enabled: config.enabled,
+    ...(config.execution_time ? { execution_time: config.execution_time } : {}),
     decay: structuredClone(config.decay),
     protection: structuredClone(config.protection),
   };

@@ -16,28 +16,20 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-// An isolated consistent copy may be supplied instead of the synthetic fixture.
-// Neither input is modified, and verification never starts network services.
-func TestInteractionUpgradeFromReleasedBinary(t *testing.T) {
-	source := os.Getenv("NONBIRI_INTERACTION_FIXTURE")
+// The release gate supplies a populated database created by the supported
+// released binary. An isolated consistent copy can use the same verifier.
+func TestUpgradeFromReleasedBinary(t *testing.T) {
+	source := os.Getenv("NONBIRI_UPGRADE_FIXTURE")
 	if source == "" {
 		t.Skip("released-source gate supplies a consistent fixture")
 	}
-	verifyReleasedStorageUpgrade(t, source, preInteractionManifestHash)
-}
-
-func TestStorageContractsUpgradeFromReleasedBinary(t *testing.T) {
-	source := os.Getenv("NONBIRI_STORAGE_FIXTURE")
-	if source == "" {
-		t.Skip("released-source gate supplies a consistent fixture")
-	}
-	verifyReleasedStorageUpgrade(t, source, "3f773b6dca01058f2296f437c3666afde92a74e8eeb861fa8637756dcd859481")
+	verifyReleasedStorageUpgrade(t, source, preLedgerRetentionManifestHash)
 }
 
 func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest string) {
 	t.Helper()
 	key := bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes)
-	if file := os.Getenv("NONBIRI_INTERACTION_MASTER_KEY_FILE"); file != "" {
+	if file := os.Getenv("NONBIRI_UPGRADE_MASTER_KEY_FILE"); file != "" {
 		encoded, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatal("cannot read isolated master key")
@@ -148,10 +140,6 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 		if credentials == 0 {
 			t.Fatal("source contains no credential preservation evidence")
 		}
-		if expectedSourceManifest == preInteractionManifestHash {
-			publishedScalar(t, database, `SELECT count(*) FROM limited_activity_configs WHERE activity_key='fat-fish' AND visible=0 AND starts_at IS NULL AND ends_at IS NULL`, 1)
-		}
-		publishedScalar(t, database, `SELECT count(*) FROM limited_activity_configs WHERE activity_key='lake-notes' AND visible=0 AND starts_at IS NULL AND ends_at IS NULL`, 1)
 		if err := store.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -179,9 +167,6 @@ func interactionTableDigests(t *testing.T, database *sql.DB, manifest generation
 			columns[i] = hostileQuoteIdent(column.Name)
 		}
 		query := "SELECT " + strings.Join(columns, ",") + " FROM " + hostileQuoteIdent(table.Name)
-		if table.Name == "limited_activity_configs" || table.Name == "limited_activity_revisions" {
-			query += addedActivityRowsFilter(manifest)
-		}
 		rows, err := database.Query(query)
 		if err != nil {
 			t.Fatal(err)

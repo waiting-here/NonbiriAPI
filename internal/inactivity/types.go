@@ -45,16 +45,18 @@ type ProtectionPolicy struct {
 	InactiveDays *int64 `json:"inactive_days"`
 }
 type Policy struct {
-	Enabled    bool             `json:"enabled"`
-	Decay      DecayPolicy      `json:"decay"`
-	Protection ProtectionPolicy `json:"protection"`
+	Enabled       bool             `json:"enabled"`
+	ExecutionTime string           `json:"execution_time,omitempty"`
+	Decay         DecayPolicy      `json:"decay"`
+	Protection    ProtectionPolicy `json:"protection"`
 }
 type Configuration struct {
 	Policy
-	Revision             int64 `json:"revision,string"`
-	DecayGraceUntil      int64 `json:"decay_grace_until"`
-	ProtectionGraceUntil int64 `json:"protection_grace_until"`
-	UpdatedAt            int64 `json:"updated_at"`
+	SiteTimezoneOffsetMinutes *int  `json:"site_timezone_offset_minutes,omitempty"`
+	Revision                  int64 `json:"revision,string"`
+	DecayGraceUntil           int64 `json:"decay_grace_until"`
+	ProtectionGraceUntil      int64 `json:"protection_grace_until"`
+	UpdatedAt                 int64 `json:"updated_at"`
 }
 type ActivityState struct {
 	ObservationStartedAt int64  `json:"observation_started_at"`

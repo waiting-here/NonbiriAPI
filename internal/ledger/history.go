@@ -101,7 +101,7 @@ func UserHistory(ctx context.Context, tx *sql.Tx, userID, now int64, filter Hist
 	}
 	page := HistoryPage{GameBalance: formatDisplayCredits(gameWallet.Balance.Big()), Data: []HistoryEntry{}, Page: "1", PageSize: filter.PageSize, Total: "0", TotalPages: "1",
 		CurrentBalance: formatDisplayCredits(wallet.Balance.Big()), ServerNow: now}
-	anchorQuery := `SELECT o.id,o.ledger_seq FROM credit_entries e JOIN credit_operations o ON o.id=e.operation_id
+	anchorQuery := `SELECT o.id,o.ledger_seq FROM credit_entries e JOIN credit_operations o INDEXED BY idx_credit_operations_history ON o.id=e.operation_id
 WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0`
 	anchorArgs := append([]any{}, walletArgs...)
 	if filter.Anchor != "" {
@@ -122,9 +122,9 @@ WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0
 		return HistoryPage{}, classifySQLError("history anchor", err)
 	}
 	page.Anchor = &anchor
-	where := ` FROM credit_entries e JOIN credit_operations o ON o.id=e.operation_id
-WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND o.ledger_seq<=?`
-	args := append(append([]any{}, walletArgs...), sequence)
+	where := ` FROM credit_entries e JOIN credit_operations o INDEXED BY idx_credit_operations_history ON o.id=e.operation_id
+WHERE ` + walletWhere + ` AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND o.ledger_seq<=? AND o.created_at>?`
+	args := append(append([]any{}, walletArgs...), sequence, now-DetailRetentionSeconds)
 	if filter.From != nil {
 		where += ` AND o.created_at>=?`
 		args = append(args, *filter.From)
@@ -165,7 +165,11 @@ AND (l.completed_at IS NULL OR l.completed_at>?) AND (l.route_kind NOT IN ('char
 WHEN o.source_type='operation' AND o.kind='anti_abuse_penalty'
 THEN (SELECT l.logical_request_id FROM request_logs l WHERE l.logical_request_id='req_'||substr(o.id,4) AND l.user_id=?
 AND l.route_kind='charity_chat_completions' AND l.caller_error_code='content_too_short' AND l.completed_at>? LIMIT 1)
-ELSE NULL END` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFFSET ?`
+ELSE NULL END
+FROM (SELECT e.operation_id,e.line_no` + where + ` ORDER BY o.ledger_seq DESC,e.line_no DESC LIMIT ? OFFSET ?) selected
+JOIN credit_entries e ON e.operation_id=selected.operation_id AND e.line_no=selected.line_no
+JOIN credit_operations o ON o.id=e.operation_id
+ORDER BY o.ledger_seq DESC,e.line_no DESC`
 	queryArgs := append([]any{userID, now - 30*24*60*60, userID, now - 30*24*60*60}, args...)
 	queryArgs = append(queryArgs, filter.PageSize, (current-1)*int64(filter.PageSize))
 	rows, err := tx.QueryContext(ctx, query, queryArgs...)

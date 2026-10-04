@@ -48,8 +48,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	if err != nil {
 		return Page[UserLogRow]{}, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.model FROM request_logs l
-WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
+	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 	args := []any{userID, now - requestLogRetentionSeconds}
 	query += phaseFilter(filter.Phase)
 	if filter.Model != nil {
@@ -77,7 +76,9 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	query, args, metadata, err := logPageQuery(ctx, reader, query, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	selection := `SELECT ` + commonListColumns + `,l.model FROM request_logs l ` + query
+	countSelection := `SELECT COUNT(*) FROM request_logs l ` + query
+	query, args, metadata, err := logPageQuery(ctx, reader, selection, countSelection, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[UserLogRow]{}, err
 	}
@@ -178,8 +179,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
-	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
-WHERE (l.completed_at IS NULL OR l.completed_at>?)`
+	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(filter.Phase)
@@ -227,7 +227,9 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	query, args, metadata, err := logPageQuery(ctx, reader, query, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	selection := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + query
+	countSelection := `SELECT COUNT(*) FROM request_logs l ` + query
+	query, args, metadata, err := logPageQuery(ctx, reader, selection, countSelection, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
@@ -320,8 +322,7 @@ func (repository *Repository) ListSteward(
 	}
 	defer tx.Rollback()
 	// Keep the steward projection independent from the administrator DTO.
-	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
-WHERE (l.completed_at IS NULL OR l.completed_at>?)`
+	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
 	query += phaseFilter(filter.Phase)
@@ -369,7 +370,9 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	query, args, metadata, err := logPageQuery(ctx, tx, query, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	selection := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + query
+	countSelection := `SELECT COUNT(*) FROM request_logs l ` + query
+	query, args, metadata, err := logPageQuery(ctx, tx, selection, countSelection, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}

@@ -84,13 +84,20 @@ func validateLedgerState(ctx context.Context, tx *sql.Tx, domainTotal *big.Int) 
 	if new(big.Int).Add(big.NewInt(capacity.LastLedgerSeq), domainTotal).Cmp(big.NewInt(math.MaxInt64)) > 0 {
 		return ErrInvariant
 	}
+	through, _, _, err := db.LedgerCompactionState(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if through > capacity.LastLedgerSeq {
+		return ErrInvariant
+	}
 
 	if db.IsActiveRecovery(ctx) {
 		var maximum int64
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ledger_seq),0) FROM credit_operations`).Scan(&maximum); err != nil {
 			return err
 		}
-		if maximum != capacity.LastLedgerSeq {
+		if max(maximum, through) != capacity.LastLedgerSeq {
 			return ErrInvariant
 		}
 		return nil
@@ -138,11 +145,12 @@ FROM credit_accounts ORDER BY id`)
 		id       string
 		sequence int64
 	}
-	lastSequence := int64(0)
+	lastSequence := through
+	afterSequence := int64(0)
 	for {
 		opRows, err := tx.QueryContext(ctx, `
 SELECT id,ledger_seq FROM credit_operations
-WHERE ledger_seq>? ORDER BY ledger_seq LIMIT 100`, lastSequence)
+WHERE ledger_seq>? AND compacted=0 ORDER BY ledger_seq LIMIT 100`, afterSequence)
 		if err != nil {
 			return classifySQLError("scan recovery operations", err)
 		}
@@ -153,12 +161,13 @@ WHERE ledger_seq>? ORDER BY ledger_seq LIMIT 100`, lastSequence)
 				opRows.Close()
 				return classifySQLError("scan recovery operation", err)
 			}
-			if lastSequence == math.MaxInt64 || operation.sequence != lastSequence+1 {
+			if operation.sequence > through && (lastSequence == math.MaxInt64 || operation.sequence != lastSequence+1) {
 				opRows.Close()
 				return ErrInvariant
 			}
 			operations = append(operations, operation)
-			lastSequence = operation.sequence
+			afterSequence = operation.sequence
+			lastSequence = max(lastSequence, operation.sequence)
 		}
 		if err := opRows.Err(); err != nil {
 			opRows.Close()

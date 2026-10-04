@@ -96,6 +96,18 @@ function Coverage({ meta }: { readonly meta: Metadata }) {
   return (
     <div className="audit-coverage" role="status">
       <p>
+        {t(
+          '逐笔明细保留30天；更早的记录保留小时和日汇总。',
+          'Transaction details are retained for 30 days; older records remain as hourly and daily totals.',
+        )}
+      </p>
+      {meta.range_adjusted && (
+        <p>
+          {t('历史范围已对齐整点', 'Historical range aligned to whole hours')}:{' '}
+          {time(meta.from, meta.offset_minutes)} – {time(meta.to, meta.offset_minutes)}
+        </p>
+      )}
+      <p>
         {t('业务时区', 'Site time zone')} {zone(meta.offset_minutes)} ·{' '}
         {t('账本水位', 'Ledger watermark')} {meta.projected_seq} / {meta.ledger_seq} ·{' '}
         {t('快照', 'Snapshot')} {time(meta.snapshot_at, meta.offset_minutes)}

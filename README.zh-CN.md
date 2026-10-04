@@ -1,253 +1,101 @@
 # NonbiriAPI
 
-NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
+[English](README.md)
 
-> **当前版本：** [v1.0.0-rc.5](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-rc.5)，2026-10-03 UTC 发布的 Linux/amd64 源码预发行版。请从标签源码构建；不提供官方预编译二进制。向用户开放前，请阅读部署、隐私和安全文档。
->
-> **rc.5 更新：** 双站导航、表单、列表与手机布局全面整理，新增自用模型来源选择、记录与账户偏好界面、垂钓手记、在线 Gateway 控制和 schema 12 账号导出，并修复捐赠详情、积分审计与流式兼容问题。完整范围见[更新日志](CHANGELOG.md#100-rc5---2026-10-03)。实例实际功能取决于当前部署的构建。
->
-> **兼容性：** rc.5 支持完整的 rc.4 数据库 `8a46c72d911a914eabcb7ef17c537e7ac12d6969`，以及单独验证的紧邻部署来源 `77e7f41646d6c720b6ae4ddc6dbb4dd9e0b31604`；保留账号、凭据、资产、游戏、配置和实例法律正文。继续采用 Generation 2（`application_id=0x4E425249`、`user_version=2`），生产目标为 Linux/amd64。不支持未登记的中间结构，Alpha/Generation 1 仍须全新切换。详见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
->
-> 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
+NonbiriAPI 是可自行部署的 AI API 端点管理平台，提供 OpenAI-compatible 调用入口。每位用户可以管理自己的端点、加密凭据、模型发现与路由，并用可撤销的 CallerKey 调用个人或公益模型。
 
-本版完整更新见[rc.5 更新日志](CHANGELOG.md#100-rc5---2026-10-03)，功能是否可用以实例部署的构建为准。《垂钓手记》与四向兑换默认关闭。
+当前开发版本为 **1.0.0-rc.6**。版本变化见 [CHANGELOG](CHANGELOG.md)，已发布版本见 [Releases](https://github.com/waiting-here/NonbiriAPI/releases/latest)。所有版本仅发布源代码。生产环境支持 Linux/amd64。
 
-## 主要功能
+## 主要能力
 
-- 可选的游戏积分贷款只展示本金、手续费、游戏积分实到、利息、通用积分扣减。滚动七天的游戏、垂钓、二十一点和竞标净收益榜按实际净盈利计算，亏损抵扣盈利；既有榜单保留，真·慈善公开偏好独立且默认匿名。
-- 六级用户体系区分 6 级协管与 5 级见习协管。管理员任免 6 级，管理员与 6 级可任免 5 级；见习仅维护标记为主流渠道的公益模型及符合范围的捐赠密钥，并可查看共用配置的影响范围。
-- 管理员与 6 级可查看有界的上游错误原文及请求来源信息，人工初筛持续高 RPM／并发、共用 IP、客户端线索和指定路径探测。线索不等于客户端身份或盗用证据，新增审计不会自动处罚。
-- 仅管理员可用的积分审计区分四种资产的发行、回收、内部转移和库存。低活跃政策默认关闭，支持名单预览、宽限期、通用／游戏积分衰减及可人工解封的保护性封禁。
-- 通用限时活动框架首发「喵帕斯的绘本」，使用独立的草稿纸和画笔余额、管理员私有配置、服务端队列及仅驻内存的图片。用户可先看准确报价而不生图或消费积分；管理员只配置活动端点与密钥、模型启用状态及逐模型的默认价、档位价和精确尺寸纸笔价格，模型能力与可选参数由内置适配自动发现。详见[活动指南](docs/image-activity.md)；绘图功能仅在该活动提供，普通自用和公益 API 不提供绘图接口。
-- 新捐赠必须选择是否接受 Discord 手动公屏感谢，提交后不可修改。公益调用排除本人捐赠的密钥，当前 6 级协管豁免；公益模型支持顶层参数排除、一键半价回馈填入，以及附样本量的最近 24 小时成功率。
-- 自动处罚的有效违规窗口在重启后保留，提供本人安全摘要和授权管理追溯。资源搜索与筛选覆盖全部分页，管理者可从捐赠密钥反查关联模型。
-- 新角色被动、逐层抵抗、清晰花色、手机快捷下注及六游戏同步反馈；对战连答提示随单回合次数递进，正常、部分抵抗和全部抵抗分别反馈。
+- 提供 `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings`，可连接 OpenAI-compatible、Anthropic-compatible 和 AI SDK Gateway v3 上游。支持的操作与协议边界见 [API 契约](docs/api-contract.md)。
+- 支持个人模型命名、发现、路由、有限的请求适配及仅驻留内存的 Debug Hub。公益资源支持密钥捐赠、使用预算、积分结算与分级协管。
+- Discord 登录、独立管理员站、中英双语响应式页面和站点外观配置；用户可导出数据或删除账号。
+- 可选的签到、共享活动及六款小游戏，结算和恢复由服务端控制，榜单遵循隐私设置。
+- 统一出站安全策略、上游凭据加密、有限诊断与留存清理。请求日志和积分明细通常保留 30 天；压缩后的余额基线与审计汇总保持账务连续。
 
-- 回合制对战新增可随时跳过的浏览器本地教学，十轮固定剧本以险胜结束；技能卡直接显示效果，并可阅读关联词条。正式操作不足五秒时提醒，过载高亮实际不足的资源。关闭的游戏与模式禁用匹配，学习和历史仍可访问。
-- 回合制对战小游戏（测试）每个账号可保存最多 10 个私有“自定义预设”，并可跨设备使用。覆盖前须明确确认；加载只填入赛前选项，不会排队或扣费。快速与标准模式的新对局每轮计划时间均为 30 秒。
-- 被封禁账号通过 Discord 登录后显示本站自定义 403 页面；公益目录不再重复显示完整模型名已包含的提供方与模型信息。
-- 捐赠者、管理员和协管可逐密钥配置连续失败阈值，默认 10；0 表示永不因报错下架，页面持续显示醒目警示。保存保留计数并立即重算报错下架状态；协管 CallerKey 可通过[自动化接口](docs/steward-automation.md)读写。
-- Gateway 保留两种 OpenAI 输出预算字段。管理员可在线配置精确目标的推理、存储和缓存能力，包括 Anthropic 末尾显式缓存点及工具结果文本数组；保存后对新请求生效。详见[配置说明](docs/gateway-model-controls.md)。
-- 自用和公益模型可保持调用方的聊天流式模式（默认），或强制上游使用 JSON／SSE。调用方仍收到自己请求的格式；JSON 调用在等待结果时仍可能遇到客户端或代理的空闲超时。详见[传输契约](docs/api-contract.md#22-post-v1chatcompletions)。
-- 管理员和 6 级协管可按调用时保存的公益模型名筛选请求日志和导出；按字面子串匹配，仅忽略 ASCII 大小写。
-- Gateway 费用归因由管理员配置，默认不发送；开启后发送按用户及最终网关 origin 生成的伪名，调试只显示是否发送。严格兼容矩阵及已验证的 Runable 向量接口限制见 [API 契约](docs/api-contract.md#24-native-ai-sdk-gateway-v3-compatibility)。
-- OpenAI-compatible `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings` 入站接口。聊天支持 OpenAI-compatible、Anthropic-compatible 和原生 AI SDK Gateway v3 上游连接器；向量嵌入支持 OpenAI-compatible 和 Gateway 的严格文本子集。
-- Discord OAuth 普通用户登录，以及独立的管理员站点。
-- 用户级端点、主流渠道模板、加密上游凭据、自动/手动模型目录、平台模型命名，以及“端点 → 密钥 → 模型”的连续连接流程。
-- 自用顺序/随机路由，公益顺序/均匀随机/到期加权/缓存均衡路由，可选的提交前重试，单用户并发限制，以及由所有者配置、自用/公益/实发调试共用的每把密钥并发与 RPM 限额。资源所有者和公益管理者可在授权范围内配置有界的请求头及正文适配。
-- SSRF、DNS 重绑定、重定向、代理、响应大小、超时、取消、并发和流式安全边界。
-- 上游密钥加密保存，普通列表、错误和导出使用安全投影。仅供管理员与 6 级查看的错误原文可能包含上游回显的输入或凭据；例外范围见[数据说明](docs/data-lifecycle-checklist.md)。
-- 请求元数据、用量统计、留存清理、账号导出/删除、问题中心、告警中心和运行时限制。
-- 账号导出 schema 12 包含安全的账号与游戏记录、《垂钓手记》进度、模型角色设置、私人预设名称及未到期的自动化结果。错误原文、来源信息、风险证据、提示词、图片、凭据、管理员配置和其他用户身份仍不导出。
-- 分开的通用积分和游戏积分，签到各自控制开放；管理员可选开启每天二选一，用户页明显提示规则并同时展示两种签到卡片。游戏优先使用游戏积分，不足用通用积分，未使用付款原币退回，普通 API 和周四只使用通用积分。每日低保发放游戏积分。六款游戏的 22 项一次性新人任务共奖励 60,000 通用积分。
-- 管理员与 6 级协管共用用户限制、等级筛选和公告管理。6 级只能修改其他 1～5 级用户，不能删号或调整累计捐赠回馈。捐赠人和管理者可以重置捐赠密钥的连续失败状态，管理者可分批处理整个筛选结果。
-- 垂钓新库毛回报率默认 100%，已有设置保留；逐次向平台、低保和周四池抽水，默认各 1%，展示毛奖励、扣除和净奖励。
-- 悠哉积分、签到（所有等级均遵守服务端余额门槛）、本人积分流水、基于捐赠密钥的公益路由、逐密钥捐赠有效期和用量限制，以及 6 级协管能力。管理员与 6 级可在授权日志中查看实际路由 key ID 和逻辑请求扣费；普通公益调用者不会收到这些信息。按 Token 计价的公益模型保留可选的单模型调用前积分预留；留空继承全局，按次计价仍按每次价格预留。
-- 用户站与管理站资源列表使用有界的服务端分页，支持 10/20/50/100 条、直接跳页、返回或刷新后恢复筛选与页码，以及按列表分别保存的浏览器本地条数偏好。
-- 管理员和 6 级可拉取单个有效捐赠密钥、单个捐赠全部有效密钥或全站全部有效捐赠密钥的模型列表；5 级仅在可管理的主流公益模型范围内拉取。批量操作覆盖其他分页，显示进度并可停止后续请求。失败保留旧目录，手工条目与模型绑定保持。
-- 捐赠密钥的累计与循环 Token 限额支持总量、输入、输出三个独立选填维度，共同生效；分项限额需配置输入／输出预留。输入包含未缓存、缓存写入和缓存读取，各计一次；旧总量保留，不猜测拆分历史。循环规则同时支持次数与积分，窗口为 1 小时、5 小时、日、周、月。管理员、6 级及符合范围的见习可维护，捐赠者可查看。它们是公益预算而非 TPM；自用仍可能额外消耗上游额度。
-- beta.2 发布版包含完整公益模型目录、纯文本说明、允许等级集合、明确的可用性原因，以及授权管理者可用的来源／密钥浏览。目录可以展示已配置但当前调用者不能使用的模型；公开 API 仍只返回当前可调用模型。
-- 普通用户页面采用浏览器本地时间，由服务端解决夏令时缺失和重复钟点。管理员及协管页面采用站点固定时区，集中提示与浏览器时区的差异。循环限量规则保存自己的业务时区，与普通时间戳显示分开。
-- 《从头再来》低保、《疯狂星期四》共享池活动、中英文公告，以及由管理员受理的公共凭据防盗举报。创建星期四周期时自动选定北京时间下一个周四 00:00，持续 24 小时；若当天是周四，则选择下一周。管理页直接显示北京时间活动区间，编辑已有周期时保留原排期。
-- 默认关闭的聊天实验策略：仅 OpenAI-compatible 的物理密钥级 `store:false`，以及支持 OpenAI-compatible、Anthropic-compatible、Gateway v3 的逻辑模型级工具调用展平。逐模型角色策略单独配置，工具保持独立协议。
-- 只驻留内存的调试中心：新会话始终 dry run，明确确认后才发送到真实上游。实发结果由调试页捕获，API 调用者收到专用的 HTTP 422 调试响应。
-- 服务端负责结果和账务的游戏中心，包含《池塘垂钓》《连连看》《三人猜拳》《竞标对决》《回合制对战小游戏（测试）》和《二十一点》，支持幂等处理、自动恢复、隐私榜单和随程序打包的本地图像。《池塘垂钓》默认打开近 30 天单次最大收获榜，历史单次最大收获榜和近 30 天总收获榜仍可切换；透明背景的白饭主题蓝色大肥鱼彩蛋保留原传奇鱼种和奖励，榜单行使用紧凑的原鱼种名，结果说明仍保留原传奇鱼种说明。
-- OpenAI／Anthropic 使用的服务端上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
-- 重新设计的中英文 React 双站，包含响应式导航、连续资源操作、安全 Markdown 说明与自定义站点品牌，并嵌入一个 Go 单二进制。
+## 构建与启动
 
-当前源码暴露上述三个 OpenAI-compatible 入站接口。OpenAI-compatible 向量嵌入支持文本和 Token ID 的单条／批量输入、float／base64 编码和可选输出维度，自用与公益均可使用。模型不设置用途分类：请求路径决定操作，实际模型是否支持由上游判断。Rerank 暂不支持。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。`ai-sdk-gateway-v3` 使用原生 Gateway 协议，支持文本、工具、图片输入和文本向量。其他 OpenAI API 家族和连接器类型仍留待后续版本；各连接器的严格兼容边界见 [API 契约](docs/api-contract.md)。
-
-连连看新局共用 2／3／5 次提示或刷新机会，通关每次剩余机会加 100 分；不再自动重排。六个榜单按尺寸和 7／30 天窗口分开，每人只取最好成绩，同分先达成者靠前。普通消除不再额外刷新钱包和整个游戏中心，连接动画不阻止下一次选牌。旧局保留原规则。
-
-《竞标对决》提供 13 轮同步暗牌竞标；《回合制对战小游戏（测试）》包含五位角色、八种 Harness 和完整技能／Buff 规则，双方按服务端事件同步播放逐步结算，轮初补充与资源变化都有动态反馈。API 余量和金币采用数字展示；未眩晕必须选招，眩晕未解除时才可跳过。角色、技能和 Harness 的专属插画随程序打包。两款游戏支持原币种退票、近 30 天本人历史、管理员匿名长期存档及可继续的分页导出。详见[双语游戏指南](docs/duel-games.md)。
-
-六款游戏均有专属封面；垂钓渔获使用插画并保留 SVG 加载兜底。竞标、点赞和二十一点提供短音效，点赞另有同步切换的场景音乐。音效和音乐默认关闭，按游戏记住本机选择。账户页「本机偏好」可选择轻量版或无损版音乐，下次开启音乐或进入游戏时生效。格式及来源见[音频说明](web/src/shared/assets/game-audio/NOTICE.md)。
-
-饲养大肥鱼限时活动有独立插画封面，并提供 Kevin MacLeod 的《Monkeys Spinning Monkeys》背景音乐，按 CC BY 4.0 署名分发。音乐以原始 MP3 随程序提供，独立开关默认关闭；轻量版／无损版偏好不改变这首曲目的格式。详见[素材署名](web/public/assets/fatfish/NOTICE.md)。编辑器与玩家共用连续的场地／操作台：管理员可在场内或操作台安排开局道具，玩家开始后可在两处移动道具。窄屏可适配、放大和平移；编辑器支持方向键移动、Shift 微调和撤销／重做。删除关卡只从编辑库移除草稿，已发布版本、现有活动、挑战和成绩保留原版本引用；新节点和试玩不能再绑定该来源。
-
-大肥鱼新关卡和八个示例使用 `engine_version=2`、`scoring_version=1`。已发布的不可变版本、进行中的挑战、历史记录和期次节点继续引用原版本。管理员可显式把旧草稿转换为 v2、保存并发布新的不可变版本；该版本的试玩通过后，再手动切换节点使用新版本。转换、发布或试玩都不会自动切换已有节点。
-
-《二十一点》提供一张九人牌桌、跨轮候补队列及每分钟 :00／:30 开始的 5／20／5 秒节奏。六副牌规则支持分牌与加倍，逐手扣除冻结费用后全部发为通用积分。游戏默认关闭。详见[二十一点规则](docs/blackjack.md)。
-
-六款游戏均使用每局独立的私有种子，提供开局承诺和终局核验。协议、独立验证器及其适用边界见[随机性与分阶段公开](docs/game-randomness.md)。
-
-## 站点结构
-
-一个二进制服务两个按 Host 隔离的站点：
-
-- **用户站点：** 用户自助 API、`/v1/*` 和用户 Web 应用。
-- **管理员站点：** 管理员 API 和管理员 Web 应用。
-
-必须使用互不相同的用户站与管理员站主机名。若派生的 `admin.<用户主机>` 正确，可以省略 `NONBIRI_ADMIN_HOST`；绝不能把两个站点暴露在同一个主机名下。
-
-## 从源码构建
-
-构建环境要求：
-
-- Go 1.26.6。
-- Node.js 22.22.3 或更新版本，以及用于构建前端的 npm 12.0.1。
-
-运行构建完成的二进制不需要 Node.js。
+构建需要 **Go 1.26.6**、**Node.js ≥22.22.3**、**npm 12.0.1**；仓库脚本使用 Bash，Windows 开发使用 Git Bash。最终程序内嵌两套 React 站点，使用纯 Go SQLite，运行时无需 Node.js。
 
 ```sh
 npm --prefix web ci
-npm --prefix web test
-npm --prefix web run typecheck
-npm --prefix web run lint
 npm --prefix web run build
-scripts/check-go.sh
 CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 ```
 
-不带 build tag 的 Go 构建会嵌入开发占位页面。可用二进制必须先执行 `npm --prefix web run build`，再使用 `-tags dist` 编译。
+`-tags dist` 会嵌入已构建的网页；不带该标记时，程序提供开发占位页。
 
-运行前，把 `admin.env.example` 复制到 **Git 工作树外的私有路径**，替换全部 `CHANGE_ME`，并按实际环境修改示例中的 `/etc`、`/var` 生产路径。主密钥必须生成在 `NONBIRI_MASTER_KEY_FILE` 指定的绝对路径，不能落在仓库内。然后加载私有环境文件并启动：
+按照 [首次配置指南](docs/first-run-setup.md) 准备私有路径、文件权限、Discord OAuth、DNS 与反向代理。将 [admin.env.example](admin.env.example) 复制到检出目录之外的私有路径，替换占位值并配置：
+
+- `NONBIRI_MASTER_KEY_FILE` 或 `NONBIRI_MASTER_KEY`，二选一，提供 32 字节加密密钥。
+- 管理员用户名、密码，以及 Discord 客户端 ID 和密钥。
+- `NONBIRI_SITE_BASE_URL` 和独立的管理员域名；`NONBIRI_ADMIN_HOST` 默认推导为 `admin.<用户站域名>`。
+- 检出目录之外的数据库与密钥路径，以及保留配套密钥的备份。
 
 ```sh
 set -a
-. /绝对/私有/路径/admin.env
+. /absolute/private/path/admin.env
 set +a
 ./nonbiriapi
 ```
 
-密钥权限、Discord、DNS 和反向代理的完整顺序见[首次运行配置准备](docs/first-run-setup.md)。
+新数据库默认开启维护、关闭公共功能。接纳用户前，请检查实例法律页面与设置。[配置参考](docs/configuration.md) 说明启动变量和在线控制项；[部署指南](docs/deployment.md) 涵盖 systemd、代理、备份和恢复。
 
-## 配置
+rc.6 支持空白启动、最终 rc.5 数据库及已登记的 rc.6 数据库。更早或未知结构会被拒绝；具体来源与回退要求见 [数据库兼容性](docs/deployment.md#database-compatibility-and-version-changes)。
 
-完整的启动环境变量见 [`admin.env.example`](admin.env.example)。[配置参考](docs/configuration.md) 说明启动变量、管理员运行时设置和私有 Discord 试运行的注册门禁。必须配置的值包括：
+## 调用 API
 
-- `NONBIRI_MASTER_KEY_FILE` 或 `NONBIRI_MASTER_KEY`（二选一，解码后必须是 32 字节）。
-- `NONBIRI_ADMIN_USERNAME` 与 `NONBIRI_ADMIN_PASSWORD`。
-- `NONBIRI_DISCORD_CLIENT_ID` 与 `NONBIRI_DISCORD_CLIENT_SECRET`。
-- `NONBIRI_SITE_BASE_URL`；若派生的 `admin.<用户主机>` 不适用，再设置 `NONBIRI_ADMIN_HOST`。
-
-`admin.env`、主密钥文件和数据库都应放在 Git 工作树之外。不要提交真实凭据或真实数据库。
-
-## VPS/systemd 部署
-
-首个部署版本采用手动更新的 systemd 服务，详见：
-
-- [部署与 systemd 指南](docs/deployment.md)
-- [供管理员传达的协管自动化调用规则](docs/steward-automation.md)
-- [环境变量示例](admin.env.example)
-- [systemd 单元示例](deploy/nonbiriapi.service.example)
-
-rc.5 保持 Generation 2，支持来源以本页兼容性说明及部署指南为准。账号、余额、捐赠、模型绑定、游戏、凭据、运营配置与实例法律正文保持，新增活动资产独立建账。降级须恢复相匹配的完整停服快照。新库仍默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
-
-普通启动会在监听前检查数据库身份、结构和凭据，并恢复未完成工作。全面历史审计改由 `./nonbiriapi maintenance verify` 单独执行：加载正常私有环境，检查已停服数据库或可信一致副本，不修复、不迁移、不启动后台任务或监听；SQLite 可能生成读锁协调文件。详见[恢复契约](docs/api-contract.md#10-maintenance-recovery-and-retention)。
-
-本项目采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
-
-## GitHub 自动化
-
-仓库包含只读 CI 流程。GitHub Actions 在 Pull Request 和手动触发时运行 Go 与前端门禁，不会部署应用。最终候选须有完整门禁证据；正常合入受保护的 `master` 后，核对最终提交及其 tree，相关输入相同时复用有效证据，有变化时重验对应层。CodeQL 保持独立触发。发布产物自动化会等支持平台和签名策略确定后再单独添加。
-
-## API
-
-发布契约见 [`docs/api-contract.md`](docs/api-contract.md)。
-
-在用户站点生成 CallerKey 后：
-
-```sh
-curl https://api.example.com/v1/models \
-  -H 'Authorization: Bearer nbk_替换为你的CallerKey'
-```
-
-聊天请求使用在用户站点配置的平台模型名：
+先创建端点、添加上游密钥、发现或填写模型，再将模型连接到个人平台名称。创建 CallerKey 后，及时保存当次展示的完整值。
 
 ```sh
 curl https://api.example.com/v1/chat/completions \
-  -H 'Authorization: Bearer nbk_替换为你的CallerKey' \
+  -H 'Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY' \
   -H 'Content-Type: application/json' \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-CallerKey 完整内容只在创建或更换成功后显示一次，请立即保存；未保存时请再次更换以取得新值。
+通过 `/v1/models` 查看可用名称，使用 `/v1/embeddings` 调用支持向量生成的模型。上游地址应包含其 API 版本，例如 `https://provider.example/v1`。浏览器调用使用 Bearer CallerKey 和 `credentials: 'omit'`。不要将密钥放入 URL 或共享日志。
 
-CallerKey 和上游凭据都必须按密钥保护。不要把它们放入 URL、问题反馈、备注、命令历史、截图或日志。
+[API 契约](docs/api-contract.md) 说明流式响应、错误、计费、CORS、连接器差异及个人自动化接口。[协管自动化说明](docs/steward-automation.md) 介绍由管理员提供的接入指南。
 
-错误响应包含稳定的 `error.code`、`source` 和 `message`。平台错误文案以 `[NonbiriAPI]` 开头，上游错误不加此前缀。常见结果如下：
+## 开发导航
 
-| HTTP | 稳定 `error.code` | `source` | 含义 |
-| --- | --- | --- | --- |
-| 400 | `invalid_request`, `content_too_short` | `platform` | 输入无效，或公益请求低于配置的最短长度。 |
-| 401 | `unauthorized` | `platform` | 缺少认证或认证无效。 |
-| 403 | `forbidden`, `elevated_required`, `feature_disabled`, `insufficient_credits`, `charity_suspended`, `checkin_cap_reached` | `platform` | 权限、功能、余额或账号限制。 |
-| 404 / 405 | `not_found` / `method_not_allowed` | `platform` | 资源不存在、站点不符或不支持该方法。 |
-| 409 | `conflict`, `already_checked_in`, `debug_live_cancelled` | `platform` | 状态冲突、重复签到或实发调试已取消。 |
-| 413 | `payload_too_large` | `platform` | 请求大小超过上限。 |
-| 422 | `resource_limit_exceeded`, `debug_dry_run_intercepted`, `debug_live_result_captured` | `platform` | 资源数量受限，或请求被调试功能主动拦截。 |
-| 423 | `resource_locked` | `platform` | 资源处于临时保护中。 |
-| 429 | `rate_limited` | `platform` | 速率或并发限制阻止本次准入。 |
-| 500 | `internal` | `platform` | 内部错误。 |
-| 503 | `maintenance`, `service_unavailable`, `unbound_model` | `platform` | 维护中、服务暂不可用或模型无可用连接。 |
-| 上游 4xx / 5xx | `upstream` | `upstream` | 自用和公益调用均保留上游 HTTP 错误状态。 |
-| 502 / 504 | `upstream` | `upstream` | 上游传输或协议失败，或上游超时。 |
+应用采用单进程、单 SQLite 数据库。用户站与管理员站共用程序，通过不同主机名和权限边界隔离。
 
-自用和公益调用会保留可识别的上游报错信息，以及可选的 `upstream_code`，并清除来源地址和敏感值。无法读取、过大或无法安全呈现的错误使用通用提示。SSE 响应头发出后无法改写 HTTP 状态，失败会通过有界错误事件或关闭连接表达。公益计费依据上游已验证的生成及实际用量，包括为 JSON 调用方缓冲但最终未送达的生成；未知用量仍按现有规则结算。调用方断开后立即取消上游请求，保活注释本身不构成消耗。完整规则见 [API 错误与收费契约](docs/api-contract.md)。
+| 范围 | 入口 |
+| --- | --- |
+| 启动和 HTTP 接线 | `main.go`、`internal/app/` |
+| 数据库结构、初始化与验证 | `internal/db/` |
+| 账务与留存 | `internal/ledger/`、`internal/lifecycle/` |
+| 上游协议与出站策略 | `internal/connector/`、`internal/egress/` |
+| 用户站和管理员站 | `web/` |
+| 检查脚本与部署示例 | `scripts/`、`deploy/` |
 
-调用向量嵌入时，选择实际支持该操作的上游模型：
-
-```sh
-curl https://api.example.com/v1/embeddings \
-  -H 'Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"provider/model","input":["Hello","World"],"encoding_format":"float"}'
-```
-
-OpenAI-compatible 上游填写带版本的 base，如 `https://provider.example/v1`；连接器追加 `/embeddings`，不会自动补 `/v1`。成功批量请求按次只计一次；公益按 Token 计费使用整批输入 Token 和输入价格，向量维度不算输出 Token。校验、未知用量结算、限额和调试行为见[向量接口契约](docs/api-contract.md#23-post-v1embeddings)。
-
-浏览器客户端可以跨源调用这三个公开模型接口，并在 Authorization 中显式提供 CallerKey。使用 fetch 默认凭据模式或 `credentials: 'omit'`，不要设置为 `include`。例如，由用户在运行时提供 CallerKey：
-
-```js
-const response = await fetch('https://api.example.com/v1/embeddings', {
-  method: 'POST',
-  credentials: 'omit',
-  headers: { Authorization: `Bearer ${callerKey}`, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ model: 'provider/model', input: 'Hello' }),
-});
-const result = await response.json();
-if (!response.ok) throw new Error(result.error.message);
-```
-
-浏览器自动发送的 OPTIONS 预检不需要密钥，不调用模型或产生费用；实际请求仍须通过鉴权。用户会话及管理员接口继续保留同源保护。具体限制见 [CORS 契约](docs/api-contract.md#browser-cross-origin-access)。若预检失败，浏览器不会发送模型请求，因此不会产生调用日志。
-
-本人脚本可使用 CallerKey 查询已建服务／模型，向本人已有服务逐把导入上游密钥，或向已有自用模型追加连接。它不会自动创建目标、启用禁用资源、捐赠或收费验证；部分成功不会回滚。相同密钥正文返回原记录并保留设置，默认手动模式不等于上游验证。断线后在24小时内使用原幂等键与完整原请求核对／继续；超过期限先读取实际资源。方法、虚构 JSON／Bash 示例、预算和逐项结果见[本人自动化](docs/api-contract.md#34-personal-callerkey-automation)。公益 CallerKey 读写全部仅6级；5级本人自用及既有网页主流模型权限保持。
-
-## 开发门禁
+日常开发验证实际影响范围，最终候选运行完整门禁：
 
 ```sh
 scripts/check-go.sh
+scripts/check-upgrade.sh
 scripts/race-check.sh
+npm --prefix web test
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
 ```
 
-贡献流程和完整门禁见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+race 检查需要可用的 C 编译器。CI 还覆盖真实浏览器、许可证、漏洞与目标构建，不执行部署。测试范围与受保护分支流程见 [贡献指南](CONTRIBUTING.md)。
 
-## 数据与法律页面
+## 详细文档
 
-应用内包含中英文隐私政策和服务条款页面。运营方在接受真实用户前，必须根据实际运营主体、联系方式、司法辖区、部署方式和数据处理实践审阅并定制这些文本。
+| 主题 | 文档 |
+| --- | --- |
+| Gateway 模型与缓存控制 | [Gateway 设置](docs/gateway-model-controls.md) |
+| 游戏和随机结果验证 | [对战游戏](docs/duel-games.md)、[二十一点](docs/blackjack.md)、[随机性](docs/game-randomness.md) |
+| 绘本活动 | [活动指南](docs/image-activity.md) |
+| 导出、删号与记录留存 | [数据生命周期](docs/data-lifecycle-checklist.md) |
+| 离线完整性与账务审计 | [维护验证](docs/api-contract.md#10-maintenance-recovery-and-retention) |
 
-请求可能发送到账号选择的 OpenAI-compatible、Anthropic-compatible 或 AI SDK Gateway v3 提供方，包括公益资源，以及活动专用的图像提供方。独立第三方可能按自身政策处理或留存正文，`store:false` 无法保证零留存。NonbiriAPI 不主动记录请求正文或成功响应正文，但保留上游错误原文，可能包含上游回显的输入或凭据，仅管理员与 6 级可查。普通留存 30 天，单次最多 1 MiB，默认总容量 1 GiB；明确的法律保全可延长留存。来源 IP 与允许的客户端请求头线索同样仅向上述角色开放。Debug 有界且仅驻内存；生图提示词、执行参数和结果也只放进程内存，图片可领取 10 分钟。通用、游戏、草稿纸、画笔分别记账，草稿纸和画笔不可反向兑换；湖泊金币另按管理员启用的精确规则兑换；`donation_credit` 仍是不可花费的累计统计。
+部署者须按实际运营情况修改内置隐私政策和服务条款。独立上游各自适用其数据政策；`store:false` 无法保证零留存。受限的原始错误诊断可能包含上游回显的内容，权限、留存和法律保留例外见生命周期文档。
 
-用户删除账号时，服务保留只读的最小记录：能够确认的原站内／Discord ID、时间、当时等级及限制状态、删除来源和清零前余额。管理员与当前 6 级协管在各自权限内可查，旧记录缺失的字段保持未知。经济快照仍会产生仅管理员可见的删号告警；主动删号实际中止进行中对决时，最小中止记录仅管理员可查，90 天后清理。Discord ID 黑名单留存至管理员移除，管理员和 6 级协管可在各自权限内添加；首条原因保留，后续原因只追加。移除不自动解封。相同 Discord 身份的少量已用资格及未过期违规窗口可延续至新账号，但不会恢复旧账号和私有资料。上述管理安全记录不进入个人导出。
-
-在有效封禁期间主动删号时，自动拉黑说明会在“试图通过删号逃避处罚”之后换行记录删除开始时的封禁原因。空原因不补造，已过期封禁不按有效封禁处理；已有黑名单保留首次理由和发起方，只追加本次说明，管理员和 6 级协管可查看保留换行的内容。
-
-数据导出、删除、留存和隐私不变量见 [`docs/data-lifecycle-checklist.md`](docs/data-lifecycle-checklist.md)。
-
-rc.5 保留删号前请求日志及必要来源至原请求结束后30天或适用保全期限，不因自行／管理员／低活跃删号而提前删除。原账号与Discord身份仅管理员和获准6级可查；同Discord新账号不能读取旧日志。多地址／共享地址审计汇总可信API来源，不使用网页登录地址，任务最多24小时且不自动处罚。密钥强制复审使用长期不可还原匹配材料，删号或重提不取消要求；批准只解除当次明确启用的成员。
-
-《垂钓手记》在服务器保存跨设备／跨期档案和当前一竿，同一期入场只收一次通用积分。关闭／暂停／维护保留进度并停止游玩和所有兑换；四方向分别配置且默认关闭，只按精确整批兑换。完成摘要保留30天，当前／暂停进度按账号生命周期保留，秘密奖励随机资料不导出。自用模型角色策略、预设名称及24小时内安全自动化结果纳入本人导出；删号清除其个人关联。大肥鱼v3为新内容默认版本，旧内容只由显式离线清理处理，正常启动不清除关卡或账务。
-
-## 安全
-
-请阅读 [`SECURITY.md`](SECURITY.md)，不要在公开 Issue 中披露尚未修复的安全漏洞。仓库安全设置见 [`docs/github-settings.md`](docs/github-settings.md)。NonbiriAPI 使用 [GNU Affero General Public License v3.0](LICENSE) 发布。
-
-## 许可证
-
-版权所有 © 2026 `waiting-here`。项目代码采用 GNU Affero General Public License v3.0；请参阅 [`LICENSE`](LICENSE)、[`NOTICE`](NOTICE) 和 [`web/THIRD_PARTY_NOTICES.md`](web/THIRD_PARTY_NOTICES.md)。
-
-游戏中心插画是由 ChatGPT 协助创作的项目原创素材，与项目一同按 AGPL-3.0 分发。视觉调研参考了 [DeepSeek Whale-chan](https://github.com/Neko3000/deepseek-whalechan) 和 [Token姬·抽卡计划](https://github.com/guihui2538/Every-token-you-spend-comes-back-as-a-waifu.)；仓库未嵌入这两个参考项目的源图片。
+漏洞请按 [SECURITY.md](SECURITY.md) 报告。项目代码采用 [AGPL-3.0](LICENSE)；署名与素材许可见 [NOTICE](NOTICE)、[前端声明](web/THIRD_PARTY_NOTICES.md) 和 [音频署名](web/src/shared/assets/game-audio/NOTICE.md)。

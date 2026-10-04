@@ -56,7 +56,7 @@ func TestExportUserEntriesIsOwnerScopedWideExactBoundedAndTransactionLocal(t *te
 	}
 
 	readTx := beginLedgerTestTx(t, store.DB())
-	entries, err := ExportUserEntries(ctx, readTx, userID, 2)
+	entries, err := ExportUserEntries(ctx, readTx, userID, ledgerTestNow+10, 2)
 	if err != nil {
 		t.Fatalf("export owner ledger: %v", err)
 	}
@@ -77,13 +77,13 @@ func TestExportUserEntriesIsOwnerScopedWideExactBoundedAndTransactionLocal(t *te
 			t.Fatalf("foreign operation leaked into owner export: %+v", entry)
 		}
 	}
-	if _, err := ExportUserEntries(ctx, readTx, userID, 1); !errors.Is(err, ErrExportTooLarge) {
+	if _, err := ExportUserEntries(ctx, readTx, userID, ledgerTestNow+10, 1); !errors.Is(err, ErrExportTooLarge) {
 		t.Fatalf("bounded export error = %v, want too large", err)
 	}
-	if _, err := ExportUserEntries(ctx, readTx, userID, 0); !errors.Is(err, ErrInvalidExport) {
+	if _, err := ExportUserEntries(ctx, readTx, userID, ledgerTestNow+10, 0); !errors.Is(err, ErrInvalidExport) {
 		t.Fatalf("zero limit error = %v", err)
 	}
-	if _, err := ExportUserEntries(ctx, readTx, userID, MaxUserExportEntries+1); !errors.Is(err, ErrInvalidExport) {
+	if _, err := ExportUserEntries(ctx, readTx, userID, ledgerTestNow+10, MaxUserExportEntries+1); !errors.Is(err, ErrInvalidExport) {
 		t.Fatalf("oversized limit error = %v", err)
 	}
 	if err := readTx.Rollback(); err != nil {
@@ -106,7 +106,7 @@ func TestExportUserEntriesIsOwnerScopedWideExactBoundedAndTransactionLocal(t *te
 	if _, err := Apply(ctx, mutationTx, third); err != nil {
 		t.Fatal(err)
 	}
-	inside, err := ExportUserEntries(ctx, mutationTx, userID, 3)
+	inside, err := ExportUserEntries(ctx, mutationTx, userID, ledgerTestNow+10, 3)
 	if err != nil || len(inside) != 3 || inside[2].OperationID != thirdID || inside[2].Delta != "0.001" {
 		t.Fatalf("transaction-local export = (%+v,%v)", inside, err)
 	}
@@ -116,7 +116,7 @@ func TestExportUserEntriesIsOwnerScopedWideExactBoundedAndTransactionLocal(t *te
 
 	afterTx := beginLedgerTestTx(t, store.DB())
 	defer afterTx.Rollback()
-	after, err := ExportUserEntries(ctx, afterTx, userID, 2)
+	after, err := ExportUserEntries(ctx, afterTx, userID, ledgerTestNow+10, 2)
 	if err != nil || len(after) != 2 {
 		t.Fatalf("export after rollback = (%+v,%v)", after, err)
 	}

@@ -10,10 +10,9 @@ This checklist does not itself assert a pass.
 
 - Synchronize version metadata, bilingual README/changelog, API, configuration,
   lifecycle, game, legal and deployment documentation.
-- Validate the supported rc.4 source at
-  `8a46c72d911a914eabcb7ef17c537e7ac12d6969` and the exact preceding deployed
-  source `77e7f41646d6c720b6ae4ddc6dbb4dd9e0b31604` when upgrading to rc.5.
-  Retain the registered historical-source tests.
+- Validate fresh creation, the final rc.5 source at
+  `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6 schemas.
+  `scripts/check-upgrade.sh` builds the pinned released source to create its fixture.
   Generate populated samples with that exact old code. Include
   wide and negative balances, manual donation-credit adjustments, historical
   empty descriptions, bans, active/terminal games, reward holds, nine Blackjack
@@ -141,8 +140,8 @@ unavailable scans. Never classify unavailable evidence as a pass.
   Tags, prereleases and deployment each require their own authorization;
   merging a development PR does not publish or deploy a version.
 - When a release is authorized, create its annotated tag and source prerelease
-  at the approved commit. Public precompiled attachments require a supported
-  artifact and signing policy.
+  at the approved commit. Publish source code only; do not attach precompiled binaries,
+  container images or installers.
 - For an authorized deployment, use a trusted final Linux artifact from a clean
   independent checkout. A branch deployment can use an approved immutable commit
   without creating a tag. Reuse matching business-test evidence, record the full

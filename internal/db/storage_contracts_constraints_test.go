@@ -23,7 +23,7 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if !seen["3f773b6dca01058f2296f437c3666afde92a74e8eeb861fa8637756dcd859481"] {
+	if len(seen) != 2 || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] {
 		t.Fatal("deployed source missing")
 	}
 	descriptor.SourceManifestHashes[0] = "unknown"

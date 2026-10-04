@@ -3,10 +3,12 @@ package inactivity
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 	"io"
 	"math/big"
+	"time"
 )
 
 func decodePolicy(raw []byte) (Policy, error) {
@@ -23,6 +25,12 @@ func decodePolicy(raw []byte) (Policy, error) {
 }
 func validDays(v *int64) bool { return v != nil && *v >= 1 && *v <= 36500 }
 func Validate(p Policy) error {
+	if p.ExecutionTime != "" {
+		parsed, err := time.Parse("15:04", p.ExecutionTime)
+		if err != nil || parsed.Format("15:04") != p.ExecutionTime {
+			return ErrInvalid
+		}
+	}
 	if p.Decay.InactiveDays != nil && !validDays(p.Decay.InactiveDays) || p.Decay.IntervalDays != nil && !validDays(p.Decay.IntervalDays) || p.Protection.InactiveDays != nil && !validDays(p.Protection.InactiveDays) {
 		return ErrInvalid
 	}
@@ -101,6 +109,14 @@ func assetTighter(old, next *AssetRule) bool {
 }
 func grace(old Configuration, next Policy, at int64) (int64, int64) {
 	d, b := old.DecayGraceUntil, old.ProtectionGraceUntil
+	if old.Enabled && next.Enabled && old.ExecutionTime != next.ExecutionTime {
+		if old.Decay.Enabled && next.Decay.Enabled {
+			d = max(d, at+graceSeconds)
+		}
+		if old.Protection.Enabled && next.Protection.Enabled {
+			b = max(b, at+graceSeconds)
+		}
+	}
 	if next.Enabled && next.Decay.Enabled && (!old.Enabled || !old.Decay.Enabled || *next.Decay.InactiveDays < *old.Decay.InactiveDays || *next.Decay.IntervalDays < *old.Decay.IntervalDays || assetTighter(old.Decay.Assets.General, next.Decay.Assets.General) || assetTighter(old.Decay.Assets.Game, next.Decay.Assets.Game)) {
 		d = max(d, at+graceSeconds)
 	}
@@ -120,15 +136,38 @@ func due(c Configuration, state ActivityState) (decay, protection *int64) {
 	if c.Decay.Enabled {
 		at := max(base+*c.Decay.InactiveDays*day, c.DecayGraceUntil)
 		if state.LastDecayAt != nil {
-			at = max(at, *state.LastDecayAt+*c.Decay.IntervalDays*day)
+			next := *state.LastDecayAt + *c.Decay.IntervalDays*day
+			if c.ExecutionTime != "" {
+				// Keep the configured clock time after a delayed worker pass.
+				next = executionOnDay(c, *state.LastDecayAt) + *c.Decay.IntervalDays*day
+			}
+			at = max(at, next)
 		}
+		at = alignExecution(c, at)
 		decay = &at
 	}
 	if c.Protection.Enabled {
 		at := max(base+*c.Protection.InactiveDays*day, c.ProtectionGraceUntil)
+		at = alignExecution(c, at)
 		protection = &at
 	}
 	return
+}
+
+func executionOnDay(c Configuration, at int64) int64 {
+	clock, _ := time.Parse("15:04", c.ExecutionTime)
+	return db.SiteDayKey(at, int64(*c.SiteTimezoneOffsetMinutes)) + int64(clock.Hour()*3600+clock.Minute()*60)
+}
+
+func alignExecution(c Configuration, at int64) int64 {
+	if c.ExecutionTime == "" {
+		return at
+	}
+	scheduled := executionOnDay(c, at)
+	if scheduled < at {
+		scheduled += day
+	}
+	return scheduled
 }
 func earliest(a, b *int64) *int64 {
 	if a == nil {

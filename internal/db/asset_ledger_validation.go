@@ -4,11 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 )
 
-// ValidateAssetLedger validates monetary facts before committing an upgrade.
+// ValidateAssetLedger audits retained monetary facts and balance baselines.
 // It streams entries and independently conserves every supported asset.
 func ValidateAssetLedger(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, `
@@ -73,14 +74,24 @@ ORDER BY o.ledger_seq,e.line_no`)
 	return ValidateAssetBalances(ctx, tx)
 }
 
-// ValidateAssetBalances replays each surviving account from its zero opening
+// ValidateAssetBalances replays each surviving account from its retained opening
 // balance, including signed user debt, without collecting the ledger in RAM.
 func ValidateAssetBalances(ctx context.Context, tx *sql.Tx) error {
+	through, _, compacted, err := LedgerCompactionState(ctx, tx)
+	if err != nil {
+		return err
+	}
+	opening, join := "0,zeroblob(16)", ""
+	entries := "LEFT JOIN credit_entries e ON e.account_id=a.id"
+	if compacted {
+		opening = "COALESCE(b.balance_sign,0),COALESCE(b.balance_mag,zeroblob(16))"
+		join = "LEFT JOIN credit_opening_balances b ON b.account_id=a.id"
+		entries += " AND EXISTS(SELECT 1 FROM credit_operations recent WHERE recent.id=e.operation_id AND recent.ledger_seq>" + fmt.Sprint(through) + ")"
+	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT a.id,a.kind,a.asset_type,a.balance_sign,a.balance_mag,
+SELECT a.id,a.kind,a.asset_type,a.balance_sign,a.balance_mag,`+opening+`,
  e.delta_sign,e.delta_mag,e.balance_after_sign,e.balance_after_mag
-FROM credit_accounts a
-LEFT JOIN credit_entries e ON e.account_id=a.id
+FROM credit_accounts a `+join+` `+entries+`
 LEFT JOIN credit_operations o ON o.id=e.operation_id
 ORDER BY a.id,o.ledger_seq,e.line_no`)
 	if err != nil {
@@ -92,10 +103,10 @@ ORDER BY a.id,o.ledger_seq,e.line_no`)
 	for rows.Next() {
 		var id int64
 		var kind, asset string
-		var sign int
-		var raw, deltaRaw, afterRaw []byte
+		var sign, openingSign int
+		var raw, openingRaw, deltaRaw, afterRaw []byte
 		var deltaSign, afterSign sql.NullInt64
-		if err := rows.Scan(&id, &kind, &asset, &sign, &raw, &deltaSign, &deltaRaw, &afterSign, &afterRaw); err != nil {
+		if err := rows.Scan(&id, &kind, &asset, &sign, &raw, &openingSign, &openingRaw, &deltaSign, &deltaRaw, &afterSign, &afterRaw); err != nil {
 			return err
 		}
 		if id != previous {
@@ -110,7 +121,11 @@ ORDER BY a.id,o.ledger_seq,e.line_no`)
 			if (asset == "sketch_paper" || asset == "sketch_brush") && new(big.Int).Mod(expected, big.NewInt(1000)).Sign() != 0 {
 				return errors.New("fractional activity balance")
 			}
-			running.SetInt64(0)
+			opening, err := NewSM128(openingSign, openingRaw)
+			if err != nil {
+				return err
+			}
+			running.Set(opening.Big())
 			previous = id
 		}
 		if !deltaSign.Valid {
@@ -152,11 +167,15 @@ func validateAssetCapacity(ctx context.Context, tx *sql.Tx) error {
 	if err := tx.QueryRowContext(ctx, `SELECT last_ledger_seq,reserved_future_rows FROM credit_capacity WHERE id=1`).Scan(&last, &reservedRaw); err != nil {
 		return err
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(MAX(ledger_seq),0) FROM credit_operations`).Scan(&count, &maximum); err != nil {
+	through, _, _, err := LedgerCompactionState(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(MAX(ledger_seq),?) FROM credit_operations WHERE ledger_seq>?`, through, through).Scan(&count, &maximum); err != nil {
 		return err
 	}
 	reserved, err := DecodeU128(reservedRaw)
-	if err != nil || last != count || last != maximum {
+	if err != nil || last-through != count || last != maximum || through > last {
 		return errors.New("ledger sequence/capacity mismatch")
 	}
 	total := new(big.Int)

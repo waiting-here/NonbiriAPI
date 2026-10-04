@@ -21,6 +21,10 @@ import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/S
 import { Affix, DataTable, Fold, Toggle, PanelFoot } from '@shared/components/ui';
 import { AmountInput } from './AmountInput';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { useSiteTimeOffset } from '@shared/components/timeContextValue';
+import { fixedOffsetZone } from '@shared/time';
+import { PagePagination } from '@shared/operations/PagePagination';
+import type { PageSize } from '@shared/operations/pageNumbers';
 import '@shared/operations/operations.css';
 
 function AssetEditor({
@@ -125,8 +129,10 @@ function Editor({
   locale?: string;
 }) {
   const formatDateTime = useDateTimeFormatter();
+  const siteOffset = useSiteTimeOffset();
   const [policy, setPolicy] = useState<Policy>(() => policyOnly(configuration));
   const [preview, setPreview] = useState<Preview>();
+  const [previewSize, setPreviewSize] = useState<PageSize>(20);
   const [runs, setRuns] = useState<Runs>();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -191,6 +197,11 @@ function Editor({
     setRetry(undefined);
     onSaved(updated);
   };
+  const loadPreview = async (page = '1', size = previewSize) => {
+    const result = await previewPolicy(configuration.revision, policy, page, size);
+    setPreview(result);
+    setPreviewSize(size);
+  };
   const validate = () => {
     if (!form.current?.reportValidity()) return false;
     if (policy.enabled && !policy.decay.enabled && !policy.protection.enabled) {
@@ -250,6 +261,31 @@ function Editor({
       >
         <fieldset disabled={pending}>
           <legend>{zh ? '政策配置' : 'Policy configuration'}</legend>
+          <label>
+            {zh ? '执行时刻（选填）' : 'Execution time (optional)'}
+            <input
+              type="time"
+              aria-label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
+              step={60}
+              value={policy.execution_time ?? ''}
+              disabled={siteOffset === null}
+              onChange={(event) =>
+                change({ ...policy, execution_time: event.target.value || undefined })
+              }
+            />
+            <small>
+              {siteOffset === null
+                ? zh
+                  ? '请先在站点设置中配置时区。'
+                  : 'Set the timezone in site settings first.'
+                : `${zh ? '站点时区' : 'Site timezone'}: ${fixedOffsetZone(siteOffset)}`}
+            </small>
+            <small>
+              {zh
+                ? '留空按账号到期时间执行。填写后，衰减和保护封禁在指定时刻到期，由分钟批次处理；周期为 1 天、时刻为 12:00 时，每天中午执行。更改时刻至少给予 7 天宽限。'
+                : 'Leave blank to use each account’s due time. When set, decay and protective bans become due at this time and run in minute batches. A one-day interval at 12:00 runs daily at noon. Changing the time grants at least seven days of grace.'}
+            </small>
+          </label>
           <fieldset className="inactivity-section">
             <legend>{zh ? '积分衰减' : 'Credit decay'}</legend>
             <Toggle
@@ -334,7 +370,7 @@ function Editor({
               onClick={() =>
                 validate() &&
                 void perform(async () => {
-                  setPreview(await previewPolicy(configuration.revision, policy));
+                  await loadPreview();
                 })
               }
             >
@@ -361,7 +397,7 @@ function Editor({
       {error && <p role="alert">{error}</p>}
       <Card>
         <h2>{zh ? '当前草稿摘要' : 'Draft summary'}</h2>
-        <PolicySummary policy={policy} zh={zh} />
+        <PolicySummary policy={policy} zh={zh} siteOffset={siteOffset} />
         <p>
           {zh ? '当前衰减宽限截止' : 'Current decay grace ends'}:{' '}
           {date(configuration.decay_grace_until)} ·{' '}
@@ -388,8 +424,8 @@ function Editor({
           <h2>{zh ? '候选政策预览' : 'Candidate policy preview'}</h2>
           <p>
             {zh
-              ? '每页最多 100 个账号。金额按当前余额估算，实际处理会重新检查活跃、权限和余额。此预览不会执行处罚。'
-              : 'Up to 100 accounts per page. Amounts use current balances; processing rechecks activity, roles, and balances. Preview applies no penalties.'}
+              ? '金额按当前余额估算，实际处理会重新检查活跃、权限和余额。此预览不会执行处罚。'
+              : 'Amounts use current balances; processing rechecks activity, roles, and balances. Preview applies no penalties.'}
           </p>
           <p>
             {zh ? '预览衰减／封禁宽限截止' : 'Proposed decay / ban grace ends'}:{' '}
@@ -429,25 +465,12 @@ function Editor({
               },
             ]}
           />
-          {preview.next_cursor && (
-            <button
-              className="nb-btn nb-btn--secondary"
-              disabled={pending}
-              onClick={() =>
-                void perform(async () => {
-                  setPreview(
-                    await previewPolicy(
-                      configuration.revision,
-                      policy,
-                      preview.next_cursor ?? undefined,
-                    ),
-                  );
-                })
-              }
-            >
-              {zh ? '下一页预览' : 'Next preview page'}
-            </button>
-          )}
+          <PagePagination
+            metadata={preview.pagination}
+            busy={pending}
+            onPageChange={(page) => void perform(() => loadPreview(page))}
+            onPageSizeChange={(size) => void perform(() => loadPreview('1', size))}
+          />
         </section>
       )}
       <details

@@ -58,21 +58,23 @@ export function metrics(value: unknown) {
 export type Metrics = ReturnType<typeof metrics>;
 
 function metadata(value: unknown) {
+  const required = [
+    'asset',
+    'from',
+    'to',
+    'unit',
+    'scale',
+    'offset_minutes',
+    'ledger_seq',
+    'projected_seq',
+    'snapshot_at',
+    'coverage',
+  ];
   const v = record(
     value,
-    [
-      'asset',
-      'from',
-      'to',
-      'unit',
-      'scale',
-      'offset_minutes',
-      'ledger_seq',
-      'projected_seq',
-      'snapshot_at',
-      'coverage',
-    ],
+    [...required, 'detail_retained_from', 'range_adjusted'],
     'audit metadata',
+    required,
   );
   if (v.unit !== 'milliunits' || v.scale !== '1000') invalidResponse('audit unit');
   const offset = integer(v.offset_minutes, 'site offset', -720, 840);
@@ -90,6 +92,12 @@ function metadata(value: unknown) {
     ledger_seq: sequence(v.ledger_seq),
     projected_seq: sequence(v.projected_seq),
     snapshot_at: unixSecond(v.snapshot_at, 'snapshot time'),
+    detail_retained_from:
+      v.detail_retained_from === undefined
+        ? undefined
+        : unixSecond(v.detail_retained_from, 'detail retention'),
+    range_adjusted:
+      v.range_adjusted === undefined ? false : boolean(v.range_adjusted, 'adjusted range'),
     coverage: {
       status: oneOf(
         c.status,
