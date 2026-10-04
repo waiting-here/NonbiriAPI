@@ -20,6 +20,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Terminal charity reservation cleanup uses end-time indexes, avoiding scans of retained request history within each maintenance batch.
 - Completed image tasks publish their downloadable results before a status reader can observe success, preventing a brief missing-image response.
 - The charity ranking is visible beside the shared-model catalog on desktop and below it on mobile.
 - Inactivity-policy previews support page sizes, previous and next pages, and direct page selection. An optional execution time uses the site's configured time zone; leaving it blank preserves elapsed-time scheduling.

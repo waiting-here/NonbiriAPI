@@ -143,9 +143,7 @@ func (s *Service) CleanupTx(ctx context.Context, tx *sql.Tx, decisionNow int64, 
 	if cutoff < 0 {
 		cutoff = 0
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM donation_usage_reservations WHERE claim_id IN (
-SELECT claim_id FROM donation_usage_reservations
-WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_at,claim_id LIMIT ?)`, cutoff, limit)
+	result, err := tx.ExecContext(ctx, cleanupUsageReservationsSQL, cutoff, limit)
 	if err != nil {
 		return 0, fmt.Errorf("charity: delete terminal usage: %w", err)
 	}
@@ -155,9 +153,7 @@ WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_a
 	}
 	remaining := int64(limit) - count
 	if remaining > 0 {
-		result, err = tx.ExecContext(ctx, `DELETE FROM charity_reservations WHERE logical_request_id IN (
-SELECT logical_request_id FROM charity_reservations
-WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_at,logical_request_id LIMIT ?)`, cutoff, remaining)
+		result, err = tx.ExecContext(ctx, cleanupRequestReservationsSQL, cutoff, remaining)
 		if err != nil {
 			return 0, fmt.Errorf("charity: delete terminal request reservations: %w", err)
 		}
@@ -197,3 +193,13 @@ func formatConsumerMilli(value *big.Int) string {
 	}
 	return text + "." + fraction
 }
+
+// Pin the ordered expiry scan: the state index can otherwise scan all retained
+// terminal requests before sorting, even when no record has expired.
+const cleanupUsageReservationsSQL = `DELETE FROM donation_usage_reservations WHERE claim_id IN (
+SELECT claim_id FROM donation_usage_reservations INDEXED BY idx_donation_usage_retention
+WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_at,claim_id LIMIT ?)`
+
+const cleanupRequestReservationsSQL = `DELETE FROM charity_reservations WHERE logical_request_id IN (
+SELECT logical_request_id FROM charity_reservations INDEXED BY idx_charity_reservations_retention
+WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_at,logical_request_id LIMIT ?)`

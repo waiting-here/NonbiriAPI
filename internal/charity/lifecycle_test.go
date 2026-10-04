@@ -2,6 +2,7 @@ package charity
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,37 @@ WHERE logical_request_id=?`, reward, terminalAt, terminalAt, requestID); err != 
 	var outsideCount int
 	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(&outsideCount); err != nil || outsideCount != 1 {
 		t.Fatalf("rolled-back cleanup count = %d, %v", outsideCount, err)
+	}
+}
+
+func TestTerminalReservationCleanupUsesTimeRange(t *testing.T) {
+	environment := newCharityTestEnv(t)
+	for _, test := range []struct{ name, query, index string }{
+		{"requests", cleanupRequestReservationsSQL, "idx_charity_reservations_retention"},
+		{"usage", cleanupUsageReservationsSQL, "idx_donation_usage_retention"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rows, err := environment.store.DB().Query("EXPLAIN QUERY PLAN "+test.query, charityTestNow-terminalRetention, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+			var steps []string
+			for rows.Next() {
+				var id, parent, unused int
+				var detail string
+				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+					t.Fatal(err)
+				}
+				steps = append(steps, detail)
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			plan := strings.Join(steps, " | ")
+			if !strings.Contains(plan, test.index+" (finalized_at<?)") || strings.Contains(plan, "TEMP B-TREE") {
+				t.Fatalf("cleanup must use a bounded ordered time range: %s", plan)
+			}
+		})
 	}
 }

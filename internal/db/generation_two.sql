@@ -6464,10 +6464,12 @@ CREATE INDEX idx_image_terminal_operation ON image_activity_tasks(terminal_opera
 CREATE INDEX idx_credit_entries_history ON credit_entries(account_id,operation_id,line_no,delta_sign) WHERE account_kind_snapshot='user' AND delta_sign<>0;
 CREATE INDEX idx_credit_operations_history ON credit_operations(id,ledger_seq,created_at,kind);
 CREATE INDEX idx_request_logs_retention ON request_logs(completed_at,id);
+CREATE INDEX idx_charity_reservations_retention ON charity_reservations(finalized_at,logical_request_id) WHERE state IN ('committed','released');
+CREATE INDEX idx_donation_usage_retention ON donation_usage_reservations(finalized_at,claim_id) WHERE state IN ('committed','released');
 CREATE TABLE schema_state (
  id INTEGER PRIMARY KEY CHECK(id=1),
  version INTEGER NOT NULL CHECK(version>=1)
 ) STRICT;
 INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
 INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
-INSERT INTO schema_state(id,version) VALUES(1,1);
+INSERT INTO schema_state(id,version) VALUES(1,2);

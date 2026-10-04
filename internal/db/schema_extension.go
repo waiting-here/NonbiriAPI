@@ -40,8 +40,11 @@ type schemaRegistry struct {
 // Freeze the baseline and each successor at its first stable publication.
 // Fresh DDL can evolve; published migration steps remain immutable.
 var storageSchema = schemaRegistry{
-	versions: []schemaMigration{{version: 1, manifest: baselineManifestHash}},
-	bridges:  preReleaseSchemaBridges(),
+	versions: []schemaMigration{
+		{version: 1, manifest: baselineManifestHash},
+		{version: 2, manifest: terminalReservationIndexesManifestHash, sql: terminalReservationIndexesSQL},
+	},
+	bridges: preReleaseSchemaBridges(),
 }
 
 func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {

@@ -10,3 +10,6 @@ import _ "embed"
 //
 //go:embed generation_two.sql
 var generationTwoSchema string
+
+//go:embed migrations/0002_terminal_reservation_indexes.sql
+var terminalReservationIndexesSQL string
