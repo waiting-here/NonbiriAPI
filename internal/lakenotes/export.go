@@ -35,7 +35,7 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user int64, limi
 	if e != nil {
 		return out, e
 	}
-	out = UserExport{RulesID: row.rulesID, ProfileRevision: rev(row.revision), Profile: row.profile, Casts: []CastView{}, Entries: []EntryReceipt{}, Exchanges: []ExchangeReceipt{}}
+	out = UserExport{RulesID: rules.RulesID, ProfileRevision: rev(row.revision), Profile: row.profile, Casts: []CastView{}, Entries: []EntryReceipt{}, Exchanges: []ExchangeReceipt{}}
 	rows, e := tx.QueryContext(ctx, "SELECT "+castColumns+" FROM lake_notes_casts WHERE user_id=? ORDER BY created_at,id LIMIT ?", user, limit+1)
 	if e != nil {
 		return out, e

@@ -46,6 +46,10 @@ registration points. A new financial operation requires an audited ledger
 constructor and a corresponding module port. Modules do not perform schema
 migrations or register themselves through package initialization.
 
+Persistent changes follow the [database upgrade chain](database-upgrades.md).
+Save-format versions and gameplay-rule versions evolve independently; live work
+retains its recorded rules and settlement facts until converted or completed.
+
 New Fishing, LinkLink and RPS entries use their registered version-2 rules.
 Recovery selects saved version-1 or version-2 rules for accepted old work.
 Bidding Duel and Turn-based Battle Minigame (Test) each use independent rules version 1, with their

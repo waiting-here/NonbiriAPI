@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"os"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -105,6 +107,7 @@ func TestWriteReleasedUpgradeFixture(t *testing.T) {
 	}
 	seedReleasedGovernanceFacts(t, tx, vault, users)
 	seedReleasedEconomyAuditProjection(t, tx, users)
+	seedReleasedLakeNotes(t, tx, users[0])
 	if err := ValidateRecovery(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +118,48 @@ func TestWriteReleasedUpgradeFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type releasedLakeRandom struct{}
+
+func (releasedLakeRandom) Float53() (float64, error) { return 0.5, nil }
+
+func seedReleasedLakeNotes(t *testing.T, tx *sql.Tx, user int64) {
+	t.Helper()
+	profile := rules.InitialProfile()
+	profile.Coins = "3700"
+	profile.OwnedGear = append(profile.OwnedGear, "trainingRod")
+	profile.BaitStock["basic"] = 7
+	profile, cast, err := rules.Start(profile, releasedLakeRandom{}, 17)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cast.Paused = true
+	profileRaw, err := rules.EncodeProfile(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	castRaw, err := rules.EncodeCast(cast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coins, err := db.ParseU128Decimal(string(profile.Coins))
+	if err != nil {
+		t.Fatal(err)
+	}
+	period := mustLedgerID(t, "lnp_")
+	if _, err := tx.Exec(`INSERT INTO lake_notes_periods(id,name,revision,status,starts_at,ends_at,entry_fee_milli,created_at,updated_at) VALUES(?,'Saved lake',1,'published',?,?,0,?,?)`, period, ledgerTestNow-100, ledgerTestNow+100, ledgerTestNow, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO lake_notes_profiles(user_id,revision,rules_id,coin_mag,profile,updated_at) VALUES(?,2,?,?,?,?)`, user, rules.RulesID, db.EncodeU128(coins), profileRaw, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,created_at,updated_at) VALUES(?,?,?,?,'waiting',1,1,2,0,?,X'7b7d',0,0,?,?)`, mustLedgerID(t, "lnc_"), user, period, rules.RulesID, castRaw, ledgerTestNow, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO lake_notes_entitlements(user_id,period_id,fee_milli,period_revision,operation_key_hash,created_at) VALUES(?,?,0,1,zeroblob(32),?)`, user, period, ledgerTestNow); err != nil {
 		t.Fatal(err)
 	}
 }

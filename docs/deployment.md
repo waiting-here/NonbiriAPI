@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance model: one Linux/amd64 binary, a dedicated service user, local SQLite and a TLS reverse proxy. The current source prerelease is 1.0.0-rc.3. Supported upgrade sources include the complete rc.2 maintenance database at db959c64674afc531046a63066de0464725d439c and the administration maintenance database at 84018acbd594765c563cc0ee4083d206e0bd6a77. Alpha deployments require a fresh cutover. Verify compatibility, backups, configuration, instance legal text and changed behavior before opening a deployment. See [configuration.md](configuration.md) for environment settings and [image-activity.md](image-activity.md) for activity operations.
+This guide covers one Linux/amd64 application instance with a dedicated service user, local SQLite and a TLS reverse proxy. Check the [supported upgrade sources](#database-compatibility-and-version-changes) before updating. See [configuration.md](configuration.md) for settings and [image-activity.md](image-activity.md) for activity operations.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -190,9 +190,11 @@ This fallback also covers proxy timeouts or invalid upstream responses before re
 
 rc.6 accepts a fresh database, the final rc.5 schema at commit `8949a3d6e5b3d7536549f42a4c597393fccab62a`, and registered rc.6 schemas. The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`); account exports use schema 12. Compatibility is checked against the complete structural manifest. Earlier releases, partial schemas and unknown intermediate states are rejected without repair.
 
-The upgrade adds ledger-compaction storage and history-query indexes. It preserves accounts, credentials, balances, donations, saved game rules, configuration and instance legal overrides. Six-hour maintenance compacts expired credit details into balance baselines and audit totals before removing them. Necessary settlement, legal-hold and idempotency evidence follows its business lifecycle.
+The upgrade adds ledger-compaction storage, history-query indexes, an explicit migration version and Lake Notes save-format versions. It preserves accounts, credentials, balances, donations, saved game rules, configuration and instance legal overrides. Six-hour maintenance compacts expired credit details into balance baselines and audit totals before removing them. Necessary settlement, legal-hold and idempotency evidence follows its business lifecycle.
 
-Startup validates source identity, schema, configuration and credentials, applies supported changes atomically and recovers unfinished work before opening listeners. It does not replay the complete historical ledger on every upgrade. Run `./nonbiriapi maintenance verify` against a stopped database or trusted consistent copy for full structural, historical accounting and domain audits. Verification uses the normal private environment and does not repair, migrate, start workers or open listeners; SQLite may create coordination files.
+From v1.0.0 onward, every stable v1.x release must support a direct upgrade from any earlier stable v1.x database. Prereleases are outside that long-term guarantee. The [database upgrade guide](database-upgrades.md) describes the baseline and migration rules.
+
+Startup validates the registered source, applies supported changes atomically, checks target configuration and credentials before commit, and recovers unfinished work before opening listeners. It does not replay the complete historical ledger on every upgrade. Run `./nonbiriapi maintenance verify` against a stopped current-version database or an upgraded consistent copy for full structural, historical accounting and domain audits. Verification uses the normal private environment and does not repair, migrate, start workers or open listeners; SQLite may create coordination files.
 
 Keep the database, master key, encrypted instance matching material, configuration and matching binary together. A binary-only downgrade is unsupported; rollback restores the complete stopped snapshot. After reopening, do not overwrite newly accepted user data automatically with an old snapshot.
 

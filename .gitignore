@@ -197,10 +197,12 @@ nginx/*.local.conf
 *.zip
 !internal/calendar/zoneinfo.zip
 
-# ===== Migration scripts (manual, version-specific, not for git) =====
+# ===== Manual SQL and database dumps =====
 
 *.sql
 !internal/db/generation_two.sql
+!internal/db/migrations/**/*.sql
+!internal/db/testdata/*.sql
 
 # ===== Local deployment configs =====
 

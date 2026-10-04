@@ -22,22 +22,24 @@ type castRow struct {
 	started, lease             sql.NullInt64
 }
 
-const castColumns = "id,user_id,source_period_id,generation,revision,snapshot,reward_plan,phase,paused,last_tick,held,active_elapsed_ns,active_started_at_ns,lease_until_ns"
+const castColumns = "id,user_id,source_period_id,rules_id,storage_version,generation,revision,snapshot,reward_plan,phase,paused,last_tick,held,active_elapsed_ns,active_started_at_ns,lease_until_ns"
 
 func scanCast(scan func(...any) error) (castRow, error) {
 	var row castRow
 	var snapshot, reward []byte
+	var rulesID string
+	var version int
 	var phase string
 	var paused, held bool
 	var tick uint64
-	e := scan(&row.id, &row.user, &row.period, &row.generation, &row.revision, &snapshot, &reward, &phase, &paused, &tick, &held, &row.elapsed, &row.started, &row.lease)
+	e := scan(&row.id, &row.user, &row.period, &rulesID, &version, &row.generation, &row.revision, &snapshot, &reward, &phase, &paused, &tick, &held, &row.elapsed, &row.started, &row.lease)
 	if errors.Is(e, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}
 	if e != nil {
 		return row, e
 	}
-	row.state, e = rules.DecodeCast(snapshot)
+	row.state, e = decodeStoredCast(version, snapshot)
 	if e != nil {
 		return row, ErrInvariant
 	}
@@ -46,7 +48,7 @@ func scanCast(scan func(...any) error) (castRow, error) {
 			return row, ErrInvariant
 		}
 	}
-	if row.state.Phase != phase || row.state.Tick != tick {
+	if row.state.RulesID != rulesID || row.state.Phase != phase || row.state.Tick != tick {
 		return row, ErrInvariant
 	}
 	row.state.Paused, row.state.Held = paused, held
@@ -209,7 +211,7 @@ func (s *Service) Start(ctx context.Context, user int64, key string, in StartInp
 		if e != nil {
 			return CastResult{}, e
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,active_started_at_ns,lease_until_ns,created_at,updated_at) VALUES(?,?,?,?,?,0,1,1,0,?,X'7b7d',0,0,?,?,?,?)", id, user, p.ID, rules.RulesID, state.Phase, raw, now.UnixNano(), deadline, now.Unix(), now.Unix())
+		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,storage_version,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,active_started_at_ns,lease_until_ns,created_at,updated_at) VALUES(?,?,?,?,?,?,0,1,1,0,?,X'7b7d',0,0,?,?,?,?)", id, user, p.ID, rules.RulesID, castStorageVersion, state.Phase, raw, now.UnixNano(), deadline, now.Unix(), now.Unix())
 		if e != nil {
 			return CastResult{}, e
 		}

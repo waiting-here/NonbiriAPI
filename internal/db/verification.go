@@ -124,14 +124,17 @@ func validateCurrentSource(ctx context.Context, path string, source *sourceSnaps
 		return generationError(userVersion)
 	}
 	RecordStartupStage(ctx, StageSchemaValidation)
-	if _, err := generationTwoExtensionNeeded(ctx, d); err != nil {
+	needed, err := generationTwoExtensionNeeded(ctx, d)
+	if err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	if err := validateStartupSeed(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-	}
-	if err := validateSourceConfig(ctx, d); err != nil {
-		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
+	if !needed {
+		if err := validateStartupSeed(ctx, d); err != nil {
+			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
+		}
+		if err := validateSourceConfig(ctx, d); err != nil {
+			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
+		}
 	}
 	RecordStartupStage(ctx, StageCredentialValidation)
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {

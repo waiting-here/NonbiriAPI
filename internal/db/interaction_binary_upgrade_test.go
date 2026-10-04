@@ -109,6 +109,12 @@ func verifyReleasedStorageUpgrade(t *testing.T, source, expectedSourceManifest s
 				}
 			}
 		}
+		for _, table := range []string{"lake_notes_profiles", "lake_notes_casts"} {
+			var unknown int
+			if err := database.QueryRow("SELECT count(*) FROM " + table + " WHERE storage_version<>1").Scan(&unknown); err != nil || unknown != 0 {
+				t.Fatal("saved Lake Notes format was not initialized", table, unknown, err)
+			}
+		}
 		rows, err := database.Query(`SELECT context_id,encrypted_secret FROM endpoint_key_secrets`)
 		if err != nil {
 			store.Close()

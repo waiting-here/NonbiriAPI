@@ -5,7 +5,7 @@ import _ "embed"
 
 // Fresh bootstrap executes this static, non-idempotent DDL without runtime
 // transformations. Schema changes update this file's SQL, both independent
-// pins, and a registered migration from the deployed predecessor. Historical
+// pins, and an append-only schema/data migration. Historical
 // declarations belong to the upgrade paths rather than fresh construction.
 //
 //go:embed generation_two.sql

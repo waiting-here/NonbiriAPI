@@ -1,7 +1,5 @@
-
+-- Canonical current schema. Historical transitions live in migrations/.
 PRAGMA foreign_keys=ON;
-
--- ===== identity and inherited alpha.3 facts ================================
 CREATE TABLE users (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  discord_id TEXT UNIQUE,
@@ -31,7 +29,7 @@ CREATE TABLE users (
  revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16),
  lang TEXT NOT NULL DEFAULT '' CHECK(lang IN ('','zh','en')),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
- updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), charity_profile_public INTEGER NOT NULL DEFAULT 0 CHECK(typeof(charity_profile_public)='integer' AND charity_profile_public IN (0,1)), donation_credit_achieved_at INTEGER CHECK(donation_credit_achieved_at IS NULL OR (typeof(donation_credit_achieved_at)='integer' AND donation_credit_achieved_at BETWEEN 0 AND 253402300799)), donation_credit_achieved_seq BLOB CHECK(donation_credit_achieved_seq IS NULL OR (typeof(donation_credit_achieved_seq)='blob' AND length(donation_credit_achieved_seq)=16 AND donation_credit_achieved_seq>X'00000000000000000000000000000000')) CHECK((donation_credit_achieved_at IS NULL)=(donation_credit_achieved_seq IS NULL)), ban_kind TEXT NOT NULL DEFAULT '' CHECK(ban_kind='' OR (ban_kind='protective_inactivity' AND is_admin=0 AND is_banned=1 AND banned_until IS NULL)),
  CHECK(endpoint_limit IS NULL OR endpoint_limit BETWEEN 0 AND 10000),
  CHECK(rpm_limit IS NULL OR rpm_limit BETWEEN 1 AND 4096),
  CHECK(concurrency_limit IS NULL OR concurrency_limit BETWEEN 1 AND 100000),
@@ -39,13 +37,9 @@ CREATE TABLE users (
 );
 CREATE INDEX idx_users_created ON users(created_at);
 CREATE UNIQUE INDEX idx_users_one_admin ON users(is_admin) WHERE is_admin=1;
--- A short-lived marker lets the trusted account-deletion trigger distinguish
--- its coordinated maintenance-audit de-identification from a direct UPDATE.
--- It is inserted and removed in the same BEFORE DELETE trigger invocation.
 CREATE TABLE user_deletion_markers (
  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
 );
-
 CREATE TABLE sessions (
  token_hash TEXT NOT NULL PRIMARY KEY,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -64,7 +58,6 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_user ON sessions(user_id);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX idx_sessions_absolute ON sessions(absolute_expires_at);
-
 CREATE TABLE policy_audits (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -75,21 +68,12 @@ CREATE TABLE policy_audits (
  old_value INTEGER CHECK(old_value IN (0,1)),
  new_value INTEGER CHECK(new_value IN (0,1)),
  created_at INTEGER NOT NULL
-);
+, from_revision INTEGER CHECK(from_revision IS NULL OR (typeof(from_revision)='integer' AND from_revision>=0)), to_revision INTEGER CHECK(to_revision IS NULL OR (typeof(to_revision)='integer' AND to_revision>=1)));
 CREATE INDEX idx_policy_audits_resource ON policy_audits(resource_type,resource_id,id);
 CREATE INDEX idx_policy_audits_actor ON policy_audits(actor_user_id,id);
-CREATE TRIGGER policy_audits_no_update BEFORE UPDATE ON policy_audits
-WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
- AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.actor_user_id)
- AND OLD.actor_role=NEW.actor_role AND OLD.resource_type=NEW.resource_type
- AND OLD.resource_id=NEW.resource_id AND OLD.policy=NEW.policy
- AND OLD.old_value=NEW.old_value AND OLD.new_value=NEW.new_value
- AND OLD.created_at=NEW.created_at)
-BEGIN SELECT RAISE(ABORT,'policy_audits is append-only'); END;
 CREATE TRIGGER policy_audits_no_delete BEFORE DELETE ON policy_audits
 BEGIN SELECT RAISE(ABORT,'policy_audits is append-only'); END;
-
- CREATE TABLE admin_alerts (
+CREATE TABLE admin_alerts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL CHECK(kind IN ('fetch_failed','forward_error','registration_rejected','maintenance_enabled','donation_failure_disabled','issue_projection_incomplete','report_retry_exhausted','fishing_retry_exhausted','rps_terminal_retrying','worker_checkpoint_failed','invariant_violation','account_deleted')),
  message TEXT NOT NULL DEFAULT '',
@@ -98,11 +82,10 @@ BEGIN SELECT RAISE(ABORT,'policy_audits is append-only'); END;
  created_at INTEGER NOT NULL,
  resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0,1)),
  resolved_at INTEGER
-);
+, context_version INTEGER NOT NULL DEFAULT 0 CHECK(context_version IN (0,1)), context_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(context_json) AND json_type(context_json)='object' AND length(CAST(context_json AS BLOB))<=16384), resolution_kind TEXT NOT NULL DEFAULT '' CHECK(resolution_kind IN ('','manual','automatic_blacklist','worker_recovered','legacy')));
 CREATE INDEX idx_admin_alerts_created ON admin_alerts(created_at);
 CREATE INDEX idx_admin_alerts_subject_user ON admin_alerts(subject_user_id);
 CREATE INDEX idx_admin_alerts_unresolved ON admin_alerts(resolved,created_at);
-
 CREATE TABLE user_activity_daily (
  day INTEGER NOT NULL,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -116,11 +99,10 @@ CREATE TABLE user_activity_daily (
  console_writes INTEGER NOT NULL DEFAULT 0 CHECK(console_writes BETWEEN 0 AND 9223372036854775807),
  game_active INTEGER NOT NULL DEFAULT 0 CHECK(game_active IN (0,1)),
  game_rounds INTEGER NOT NULL DEFAULT 0 CHECK(game_rounds BETWEEN 0 AND 9223372036854775807),
- updated_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL, game_checkins INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_checkins)='integer' AND game_checkins BETWEEN 0 AND 9223372036854775807),
  PRIMARY KEY(day,user_id)
 );
 CREATE INDEX idx_user_activity_user ON user_activity_daily(user_id);
-
 CREATE TABLE site_activity_daily (
  day INTEGER PRIMARY KEY,
  product_active INTEGER NOT NULL DEFAULT 0 CHECK(product_active IN (0,1)),
@@ -135,8 +117,7 @@ CREATE TABLE site_activity_daily (
  game_rounds BLOB NOT NULL CHECK(typeof(game_rounds)='blob' AND length(game_rounds)=16),
  distinct_product_users BLOB NOT NULL CHECK(typeof(distinct_product_users)='blob' AND length(distinct_product_users)=16),
  updated_at INTEGER NOT NULL
-);
-
+, game_checkins BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_checkins)='blob' AND length(game_checkins)=16));
 CREATE TABLE site_usage_totals (
  id INTEGER PRIMARY KEY CHECK(id=1),
  total_requests BLOB NOT NULL CHECK(typeof(total_requests)='blob' AND length(total_requests)=16),
@@ -153,8 +134,6 @@ CREATE TABLE config_revisions (
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
  updated_at INTEGER NOT NULL
 );
-
--- ===== mainstream channel authority and endpoint provenance ================
 CREATE TABLE mainstream_channels (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='mch_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  name TEXT NOT NULL CHECK(typeof(name)='text' AND length(name) BETWEEN 1 AND 128),
@@ -194,8 +173,6 @@ WHEN (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
  OR (NEW.retired_at IS NOT NULL AND typeof(NEW.retired_at)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-
--- ===== caller keys, endpoint identity, and model catalog ====================
 CREATE TABLE caller_keys (
  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  generation INTEGER NOT NULL CHECK(generation BETWEEN 0 AND 9223372036854775807),
@@ -209,7 +186,6 @@ CREATE TABLE caller_keys (
    OR (key_hash IS NOT NULL AND length(display_head)<=16 AND length(display_tail)<=16 AND key_created_at IS NOT NULL))
 );
 CREATE UNIQUE INDEX idx_caller_keys_hash ON caller_keys(key_hash) WHERE key_hash IS NOT NULL;
-
 CREATE TABLE checkins (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -222,7 +198,6 @@ CREATE TABLE checkins (
 );
 CREATE INDEX idx_checkins_user_day ON checkins(user_id,site_day);
 CREATE INDEX idx_checkins_operation ON checkins(operation_id);
-
 CREATE TABLE endpoints (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -253,7 +228,6 @@ WHEN NEW.mainstream_channel_id IS NOT OLD.mainstream_channel_id
  OR NEW.mainstream_channel_name IS NOT OLD.mainstream_channel_name
  OR NEW.mainstream_channel_category IS NOT OLD.mainstream_channel_category
 BEGIN SELECT RAISE(ABORT,'endpoint channel provenance is immutable'); END;
-
 CREATE TABLE endpoint_key_secrets (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  context_id BLOB NOT NULL UNIQUE CHECK(typeof(context_id)='blob' AND length(context_id)=16),
@@ -262,9 +236,8 @@ CREATE TABLE endpoint_key_secrets (
  encrypted_secret TEXT NOT NULL CHECK(typeof(encrypted_secret)='text' AND length(CAST(encrypted_secret AS BLOB)) BETWEEN 1 AND 131072),
  created_at INTEGER NOT NULL,
  orphaned_at INTEGER CHECK(orphaned_at IS NULL OR orphaned_at BETWEEN 0 AND 253402300799)
-);
+, key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32)));
 CREATE INDEX idx_endpoint_key_secrets_orphaned ON endpoint_key_secrets(orphaned_at,id) WHERE orphaned_at IS NOT NULL;
-
 CREATE TABLE endpoint_keys (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  endpoint_id INTEGER NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
@@ -287,7 +260,6 @@ CREATE TABLE endpoint_keys (
 );
 CREATE INDEX idx_endpoint_keys_owner_cursor ON endpoint_keys(endpoint_id,updated_at,id);
 CREATE INDEX idx_endpoint_keys_fingerprint ON endpoint_keys(secret_fingerprint);
-
 CREATE TABLE endpoint_key_suspensions (
  endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
  reason_type TEXT NOT NULL CHECK(reason_type='report_case'),
@@ -296,7 +268,6 @@ CREATE TABLE endpoint_key_suspensions (
  PRIMARY KEY(endpoint_key_id,reason_type,report_case_id)
 );
 CREATE INDEX idx_endpoint_key_suspensions_reason ON endpoint_key_suspensions(endpoint_key_id,reason_type);
-
 CREATE TABLE model_discovery_evidence (
  endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE CASCADE,
  state TEXT NOT NULL CHECK(state IN ('unknown','checking','succeeded','failed')),
@@ -316,7 +287,6 @@ CREATE TABLE model_discovery_evidence (
  CHECK(started_at IS NULL OR completed_at IS NULL OR completed_at>=started_at)
 );
 CREATE INDEX idx_model_discovery_due ON model_discovery_evidence(state,started_at,endpoint_key_id);
-
 CREATE TABLE model_catalog_entries (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
@@ -345,7 +315,6 @@ CREATE TABLE model_catalog_entries (
  UNIQUE(id,endpoint_key_id)
 );
 CREATE INDEX idx_model_catalog_pair_model ON model_catalog_entries(endpoint_key_id,normalized_model_id,source_type);
-
 CREATE TABLE model_pair_catalog (
  endpoint_key_id INTEGER NOT NULL REFERENCES endpoint_keys(id) ON DELETE CASCADE,
  normalized_model_id TEXT NOT NULL CHECK(typeof(normalized_model_id)='text' AND length(normalized_model_id) BETWEEN 1 AND 512),
@@ -357,7 +326,6 @@ CREATE TABLE model_pair_catalog (
  PRIMARY KEY(endpoint_key_id,normalized_model_id)
 );
 CREATE INDEX idx_model_pair_catalog_model ON model_pair_catalog(normalized_model_id,endpoint_key_id);
-
 CREATE TABLE models (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -370,12 +338,11 @@ CREATE TABLE models (
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
  binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807),
  created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL, role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')),
  UNIQUE(user_id,full_name), UNIQUE(id,user_id), CHECK(full_name=provider||'/'||model)
 );
 CREATE INDEX idx_models_user ON models(user_id);
 CREATE INDEX idx_models_user_fullname ON models(user_id,full_name);
-
 CREATE TABLE model_bindings (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  model_id INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
@@ -388,7 +355,6 @@ CREATE TABLE model_bindings (
  FOREIGN KEY(endpoint_key_id,upstream_model_id) REFERENCES model_pair_catalog(endpoint_key_id,normalized_model_id) ON DELETE CASCADE
 );
 CREATE INDEX idx_model_bindings_model ON model_bindings(model_id,ord,id);
-
 CREATE TABLE charity_models (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  provider TEXT NOT NULL, model TEXT NOT NULL, full_name TEXT NOT NULL UNIQUE,
@@ -397,10 +363,10 @@ CREATE TABLE charity_models (
  uncached_user_price INTEGER NOT NULL DEFAULT 0 CHECK(uncached_user_price BETWEEN 0 AND 9000000000000000), cache_write_user_price INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_user_price BETWEEN 0 AND 9000000000000000), cache_read_user_price INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_user_price BETWEEN 0 AND 9000000000000000), output_user_price INTEGER NOT NULL DEFAULT 0 CHECK(output_user_price BETWEEN 0 AND 9000000000000000),
  uncached_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(uncached_donor_reward BETWEEN 0 AND 9000000000000000), cache_write_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_donor_reward BETWEEN 0 AND 9000000000000000), cache_read_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_donor_reward BETWEEN 0 AND 9000000000000000), output_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(output_donor_reward BETWEEN 0 AND 9000000000000000),
  discount_percent INTEGER NOT NULL DEFAULT 100 CHECK(discount_percent BETWEEN 0 AND 100), discount_start_at INTEGER, discount_end_at INTEGER, discount_enabled INTEGER NOT NULL DEFAULT 0 CHECK(discount_enabled IN (0,1)), flatten_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK(flatten_tool_calls IN (0,1)), created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
- revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807), binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+ revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807), binding_revision INTEGER NOT NULL DEFAULT 0 CHECK(binding_revision BETWEEN 0 AND 9223372036854775807), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, is_mainstream INTEGER NOT NULL DEFAULT 0 CHECK(is_mainstream IN (0,1)), excluded_request_fields TEXT NOT NULL DEFAULT '[]'
+ CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200), role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object'), transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream')),
  CHECK(full_name='[公益]'||provider||'/'||model), CHECK(discount_end_at IS NULL OR discount_start_at IS NULL OR discount_end_at>=discount_start_at)
 );
-
 CREATE TABLE donation_keys (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE,
@@ -419,7 +385,7 @@ CREATE TABLE donation_keys (
  mainstream_channel_category TEXT CHECK(mainstream_channel_category IS NULL OR mainstream_channel_category IN ('subscription','api_platform')),
  source_endpoint_key_id INTEGER NOT NULL CHECK(typeof(source_endpoint_key_id)='integer' AND source_endpoint_key_id>0),
  report_fingerprint BLOB CHECK(report_fingerprint IS NULL OR (typeof(report_fingerprint)='blob' AND length(report_fingerprint)=32)),
- report_match_until INTEGER CHECK(report_match_until IS NULL OR (typeof(report_match_until)='integer' AND report_match_until BETWEEN 0 AND 253402300799)),
+ report_match_until INTEGER CHECK(report_match_until IS NULL OR (typeof(report_match_until)='integer' AND report_match_until BETWEEN 0 AND 253402300799)), failure_disable_threshold TEXT NOT NULL DEFAULT '10' CHECK(typeof(failure_disable_threshold)='text' AND instr(failure_disable_threshold,char(0))=0 AND (failure_disable_threshold='0' OR (length(failure_disable_threshold) BETWEEN 1 AND 39 AND failure_disable_threshold NOT GLOB '*[^0-9]*' AND substr(failure_disable_threshold,1,1) BETWEEN '1' AND '9' AND (length(failure_disable_threshold)<39 OR failure_disable_threshold<='340282366920938463463374607431768211455')))), input_token_limit_mag BLOB CHECK(input_token_limit_mag IS NULL OR (typeof(input_token_limit_mag)='blob' AND length(input_token_limit_mag)=16 AND hex(input_token_limit_mag)<='00000000000000007FFFFFFFFFFFFFFF')), output_token_limit_mag BLOB CHECK(output_token_limit_mag IS NULL OR (typeof(output_token_limit_mag)='blob' AND length(output_token_limit_mag)=16 AND hex(output_token_limit_mag)<='00000000000000007FFFFFFFFFFFFFFF')), input_token_reserve INTEGER CHECK(input_token_reserve IS NULL OR (typeof(input_token_reserve)='integer' AND input_token_reserve>=0)), output_token_reserve INTEGER CHECK(output_token_reserve IS NULL OR (typeof(output_token_reserve)='integer' AND output_token_reserve>=0)), input_tokens_used BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(input_tokens_used)='blob' AND length(input_tokens_used)=16), output_tokens_used BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(output_tokens_used)='blob' AND length(output_tokens_used)=16), input_tokens_reserved BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(input_tokens_reserved)='blob' AND length(input_tokens_reserved)=16), output_tokens_reserved BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(output_tokens_reserved)='blob' AND length(output_tokens_reserved)=16), unattributed_total_tokens BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(unattributed_total_tokens)='blob' AND length(unattributed_total_tokens)=16), breakdown_started_at INTEGER NOT NULL DEFAULT 0 CHECK(typeof(breakdown_started_at)='integer' AND breakdown_started_at BETWEEN 0 AND 253402300799), key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32)), review_revision INTEGER CHECK(review_revision IS NULL OR (typeof(review_revision)='integer' AND review_revision>=1)), manual_catalog_revision INTEGER NOT NULL DEFAULT 1 CHECK(typeof(manual_catalog_revision)='integer' AND manual_catalog_revision>=1),
  UNIQUE(id,donation_id), CHECK(typeof(display_head)='text' AND typeof(display_tail)='text' AND typeof(canonical_base_url)='text' AND typeof(safe_note)='text'), CHECK(length(CAST(display_head AS BLOB)) BETWEEN 0 AND 16 AND length(CAST(display_tail AS BLOB)) BETWEEN 0 AND 16 AND display_head NOT GLOB '*[^ -~]*' AND display_tail NOT GLOB '*[^ -~]*'), CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 0 AND 4096), CHECK(length(safe_note) BETWEEN 0 AND 256), CHECK(ended_reason IS NULL OR ended_reason IN ('withdrawn','terminated','expired','member_removed','account_deleted')),
  CHECK(endpoint_key_id IS NOT NULL OR ended_at IS NOT NULL),
  CHECK(endpoint_key_id IS NULL OR endpoint_key_id=source_endpoint_key_id),
@@ -429,9 +395,9 @@ CREATE TABLE donation_keys (
  CHECK((ended_at IS NULL AND ended_reason IS NULL AND report_fingerprint IS NOT NULL AND report_match_until IS NULL)
    OR (ended_at IS NOT NULL AND ended_reason IS NOT NULL AND enabled=0 AND report_match_until IS NOT NULL AND report_match_until=ended_at+7776000))
 );
- CREATE INDEX idx_donation_keys_donation ON donation_keys(donation_id);
- CREATE INDEX idx_donation_keys_route ON donation_keys(enabled,failure_disabled,ended_at,id);
- CREATE UNIQUE INDEX idx_donation_keys_donation_endpoint ON donation_keys(donation_id,endpoint_key_id) WHERE endpoint_key_id IS NOT NULL;
+CREATE INDEX idx_donation_keys_donation ON donation_keys(donation_id);
+CREATE INDEX idx_donation_keys_route ON donation_keys(enabled,failure_disabled,ended_at,id);
+CREATE UNIQUE INDEX idx_donation_keys_donation_endpoint ON donation_keys(donation_id,endpoint_key_id) WHERE endpoint_key_id IS NOT NULL;
 CREATE INDEX idx_donation_keys_source_key ON donation_keys(source_endpoint_key_id,id);
 CREATE INDEX idx_donation_keys_report_fingerprint ON donation_keys(report_fingerprint) WHERE report_fingerprint IS NOT NULL;
 CREATE INDEX idx_donation_keys_report_match ON donation_keys(report_match_until,id) WHERE report_match_until IS NOT NULL;
@@ -476,7 +442,6 @@ WHEN NEW.report_fingerprint IS NOT OLD.report_fingerprint AND NOT (
  AND OLD.ended_at IS NOT NULL AND OLD.report_match_until IS NOT NULL
  AND NEW.updated_at>=OLD.report_match_until)
 BEGIN SELECT RAISE(ABORT,'donation key report fingerprint mutation is not allowed'); END;
-
 CREATE TABLE charity_model_bindings (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), charity_model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE, endpoint_key_id INTEGER NOT NULL, upstream_model_id TEXT NOT NULL, ord INTEGER NOT NULL DEFAULT 0 CHECK(ord BETWEEN 0 AND 511), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
  UNIQUE(charity_model_id,donation_key_id,upstream_model_id), UNIQUE(charity_model_id,ord), FOREIGN KEY(endpoint_key_id) REFERENCES endpoint_keys(id) ON DELETE CASCADE
@@ -484,14 +449,11 @@ CREATE TABLE charity_model_bindings (
 CREATE INDEX idx_charity_bindings_model ON charity_model_bindings(charity_model_id,ord,id);
 CREATE TABLE charity_model_stats (model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE, next_slot INTEGER NOT NULL DEFAULT 0 CHECK(next_slot BETWEEN 0 AND 99), sample_count INTEGER NOT NULL DEFAULT 0 CHECK(sample_count BETWEEN 0 AND 100), success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count BETWEEN 0 AND 100)) STRICT;
 CREATE TABLE charity_model_outcomes (model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, slot INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 99), success INTEGER NOT NULL CHECK(success IN (0,1)), created_at INTEGER NOT NULL, PRIMARY KEY(model_id,slot));
-
--- ===== common request/idempotency and dispatch facts =======================
 CREATE TABLE idempotency_records (
  scope TEXT NOT NULL CHECK(scope IN ('credential_report','control_mutation','openai_chat_completions','charity_chat_completions','model_discovery','maintenance','announcement','activity','game_fishing','game_linklink','game_rps','game_bidding','game_likes','game_blackjack','activity_loan','donation','lake_notes','personal_automation')), actor_scope_hash BLOB NOT NULL CHECK(typeof(actor_scope_hash)='blob' AND length(actor_scope_hash)=32), key_hash BLOB NOT NULL CHECK(typeof(key_hash)='blob' AND length(key_hash)=32), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), lookup_fingerprint BLOB CHECK(lookup_fingerprint IS NULL OR (typeof(lookup_fingerprint)='blob' AND length(lookup_fingerprint)=32)), state TEXT NOT NULL CHECK(state IN ('accepted','completed')), http_status INTEGER NOT NULL CHECK(http_status=0 OR http_status BETWEEN 100 AND 599), response_body BLOB NOT NULL CHECK(typeof(response_body)='blob' AND length(response_body)<=65536), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,actor_scope_hash,key_hash), CHECK(expires_at>=created_at), CHECK((scope='credential_report' AND lookup_fingerprint IS NOT NULL AND expires_at=created_at+86400) OR (scope<>'credential_report' AND lookup_fingerprint IS NULL)), CHECK((state='accepted' AND http_status=0 AND length(response_body)=0) OR (state='completed' AND http_status BETWEEN 100 AND 599))
 );
 CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
-
- CREATE TABLE logical_requests (
+CREATE TABLE logical_requests (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='req_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
  route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings')),
@@ -506,7 +468,7 @@ CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
  settlement_destination TEXT NOT NULL CHECK(settlement_destination IN ('user','external')),
  ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
- terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799),
+ terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings')),
  CHECK((state<>'terminal' AND caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND terminal_at IS NULL) OR
        (state='terminal' AND caller_result_class IS NOT NULL AND terminal_at IS NOT NULL AND terminal_at>=created_at AND
         ((caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL) OR
@@ -518,7 +480,6 @@ CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
 );
 CREATE INDEX idx_logical_requests_user ON logical_requests(user_id,created_at,id);
 CREATE INDEX idx_logical_requests_state ON logical_requests(state,created_at,id);
-
 CREATE TABLE dispatch_claims (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='clm_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  logical_request_id TEXT NOT NULL REFERENCES logical_requests(id) ON DELETE CASCADE CHECK(length(logical_request_id)=26 AND substr(logical_request_id,1,4)='req_' AND substr(logical_request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(logical_request_id,-1,1) IN ('A','Q','g','w')),
@@ -539,7 +500,7 @@ CREATE TABLE dispatch_claims (
  donor_reward_actual_milli INTEGER CHECK(donor_reward_actual_milli IS NULL OR donor_reward_actual_milli BETWEEN 0 AND 9000000000000000),
  donor_reward_state TEXT NOT NULL DEFAULT 'not_applicable' CHECK(donor_reward_state IN ('not_applicable','pending','posted','zero','not_due','receiver_deleted')),
  dispatched_at INTEGER CHECK(dispatched_at IS NULL OR dispatched_at BETWEEN 0 AND 253402300799),
- terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799),
+ terminal_at INTEGER CHECK(terminal_at IS NULL OR terminal_at BETWEEN 0 AND 253402300799), reserved_input_tokens INTEGER CHECK(reserved_input_tokens IS NULL OR (typeof(reserved_input_tokens)='integer' AND reserved_input_tokens>=0)), reserved_output_tokens INTEGER CHECK(reserved_output_tokens IS NULL OR (typeof(reserved_output_tokens)='integer' AND reserved_output_tokens>=0)), streak_disposition TEXT CHECK(streak_disposition IS NULL OR streak_disposition IN ('success','upstream_failure','neutral')), failure_origin TEXT CHECK(failure_origin IS NULL OR failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','legacy_unknown','recovery_unknown')),
  UNIQUE(logical_request_id,attempt_seq),
  CHECK((state IN ('claimed','dispatched') AND secret_ref_id IS NOT NULL) OR (state IN ('committed','released') AND secret_ref_id IS NULL AND terminal_at IS NOT NULL)),
  CHECK((state='claimed' AND dispatched_at IS NULL AND terminal_at IS NULL) OR
@@ -560,7 +521,6 @@ CREATE TABLE dispatch_claims (
 CREATE INDEX idx_dispatch_claims_request ON dispatch_claims(logical_request_id,attempt_seq);
 CREATE INDEX idx_dispatch_claims_secret ON dispatch_claims(secret_ref_id,state);
 CREATE INDEX idx_dispatch_claims_due ON dispatch_claims(state,claim_now,id);
-
 CREATE TABLE request_logs (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  logical_request_id TEXT NOT NULL UNIQUE CHECK(length(logical_request_id)=26 AND substr(logical_request_id,1,4)='req_' AND substr(logical_request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(logical_request_id,-1,1) IN ('A','Q','g','w')),
@@ -586,7 +546,8 @@ CREATE TABLE request_logs (
  error_source TEXT NOT NULL DEFAULT 'platform' CHECK(error_source IN ('platform','upstream')),
  error_code TEXT NOT NULL DEFAULT '' CHECK(typeof(error_code)='text' AND length(CAST(error_code AS BLOB))<=64 AND error_code NOT GLOB '*[^a-z0-9_]*'),
  error_diag TEXT NOT NULL DEFAULT '' CHECK(typeof(error_diag)='text' AND length(CAST(error_diag AS BLOB))<=4096),
- legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)),
+ legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight')), rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable')), request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST')), request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings')), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), origin_user_id INTEGER CHECK(origin_user_id IS NULL OR (typeof(origin_user_id)='integer' AND origin_user_id>0)), origin_discord_id TEXT CHECK(origin_discord_id IS NULL OR (typeof(origin_discord_id)='text' AND length(origin_discord_id) BETWEEN 1 AND 20 AND origin_discord_id NOT GLOB '*[^0-9]*' AND substr(origin_discord_id,1,1) BETWEEN '1' AND '9')),
  CHECK((caller_result_class IS NULL AND caller_status IS NULL AND caller_error_code IS NULL AND completed_at IS NULL AND status_code=0 AND error_code='') OR
        (caller_result_class='success' AND caller_status BETWEEN 200 AND 399 AND caller_error_code IS NULL AND completed_at IS NOT NULL) OR
        (caller_result_class='failed' AND caller_status BETWEEN 400 AND 599 AND caller_error_code IN ('internal','invalid_request','unauthorized','forbidden','not_found','conflict','method_not_allowed','rate_limited','payload_too_large','elevated_required','unbound_model','upstream','maintenance','service_unavailable','resource_limit_exceeded','resource_locked','debug_dry_run_intercepted','debug_live_result_captured','debug_live_cancelled','insufficient_credits','feature_disabled','charity_suspended','content_too_short','already_checked_in','checkin_cap_reached') AND completed_at IS NOT NULL) OR
@@ -594,14 +555,14 @@ CREATE TABLE request_logs (
  CHECK((caller_result_class IS NULL AND completed_at IS NULL) OR (caller_result_class IS NOT NULL AND completed_at IS NOT NULL))
 );
 CREATE INDEX idx_request_logs_user_started ON request_logs(user_id,started_at,id);
-CREATE INDEX idx_request_logs_retention ON request_logs(completed_at,id) WHERE completed_at IS NOT NULL;
 CREATE TABLE request_attempts (
- claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), request_log_id INTEGER NOT NULL REFERENCES request_logs(id) ON DELETE CASCADE, attempt_seq INTEGER NOT NULL CHECK(attempt_seq BETWEEN 1 AND 100), endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), upstream_model_id TEXT NOT NULL CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id) BETWEEN 0 AND 512), result_kind TEXT NOT NULL CHECK(result_kind IN ('response','synthetic')), upstream_status INTEGER CHECK(upstream_status IS NULL OR upstream_status BETWEEN 100 AND 599), upstream_code TEXT, diag TEXT, input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799), completed_at INTEGER NOT NULL CHECK(completed_at BETWEEN 0 AND 253402300799 AND completed_at>=started_at), UNIQUE(request_log_id,attempt_seq), CHECK(upstream_code IS NULL OR (typeof(upstream_code)='text' AND length(CAST(upstream_code AS BLOB)) BETWEEN 1 AND 64 AND upstream_code NOT GLOB '*[^ -~]*')), CHECK(diag IS NULL OR (typeof(diag)='text' AND length(CAST(diag AS BLOB))<=4096))
+ claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), request_log_id INTEGER NOT NULL REFERENCES request_logs(id) ON DELETE CASCADE, attempt_seq INTEGER NOT NULL CHECK(attempt_seq BETWEEN 1 AND 100), endpoint_id_snapshot INTEGER, endpoint_key_id_snapshot INTEGER, connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), upstream_model_id TEXT NOT NULL CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id) BETWEEN 0 AND 512), result_kind TEXT NOT NULL CHECK(result_kind IN ('response','synthetic')), upstream_status INTEGER CHECK(upstream_status IS NULL OR upstream_status BETWEEN 100 AND 599), upstream_code TEXT, diag TEXT, input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799), completed_at INTEGER NOT NULL CHECK(completed_at BETWEEN 0 AND 253402300799 AND completed_at>=started_at), usage_total_mismatch INTEGER NOT NULL DEFAULT 0
+ CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1)), UNIQUE(request_log_id,attempt_seq), CHECK(upstream_code IS NULL OR (typeof(upstream_code)='text' AND length(CAST(upstream_code AS BLOB)) BETWEEN 1 AND 64 AND upstream_code NOT GLOB '*[^ -~]*')), CHECK(diag IS NULL OR (typeof(diag)='text' AND length(CAST(diag AS BLOB))<=4096))
 );
 CREATE INDEX idx_request_attempts_log_seq ON request_attempts(request_log_id,attempt_seq);
 CREATE INDEX idx_request_attempts_started ON request_attempts(started_at);
 CREATE INDEX idx_request_attempts_retention ON request_attempts(completed_at,request_log_id,attempt_seq) WHERE completed_at IS NOT NULL;
- CREATE TABLE worker_checkpoints (worker_key TEXT NOT NULL PRIMARY KEY, cursor_text TEXT NOT NULL DEFAULT '', generation INTEGER NOT NULL CHECK(generation BETWEEN 0 AND 9223372036854775807), attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 0 AND 2147483647), next_attempt_at INTEGER NOT NULL CHECK(next_attempt_at BETWEEN 0 AND 253402300799), last_error_class TEXT NOT NULL DEFAULT '' CHECK(last_error_class IN ('','db_busy','internal_retryable','invariant_violation')), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799));
+CREATE TABLE worker_checkpoints (worker_key TEXT NOT NULL PRIMARY KEY, cursor_text TEXT NOT NULL DEFAULT '', generation INTEGER NOT NULL CHECK(generation BETWEEN 0 AND 9223372036854775807), attempt_count INTEGER NOT NULL CHECK(attempt_count BETWEEN 0 AND 2147483647), next_attempt_at INTEGER NOT NULL CHECK(next_attempt_at BETWEEN 0 AND 253402300799), last_error_class TEXT NOT NULL DEFAULT '' CHECK(last_error_class IN ('','db_busy','internal_retryable','invariant_violation')), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), last_success_at INTEGER CHECK(last_success_at IS NULL OR (typeof(last_success_at)='integer' AND last_success_at BETWEEN 0 AND 253402300799 AND last_success_at<=updated_at)));
 CREATE INDEX idx_worker_checkpoints_due ON worker_checkpoints(next_attempt_at,worker_key);
 CREATE TABLE accepted_operations (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
@@ -620,38 +581,32 @@ CREATE TABLE accepted_operations (
        (state='failed_blocked' AND last_error_class='invariant_violation' AND terminal_at IS NOT NULL AND terminal_at>=created_at))
 );
 CREATE INDEX idx_accepted_operations_state ON accepted_operations(state,created_at,id);
-
--- ===== central wide ledger ==================================================
 CREATE TABLE credit_accounts (
- id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), kind TEXT NOT NULL CHECK(kind IN ('user','pool','platform','external')), user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, code TEXT, balance_sign INTEGER NOT NULL CHECK(balance_sign IN (-1,0,1)), balance_mag BLOB NOT NULL CHECK(typeof(balance_mag)='blob' AND length(balance_mag)=16), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, CHECK((balance_sign=0 AND hex(balance_mag)='00000000000000000000000000000000') OR (balance_sign<>0 AND hex(balance_mag)<>'00000000000000000000000000000000')), CHECK((kind='user' AND user_id IS NOT NULL AND code IS NULL) OR (kind<>'user' AND user_id IS NULL AND code IS NOT NULL AND length(code) BETWEEN 1 AND 64)), CHECK(kind IN ('user','external') OR balance_sign IN (0,1)), CHECK((kind='user' AND code IS NULL) OR (kind='external' AND code='external') OR (kind='pool' AND length(code)=31 AND substr(code,1,5)='pool:' AND substr(code,6,4)='pol_' AND substr(code,10) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (kind='platform' AND (code IN ('platform','forward_reserve','charity_reserve','game_fishing_reserve','image_activity_reserve') OR (length(code)=44 AND substr(code,1,18)='blackjack-payment:' AND substr(code,19,4)='bjp_' AND substr(code,23) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,11)='duel-queue:' AND substr(code,12,5) IN ('bidq_','likq_') AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=39 AND substr(code,1,13)='duel-session:' AND substr(code,14,4) IN ('bid_','lik_') AND substr(code,18) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=37 AND substr(code,1,10)='rps-queue:' AND substr(code,11,5)='rpsq_' AND substr(code,16) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,12)='rps-session:' AND substr(code,13,4)='rps_' AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')))))
+ id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), kind TEXT NOT NULL CHECK(kind IN ('user','pool','platform','external')), user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, code TEXT, balance_sign INTEGER NOT NULL CHECK(balance_sign IN (-1,0,1)), balance_mag BLOB NOT NULL CHECK(typeof(balance_mag)='blob' AND length(balance_mag)=16), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')), CHECK((balance_sign=0 AND hex(balance_mag)='00000000000000000000000000000000') OR (balance_sign<>0 AND hex(balance_mag)<>'00000000000000000000000000000000')), CHECK((kind='user' AND user_id IS NOT NULL AND code IS NULL) OR (kind<>'user' AND user_id IS NULL AND code IS NOT NULL AND length(code) BETWEEN 1 AND 64)), CHECK(kind IN ('user','external') OR balance_sign IN (0,1)), CHECK((kind='user' AND code IS NULL) OR (kind='external' AND code='external') OR (kind='pool' AND length(code)=31 AND substr(code,1,5)='pool:' AND substr(code,6,4)='pol_' AND substr(code,10) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (kind='platform' AND (code IN ('platform','forward_reserve','charity_reserve','game_fishing_reserve','image_activity_reserve') OR (length(code)=44 AND substr(code,1,18)='blackjack-payment:' AND substr(code,19,4)='bjp_' AND substr(code,23) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,11)='duel-queue:' AND substr(code,12,5) IN ('bidq_','likq_') AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=39 AND substr(code,1,13)='duel-session:' AND substr(code,14,4) IN ('bid_','lik_') AND substr(code,18) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=37 AND substr(code,1,10)='rps-queue:' AND substr(code,11,5)='rpsq_' AND substr(code,16) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')) OR (length(code)=38 AND substr(code,1,12)='rps-session:' AND substr(code,13,4)='rps_' AND substr(code,17) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(code,-1,1) IN ('A','Q','g','w')))))
 );
-CREATE UNIQUE INDEX idx_credit_accounts_user ON credit_accounts(user_id) WHERE kind='user';
-CREATE UNIQUE INDEX idx_credit_accounts_code ON credit_accounts(code) WHERE code IS NOT NULL;
 CREATE TABLE credit_capacity (id INTEGER PRIMARY KEY CHECK(id=1), last_ledger_seq INTEGER NOT NULL CHECK(last_ledger_seq BETWEEN 0 AND 9223372036854775807), reserved_future_rows BLOB NOT NULL CHECK(typeof(reserved_future_rows)='blob' AND length(reserved_future_rows)=16), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16));
 CREATE TABLE credit_operations (
- id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (donation_credit_user_id IS NOT NULL AND kind IN ('admin_user_adjustment','donor_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
+ id TEXT NOT NULL PRIMARY KEY CHECK(typeof(id)='text' AND length(id)=25 AND substr(id,1,3)='op_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), ledger_seq INTEGER NOT NULL UNIQUE CHECK(ledger_seq BETWEEN 1 AND 9223372036854775807), kind TEXT NOT NULL CHECK(kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','image_reserve','image_settle','image_refund','image_delete_finalize','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout','forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release','donor_reward','thursday_finalize','fishing_reserve','fishing_settle','fishing_release','linklink_entry','rps_queue_reserve','rps_queue_release','rps_session_start','rps_round_cut','rps_terminal','duel_queue_reserve','duel_queue_release','duel_session_start','duel_terminal','blackjack_reserve','blackjack_settle','blackjack_release')), source_type TEXT NOT NULL CHECK(source_type IN ('image_task','operation','logical_request','dispatch_claim','period','fishing_batch','linklink_session','rps_queue','rps_session','duel_queue','duel_session','blackjack_payment')), source_id TEXT NOT NULL, source_seq BLOB NOT NULL CHECK(typeof(source_seq)='blob' AND length(source_seq)=16), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, donation_credit_delta_sign INTEGER NOT NULL CHECK(donation_credit_delta_sign IN (-1,0,1)), donation_credit_delta_mag BLOB NOT NULL CHECK(typeof(donation_credit_delta_mag)='blob' AND length(donation_credit_delta_mag)=16), donation_credit_after BLOB CHECK(donation_credit_after IS NULL OR (typeof(donation_credit_after)='blob' AND length(donation_credit_after)=16)), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1)), UNIQUE(kind,source_type,source_id,source_seq), CHECK((donation_credit_delta_sign=0 AND hex(donation_credit_delta_mag)='00000000000000000000000000000000') OR (donation_credit_delta_sign<>0 AND hex(donation_credit_delta_mag)<>'00000000000000000000000000000000')), CHECK((donation_credit_user_id IS NULL AND donation_credit_delta_sign=0 AND donation_credit_after IS NULL) OR (donation_credit_user_id IS NOT NULL AND kind IN ('admin_user_adjustment','donor_reward'))), CHECK((donation_credit_delta_sign=0 OR kind IN ('admin_user_adjustment','donor_reward'))), CHECK((reason IS NULL OR kind IN ('admin_user_adjustment','admin_pool_adjustment','anti_abuse_penalty'))), CHECK((source_type='operation' AND length(source_id)=25 AND substr(source_id,1,3)='op_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='image_task' AND length(source_id)=26 AND substr(source_id,1,4)='img_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='logical_request' AND length(source_id)=26 AND substr(source_id,1,4)='req_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='dispatch_claim' AND length(source_id)=26 AND substr(source_id,1,4)='clm_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='period' AND length(source_id)=26 AND substr(source_id,1,4)='thu_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='fishing_batch' AND length(source_id)=25 AND substr(source_id,1,3)='fb_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='linklink_session' AND length(source_id)=25 AND substr(source_id,1,3)='ll_' AND substr(source_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_queue' AND length(source_id)=27 AND substr(source_id,1,5)='rpsq_' AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='blackjack_payment' AND length(source_id)=26 AND substr(source_id,1,4)='bjp_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_queue' AND length(source_id)=27 AND substr(source_id,1,5) IN ('bidq_','likq_') AND substr(source_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='duel_session' AND length(source_id)=26 AND substr(source_id,1,4) IN ('bid_','lik_') AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w')) OR (source_type='rps_session' AND length(source_id)=26 AND substr(source_id,1,4)='rps_' AND substr(source_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(source_id,-1,1) IN ('A','Q','g','w'))), CHECK((kind IN ('admin_user_adjustment','admin_pool_adjustment','account_delete_zero','checkin_award','game_onboarding_reward','activity_loan','activity_exchange','inactivity_decay','fatfish_unlock','fatfish_ticket','fatfish_reward','fatfish_refund','lake_entry','lake_exchange','anti_abuse_penalty','welfare_claim','thursday_contribution','thursday_payout') AND source_type='operation' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release') AND source_type='logical_request' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('image_reserve','image_settle','image_refund','image_delete_finalize') AND source_type='image_task' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='donor_reward' AND source_type='dispatch_claim' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='thursday_finalize' AND source_type='period' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('fishing_reserve','fishing_settle','fishing_release') AND source_type='fishing_batch' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='linklink_entry' AND source_type='linklink_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_queue_reserve','rps_queue_release') AND source_type='rps_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('rps_session_start','rps_terminal') AND source_type='rps_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('blackjack_reserve','blackjack_settle','blackjack_release') AND source_type='blackjack_payment' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_queue_reserve','duel_queue_release') AND source_type='duel_queue' AND hex(source_seq)='00000000000000000000000000000000') OR (kind IN ('duel_session_start','duel_terminal') AND source_type='duel_session' AND hex(source_seq)='00000000000000000000000000000000') OR (kind='rps_round_cut' AND source_type='rps_session' AND hex(source_seq)<>'00000000000000000000000000000000'))
 ) WITHOUT ROWID;
 CREATE INDEX idx_credit_operations_source ON credit_operations(source_type,source_id,source_seq);
 CREATE INDEX idx_credit_operations_created ON credit_operations(created_at,ledger_seq);
 CREATE TABLE credit_entries (
- operation_id TEXT NOT NULL REFERENCES credit_operations(id) ON DELETE CASCADE CHECK(typeof(operation_id)='text' AND length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), line_no INTEGER NOT NULL CHECK(line_no BETWEEN 0 AND 255), account_id INTEGER REFERENCES credit_accounts(id) ON DELETE SET NULL, account_kind_snapshot TEXT NOT NULL CHECK(account_kind_snapshot IN ('user','pool','platform','external')), delta_sign INTEGER NOT NULL CHECK(delta_sign IN (-1,0,1)), delta_mag BLOB NOT NULL CHECK(typeof(delta_mag)='blob' AND length(delta_mag)=16), balance_after_sign INTEGER, balance_after_mag BLOB CHECK((account_kind_snapshot='user' AND balance_after_sign IS NULL AND balance_after_mag IS NULL) OR (account_kind_snapshot<>'user' AND balance_after_sign IS NOT NULL AND balance_after_mag IS NOT NULL)), PRIMARY KEY(operation_id,line_no), CHECK((delta_sign=0 AND hex(delta_mag)='00000000000000000000000000000000') OR (delta_sign<>0 AND hex(delta_mag)<>'00000000000000000000000000000000')), CHECK((balance_after_sign IS NULL AND balance_after_mag IS NULL) OR (balance_after_sign IN (-1,0,1) AND typeof(balance_after_mag)='blob' AND length(balance_after_mag)=16 AND ((balance_after_sign=0 AND hex(balance_after_mag)='00000000000000000000000000000000') OR (balance_after_sign<>0 AND hex(balance_after_mag)<>'00000000000000000000000000000000')))), CHECK(account_kind_snapshot NOT IN ('pool','platform') OR balance_after_sign IN (0,1))
+ operation_id TEXT NOT NULL REFERENCES credit_operations(id) ON DELETE CASCADE CHECK(typeof(operation_id)='text' AND length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), line_no INTEGER NOT NULL CHECK(line_no BETWEEN 0 AND 255), account_id INTEGER REFERENCES credit_accounts(id) ON DELETE SET NULL, account_kind_snapshot TEXT NOT NULL CHECK(account_kind_snapshot IN ('user','pool','platform','external')), delta_sign INTEGER NOT NULL CHECK(delta_sign IN (-1,0,1)), delta_mag BLOB NOT NULL CHECK(typeof(delta_mag)='blob' AND length(delta_mag)=16), balance_after_sign INTEGER, balance_after_mag BLOB CHECK((account_kind_snapshot='user' AND balance_after_sign IS NULL AND balance_after_mag IS NULL) OR (account_kind_snapshot<>'user' AND balance_after_sign IS NOT NULL AND balance_after_mag IS NOT NULL)), asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush')), PRIMARY KEY(operation_id,line_no), CHECK((delta_sign=0 AND hex(delta_mag)='00000000000000000000000000000000') OR (delta_sign<>0 AND hex(delta_mag)<>'00000000000000000000000000000000')), CHECK((balance_after_sign IS NULL AND balance_after_mag IS NULL) OR (balance_after_sign IN (-1,0,1) AND typeof(balance_after_mag)='blob' AND length(balance_after_mag)=16 AND ((balance_after_sign=0 AND hex(balance_after_mag)='00000000000000000000000000000000') OR (balance_after_sign<>0 AND hex(balance_after_mag)<>'00000000000000000000000000000000')))), CHECK(account_kind_snapshot NOT IN ('pool','platform') OR balance_after_sign IN (0,1))
 ) WITHOUT ROWID;
 CREATE INDEX idx_credit_entries_account ON credit_entries(account_id,operation_id,line_no);
- CREATE TABLE shared_pools (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='pol_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), pool_type TEXT NOT NULL CHECK(pool_type IN ('welfare','thursday')), period_id TEXT REFERENCES thursday_periods(id) ON DELETE RESTRICT CHECK(period_id IS NULL OR (length(period_id)=26 AND substr(period_id,1,4)='thu_' AND substr(period_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(period_id,-1,1) IN ('A','Q','g','w'))), account_id INTEGER NOT NULL UNIQUE REFERENCES credit_accounts(id) ON DELETE RESTRICT, state TEXT NOT NULL CHECK(state IN ('open','closed')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), closed_at INTEGER CHECK(closed_at IS NULL OR closed_at BETWEEN 0 AND 253402300799), UNIQUE(pool_type,period_id), CHECK((pool_type='welfare' AND period_id IS NULL) OR pool_type='thursday'), CHECK((state='open' AND closed_at IS NULL) OR (state='closed' AND closed_at IS NOT NULL AND closed_at>=created_at)));
+CREATE TABLE shared_pools (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='pol_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), pool_type TEXT NOT NULL CHECK(pool_type IN ('welfare','thursday')), period_id TEXT REFERENCES thursday_periods(id) ON DELETE RESTRICT CHECK(period_id IS NULL OR (length(period_id)=26 AND substr(period_id,1,4)='thu_' AND substr(period_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(period_id,-1,1) IN ('A','Q','g','w'))), account_id INTEGER NOT NULL UNIQUE REFERENCES credit_accounts(id) ON DELETE RESTRICT, state TEXT NOT NULL CHECK(state IN ('open','closed')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), closed_at INTEGER CHECK(closed_at IS NULL OR closed_at BETWEEN 0 AND 253402300799), UNIQUE(pool_type,period_id), CHECK((pool_type='welfare' AND period_id IS NULL) OR pool_type='thursday'), CHECK((state='open' AND closed_at IS NULL) OR (state='closed' AND closed_at IS NOT NULL AND closed_at>=created_at)));
 CREATE UNIQUE INDEX idx_shared_pools_welfare_singleton ON shared_pools(pool_type) WHERE pool_type='welfare';
 CREATE UNIQUE INDEX idx_shared_pools_unbound_thursday ON shared_pools(pool_type) WHERE pool_type='thursday' AND period_id IS NULL;
-
--- ===== announcement and activity facts =====================================
- CREATE TABLE announcements (
+CREATE TABLE announcements (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='ann_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), state TEXT NOT NULL CHECK(state IN ('draft','published','withdrawn','expired')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), draft_title_zh TEXT NOT NULL DEFAULT '', draft_body_zh TEXT NOT NULL DEFAULT '', draft_title_en TEXT NOT NULL DEFAULT '', draft_body_en TEXT NOT NULL DEFAULT '', published_title_zh TEXT, published_body_zh TEXT, published_title_en TEXT, published_body_en TEXT, severity TEXT NOT NULL CHECK(severity IN ('info','warning','important')), pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1)), dismissible INTEGER NOT NULL DEFAULT 1 CHECK(dismissible IN (0,1)), expires_at INTEGER CHECK(expires_at IS NULL OR expires_at BETWEEN 0 AND 253402300799), published_revision INTEGER CHECK(published_revision IS NULL OR published_revision BETWEEN 1 AND 9223372036854775807), published_at INTEGER CHECK(published_at IS NULL OR published_at BETWEEN 0 AND 253402300799), withdrawn_at INTEGER CHECK(withdrawn_at IS NULL OR withdrawn_at BETWEEN 0 AND 253402300799), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), CHECK((state='published' AND published_revision BETWEEN 1 AND revision AND published_at IS NOT NULL AND published_title_zh IS NOT NULL AND published_body_zh IS NOT NULL AND published_title_en IS NOT NULL AND published_body_en IS NOT NULL AND ((length(published_title_zh)>0 AND length(published_body_zh)>0) OR (length(published_title_en)>0 AND length(published_body_en)>0))) OR state<>'published'), CHECK(((published_revision IS NULL) AND published_at IS NULL AND published_title_zh IS NULL AND published_body_zh IS NULL AND published_title_en IS NULL AND published_body_en IS NULL) OR ((published_revision IS NOT NULL) AND published_at IS NOT NULL AND published_title_zh IS NOT NULL AND published_body_zh IS NOT NULL AND published_title_en IS NOT NULL AND published_body_en IS NOT NULL)), CHECK(length(draft_title_zh)<=160 AND length(draft_title_en)<=160 AND length(CAST(draft_body_zh AS BLOB))<=65536 AND length(CAST(draft_body_en AS BLOB))<=65536), CHECK(published_title_zh IS NULL OR length(published_title_zh)<=160), CHECK(published_title_en IS NULL OR length(published_title_en)<=160), CHECK(published_body_zh IS NULL OR length(CAST(published_body_zh AS BLOB))<=65536), CHECK(published_body_en IS NULL OR length(CAST(published_body_en AS BLOB))<=65536)
  );
 CREATE INDEX idx_announcements_user ON announcements(state,pinned DESC,published_at DESC,id);
 CREATE INDEX idx_announcements_expiry ON announcements(expires_at,id);
 CREATE INDEX idx_announcements_revision ON announcements(revision,id);
- CREATE TABLE announcement_audits (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), announcement_id_text TEXT NOT NULL CHECK(length(announcement_id_text)=26 AND substr(announcement_id_text,1,4)='ann_' AND substr(announcement_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(announcement_id_text,-1,1) IN ('A','Q','g','w')), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action TEXT NOT NULL CHECK(action IN ('create','edit','publish','withdraw','expire','delete')), from_revision INTEGER NOT NULL CHECK(from_revision BETWEEN 0 AND 9223372036854775807), to_revision INTEGER NOT NULL CHECK(to_revision BETWEEN 1 AND 9223372036854775807), reason TEXT NOT NULL DEFAULT '' CHECK(typeof(reason)='text' AND length(reason)<=1024 AND length(CAST(reason AS BLOB))<=4096), created_at INTEGER NOT NULL, actor_deidentify_at INTEGER NOT NULL, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(actor_deidentify_at=created_at+7776000));
+CREATE TABLE announcement_audits (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), announcement_id_text TEXT NOT NULL CHECK(length(announcement_id_text)=26 AND substr(announcement_id_text,1,4)='ann_' AND substr(announcement_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(announcement_id_text,-1,1) IN ('A','Q','g','w')), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action TEXT NOT NULL CHECK(action IN ('create','edit','publish','withdraw','expire','delete')), from_revision INTEGER NOT NULL CHECK(from_revision BETWEEN 0 AND 9223372036854775807), to_revision INTEGER NOT NULL CHECK(to_revision BETWEEN 1 AND 9223372036854775807), reason TEXT NOT NULL DEFAULT '' CHECK(typeof(reason)='text' AND length(reason)<=1024 AND length(CAST(reason AS BLOB))<=4096), created_at INTEGER NOT NULL, actor_deidentify_at INTEGER NOT NULL, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(actor_deidentify_at=created_at+7776000));
 CREATE INDEX idx_announcement_audits_retention ON announcement_audits(created_at,id);
 CREATE INDEX idx_announcement_audits_actor ON announcement_audits(actor_user_id,created_at);
- CREATE TABLE welfare_claims (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, site_day TEXT NOT NULL, operation_id TEXT NOT NULL UNIQUE REFERENCES credit_operations(id) ON DELETE RESTRICT, threshold_milli INTEGER NOT NULL CHECK(threshold_milli BETWEEN 0 AND 9000000000000000), cap_milli INTEGER NOT NULL CHECK(cap_milli BETWEEN 0 AND 9000000000000000), pool_before_milli INTEGER NOT NULL CHECK(pool_before_milli BETWEEN 0 AND 9000000000000000), award_milli INTEGER NOT NULL CHECK(award_milli BETWEEN 1 AND 9000000000000000), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), UNIQUE(user_id,site_day), CHECK(length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), CHECK(length(site_day)=10 AND site_day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(site_day)=site_day), CHECK(award_milli<=cap_milli AND award_milli<=pool_before_milli));
+CREATE TABLE welfare_claims (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, site_day TEXT NOT NULL, operation_id TEXT NOT NULL UNIQUE REFERENCES credit_operations(id) ON DELETE RESTRICT, threshold_milli INTEGER NOT NULL CHECK(threshold_milli BETWEEN 0 AND 9000000000000000), cap_milli INTEGER NOT NULL CHECK(cap_milli BETWEEN 0 AND 9000000000000000), pool_before_milli INTEGER NOT NULL CHECK(pool_before_milli BETWEEN 0 AND 9000000000000000), award_milli INTEGER NOT NULL CHECK(award_milli BETWEEN 1 AND 9000000000000000), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game')), UNIQUE(user_id,site_day), CHECK(length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), CHECK(length(site_day)=10 AND site_day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(site_day)=site_day), CHECK(award_milli<=cap_milli AND award_milli<=pool_before_milli));
 CREATE INDEX idx_welfare_claims_user_day ON welfare_claims(user_id,site_day);
 CREATE INDEX idx_welfare_claims_retention ON welfare_claims(created_at,id);
 CREATE TABLE thursday_periods (
@@ -662,42 +617,6 @@ CREATE INDEX idx_thursday_periods_cursor ON thursday_periods(settlement_cursor,i
 CREATE TABLE thursday_participants (period_id TEXT NOT NULL REFERENCES thursday_periods(id) ON DELETE CASCADE CHECK(length(period_id)=26 AND substr(period_id,1,4)='thu_' AND substr(period_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(period_id,-1,1) IN ('A','Q','g','w')), participant_ref TEXT NOT NULL CHECK(length(participant_ref)=26 AND substr(participant_ref,1,4)='thp_' AND substr(participant_ref,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(participant_ref,-1,1) IN ('A','Q','g','w')), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, contribution_count BLOB NOT NULL CHECK(typeof(contribution_count)='blob' AND length(contribution_count)=16), contributed_mag BLOB NOT NULL CHECK(typeof(contributed_mag)='blob' AND length(contributed_mag)=16), eligible_at_freeze INTEGER NOT NULL CHECK(eligible_at_freeze IN (0,1)), payout_mag BLOB NOT NULL CHECK(typeof(payout_mag)='blob' AND length(payout_mag)=16), unpaid_reason TEXT CHECK(unpaid_reason IS NULL OR unpaid_reason IN ('account_banned','account_deleted')), settled INTEGER NOT NULL DEFAULT 0 CHECK(settled IN (0,1)), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(period_id,participant_ref));
 CREATE UNIQUE INDEX idx_thursday_active_participant ON thursday_participants(period_id,user_id) WHERE user_id IS NOT NULL AND settled=0;
 CREATE INDEX idx_thursday_participants_user ON thursday_participants(user_id,period_id);
-
-CREATE TRIGGER welfare_claim_matrix_guard BEFORE INSERT ON welfare_claims
-WHEN typeof(NEW.site_day)<>'text'
- OR length(NEW.site_day)<>10
- OR NEW.site_day NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
- OR date(NEW.site_day)<>NEW.site_day
- OR NEW.threshold_milli NOT BETWEEN 0 AND 9000000000000000
- OR NEW.cap_milli NOT BETWEEN 0 AND 9000000000000000
- OR NEW.pool_before_milli NOT BETWEEN 0 AND 9000000000000000
- OR NEW.award_milli NOT BETWEEN 1 AND 9000000000000000
- OR NEW.award_milli>NEW.cap_milli
- OR NEW.award_milli>NEW.pool_before_milli
- OR NEW.created_at NOT BETWEEN 0 AND 253402300799
- OR NOT EXISTS(SELECT 1 FROM credit_operations o
-               WHERE o.id=NEW.operation_id AND o.kind='welfare_claim'
-                 AND o.source_type='operation' AND o.source_id=NEW.operation_id
-                 AND hex(o.source_seq)='00000000000000000000000000000000')
-BEGIN SELECT RAISE(ABORT,'welfare claim matrix is invalid'); END;
-CREATE TRIGGER welfare_claim_matrix_update_guard BEFORE UPDATE ON welfare_claims
-WHEN typeof(NEW.site_day)<>'text'
- OR length(NEW.site_day)<>10
- OR NEW.site_day NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
- OR date(NEW.site_day)<>NEW.site_day
- OR NEW.threshold_milli NOT BETWEEN 0 AND 9000000000000000
- OR NEW.cap_milli NOT BETWEEN 0 AND 9000000000000000
- OR NEW.pool_before_milli NOT BETWEEN 0 AND 9000000000000000
- OR NEW.award_milli NOT BETWEEN 1 AND 9000000000000000
- OR NEW.award_milli>NEW.cap_milli
- OR NEW.award_milli>NEW.pool_before_milli
- OR NEW.created_at NOT BETWEEN 0 AND 253402300799
- OR NOT EXISTS(SELECT 1 FROM credit_operations o
-               WHERE o.id=NEW.operation_id AND o.kind='welfare_claim'
-                 AND o.source_type='operation' AND o.source_id=NEW.operation_id
-                 AND hex(o.source_seq)='00000000000000000000000000000000')
-BEGIN SELECT RAISE(ABORT,'welfare claim matrix is invalid'); END;
-
 CREATE TRIGGER thursday_period_matrix_guard BEFORE INSERT ON thursday_periods
 WHEN typeof(NEW.period_key)<>'text'
  OR length(NEW.period_key)<>10
@@ -802,9 +721,7 @@ WHEN typeof(NEW.contribution_count)<>'blob' OR length(NEW.contribution_count)<>1
  OR (NEW.settled=1 AND NEW.user_id IS NOT NULL AND NEW.eligible_at_freeze=0 AND (NEW.unpaid_reason IS NULL OR NEW.unpaid_reason<>'account_banned' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000'))
  OR (NEW.settled=1 AND NEW.user_id IS NOT NULL AND NEW.eligible_at_freeze=1 AND NEW.unpaid_reason IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'thursday participant matrix is invalid'); END;
-
--- ===== donations, charity reservations, and report/security facts ==========
- CREATE TABLE donations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','deleted','expired')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), description TEXT NOT NULL DEFAULT '', review_note TEXT NOT NULL DEFAULT '', reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewed_by_role TEXT NOT NULL DEFAULT '' CHECK(reviewed_by_role IN ('','admin','level5','level6','trainee5')), reviewed_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK((status IN ('pending','approved') AND terminal_at IS NULL) OR (status IN ('rejected','deleted','expired') AND terminal_at IS NOT NULL)));
+CREATE TABLE donations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','deleted','expired')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), description TEXT NOT NULL DEFAULT '', review_note TEXT NOT NULL DEFAULT '', reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewed_by_role TEXT NOT NULL DEFAULT '' CHECK(reviewed_by_role IN ('','admin','level5','level6','trainee5')), reviewed_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), discord_public_thanks INTEGER CHECK(discord_public_thanks IN (0,1)), first_approval_origin TEXT NOT NULL DEFAULT 'unknown' CHECK(first_approval_origin IN ('auto','manual','unknown')), CHECK((status IN ('pending','approved') AND terminal_at IS NULL) OR (status IN ('rejected','deleted','expired') AND terminal_at IS NOT NULL)));
 CREATE INDEX idx_donations_user ON donations(user_id,created_at,id);
 CREATE INDEX idx_donations_status ON donations(status,terminal_at,id);
 CREATE TRIGGER donation_terminal_immutable BEFORE UPDATE OF status,terminal_at ON donations
@@ -813,19 +730,18 @@ WHEN OLD.status IN ('rejected','deleted','expired')
 BEGIN SELECT RAISE(ABORT,'terminal donation cannot reopen or move its terminal time'); END;
 CREATE TABLE donation_key_memberships (endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE RESTRICT, donation_key_id INTEGER NOT NULL UNIQUE REFERENCES donation_keys(id) ON DELETE CASCADE, donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE, created_at INTEGER NOT NULL);
 CREATE INDEX idx_donation_memberships_donation ON donation_key_memberships(donation_id,endpoint_key_id);
- CREATE TABLE donation_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE, submission_revision INTEGER NOT NULL DEFAULT 1 CHECK(submission_revision BETWEEN 1 AND 9223372036854775807), reviewer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewer_role TEXT NOT NULL DEFAULT '' CHECK(reviewer_role IN ('','admin','level5','level6','trainee5')), action TEXT NOT NULL CHECK(action IN ('approve','reject','withdraw','terminate','expire','enable','disable','limit_update','note_update','member_removed','failure_streak_reset','failure_policy_update','force_reject')), note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE TABLE donation_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE, submission_revision INTEGER NOT NULL DEFAULT 1 CHECK(submission_revision BETWEEN 1 AND 9223372036854775807), reviewer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewer_role TEXT NOT NULL DEFAULT '' CHECK(reviewer_role IN ('','admin','level5','level6','trainee5')), action TEXT NOT NULL CHECK(action IN ('approve','reject','withdraw','terminate','expire','enable','disable','limit_update','note_update','member_removed','failure_streak_reset','failure_policy_update','force_reject')), note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
 CREATE INDEX idx_donation_reviews_donation ON donation_reviews(donation_id,id);
- CREATE TABLE charity_reservations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), logical_request_id TEXT NOT NULL UNIQUE REFERENCES logical_requests(id) ON DELETE CASCADE CHECK(length(logical_request_id)=26 AND substr(logical_request_id,1,4)='req_' AND substr(logical_request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(logical_request_id,-1,1) IN ('A','Q','g','w')), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, charity_model_id INTEGER REFERENCES charity_models(id) ON DELETE SET NULL, model_snapshot TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('reserved','dispatched','committed','released')), pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token')), discount_percent INTEGER NOT NULL CHECK(discount_percent BETWEEN 0 AND 100), request_user_price_milli INTEGER NOT NULL CHECK(request_user_price_milli BETWEEN 0 AND 9000000000000000), request_donor_reward_milli INTEGER NOT NULL CHECK(request_donor_reward_milli BETWEEN 0 AND 9000000000000000), uncached_user_price_milli INTEGER NOT NULL CHECK(uncached_user_price_milli BETWEEN 0 AND 9000000000000000), cache_write_user_price_milli INTEGER NOT NULL CHECK(cache_write_user_price_milli BETWEEN 0 AND 9000000000000000), cache_read_user_price_milli INTEGER NOT NULL CHECK(cache_read_user_price_milli BETWEEN 0 AND 9000000000000000), output_user_price_milli INTEGER NOT NULL CHECK(output_user_price_milli BETWEEN 0 AND 9000000000000000), uncached_donor_reward_milli INTEGER NOT NULL CHECK(uncached_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_write_donor_reward_milli INTEGER NOT NULL CHECK(cache_write_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_read_donor_reward_milli INTEGER NOT NULL CHECK(cache_read_donor_reward_milli BETWEEN 0 AND 9000000000000000), output_donor_reward_milli INTEGER NOT NULL CHECK(output_donor_reward_milli BETWEEN 0 AND 9000000000000000), token_reserve_milli INTEGER NOT NULL CHECK(token_reserve_milli>=0), user_reserved_milli INTEGER NOT NULL CHECK(user_reserved_milli>=0), original_charge_milli INTEGER NOT NULL CHECK(original_charge_milli>=0), user_charge_milli INTEGER NOT NULL CHECK(user_charge_milli>=0), donor_reward_total_mag BLOB NOT NULL CHECK(typeof(donor_reward_total_mag)='blob' AND length(donor_reward_total_mag)=16), usage_uncached_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_uncached_input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), usage_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), created_at INTEGER NOT NULL, dispatched_at INTEGER, finalized_at INTEGER, updated_at INTEGER NOT NULL);
+CREATE TABLE charity_reservations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), logical_request_id TEXT NOT NULL UNIQUE REFERENCES logical_requests(id) ON DELETE CASCADE CHECK(length(logical_request_id)=26 AND substr(logical_request_id,1,4)='req_' AND substr(logical_request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(logical_request_id,-1,1) IN ('A','Q','g','w')), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, charity_model_id INTEGER REFERENCES charity_models(id) ON DELETE SET NULL, model_snapshot TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('reserved','dispatched','committed','released')), pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token')), discount_percent INTEGER NOT NULL CHECK(discount_percent BETWEEN 0 AND 100), request_user_price_milli INTEGER NOT NULL CHECK(request_user_price_milli BETWEEN 0 AND 9000000000000000), request_donor_reward_milli INTEGER NOT NULL CHECK(request_donor_reward_milli BETWEEN 0 AND 9000000000000000), uncached_user_price_milli INTEGER NOT NULL CHECK(uncached_user_price_milli BETWEEN 0 AND 9000000000000000), cache_write_user_price_milli INTEGER NOT NULL CHECK(cache_write_user_price_milli BETWEEN 0 AND 9000000000000000), cache_read_user_price_milli INTEGER NOT NULL CHECK(cache_read_user_price_milli BETWEEN 0 AND 9000000000000000), output_user_price_milli INTEGER NOT NULL CHECK(output_user_price_milli BETWEEN 0 AND 9000000000000000), uncached_donor_reward_milli INTEGER NOT NULL CHECK(uncached_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_write_donor_reward_milli INTEGER NOT NULL CHECK(cache_write_donor_reward_milli BETWEEN 0 AND 9000000000000000), cache_read_donor_reward_milli INTEGER NOT NULL CHECK(cache_read_donor_reward_milli BETWEEN 0 AND 9000000000000000), output_donor_reward_milli INTEGER NOT NULL CHECK(output_donor_reward_milli BETWEEN 0 AND 9000000000000000), token_reserve_milli INTEGER NOT NULL CHECK(token_reserve_milli>=0), user_reserved_milli INTEGER NOT NULL CHECK(user_reserved_milli>=0), original_charge_milli INTEGER NOT NULL CHECK(original_charge_milli>=0), user_charge_milli INTEGER NOT NULL CHECK(user_charge_milli>=0), donor_reward_total_mag BLOB NOT NULL CHECK(typeof(donor_reward_total_mag)='blob' AND length(donor_reward_total_mag)=16), usage_uncached_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_uncached_input_tokens>=0), cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_input_tokens>=0), cache_read_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_input_tokens>=0), usage_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_output_tokens>=0), usage_unknown INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)), created_at INTEGER NOT NULL, dispatched_at INTEGER, finalized_at INTEGER, updated_at INTEGER NOT NULL);
 CREATE INDEX idx_charity_reservations_state ON charity_reservations(state,created_at,id);
 CREATE INDEX idx_charity_reservations_user ON charity_reservations(user_id,created_at,id);
-CREATE TABLE donation_usage_reservations (claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), donation_key_id INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL, streak_generation BLOB NOT NULL CHECK(typeof(streak_generation)='blob' AND length(streak_generation)=16), claim_seq BLOB NOT NULL CHECK(typeof(claim_seq)='blob' AND length(claim_seq)=16), price_reserved_milli INTEGER NOT NULL CHECK(price_reserved_milli BETWEEN 0 AND 9000000000000000), price_actual_milli INTEGER CHECK(price_actual_milli IS NULL OR price_actual_milli BETWEEN 0 AND 9000000000000000), reward_actual_milli INTEGER CHECK(reward_actual_milli IS NULL OR reward_actual_milli BETWEEN 0 AND 9000000000000000), calls_reserved INTEGER NOT NULL CHECK(calls_reserved IN (0,1)), calls_actual INTEGER CHECK(calls_actual IS NULL OR calls_actual IN (0,1)), tokens_reserved INTEGER NOT NULL CHECK(tokens_reserved BETWEEN 0 AND 9223372036854775807), tokens_actual INTEGER CHECK(tokens_actual IS NULL OR tokens_actual BETWEEN 0 AND 9223372036854775807), protocol_success INTEGER CHECK(protocol_success IS NULL OR protocol_success IN (0,1)), usage_unknown INTEGER CHECK(usage_unknown IS NULL OR usage_unknown IN (0,1)), state TEXT NOT NULL CHECK(state IN ('reserved','committed','released')), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), finalized_at INTEGER CHECK(finalized_at IS NULL OR finalized_at BETWEEN 0 AND 253402300799), UNIQUE(donation_key_id,streak_generation,claim_seq), CHECK((state='reserved' AND price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL AND finalized_at IS NULL) OR (state='committed' AND price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL AND finalized_at IS NOT NULL) OR (state='released' AND finalized_at IS NOT NULL AND ((price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL) OR (price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL)))));
+CREATE TABLE donation_usage_reservations (claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), donation_key_id INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL, streak_generation BLOB NOT NULL CHECK(typeof(streak_generation)='blob' AND length(streak_generation)=16), claim_seq BLOB NOT NULL CHECK(typeof(claim_seq)='blob' AND length(claim_seq)=16), price_reserved_milli INTEGER NOT NULL CHECK(price_reserved_milli BETWEEN 0 AND 9000000000000000), price_actual_milli INTEGER CHECK(price_actual_milli IS NULL OR price_actual_milli BETWEEN 0 AND 9000000000000000), reward_actual_milli INTEGER CHECK(reward_actual_milli IS NULL OR reward_actual_milli BETWEEN 0 AND 9000000000000000), calls_reserved INTEGER NOT NULL CHECK(calls_reserved IN (0,1)), calls_actual INTEGER CHECK(calls_actual IS NULL OR calls_actual IN (0,1)), tokens_reserved INTEGER NOT NULL CHECK(tokens_reserved BETWEEN 0 AND 9223372036854775807), tokens_actual INTEGER CHECK(tokens_actual IS NULL OR tokens_actual BETWEEN 0 AND 9223372036854775807), protocol_success INTEGER CHECK(protocol_success IS NULL OR protocol_success IN (0,1)), usage_unknown INTEGER CHECK(usage_unknown IS NULL OR usage_unknown IN (0,1)), state TEXT NOT NULL CHECK(state IN ('reserved','committed','released')), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), finalized_at INTEGER CHECK(finalized_at IS NULL OR finalized_at BETWEEN 0 AND 253402300799), input_tokens_reserved INTEGER CHECK(input_tokens_reserved IS NULL OR (typeof(input_tokens_reserved)='integer' AND input_tokens_reserved>=0)), output_tokens_reserved INTEGER CHECK(output_tokens_reserved IS NULL OR (typeof(output_tokens_reserved)='integer' AND output_tokens_reserved>=0)), input_tokens_actual INTEGER CHECK(input_tokens_actual IS NULL OR (typeof(input_tokens_actual)='integer' AND input_tokens_actual>=0)), output_tokens_actual INTEGER CHECK(output_tokens_actual IS NULL OR (typeof(output_tokens_actual)='integer' AND output_tokens_actual>=0)), streak_disposition TEXT CHECK(streak_disposition IS NULL OR streak_disposition IN ('success','upstream_failure','neutral')), failure_origin TEXT CHECK(failure_origin IS NULL OR failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','legacy_unknown','recovery_unknown')), UNIQUE(donation_key_id,streak_generation,claim_seq), CHECK((state='reserved' AND price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL AND finalized_at IS NULL) OR (state='committed' AND price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL AND finalized_at IS NOT NULL) OR (state='released' AND finalized_at IS NOT NULL AND ((price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL) OR (price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL)))));
 CREATE INDEX idx_donation_usage_key_state ON donation_usage_reservations(donation_key_id,state,claim_seq);
-
 CREATE TABLE report_cases (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), fingerprint BLOB NOT NULL CHECK(typeof(fingerprint)='blob' AND length(fingerprint)=32), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3')), canonical_base_url TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending_indexing','pending_review','approved_processing','approved','rejected','expired')), progress_state TEXT NOT NULL CHECK(progress_state IN ('in_progress','complete')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), deadline INTEGER NOT NULL, cursor_source TEXT CHECK(cursor_source IS NULL OR cursor_source IN ('endpoint','donation')), cursor_id INTEGER CHECK(cursor_id IS NULL OR (typeof(cursor_id)='integer' AND cursor_id BETWEEN 0 AND 9223372036854775807)), material_count INTEGER NOT NULL CHECK(material_count>=0), target_count INTEGER NOT NULL CHECK(target_count>=0), distinct_owner_count INTEGER NOT NULL CHECK(distinct_owner_count>=0), processed_target_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_target_count>=0), deleted_target_count INTEGER NOT NULL DEFAULT 0 CHECK(deleted_target_count>=0), released_target_count INTEGER NOT NULL DEFAULT 0 CHECK(released_target_count>=0), decision_reason TEXT, decision_actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, decision_at INTEGER, retry_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(retry_attempt_count>=0), next_retry_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('db_busy','internal_retryable','invariant_violation')), created_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(processed_target_count<=target_count AND deleted_target_count<=target_count AND released_target_count<=target_count), CHECK((cursor_source IS NULL AND cursor_id IS NULL) OR (cursor_source IS NOT NULL AND cursor_id IS NOT NULL)), CHECK(cursor_id IS NULL OR cursor_id>0 OR cursor_source='donation'), CHECK(progress_state='in_progress' OR (cursor_source IS NULL AND cursor_id IS NULL)), CHECK((progress_state='in_progress' AND status IN ('pending_indexing','approved_processing')) OR (progress_state='complete' AND status IN ('pending_review','approved','rejected')) OR status='expired'));
 CREATE UNIQUE INDEX idx_report_cases_active_fingerprint ON report_cases(fingerprint) WHERE status IN ('pending_indexing','pending_review','approved_processing');
 CREATE INDEX idx_report_cases_status_deadline ON report_cases(status,deadline,id);
 CREATE INDEX idx_report_cases_retry ON report_cases(next_retry_at,id);
- CREATE TABLE report_materials (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_hash BLOB NOT NULL CHECK(typeof(material_hash)='blob' AND length(material_hash)=32), note_text TEXT NOT NULL DEFAULT '', reporter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reporter_discord_id TEXT CHECK(reporter_discord_id IS NULL OR (length(CAST(reporter_discord_id AS BLOB)) BETWEEN 1 AND 64 AND reporter_discord_id NOT GLOB '*[^ -~]*')), source_ip_envelope BLOB NOT NULL CHECK(typeof(source_ip_envelope)='blob' AND length(source_ip_envelope)=45), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,material_hash));
+CREATE TABLE report_materials (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_hash BLOB NOT NULL CHECK(typeof(material_hash)='blob' AND length(material_hash)=32), note_text TEXT NOT NULL DEFAULT '', reporter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reporter_discord_id TEXT CHECK(reporter_discord_id IS NULL OR (length(CAST(reporter_discord_id AS BLOB)) BETWEEN 1 AND 64 AND reporter_discord_id NOT GLOB '*[^ -~]*')), source_ip_envelope BLOB NOT NULL CHECK(typeof(source_ip_envelope)='blob' AND length(source_ip_envelope)=45), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,material_hash));
 CREATE INDEX idx_report_materials_case ON report_materials(case_id,id);
 CREATE TABLE report_targets (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpt_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), target_seq INTEGER NOT NULL CHECK(target_seq BETWEEN 0 AND 9223372036854775807), endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL, source_endpoint_key_id INTEGER NOT NULL CHECK(typeof(source_endpoint_key_id)='integer' AND source_endpoint_key_id>0), key_ref BLOB NOT NULL CHECK(typeof(key_ref)='blob' AND length(key_ref)=32), owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, owner_discord_id TEXT CHECK(owner_discord_id IS NULL OR (length(CAST(owner_discord_id AS BLOB)) BETWEEN 1 AND 64 AND owner_discord_id NOT GLOB '*[^ -~]*')), owner_display_name TEXT CHECK(owner_display_name IS NULL OR (typeof(owner_display_name)='text' AND length(CAST(owner_display_name AS BLOB))<=512)), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible','ai-sdk-gateway-v3')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), key_display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_head AS BLOB))<=16), key_display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_tail AS BLOB))<=16), state TEXT NOT NULL CHECK(state IN ('protected','deleted_by_owner','deleted_by_account','deleted_by_approval','released')), discovered_version INTEGER NOT NULL CHECK(discovered_version BETWEEN 1 AND 9223372036854775807), decided_version INTEGER CHECK(decided_version IS NULL OR decided_version BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,key_ref), UNIQUE(case_id,target_seq));
 CREATE INDEX idx_report_targets_case_state ON report_targets(case_id,state,target_seq,id);
@@ -833,7 +749,7 @@ CREATE INDEX idx_report_targets_owner ON report_targets(owner_user_id,id);
 CREATE TRIGGER report_target_source_key_immutable BEFORE UPDATE OF source_endpoint_key_id ON report_targets
 WHEN NEW.source_endpoint_key_id IS NOT OLD.source_endpoint_key_id
 BEGIN SELECT RAISE(ABORT,'report target source endpoint key is immutable'); END;
- CREATE TABLE report_decisions (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action TEXT NOT NULL CHECK(action IN ('approve','reject','expire','resume_processing')), reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE TABLE report_decisions (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action TEXT NOT NULL CHECK(action IN ('approve','reject','expire','resume_processing')), reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
 CREATE INDEX idx_report_decisions_case ON report_decisions(case_id,id);
 CREATE TABLE report_rate_buckets (scope TEXT NOT NULL CHECK(scope IN ('ip','account','fingerprint','global')), scope_hash BLOB NOT NULL CHECK(typeof(scope_hash)='blob' AND length(scope_hash)=32), window_start INTEGER NOT NULL CHECK(window_start BETWEEN 0 AND 253402300799), count INTEGER NOT NULL CHECK(count BETWEEN 0 AND 4096), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,scope_hash,window_start), CHECK((scope IN ('ip','account','fingerprint') AND expires_at=window_start+1200) OR (scope='global' AND expires_at=window_start+120)));
 CREATE INDEX idx_report_rate_buckets_expiry ON report_rate_buckets(expires_at);
@@ -850,20 +766,20 @@ CREATE TABLE legal_holds (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND s
 CREATE INDEX idx_legal_holds_object ON legal_holds(object_kind,object_ref,state);
 CREATE INDEX idx_legal_holds_expiry ON legal_holds(state,expires_at,id);
 CREATE INDEX idx_legal_holds_retention ON legal_holds(retain_until,id);
- CREATE TABLE legal_hold_audits (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), hold_id_text TEXT NOT NULL CHECK(length(hold_id_text)=26 AND substr(hold_id_text,1,4)='lgh_' AND substr(hold_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(hold_id_text,-1,1) IN ('A','Q','g','w')), actor_user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT, action TEXT NOT NULL CHECK(action IN ('create','release','expire')), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), retain_until INTEGER CHECK(retain_until IS NULL OR retain_until BETWEEN 0 AND 253402300799), UNIQUE(hold_id_text,action));
+CREATE TABLE legal_hold_audits (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), hold_id_text TEXT NOT NULL CHECK(length(hold_id_text)=26 AND substr(hold_id_text,1,4)='lgh_' AND substr(hold_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(hold_id_text,-1,1) IN ('A','Q','g','w')), actor_user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT, action TEXT NOT NULL CHECK(action IN ('create','release','expire')), reason TEXT CHECK(reason IS NULL OR (typeof(reason)='text' AND length(reason) BETWEEN 1 AND 1024 AND length(CAST(reason AS BLOB))<=4096)), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), retain_until INTEGER CHECK(retain_until IS NULL OR retain_until BETWEEN 0 AND 253402300799), UNIQUE(hold_id_text,action));
 CREATE INDEX idx_legal_hold_audits_retention ON legal_hold_audits(retain_until,id);
 CREATE TABLE legal_hold_read_audits (hold_id_text TEXT NOT NULL CHECK(length(hold_id_text)=26 AND substr(hold_id_text,1,4)='lgh_' AND substr(hold_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(hold_id_text,-1,1) IN ('A','Q','g','w')), admin_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT, read_kind TEXT NOT NULL CHECK(read_kind IN ('metadata','object')), first_read_at INTEGER NOT NULL CHECK(first_read_at BETWEEN 0 AND 253402300799), last_read_at INTEGER NOT NULL CHECK(last_read_at BETWEEN 0 AND 253402300799 AND last_read_at>=first_read_at), read_count INTEGER NOT NULL CHECK(read_count>=1), retain_until INTEGER CHECK(retain_until IS NULL OR retain_until BETWEEN 0 AND 253402300799), PRIMARY KEY(hold_id_text,admin_user_id,read_kind));
 CREATE INDEX idx_legal_hold_reads_retention ON legal_hold_read_audits(retain_until,hold_id_text);
-
--- ===== games ================================================================
-CREATE TABLE game_user_preferences (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, tutorial_rps_seen INTEGER NOT NULL DEFAULT 0 CHECK(tutorial_rps_seen IN (0,1)), game_profile_public INTEGER NOT NULL DEFAULT 0 CHECK(game_profile_public IN (0,1)), updated_at INTEGER NOT NULL);
-CREATE TABLE game_fishing_batches (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='fb_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, bait TEXT NOT NULL CHECK(bait IN ('worm','lure','premium')), count INTEGER NOT NULL CHECK(count IN (1,10)), unit_price_milli INTEGER NOT NULL CHECK(unit_price_milli BETWEEN 0 AND 9000000000000000), entry_total_milli INTEGER NOT NULL CHECK(entry_total_milli BETWEEN 0 AND 9000000000000000), payout_total_milli INTEGER NOT NULL CHECK(payout_total_milli BETWEEN 0 AND 9000000000000000), operation_id TEXT NOT NULL UNIQUE CHECK(length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), state TEXT NOT NULL CHECK(state IN ('reserved','committed','released')), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count BETWEEN 0 AND 10), next_attempt_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('rng_failed','settlement_failed','db_busy','internal_retryable','invariant_violation')), retry_exhausted INTEGER NOT NULL DEFAULT 0 CHECK(retry_exhausted IN (0,1)), created_at INTEGER NOT NULL, settled_at INTEGER, revealed_at INTEGER, UNIQUE(user_id,operation_id), CHECK((state='reserved' AND settled_at IS NULL AND revealed_at IS NULL AND ((retry_exhausted=0 AND next_attempt_at IS NOT NULL) OR (retry_exhausted=1 AND next_attempt_at IS NULL))) OR (state IN ('committed','released') AND settled_at IS NOT NULL AND next_attempt_at IS NULL AND retry_exhausted=0)), CHECK(entry_total_milli=unit_price_milli*count));
+CREATE TABLE game_user_preferences (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, tutorial_rps_seen INTEGER NOT NULL DEFAULT 0 CHECK(tutorial_rps_seen IN (0,1)), game_profile_public INTEGER NOT NULL DEFAULT 0 CHECK(game_profile_public IN (0,1)), updated_at INTEGER NOT NULL, linklink_public_tie_key BLOB CHECK(linklink_public_tie_key IS NULL OR (typeof(linklink_public_tie_key)='blob' AND length(linklink_public_tie_key)=32)));
+CREATE TABLE game_fishing_batches (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='fb_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, bait TEXT NOT NULL CHECK(bait IN ('worm','lure','premium')), count INTEGER NOT NULL CHECK(count IN (1,10)), unit_price_milli INTEGER NOT NULL CHECK(unit_price_milli BETWEEN 0 AND 9000000000000000), entry_total_milli INTEGER NOT NULL CHECK(entry_total_milli BETWEEN 0 AND 9000000000000000), payout_total_milli INTEGER NOT NULL CHECK(payout_total_milli BETWEEN 0 AND 9000000000000000), operation_id TEXT NOT NULL UNIQUE CHECK(length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), state TEXT NOT NULL CHECK(state IN ('reserved','committed','released')), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count BETWEEN 0 AND 10), next_attempt_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('rng_failed','settlement_failed','db_busy','internal_retryable','invariant_violation')), retry_exhausted INTEGER NOT NULL DEFAULT 0 CHECK(retry_exhausted IN (0,1)), created_at INTEGER NOT NULL, settled_at INTEGER, revealed_at INTEGER, rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2), game_paid_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_paid_milli)='integer' AND game_paid_milli BETWEEN 0 AND entry_total_milli), platform_bp INTEGER NOT NULL DEFAULT 0 CHECK(typeof(platform_bp)='integer' AND platform_bp BETWEEN 0 AND 9999), welfare_bp INTEGER NOT NULL DEFAULT 0 CHECK(typeof(welfare_bp)='integer' AND welfare_bp BETWEEN 0 AND 9999), thursday_bp INTEGER NOT NULL DEFAULT 0 CHECK(typeof(thursday_bp)='integer' AND thursday_bp BETWEEN 0 AND 9999), net_payout_total_milli INTEGER CHECK(net_payout_total_milli IS NULL OR (typeof(net_payout_total_milli)='integer' AND net_payout_total_milli BETWEEN 0 AND 9000000000000000)), platform_cut_total_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(platform_cut_total_milli)='integer' AND platform_cut_total_milli BETWEEN 0 AND 9000000000000000), welfare_cut_total_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(welfare_cut_total_milli)='integer' AND welfare_cut_total_milli BETWEEN 0 AND 9000000000000000), thursday_cut_total_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(thursday_cut_total_milli)='integer' AND thursday_cut_total_milli BETWEEN 0 AND 9000000000000000), blue_fish_chance_bps INTEGER NOT NULL DEFAULT 1000
+ CHECK(typeof(blue_fish_chance_bps)='integer' AND blue_fish_chance_bps BETWEEN 0 AND 10000), config_revision INTEGER
+ CHECK(config_revision IS NULL OR (typeof(config_revision)='integer' AND config_revision>0)), UNIQUE(user_id,operation_id), CHECK((state='reserved' AND settled_at IS NULL AND revealed_at IS NULL AND ((retry_exhausted=0 AND next_attempt_at IS NOT NULL) OR (retry_exhausted=1 AND next_attempt_at IS NULL))) OR (state IN ('committed','released') AND settled_at IS NOT NULL AND next_attempt_at IS NULL AND retry_exhausted=0)), CHECK(entry_total_milli=unit_price_milli*count));
 CREATE UNIQUE INDEX idx_fishing_one_reserved ON game_fishing_batches(user_id) WHERE state='reserved';
 CREATE INDEX idx_fishing_due ON game_fishing_batches(state,next_attempt_at,id);
 CREATE INDEX idx_fishing_user ON game_fishing_batches(user_id,created_at,id);
 CREATE INDEX idx_fishing_unrevealed ON game_fishing_batches(user_id,settled_at,id) WHERE settled_at IS NOT NULL AND revealed_at IS NULL;
 CREATE INDEX idx_fishing_retention ON game_fishing_batches(settled_at,id);
-CREATE TABLE game_fishing_outcomes (batch_id TEXT NOT NULL REFERENCES game_fishing_batches(id) ON DELETE CASCADE CHECK(length(batch_id)=25 AND substr(batch_id,1,3)='fb_' AND substr(batch_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(batch_id,-1,1) IN ('A','Q','g','w')), ordinal INTEGER NOT NULL CHECK(ordinal>=0), species_key TEXT NOT NULL, tier TEXT NOT NULL CHECK(tier IN ('junk','small','regular','big','giant','legend','treasure')), size_cm INTEGER NOT NULL CHECK(size_cm BETWEEN 0 AND 200), payout_milli INTEGER NOT NULL CHECK(payout_milli>=0), PRIMARY KEY(batch_id,ordinal), CHECK((tier='junk' AND species_key IN ('boot','seaweed','plastic_bag','branch','old_tire','glasses','phone_case','fry')) OR (tier='small' AND species_key IN ('whitebait','gudgeon','horse_mouth','smelt','loach')) OR (tier='regular' AND species_key IN ('crucian','tilapia','yellow_catfish','ayu','stream_carp')) OR (tier='big' AND species_key IN ('common_carp','snakehead','catfish','mandarin_fish','rainbow_trout')) OR (tier='giant' AND species_key IN ('grass_carp','silver_carp','bighead_carp','black_carp','japanese_eel')) OR (tier='legend' AND species_key IN ('yellowcheek','taimen','koi')) OR (tier='treasure' AND species_key IN ('bottle','clover','shell'))), CHECK((tier IN ('junk','treasure') AND size_cm=0) OR (tier='small' AND size_cm BETWEEN 5 AND 25) OR (tier='regular' AND size_cm BETWEEN 15 AND 35) OR (tier='big' AND size_cm BETWEEN 30 AND 80) OR (tier='giant' AND size_cm BETWEEN 60 AND 150) OR (tier='legend' AND size_cm BETWEEN 100 AND 200)));
+CREATE TABLE game_fishing_outcomes (batch_id TEXT NOT NULL REFERENCES game_fishing_batches(id) ON DELETE CASCADE CHECK(length(batch_id)=25 AND substr(batch_id,1,3)='fb_' AND substr(batch_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(batch_id,-1,1) IN ('A','Q','g','w')), ordinal INTEGER NOT NULL CHECK(ordinal>=0), species_key TEXT NOT NULL, tier TEXT NOT NULL CHECK(tier IN ('junk','small','regular','big','giant','legend','treasure')), size_cm INTEGER NOT NULL CHECK(size_cm BETWEEN 0 AND 200), payout_milli INTEGER NOT NULL CHECK(payout_milli>=0), net_payout_milli INTEGER CHECK(net_payout_milli IS NULL OR (typeof(net_payout_milli)='integer' AND net_payout_milli BETWEEN 0 AND 9000000000000000)), platform_cut_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(platform_cut_milli)='integer' AND platform_cut_milli BETWEEN 0 AND 9000000000000000), welfare_cut_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(welfare_cut_milli)='integer' AND welfare_cut_milli BETWEEN 0 AND 9000000000000000), thursday_cut_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(thursday_cut_milli)='integer' AND thursday_cut_milli BETWEEN 0 AND 9000000000000000), PRIMARY KEY(batch_id,ordinal), CHECK((tier='junk' AND species_key IN ('boot','seaweed','plastic_bag','branch','old_tire','glasses','phone_case','fry')) OR (tier='small' AND species_key IN ('whitebait','gudgeon','horse_mouth','smelt','loach')) OR (tier='regular' AND species_key IN ('crucian','tilapia','yellow_catfish','ayu','stream_carp')) OR (tier='big' AND species_key IN ('common_carp','snakehead','catfish','mandarin_fish','rainbow_trout')) OR (tier='giant' AND species_key IN ('grass_carp','silver_carp','bighead_carp','black_carp','japanese_eel')) OR (tier='legend' AND species_key IN ('yellowcheek','taimen','koi')) OR (tier='treasure' AND species_key IN ('bottle','clover','shell'))), CHECK((tier IN ('junk','treasure') AND size_cm=0) OR (tier='small' AND size_cm BETWEEN 5 AND 25) OR (tier='regular' AND size_cm BETWEEN 15 AND 35) OR (tier='big' AND size_cm BETWEEN 30 AND 80) OR (tier='giant' AND size_cm BETWEEN 60 AND 150) OR (tier='legend' AND size_cm BETWEEN 100 AND 200)));
 CREATE INDEX idx_fishing_outcomes_rank ON game_fishing_outcomes(tier,size_cm,batch_id,ordinal);
 CREATE TABLE game_fishing_best (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, batch_id TEXT, ordinal INTEGER, species_key TEXT NOT NULL, tier TEXT NOT NULL, size_cm INTEGER NOT NULL CHECK(size_cm BETWEEN 0 AND 200), caught_at INTEGER NOT NULL, public_tie_key BLOB NOT NULL CHECK(typeof(public_tie_key)='blob' AND length(public_tie_key)=32), FOREIGN KEY(batch_id,ordinal) REFERENCES game_fishing_outcomes(batch_id,ordinal) ON DELETE SET NULL, CHECK((batch_id IS NULL AND ordinal IS NULL) OR (batch_id IS NOT NULL AND ordinal IS NOT NULL)), CHECK(batch_id IS NULL OR (length(batch_id)=25 AND substr(batch_id,1,3)='fb_' AND substr(batch_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(batch_id,-1,1) IN ('A','Q','g','w'))));
 CREATE INDEX idx_game_fishing_best_rank ON game_fishing_best(size_cm DESC,caught_at ASC,public_tie_key);
@@ -872,19 +788,18 @@ CREATE INDEX idx_fishing_rank_facts_due ON game_fishing_rank_facts(expires_at,ba
 CREATE INDEX idx_fishing_rank_facts_user ON game_fishing_rank_facts(user_id,expires_at,batch_id_text);
 CREATE TABLE game_fishing_rank_aggregates (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, batch_count BLOB NOT NULL CHECK(typeof(batch_count)='blob' AND length(batch_count)=16), total_payout BLOB NOT NULL CHECK(typeof(total_payout)='blob' AND length(total_payout)=16), score_achieved_at INTEGER NOT NULL, public_tie_key BLOB NOT NULL CHECK(typeof(public_tie_key)='blob' AND length(public_tie_key)=32), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), updated_at INTEGER NOT NULL);
 CREATE INDEX idx_fishing_rank_aggregates_rank ON game_fishing_rank_aggregates(total_payout DESC,score_achieved_at ASC,public_tie_key);
-CREATE TABLE game_linklink_sessions (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='ll_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, spec TEXT NOT NULL CHECK(spec IN ('6x8','8x8','10x10')), state TEXT NOT NULL CHECK(state='active'), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), price_milli INTEGER NOT NULL CHECK(price_milli BETWEEN 0 AND 9000000000000000), board_blob BLOB NOT NULL CHECK(typeof(board_blob)='blob' AND length(board_blob)<=16384), removed_bits BLOB NOT NULL CHECK(typeof(removed_bits)='blob' AND length(removed_bits) BETWEEN 1 AND 13 AND ((spec='6x8' AND length(removed_bits)=6) OR (spec='8x8' AND length(removed_bits)=8) OR (spec='10x10' AND length(removed_bits)=13)) AND (spec<>'10x10' OR substr(hex(removed_bits),-2,1)='0')), pairs_removed INTEGER NOT NULL CHECK(pairs_removed>=0), deadline INTEGER NOT NULL, operation_id TEXT NOT NULL CHECK(length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(user_id));
+CREATE TABLE game_linklink_sessions (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=25 AND substr(id,1,3)='ll_' AND substr(id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, spec TEXT NOT NULL CHECK(spec IN ('6x8','8x8','10x10')), state TEXT NOT NULL CHECK(state='active'), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), price_milli INTEGER NOT NULL CHECK(price_milli BETWEEN 0 AND 9000000000000000), board_blob BLOB NOT NULL CHECK(typeof(board_blob)='blob' AND length(board_blob)<=16384), removed_bits BLOB NOT NULL CHECK(typeof(removed_bits)='blob' AND length(removed_bits) BETWEEN 1 AND 13 AND ((spec='6x8' AND length(removed_bits)=6) OR (spec='8x8' AND length(removed_bits)=8) OR (spec='10x10' AND length(removed_bits)=13)) AND (spec<>'10x10' OR substr(hex(removed_bits),-2,1)='0')), pairs_removed INTEGER NOT NULL CHECK(pairs_removed>=0), deadline INTEGER NOT NULL, operation_id TEXT NOT NULL CHECK(length(operation_id)=25 AND substr(operation_id,1,3)='op_' AND substr(operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(operation_id,-1,1) IN ('A','Q','g','w')), request_hash BLOB NOT NULL CHECK(typeof(request_hash)='blob' AND length(request_hash)=32), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2), game_paid_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_paid_milli)='integer' AND game_paid_milli BETWEEN 0 AND price_milli), assists_initial INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_initial)='integer' AND assists_initial BETWEEN 0 AND 5), assists_remaining INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_remaining)='integer' AND assists_remaining BETWEEN 0 AND assists_initial), UNIQUE(user_id));
 CREATE INDEX idx_linklink_deadline ON game_linklink_sessions(deadline,id);
 CREATE INDEX idx_linklink_user ON game_linklink_sessions(user_id,id);
-CREATE TABLE game_linklink_summaries (session_id TEXT NOT NULL PRIMARY KEY CHECK(length(session_id)=25 AND substr(session_id,1,3)='ll_' AND substr(session_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, spec TEXT NOT NULL CHECK(spec IN ('6x8','8x8','10x10')), price_milli INTEGER NOT NULL CHECK(price_milli>=0), terminal_reason TEXT NOT NULL CHECK(terminal_reason IN ('completed','timed_out','abandoned')), started_at INTEGER NOT NULL, deadline INTEGER NOT NULL, terminal_at INTEGER NOT NULL, pairs_removed INTEGER NOT NULL CHECK(pairs_removed>=0), score INTEGER, CHECK((terminal_reason IN ('completed','timed_out') AND score IS NOT NULL) OR (terminal_reason='abandoned' AND score IS NULL)));
+CREATE TABLE game_linklink_summaries (session_id TEXT NOT NULL PRIMARY KEY CHECK(length(session_id)=25 AND substr(session_id,1,3)='ll_' AND substr(session_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, spec TEXT NOT NULL CHECK(spec IN ('6x8','8x8','10x10')), price_milli INTEGER NOT NULL CHECK(price_milli>=0), terminal_reason TEXT NOT NULL CHECK(terminal_reason IN ('completed','timed_out','abandoned')), started_at INTEGER NOT NULL, deadline INTEGER NOT NULL, terminal_at INTEGER NOT NULL, pairs_removed INTEGER NOT NULL CHECK(pairs_removed>=0), score INTEGER, rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2), game_paid_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_paid_milli)='integer' AND game_paid_milli BETWEEN 0 AND price_milli), assists_initial INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_initial)='integer' AND assists_initial BETWEEN 0 AND 5), assists_remaining INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_remaining)='integer' AND assists_remaining BETWEEN 0 AND assists_initial), CHECK((terminal_reason IN ('completed','timed_out') AND score IS NOT NULL) OR (terminal_reason='abandoned' AND score IS NULL)));
 CREATE INDEX idx_linklink_summaries_retention ON game_linklink_summaries(terminal_at,session_id);
 CREATE INDEX idx_linklink_summaries_user ON game_linklink_summaries(user_id,terminal_at,session_id);
-CREATE TABLE game_rps_queue (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=27 AND substr(id,1,5)='rpsq_' AND substr(id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, account_id INTEGER NOT NULL UNIQUE REFERENCES credit_accounts(id) ON DELETE RESTRICT, mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), reservation_operation_id TEXT NOT NULL CHECK(length(reservation_operation_id)=25 AND substr(reservation_operation_id,1,3)='op_' AND substr(reservation_operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(reservation_operation_id,-1,1) IN ('A','Q','g','w')), reserved BLOB NOT NULL CHECK(typeof(reserved)='blob' AND length(reserved)=16), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), device_token_hash BLOB NOT NULL CHECK(typeof(device_token_hash)='blob' AND length(device_token_hash)=32), source_ip_hash BLOB NOT NULL CHECK(typeof(source_ip_hash)='blob' AND length(source_ip_hash)=32), deadline INTEGER NOT NULL, created_at INTEGER NOT NULL);
-CREATE INDEX idx_rps_queue_match ON game_rps_queue(mode,deadline,created_at,id);
+CREATE TABLE game_rps_queue (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=27 AND substr(id,1,5)='rpsq_' AND substr(id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, account_id INTEGER NOT NULL UNIQUE REFERENCES credit_accounts(id) ON DELETE RESTRICT, mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), reservation_operation_id TEXT NOT NULL CHECK(length(reservation_operation_id)=25 AND substr(reservation_operation_id,1,3)='op_' AND substr(reservation_operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(reservation_operation_id,-1,1) IN ('A','Q','g','w')), reserved BLOB NOT NULL CHECK(typeof(reserved)='blob' AND length(reserved)=16), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), device_token_hash BLOB NOT NULL CHECK(typeof(device_token_hash)='blob' AND length(device_token_hash)=32), source_ip_hash BLOB NOT NULL CHECK(typeof(source_ip_hash)='blob' AND length(source_ip_hash)=32), deadline INTEGER NOT NULL, created_at INTEGER NOT NULL, rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2), game_paid BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_paid)='blob' AND length(game_paid)=16 AND game_paid<=reserved));
 CREATE INDEX idx_rps_queue_user ON game_rps_queue(user_id,id);
 CREATE TABLE game_rps_sessions (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rps_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), account_id INTEGER NOT NULL UNIQUE REFERENCES credit_accounts(id) ON DELETE RESTRICT, mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), rules_version INTEGER NOT NULL CHECK(rules_version>=1), state TEXT NOT NULL CHECK(state IN ('started','terminal_processing')), phase TEXT NOT NULL CHECK(phase IN ('gesture','dealer_raise','followers','paid_pool_gesture','free_pool_gesture','ultimate_gesture','terminal_processing')), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), phase_seq BLOB NOT NULL CHECK(typeof(phase_seq)='blob' AND length(phase_seq)=16), identity_epoch BLOB NOT NULL CHECK(typeof(identity_epoch)='blob' AND length(identity_epoch)=16), cut_seq BLOB NOT NULL CHECK(typeof(cut_seq)='blob' AND length(cut_seq)=16), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), dealer_seat INTEGER CHECK(dealer_seat BETWEEN 0 AND 2), base_milli INTEGER NOT NULL CHECK(base_milli BETWEEN 0 AND 9000000000000000), platform_bp INTEGER NOT NULL CHECK(platform_bp BETWEEN 0 AND 9999), welfare_bp INTEGER NOT NULL CHECK(welfare_bp BETWEEN 0 AND 9999), thursday_bp INTEGER NOT NULL CHECK(thursday_bp BETWEEN 0 AND 9999), gesture_seconds INTEGER NOT NULL CHECK(gesture_seconds BETWEEN 5 AND 20), dealer_seconds INTEGER NOT NULL CHECK(dealer_seconds BETWEEN 5 AND 15), follower_seconds INTEGER NOT NULL CHECK(follower_seconds BETWEEN 5 AND 15), player_pool BLOB NOT NULL CHECK(typeof(player_pool)='blob' AND length(player_pool)=16), permanent_multiplier BLOB NOT NULL CHECK(typeof(permanent_multiplier)='blob' AND length(permanent_multiplier)=16), pool_base_multiplier BLOB CHECK(pool_base_multiplier IS NULL OR (typeof(pool_base_multiplier)='blob' AND length(pool_base_multiplier)=16 AND hex(pool_base_multiplier)<>'00000000000000000000000000000000')), current_plan_multiplier BLOB CHECK(current_plan_multiplier IS NULL OR (typeof(current_plan_multiplier)='blob' AND length(current_plan_multiplier)=16 AND hex(current_plan_multiplier)<>'00000000000000000000000000000000')), dealer_raise BLOB CHECK(dealer_raise IS NULL OR (typeof(dealer_raise)='blob' AND length(dealer_raise)=16 AND hex(dealer_raise)<>'00000000000000000000000000000000')), base_round_count BLOB NOT NULL CHECK(typeof(base_round_count)='blob' AND length(base_round_count)=16), paid_tie_count BLOB NOT NULL CHECK(typeof(paid_tie_count)='blob' AND length(paid_tie_count)=16), free_tie_count BLOB NOT NULL CHECK(typeof(free_tie_count)='blob' AND length(free_tie_count)=16), paid_pool_streak BLOB NOT NULL CHECK(typeof(paid_pool_streak)='blob' AND length(paid_pool_streak)=16), free_pool_streak BLOB NOT NULL CHECK(typeof(free_pool_streak)='blob' AND length(free_pool_streak)=16), platform_cut_total BLOB NOT NULL CHECK(typeof(platform_cut_total)='blob' AND length(platform_cut_total)=16), welfare_cut_total BLOB NOT NULL CHECK(typeof(welfare_cut_total)='blob' AND length(welfare_cut_total)=16), thursday_cut_total BLOB NOT NULL CHECK(typeof(thursday_cut_total)='blob' AND length(thursday_cut_total)=16), welfare_carry_total BLOB NOT NULL CHECK(typeof(welfare_carry_total)='blob' AND length(welfare_carry_total)=16), reminder_state TEXT NOT NULL DEFAULT 'none' CHECK(reminder_state IN ('none','active')), phase_deadline INTEGER CHECK(phase_deadline IS NULL OR phase_deadline BETWEEN 0 AND 253402300799), health_epoch INTEGER NOT NULL DEFAULT 0 CHECK(health_epoch>=0), recent_events_blob BLOB NOT NULL DEFAULT X'' CHECK(typeof(recent_events_blob)='blob' AND length(recent_events_blob)<=131072), recent_first_seq BLOB NOT NULL CHECK(typeof(recent_first_seq)='blob' AND length(recent_first_seq)=16), recent_last_seq BLOB NOT NULL CHECK(typeof(recent_last_seq)='blob' AND length(recent_last_seq)=16), recent_event_count INTEGER NOT NULL DEFAULT 0 CHECK(recent_event_count BETWEEN 0 AND 64), terminal_operation_id TEXT CHECK(terminal_operation_id IS NULL OR (length(terminal_operation_id)=25 AND substr(terminal_operation_id,1,3)='op_' AND substr(terminal_operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(terminal_operation_id,-1,1) IN ('A','Q','g','w'))), terminal_retry_attempt_count BLOB NOT NULL CHECK(typeof(terminal_retry_attempt_count)='blob' AND length(terminal_retry_attempt_count)=16), terminal_next_retry_at INTEGER, terminal_last_error_class TEXT CHECK(terminal_last_error_class IS NULL OR terminal_last_error_class IN ('db_busy','internal_retryable','invariant_violation')), started_at INTEGER NOT NULL, terminal_reason TEXT CHECK(terminal_reason IS NULL OR terminal_reason IN ('quick_resolved','standard_round_limit','standard_insufficient_balance','deathmatch_balance_exhausted','ultimate_resolved','free_tie_limit')), CHECK((state='started' AND phase IN ('gesture','dealer_raise','followers','paid_pool_gesture','free_pool_gesture','ultimate_gesture') AND phase_deadline IS NOT NULL AND terminal_operation_id IS NULL AND terminal_reason IS NULL AND hex(terminal_retry_attempt_count)='00000000000000000000000000000000' AND terminal_next_retry_at IS NULL AND terminal_last_error_class IS NULL) OR (state='terminal_processing' AND phase='terminal_processing' AND phase_deadline IS NULL AND terminal_operation_id IS NOT NULL AND terminal_reason IS NOT NULL AND (hex(terminal_retry_attempt_count)='00000000000000000000000000000000' AND terminal_next_retry_at IS NULL AND terminal_last_error_class IS NULL OR hex(terminal_retry_attempt_count)<>'00000000000000000000000000000000' AND terminal_next_retry_at IS NOT NULL AND terminal_last_error_class IS NOT NULL))), CHECK((phase IN ('gesture','dealer_raise','followers','ultimate_gesture') AND current_plan_multiplier IS NOT NULL AND pool_base_multiplier IS NULL) OR (phase IN ('paid_pool_gesture','free_pool_gesture') AND current_plan_multiplier IS NULL AND pool_base_multiplier IS NOT NULL) OR (phase='terminal_processing' AND current_plan_multiplier IS NULL AND pool_base_multiplier IS NULL)), CHECK((phase='followers' AND (dealer_raise IS NULL OR hex(dealer_raise)<>'00000000000000000000000000000000')) OR (phase<>'followers' AND dealer_raise IS NULL)), CHECK((reminder_state='none') OR (phase='free_pool_gesture' AND free_pool_streak IN (X'00000000000000000000000000000003',X'00000000000000000000000000000004',X'00000000000000000000000000000005'))));
 CREATE INDEX idx_rps_sessions_state ON game_rps_sessions(state,phase_deadline,id);
 CREATE INDEX idx_rps_sessions_mode ON game_rps_sessions(mode,id);
-CREATE TABLE game_rps_seats (session_id TEXT NOT NULL REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, deletion_state TEXT NOT NULL CHECK(deletion_state IN ('active','deletion_pending','deidentified')), display_name_snapshot TEXT, avatar_url_snapshot TEXT, starting_balance BLOB NOT NULL CHECK(typeof(starting_balance)='blob' AND length(starting_balance)=16), current_balance BLOB NOT NULL CHECK(typeof(current_balance)='blob' AND length(current_balance)=16), current_round_input BLOB NOT NULL CHECK(typeof(current_round_input)='blob' AND length(current_round_input)=16), current_all_in INTEGER NOT NULL CHECK(current_all_in IN (0,1)), current_gesture_envelope BLOB CHECK(current_gesture_envelope IS NULL OR (typeof(current_gesture_envelope)='blob' AND length(current_gesture_envelope) IN (33,34,37) AND substr(current_gesture_envelope,1,1)=X'01')), current_gesture_phase_seq BLOB CHECK(current_gesture_phase_seq IS NULL OR (typeof(current_gesture_phase_seq)='blob' AND length(current_gesture_phase_seq)=16)), follower_action TEXT CHECK(follower_action IS NULL OR follower_action IN ('call','surrender')), last_action_phase_seq BLOB CHECK(last_action_phase_seq IS NULL OR (typeof(last_action_phase_seq)='blob' AND length(last_action_phase_seq)=16)), total_input BLOB NOT NULL CHECK(typeof(total_input)='blob' AND length(total_input)=32), total_returned BLOB NOT NULL CHECK(typeof(total_returned)='blob' AND length(total_returned)=32), terminal_return BLOB CHECK(terminal_return IS NULL OR (typeof(terminal_return)='blob' AND length(terminal_return)=16)), wallet_net_sign INTEGER CHECK(wallet_net_sign IS NULL OR wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB, rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), timeout_count BLOB NOT NULL CHECK(typeof(timeout_count)='blob' AND length(timeout_count)=16), snapshot_completed_count BLOB CHECK(snapshot_completed_count IS NULL OR (typeof(snapshot_completed_count)='blob' AND length(snapshot_completed_count)=16)), snapshot_profitable_count BLOB CHECK(snapshot_profitable_count IS NULL OR (typeof(snapshot_profitable_count)='blob' AND length(snapshot_profitable_count)=16)), snapshot_rock_count BLOB CHECK(snapshot_rock_count IS NULL OR (typeof(snapshot_rock_count)='blob' AND length(snapshot_rock_count)=16)), snapshot_scissors_count BLOB CHECK(snapshot_scissors_count IS NULL OR (typeof(snapshot_scissors_count)='blob' AND length(snapshot_scissors_count)=16)), snapshot_paper_count BLOB CHECK(snapshot_paper_count IS NULL OR (typeof(snapshot_paper_count)='blob' AND length(snapshot_paper_count)=16)), stats_applied INTEGER NOT NULL DEFAULT 0 CHECK(stats_applied IN (0,1)), PRIMARY KEY(session_id,seat_no), CHECK((current_gesture_envelope IS NULL AND current_gesture_phase_seq IS NULL) OR (current_gesture_envelope IS NOT NULL AND current_gesture_phase_seq IS NOT NULL)), CHECK((terminal_return IS NULL AND wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (terminal_return IS NOT NULL AND wallet_net_sign IS NOT NULL AND wallet_net_mag IS NOT NULL)), CHECK((wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (wallet_net_sign IS NOT NULL AND typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7') AND ((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')))), CHECK((snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL) OR (snapshot_completed_count IS NOT NULL AND snapshot_profitable_count IS NOT NULL AND snapshot_rock_count IS NOT NULL AND snapshot_scissors_count IS NOT NULL AND snapshot_paper_count IS NOT NULL)), CHECK((deletion_state='active') OR (display_name_snapshot IS NULL AND avatar_url_snapshot IS NULL AND snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL)));
+CREATE TABLE game_rps_seats (session_id TEXT NOT NULL REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, deletion_state TEXT NOT NULL CHECK(deletion_state IN ('active','deletion_pending','deidentified')), display_name_snapshot TEXT, avatar_url_snapshot TEXT, starting_balance BLOB NOT NULL CHECK(typeof(starting_balance)='blob' AND length(starting_balance)=16), current_balance BLOB NOT NULL CHECK(typeof(current_balance)='blob' AND length(current_balance)=16), current_round_input BLOB NOT NULL CHECK(typeof(current_round_input)='blob' AND length(current_round_input)=16), current_all_in INTEGER NOT NULL CHECK(current_all_in IN (0,1)), current_gesture_envelope BLOB CHECK(current_gesture_envelope IS NULL OR (typeof(current_gesture_envelope)='blob' AND length(current_gesture_envelope) IN (33,34,37) AND substr(current_gesture_envelope,1,1)=X'01')), current_gesture_phase_seq BLOB CHECK(current_gesture_phase_seq IS NULL OR (typeof(current_gesture_phase_seq)='blob' AND length(current_gesture_phase_seq)=16)), follower_action TEXT CHECK(follower_action IS NULL OR follower_action IN ('call','surrender')), last_action_phase_seq BLOB CHECK(last_action_phase_seq IS NULL OR (typeof(last_action_phase_seq)='blob' AND length(last_action_phase_seq)=16)), total_input BLOB NOT NULL CHECK(typeof(total_input)='blob' AND length(total_input)=32), total_returned BLOB NOT NULL CHECK(typeof(total_returned)='blob' AND length(total_returned)=32), terminal_return BLOB CHECK(terminal_return IS NULL OR (typeof(terminal_return)='blob' AND length(terminal_return)=16)), wallet_net_sign INTEGER CHECK(wallet_net_sign IS NULL OR wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB, rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), timeout_count BLOB NOT NULL CHECK(typeof(timeout_count)='blob' AND length(timeout_count)=16), snapshot_completed_count BLOB CHECK(snapshot_completed_count IS NULL OR (typeof(snapshot_completed_count)='blob' AND length(snapshot_completed_count)=16)), snapshot_profitable_count BLOB CHECK(snapshot_profitable_count IS NULL OR (typeof(snapshot_profitable_count)='blob' AND length(snapshot_profitable_count)=16)), snapshot_rock_count BLOB CHECK(snapshot_rock_count IS NULL OR (typeof(snapshot_rock_count)='blob' AND length(snapshot_rock_count)=16)), snapshot_scissors_count BLOB CHECK(snapshot_scissors_count IS NULL OR (typeof(snapshot_scissors_count)='blob' AND length(snapshot_scissors_count)=16)), snapshot_paper_count BLOB CHECK(snapshot_paper_count IS NULL OR (typeof(snapshot_paper_count)='blob' AND length(snapshot_paper_count)=16)), stats_applied INTEGER NOT NULL DEFAULT 0 CHECK(stats_applied IN (0,1)), game_buy_in BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_buy_in)='blob' AND length(game_buy_in)=16 AND game_buy_in<=starting_balance), game_remaining BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_remaining)='blob' AND length(game_remaining)=16 AND game_remaining<=current_balance), PRIMARY KEY(session_id,seat_no), CHECK((current_gesture_envelope IS NULL AND current_gesture_phase_seq IS NULL) OR (current_gesture_envelope IS NOT NULL AND current_gesture_phase_seq IS NOT NULL)), CHECK((terminal_return IS NULL AND wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (terminal_return IS NOT NULL AND wallet_net_sign IS NOT NULL AND wallet_net_mag IS NOT NULL)), CHECK((wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (wallet_net_sign IS NOT NULL AND typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7') AND ((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')))), CHECK((snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL) OR (snapshot_completed_count IS NOT NULL AND snapshot_profitable_count IS NOT NULL AND snapshot_rock_count IS NOT NULL AND snapshot_scissors_count IS NOT NULL AND snapshot_paper_count IS NOT NULL)), CHECK((deletion_state='active') OR (display_name_snapshot IS NULL AND avatar_url_snapshot IS NULL AND snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL)));
 CREATE UNIQUE INDEX idx_rps_seats_active_user ON game_rps_seats(user_id) WHERE user_id IS NOT NULL AND deletion_state='active';
 CREATE INDEX idx_rps_seats_user ON game_rps_seats(user_id,session_id,seat_no);
 CREATE TABLE game_rps_user_slots (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, queue_id TEXT REFERENCES game_rps_queue(id) ON DELETE CASCADE CHECK(queue_id IS NULL OR (length(queue_id)=27 AND substr(queue_id,1,5)='rpsq_' AND substr(queue_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(queue_id,-1,1) IN ('A','Q','g','w'))), session_id TEXT REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(session_id IS NULL OR (length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w'))), created_at INTEGER NOT NULL, CHECK((queue_id IS NOT NULL AND session_id IS NULL) OR (queue_id IS NULL AND session_id IS NOT NULL)));
@@ -892,10 +807,10 @@ CREATE UNIQUE INDEX idx_rps_slots_queue ON game_rps_user_slots(queue_id) WHERE q
 CREATE INDEX idx_rps_slots_session ON game_rps_user_slots(session_id) WHERE session_id IS NOT NULL;
 CREATE TABLE game_online_leases (session_id TEXT NOT NULL CHECK((length(session_id)=25 AND substr(session_id,1,3)='ll_' AND substr(session_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')) OR (length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w'))), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, lease_id TEXT NOT NULL CHECK(length(lease_id)=26 AND substr(lease_id,1,4)='gle_' AND substr(lease_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(lease_id,-1,1) IN ('A','Q','g','w')), health_epoch INTEGER NOT NULL, expires_at INTEGER NOT NULL, last_renewed_at INTEGER NOT NULL, PRIMARY KEY(session_id,user_id,lease_id));
 CREATE INDEX idx_game_leases_expiry ON game_online_leases(expires_at,session_id);
-CREATE TABLE game_rps_pending_results (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, session_id_text TEXT NOT NULL CHECK(length(session_id_text)=26 AND substr(session_id_text,1,4)='rps_' AND substr(session_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id_text,-1,1) IN ('A','Q','g','w')), mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), terminal_reason TEXT NOT NULL, own_seat_no INTEGER NOT NULL CHECK(own_seat_no BETWEEN 0 AND 2), own_input BLOB NOT NULL CHECK(typeof(own_input)='blob' AND length(own_input)=32), own_returned BLOB NOT NULL CHECK(typeof(own_returned)='blob' AND length(own_returned)=32), own_wallet_net_sign INTEGER NOT NULL CHECK(own_wallet_net_sign IN (-1,0,1)), own_wallet_net_mag BLOB NOT NULL CHECK(typeof(own_wallet_net_mag)='blob' AND length(own_wallet_net_mag)=16 AND substr(hex(own_wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7')), seat0_result TEXT NOT NULL CHECK(seat0_result IN ('win','loss','tie','deidentified')), seat1_result TEXT NOT NULL CHECK(seat1_result IN ('win','loss','tie','deidentified')), seat2_result TEXT NOT NULL CHECK(seat2_result IN ('win','loss','tie','deidentified')), created_at INTEGER NOT NULL, CHECK((own_wallet_net_sign=0 AND hex(own_wallet_net_mag)='00000000000000000000000000000000') OR (own_wallet_net_sign<>0 AND hex(own_wallet_net_mag)<>'00000000000000000000000000000000')));
+CREATE TABLE game_rps_pending_results (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, session_id_text TEXT NOT NULL CHECK(length(session_id_text)=26 AND substr(session_id_text,1,4)='rps_' AND substr(session_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id_text,-1,1) IN ('A','Q','g','w')), mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), terminal_reason TEXT NOT NULL, own_seat_no INTEGER NOT NULL CHECK(own_seat_no BETWEEN 0 AND 2), own_input BLOB NOT NULL CHECK(typeof(own_input)='blob' AND length(own_input)=32), own_returned BLOB NOT NULL CHECK(typeof(own_returned)='blob' AND length(own_returned)=32), own_wallet_net_sign INTEGER NOT NULL CHECK(own_wallet_net_sign IN (-1,0,1)), own_wallet_net_mag BLOB NOT NULL CHECK(typeof(own_wallet_net_mag)='blob' AND length(own_wallet_net_mag)=16 AND substr(hex(own_wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7')), seat0_result TEXT NOT NULL CHECK(seat0_result IN ('win','loss','tie','deidentified')), seat1_result TEXT NOT NULL CHECK(seat1_result IN ('win','loss','tie','deidentified')), seat2_result TEXT NOT NULL CHECK(seat2_result IN ('win','loss','tie','deidentified')), created_at INTEGER NOT NULL, rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2), general_buy_in BLOB CHECK(general_buy_in IS NULL OR (typeof(general_buy_in)='blob' AND length(general_buy_in)=16)), game_buy_in BLOB CHECK(game_buy_in IS NULL OR (typeof(game_buy_in)='blob' AND length(game_buy_in)=16)), own_returned_general BLOB CHECK(own_returned_general IS NULL OR (typeof(own_returned_general)='blob' AND length(own_returned_general)=16)), CHECK((own_wallet_net_sign=0 AND hex(own_wallet_net_mag)='00000000000000000000000000000000') OR (own_wallet_net_sign<>0 AND hex(own_wallet_net_mag)<>'00000000000000000000000000000000')));
 CREATE TABLE game_rps_summaries (session_id TEXT NOT NULL PRIMARY KEY CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), rules_version INTEGER NOT NULL, base_milli INTEGER NOT NULL, platform_bp INTEGER NOT NULL, welfare_bp INTEGER NOT NULL, thursday_bp INTEGER NOT NULL, started_at INTEGER NOT NULL, terminal_at INTEGER NOT NULL, terminal_reason TEXT NOT NULL, base_round_count BLOB NOT NULL CHECK(typeof(base_round_count)='blob' AND length(base_round_count)=16), paid_tie_count BLOB NOT NULL CHECK(typeof(paid_tie_count)='blob' AND length(paid_tie_count)=16), free_tie_count BLOB NOT NULL CHECK(typeof(free_tie_count)='blob' AND length(free_tie_count)=16), total_timeout_count BLOB NOT NULL CHECK(typeof(total_timeout_count)='blob' AND length(total_timeout_count)=16), total_rock_count BLOB NOT NULL CHECK(typeof(total_rock_count)='blob' AND length(total_rock_count)=16), total_scissors_count BLOB NOT NULL CHECK(typeof(total_scissors_count)='blob' AND length(total_scissors_count)=16), total_paper_count BLOB NOT NULL CHECK(typeof(total_paper_count)='blob' AND length(total_paper_count)=16), platform_total BLOB NOT NULL CHECK(typeof(platform_total)='blob' AND length(platform_total)=16), welfare_total BLOB NOT NULL CHECK(typeof(welfare_total)='blob' AND length(welfare_total)=16), thursday_total BLOB NOT NULL CHECK(typeof(thursday_total)='blob' AND length(thursday_total)=16), delete_at INTEGER NOT NULL, CHECK(terminal_reason IN ('quick_resolved','standard_round_limit','standard_insufficient_balance','deathmatch_balance_exhausted','ultimate_resolved','free_tie_limit')), CHECK(platform_bp BETWEEN 0 AND 9999 AND welfare_bp BETWEEN 0 AND 9999 AND thursday_bp BETWEEN 0 AND 9999 AND platform_bp+welfare_bp+thursday_bp<10000));
 CREATE INDEX idx_rps_summaries_retention ON game_rps_summaries(delete_at,session_id);
-CREATE TABLE game_rps_summary_seats (session_id TEXT NOT NULL REFERENCES game_rps_summaries(session_id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, input BLOB NOT NULL CHECK(typeof(input)='blob' AND length(input)=32), returned BLOB NOT NULL CHECK(typeof(returned)='blob' AND length(returned)=32), wallet_net_sign INTEGER NOT NULL CHECK(wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB NOT NULL CHECK(typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7')), timeout_count BLOB NOT NULL CHECK(typeof(timeout_count)='blob' AND length(timeout_count)=16), rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), PRIMARY KEY(session_id,seat_no), CHECK((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')));
+CREATE TABLE game_rps_summary_seats (session_id TEXT NOT NULL REFERENCES game_rps_summaries(session_id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, input BLOB NOT NULL CHECK(typeof(input)='blob' AND length(input)=32), returned BLOB NOT NULL CHECK(typeof(returned)='blob' AND length(returned)=32), wallet_net_sign INTEGER NOT NULL CHECK(wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB NOT NULL CHECK(typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7')), timeout_count BLOB NOT NULL CHECK(typeof(timeout_count)='blob' AND length(timeout_count)=16), rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), general_buy_in BLOB CHECK(general_buy_in IS NULL OR (typeof(general_buy_in)='blob' AND length(general_buy_in)=16)), game_buy_in BLOB CHECK(game_buy_in IS NULL OR (typeof(game_buy_in)='blob' AND length(game_buy_in)=16)), PRIMARY KEY(session_id,seat_no), CHECK((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')));
 CREATE TABLE game_rps_fun_stats (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, completed_count BLOB NOT NULL CHECK(typeof(completed_count)='blob' AND length(completed_count)=16), profitable_count BLOB NOT NULL CHECK(typeof(profitable_count)='blob' AND length(profitable_count)=16), rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), updated_at INTEGER NOT NULL);
 CREATE TABLE game_rps_rank_facts (session_id_text TEXT NOT NULL CHECK(length(session_id_text)=26 AND substr(session_id_text,1,4)='rps_' AND substr(session_id_text,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id_text,-1,1) IN ('A','Q','g','w')), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), terminal_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, wallet_net_sign INTEGER NOT NULL CHECK(wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB NOT NULL CHECK(typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7')), profitable INTEGER NOT NULL CHECK(profitable IN (0,1)), aggregate_applied INTEGER NOT NULL CHECK(aggregate_applied IN (0,1)), PRIMARY KEY(session_id_text,user_id), CHECK((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')), CHECK(expires_at=terminal_at+2592000));
 CREATE INDEX idx_rps_rank_facts_due ON game_rps_rank_facts(expires_at,session_id_text,user_id);
@@ -903,11 +818,7 @@ CREATE INDEX idx_rps_rank_facts_mode ON game_rps_rank_facts(mode,user_id,expires
 CREATE TABLE game_rps_rank_aggregates (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), session_count BLOB NOT NULL CHECK(typeof(session_count)='blob' AND length(session_count)=16), profitable_count BLOB NOT NULL CHECK(typeof(profitable_count)='blob' AND length(profitable_count)=16), net_profit_sign INTEGER NOT NULL CHECK(net_profit_sign IN (-1,0,1)), net_profit_mag BLOB NOT NULL CHECK(typeof(net_profit_mag)='blob' AND length(net_profit_mag)=16 AND substr(hex(net_profit_mag),1,1) IN ('0','1','2','3','4','5','6','7')), eligible INTEGER NOT NULL CHECK(eligible IN (0,1)), profit_rate_bp INTEGER NOT NULL CHECK(profit_rate_bp BETWEEN 0 AND 10000), profit_rate_achieved_at INTEGER NOT NULL, net_profit_achieved_at INTEGER NOT NULL, profit_public_tie_key BLOB NOT NULL CHECK(typeof(profit_public_tie_key)='blob' AND length(profit_public_tie_key)=32), net_public_tie_key BLOB NOT NULL CHECK(typeof(net_public_tie_key)='blob' AND length(net_public_tie_key)=32), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,mode), CHECK((net_profit_sign=0 AND hex(net_profit_mag)='00000000000000000000000000000000') OR (net_profit_sign<>0 AND hex(net_profit_mag)<>'00000000000000000000000000000000')));
 CREATE UNIQUE INDEX idx_rps_rank_profit ON game_rps_rank_aggregates(mode,profit_rate_bp DESC,profit_rate_achieved_at,profit_public_tie_key) WHERE eligible=1;
 CREATE INDEX idx_rps_rank_net ON game_rps_rank_aggregates(mode,net_profit_sign DESC,CASE WHEN net_profit_sign=1 THEN net_profit_mag END DESC,CASE WHEN net_profit_sign=-1 THEN net_profit_mag END ASC,net_profit_achieved_at ASC,net_public_tie_key) WHERE eligible=1;
-
--- ===== site configuration ===================================================
 CREATE TABLE site_config (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0);
-
--- ===== invariant guards =====================================================
 CREATE TRIGGER idempotency_expiry_guard BEFORE INSERT ON idempotency_records
 WHEN typeof(NEW.created_at)<>'integer' OR typeof(NEW.expires_at)<>'integer' OR
      NEW.created_at NOT BETWEEN 0 AND 253402300799-86400 OR NEW.expires_at<>NEW.created_at+86400
@@ -946,36 +857,6 @@ BEGIN SELECT RAISE(ABORT,'terminal dispatch claim cannot be reopened'); END;
 CREATE TRIGGER accepted_operation_terminal_state_guard BEFORE UPDATE OF state ON accepted_operations
 WHEN OLD.state IN ('completed','failed_blocked') AND NEW.state IS NOT OLD.state
 BEGIN SELECT RAISE(ABORT,'terminal accepted operation cannot be reopened'); END;
-CREATE TRIGGER credit_operations_no_update BEFORE UPDATE ON credit_operations
-WHEN NOT (
- NEW.id IS OLD.id AND NEW.ledger_seq IS OLD.ledger_seq AND NEW.kind IS OLD.kind AND
- NEW.source_type IS OLD.source_type AND NEW.source_id IS OLD.source_id AND NEW.source_seq IS OLD.source_seq AND
- NEW.donation_credit_delta_sign IS OLD.donation_credit_delta_sign AND NEW.donation_credit_delta_mag IS OLD.donation_credit_delta_mag AND
- NEW.donation_credit_after IS OLD.donation_credit_after AND NEW.reason IS OLD.reason AND NEW.created_at IS OLD.created_at AND
- (NEW.actor_user_id IS OLD.actor_user_id OR (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL AND NOT EXISTS(SELECT 1 FROM users u WHERE u.id=OLD.actor_user_id))) AND
- (NEW.donation_credit_user_id IS OLD.donation_credit_user_id OR (OLD.donation_credit_user_id IS NOT NULL AND NEW.donation_credit_user_id IS NULL AND NOT EXISTS(SELECT 1 FROM users u WHERE u.id=OLD.donation_credit_user_id)))
-)
-BEGIN SELECT RAISE(ABORT,'credit_operations is append-only'); END;
-CREATE TRIGGER credit_operations_no_delete BEFORE DELETE ON credit_operations
-BEGIN SELECT RAISE(ABORT,'credit_operations is append-only'); END;
-CREATE TRIGGER credit_entries_no_update BEFORE UPDATE ON credit_entries
-WHEN NOT (
- NEW.operation_id IS OLD.operation_id AND NEW.line_no IS OLD.line_no AND NEW.account_kind_snapshot IS OLD.account_kind_snapshot AND
- NEW.delta_sign IS OLD.delta_sign AND NEW.delta_mag IS OLD.delta_mag AND NEW.balance_after_sign IS OLD.balance_after_sign AND
- NEW.balance_after_mag IS OLD.balance_after_mag AND
- (NEW.account_id IS OLD.account_id OR (OLD.account_id IS NOT NULL AND NEW.account_id IS NULL AND NOT EXISTS(SELECT 1 FROM credit_accounts a WHERE a.id=OLD.account_id)))
-)
-BEGIN SELECT RAISE(ABORT,'credit_entries is append-only'); END;
-CREATE TRIGGER credit_entries_no_delete BEFORE DELETE ON credit_entries
-BEGIN SELECT RAISE(ABORT,'credit_entries is append-only'); END;
-CREATE TRIGGER credit_entries_account_kind_guard BEFORE INSERT ON credit_entries
-WHEN NEW.account_id IS NOT NULL AND NOT EXISTS(
- SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind=NEW.account_kind_snapshot)
-BEGIN SELECT RAISE(ABORT,'credit entry account kind snapshot mismatch'); END;
-CREATE TRIGGER credit_entries_account_kind_update_guard BEFORE UPDATE OF account_id,account_kind_snapshot ON credit_entries
-WHEN NEW.account_id IS NOT NULL AND NOT EXISTS(
- SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind=NEW.account_kind_snapshot)
-BEGIN SELECT RAISE(ABORT,'credit entry account kind snapshot mismatch'); END;
 CREATE TRIGGER credit_account_code_guard BEFORE INSERT ON credit_accounts
 WHEN NEW.code IS NOT NULL AND NOT (typeof(NEW.code)='text' AND length(CAST(NEW.code AS BLOB)) BETWEEN 1 AND 64 AND NEW.code NOT GLOB '*[^ -~]*')
 BEGIN SELECT RAISE(ABORT,'credit account code is not canonical text'); END;
@@ -1138,7 +1019,7 @@ CREATE TRIGGER announcement_audits_revision_guard BEFORE INSERT ON announcement_
 WHEN (NEW.action='create' AND (NEW.from_revision<>0 OR NEW.to_revision<>1))
   OR (NEW.action<>'create' AND (NEW.from_revision<1 OR NEW.to_revision<=NEW.from_revision))
 BEGIN SELECT RAISE(ABORT,'announcement audit revision transition is invalid'); END;
- CREATE TRIGGER announcement_audits_no_update BEFORE UPDATE ON announcement_audits
+CREATE TRIGGER announcement_audits_no_update BEFORE UPDATE ON announcement_audits
  WHEN NOT (
    NEW.id=OLD.id AND NEW.announcement_id_text IS OLD.announcement_id_text AND NEW.action IS OLD.action AND
    NEW.from_revision=OLD.from_revision AND NEW.to_revision=OLD.to_revision AND NEW.reason IS OLD.reason AND
@@ -1181,13 +1062,13 @@ BEGIN SELECT RAISE(ABORT,'charity reservation scalar/state invariant'); END;
 CREATE TRIGGER charity_binding_endpoint_guard BEFORE INSERT ON charity_model_bindings
 WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.endpoint_key_id=NEW.endpoint_key_id)
 BEGIN SELECT RAISE(ABORT,'charity binding endpoint mismatch'); END;
- CREATE TRIGGER charity_binding_endpoint_update_guard BEFORE UPDATE OF donation_key_id,endpoint_key_id ON charity_model_bindings
+CREATE TRIGGER charity_binding_endpoint_update_guard BEFORE UPDATE OF donation_key_id,endpoint_key_id ON charity_model_bindings
  WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.endpoint_key_id=NEW.endpoint_key_id)
  BEGIN SELECT RAISE(ABORT,'charity binding endpoint mismatch'); END;
- CREATE TRIGGER donation_key_membership_consistency_guard BEFORE INSERT ON donation_key_memberships
+CREATE TRIGGER donation_key_membership_consistency_guard BEFORE INSERT ON donation_key_memberships
  WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id AND d.ended_at IS NULL)
  BEGIN SELECT RAISE(ABORT,'donation key membership identity mismatch'); END;
- CREATE TRIGGER donation_key_membership_consistency_update_guard BEFORE UPDATE OF endpoint_key_id,donation_key_id,donation_id ON donation_key_memberships
+CREATE TRIGGER donation_key_membership_consistency_update_guard BEFORE UPDATE OF endpoint_key_id,donation_key_id,donation_id ON donation_key_memberships
  WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id AND d.ended_at IS NULL)
  BEGIN SELECT RAISE(ABORT,'donation key membership identity mismatch'); END;
 CREATE TRIGGER rps_queue_account_guard BEFORE INSERT ON game_rps_queue
@@ -1206,32 +1087,32 @@ CREATE TRIGGER thursday_period_pool_oid_guard BEFORE INSERT ON thursday_periods
 WHEN NOT ((length(NEW.current_pool_id)=26 AND substr(NEW.current_pool_id,1,4)='pol_' AND substr(NEW.current_pool_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(NEW.current_pool_id,-1,1) IN ('A','Q','g','w'))
  AND (length(NEW.next_pool_id)=26 AND substr(NEW.next_pool_id,1,4)='pol_' AND substr(NEW.next_pool_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(NEW.next_pool_id,-1,1) IN ('A','Q','g','w')))
 BEGIN SELECT RAISE(ABORT,'thursday pool reference is not canonical'); END;
- CREATE TRIGGER thursday_period_pool_oid_update_guard BEFORE UPDATE OF current_pool_id,next_pool_id ON thursday_periods
+CREATE TRIGGER thursday_period_pool_oid_update_guard BEFORE UPDATE OF current_pool_id,next_pool_id ON thursday_periods
  WHEN NOT ((length(NEW.current_pool_id)=26 AND substr(NEW.current_pool_id,1,4)='pol_' AND substr(NEW.current_pool_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(NEW.current_pool_id,-1,1) IN ('A','Q','g','w'))
   AND (length(NEW.next_pool_id)=26 AND substr(NEW.next_pool_id,1,4)='pol_' AND substr(NEW.next_pool_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(NEW.next_pool_id,-1,1) IN ('A','Q','g','w')))
  BEGIN SELECT RAISE(ABORT,'thursday pool reference is not canonical'); END;
- CREATE TRIGGER shared_pool_account_guard BEFORE INSERT ON shared_pools
+CREATE TRIGGER shared_pool_account_guard BEFORE INSERT ON shared_pools
  WHEN NOT EXISTS(SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind='pool' AND a.code='pool:'||NEW.id)
  BEGIN SELECT RAISE(ABORT,'shared pool account identity mismatch'); END;
- CREATE TRIGGER shared_pool_account_update_guard BEFORE UPDATE OF id,account_id ON shared_pools
+CREATE TRIGGER shared_pool_account_update_guard BEFORE UPDATE OF id,account_id ON shared_pools
  WHEN NOT EXISTS(SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind='pool' AND a.code='pool:'||NEW.id)
  BEGIN SELECT RAISE(ABORT,'shared pool account identity mismatch'); END;
- CREATE TRIGGER logical_request_destination_insert_guard BEFORE INSERT ON logical_requests
+CREATE TRIGGER logical_request_destination_insert_guard BEFORE INSERT ON logical_requests
  WHEN NEW.settlement_destination='external'
  BEGIN SELECT RAISE(ABORT,'external settlement requires an in-flight user handoff'); END;
- CREATE TRIGGER logical_request_destination_update_guard BEFORE UPDATE OF user_id,settlement_destination ON logical_requests
+CREATE TRIGGER logical_request_destination_update_guard BEFORE UPDATE OF user_id,settlement_destination ON logical_requests
  WHEN (OLD.settlement_destination='external' AND NEW.settlement_destination<>'external')
   OR (NEW.settlement_destination='external' AND NEW.user_id IS NOT NULL)
   OR (OLD.settlement_destination='user' AND NEW.settlement_destination='external' AND
       NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.logical_request_id=NEW.id AND c.dispatched_at IS NOT NULL))
  BEGIN SELECT RAISE(ABORT,'logical request settlement handoff is invalid'); END;
- CREATE TRIGGER dispatch_claim_attempt_limit_guard BEFORE INSERT ON dispatch_claims
+CREATE TRIGGER dispatch_claim_attempt_limit_guard BEFORE INSERT ON dispatch_claims
  WHEN NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.id=NEW.logical_request_id AND NEW.attempt_seq<=r.attempt_limit)
  BEGIN SELECT RAISE(ABORT,'dispatch attempt exceeds request limit'); END;
- CREATE TRIGGER dispatch_claim_attempt_limit_update_guard BEFORE UPDATE OF logical_request_id,attempt_seq ON dispatch_claims
+CREATE TRIGGER dispatch_claim_attempt_limit_update_guard BEFORE UPDATE OF logical_request_id,attempt_seq ON dispatch_claims
  WHEN NOT EXISTS(SELECT 1 FROM logical_requests r WHERE r.id=NEW.logical_request_id AND NEW.attempt_seq<=r.attempt_limit)
  BEGIN SELECT RAISE(ABORT,'dispatch attempt exceeds request limit'); END;
- CREATE TRIGGER request_log_logical_snapshot_guard BEFORE INSERT ON request_logs
+CREATE TRIGGER request_log_logical_snapshot_guard BEFORE INSERT ON request_logs
  WHEN NOT EXISTS(
    SELECT 1 FROM logical_requests r
    WHERE r.id=NEW.logical_request_id AND NEW.user_id IS r.user_id AND NEW.route_kind IS r.route_kind
@@ -1241,7 +1122,7 @@ BEGIN SELECT RAISE(ABORT,'thursday pool reference is not canonical'); END;
      AND NEW.error_code IS COALESCE(r.caller_error_code,'')
      AND NEW.completed_at IS r.terminal_at)
  BEGIN SELECT RAISE(ABORT,'request log caller snapshot mismatch'); END;
- CREATE TRIGGER request_log_logical_snapshot_update_guard BEFORE UPDATE OF logical_request_id,user_id,route_kind,caller_result_class,caller_status,caller_error_code,status_code,error_code,completed_at ON request_logs
+CREATE TRIGGER request_log_logical_snapshot_update_guard BEFORE UPDATE OF logical_request_id,user_id,route_kind,caller_result_class,caller_status,caller_error_code,status_code,error_code,completed_at ON request_logs
  WHEN NOT EXISTS(
    SELECT 1 FROM logical_requests r
    WHERE r.id=NEW.logical_request_id AND NEW.user_id IS r.user_id AND NEW.route_kind IS r.route_kind
@@ -1251,7 +1132,7 @@ BEGIN SELECT RAISE(ABORT,'thursday pool reference is not canonical'); END;
      AND NEW.error_code IS COALESCE(r.caller_error_code,'')
      AND NEW.completed_at IS r.terminal_at)
  BEGIN SELECT RAISE(ABORT,'request log caller snapshot mismatch'); END;
- CREATE TRIGGER logical_request_log_snapshot_sync AFTER UPDATE OF state,user_id,route_kind,caller_result_class,caller_status,caller_error_code,terminal_at ON logical_requests
+CREATE TRIGGER logical_request_log_snapshot_sync AFTER UPDATE OF state,user_id,route_kind,caller_result_class,caller_status,caller_error_code,terminal_at ON logical_requests
  WHEN EXISTS(SELECT 1 FROM request_logs l WHERE l.logical_request_id=NEW.id)
  BEGIN
    UPDATE request_logs
@@ -1268,7 +1149,7 @@ BEGIN SELECT RAISE(ABORT,'thursday pool reference is not canonical'); END;
 CREATE TRIGGER fishing_outcome_ordinal_guard BEFORE INSERT ON game_fishing_outcomes
 WHEN NOT EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.batch_id AND NEW.ordinal BETWEEN 0 AND b.count-1)
 BEGIN SELECT RAISE(ABORT,'fishing outcome ordinal is outside batch'); END;
- CREATE TRIGGER fishing_outcome_ordinal_update_guard BEFORE UPDATE OF batch_id,ordinal ON game_fishing_outcomes
+CREATE TRIGGER fishing_outcome_ordinal_update_guard BEFORE UPDATE OF batch_id,ordinal ON game_fishing_outcomes
  WHEN OLD.batch_id IS NOT NEW.batch_id
   OR NOT EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=OLD.batch_id AND b.state='reserved')
   OR NOT EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.batch_id AND NEW.ordinal BETWEEN 0 AND b.count-1 AND b.state='reserved')
@@ -1307,7 +1188,7 @@ BEGIN SELECT RAISE(ABORT,'fishing terminal facts are immutable'); END;
 CREATE TRIGGER fishing_outcome_parent_state_guard BEFORE INSERT ON game_fishing_outcomes
 WHEN EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.batch_id AND b.state<>'reserved')
 BEGIN SELECT RAISE(ABORT,'fishing outcome parent is terminal'); END;
- CREATE TRIGGER fishing_outcome_parent_state_update_guard BEFORE UPDATE ON game_fishing_outcomes
+CREATE TRIGGER fishing_outcome_parent_state_update_guard BEFORE UPDATE ON game_fishing_outcomes
  WHEN EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=OLD.batch_id AND b.state<>'reserved')
   OR EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.batch_id AND b.state<>'reserved')
  BEGIN SELECT RAISE(ABORT,'fishing outcome parent is terminal'); END;
@@ -1583,7 +1464,7 @@ WHEN (NEW.generation<OLD.generation OR NEW.generation>OLD.generation+1)
  OR (NEW.generation=OLD.generation+1 AND NEW.key_hash IS OLD.key_hash)
  OR (NEW.generation=OLD.generation AND (NEW.key_hash IS NOT OLD.key_hash OR NEW.display_head IS NOT OLD.display_head OR NEW.display_tail IS NOT OLD.display_tail OR NEW.key_created_at IS NOT OLD.key_created_at))
 BEGIN SELECT RAISE(ABORT,'caller key generation replacement is not atomic'); END;
- CREATE TRIGGER announcements_publish_guard BEFORE UPDATE ON announcements
+CREATE TRIGGER announcements_publish_guard BEFORE UPDATE ON announcements
  WHEN (NEW.state='published' AND
        (OLD.state<>'published' OR NEW.published_revision IS NOT OLD.published_revision) AND
        NOT (NEW.published_revision=NEW.revision AND NEW.published_at IS NOT NULL AND
@@ -1595,7 +1476,7 @@ BEGIN SELECT RAISE(ABORT,'caller key generation replacement is not atomic'); END
        NEW.published_title_zh IS NOT OLD.published_title_zh OR NEW.published_body_zh IS NOT OLD.published_body_zh OR
        NEW.published_title_en IS NOT OLD.published_title_en OR NEW.published_body_en IS NOT OLD.published_body_en))
  BEGIN SELECT RAISE(ABORT,'announcement publication is incomplete'); END;
- CREATE TRIGGER announcements_publish_insert_guard BEFORE INSERT ON announcements
+CREATE TRIGGER announcements_publish_insert_guard BEFORE INSERT ON announcements
  WHEN (NEW.state='published' AND NOT (NEW.published_revision=NEW.revision AND NEW.published_at IS NOT NULL AND
      NEW.published_title_zh IS NEW.draft_title_zh AND NEW.published_body_zh IS NEW.draft_body_zh AND
      NEW.published_title_en IS NEW.draft_title_en AND NEW.published_body_en IS NEW.draft_body_en))
@@ -1682,7 +1563,7 @@ WHEN NOT EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text)
                NEW.retain_until=h.retain_until AND NEW.retain_until=h.ended_at+34560000))
      ))
 BEGIN SELECT RAISE(ABORT,'legal hold read audit is inconsistent'); END;
- CREATE TRIGGER legal_hold_audits_no_update BEFORE UPDATE ON legal_hold_audits
+CREATE TRIGGER legal_hold_audits_no_update BEFORE UPDATE ON legal_hold_audits
  WHEN NOT (
    NEW.id=OLD.id AND NEW.hold_id_text IS OLD.hold_id_text AND NEW.actor_user_id IS OLD.actor_user_id AND
    NEW.action IS OLD.action AND NEW.reason IS OLD.reason AND NEW.created_at=OLD.created_at AND
@@ -1746,11 +1627,6 @@ CREATE TRIGGER legal_hold_consumed_guard_announcement BEFORE UPDATE OF legal_hol
 CREATE TRIGGER legal_hold_consumed_guard_report BEFORE UPDATE OF legal_hold_consumed ON report_cases WHEN OLD.legal_hold_consumed=1 AND NEW.legal_hold_consumed<>1 BEGIN SELECT RAISE(ABORT,'legal hold marker cannot be cleared'); END;
 CREATE TRIGGER legal_hold_consumed_guard_donation BEFORE UPDATE OF legal_hold_consumed ON donations WHEN OLD.legal_hold_consumed=1 AND NEW.legal_hold_consumed<>1 BEGIN SELECT RAISE(ABORT,'legal hold marker cannot be cleared'); END;
 CREATE TRIGGER legal_hold_consumed_guard_log BEFORE UPDATE OF legal_hold_consumed ON request_logs WHEN OLD.legal_hold_consumed=1 AND NEW.legal_hold_consumed<>1 BEGIN SELECT RAISE(ABORT,'legal hold marker cannot be cleared'); END;
-
--- Every persisted timestamp is a signed Unix second in the frozen UTC range.
--- These narrow table guards cover columns whose state matrices intentionally
--- allow NULL; INTEGER affinity alone is not a sufficient boundary because
--- SQLite accepts out-of-range text/numeric values in an INTEGER column.
 CREATE TRIGGER generation_two_users_time_guard BEFORE INSERT ON users
 WHEN (NEW.banned_until IS NOT NULL AND (typeof(NEW.banned_until)<>'integer' OR NEW.banned_until NOT BETWEEN 0 AND 253402300799))
  OR (NEW.charity_suspended_until IS NOT NULL AND (typeof(NEW.charity_suspended_until)<>'integer' OR NEW.charity_suspended_until NOT BETWEEN 0 AND 253402300799))
@@ -1771,14 +1647,12 @@ WHEN typeof(NEW.last_seen_at)<>'integer' OR NEW.last_seen_at NOT BETWEEN 0 AND 2
  OR typeof(NEW.absolute_expires_at)<>'integer' OR NEW.absolute_expires_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'session timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_policy_audits_time_guard BEFORE INSERT ON policy_audits
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'policy audit timestamp is outside UTC range'); END;
 CREATE TRIGGER generation_two_policy_audits_time_update_guard BEFORE UPDATE ON policy_audits
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'policy audit timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_admin_alerts_time_guard BEFORE INSERT ON admin_alerts
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.resolved_at IS NOT NULL AND (typeof(NEW.resolved_at)<>'integer' OR NEW.resolved_at NOT BETWEEN 0 AND 253402300799))
@@ -1787,7 +1661,6 @@ CREATE TRIGGER generation_two_admin_alerts_time_update_guard BEFORE UPDATE ON ad
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.resolved_at IS NOT NULL AND (typeof(NEW.resolved_at)<>'integer' OR NEW.resolved_at NOT BETWEEN 0 AND 253402300799))
 BEGIN SELECT RAISE(ABORT,'admin alert timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_user_activity_time_guard BEFORE INSERT ON user_activity_daily
 WHEN typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'user activity timestamp is outside UTC range'); END;
@@ -1812,7 +1685,6 @@ BEGIN SELECT RAISE(ABORT,'config revision timestamp is outside UTC range'); END;
 CREATE TRIGGER generation_two_config_revision_time_update_guard BEFORE UPDATE ON config_revisions
 WHEN typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'config revision timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_caller_keys_time_guard BEFORE INSERT ON caller_keys
 WHEN typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.key_created_at IS NOT NULL AND (typeof(NEW.key_created_at)<>'integer' OR NEW.key_created_at NOT BETWEEN 0 AND 253402300799))
@@ -1857,7 +1729,6 @@ BEGIN SELECT RAISE(ABORT,'endpoint suspension timestamp is outside UTC range'); 
 CREATE TRIGGER generation_two_endpoint_suspensions_time_update_guard BEFORE UPDATE ON endpoint_key_suspensions
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'endpoint suspension timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_discovery_time_guard BEFORE INSERT ON model_discovery_evidence
 WHEN (NEW.started_at IS NOT NULL AND (typeof(NEW.started_at)<>'integer' OR NEW.started_at NOT BETWEEN 0 AND 253402300799))
  OR (NEW.completed_at IS NOT NULL AND (typeof(NEW.completed_at)<>'integer' OR NEW.completed_at NOT BETWEEN 0 AND 253402300799))
@@ -1934,7 +1805,6 @@ WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 25340
  OR (NEW.ended_at IS NOT NULL AND (typeof(NEW.ended_at)<>'integer' OR NEW.ended_at NOT BETWEEN 0 AND 253402300799))
  OR (NEW.report_match_until IS NOT NULL AND (typeof(NEW.report_match_until)<>'integer' OR NEW.report_match_until NOT BETWEEN 0 AND 253402300799))
 BEGIN SELECT RAISE(ABORT,'donation key timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_credit_accounts_time_guard BEFORE INSERT ON credit_accounts
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
@@ -1991,7 +1861,6 @@ BEGIN SELECT RAISE(ABORT,'issue projection timestamp is outside UTC range'); END
 CREATE TRIGGER generation_two_issue_projection_time_update_guard BEFORE UPDATE ON user_issue_projection_state
 WHEN typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'issue projection timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_fishing_best_time_guard BEFORE INSERT ON game_fishing_best
 WHEN typeof(NEW.caught_at)<>'integer' OR NEW.caught_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'fishing best timestamp is outside UTC range'); END;
@@ -2024,7 +1893,6 @@ WHEN typeof(NEW.started_at)<>'integer' OR NEW.started_at NOT BETWEEN 0 AND 25340
  OR typeof(NEW.deadline)<>'integer' OR NEW.deadline NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.terminal_at)<>'integer' OR NEW.terminal_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'LinkLink summary timestamp is outside UTC range'); END;
-
 CREATE TRIGGER generation_two_rps_session_retry_time_guard BEFORE INSERT ON game_rps_sessions
 WHEN NEW.terminal_next_retry_at IS NOT NULL AND (typeof(NEW.terminal_next_retry_at)<>'integer' OR NEW.terminal_next_retry_at NOT BETWEEN 0 AND 253402300799)
 BEGIN SELECT RAISE(ABORT,'RPS retry timestamp is outside UTC range'); END;
@@ -2079,10 +1947,6 @@ BEGIN SELECT RAISE(ABORT,'game preference timestamp is outside UTC range'); END;
 CREATE TRIGGER generation_two_game_preferences_time_update_guard BEFORE UPDATE ON game_user_preferences
 WHEN typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'game preference timestamp is outside UTC range'); END;
-
--- Keep every generation/epoch/revision INTEGER in SQLite's signed 64-bit domain.
--- The column declarations retain their semantic lower bounds; these guards make
--- the upper bound explicit even when a direct SQL writer bypasses application code.
 CREATE TRIGGER generation_two_user_issue_generation_guard BEFORE INSERT ON user_issues
 WHEN typeof(NEW.generation)<>'integer' OR NEW.generation NOT BETWEEN 0 AND 9223372036854775807
 BEGIN SELECT RAISE(ABORT,'user issue generation is outside integer range'); END;
@@ -2147,10 +2011,6 @@ WHEN hex(NEW.session_count)='00000000000000000000000000000000'
  OR (NEW.eligible=1 AND hex(NEW.session_count)<'0000000000000000000000000000000A')
  OR (NEW.eligible=0 AND hex(NEW.session_count)>='0000000000000000000000000000000A')
 BEGIN SELECT RAISE(ABORT,'RPS rank aggregate matrix is inconsistent'); END;
-
--- U128 values are fixed-width big-endian unsigned integers.  Their complete
--- 128-bit range is allowed; SM128 high-bit and sign/zero rules are declared
--- inline on the corresponding signed-magnitude columns.
 CREATE TRIGGER generation_two_users_u128_guard BEFORE INSERT ON users
 WHEN typeof(NEW.donation_credit_mag)<>'blob' OR length(NEW.donation_credit_mag)<>16 OR substr(hex(NEW.donation_credit_mag),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
  OR typeof(NEW.total_requests)<>'blob' OR length(NEW.total_requests)<>16 OR substr(hex(NEW.total_requests),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
@@ -2483,7 +2343,6 @@ WHEN typeof(NEW.session_count)<>'blob' OR length(NEW.session_count)<>16 OR subst
  OR typeof(NEW.net_profit_mag)<>'blob' OR length(NEW.net_profit_mag)<>16 OR substr(hex(NEW.net_profit_mag),1,1) NOT IN ('0','1','2','3','4','5','6','7')
  OR typeof(NEW.revision)<>'blob' OR length(NEW.revision)<>16 OR substr(hex(NEW.revision),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
 BEGIN SELECT RAISE(ABORT,'RPS rank aggregate U128 value is invalid'); END;
--- SQLite has INTEGER affinity, so every INTEGER column also receives an explicit type guard.
 CREATE TRIGGER generation_two_integer_type_accepted_operations_insert_guard BEFORE INSERT ON accepted_operations
 WHEN (NEW.actor_user_id IS NOT NULL AND typeof(NEW.actor_user_id)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
@@ -3816,12 +3675,10 @@ WHEN (NEW.generation IS NOT NULL AND typeof(NEW.generation)<>'integer')
  OR (NEW.next_attempt_at IS NOT NULL AND typeof(NEW.next_attempt_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
-
 CREATE TABLE charity_model_routing (
  model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
  strategy TEXT NOT NULL CHECK(strategy IN ('ordered','random','expiry_weighted','cache_balanced'))
 );
-
 CREATE TABLE endpoint_key_limits (
  endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE CASCADE,
  max_concurrency INTEGER NOT NULL DEFAULT 0 CHECK(typeof(max_concurrency)='integer' AND max_concurrency BETWEEN 0 AND 2147483647),
@@ -3829,12 +3686,10 @@ CREATE TABLE endpoint_key_limits (
 );
 CREATE INDEX idx_dispatch_claims_key_active ON dispatch_claims(endpoint_key_id,state) WHERE purpose<>'discovery' AND state IN ('claimed','dispatched');
 CREATE INDEX idx_dispatch_claims_key_rpm ON dispatch_claims(endpoint_key_id,dispatched_at) WHERE purpose<>'discovery' AND dispatched_at IS NOT NULL;
-
 CREATE TABLE dispatch_response_starts (
  claim_id TEXT NOT NULL PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')),
  started_at INTEGER NOT NULL CHECK(typeof(started_at)='integer' AND started_at BETWEEN 0 AND 253402300799)
 );
-
 CREATE TABLE donation_handling (
  donation_id INTEGER PRIMARY KEY REFERENCES donations(id) ON DELETE CASCADE CHECK(donation_id>0),
  state TEXT NOT NULL CHECK(state IN ('legacy','pending','processed','closed')),
@@ -3850,7 +3705,6 @@ CREATE TABLE donation_handling (
    OR (state='closed' AND closed_at IS NOT NULL AND closed_reason<>'' AND processed_at IS NULL AND processed_by_user_id IS NULL AND processed_by_role=''))
 );
 CREATE INDEX idx_donation_handling_state ON donation_handling(state,donation_id);
-
 CREATE TABLE charity_model_access (
  model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
  allowed_level_mask INTEGER NOT NULL DEFAULT 63 CHECK(typeof(allowed_level_mask)='integer' AND allowed_level_mask BETWEEN 0 AND 63),
@@ -3860,14 +3714,12 @@ CREATE TABLE charity_model_access (
  CHECK(instr(public_description,char(0))=0),
  CHECK(public_description NOT GLOB ('*['||char(1)||'-'||char(8)||char(11)||'-'||char(31)||char(127)||'-'||char(159)||']*'))
 );
-
 CREATE TABLE donation_quota_capacity (
  id INTEGER PRIMARY KEY CHECK(id=1),
  rows_used INTEGER NOT NULL CHECK(typeof(rows_used)='integer' AND rows_used BETWEEN 0 AND 5000000),
  rows_held INTEGER NOT NULL CHECK(typeof(rows_held)='integer' AND rows_held BETWEEN 0 AND 5000000),
  CHECK(rows_used+rows_held<=5000000)
 );
-
 CREATE TABLE game_rps_presentation (
  session_id TEXT NOT NULL PRIMARY KEY REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')),
  pool_tie_count BLOB CHECK(pool_tie_count IS NULL OR (typeof(pool_tie_count)='blob' AND length(pool_tie_count)=16)),
@@ -3877,7 +3729,6 @@ CREATE TABLE game_rps_presentation (
  CHECK((quick_seat0_gesture IS NULL AND quick_seat1_gesture IS NULL AND quick_seat2_gesture IS NULL)
    OR (quick_seat0_gesture IS NOT NULL AND quick_seat1_gesture IS NOT NULL AND quick_seat2_gesture IS NOT NULL))
 );
-
 CREATE TABLE game_rps_pending_presentation (
  user_id INTEGER PRIMARY KEY REFERENCES game_rps_pending_results(user_id) ON DELETE CASCADE,
  own_buy_in BLOB CHECK(own_buy_in IS NULL OR (typeof(own_buy_in)='blob' AND length(own_buy_in)=16)),
@@ -3889,7 +3740,6 @@ CREATE TABLE game_rps_pending_presentation (
  CHECK((quick_seat0_gesture IS NULL AND quick_seat1_gesture IS NULL AND quick_seat2_gesture IS NULL)
    OR (quick_seat0_gesture IS NOT NULL AND quick_seat1_gesture IS NOT NULL AND quick_seat2_gesture IS NOT NULL))
 );
-
 CREATE TABLE game_rps_summary_presentation (
  session_id TEXT NOT NULL CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')),
  seat_no INTEGER NOT NULL CHECK(typeof(seat_no)='integer' AND seat_no BETWEEN 0 AND 2),
@@ -3899,7 +3749,6 @@ CREATE TABLE game_rps_summary_presentation (
  PRIMARY KEY(session_id,seat_no),
  FOREIGN KEY(session_id,seat_no) REFERENCES game_rps_summary_seats(session_id,seat_no) ON DELETE CASCADE
 );
-
 CREATE TABLE donation_quota_rules (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='qlr_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE CHECK(typeof(donation_key_id)='integer' AND donation_key_id>0),
@@ -3909,7 +3758,6 @@ CREATE TABLE donation_quota_rules (
  FOREIGN KEY(id, current_epoch) REFERENCES donation_quota_epochs(rule_id, epoch)
 );
 CREATE UNIQUE INDEX idx_donation_quota_rules_key_order ON donation_quota_rules(donation_key_id, display_order) WHERE current_epoch IS NOT NULL;
-
 CREATE TABLE donation_quota_epochs (
  rule_id TEXT NOT NULL REFERENCES donation_quota_rules(id) ON DELETE CASCADE CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
  epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
@@ -3947,7 +3795,6 @@ CREATE TABLE donation_quota_epochs (
  )
 );
 CREATE INDEX idx_donation_quota_epochs_retired ON donation_quota_epochs(rule_id, retired_at) WHERE retired_at IS NOT NULL;
-
 CREATE TABLE donation_quota_receipts (
  claim_id TEXT NOT NULL REFERENCES dispatch_claims(id) ON DELETE CASCADE CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')),
  rule_id TEXT NOT NULL CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
@@ -3969,7 +3816,6 @@ CREATE TABLE donation_quota_receipts (
  )
 );
 CREATE INDEX idx_donation_quota_receipts_epoch ON donation_quota_receipts(rule_id, epoch, success_at);
-
 CREATE TABLE donation_quota_periods (
  rule_id TEXT NOT NULL CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
  epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
@@ -3982,7 +3828,6 @@ CREATE TABLE donation_quota_periods (
  CHECK(end_at>start_at)
 );
 CREATE INDEX idx_donation_quota_periods_end ON donation_quota_periods(rule_id, epoch, end_at);
-
 CREATE TABLE donation_quota_buckets (
  rule_id TEXT NOT NULL CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
  epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
@@ -3992,7 +3837,6 @@ CREATE TABLE donation_quota_buckets (
  PRIMARY KEY(rule_id, epoch, success_at),
  FOREIGN KEY(rule_id, epoch) REFERENCES donation_quota_epochs(rule_id, epoch) ON DELETE CASCADE
 );
-
 CREATE TRIGGER donation_quota_period_mode_insert BEFORE INSERT ON donation_quota_periods
 WHEN NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE rule_id=NEW.rule_id AND epoch=NEW.epoch AND mode='reset')
 BEGIN SELECT RAISE(ABORT,'quota period requires reset epoch'); END;
@@ -4009,7 +3853,6 @@ CREATE TRIGGER donation_quota_epoch_mode_update BEFORE UPDATE OF mode ON donatio
 WHEN (NEW.mode<>'reset' AND EXISTS(SELECT 1 FROM donation_quota_periods WHERE rule_id=OLD.rule_id AND epoch=OLD.epoch))
   OR (NEW.mode<>'sliding' AND EXISTS(SELECT 1 FROM donation_quota_buckets WHERE rule_id=OLD.rule_id AND epoch=OLD.epoch))
 BEGIN SELECT RAISE(ABORT,'quota epoch mode conflicts with aggregates'); END;
-
 CREATE INDEX idx_report_cases_created ON report_cases(created_at,id);
 CREATE INDEX idx_report_materials_created ON report_materials(case_id,created_at,id);
 CREATE INDEX idx_legal_holds_created ON legal_holds(created_at,id);
@@ -4028,14 +3871,12 @@ CREATE INDEX idx_donation_keys_source_page ON donation_keys(
  CASE WHEN mainstream_channel_id IS NULL THEN canonical_base_url ELSE '' END,
  id
 );
-
 CREATE INDEX idx_donation_quota_buckets_cleanup ON donation_quota_buckets(success_at,rule_id,epoch);
 CREATE INDEX idx_donation_quota_periods_cleanup ON donation_quota_periods(end_at,rule_id,epoch,start_at);
 CREATE INDEX idx_donation_quota_epochs_clock ON donation_quota_epochs(COALESCE(last_observed_at,effective_at),rule_id,epoch) WHERE mode='reset';
 CREATE INDEX idx_donation_quota_receipts_settled ON donation_quota_receipts(claim_id,rule_id,epoch) WHERE state='settled';
 CREATE INDEX idx_donation_quota_receipts_period ON donation_quota_receipts(rule_id,epoch,period_start) WHERE period_start IS NOT NULL;
 CREATE INDEX idx_donation_quota_rules_retired ON donation_quota_rules(id) WHERE current_epoch IS NULL;
-
 CREATE TABLE legal_hold_steward_reads (
  id INTEGER PRIMARY KEY,
  hold_id_text TEXT NOT NULL REFERENCES legal_holds(id) ON DELETE CASCADE,
@@ -4046,22 +3887,6 @@ CREATE TABLE legal_hold_steward_reads (
  UNIQUE(hold_id_text,user_id)
 );
 CREATE INDEX idx_legal_hold_steward_reads_user ON legal_hold_steward_reads(user_id);
-CREATE TRIGGER legal_hold_steward_read_insert_guard BEFORE INSERT ON legal_hold_steward_reads
-WHEN NOT EXISTS(SELECT 1 FROM users u WHERE u.id=NEW.user_id AND u.is_admin=0 AND u.is_banned=0 AND u.level=5)
- OR NEW.read_count<>1 OR NEW.first_read_at<>NEW.last_read_at
- OR NOT EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text AND h.object_kind IN ('donation','request_log') AND h.state='active' AND NEW.first_read_at>=h.created_at AND NEW.last_read_at<h.expires_at)
-BEGIN SELECT RAISE(ABORT,'steward held read is inconsistent'); END;
-CREATE TRIGGER legal_hold_steward_read_update_guard BEFORE UPDATE ON legal_hold_steward_reads
-WHEN NEW.id IS NOT OLD.id OR NEW.hold_id_text IS NOT OLD.hold_id_text OR NEW.first_read_at IS NOT OLD.first_read_at
- OR NOT (
-  (NEW.user_id IS OLD.user_id AND NEW.last_read_at>=OLD.last_read_at AND NEW.read_count=OLD.read_count+1
-   AND EXISTS(SELECT 1 FROM users u WHERE u.id=NEW.user_id AND u.is_admin=0 AND u.is_banned=0 AND u.level=5)
-   AND EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text AND h.state='active' AND NEW.last_read_at<h.expires_at))
-  OR (NEW.user_id IS NULL AND OLD.user_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users u WHERE u.id=OLD.user_id)
-   AND NEW.last_read_at=OLD.last_read_at AND NEW.read_count=OLD.read_count)
- )
-BEGIN SELECT RAISE(ABORT,'steward held read is inconsistent'); END;
-
 CREATE TABLE game_fishing_outcome_lengths (
  batch_id TEXT NOT NULL,
  ordinal INTEGER NOT NULL CHECK(typeof(ordinal)='integer' AND ordinal BETWEEN 0 AND 9),
@@ -4085,7 +3910,6 @@ BEGIN SELECT RAISE(ABORT,'terminal fishing presentation is immutable'); END;
 CREATE TRIGGER fishing_presented_outcome_update_guard BEFORE UPDATE ON game_fishing_outcomes
 WHEN EXISTS(SELECT 1 FROM game_fishing_outcome_lengths l WHERE l.batch_id=OLD.batch_id AND l.ordinal=OLD.ordinal)
 BEGIN SELECT RAISE(ABORT,'presented fishing outcome is immutable'); END;
-
 CREATE TABLE game_fishing_best_lengths (
  user_id INTEGER PRIMARY KEY REFERENCES game_fishing_best(user_id) ON DELETE CASCADE,
  length_cm TEXT NOT NULL CHECK(typeof(length_cm)='text' AND length(length_cm) BETWEEN 3 AND 128
@@ -4116,7 +3940,6 @@ WHEN EXISTS(SELECT 1 FROM game_fishing_best_lengths l WHERE l.user_id=OLD.user_i
   ON fresh.batch_id=NEW.batch_id AND fresh.ordinal=NEW.ordinal
   WHERE previous.user_id=OLD.user_id AND previous.length_cm=fresh.length_cm)))
 BEGIN SELECT RAISE(ABORT,'fishing best presentation mismatch'); END;
-
 CREATE TABLE game_fishing_length_facts (
  batch_id_text TEXT PRIMARY KEY NOT NULL REFERENCES game_fishing_rank_facts(batch_id_text) ON DELETE CASCADE,
  ordinal INTEGER NOT NULL CHECK(typeof(ordinal)='integer' AND ordinal BETWEEN 0 AND 9),
@@ -4146,50 +3969,10 @@ WHEN NOT EXISTS(SELECT 1 FROM game_fishing_rank_facts f
 BEGIN SELECT RAISE(ABORT,'fishing length fact does not match batch maximum'); END;
 CREATE TRIGGER fishing_length_fact_update_guard BEFORE UPDATE ON game_fishing_length_facts
 BEGIN SELECT RAISE(ABORT,'fishing length fact is immutable'); END;
-
 CREATE TABLE charity_model_token_reserves (
     model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
     amount_milli INTEGER NOT NULL CHECK(typeof(amount_milli)='integer' AND amount_milli BETWEEN 1 AND 9000000000000000)
 );
-
-ALTER TABLE credit_accounts ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush'));
-ALTER TABLE credit_entries ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game','sketch_paper','sketch_brush'));
-ALTER TABLE welfare_claims ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'general' CHECK(asset_type IN ('general','game'));
-ALTER TABLE user_activity_daily ADD COLUMN game_checkins INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_checkins)='integer' AND game_checkins BETWEEN 0 AND 9223372036854775807);
-ALTER TABLE site_activity_daily ADD COLUMN game_checkins BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_checkins)='blob' AND length(game_checkins)=16);
-ALTER TABLE game_fishing_batches ADD COLUMN rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2);
-ALTER TABLE game_linklink_sessions ADD COLUMN rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2);
-ALTER TABLE game_linklink_summaries ADD COLUMN rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2);
-ALTER TABLE game_rps_queue ADD COLUMN rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2);
-ALTER TABLE game_rps_pending_results ADD COLUMN rules_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(rules_version)='integer' AND rules_version BETWEEN 1 AND 2);
-ALTER TABLE game_fishing_batches ADD COLUMN game_paid_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_paid_milli)='integer' AND game_paid_milli BETWEEN 0 AND entry_total_milli);
-ALTER TABLE game_fishing_batches ADD COLUMN platform_bp INTEGER NOT NULL DEFAULT 0 CHECK(typeof(platform_bp)='integer' AND platform_bp BETWEEN 0 AND 9999);
-ALTER TABLE game_fishing_batches ADD COLUMN welfare_bp INTEGER NOT NULL DEFAULT 0 CHECK(typeof(welfare_bp)='integer' AND welfare_bp BETWEEN 0 AND 9999);
-ALTER TABLE game_fishing_batches ADD COLUMN thursday_bp INTEGER NOT NULL DEFAULT 0 CHECK(typeof(thursday_bp)='integer' AND thursday_bp BETWEEN 0 AND 9999);
-ALTER TABLE game_fishing_batches ADD COLUMN net_payout_total_milli INTEGER CHECK(net_payout_total_milli IS NULL OR (typeof(net_payout_total_milli)='integer' AND net_payout_total_milli BETWEEN 0 AND 9000000000000000));
-ALTER TABLE game_fishing_batches ADD COLUMN platform_cut_total_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(platform_cut_total_milli)='integer' AND platform_cut_total_milli BETWEEN 0 AND 9000000000000000);
-ALTER TABLE game_fishing_batches ADD COLUMN welfare_cut_total_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(welfare_cut_total_milli)='integer' AND welfare_cut_total_milli BETWEEN 0 AND 9000000000000000);
-ALTER TABLE game_fishing_batches ADD COLUMN thursday_cut_total_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(thursday_cut_total_milli)='integer' AND thursday_cut_total_milli BETWEEN 0 AND 9000000000000000);
-ALTER TABLE game_fishing_outcomes ADD COLUMN net_payout_milli INTEGER CHECK(net_payout_milli IS NULL OR (typeof(net_payout_milli)='integer' AND net_payout_milli BETWEEN 0 AND 9000000000000000));
-ALTER TABLE game_fishing_outcomes ADD COLUMN platform_cut_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(platform_cut_milli)='integer' AND platform_cut_milli BETWEEN 0 AND 9000000000000000);
-ALTER TABLE game_fishing_outcomes ADD COLUMN welfare_cut_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(welfare_cut_milli)='integer' AND welfare_cut_milli BETWEEN 0 AND 9000000000000000);
-ALTER TABLE game_fishing_outcomes ADD COLUMN thursday_cut_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(thursday_cut_milli)='integer' AND thursday_cut_milli BETWEEN 0 AND 9000000000000000);
-ALTER TABLE game_linklink_sessions ADD COLUMN game_paid_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_paid_milli)='integer' AND game_paid_milli BETWEEN 0 AND price_milli);
-ALTER TABLE game_linklink_sessions ADD COLUMN assists_initial INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_initial)='integer' AND assists_initial BETWEEN 0 AND 5);
-ALTER TABLE game_linklink_sessions ADD COLUMN assists_remaining INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_remaining)='integer' AND assists_remaining BETWEEN 0 AND assists_initial);
-ALTER TABLE game_linklink_summaries ADD COLUMN game_paid_milli INTEGER NOT NULL DEFAULT 0 CHECK(typeof(game_paid_milli)='integer' AND game_paid_milli BETWEEN 0 AND price_milli);
-ALTER TABLE game_linklink_summaries ADD COLUMN assists_initial INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_initial)='integer' AND assists_initial BETWEEN 0 AND 5);
-ALTER TABLE game_linklink_summaries ADD COLUMN assists_remaining INTEGER NOT NULL DEFAULT 0 CHECK(typeof(assists_remaining)='integer' AND assists_remaining BETWEEN 0 AND assists_initial);
-ALTER TABLE game_rps_queue ADD COLUMN game_paid BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_paid)='blob' AND length(game_paid)=16 AND game_paid<=reserved);
-ALTER TABLE game_rps_seats ADD COLUMN game_buy_in BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_buy_in)='blob' AND length(game_buy_in)=16 AND game_buy_in<=starting_balance);
-ALTER TABLE game_rps_seats ADD COLUMN game_remaining BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(game_remaining)='blob' AND length(game_remaining)=16 AND game_remaining<=current_balance);
-ALTER TABLE game_rps_summary_seats ADD COLUMN general_buy_in BLOB CHECK(general_buy_in IS NULL OR (typeof(general_buy_in)='blob' AND length(general_buy_in)=16));
-ALTER TABLE game_rps_summary_seats ADD COLUMN game_buy_in BLOB CHECK(game_buy_in IS NULL OR (typeof(game_buy_in)='blob' AND length(game_buy_in)=16));
-ALTER TABLE game_rps_pending_results ADD COLUMN general_buy_in BLOB CHECK(general_buy_in IS NULL OR (typeof(general_buy_in)='blob' AND length(general_buy_in)=16));
-ALTER TABLE game_rps_pending_results ADD COLUMN game_buy_in BLOB CHECK(game_buy_in IS NULL OR (typeof(game_buy_in)='blob' AND length(game_buy_in)=16));
-ALTER TABLE game_rps_pending_results ADD COLUMN own_returned_general BLOB CHECK(own_returned_general IS NULL OR (typeof(own_returned_general)='blob' AND length(own_returned_general)=16));
-ALTER TABLE game_user_preferences ADD COLUMN linklink_public_tie_key BLOB CHECK(linklink_public_tie_key IS NULL OR (typeof(linklink_public_tie_key)='blob' AND length(linklink_public_tie_key)=32));
-
 CREATE TABLE game_checkins (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(typeof(id)='integer' AND id>0),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE CHECK(typeof(user_id)='integer'),
@@ -4253,22 +4036,12 @@ CREATE TABLE game_onboarding_holds (
   (game_key='blackjack' AND fishing_batch_id IS NULL AND linklink_session_id IS NULL AND rps_queue_id IS NULL AND rps_session_id IS NULL AND seat_no IS NULL AND duel_queue_id IS NULL AND duel_session_id IS NULL AND blackjack_entry_id IS NOT NULL)
  )
 );
-
-DROP INDEX idx_credit_accounts_user;
-DROP INDEX idx_credit_accounts_code;
 CREATE UNIQUE INDEX idx_credit_accounts_user ON credit_accounts(user_id,asset_type) WHERE kind='user';
 CREATE UNIQUE INDEX idx_credit_accounts_code ON credit_accounts(code,asset_type) WHERE code IS NOT NULL;
-DROP INDEX idx_rps_queue_match;
 CREATE INDEX idx_rps_queue_match ON game_rps_queue(mode,rules_version,deadline,created_at,id);
-CREATE UNIQUE INDEX idx_game_onboarding_hold_fishing ON game_onboarding_holds(fishing_batch_id) WHERE fishing_batch_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_game_onboarding_hold_linklink ON game_onboarding_holds(linklink_session_id) WHERE linklink_session_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_game_onboarding_hold_queue ON game_onboarding_holds(rps_queue_id) WHERE rps_queue_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_game_onboarding_hold_seat ON game_onboarding_holds(rps_session_id,seat_no) WHERE rps_session_id IS NOT NULL;
 CREATE INDEX idx_game_onboarding_hold_user ON game_onboarding_holds(user_id);
 CREATE INDEX idx_game_onboarding_hold_created ON game_onboarding_holds(created_at,id);
 CREATE INDEX idx_linklink_leaderboard ON game_linklink_summaries(spec,rules_version,terminal_reason,terminal_at,user_id,score DESC);
-
-DROP TRIGGER credit_entries_no_update;
 CREATE TRIGGER credit_entries_no_update BEFORE UPDATE ON credit_entries
 WHEN NOT (
  NEW.operation_id IS OLD.operation_id AND NEW.line_no IS OLD.line_no AND NEW.account_kind_snapshot IS OLD.account_kind_snapshot AND
@@ -4277,23 +4050,17 @@ WHEN NOT (
  (NEW.account_id IS OLD.account_id OR (OLD.account_id IS NOT NULL AND NEW.account_id IS NULL AND NOT EXISTS(SELECT 1 FROM credit_accounts a WHERE a.id=OLD.account_id)))
 )
 BEGIN SELECT RAISE(ABORT,'credit_entries is append-only'); END;
-DROP TRIGGER credit_entries_account_kind_guard;
 CREATE TRIGGER credit_entries_account_kind_guard BEFORE INSERT ON credit_entries
 WHEN NEW.account_id IS NOT NULL AND NOT EXISTS(
  SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind=NEW.account_kind_snapshot AND a.asset_type=NEW.asset_type)
 BEGIN SELECT RAISE(ABORT,'credit entry account kind snapshot mismatch'); END;
-DROP TRIGGER credit_entries_account_kind_update_guard;
 CREATE TRIGGER credit_entries_account_kind_update_guard BEFORE UPDATE OF account_id,account_kind_snapshot,asset_type ON credit_entries
 WHEN NEW.account_id IS NOT NULL AND NOT EXISTS(
  SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind=NEW.account_kind_snapshot AND a.asset_type=NEW.asset_type)
 BEGIN SELECT RAISE(ABORT,'credit entry account kind snapshot mismatch'); END;
-CREATE TRIGGER credit_account_asset_insert BEFORE INSERT ON credit_accounts
-WHEN NEW.asset_type='game' AND (NEW.kind='pool' OR NEW.code IN ('forward_reserve','charity_reserve'))
-BEGIN SELECT RAISE(ABORT,'account code does not support this asset'); END;
 CREATE TRIGGER credit_account_identity_update BEFORE UPDATE ON credit_accounts
 WHEN NEW.asset_type IS NOT OLD.asset_type OR NEW.kind IS NOT OLD.kind OR NEW.code IS NOT OLD.code OR NEW.user_id IS NOT OLD.user_id
 BEGIN SELECT RAISE(ABORT,'account identity is immutable'); END;
-DROP TRIGGER welfare_claim_matrix_guard;
 CREATE TRIGGER welfare_claim_matrix_guard BEFORE INSERT ON welfare_claims
 WHEN NEW.asset_type<>'game' OR NOT EXISTS(SELECT 1 FROM credit_entries e JOIN credit_accounts a ON a.id=e.account_id
   WHERE e.operation_id=NEW.operation_id AND a.kind='user' AND a.user_id=NEW.user_id
@@ -4314,7 +4081,6 @@ WHEN NEW.asset_type<>'game' OR NOT EXISTS(SELECT 1 FROM credit_entries e JOIN cr
                  AND o.source_type='operation' AND o.source_id=NEW.operation_id
                  AND hex(o.source_seq)='00000000000000000000000000000000')
 BEGIN SELECT RAISE(ABORT,'welfare claim matrix is invalid'); END;
-DROP TRIGGER welfare_claim_matrix_update_guard;
 CREATE TRIGGER welfare_claim_matrix_update_guard BEFORE UPDATE ON welfare_claims
 WHEN NEW.asset_type IS NOT OLD.asset_type
  OR typeof(NEW.site_day)<>'text'
@@ -4418,22 +4184,6 @@ CREATE TRIGGER rps_pending_funding_update BEFORE UPDATE ON game_rps_pending_resu
 WHEN (NEW.general_buy_in IS NULL)<>(NEW.game_buy_in IS NULL)
  OR (NEW.rules_version=2 AND (NEW.general_buy_in IS NULL OR NEW.own_returned_general IS NULL))
 BEGIN SELECT RAISE(ABORT,'rps pending funding is incomplete'); END;
-CREATE TRIGGER onboarding_hold_parent_insert BEFORE INSERT ON game_onboarding_holds
-WHEN NOT (
- (NEW.game_key='fishing' AND EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.fishing_batch_id AND b.user_id=NEW.user_id AND b.bait=NEW.task_key AND b.rules_version=2 AND b.state='reserved')) OR
- (NEW.game_key='linklink' AND EXISTS(SELECT 1 FROM game_linklink_sessions s WHERE s.id=NEW.linklink_session_id AND s.user_id=NEW.user_id AND s.spec=NEW.task_key AND s.rules_version=2)) OR
- (NEW.game_key='rps' AND EXISTS(SELECT 1 FROM game_rps_queue q WHERE q.id=NEW.rps_queue_id AND q.user_id=NEW.user_id AND q.mode=NEW.task_key AND q.rules_version=2)) OR
- (NEW.game_key='rps' AND EXISTS(SELECT 1 FROM game_rps_seats p JOIN game_rps_sessions s ON s.id=p.session_id WHERE p.session_id=NEW.rps_session_id AND p.seat_no=NEW.seat_no AND p.user_id=NEW.user_id AND p.deletion_state='active' AND s.mode=NEW.task_key AND s.rules_version=2))
-)
-BEGIN SELECT RAISE(ABORT,'onboarding hold parent mismatch'); END;
-CREATE TRIGGER onboarding_hold_parent_update BEFORE UPDATE ON game_onboarding_holds
-WHEN NOT (
- (NEW.game_key='fishing' AND EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.fishing_batch_id AND b.user_id=NEW.user_id AND b.bait=NEW.task_key AND b.rules_version=2 AND b.state='reserved')) OR
- (NEW.game_key='linklink' AND EXISTS(SELECT 1 FROM game_linklink_sessions s WHERE s.id=NEW.linklink_session_id AND s.user_id=NEW.user_id AND s.spec=NEW.task_key AND s.rules_version=2)) OR
- (NEW.game_key='rps' AND EXISTS(SELECT 1 FROM game_rps_queue q WHERE q.id=NEW.rps_queue_id AND q.user_id=NEW.user_id AND q.mode=NEW.task_key AND q.rules_version=2)) OR
- (NEW.game_key='rps' AND EXISTS(SELECT 1 FROM game_rps_seats p JOIN game_rps_sessions s ON s.id=p.session_id WHERE p.session_id=NEW.rps_session_id AND p.seat_no=NEW.seat_no AND p.user_id=NEW.user_id AND p.deletion_state='active' AND s.mode=NEW.task_key AND s.rules_version=2))
-)
-BEGIN SELECT RAISE(ABORT,'onboarding hold parent mismatch'); END;
 CREATE TRIGGER onboarding_hold_identity_update BEFORE UPDATE ON game_onboarding_holds
 WHEN NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.game_key IS NOT OLD.game_key OR NEW.task_key IS NOT OLD.task_key OR NEW.created_at IS NOT OLD.created_at
 BEGIN SELECT RAISE(ABORT,'onboarding hold identity is immutable'); END;
@@ -4461,7 +4211,6 @@ WHEN NOT EXISTS(
   AND a.kind='user' AND a.user_id=NEW.user_id AND e.asset_type='game'
   AND e.delta_sign=CASE WHEN NEW.award_milli=0 THEN 0 ELSE 1 END AND hex(e.delta_mag)=printf('%032X',NEW.award_milli))
 BEGIN SELECT RAISE(ABORT,'game check-in operation mismatch'); END;
-
 CREATE TABLE game_duel_catalogs (
  game_key TEXT NOT NULL CHECK(game_key IN ('bidding','likes')),
  content_hash TEXT NOT NULL CHECK(length(content_hash)=64 AND content_hash NOT GLOB '*[^0-9a-f]*'),
@@ -4603,12 +4352,10 @@ CREATE TRIGGER game_duel_seat_deidentify BEFORE UPDATE OF user_id ON game_duel_s
 CREATE TRIGGER game_duel_user_ban_guard BEFORE UPDATE OF is_banned,banned_until ON users WHEN NEW.is_banned=1 AND (NEW.is_banned<>OLD.is_banned OR NEW.banned_until IS NOT OLD.banned_until) AND EXISTS(SELECT 1 FROM game_duel_user_slots WHERE user_id=NEW.id) BEGIN SELECT RAISE(ABORT,'duel cancellation required'); END;
 CREATE TRIGGER game_duel_anonymous_immutable BEFORE UPDATE ON game_duel_anonymous BEGIN SELECT RAISE(ABORT,'duel archive immutable'); END;
 CREATE TRIGGER game_duel_anonymous_round_immutable BEFORE UPDATE ON game_duel_anonymous_rounds BEGIN SELECT RAISE(ABORT,'duel archive round immutable'); END;
-
 CREATE TABLE game_blackjack_clock (
  id INTEGER PRIMARY KEY CHECK(id=1),
  observed_at INTEGER NOT NULL CHECK(observed_at BETWEEN 0 AND 253399708739)
 ) STRICT;
-INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
 CREATE TABLE game_blackjack_sessions (
  id TEXT PRIMARY KEY NOT NULL CHECK(length(id)=26 AND substr(id,1,4)='bjt_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  started_at INTEGER NOT NULL UNIQUE CHECK(started_at BETWEEN 0 AND 253399708739 AND started_at%30=0),
@@ -4706,7 +4453,6 @@ CREATE TRIGGER blackjack_session_delete BEFORE DELETE ON game_blackjack_sessions
 CREATE TRIGGER blackjack_user_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM game_blackjack_entries WHERE user_id=OLD.id) BEGIN SELECT RAISE(ABORT,'blackjack user handoff required'); END;
 CREATE TRIGGER blackjack_event_immutable BEFORE UPDATE ON game_blackjack_events BEGIN SELECT RAISE(ABORT,'blackjack event immutable'); END;
 CREATE TRIGGER blackjack_anonymous_immutable BEFORE UPDATE ON game_blackjack_anonymous BEGIN SELECT RAISE(ABORT,'blackjack archive immutable'); END;
-
 CREATE TABLE game_random_proofs (
  resource_id TEXT PRIMARY KEY NOT NULL,
  game_key TEXT NOT NULL CHECK(game_key IN ('fishing','linklink','rps','bidding','likes','blackjack')),
@@ -4738,15 +4484,8 @@ WHEN NEW.resource_id IS NOT OLD.resource_id OR NEW.game_key IS NOT OLD.game_key
  OR json_extract(NEW.private_json,'$.commitment') IS NOT json_extract(OLD.private_json,'$.commitment')
  OR json_extract(NEW.private_json,'$.rules') IS NOT json_extract(OLD.private_json,'$.rules')
 BEGIN SELECT RAISE(ABORT,'game random commitment is immutable'); END;
-
-ALTER TABLE donation_keys ADD COLUMN failure_disable_threshold TEXT NOT NULL DEFAULT '10' CHECK(typeof(failure_disable_threshold)='text' AND instr(failure_disable_threshold,char(0))=0 AND (failure_disable_threshold='0' OR (length(failure_disable_threshold) BETWEEN 1 AND 39 AND failure_disable_threshold NOT GLOB '*[^0-9]*' AND substr(failure_disable_threshold,1,1) BETWEEN '1' AND '9' AND (length(failure_disable_threshold)<39 OR failure_disable_threshold<='340282366920938463463374607431768211455'))));
-
-ALTER TABLE users ADD COLUMN charity_profile_public INTEGER NOT NULL DEFAULT 0 CHECK(typeof(charity_profile_public)='integer' AND charity_profile_public IN (0,1));
-ALTER TABLE users ADD COLUMN donation_credit_achieved_at INTEGER CHECK(donation_credit_achieved_at IS NULL OR (typeof(donation_credit_achieved_at)='integer' AND donation_credit_achieved_at BETWEEN 0 AND 253402300799));
-ALTER TABLE users ADD COLUMN donation_credit_achieved_seq BLOB CHECK(donation_credit_achieved_seq IS NULL OR (typeof(donation_credit_achieved_seq)='blob' AND length(donation_credit_achieved_seq)=16 AND donation_credit_achieved_seq>X'00000000000000000000000000000000')) CHECK((donation_credit_achieved_at IS NULL)=(donation_credit_achieved_seq IS NULL));
 CREATE INDEX idx_users_charity_rank ON users(donation_credit_mag DESC,donation_credit_achieved_at,donation_credit_achieved_seq);
 CREATE INDEX idx_credit_donation_sequence ON credit_operations(donation_credit_user_id,ledger_seq DESC) WHERE donation_credit_delta_sign<>0;
-
 CREATE TABLE game_statistics_epoch (
  id INTEGER PRIMARY KEY CHECK(id=1),
  started_at INTEGER NOT NULL CHECK(started_at BETWEEN 0 AND 253402300799),
@@ -4802,7 +4541,10 @@ CREATE TABLE game_rank_expiry_work (
  expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799),
  delta_sign INTEGER NOT NULL CHECK(delta_sign IN (-1,0,1)),
  delta_mag BLOB NOT NULL CHECK(length(delta_mag)=32),
- last_seq BLOB NOT NULL CHECK(length(last_seq)=16),
+ last_seq BLOB NOT NULL CHECK(length(last_seq)=16), net_game_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_game_delta_sign IN(-1,0,1)), net_game_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
+ CHECK(length(net_game_delta_mag)=32 AND (net_game_delta_sign=0)=(net_game_delta_mag=zeroblob(32))), net_fishing_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_fishing_delta_sign IN(-1,0,1)), net_fishing_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
+ CHECK(length(net_fishing_delta_mag)=32 AND (net_fishing_delta_sign=0)=(net_fishing_delta_mag=zeroblob(32))), net_blackjack_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_blackjack_delta_sign IN(-1,0,1)), net_blackjack_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
+ CHECK(length(net_blackjack_delta_mag)=32 AND (net_blackjack_delta_sign=0)=(net_blackjack_delta_mag=zeroblob(32))), net_fishing_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_fishing_last_seq)=16), net_blackjack_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_blackjack_last_seq)=16), net_bidding_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_bidding_delta_sign IN(-1,0,1)), net_bidding_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000' CHECK(length(net_bidding_delta_mag)=32 AND (net_bidding_delta_sign=0)=(net_bidding_delta_mag=zeroblob(32))), net_bidding_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_bidding_last_seq)=16),
  CHECK(board<>'game_charity' OR window='7d'),
  CHECK((delta_sign=0)=(delta_mag=zeroblob(32)))
 ) STRICT;
@@ -4845,7 +4587,6 @@ WHEN NOT EXISTS(SELECT 1 FROM credit_operations o WHERE o.id=NEW.operation_id AN
  OR NOT EXISTS(SELECT 1 FROM credit_entries e JOIN credit_accounts a ON a.id=e.account_id WHERE e.operation_id=NEW.operation_id AND a.kind='user' AND a.user_id=NEW.user_id AND e.asset_type='game' AND e.delta_sign=1 AND hex(e.delta_mag)=printf('%032X',NEW.disbursed_milli))
  OR NOT EXISTS(SELECT 1 FROM credit_entries e JOIN credit_accounts a ON a.id=e.account_id WHERE e.operation_id=NEW.operation_id AND a.kind='external' AND a.code='external' AND e.asset_type='game' AND e.delta_sign=-1 AND hex(e.delta_mag)=printf('%032X',NEW.disbursed_milli))
 BEGIN SELECT RAISE(ABORT,'loan operation mismatch'); END;
-
 CREATE TABLE abuse_windows (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  violation_kind TEXT NOT NULL CHECK(violation_kind IN ('rpm','short_content')),
@@ -4861,7 +4602,7 @@ CREATE TABLE abuse_window_events (
  seq INTEGER NOT NULL CHECK(seq>0),
  occurred_at INTEGER NOT NULL CHECK(occurred_at BETWEEN 0 AND 253402300799),
  request_id TEXT NOT NULL CHECK(length(request_id)=26 AND substr(request_id,1,4)='req_' AND substr(request_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(request_id,-1,1) IN ('A','Q','g','w')),
- content_chars INTEGER CHECK(content_chars IS NULL OR content_chars BETWEEN 0 AND 1048576),
+ content_chars INTEGER CHECK(content_chars IS NULL OR content_chars BETWEEN 0 AND 1048576), expires_at INTEGER CHECK(expires_at>occurred_at AND expires_at<=253402300799),
  PRIMARY KEY(user_id,violation_kind,seq), UNIQUE(request_id,violation_kind),
  FOREIGN KEY(user_id,violation_kind) REFERENCES abuse_windows(user_id,violation_kind) ON DELETE CASCADE,
  CHECK((violation_kind='rpm' AND content_chars IS NULL) OR (violation_kind='short_content' AND content_chars IS NOT NULL))
@@ -4922,11 +4663,6 @@ CREATE TRIGGER abuse_evidence_immutable BEFORE UPDATE ON abuse_evidence BEGIN SE
 CREATE TRIGGER abuse_evidence_bound BEFORE INSERT ON abuse_evidence
 WHEN NOT EXISTS(SELECT 1 FROM abuse_actions WHERE seq=NEW.action_seq AND NEW.ordinal<evidence_count)
 BEGIN SELECT RAISE(ABORT,'penalty evidence exceeds declared count'); END;
-
-DROP INDEX idx_game_onboarding_hold_fishing;
-DROP INDEX idx_game_onboarding_hold_linklink;
-DROP INDEX idx_game_onboarding_hold_queue;
-DROP INDEX idx_game_onboarding_hold_seat;
 CREATE UNIQUE INDEX idx_game_onboarding_hold_fishing ON game_onboarding_holds(fishing_batch_id,task_key) WHERE fishing_batch_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_game_onboarding_hold_linklink ON game_onboarding_holds(linklink_session_id,task_key) WHERE linklink_session_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_game_onboarding_hold_queue ON game_onboarding_holds(rps_queue_id,task_key) WHERE rps_queue_id IS NOT NULL;
@@ -4934,9 +4670,6 @@ CREATE UNIQUE INDEX idx_game_onboarding_hold_seat ON game_onboarding_holds(rps_s
 CREATE UNIQUE INDEX idx_game_onboarding_hold_duel_queue ON game_onboarding_holds(duel_queue_id,task_key) WHERE duel_queue_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_game_onboarding_hold_duel_seat ON game_onboarding_holds(duel_session_id,seat_no,task_key) WHERE duel_session_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_game_onboarding_hold_blackjack ON game_onboarding_holds(blackjack_entry_id,task_key) WHERE blackjack_entry_id IS NOT NULL;
-
-DROP TRIGGER onboarding_hold_parent_insert;
-DROP TRIGGER onboarding_hold_parent_update;
 CREATE TRIGGER onboarding_hold_parent_insert BEFORE INSERT ON game_onboarding_holds WHEN NOT (
  (NEW.game_key='fishing' AND EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.id=NEW.fishing_batch_id AND b.user_id=NEW.user_id AND b.bait=NEW.task_key AND b.rules_version=2 AND b.state='reserved')) OR
  (NEW.game_key='linklink' AND EXISTS(SELECT 1 FROM game_linklink_sessions s WHERE s.id=NEW.linklink_session_id AND s.user_id=NEW.user_id AND s.spec=NEW.task_key AND s.rules_version=2)) OR
@@ -4965,10 +4698,6 @@ CREATE TRIGGER onboarding_hold_parent_update BEFORE UPDATE ON game_onboarding_ho
  (NEW.game_key='blackjack' AND EXISTS(SELECT 1 FROM game_blackjack_entries e WHERE e.id=NEW.blackjack_entry_id AND e.user_id=NEW.user_id AND e.state IN ('waiting','seated','playing')))
 )
 BEGIN SELECT RAISE(ABORT,'onboarding hold parent mismatch'); END;
-ALTER TABLE logical_requests ADD COLUMN rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight'));
-ALTER TABLE logical_requests ADD COLUMN rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable'));
-ALTER TABLE logical_requests ADD COLUMN request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST'));
-ALTER TABLE logical_requests ADD COLUMN request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings'));
 CREATE TRIGGER logical_requests_rejection_insert BEFORE INSERT ON logical_requests
 WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.request_method IS NOT NULL OR NEW.request_path IS NOT NULL))
  OR (NEW.rejection_stage IS NOT NULL AND (NEW.rejection_reason IS NULL OR NEW.request_method IS NULL OR NEW.request_path IS NULL
@@ -4983,10 +4712,6 @@ WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.r
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/chat/completions' AND NEW.route_kind IN ('openai_chat_completions','charity_chat_completions'))
  OR (NEW.request_method='POST' AND NEW.request_path='/v1/embeddings' AND NEW.route_kind IN ('openai_embeddings','charity_embeddings')))
  OR NEW.caller_result_class IS NOT 'failed' OR NEW.state<>'terminal' OR NEW.accounting_state<>'none' OR NEW.account_reserved_milli<>0 OR NEW.ledger_rows_remaining<>X'00000000000000000000000000000000')) BEGIN SELECT RAISE(ABORT,'invalid pre-handler rejection'); END;
-ALTER TABLE request_logs ADD COLUMN rejection_stage TEXT CHECK(rejection_stage IS NULL OR rejection_stage IN ('authorization','flow','preflight'));
-ALTER TABLE request_logs ADD COLUMN rejection_reason TEXT CHECK(rejection_reason IS NULL OR rejection_reason IN ('unauthorized','forbidden','charity_suspended','feature_disabled','maintenance','invalid_request','not_found','unbound_model','insufficient_credits','user_rpm','global_rpm','shared_rpm','concurrency','content_too_short','payload_too_large','resource_limit_exceeded','service_unavailable'));
-ALTER TABLE request_logs ADD COLUMN request_method TEXT CHECK(request_method IS NULL OR request_method IN ('GET','POST'));
-ALTER TABLE request_logs ADD COLUMN request_path TEXT CHECK(request_path IS NULL OR request_path IN ('/v1/models','/v1/chat/completions','/v1/embeddings'));
 CREATE TRIGGER request_logs_rejection_insert BEFORE INSERT ON request_logs
 WHEN (NEW.rejection_stage IS NULL AND (NEW.rejection_reason IS NOT NULL OR NEW.request_method IS NOT NULL OR NEW.request_path IS NOT NULL))
  OR (NEW.rejection_stage IS NOT NULL AND (NEW.rejection_reason IS NULL OR NEW.request_method IS NULL OR NEW.request_path IS NULL
@@ -5007,7 +4732,6 @@ CREATE INDEX idx_request_logs_phase ON request_logs(user_id,rejection_stage,star
 CREATE TRIGGER rejected_request_no_dispatch BEFORE INSERT ON dispatch_claims
 WHEN EXISTS(SELECT 1 FROM logical_requests WHERE id=NEW.logical_request_id AND rejection_stage IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'rejected request cannot dispatch'); END;
-
 CREATE TABLE image_upstream_control (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='iup_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  identity_hash BLOB NOT NULL UNIQUE CHECK(length(identity_hash)=32),
@@ -5157,18 +4881,14 @@ CREATE TABLE image_task_sources (
  occurred_at INTEGER NOT NULL CHECK(occurred_at BETWEEN 0 AND 253402300799)
 ) STRICT;
 CREATE INDEX idx_image_sources_user_time ON image_task_sources(user_id,occurred_at,task_id);
-
 CREATE TRIGGER image_upstream_revisions_immutable BEFORE UPDATE ON image_upstream_revisions
 WHEN NEW.revision IS NOT OLD.revision OR NEW.control_id IS NOT OLD.control_id OR NEW.base_url IS NOT OLD.base_url OR NEW.secret_context IS NOT OLD.secret_context OR NEW.secret_ciphertext IS NOT OLD.secret_ciphertext OR NEW.adapter_json IS NOT OLD.adapter_json OR NEW.image_origins_json IS NOT OLD.image_origins_json OR NEW.per_user_limit IS NOT OLD.per_user_limit OR NEW.global_limit IS NOT OLD.global_limit OR NEW.queue_timeout_seconds IS NOT OLD.queue_timeout_seconds OR NEW.execution_timeout_seconds IS NOT OLD.execution_timeout_seconds OR NEW.memory_budget_mib IS NOT OLD.memory_budget_mib OR NEW.created_at IS NOT OLD.created_at
  OR (NEW.actor_user_id IS NOT OLD.actor_user_id AND NEW.actor_user_id IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'image configuration revision is immutable'); END;
-
 CREATE TRIGGER image_model_revisions_immutable BEFORE UPDATE ON image_model_revisions
 WHEN NEW.model_id IS NOT OLD.model_id OR NEW.revision IS NOT OLD.revision OR NEW.display_name IS NOT OLD.display_name OR NEW.description IS NOT OLD.description OR NEW.enabled IS NOT OLD.enabled OR NEW.parameters_json IS NOT OLD.parameters_json OR NEW.combinations_json IS NOT OLD.combinations_json OR NEW.mapping_json IS NOT OLD.mapping_json OR NEW.paper_price_mag IS NOT OLD.paper_price_mag OR NEW.brush_price_mag IS NOT OLD.brush_price_mag OR NEW.created_at IS NOT OLD.created_at
  OR (NEW.actor_user_id IS NOT OLD.actor_user_id AND NEW.actor_user_id IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'image configuration revision is immutable'); END;
-
-
 CREATE TABLE request_source_facts (
  source_id INTEGER PRIMARY KEY AUTOINCREMENT,
  request_log_id INTEGER NOT NULL UNIQUE REFERENCES request_logs(id) ON DELETE CASCADE,
@@ -5180,8 +4900,6 @@ CREATE TABLE request_source_facts (
  occurred_at INTEGER NOT NULL CHECK(occurred_at BETWEEN 0 AND 253402300799)
 ) STRICT;
 CREATE INDEX idx_request_sources_user_time ON request_source_facts(user_id,occurred_at,request_log_id);
-CREATE INDEX idx_request_sources_ip_time ON request_source_facts(effective_ip,occurred_at,request_log_id);
-
 CREATE TABLE request_error_bodies (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  request_log_id INTEGER REFERENCES request_logs(id) ON DELETE CASCADE,
@@ -5205,7 +4923,6 @@ CREATE UNIQUE INDEX idx_request_errors_request ON request_error_bodies(request_l
 CREATE UNIQUE INDEX idx_request_errors_task ON request_error_bodies(task_id,attempt_seq,event_seq) WHERE task_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_request_errors_operation ON request_error_bodies(operation_id,attempt_seq,event_seq) WHERE operation_id IS NOT NULL;
 CREATE INDEX idx_request_errors_expiry ON request_error_bodies(expires_at,id);
-
 CREATE TABLE observability_state (
  id INTEGER PRIMARY KEY CHECK(id=1),
  raw_body_bytes INTEGER NOT NULL DEFAULT 0 CHECK(raw_body_bytes>=0),
@@ -5218,7 +4935,6 @@ CREATE TABLE observability_state (
 ) STRICT;
 CREATE TRIGGER request_error_delete_count AFTER DELETE ON request_error_bodies
 BEGIN UPDATE observability_state SET raw_body_bytes=raw_body_bytes-OLD.bytes_saved WHERE id=1; END;
-
 CREATE TABLE audit_access_events (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='aev_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -5245,7 +4961,6 @@ BEGIN UPDATE audit_access_events SET caller_key_user_id=NULL,caller_key_generati
 CREATE TRIGGER audit_access_key_rotate AFTER UPDATE OF generation,key_hash ON caller_keys
 WHEN NEW.generation<>OLD.generation OR NEW.key_hash IS NULL
 BEGIN UPDATE audit_access_events SET caller_key_user_id=NULL,caller_key_generation=NULL WHERE caller_key_user_id=OLD.user_id; END;
-
 CREATE TABLE anonymous_access_minutes (
  minute_at INTEGER NOT NULL CHECK(minute_at BETWEEN 0 AND 253402300799 AND minute_at%60=0),
  path_kind TEXT NOT NULL CHECK(path_kind IN ('models','billing_subscription','billing_usage','v1_billing_subscription','v1_billing_usage','sub2api_billing','chat_head')),
@@ -5254,7 +4969,6 @@ CREATE TABLE anonymous_access_minutes (
  count INTEGER NOT NULL CHECK(count>=0),
  PRIMARY KEY(minute_at,path_kind,method,status_class)
 ) STRICT, WITHOUT ROWID;
-
 CREATE TABLE charity_request_outcomes (
  request_log_id INTEGER PRIMARY KEY REFERENCES request_logs(id) ON DELETE CASCADE,
  model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
@@ -5263,7 +4977,6 @@ CREATE TABLE charity_request_outcomes (
  result TEXT NOT NULL CHECK(result IN ('success','failure','cancelled'))
 ) STRICT;
 CREATE INDEX idx_charity_outcomes_model_time ON charity_request_outcomes(model_id,completed_at,request_log_id);
-
 CREATE TABLE risk_audit_minutes (
  epoch TEXT NOT NULL CHECK(length(epoch) BETWEEN 1 AND 64),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -5303,7 +5016,7 @@ CREATE TABLE risk_audit_config (
  shared_ip_users INTEGER NOT NULL CHECK(shared_ip_users BETWEEN 2 AND 1000),
  revision INTEGER NOT NULL CHECK(revision>=1),
  updated_at INTEGER NOT NULL CHECK(updated_at>=0)
-) STRICT;
+, user_ip_window_hours INTEGER NOT NULL DEFAULT 24 CHECK(user_ip_window_hours BETWEEN 1 AND 720), user_ip_min_ips INTEGER NOT NULL DEFAULT 3 CHECK(user_ip_min_ips BETWEEN 2 AND 1000)) STRICT;
 CREATE TABLE risk_client_rules (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 64),
  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 120),
@@ -5321,7 +5034,6 @@ CREATE TABLE risk_client_rules (
  updated_at INTEGER NOT NULL CHECK(updated_at>=created_at)
 ) STRICT;
 CREATE INDEX idx_risk_rules_updated ON risk_client_rules(updated_at,id);
-
 CREATE TABLE economy_audit_checkpoint (
  id INTEGER PRIMARY KEY CHECK(id=1),
  last_ledger_seq INTEGER NOT NULL DEFAULT 0 CHECK(typeof(last_ledger_seq)='integer' AND last_ledger_seq BETWEEN 0 AND 9223372036854775807),
@@ -5354,13 +5066,11 @@ CREATE TABLE economy_audit_buckets (
  CHECK((bucket_start+offset_minutes*60)%CASE bucket WHEN 'hour' THEN 3600 ELSE 86400 END=0)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_economy_audit_buckets_time ON economy_audit_buckets(asset_type,bucket,bucket_start,kind,source_type,channel);
-DROP TRIGGER legal_hold_steward_read_insert_guard;
 CREATE TRIGGER legal_hold_steward_read_insert_guard BEFORE INSERT ON legal_hold_steward_reads
 WHEN NOT EXISTS(SELECT 1 FROM users u WHERE u.id=NEW.user_id AND u.is_admin=0 AND u.is_banned=0 AND u.level=6)
  OR NEW.read_count<>1 OR NEW.first_read_at<>NEW.last_read_at
  OR NOT EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text AND h.object_kind IN ('donation','request_log') AND h.state='active' AND NEW.first_read_at>=h.created_at AND NEW.last_read_at<h.expires_at)
 BEGIN SELECT RAISE(ABORT,'steward held read is inconsistent'); END;
-DROP TRIGGER legal_hold_steward_read_update_guard;
 CREATE TRIGGER legal_hold_steward_read_update_guard BEFORE UPDATE ON legal_hold_steward_reads
 WHEN NEW.id IS NOT OLD.id OR NEW.hold_id_text IS NOT OLD.hold_id_text OR NEW.first_read_at IS NOT OLD.first_read_at
  OR NOT (
@@ -5371,8 +5081,6 @@ WHEN NEW.id IS NOT OLD.id OR NEW.hold_id_text IS NOT OLD.hold_id_text OR NEW.fir
    AND NEW.last_read_at=OLD.last_read_at AND NEW.read_count=OLD.read_count)
  )
 BEGIN SELECT RAISE(ABORT,'steward held read is inconsistent'); END;
-
-DROP TRIGGER credit_account_asset_insert;
 CREATE TRIGGER credit_account_asset_insert BEFORE INSERT ON credit_accounts
 WHEN (NEW.asset_type='game' AND (NEW.kind='pool' OR NEW.code IN ('forward_reserve','charity_reserve')))
  OR (NEW.asset_type IN ('sketch_paper','sketch_brush') AND NOT
@@ -5391,15 +5099,9 @@ BEGIN SELECT RAISE(ABORT,'activity balance is not an integer'); END;
 CREATE TRIGGER activity_entry_integer_update BEFORE UPDATE ON credit_entries
 WHEN NEW.asset_type IN ('sketch_paper','sketch_brush') AND (NOT (((instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.delta_mag),32,1))-1)*1)%1000=0) OR (NEW.balance_after_mag IS NOT NULL AND NOT (((instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.balance_after_mag),32,1))-1)*1)%1000=0)))
 BEGIN SELECT RAISE(ABORT,'activity entry is not an integer'); END;
-
-ALTER TABLE donations ADD COLUMN discord_public_thanks INTEGER CHECK(discord_public_thanks IN (0,1));
 CREATE TRIGGER donation_thanks_immutable BEFORE UPDATE OF discord_public_thanks ON donations
 WHEN NEW.user_id IS NOT NULL AND OLD.discord_public_thanks IS NOT NEW.discord_public_thanks
 BEGIN SELECT RAISE(ABORT,'donation public thanks choice is immutable'); END;
-ALTER TABLE charity_models ADD COLUMN is_mainstream INTEGER NOT NULL DEFAULT 0 CHECK(is_mainstream IN (0,1));
-ALTER TABLE charity_models ADD COLUMN excluded_request_fields TEXT NOT NULL DEFAULT '[]'
- CHECK(json_valid(excluded_request_fields) AND json_type(excluded_request_fields)='array' AND length(excluded_request_fields)<=2200);
-
 CREATE TABLE limited_activity_configs (
  activity_key TEXT NOT NULL PRIMARY KEY CHECK(length(activity_key) BETWEEN 1 AND 64 AND activity_key NOT GLOB '*[^a-z0-9-]*'),
  visible INTEGER NOT NULL CHECK(visible IN (0,1)),
@@ -5468,8 +5170,6 @@ WHEN NEW.operation_id<>OLD.operation_id OR NEW.activity_key<>OLD.activity_key OR
 BEGIN SELECT RAISE(ABORT,'activity exchange receipts are immutable'); END;
 CREATE TRIGGER activity_exchange_receipts_no_delete BEFORE DELETE ON activity_exchange_receipts
 BEGIN SELECT RAISE(ABORT,'activity exchange receipts are permanent'); END;
-
-ALTER TABLE users ADD COLUMN ban_kind TEXT NOT NULL DEFAULT '' CHECK(ban_kind='' OR (ban_kind='protective_inactivity' AND is_admin=0 AND is_banned=1 AND banned_until IS NULL));
 CREATE TABLE inactivity_policy (
  id INTEGER PRIMARY KEY CHECK(id=1),
  revision INTEGER NOT NULL CHECK(revision>=1),
@@ -5528,28 +5228,9 @@ CREATE TABLE inactivity_audits (
 ) STRICT;
 CREATE INDEX idx_inactivity_audits_retention ON inactivity_audits(retain_until,id);
 CREATE INDEX idx_inactivity_audits_identity ON inactivity_audits(deidentify_at,id) WHERE actor_user_id IS NOT NULL;
-
-ALTER TABLE game_fishing_batches ADD COLUMN blue_fish_chance_bps INTEGER NOT NULL DEFAULT 1000
- CHECK(typeof(blue_fish_chance_bps)='integer' AND blue_fish_chance_bps BETWEEN 0 AND 10000);
-ALTER TABLE game_fishing_batches ADD COLUMN config_revision INTEGER
- CHECK(config_revision IS NULL OR (typeof(config_revision)='integer' AND config_revision>0));
 CREATE TRIGGER fishing_batch_probability_immutable BEFORE UPDATE OF blue_fish_chance_bps,config_revision ON game_fishing_batches
 WHEN NEW.blue_fish_chance_bps IS NOT OLD.blue_fish_chance_bps OR NEW.config_revision IS NOT OLD.config_revision
 BEGIN SELECT RAISE(ABORT,'fishing batch configuration is immutable'); END;
-
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_game_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_game_delta_sign IN(-1,0,1));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_game_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
- CHECK(length(net_game_delta_mag)=32 AND (net_game_delta_sign=0)=(net_game_delta_mag=zeroblob(32)));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_fishing_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_fishing_delta_sign IN(-1,0,1));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_fishing_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
- CHECK(length(net_fishing_delta_mag)=32 AND (net_fishing_delta_sign=0)=(net_fishing_delta_mag=zeroblob(32)));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_blackjack_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_blackjack_delta_sign IN(-1,0,1));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_blackjack_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000'
- CHECK(length(net_blackjack_delta_mag)=32 AND (net_blackjack_delta_sign=0)=(net_blackjack_delta_mag=zeroblob(32)));
-
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_fishing_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_fishing_last_seq)=16);
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_blackjack_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_blackjack_last_seq)=16);
-
 CREATE TABLE game_rank_net_rebuild (
  id INTEGER PRIMARY KEY CHECK(id=1),
  phase INTEGER NOT NULL CHECK(phase IN (0,1,2)),
@@ -5579,24 +5260,8 @@ BEGIN SELECT RAISE(ABORT,'image price is not an integer'); END;
 CREATE TRIGGER image_activity_tasks_whole_update BEFORE UPDATE ON image_activity_tasks
 WHEN (NEW.paper_charge_mag IS NOT NULL AND NOT (((instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.paper_charge_mag),32,1))-1)*1)%1000=0)) OR (NEW.brush_charge_mag IS NOT NULL AND NOT (((instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.brush_charge_mag),32,1))-1)*1)%1000=0))
 BEGIN SELECT RAISE(ABORT,'image price is not an integer'); END;
-ALTER TABLE donation_keys ADD COLUMN input_token_limit_mag BLOB CHECK(input_token_limit_mag IS NULL OR (typeof(input_token_limit_mag)='blob' AND length(input_token_limit_mag)=16 AND hex(input_token_limit_mag)<='00000000000000007FFFFFFFFFFFFFFF'));
-ALTER TABLE donation_keys ADD COLUMN output_token_limit_mag BLOB CHECK(output_token_limit_mag IS NULL OR (typeof(output_token_limit_mag)='blob' AND length(output_token_limit_mag)=16 AND hex(output_token_limit_mag)<='00000000000000007FFFFFFFFFFFFFFF'));
-ALTER TABLE donation_keys ADD COLUMN input_token_reserve INTEGER CHECK(input_token_reserve IS NULL OR (typeof(input_token_reserve)='integer' AND input_token_reserve>=0));
-ALTER TABLE donation_keys ADD COLUMN output_token_reserve INTEGER CHECK(output_token_reserve IS NULL OR (typeof(output_token_reserve)='integer' AND output_token_reserve>=0));
-ALTER TABLE donation_keys ADD COLUMN input_tokens_used BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(input_tokens_used)='blob' AND length(input_tokens_used)=16);
-ALTER TABLE donation_keys ADD COLUMN output_tokens_used BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(output_tokens_used)='blob' AND length(output_tokens_used)=16);
-ALTER TABLE donation_keys ADD COLUMN input_tokens_reserved BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(input_tokens_reserved)='blob' AND length(input_tokens_reserved)=16);
-ALTER TABLE donation_keys ADD COLUMN output_tokens_reserved BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(output_tokens_reserved)='blob' AND length(output_tokens_reserved)=16);
-ALTER TABLE donation_keys ADD COLUMN unattributed_total_tokens BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(unattributed_total_tokens)='blob' AND length(unattributed_total_tokens)=16);
-ALTER TABLE donation_keys ADD COLUMN breakdown_started_at INTEGER NOT NULL DEFAULT 0 CHECK(typeof(breakdown_started_at)='integer' AND breakdown_started_at BETWEEN 0 AND 253402300799);
 CREATE TRIGGER donation_token_breakdown_insert AFTER INSERT ON donation_keys WHEN NEW.breakdown_started_at=0
 BEGIN UPDATE donation_keys SET breakdown_started_at=NEW.created_at WHERE id=NEW.id; END;
-ALTER TABLE dispatch_claims ADD COLUMN reserved_input_tokens INTEGER CHECK(reserved_input_tokens IS NULL OR (typeof(reserved_input_tokens)='integer' AND reserved_input_tokens>=0));
-ALTER TABLE dispatch_claims ADD COLUMN reserved_output_tokens INTEGER CHECK(reserved_output_tokens IS NULL OR (typeof(reserved_output_tokens)='integer' AND reserved_output_tokens>=0));
-ALTER TABLE donation_usage_reservations ADD COLUMN input_tokens_reserved INTEGER CHECK(input_tokens_reserved IS NULL OR (typeof(input_tokens_reserved)='integer' AND input_tokens_reserved>=0));
-ALTER TABLE donation_usage_reservations ADD COLUMN output_tokens_reserved INTEGER CHECK(output_tokens_reserved IS NULL OR (typeof(output_tokens_reserved)='integer' AND output_tokens_reserved>=0));
-ALTER TABLE donation_usage_reservations ADD COLUMN input_tokens_actual INTEGER CHECK(input_tokens_actual IS NULL OR (typeof(input_tokens_actual)='integer' AND input_tokens_actual>=0));
-ALTER TABLE donation_usage_reservations ADD COLUMN output_tokens_actual INTEGER CHECK(output_tokens_actual IS NULL OR (typeof(output_tokens_actual)='integer' AND output_tokens_actual>=0));
 CREATE TRIGGER donation_token_configuration_insert BEFORE INSERT ON donation_keys
 WHEN (NEW.input_token_reserve IS NULL)<>(NEW.output_token_reserve IS NULL)
  OR (NEW.input_token_reserve IS NOT NULL AND (NEW.input_token_reserve>9223372036854775807-NEW.output_token_reserve OR (NEW.input_token_reserve=0 AND NEW.output_token_reserve=0)))
@@ -5633,7 +5298,6 @@ CREATE TRIGGER donation_token_actual_update BEFORE UPDATE ON donation_usage_rese
 WHEN (NEW.input_tokens_actual IS NULL)<>(NEW.output_tokens_actual IS NULL)
  OR (NEW.input_tokens_actual IS NOT NULL AND (NEW.tokens_actual IS NULL OR NEW.input_tokens_actual>9223372036854775807-NEW.output_tokens_actual OR NEW.input_tokens_actual+NEW.output_tokens_actual<>NEW.tokens_actual))
 BEGIN SELECT RAISE(ABORT,'invalid actual token vector'); END;
-
 CREATE TABLE discord_blacklist (
  discord_id TEXT NOT NULL PRIMARY KEY CHECK(length(discord_id) BETWEEN 1 AND 20 AND discord_id NOT GLOB '*[^0-9]*' AND substr(discord_id,1,1)<>'0' AND (length(discord_id)<20 OR discord_id<='18446744073709551615')),
  reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 2000),
@@ -5642,7 +5306,7 @@ CREATE TABLE discord_blacklist (
 CREATE TABLE admin_account_deletions (
  alert_id INTEGER NOT NULL PRIMARY KEY REFERENCES admin_alerts(id) ON DELETE CASCADE,
  snapshot_json TEXT NOT NULL CHECK(length(snapshot_json) BETWEEN 2 AND 8192 AND json_valid(snapshot_json) AND json_type(snapshot_json)='object')
-) STRICT;
+, snapshot_version INTEGER NOT NULL DEFAULT 1 CHECK(snapshot_version IN (1,2)), former_user_id INTEGER CHECK(former_user_id>0), discord_id TEXT CHECK(length(CAST(discord_id AS BLOB)) BETWEEN 1 AND 128), registered_at INTEGER CHECK(registered_at BETWEEN 0 AND 253402300799), deleted_at INTEGER CHECK(deleted_at BETWEEN 0 AND 253402300799), effective_level INTEGER CHECK(effective_level BETWEEN 1 AND 6), source TEXT NOT NULL DEFAULT 'unknown' CHECK(source IN ('unknown','self','admin','system')), actor_user_id INTEGER CHECK(actor_user_id>0), ban_active INTEGER CHECK(ban_active IN (0,1)), pause_active INTEGER CHECK(pause_active IN (0,1)), blacklist_action TEXT NOT NULL DEFAULT 'unknown' CHECK(blacklist_action IN ('unknown','none','added','appended'))) STRICT;
 CREATE INDEX idx_admin_alerts_kind_resolved ON admin_alerts(kind,resolved,id DESC);
 CREATE INDEX idx_admin_alerts_kind ON admin_alerts(kind,id DESC);
 CREATE TRIGGER discord_blacklist_registration_guard BEFORE INSERT ON users
@@ -5657,7 +5321,6 @@ BEGIN SELECT RAISE(ABORT,'existing account must be permanently banned first'); E
 CREATE TRIGGER discord_blacklist_identity_guard BEFORE UPDATE OF discord_id ON discord_blacklist
 WHEN NEW.discord_id<>OLD.discord_id
 BEGIN SELECT RAISE(ABORT,'blacklist identity is immutable'); END;
-
 CREATE TABLE image_discovery_dispatches (
  operation_id TEXT PRIMARY KEY REFERENCES image_model_refreshes(operation_id) ON DELETE CASCADE,
  method TEXT NOT NULL CHECK(method='GET'),
@@ -5688,10 +5351,9 @@ CREATE TABLE risk_client_scans (
  failures INTEGER NOT NULL DEFAULT 0 CHECK(failures BETWEEN 0 AND 3),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402292399),
  updated_at INTEGER NOT NULL CHECK(updated_at>=created_at),
- expires_at INTEGER NOT NULL CHECK(expires_at=created_at+86400),
+ expires_at INTEGER NOT NULL CHECK(expires_at=created_at+86400), kind TEXT NOT NULL DEFAULT 'client_hits' CHECK(kind IN ('client_hits','users','shared_ips','user_ips')), filter_revision INTEGER NOT NULL DEFAULT 1 CHECK(filter_revision>0), checkpoint_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(checkpoint_json) AND json_type(checkpoint_json)='object' AND length(CAST(checkpoint_json AS BLOB))<=16384), coverage_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(coverage_json) AND json_type(coverage_json)='object' AND length(CAST(coverage_json AS BLOB))<=4096), changed INTEGER NOT NULL DEFAULT 0 CHECK(changed IN (0,1)), upper_source_id INTEGER NOT NULL DEFAULT 0 CHECK(upper_source_id>=0), after_source_id INTEGER NOT NULL DEFAULT 0 CHECK(after_source_id BETWEEN 0 AND upper_source_id),
  UNIQUE(user_id,request_token)
 ) STRICT;
-CREATE UNIQUE INDEX idx_risk_scans_unfinished ON risk_client_scans(user_id) WHERE state IN ('queued','running');
 CREATE INDEX idx_risk_scans_queue ON risk_client_scans(state,created_at,id);
 CREATE INDEX idx_risk_scans_expiry ON risk_client_scans(expires_at,id);
 CREATE INDEX idx_risk_scans_owner ON risk_client_scans(user_id,created_at DESC,id);
@@ -5703,17 +5365,6 @@ CREATE TABLE risk_client_scan_matches (
  UNIQUE(scan_id,ordinal)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_risk_scan_matches_log ON risk_client_scan_matches(request_log_id,scan_id);
-CREATE INDEX idx_request_sources_scan ON request_source_facts(occurred_at,request_log_id) WHERE user_id IS NOT NULL AND kind IN ('self','charity','unclassified');
-CREATE TRIGGER risk_scan_source_retired AFTER UPDATE OF user_id ON request_source_facts WHEN NEW.user_id IS NULL
-BEGIN DELETE FROM risk_client_scan_matches WHERE request_log_id=NEW.request_log_id; END;
-CREATE TRIGGER risk_scan_authority_changed AFTER UPDATE OF is_admin,level,auto_level,is_banned,banned_until ON users
-BEGIN
- UPDATE risk_client_scans SET state='cancelled',reason='permission_changed'
- WHERE user_id=NEW.id
- AND ((admin=1 AND NEW.is_admin<>1) OR (admin=0 AND (NEW.is_admin<>0 OR COALESCE(NEW.level,NEW.auto_level)<>6))
- OR (NEW.is_banned=1 AND (NEW.banned_until IS NULL OR NEW.banned_until>unixepoch())));
-END;
-
 CREATE TABLE charity_routing_settings (
  model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
@@ -5843,8 +5494,6 @@ WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
  AND NEW.actor_role=OLD.actor_role AND NEW.revision=OLD.revision
  AND NEW.changed_partitions=OLD.changed_partitions AND NEW.created_at=OLD.created_at)
 BEGIN SELECT RAISE(ABORT,'request adaptation audit is immutable'); END;
-
-ALTER TABLE abuse_window_events ADD COLUMN expires_at INTEGER CHECK(expires_at>occurred_at AND expires_at<=253402300799);
 CREATE TABLE client_rule_auto_bans (
  rule_id TEXT PRIMARY KEY REFERENCES risk_client_rules(id) ON DELETE RESTRICT,
  enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
@@ -5920,17 +5569,6 @@ CREATE TABLE identity_window_events (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_identity_windows_expiry ON identity_window_events(expires_at_ms,identity_key,kind,scope,event_key);
 CREATE INDEX idx_identity_windows_current ON identity_window_events(identity_key,kind,scope,occurred_at_ms);
-ALTER TABLE admin_account_deletions ADD COLUMN snapshot_version INTEGER NOT NULL DEFAULT 1 CHECK(snapshot_version IN (1,2));
-ALTER TABLE admin_account_deletions ADD COLUMN former_user_id INTEGER CHECK(former_user_id>0);
-ALTER TABLE admin_account_deletions ADD COLUMN discord_id TEXT CHECK(length(CAST(discord_id AS BLOB)) BETWEEN 1 AND 128);
-ALTER TABLE admin_account_deletions ADD COLUMN registered_at INTEGER CHECK(registered_at BETWEEN 0 AND 253402300799);
-ALTER TABLE admin_account_deletions ADD COLUMN deleted_at INTEGER CHECK(deleted_at BETWEEN 0 AND 253402300799);
-ALTER TABLE admin_account_deletions ADD COLUMN effective_level INTEGER CHECK(effective_level BETWEEN 1 AND 6);
-ALTER TABLE admin_account_deletions ADD COLUMN source TEXT NOT NULL DEFAULT 'unknown' CHECK(source IN ('unknown','self','admin','system'));
-ALTER TABLE admin_account_deletions ADD COLUMN actor_user_id INTEGER CHECK(actor_user_id>0);
-ALTER TABLE admin_account_deletions ADD COLUMN ban_active INTEGER CHECK(ban_active IN (0,1));
-ALTER TABLE admin_account_deletions ADD COLUMN pause_active INTEGER CHECK(pause_active IN (0,1));
-ALTER TABLE admin_account_deletions ADD COLUMN blacklist_action TEXT NOT NULL DEFAULT 'unknown' CHECK(blacklist_action IN ('unknown','none','added','appended'));
 CREATE UNIQUE INDEX idx_deleted_accounts_former_user ON admin_account_deletions(former_user_id) WHERE former_user_id IS NOT NULL;
 CREATE INDEX idx_deleted_accounts_discord ON admin_account_deletions(discord_id,deleted_at DESC,former_user_id);
 CREATE INDEX idx_deleted_accounts_time ON admin_account_deletions(deleted_at DESC,former_user_id);
@@ -5951,7 +5589,6 @@ CREATE TABLE self_deletion_duel_aborts (
 ) STRICT;
 CREATE INDEX idx_self_deletion_duel_aborts_discord ON self_deletion_duel_aborts(discord_id,occurred_at,id);
 CREATE INDEX idx_self_deletion_duel_aborts_expiry ON self_deletion_duel_aborts(expires_at,id);
-
 CREATE TABLE image_capability_profiles (
  control_id TEXT PRIMARY KEY REFERENCES image_upstream_control(id) ON DELETE CASCADE,
  revision INTEGER NOT NULL CHECK(revision>0),
@@ -6040,18 +5677,7 @@ CREATE TRIGGER image_task_price_receipt_immutable BEFORE UPDATE ON image_task_pr
 BEGIN SELECT RAISE(ABORT,'image accepted price is immutable'); END;
 CREATE TRIGGER image_model_pricing_revisions_whole_insert BEFORE INSERT ON image_model_pricing_revisions WHEN NOT (((instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.default_paper_mag),32,1))-1)*1)%1000=0) OR NOT (((instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.default_brush_mag),32,1))-1)*1)%1000=0) BEGIN SELECT RAISE(ABORT,'image price is not an integer'); END;
 CREATE TRIGGER image_task_price_receipts_whole_insert BEFORE INSERT ON image_task_price_receipts WHEN NOT (((instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.unit_paper_mag),32,1))-1)*1)%1000=0) OR NOT (((instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.unit_brush_mag),32,1))-1)*1)%1000=0) OR NOT (((instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.total_paper_mag),32,1))-1)*1)%1000=0) OR NOT (((instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),1,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),2,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),3,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),4,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),5,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),6,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),7,1))-1)*376+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),8,1))-1)*336+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),9,1))-1)*896+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),10,1))-1)*56+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),11,1))-1)*816+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),12,1))-1)*176+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),13,1))-1)*136+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),14,1))-1)*696+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),15,1))-1)*856+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),16,1))-1)*616+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),17,1))-1)*976+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),18,1))-1)*936+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),19,1))-1)*496+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),20,1))-1)*656+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),21,1))-1)*416+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),22,1))-1)*776+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),23,1))-1)*736+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),24,1))-1)*296+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),25,1))-1)*456+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),26,1))-1)*216+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),27,1))-1)*576+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),28,1))-1)*536+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),29,1))-1)*96+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),30,1))-1)*256+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),31,1))-1)*16+(instr('0123456789ABCDEF',substr(hex(NEW.total_brush_mag),32,1))-1)*1)%1000=0) BEGIN SELECT RAISE(ABORT,'image price is not an integer'); END;
-
 CREATE INDEX idx_audit_access_time_page ON audit_access_events(occurred_at DESC,id DESC);
-ALTER TABLE worker_checkpoints ADD COLUMN last_success_at INTEGER CHECK(last_success_at IS NULL OR (typeof(last_success_at)='integer' AND last_success_at BETWEEN 0 AND 253402300799 AND last_success_at<=updated_at));
-ALTER TABLE admin_alerts ADD COLUMN context_version INTEGER NOT NULL DEFAULT 0 CHECK(context_version IN (0,1));
-ALTER TABLE admin_alerts ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(context_json) AND json_type(context_json)='object' AND length(CAST(context_json AS BLOB))<=16384);
-ALTER TABLE admin_alerts ADD COLUMN resolution_kind TEXT NOT NULL DEFAULT '' CHECK(resolution_kind IN ('','manual','automatic_blacklist','worker_recovered','legacy'));
-ALTER TABLE risk_client_scans ADD COLUMN kind TEXT NOT NULL DEFAULT 'client_hits' CHECK(kind IN ('client_hits','users','shared_ips','user_ips'));
-ALTER TABLE risk_client_scans ADD COLUMN filter_revision INTEGER NOT NULL DEFAULT 1 CHECK(filter_revision>0);
-ALTER TABLE risk_client_scans ADD COLUMN checkpoint_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(checkpoint_json) AND json_type(checkpoint_json)='object' AND length(CAST(checkpoint_json AS BLOB))<=16384);
-ALTER TABLE risk_client_scans ADD COLUMN coverage_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(coverage_json) AND json_type(coverage_json)='object' AND length(CAST(coverage_json AS BLOB))<=4096);
-ALTER TABLE risk_client_scans ADD COLUMN changed INTEGER NOT NULL DEFAULT 0 CHECK(changed IN (0,1));
-DROP INDEX idx_risk_scans_unfinished;
 CREATE INDEX idx_risk_scans_unfinished ON risk_client_scans(user_id,state) WHERE state IN ('queued','running');
 CREATE TRIGGER risk_scan_capacity BEFORE INSERT ON risk_client_scans
 WHEN (SELECT count(*) FROM risk_client_scans)>=200
@@ -6091,48 +5717,6 @@ CREATE TABLE risk_scan_result_sources (
  FOREIGN KEY(scan_id,row_no) REFERENCES risk_scan_results(scan_id,row_no) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_risk_scan_result_sources_source ON risk_scan_result_sources(request_log_id,scan_id,row_no);
-INSERT INTO risk_scan_results(scan_id,row_no,request_log_id,published,result_json)
- SELECT scan_id,ordinal,request_log_id,1,'{}' FROM risk_client_scan_matches;
-INSERT INTO risk_scan_result_sources(scan_id,row_no,request_log_id)
- SELECT scan_id,ordinal,request_log_id FROM risk_client_scan_matches;
-CREATE TRIGGER risk_scan_user_retired BEFORE DELETE ON users
-BEGIN
- UPDATE risk_client_scans SET changed=1,
- state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
- reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
- checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
- WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE user_id=OLD.id
- UNION SELECT scan_id FROM risk_scan_result_users WHERE user_id=OLD.id)
- OR json_extract(checkpoint_json,'$.pending_user')=OLD.id OR json_extract(checkpoint_json,'$.after_user')=OLD.id;
- DELETE FROM risk_scan_results WHERE user_id=OLD.id OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_users WHERE user_id=OLD.id);
-END;
-CREATE TRIGGER risk_scan_result_source_retired AFTER UPDATE OF user_id ON request_source_facts WHEN NEW.user_id IS NULL
-BEGIN
- UPDATE risk_client_scans SET changed=1,
- state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
- reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
- checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
- WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=NEW.request_log_id
- UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=NEW.request_log_id)
- OR json_extract(checkpoint_json,'$.pending_user')=OLD.user_id OR json_extract(checkpoint_json,'$.after_user')=OLD.user_id
- OR (OLD.effective_ip<>'' AND (json_extract(checkpoint_json,'$.pending_ip')=OLD.effective_ip OR json_extract(checkpoint_json,'$.after_ip')=OLD.effective_ip));
- DELETE FROM risk_scan_results WHERE request_log_id=NEW.request_log_id
- OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_sources WHERE request_log_id=NEW.request_log_id);
-END;
-CREATE TRIGGER risk_scan_result_source_deleted BEFORE DELETE ON request_source_facts
-BEGIN
- UPDATE risk_client_scans SET changed=1,
- state=CASE WHEN state IN ('queued','running') THEN 'failed' ELSE state END,
- reason=CASE WHEN state IN ('queued','running') THEN 'source_changed' ELSE reason END,
- checkpoint_json=json_remove(checkpoint_json,'$.pending_user','$.after_user','$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary')
- WHERE id IN (SELECT scan_id FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
- UNION SELECT scan_id FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id)
- OR json_extract(checkpoint_json,'$.pending_user')=OLD.user_id OR json_extract(checkpoint_json,'$.after_user')=OLD.user_id
- OR (OLD.effective_ip<>'' AND (json_extract(checkpoint_json,'$.pending_ip')=OLD.effective_ip OR json_extract(checkpoint_json,'$.after_ip')=OLD.effective_ip));
- DELETE FROM risk_scan_results WHERE request_log_id=OLD.request_log_id
- OR (scan_id,row_no) IN (SELECT scan_id,row_no FROM risk_scan_result_sources WHERE request_log_id=OLD.request_log_id);
-END;
-DROP TRIGGER risk_scan_authority_changed;
 CREATE TRIGGER risk_scan_authority_changed AFTER UPDATE OF is_admin,level,auto_level,is_banned,banned_until ON users
 BEGIN
  UPDATE risk_client_scans SET state='cancelled',reason='permission_changed',
@@ -6141,9 +5725,6 @@ BEGIN
  AND ((admin=1 AND NEW.is_admin<>1) OR (admin=0 AND (NEW.is_admin<>0 OR COALESCE(NEW.level,NEW.auto_level)<>6))
  OR (NEW.is_banned=1 AND (NEW.banned_until IS NULL OR NEW.banned_until>unixepoch())));
 END;
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_bidding_delta_sign INTEGER NOT NULL DEFAULT 0 CHECK(net_bidding_delta_sign IN(-1,0,1));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_bidding_delta_mag BLOB NOT NULL DEFAULT X'0000000000000000000000000000000000000000000000000000000000000000' CHECK(length(net_bidding_delta_mag)=32 AND (net_bidding_delta_sign=0)=(net_bidding_delta_mag=zeroblob(32)));
-ALTER TABLE game_rank_expiry_work ADD COLUMN net_bidding_last_seq BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(net_bidding_last_seq)=16);
 CREATE TABLE game_bidding_net_rebuild (
  id INTEGER PRIMARY KEY CHECK(id=1),
  state TEXT NOT NULL CHECK(state IN ('pending','scanning','publishing','completed')),
@@ -6169,7 +5750,6 @@ CREATE TABLE game_bidding_net_rebuild_totals (
  achieved_phase INTEGER NOT NULL CHECK(achieved_phase IN (0,1)),
  achieved_seq BLOB NOT NULL CHECK(length(achieved_seq)=16)
 ) STRICT;
-
 CREATE TABLE fatfish_levels (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='ffl_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 128),
@@ -6189,11 +5769,9 @@ CREATE TABLE fatfish_level_versions (
  content_json TEXT NOT NULL CHECK(json_valid(content_json) AND json_type(content_json)='object' AND length(CAST(content_json AS BLOB))<=262144),
  duration_seconds INTEGER NOT NULL CHECK(duration_seconds BETWEEN 10 AND 600),
  maximum_stars INTEGER NOT NULL CHECK(maximum_stars BETWEEN 1 AND 3),
- created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), version_number INTEGER NOT NULL DEFAULT 1 CHECK(version_number>=1),
  UNIQUE(level_id,content_hash,engine_version,scoring_version)
 ) STRICT;
-CREATE TRIGGER fatfish_content_immutable BEFORE UPDATE ON fatfish_level_versions
-BEGIN SELECT RAISE(ABORT,'published game content is immutable'); END;
 CREATE TABLE fatfish_periods (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='ffp_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 128),
@@ -6407,13 +5985,7 @@ CREATE TABLE fatfish_playtests (
  CHECK((passed=1)=(score_units>0))
 ) STRICT;
 CREATE INDEX idx_fatfish_playtests_passed ON fatfish_playtests(version_id,passed,created_at DESC);
-
-ALTER TABLE request_logs ADD COLUMN usage_total_mismatch INTEGER NOT NULL DEFAULT 0
- CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1));
-ALTER TABLE request_attempts ADD COLUMN usage_total_mismatch INTEGER NOT NULL DEFAULT 0
- CHECK(typeof(usage_total_mismatch)='integer' AND usage_total_mismatch IN (0,1));
 CREATE INDEX idx_request_logs_usage_mismatch ON request_logs(started_at DESC,id DESC) WHERE usage_total_mismatch=1;
-
 CREATE TABLE game_likes_loadouts (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  slot INTEGER NOT NULL CHECK(typeof(slot)='integer' AND slot BETWEEN 1 AND 10),
@@ -6425,7 +5997,7 @@ CREATE TABLE game_likes_loadouts (
   AND COALESCE(json_type(loadout_json,'$.harness'),'') IN ('null','text')
   AND COALESCE(json_type(loadout_json,'$.skills'),'')='array'
   AND json_array_length(loadout_json,'$.skills') BETWEEN 1 AND 6),
- updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at BETWEEN 0 AND 253402300799),
+ updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at BETWEEN 0 AND 253402300799), name TEXT NOT NULL DEFAULT '' CHECK(typeof(name)='text' AND length(name)<=20 AND instr(name,char(0))=0 AND instr(name,char(10))=0 AND instr(name,char(13))=0),
  PRIMARY KEY(user_id,slot)
 );
 CREATE TRIGGER game_likes_loadouts_insert_guard BEFORE INSERT ON game_likes_loadouts
@@ -6438,35 +6010,15 @@ WHEN NEW.user_id<>OLD.user_id OR NEW.slot<>OLD.slot OR OLD.revision=922337203685
  OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND is_admin=0)
  OR EXISTS(SELECT 1 FROM user_deletion_markers WHERE user_id=NEW.user_id)
 BEGIN SELECT RAISE(ABORT,'invalid custom preset update'); END;
-
 CREATE TABLE fatfish_deleted_levels (
  level_id TEXT PRIMARY KEY REFERENCES fatfish_levels(id) ON DELETE CASCADE,
  deleted_at INTEGER NOT NULL CHECK(deleted_at BETWEEN 0 AND 253402300799)
 ) STRICT;
-
--- Additive storage contracts
-ALTER TABLE request_logs ADD COLUMN origin_user_id INTEGER CHECK(origin_user_id IS NULL OR (typeof(origin_user_id)='integer' AND origin_user_id>0));
-ALTER TABLE request_logs ADD COLUMN origin_discord_id TEXT CHECK(origin_discord_id IS NULL OR (typeof(origin_discord_id)='text' AND length(origin_discord_id) BETWEEN 1 AND 20 AND origin_discord_id NOT GLOB '*[^0-9]*' AND substr(origin_discord_id,1,1) BETWEEN '1' AND '9'));
 CREATE INDEX idx_request_logs_origin_user ON request_logs(origin_user_id,started_at,id);
 CREATE INDEX idx_request_logs_origin_discord ON request_logs(origin_discord_id,started_at,id);
-ALTER TABLE risk_audit_config ADD COLUMN user_ip_window_hours INTEGER NOT NULL DEFAULT 24 CHECK(user_ip_window_hours BETWEEN 1 AND 720);
-ALTER TABLE risk_audit_config ADD COLUMN user_ip_min_ips INTEGER NOT NULL DEFAULT 3 CHECK(user_ip_min_ips BETWEEN 2 AND 1000);
-ALTER TABLE endpoint_key_secrets ADD COLUMN key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32));
 CREATE TRIGGER endpoint_key_review_identity BEFORE UPDATE OF key_body_review_hmac ON endpoint_key_secrets
 WHEN OLD.key_body_review_hmac IS NOT NULL AND NEW.key_body_review_hmac IS NOT OLD.key_body_review_hmac
 BEGIN SELECT RAISE(ABORT,'credential review identity is immutable'); END;
-ALTER TABLE donations ADD COLUMN first_approval_origin TEXT NOT NULL DEFAULT 'unknown' CHECK(first_approval_origin IN ('auto','manual','unknown'));
-ALTER TABLE donation_keys ADD COLUMN key_body_review_hmac BLOB CHECK(key_body_review_hmac IS NULL OR (typeof(key_body_review_hmac)='blob' AND length(key_body_review_hmac)=32));
-ALTER TABLE donation_keys ADD COLUMN review_revision INTEGER CHECK(review_revision IS NULL OR (typeof(review_revision)='integer' AND review_revision>=1));
-ALTER TABLE donation_keys ADD COLUMN manual_catalog_revision INTEGER NOT NULL DEFAULT 1 CHECK(typeof(manual_catalog_revision)='integer' AND manual_catalog_revision>=1);
-ALTER TABLE donation_usage_reservations ADD COLUMN streak_disposition TEXT CHECK(streak_disposition IS NULL OR streak_disposition IN ('success','upstream_failure','neutral'));
-ALTER TABLE donation_usage_reservations ADD COLUMN failure_origin TEXT CHECK(failure_origin IS NULL OR failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','legacy_unknown','recovery_unknown'));
-ALTER TABLE dispatch_claims ADD COLUMN streak_disposition TEXT CHECK(streak_disposition IS NULL OR streak_disposition IN ('success','upstream_failure','neutral'));
-ALTER TABLE dispatch_claims ADD COLUMN failure_origin TEXT CHECK(failure_origin IS NULL OR failure_origin IN ('none','upstream_response','upstream_protocol','network','timeout','client_cancel','downstream','platform','legacy_unknown','recovery_unknown'));
-ALTER TABLE game_likes_loadouts ADD COLUMN name TEXT NOT NULL DEFAULT '' CHECK(typeof(name)='text' AND length(name)<=20 AND instr(name,char(0))=0 AND instr(name,char(10))=0 AND instr(name,char(13))=0);
-ALTER TABLE models ADD COLUMN role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object');
-ALTER TABLE charity_models ADD COLUMN role_policy TEXT NOT NULL DEFAULT '{"default_action":"native","rules":{}}' CHECK(typeof(role_policy)='text' AND length(CAST(role_policy AS BLOB))<=8192 AND json_valid(role_policy) AND json_type(role_policy)='object' AND COALESCE(json_type(role_policy,'$.default_action'),'')='text' AND json_extract(role_policy,'$.default_action') IN ('native','passthrough','system','user','assistant','reject') AND COALESCE(json_type(role_policy,'$.rules'),'')='object');
-
 CREATE TABLE auth_denial_grants (
  token_hash BLOB PRIMARY KEY CHECK(length(token_hash)=32),
  discord_id TEXT NOT NULL CHECK(length(discord_id) BETWEEN 1 AND 20 AND discord_id NOT GLOB '*[^0-9]*' AND substr(discord_id,1,1) BETWEEN '1' AND '9'),
@@ -6559,7 +6111,6 @@ CREATE TABLE fatfish_graph_layouts (
  layout_json TEXT NOT NULL CHECK(json_valid(layout_json) AND json_type(layout_json)='object' AND length(CAST(layout_json AS BLOB))<=32768),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799)
 ) STRICT, WITHOUT ROWID;
-
 CREATE TABLE lake_notes_periods (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='lnp_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),
@@ -6594,7 +6145,7 @@ CREATE TABLE lake_notes_profiles (
  coin_mag BLOB NOT NULL CHECK(length(coin_mag)=16),
  profile BLOB NOT NULL CHECK(length(profile) BETWEEN 1 AND 65536),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799)
-) STRICT;
+, storage_version INTEGER NOT NULL DEFAULT 1 CHECK(storage_version>=1)) STRICT;
 CREATE TABLE lake_notes_casts (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='lnc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -6614,7 +6165,7 @@ CREATE TABLE lake_notes_casts (
  last_ack_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(last_ack_json) AND json_type(last_ack_json)='object' AND length(CAST(last_ack_json AS BLOB))<=16384),
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN created_at AND 253402300799),
- terminal_at INTEGER CHECK(terminal_at BETWEEN created_at AND 253402300799),
+ terminal_at INTEGER CHECK(terminal_at BETWEEN created_at AND 253402300799), storage_version INTEGER NOT NULL DEFAULT 1 CHECK(storage_version>=1),
  CHECK((paused=1 AND held=0 AND active_started_at_ns IS NULL AND lease_until_ns IS NULL) OR (paused=0 AND active_started_at_ns IS NOT NULL AND lease_until_ns IS NOT NULL)),
  CHECK((phase IN ('waiting','playing') AND terminal_at IS NULL) OR (phase IN ('success','failed') AND terminal_at IS NOT NULL AND paused=1))
 ) STRICT, WITHOUT ROWID;
@@ -6646,7 +6197,6 @@ CREATE TABLE lake_notes_exchange_receipts (
  created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
  UNIQUE(user_id,operation_key_hash)
 ) STRICT, WITHOUT ROWID;
-
 CREATE TABLE personal_automation_batches (
  id TEXT PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='pab_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -6695,7 +6245,6 @@ WHEN NOT EXISTS(SELECT 1 FROM personal_automation_batches WHERE id=NEW.batch_id 
 BEGIN SELECT RAISE(ABORT,'automation step is inconsistent'); END;
 CREATE TRIGGER personal_automation_step_immutable BEFORE UPDATE ON personal_automation_steps
 BEGIN SELECT RAISE(ABORT,'automation step result is immutable'); END;
-
 CREATE TRIGGER models_role_policy_insert_guard BEFORE INSERT ON models
 WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) WHERE key NOT IN ('default_action','rules'))
@@ -6708,7 +6257,6 @@ WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) GROUP BY key HAVING count(*)>1)
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy,'$.rules') GROUP BY key HAVING count(*)>1)
 BEGIN SELECT RAISE(ABORT,'invalid model role policy'); END;
-
 CREATE TRIGGER models_role_policy_update_guard BEFORE UPDATE OF role_policy ON models
 WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) WHERE key NOT IN ('default_action','rules'))
@@ -6721,7 +6269,6 @@ WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) GROUP BY key HAVING count(*)>1)
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy,'$.rules') GROUP BY key HAVING count(*)>1)
 BEGIN SELECT RAISE(ABORT,'invalid model role policy'); END;
-
 CREATE TRIGGER charity_models_role_policy_insert_guard BEFORE INSERT ON charity_models
 WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) WHERE key NOT IN ('default_action','rules'))
@@ -6734,7 +6281,6 @@ WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) GROUP BY key HAVING count(*)>1)
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy,'$.rules') GROUP BY key HAVING count(*)>1)
 BEGIN SELECT RAISE(ABORT,'invalid model role policy'); END;
-
 CREATE TRIGGER charity_models_role_policy_update_guard BEFORE UPDATE OF role_policy ON charity_models
 WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) WHERE key NOT IN ('default_action','rules'))
@@ -6747,10 +6293,6 @@ WHEN (SELECT count(*) FROM json_each(NEW.role_policy))<>2
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy) GROUP BY key HAVING count(*)>1)
  OR EXISTS(SELECT 1 FROM json_each(NEW.role_policy,'$.rules') GROUP BY key HAVING count(*)>1)
 BEGIN SELECT RAISE(ABORT,'invalid model role policy'); END;
-
-ALTER TABLE policy_audits ADD COLUMN from_revision INTEGER CHECK(from_revision IS NULL OR (typeof(from_revision)='integer' AND from_revision>=0));
-ALTER TABLE policy_audits ADD COLUMN to_revision INTEGER CHECK(to_revision IS NULL OR (typeof(to_revision)='integer' AND to_revision>=1));
-DROP TRIGGER policy_audits_no_update;
 CREATE TRIGGER policy_audits_no_update BEFORE UPDATE ON policy_audits
 WHEN NOT (OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
  AND NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.actor_user_id)
@@ -6768,26 +6310,9 @@ WHEN NOT COALESCE((NEW.policy='role_policy' AND NEW.resource_type IN ('model','c
  OR (NEW.policy<>'role_policy' AND NEW.old_value IS NOT NULL AND NEW.new_value IS NOT NULL
  AND NEW.from_revision IS NULL AND NEW.to_revision IS NULL),0)
 BEGIN SELECT RAISE(ABORT,'invalid policy audit values'); END;
-
-ALTER TABLE fatfish_level_versions ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1 CHECK(version_number>=1);
-DROP TRIGGER fatfish_content_immutable;
-WITH numbered AS (
- SELECT id,row_number() OVER (PARTITION BY level_id ORDER BY created_at,id) AS version_number
- FROM fatfish_level_versions
-)
-UPDATE fatfish_level_versions SET version_number=(SELECT version_number FROM numbered WHERE numbered.id=fatfish_level_versions.id);
 CREATE UNIQUE INDEX idx_fatfish_version_number ON fatfish_level_versions(level_id,version_number);
 CREATE TRIGGER fatfish_content_immutable BEFORE UPDATE ON fatfish_level_versions
 BEGIN SELECT RAISE(ABORT,'published game content is immutable'); END;
-
-UPDATE donation_usage_reservations
-SET streak_disposition=CASE WHEN state='committed' AND protocol_success=1 THEN 'success' ELSE 'neutral' END,
- failure_origin=CASE WHEN state='committed' AND protocol_success=1 THEN 'none' ELSE 'legacy_unknown' END
-WHERE state IN ('committed','released');
-UPDATE dispatch_claims
-SET streak_disposition=CASE WHEN EXISTS(SELECT 1 FROM donation_usage_reservations u WHERE u.claim_id=dispatch_claims.id AND u.state='committed' AND u.protocol_success=1) THEN 'success' ELSE 'neutral' END,
- failure_origin=CASE WHEN EXISTS(SELECT 1 FROM donation_usage_reservations u WHERE u.claim_id=dispatch_claims.id AND u.state='committed' AND u.protocol_success=1) THEN 'none' ELSE 'legacy_unknown' END
-WHERE state IN ('committed','released');
 CREATE TRIGGER donation_usage_reservations_outcome_insert_guard BEFORE INSERT ON donation_usage_reservations
 WHEN NOT COALESCE((NEW.state IN ('reserved') AND NEW.streak_disposition IS NULL AND NEW.failure_origin IS NULL)
  OR (NEW.state IN ('committed','released') AND (
@@ -6816,17 +6341,6 @@ WHEN NOT COALESCE((NEW.state IN ('claimed','dispatched') AND NEW.streak_disposit
   OR (NEW.streak_disposition='upstream_failure' AND NEW.failure_origin IN ('upstream_response','upstream_protocol','network','timeout'))
   OR (NEW.streak_disposition='neutral' AND NEW.failure_origin IN ('client_cancel','downstream','platform','legacy_unknown','recovery_unknown')))),0)
 BEGIN SELECT RAISE(ABORT,'invalid terminal outcome'); END;
-
-UPDATE request_logs SET origin_user_id=user_id WHERE user_id IS NOT NULL;
-WITH identities AS (
- SELECT r.id,CASE WHEN u.id IS NOT NULL THEN u.discord_id ELSE d.discord_id END AS discord_id
- FROM request_logs r LEFT JOIN users u ON u.id=r.origin_user_id
- LEFT JOIN admin_account_deletions d ON d.former_user_id=r.origin_user_id
- WHERE r.origin_user_id IS NOT NULL
-)
-UPDATE request_logs SET origin_discord_id=identities.discord_id FROM identities
- WHERE request_logs.id=identities.id AND length(identities.discord_id) BETWEEN 1 AND 20
- AND identities.discord_id NOT GLOB '*[^0-9]*' AND substr(identities.discord_id,1,1) BETWEEN '1' AND '9';
 CREATE TRIGGER request_log_origin_capture AFTER INSERT ON request_logs
 WHEN NEW.user_id IS NOT NULL AND NEW.origin_user_id IS NULL
 BEGIN
@@ -6839,18 +6353,8 @@ CREATE TRIGGER request_log_origin_immutable BEFORE UPDATE OF origin_user_id,orig
 WHEN (OLD.origin_user_id IS NOT NULL AND NEW.origin_user_id IS NOT OLD.origin_user_id)
  OR (OLD.origin_discord_id IS NOT NULL AND NEW.origin_discord_id IS NOT OLD.origin_discord_id)
 BEGIN SELECT RAISE(ABORT,'request origin is immutable'); END;
-
-ALTER TABLE risk_client_scans ADD COLUMN upper_source_id INTEGER NOT NULL DEFAULT 0 CHECK(upper_source_id>=0);
-ALTER TABLE risk_client_scans ADD COLUMN after_source_id INTEGER NOT NULL DEFAULT 0 CHECK(after_source_id BETWEEN 0 AND upper_source_id);
-UPDATE risk_client_scans SET state='cancelled',reason='source_changed',changed=1,checkpoint_json='{}'
- WHERE state IN ('queued','running');
-DROP INDEX idx_request_sources_scan;
 CREATE INDEX idx_request_sources_scan ON request_source_facts(occurred_at,source_id) WHERE kind IN ('self','charity','unclassified');
-DROP INDEX idx_request_sources_ip_time;
 CREATE INDEX idx_request_sources_ip_time ON request_source_facts(effective_ip,occurred_at,source_id);
-DROP TRIGGER risk_scan_source_retired;
-DROP TRIGGER risk_scan_result_source_retired;
-DROP TRIGGER risk_scan_user_retired;
 CREATE TRIGGER risk_scan_user_retired BEFORE DELETE ON users
 BEGIN
  UPDATE risk_client_scans SET changed=1,
@@ -6877,7 +6381,6 @@ BEGIN
  '$.pending_discord','$.after_discord','$.user_ip_summary','$.pending_user','$.after_user',
  '$.pending_ip','$.after_ip','$.source_at','$.source_id','$.ip_summary') WHERE id=NEW.id;
 END;
-DROP TRIGGER risk_scan_result_source_deleted;
 CREATE TRIGGER risk_scan_result_source_deleted BEFORE DELETE ON request_source_facts
 BEGIN
  UPDATE risk_client_scans SET changed=1,
@@ -6900,7 +6403,6 @@ BEGIN
 END;
 CREATE TRIGGER automatic_user_ban_reason_deleted AFTER DELETE ON users
 BEGIN DELETE FROM automatic_reason_metadata WHERE owner_kind='user_ban' AND owner_id=CAST(OLD.id AS TEXT); END;
--- Runtime capability storage
 CREATE TABLE gateway_model_capabilities (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
  base_url TEXT NOT NULL,
@@ -6914,15 +6416,7 @@ CREATE TABLE gateway_model_capabilities_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1),
  initialized_at INTEGER NOT NULL CHECK(typeof(initialized_at)='integer' AND initialized_at BETWEEN 0 AND 253402300799)
 );
-
--- Model chat transport rules
-ALTER TABLE models ADD COLUMN transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream'));
-ALTER TABLE charity_models ADD COLUMN transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream'));
-
--- Idempotency recovery access
 CREATE INDEX idx_idempotency_recovery ON idempotency_records(state,expires_at,scope,actor_scope_hash,key_hash);
-
--- Ledger detail retention
 CREATE TABLE credit_compaction (
  id INTEGER PRIMARY KEY CHECK(id=1),
  through_seq INTEGER NOT NULL DEFAULT 0 CHECK(through_seq>=0),
@@ -6930,15 +6424,12 @@ CREATE TABLE credit_compaction (
  sweep_at INTEGER NOT NULL DEFAULT 0 CHECK(sweep_at BETWEEN 0 AND 253402300799),
  sweep_after_seq INTEGER NOT NULL DEFAULT 0 CHECK(sweep_after_seq>=0)
 ) STRICT;
-INSERT INTO credit_compaction(id) VALUES(1);
 CREATE TABLE credit_opening_balances (
  account_id INTEGER PRIMARY KEY REFERENCES credit_accounts(id) ON DELETE CASCADE,
  balance_sign INTEGER NOT NULL CHECK(balance_sign IN (-1,0,1)),
  balance_mag BLOB NOT NULL CHECK(length(balance_mag)=16 AND hex(balance_mag)<'80000000000000000000000000000000'),
  CHECK((balance_sign=0 AND balance_mag=zeroblob(16)) OR (balance_sign<>0 AND balance_mag<>zeroblob(16)))
 ) STRICT;
-ALTER TABLE credit_operations ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0 CHECK(compacted IN (0,1));
-DROP TRIGGER credit_operations_no_update;
 CREATE TRIGGER credit_operations_no_update BEFORE UPDATE ON credit_operations
 WHEN NOT (
  NEW.id IS OLD.id AND NEW.ledger_seq IS OLD.ledger_seq AND NEW.kind IS OLD.kind AND
@@ -6954,11 +6445,9 @@ WHEN NOT (
    NEW.donation_credit_delta_mag=zeroblob(16) AND NEW.donation_credit_after IS NULL AND NEW.reason IS NULL)
  ))
 BEGIN SELECT RAISE(ABORT,'credit_operations is immutable outside compaction'); END;
-DROP TRIGGER credit_operations_no_delete;
 CREATE TRIGGER credit_operations_no_delete BEFORE DELETE ON credit_operations
 WHEN OLD.compacted<>1 OR OLD.ledger_seq>(SELECT through_seq FROM credit_compaction WHERE id=1)
 BEGIN SELECT RAISE(ABORT,'credit operation is not compacted'); END;
-DROP TRIGGER credit_entries_no_delete;
 CREATE TRIGGER credit_entries_no_delete BEFORE DELETE ON credit_entries
 WHEN NOT EXISTS(SELECT 1 FROM credit_operations WHERE id=OLD.operation_id AND compacted=1
  AND ledger_seq<=(SELECT through_seq FROM credit_compaction WHERE id=1))
@@ -6972,9 +6461,13 @@ CREATE INDEX idx_rps_queue_operation ON game_rps_queue(reservation_operation_id)
 CREATE INDEX idx_rps_terminal_operation ON game_rps_sessions(terminal_operation_id) WHERE terminal_operation_id IS NOT NULL;
 CREATE INDEX idx_image_reserve_operation ON image_activity_tasks(reserve_operation_id) WHERE reserve_operation_id IS NOT NULL;
 CREATE INDEX idx_image_terminal_operation ON image_activity_tasks(terminal_operation_id) WHERE terminal_operation_id IS NOT NULL;
-
--- History query indexes
 CREATE INDEX idx_credit_entries_history ON credit_entries(account_id,operation_id,line_no,delta_sign) WHERE account_kind_snapshot='user' AND delta_sign<>0;
 CREATE INDEX idx_credit_operations_history ON credit_operations(id,ledger_seq,created_at,kind);
-DROP INDEX idx_request_logs_retention;
 CREATE INDEX idx_request_logs_retention ON request_logs(completed_at,id);
+CREATE TABLE schema_state (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ version INTEGER NOT NULL CHECK(version>=1)
+) STRICT;
+INSERT INTO credit_compaction(id,through_seq,details_before,sweep_at,sweep_after_seq) VALUES(1,0,0,0,0);
+INSERT INTO game_blackjack_clock(id,observed_at) VALUES(1,0);
+INSERT INTO schema_state(id,version) VALUES(1,1);
