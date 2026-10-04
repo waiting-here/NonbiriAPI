@@ -6972,3 +6972,9 @@ CREATE INDEX idx_rps_queue_operation ON game_rps_queue(reservation_operation_id)
 CREATE INDEX idx_rps_terminal_operation ON game_rps_sessions(terminal_operation_id) WHERE terminal_operation_id IS NOT NULL;
 CREATE INDEX idx_image_reserve_operation ON image_activity_tasks(reserve_operation_id) WHERE reserve_operation_id IS NOT NULL;
 CREATE INDEX idx_image_terminal_operation ON image_activity_tasks(terminal_operation_id) WHERE terminal_operation_id IS NOT NULL;
+
+-- History query indexes
+CREATE INDEX idx_credit_entries_history ON credit_entries(account_id,operation_id,line_no,delta_sign) WHERE account_kind_snapshot='user' AND delta_sign<>0;
+CREATE INDEX idx_credit_operations_history ON credit_operations(id,ledger_seq,created_at,kind);
+DROP INDEX idx_request_logs_retention;
+CREATE INDEX idx_request_logs_retention ON request_logs(completed_at,id);

@@ -9,7 +9,7 @@ import (
 	"math/big"
 )
 
-// ValidateAssetLedger validates monetary facts before committing an upgrade.
+// ValidateAssetLedger audits retained monetary facts and balance baselines.
 // It streams entries and independently conserves every supported asset.
 func ValidateAssetLedger(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, `

@@ -6,7 +6,7 @@ import (
 )
 
 func TestUsageDiscrepancyUpgradePreservesHistoryAndBoundsMarkers(t *testing.T) {
-	database := interactionSourceFixture(t)
+	database := openGenerationTwoConstraintFixture(t)
 	user := hostileInsertUser(t, database, "usage", 0, 1)
 	request := hostileOID("req_")
 	hostileInsertLogicalRequest(t, database, request, user, "openai_chat_completions", 1)

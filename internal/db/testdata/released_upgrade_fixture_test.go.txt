@@ -13,11 +13,11 @@ import (
 )
 
 // This fixture is compiled with the pinned released source.
-func TestWriteReleasedDualWalletFixture(t *testing.T) {
-	if db.GenerationTwoSchemaHash() != "dcce93b162d6f9540ec45118fbcc9661b633119fe35037213506a8f956117098" || db.PinnedGenerationTwoManifestHash != "cbab638c0f8c97efd0037f47cdcff58575de714dd47390c9e9e9039a9886f517" || db.PinnedGenerationTwoFreshConfigSeedHash != "230a5c1ec309bd392d56905bfec5a5aaf790a8a96718de3f2f0f667d6271b8f3" {
+func TestWriteReleasedUpgradeFixture(t *testing.T) {
+	if db.GenerationTwoSchemaHash() != "41d6ba87261075647661ec37279c2cd83a6c3b32c97206d2b4b3cb68c05e69e5" || db.PinnedGenerationTwoManifestHash != "e2f99944f596dda1702a76de6c7ba540761bd1d27f748c437968df0ecc1cf452" || db.PinnedGenerationTwoFreshConfigSeedHash != "d07ead0c73eb8173f5e88cc463601bac7b72b576f22361db87e0da7a1cc0c1fc" {
 		t.Fatal("wrong released schema")
 	}
-	path := os.Getenv("NONBIRI_DUAL_WALLET_FIXTURE")
+	path := os.Getenv("NONBIRI_RELEASED_FIXTURE")
 	if path == "" {
 		t.Fatal("missing fixture destination")
 	}
@@ -104,6 +104,7 @@ func TestWriteReleasedDualWalletFixture(t *testing.T) {
 		}
 	}
 	seedReleasedGovernanceFacts(t, tx, vault, users)
+	seedReleasedEconomyAuditProjection(t, tx, users)
 	if err := ValidateRecovery(ctx, tx); err != nil {
 		t.Fatal(err)
 	}

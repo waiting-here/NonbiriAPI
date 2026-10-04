@@ -7,7 +7,7 @@ import (
 )
 
 func TestStorageContractsRetainsRequestIdentityAndSourceSequence(t *testing.T) {
-	database := deployedStorageFixture(t)
+	database := supportedSourceFixture(t)
 	user := hostileInsertUser(t, database, "retained-root", 0, 0)
 	hostileMustExec(t, database, "UPDATE users SET discord_id='123456789012345678' WHERE id=?", user)
 	admin := hostileInsertUser(t, database, "scan-actor", 1, 0)
@@ -30,7 +30,7 @@ func TestStorageContractsRetainsRequestIdentityAndSourceSequence(t *testing.T) {
 		t.Fatal(err)
 	}
 	var state, reason string
-	if err := database.QueryRow("SELECT state,reason FROM risk_client_scans WHERE id=?", scan).Scan(&state, &reason); err != nil || state != "cancelled" || reason != "source_changed" {
+	if err := database.QueryRow("SELECT state,reason FROM risk_client_scans WHERE id=?", scan).Scan(&state, &reason); err != nil || state != "running" || reason != "" {
 		t.Fatal(state, reason, err)
 	}
 	var origin int64

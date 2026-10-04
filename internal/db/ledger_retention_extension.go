@@ -11,7 +11,7 @@ const preLedgerRetentionManifestHash = "e2f99944f596dda1702a76de6c7ba540761bd1d2
 const ledgerRetentionMarker = "\n-- Ledger detail retention\n"
 
 func preLedgerRetentionSchema() string {
-	previous, _, _ := strings.Cut(generationTwoSchema, ledgerRetentionMarker)
+	previous, _, _ := strings.Cut(preQueryIndexesSchema(), ledgerRetentionMarker)
 	return previous
 }
 
@@ -23,7 +23,7 @@ func applyLedgerRetentionExtension(ctx context.Context, tx *sql.Tx) error {
 	if generationManifestDigest(manifest) != preLedgerRetentionManifestHash {
 		return errors.New("unrecognized ledger retention source manifest")
 	}
-	_, additive, ok := strings.Cut(generationTwoSchema, ledgerRetentionMarker)
+	_, additive, ok := strings.Cut(preQueryIndexesSchema(), ledgerRetentionMarker)
 	if !ok {
 		return errors.New("canonical ledger retention schema is missing")
 	}

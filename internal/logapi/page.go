@@ -48,12 +48,12 @@ func authorizePageAccount(ctx context.Context, tx *sql.Tx, role string, actorID,
 	return nil
 }
 
-func logPageQuery(ctx context.Context, reader logReadQueryer, selection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+func logPageQuery(ctx context.Context, reader logReadQueryer, selection, countSelection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
 	if requested == nil {
 		return selection + order + ` LIMIT ?`, append(args, limit+1), nil, nil
 	}
 	var total int64
-	if err := reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
+	if err := reader.QueryRowContext(ctx, countSelection, args...).Scan(&total); err != nil {
 		return "", nil, nil, translateSQLError(err)
 	}
 	metadata, offset, err := requested.Window(total)

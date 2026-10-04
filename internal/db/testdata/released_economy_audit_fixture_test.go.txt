@@ -9,7 +9,7 @@ import (
 )
 
 // Seed a stopped projector with one completed operation and two pending
-// operations whose channels are rejected by the released audit schema.
+// operations that the upgraded projector must process exactly once.
 func seedReleasedEconomyAuditProjection(t *testing.T, tx *sql.Tx, users []int64) {
 	t.Helper()
 	ctx := context.Background()

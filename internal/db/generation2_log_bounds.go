@@ -9,9 +9,9 @@ import (
 // helpers.  Request accounting itself is owned by the later dispatch rail;
 // these constants only keep the common read/aggregation projections bounded.
 const (
-	MaxTokenDelta     = int64(1) << 40
-	MaxLogPageLimit   = 100
-	maxLogStatus      = 599
+	MaxTokenDelta      = int64(1) << 40
+	MaxLogPageLimit    = 100
+	maxLogStatus       = 599
 	maxLogErrorCodeLen = 64
 )
 

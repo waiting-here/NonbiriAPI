@@ -362,25 +362,16 @@ func validateReadOnlyDatabase(ctx context.Context, d *sql.DB, secrets secret.Gen
 	if err := quickCheck(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupCorruptDatabase)
 	}
-	prior, err := generationTwoExtensionNeeded(ctx, d)
-	if err != nil {
+	if _, err := generationTwoExtensionNeeded(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
-	priorAssets := false
-	if prior {
-		var columns int
-		if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&columns); err != nil {
-			return startupSQLFailure(ctx, err, StartupSchemaMismatch)
-		}
-		priorAssets = columns == 0
-	}
-	if err := validateVersionSeedManifest(ctx, d, priorAssets, prior); err != nil {
+	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
 		return startupSQLFailure(ctx, err, StartupCredentialReject)
 	}
-	if err := validateAssetSourceConfig(ctx, d, prior); err != nil {
+	if err := validateSourceConfig(ctx, d); err != nil {
 		return startupSQLFailure(ctx, err, StartupSchemaMismatch)
 	}
 	if audit, ok := ctx.Value(verificationAuditKey{}).(func(context.Context, *sql.DB) error); ok {
@@ -838,31 +829,6 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if err := insertGenerationTwoConfig(ctx, tx, announcementEpoch); err != nil {
 		return err
 	}
-	progressionPresent, err := ProgressionStoragePresent(ctx, tx)
-	if err != nil {
-		return err
-	}
-	if !progressionPresent {
-		for key := range progressionConfigDefaults() {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM site_config WHERE key=?`, key); err != nil {
-				return err
-			}
-		}
-	}
-	governancePresent, err := GovernanceStoragePresent(ctx, tx)
-	if err != nil {
-		return err
-	}
-	if !governancePresent {
-		for key := range governanceConfigDefaults() {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM site_config WHERE key=?`, key); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE site_config SET value='' WHERE key='level_display_name_5'`); err != nil {
-			return err
-		}
-	}
 	for _, domain := range []string{"site", "activities", "games"} {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO config_revisions(domain,revision,updated_at) VALUES(?,?,0)`, domain, 1); err != nil {
 			return err
@@ -924,24 +890,10 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if err := seedGovernanceState(ctx, tx, time.Now().Unix()); err != nil {
 		return err
 	}
-	var interactionPresent bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='fatfish_capacity')`).Scan(&interactionPresent); err != nil {
+	if err := seedInteractionStorage(ctx, tx); err != nil {
 		return err
 	}
-	if interactionPresent {
-		if err := seedInteractionStorage(ctx, tx); err != nil {
-			return err
-		}
-	}
-	// Historical upgrade fixtures also use this seed path.
-	var lakePresent bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='lake_notes_periods')`).Scan(&lakePresent); err != nil {
-		return err
-	}
-	if lakePresent {
-		return seedLakeNotesStorage(ctx, tx)
-	}
-	return nil
+	return seedLakeNotesStorage(ctx, tx)
 }
 
 func createFreshGenerationTwo(ctx context.Context, path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
