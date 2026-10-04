@@ -10,6 +10,24 @@ import (
 
 const maximumMaintenanceBatch = 100
 
+// Both branches use the same covering index. The compound order merges them
+// with accepted rows first, without reading live completed response bodies.
+const recoveryBatchSelector = `
+ SELECT rowid FROM (
+  SELECT rowid,state,expires_at,scope,actor_scope_hash,key_hash
+  FROM idempotency_records WHERE state='accepted'
+  UNION ALL
+  SELECT rowid,state,expires_at,scope,actor_scope_hash,key_hash
+  FROM idempotency_records WHERE state='completed' AND expires_at<=?
+  ORDER BY state,expires_at,scope,actor_scope_hash,key_hash
+  LIMIT ?
+ )`
+
+const recoveryRemainingQuery = `SELECT EXISTS(
+ SELECT 1 FROM idempotency_records WHERE state='accepted'
+) OR EXISTS(SELECT 1 FROM idempotency_records WHERE expires_at<=?)
+ OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`
+
 // MaintenanceResult is the closed, bounded outcome consumed by lifecycle.
 // More reports whether another row matching the same frozen decision time
 // remained after this transaction committed.
@@ -86,12 +104,7 @@ func (maintenance *Maintenance) deleteBatch(
 		result, err = tx.ExecContext(workerCtx, `
 DELETE FROM idempotency_records
 WHERE rowid IN (
- SELECT rowid FROM idempotency_records
- WHERE state='accepted' OR expires_at<=?
- ORDER BY CASE WHEN state='accepted' THEN 0 ELSE 1 END,
-          expires_at,scope,actor_scope_hash,key_hash
- LIMIT ?
-)`, decisionNow, limit)
+`+recoveryBatchSelector+`)`, decisionNow, limit)
 	case maintenanceRetention:
 		result, err = tx.ExecContext(workerCtx, `
 DELETE FROM idempotency_records
@@ -140,10 +153,7 @@ WHERE (actor_scope_hash,key_hash) IN (
 	var more int
 	switch operation {
 	case maintenanceRecovery:
-		err = tx.QueryRowContext(workerCtx, `SELECT EXISTS(
- SELECT 1 FROM idempotency_records
- WHERE state='accepted' OR expires_at<=?
-) OR EXISTS(SELECT 1 FROM resource_operation_status WHERE expires_at<=?)`, decisionNow, decisionNow).Scan(&more)
+		err = tx.QueryRowContext(workerCtx, recoveryRemainingQuery, decisionNow, decisionNow).Scan(&more)
 	case maintenanceRetention:
 		err = tx.QueryRowContext(workerCtx, `SELECT EXISTS(
  SELECT 1 FROM idempotency_records WHERE expires_at<=?

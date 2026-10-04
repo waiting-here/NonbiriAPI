@@ -6,7 +6,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
-No unreleased changes.
+### Fixed
+
+- Startup idempotency recovery uses indexed accepted and expired-record queues, avoiding scans of large live response records while preserving replay windows, ordering and bounded transaction batches.
 
 ## [1.0.0-rc.5] - 2026-10-03
 

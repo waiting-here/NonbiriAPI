@@ -49,6 +49,7 @@ type GenerationTwoCompatibility struct {
 }
 
 var generationTwoSourceManifestHashes = [...]string{
+	preIdempotencyRecoveryManifestHash,
 	preEconomyAuditChannelsManifestHash,
 	preTransportManifestHash,
 	preRecurrenceManifestHash,
@@ -189,7 +190,9 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest == preEconomyAuditChannelsManifestHash {
+	if digest == preIdempotencyRecoveryManifestHash {
+		// The immediate predecessor only needs the recovery index.
+	} else if digest == preEconomyAuditChannelsManifestHash {
 		// Only audit projection channels need to be extended.
 	} else if digest == preTransportManifestHash {
 		// The immediate predecessor only needs model transport columns.
@@ -319,27 +322,32 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	if digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preStorageContractsManifestHash && digest != preRecurrenceManifestHash {
+	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preStorageContractsManifestHash && digest != preRecurrenceManifestHash {
 		if err := applyActivityRefinementExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preRecurrenceManifestHash {
+	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preRecurrenceManifestHash {
 		if err := applyStorageContractsExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash {
+	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash {
 		if err := applyRecurrenceExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if digest != preEconomyAuditChannelsManifestHash {
+	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash {
 		if err := applyTransportExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if err := applyEconomyAuditChannelsExtension(ctx, tx); err != nil {
+	if digest != preIdempotencyRecoveryManifestHash {
+		if err := applyEconomyAuditChannelsExtension(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if err := applyIdempotencyRecoveryExtension(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

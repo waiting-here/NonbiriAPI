@@ -25,6 +25,10 @@ func insertMaintenanceRecord(
 	expiresAt int64,
 	seed byte,
 ) {
+	insertMaintenanceRecordWithActor(t, database, scope, state, expiresAt, seed, seed)
+}
+
+func insertMaintenanceRecordWithActor(t *testing.T, database *sql.DB, scope idempotency.Scope, state string, expiresAt int64, seed, actorSeed byte) {
 	t.Helper()
 	status := 0
 	body := []byte{}
@@ -41,7 +45,7 @@ INSERT INTO idempotency_records(
  scope,actor_scope_hash,key_hash,request_hash,lookup_fingerprint,
  state,http_status,response_body,created_at,expires_at
 ) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		string(scope), maintenanceHash(seed), maintenanceHash(seed+32), maintenanceHash(seed+64),
+		string(scope), maintenanceHash(actorSeed), maintenanceHash(seed+32), maintenanceHash(seed+64),
 		lookupFingerprint, state, status, body, expiresAt-idempotency.ReplayWindowSeconds, expiresAt,
 	)
 	if err != nil {
@@ -95,6 +99,44 @@ func TestMaintenanceRecoveryOnlyConvergesInProgressOrExpiredRows(t *testing.T) {
 	} {
 		if maintenanceRecordExists(t, store.DB(), row.scope, row.seed) {
 			t.Fatalf("%s recovery row remained", row.scope)
+		}
+	}
+}
+
+func TestMaintenanceRecoveryAcceptedFirstAndStableTieOrder(t *testing.T) {
+	store := openStore(t)
+	maintenance := idempotency.NewMaintenance(store.DB())
+	rows := []struct {
+		scope  idempotency.Scope
+		state  string
+		expiry int64
+		seed   byte
+	}{
+		{idempotency.ScopeActivity, "accepted", maintenanceDecisionNow + 1, 3},
+		{idempotency.ScopeActivity, "accepted", maintenanceDecisionNow + 1, 2},
+		{idempotency.ScopeActivity, "accepted", maintenanceDecisionNow + 1, 1},
+		{idempotency.ScopeDonation, "accepted", maintenanceDecisionNow + 1, 4},
+		{idempotency.ScopeDonation, "accepted", maintenanceDecisionNow - 1, 5},
+		{idempotency.ScopeActivity, "completed", maintenanceDecisionNow - 10, 6},
+		{idempotency.ScopeActivity, "completed", maintenanceDecisionNow, 7},
+	}
+	for _, row := range rows {
+		actorSeed := row.seed
+		if row.seed == 3 {
+			actorSeed = 2
+		}
+		insertMaintenanceRecordWithActor(t, store.DB(), row.scope, row.state, row.expiry, row.seed, actorSeed)
+	}
+	// Two accepted rows share their scope, expiration and actor; key is the
+	// final tie-breaker. Another row sorts earlier by actor instead.
+	for index, position := range []int{4, 2, 1, 0, 3, 5, 6} {
+		result, err := maintenance.Recover(context.Background(), maintenanceDecisionNow, 1, maintenanceDeadline())
+		if err != nil || result != (idempotency.MaintenanceResult{Processed: 1, More: index < len(rows)-1}) {
+			t.Fatalf("batch %d = (%+v,%v)", index, result, err)
+		}
+		row := rows[position]
+		if maintenanceRecordExists(t, store.DB(), row.scope, row.seed) {
+			t.Fatalf("batch %d did not remove expected %s/%d", index, row.scope, row.seed)
 		}
 	}
 }
