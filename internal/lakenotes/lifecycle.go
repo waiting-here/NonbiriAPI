@@ -139,7 +139,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.
 		return lifecycle.WorkResult{}, e
 	}
 	defer tx.Rollback()
-	rows, e := tx.QueryContext(ctx, "SELECT id,terminal_at IS NOT NULL FROM lake_notes_casts WHERE (paused=0 AND phase IN ('waiting','playing') AND lease_until_ns<=?) OR (terminal_at<=? AND updated_at<=?) ORDER BY id LIMIT ?", now*int64(time.Second), now-30*86400, now-idempotency.ReplayWindowSeconds, limit+1)
+	rows, e := tx.QueryContext(ctx, retentionCandidatesSQL, now*int64(time.Second), now-30*86400, now-idempotency.ReplayWindowSeconds, limit+1)
 	if e != nil {
 		return lifecycle.WorkResult{}, e
 	}
@@ -188,3 +188,12 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.
 	out.Processed = len(items)
 	return out, tx.Commit()
 }
+
+// Active and terminal casts are disjoint. Separate scans let both existing
+// partial indexes exclude retained history before the shared ordered limit.
+const retentionCandidatesSQL = `SELECT id,0 FROM lake_notes_casts INDEXED BY idx_lake_notes_active_cast_user
+WHERE paused=0 AND phase IN ('waiting','playing') AND lease_until_ns<=?
+UNION ALL
+SELECT id,1 FROM lake_notes_casts INDEXED BY idx_lake_notes_cast_retention
+WHERE terminal_at<=? AND updated_at<=?
+ORDER BY id LIMIT ?`
