@@ -117,7 +117,7 @@ for (const locale of ['en', 'zh'] as const) {
       const toggle = page.locator('.nb-menu-button');
       const account = page.locator('.nb-account-trigger');
       await expect(account).toBeVisible();
-      for (const width of [1440, 1280, 1024, 768, 390]) {
+      for (const width of [1440, 1280, 1152, 1151, 1024, 768, 390]) {
         await page.setViewportSize({ width, height: width < 1024 ? 1024 : 900 });
         await expect
           .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))

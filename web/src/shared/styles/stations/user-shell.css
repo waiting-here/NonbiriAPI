@@ -142,6 +142,12 @@
   }
 }
 
+@media (min-width: 64rem) and (max-width: 71.999rem) {
+  .nb-user-header .nb-user-header__nav-link > .nb-icon {
+    display: none;
+  }
+}
+
 @media (max-width: 63.999rem) {
   .nb-user-header {
     grid-template-columns: minmax(0, 1fr) auto auto;
