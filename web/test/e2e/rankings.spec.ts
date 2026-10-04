@@ -206,8 +206,8 @@ for (const scenario of [
       );
     }
     await page.goto(`${USER_ORIGIN}/charity`);
-    await page.getByRole('tab', { name: zh ? '我的捐赠' : 'My donations', exact: true }).click();
     const card = page.locator('.progression-ranking');
+    await expect(card).toBeVisible();
     await expect(card.locator('tbody tr')).toHaveCount(20);
     const privacy = card.getByRole('switch');
     await expect(privacy).toBeChecked();

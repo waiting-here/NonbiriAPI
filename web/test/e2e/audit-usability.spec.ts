@@ -213,6 +213,12 @@ test('inactivity settings validate, preview exact human-readable amounts and sav
             next_cursor: null,
             as_of: 1800000000,
             configuration: { ...configuration, ...body.policy },
+            pagination: {
+              page: body.page,
+              page_size: body.page_size,
+              total_items: '0',
+              total_pages: '1',
+            },
           },
         });
         return;

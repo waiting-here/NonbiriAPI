@@ -16,9 +16,7 @@ import (
 func drainLedgerRetention(t *testing.T, f *auditFixture, now int64) {
 	t.Helper()
 	for range 100 {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		result, err := ledger.RetainDetails(ctx, f.database, now, 3)
-		cancel()
+		result, err := ledger.RetainDetails(t.Context(), f.database, now, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,9 +44,7 @@ func TestLedgerRetentionDrainsFullBatches(t *testing.T) {
 		}
 	}
 	for _, count := range []int{100, 1, 0} {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		result, err := ledger.RetainDetails(ctx, f.database, auditNow, 100)
-		cancel()
+		result, err := ledger.RetainDetails(t.Context(), f.database, auditNow, 100)
 		if err != nil || result.Processed != count || result.More != (count > 0) {
 			t.Fatal(result, err)
 		}
