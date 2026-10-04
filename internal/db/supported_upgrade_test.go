@@ -19,8 +19,16 @@ var preReleaseIndexesFixture string
 //go:embed testdata/pre_release_ledger.sql
 var preReleaseLedgerFixture string
 
+func baselineStorageSchema() string {
+	return generationTwoSchema + `
+DROP INDEX idx_charity_reservations_retention;
+DROP INDEX idx_donation_usage_retention;
+UPDATE schema_state SET version=1 WHERE id=1;
+`
+}
+
 func preStorageVersionSchema() string {
-	return generationTwoSchema + preReleaseCurrentFixture
+	return baselineStorageSchema() + preReleaseCurrentFixture
 }
 
 func preQueryIndexesSchema() string {
@@ -60,6 +68,7 @@ func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 		{preLedgerRetentionSchema(), preLedgerRetentionManifestHash},
 		{preQueryIndexesSchema(), preQueryIndexesManifestHash},
 		{preStorageVersionSchema(), preStorageVersionManifestHash},
+		{baselineStorageSchema(), baselineManifestHash},
 	} {
 		database, err := sql.Open("sqlite", ":memory:")
 		if err != nil {
@@ -74,8 +83,8 @@ func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 			}
 			assertRetainedManifest(t, database, PinnedGenerationTwoManifestHash)
 			assertForeignKeyEnforcement(t, database)
-			if version, err := readSchemaVersion(context.Background(), database); err != nil || version != 1 {
-				t.Fatal("stable baseline not reached", version, err)
+			if version, err := readSchemaVersion(context.Background(), database); err != nil || version != 2 {
+				t.Fatal("current schema not reached", version, err)
 			}
 		}
 		_ = database.Close()

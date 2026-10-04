@@ -3,6 +3,7 @@ package lakenotes
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -280,5 +281,30 @@ func TestRetentionSharesLimitBetweenPauseAndTerminalCleanup(t *testing.T) {
 	var elapsed int64
 	if e = f.database.QueryRow("SELECT count(*),min(active_elapsed_ns) FROM lake_notes_casts WHERE paused=1").Scan(&paused, &elapsed); e != nil || paused != 2 || elapsed != 6*int64(time.Second) {
 		t.Fatal("expired casts not paused at lease", paused, elapsed, e)
+	}
+}
+
+func TestRetentionCandidatesUseActiveAndExpiryIndexes(t *testing.T) {
+	f := newFixture(t)
+	rows, err := f.database.Query("EXPLAIN QUERY PLAN "+retentionCandidatesSQL, testNow*int64(time.Second), testNow-30*86400, testNow-86400, 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var steps []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	plan := strings.Join(steps, " | ")
+	if !strings.Contains(plan, "idx_lake_notes_active_cast_user") || !strings.Contains(plan, "idx_lake_notes_cast_retention (terminal_at<?)") {
+		t.Fatalf("retention must exclude retained terminal history: %s", plan)
 	}
 }
