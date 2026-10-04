@@ -7,8 +7,56 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/economyaudit"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
+
+func TestLedgerRetentionPreservesUnfinishedSessionRecovery(t *testing.T) {
+	fixture := newRPSFixture(t)
+	users, _ := fixture.startThree(game.RPSModeQuick, rpsTestFunding, 9000)
+	before := fixture.sessionForUser(users[0])
+	ctx := context.Background()
+	fixture.clock.Add(31 * 24 * 60 * 60)
+	if _, err := fixture.database.Exec(`INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','0',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, fixture.clock.Load()); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := fixture.database.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ready, err := economyaudit.AdvanceTx(ctx, tx, fixture.clock.Load())
+	if err != nil || !ready {
+		t.Fatal(ready, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		result, err := ledger.RetainDetails(ctx, fixture.database, fixture.clock.Load(), 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !result.More {
+			break
+		}
+	}
+	if fixture.scalar(`SELECT count(*) FROM credit_operations WHERE source_type='rps_session' AND source_id=? AND compacted=0`, before.ID) == 0 {
+		t.Fatal("unfinished session evidence was compacted")
+	}
+	if err := fixture.service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	fixture.service = fixture.newService(8)
+	if err := fixture.service.RecoverBeforeListen(ctx); err != nil {
+		t.Fatal(err)
+	}
+	after := fixture.sessionForUser(users[0])
+	if after.Phase != before.Phase || after.PhaseSeq != before.PhaseSeq || after.HealthEpoch != 8 {
+		t.Fatal("retention changed the recoverable game")
+	}
+}
 
 func TestRecoverBeforeListenAtBindsFrozenTimeLimitAndMore(t *testing.T) {
 	fixture := newRPSFixture(t)

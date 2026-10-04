@@ -169,8 +169,8 @@ func TestShortRejectionPenaltyLogAndRestrictionsCommitTogether(t *testing.T) {
 		t.Fatal("other account changed")
 	}
 	f.clock.Add(30 * 24 * 60 * 60)
-	if f.history(user).Data[0].RequestID != nil {
-		t.Fatal("expired request remains linked")
+	if page := f.history(user); len(page.Data) != 0 || page.CurrentBalance != "-0.007" {
+		t.Fatalf("expired details or changed balance: %+v", page)
 	}
 }
 

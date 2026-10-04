@@ -460,6 +460,7 @@ func newLifecycleCoordinator(
 			Secrets:            secretAdapter,
 		},
 		Retention: lifecycle.RetentionAdapters{
+			Ledger:             lifecycleadapters.NewLedgerRetention(store.DB()),
 			PersonalAutomation: automation,
 			FatFish:            fatFishAdapter,
 			RequestAdaptation:  forwardRuntime.adaptations,

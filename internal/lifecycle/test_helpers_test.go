@@ -407,6 +407,7 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 			Bidding: noopRecovery("bidding"), Likes: noopRecovery("likes"), Blackjack: noopRecovery("blackjack"),
 		},
 		Retention: RetentionAdapters{
+			Ledger:             noopRetention("ledger"),
 			PersonalAutomation: noopRetention("personal_automation"),
 			FatFish:            noopRetention("fat_fish"),
 			RequestAdaptation:  noopRetention("request_adaptation"),

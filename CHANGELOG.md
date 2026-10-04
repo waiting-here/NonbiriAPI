@@ -6,7 +6,14 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
-No unreleased changes.
+### Changed
+
+- Credit transaction details and account exports retain the last 30 days. Six-hour maintenance replaces expired entries with opening balances and non-personal audit totals, preserving current balances, pending settlement, held evidence and minimal receipts needed to prevent duplicate rewards. Historical audit ranges use complete site hours after detail compaction.
+
+### Fixed
+
+- The charity ranking is visible beside the shared-model catalog on desktop and below it on mobile.
+- Inactivity-policy previews support page sizes, previous and next pages, and direct page selection. An optional execution time uses the site's configured time zone; leaving it blank preserves elapsed-time scheduling.
 
 ## [1.0.0-rc.5] - 2026-10-03
 

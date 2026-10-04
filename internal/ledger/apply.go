@@ -520,6 +520,13 @@ func findExisting(ctx context.Context, tx *sql.Tx, plan Plan) (Result, bool, err
 	if sourceFound {
 		return sourceResult, true, nil
 	}
+	var before int64
+	if err := tx.QueryRowContext(ctx, `SELECT details_before FROM credit_compaction WHERE id=1`).Scan(&before); err != nil {
+		return Result{}, false, err
+	}
+	if plan.spec.meta.CreatedAt < before {
+		return Result{}, false, ErrConflict
+	}
 	return Result{}, false, nil
 }
 
@@ -563,19 +570,23 @@ func loadResult(ctx context.Context, tx *sql.Tx, operationID string) (Result, er
 		donationMag   []byte
 		donationAfter []byte
 		reason        sql.NullString
+		compacted     bool
 	)
 	err := tx.QueryRowContext(ctx, `
 SELECT id,ledger_seq,kind,source_type,source_id,source_seq,actor_user_id,
  donation_credit_user_id,donation_credit_delta_sign,donation_credit_delta_mag,
- donation_credit_after,reason,created_at
+ donation_credit_after,reason,created_at,compacted
 FROM credit_operations WHERE id=?`, operationID).Scan(
 		&result.OperationID, &result.LedgerSeq, &kind, &typ, &result.SourceID, &sourceSeqRaw, &actor,
-		&donationUser, &donationSign, &donationMag, &donationAfter, &reason, &result.CreatedAt)
+		&donationUser, &donationSign, &donationMag, &donationAfter, &reason, &result.CreatedAt, &compacted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Result{}, ErrNotFound
 	}
 	if err != nil {
 		return Result{}, classifySQLError("load ledger operation", err)
+	}
+	if compacted {
+		return Result{}, ErrConflict
 	}
 	result.Kind = Kind(kind)
 	result.SourceType = typ

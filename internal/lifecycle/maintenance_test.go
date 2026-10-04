@@ -46,6 +46,7 @@ func retentionAdaptersWithRecorder(record func(string)) RetentionAdapters {
 		}}
 	}
 	return RetentionAdapters{
+		Ledger:             makeAdapter("ledger"),
 		PersonalAutomation: makeAdapter("personal_automation"),
 		FatFish:            makeAdapter("fat_fish"),
 		RequestAdaptation:  makeAdapter("request_adaptation"),
@@ -77,7 +78,7 @@ func TestMaintenanceRunsFrozenRecoveryThenRetentionOrder(t *testing.T) {
 		"recovery:governance", "recovery:charity_routing",
 		"retention:personal_automation", "retention:continuity", "retention:sessions", "retention:request_logs", "retention:audits", "retention:observability", "retention:risk_audit", "retention:issues", "retention:fishing",
 		"retention:linklink", "retention:rps", "retention:bidding", "retention:likes", "retention:blackjack", "retention:reports", "retention:fat_fish", "retention:donations", "retention:charity",
-		"retention:idempotency", "retention:secrets", "retention:governance", "retention:charity_routing", "retention:request_adaptation",
+		"retention:idempotency", "retention:secrets", "retention:governance", "retention:charity_routing", "retention:request_adaptation", "retention:ledger",
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("maintenance order = %v, want %v", calls, want)

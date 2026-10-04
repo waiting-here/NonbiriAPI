@@ -26,6 +26,8 @@ See the [rc.5 changelog](CHANGELOG.md#100-rc5---2026-10-03) for this release. Fe
 - Automatic penalties have durable violation windows, safe personal summaries and authorized management history. Search and filters cover complete paginated resources; authorized managers can trace a donated key back to its associated models.
 - New character passives, layer-by-layer resistance, clear suit colors, mobile quick stakes and synchronized feedback across six games preserve server-authoritative results. Battle follow-up cues grow across a round and distinguish normal, partial and complete resistance.
 
+- Credit transaction details and request logs are available for 30 days. Six-hour maintenance compacts expired ledger details into balance baselines and audit totals, then physically removes them; necessary settlement, hold and idempotency evidence follows its business lifecycle. Current balances and entitlements are preserved.
+
 - Turn-based battles offer an optional browser-local tutorial, ten scripted rounds ending in a narrow win, concise effect cards and linked player rules. Live turns warn below five seconds; overload highlights the actual depleted resources. Closed games and modes disable matching while keeping learning and history available.
 - Turn-based Battle Minigame (Test) lets each account save up to 10 private **Custom presets** across devices. Saving over a slot requires explicit confirmation; loading fills pre-match choices only and never queues or charges. Both modes use 30-second planning periods for new matches.
 - Banned Discord sign-ins open the site's branded 403 page. The charity catalog avoids repeating provider/model details already included in the complete model name.

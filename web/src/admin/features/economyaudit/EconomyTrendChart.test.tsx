@@ -36,6 +36,8 @@ vi.mock('chart.js', () => ({
 function makeSeries(asset: Asset, amounts: readonly [string, string][]): Series {
   return {
     metadata: {
+      detail_retained_from: undefined,
+      range_adjusted: false,
       asset,
       from: 1_800_000_000,
       to: 1_800_000_000 + amounts.length * 3600,

@@ -49,6 +49,7 @@ type Filter struct {
 	Asset                         ledger.Asset
 	From, To                      int64
 	Bucket, Kind, Channel, Cursor string
+	rangeAdjusted                 bool
 }
 
 type Metrics struct {
@@ -69,16 +70,18 @@ type Coverage struct {
 }
 
 type Metadata struct {
-	Asset         ledger.Asset `json:"asset"`
-	From          int64        `json:"from"`
-	To            int64        `json:"to"`
-	Unit          string       `json:"unit"`
-	Scale         string       `json:"scale"`
-	OffsetMinutes int          `json:"offset_minutes"`
-	LedgerSeq     string       `json:"ledger_seq"`
-	ProjectedSeq  string       `json:"projected_seq"`
-	SnapshotAt    int64        `json:"snapshot_at"`
-	Coverage      Coverage     `json:"coverage"`
+	DetailRetainedFrom int64        `json:"detail_retained_from,omitempty"`
+	RangeAdjusted      bool         `json:"range_adjusted,omitempty"`
+	Asset              ledger.Asset `json:"asset"`
+	From               int64        `json:"from"`
+	To                 int64        `json:"to"`
+	Unit               string       `json:"unit"`
+	Scale              string       `json:"scale"`
+	OffsetMinutes      int          `json:"offset_minutes"`
+	LedgerSeq          string       `json:"ledger_seq"`
+	ProjectedSeq       string       `json:"projected_seq"`
+	SnapshotAt         int64        `json:"snapshot_at"`
+	Coverage           Coverage     `json:"coverage"`
 }
 
 type Inventory struct {

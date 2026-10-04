@@ -147,6 +147,7 @@ func (adapters RecoveryAdapters) ordered() []namedRecoveryAdapter {
 // RetentionAdapters fixes the six-hour cleanup order. Separate game fields
 // keep each reducer and retention cursor under its domain owner.
 type RetentionAdapters struct {
+	Ledger             RetentionAdapter
 	PersonalAutomation RetentionAdapter
 	RequestAdaptation  RetentionAdapter
 	Continuity         RetentionAdapter
@@ -202,6 +203,7 @@ func (adapters RetentionAdapters) ordered() []namedRetentionAdapter {
 		{"governance", adapters.Governance},
 		{"charity_routing", adapters.CharityRouting},
 		{"request_adaptation", adapters.RequestAdaptation},
+		{"ledger", adapters.Ledger},
 	}
 }
 

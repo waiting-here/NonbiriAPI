@@ -11,7 +11,7 @@ const preIdempotencyRecoveryManifestHash = "81cf798b4e6f943f148d8c4a5ab6a7ed99ea
 const idempotencyRecoveryMarker = "\n-- Idempotency recovery access\n"
 
 func preIdempotencyRecoverySchema() string {
-	previous, _, _ := strings.Cut(generationTwoSchema, idempotencyRecoveryMarker)
+	previous, _, _ := strings.Cut(preLedgerRetentionSchema(), idempotencyRecoveryMarker)
 	return previous
 }
 
@@ -23,7 +23,7 @@ func applyIdempotencyRecoveryExtension(ctx context.Context, tx *sql.Tx) error {
 	if generationManifestDigest(manifest) != preIdempotencyRecoveryManifestHash {
 		return errors.New("unrecognized idempotency recovery source manifest")
 	}
-	_, additive, ok := strings.Cut(generationTwoSchema, idempotencyRecoveryMarker)
+	_, additive, ok := strings.Cut(preLedgerRetentionSchema(), idempotencyRecoveryMarker)
 	if !ok {
 		return errors.New("canonical idempotency recovery schema is missing")
 	}

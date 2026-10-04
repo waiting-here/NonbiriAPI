@@ -148,7 +148,7 @@ func TestActivityExchangeReplayAndAllWalletDeletion(t *testing.T) {
 			t.Fatal("exchange replay duplicated")
 		}
 	}
-	entries, err := ExportUserEntries(ctx, tx, user, 100)
+	entries, err := ExportUserEntries(ctx, tx, user, ledgerTestNow+10, 100)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,6 +49,7 @@ type GenerationTwoCompatibility struct {
 }
 
 var generationTwoSourceManifestHashes = [...]string{
+	preLedgerRetentionManifestHash,
 	preIdempotencyRecoveryManifestHash,
 	preEconomyAuditChannelsManifestHash,
 	preTransportManifestHash,
@@ -190,164 +191,169 @@ func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest == preIdempotencyRecoveryManifestHash {
-		// The immediate predecessor only needs the recovery index.
-	} else if digest == preEconomyAuditChannelsManifestHash {
-		// Only audit projection channels need to be extended.
-	} else if digest == preTransportManifestHash {
-		// The immediate predecessor only needs model transport columns.
-	} else if digest == preRecurrenceManifestHash {
-		// The immediate predecessor needs only exact recurrence and runtime capabilities.
-	} else if digest == preStorageContractsManifestHash {
-		// The deployed predecessor already includes every historical extension.
-	} else if digest == preActivityRefinementManifestHash {
-		// The immediate predecessor already includes all earlier extensions.
-	} else if digest == preLevelDeletionManifestHash {
-		if _, err := tx.ExecContext(ctx, fatFishLevelDeletionSchema); err != nil {
-			return err
-		}
-	} else {
-		if digest != preInteractionManifestHash {
-			if digest != preAuditScanManifestHash {
-				if digest != preAccountProtectionManifestHash {
-					if digest != preGovernanceManifestHash {
-						if digest != preProgressionManifestHash {
-							if digest != preGatewayPolicyManifestHash {
-								if digest != preRandomnessManifestHash {
-									if digest != preBlackjackManifestHash {
-										if digest != preRCOneManifestHash {
-											if digest != preBetaFourManifestHash {
-												if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
-													// Extend any pre-beta.1 structure to the complete beta.1 schema first.
-													if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
-														if digest == preRoutingManifestHash {
-															if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+	if digest != preLedgerRetentionManifestHash {
+		if digest == preIdempotencyRecoveryManifestHash {
+			// The immediate predecessor only needs the recovery index.
+		} else if digest == preEconomyAuditChannelsManifestHash {
+			// Only audit projection channels need to be extended.
+		} else if digest == preTransportManifestHash {
+			// The immediate predecessor only needs model transport columns.
+		} else if digest == preRecurrenceManifestHash {
+			// The immediate predecessor needs only exact recurrence and runtime capabilities.
+		} else if digest == preStorageContractsManifestHash {
+			// The deployed predecessor already includes every historical extension.
+		} else if digest == preActivityRefinementManifestHash {
+			// The immediate predecessor already includes all earlier extensions.
+		} else if digest == preLevelDeletionManifestHash {
+			if _, err := tx.ExecContext(ctx, fatFishLevelDeletionSchema); err != nil {
+				return err
+			}
+		} else {
+			if digest != preInteractionManifestHash {
+				if digest != preAuditScanManifestHash {
+					if digest != preAccountProtectionManifestHash {
+						if digest != preGovernanceManifestHash {
+							if digest != preProgressionManifestHash {
+								if digest != preGatewayPolicyManifestHash {
+									if digest != preRandomnessManifestHash {
+										if digest != preBlackjackManifestHash {
+											if digest != preRCOneManifestHash {
+												if digest != preBetaFourManifestHash {
+													if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
+														// Extend any pre-beta.1 structure to the complete beta.1 schema first.
+														if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
+															if digest == preRoutingManifestHash {
+																if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+																	return err
+																}
+															}
+															if digest != preResponseStartsManifestHash {
+																if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+																	return err
+																}
+															}
+															if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
 																return err
 															}
 														}
-														if digest != preResponseStartsManifestHash {
-															if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+														if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
+															// Prior schemas have no recurring-limit or presentation sidecars.
+															if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
+																return err
+															}
+															if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
 																return err
 															}
 														}
-														if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
+														if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
+															if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
+																return err
+															}
+														}
+														if digest != preStewardHoldReadManifestHash {
+															if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
+																return err
+															}
+														}
+														if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
+															return err
+														}
+														if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
+															return err
+														}
+														if err := migrateFishingLengthFacts(ctx, tx); err != nil {
 															return err
 														}
 													}
-													if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
-														// Prior schemas have no recurring-limit or presentation sidecars.
-														if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
-															return err
-														}
-														if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
+													if digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
+														if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
 															return err
 														}
 													}
-													if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
-														if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
-															return err
-														}
-													}
-													if digest != preStewardHoldReadManifestHash {
-														if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
-															return err
-														}
-													}
-													if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
+													if err := extendHourlyQuotaInterval(ctx, tx); err != nil {
 														return err
 													}
-													if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
+													if err := extendEmbeddingRoutes(ctx, tx); err != nil {
 														return err
 													}
-													if err := migrateFishingLengthFacts(ctx, tx); err != nil {
+													manifest, err := readGenerationManifest(ctx, tx)
+													if err != nil {
 														return err
+													}
+													if generationManifestDigest(manifest) != preBetaFourManifestHash {
+														return errors.New("prior schema extension did not reach the asset baseline")
 													}
 												}
-												if digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
-													if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
-														return err
-													}
-												}
-												if err := extendHourlyQuotaInterval(ctx, tx); err != nil {
+												if err := extendDualAssetSchema(ctx, tx); err != nil {
 													return err
-												}
-												if err := extendEmbeddingRoutes(ctx, tx); err != nil {
-													return err
-												}
-												manifest, err := readGenerationManifest(ctx, tx)
-												if err != nil {
-													return err
-												}
-												if generationManifestDigest(manifest) != preBetaFourManifestHash {
-													return errors.New("prior schema extension did not reach the asset baseline")
 												}
 											}
-											if err := extendDualAssetSchema(ctx, tx); err != nil {
+											if err := ApplyDuelExtension(ctx, tx); err != nil {
 												return err
 											}
 										}
-										if err := ApplyDuelExtension(ctx, tx); err != nil {
+										if err := applyBlackjackExtension(ctx, tx); err != nil {
 											return err
 										}
 									}
-									if err := applyBlackjackExtension(ctx, tx); err != nil {
+									if err := applyRandomnessExtension(ctx, tx); err != nil {
 										return err
 									}
 								}
-								if err := applyRandomnessExtension(ctx, tx); err != nil {
+								if err := applyGatewayPolicyExtension(ctx, tx); err != nil {
 									return err
 								}
 							}
-							if err := applyGatewayPolicyExtension(ctx, tx); err != nil {
+							if err := applyProgressionExtension(ctx, tx); err != nil {
 								return err
 							}
 						}
-						if err := applyProgressionExtension(ctx, tx); err != nil {
+						if err := applyGovernanceExtension(ctx, tx); err != nil {
 							return err
 						}
 					}
-					if err := applyGovernanceExtension(ctx, tx); err != nil {
+					if err := applyAccountProtectionExtension(ctx, tx); err != nil {
 						return err
 					}
 				}
-				if err := applyAccountProtectionExtension(ctx, tx); err != nil {
+				if err := applyAuditScanExtension(ctx, tx); err != nil {
 					return err
 				}
 			}
-			if err := applyAuditScanExtension(ctx, tx); err != nil {
+			if err := applyInteractionExtension(ctx, tx); err != nil {
 				return err
 			}
 		}
-		if err := applyInteractionExtension(ctx, tx); err != nil {
+		if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preStorageContractsManifestHash && digest != preRecurrenceManifestHash {
+			if err := applyActivityRefinementExtension(ctx, tx); err != nil {
+				return err
+			}
+		}
+		if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preRecurrenceManifestHash {
+			if err := applyStorageContractsExtension(ctx, tx); err != nil {
+				return err
+			}
+		}
+		if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash {
+			if err := applyRecurrenceExtension(ctx, tx); err != nil {
+				return err
+			}
+		}
+		if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash {
+			if err := applyTransportExtension(ctx, tx); err != nil {
+				return err
+			}
+		}
+		if digest != preIdempotencyRecoveryManifestHash {
+			if err := applyEconomyAuditChannelsExtension(ctx, tx); err != nil {
+				return err
+			}
+		}
+		if err := applyIdempotencyRecoveryExtension(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preStorageContractsManifestHash && digest != preRecurrenceManifestHash {
-		if err := applyActivityRefinementExtension(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash && digest != preRecurrenceManifestHash {
-		if err := applyStorageContractsExtension(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash && digest != preTransportManifestHash {
-		if err := applyRecurrenceExtension(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if digest != preIdempotencyRecoveryManifestHash && digest != preEconomyAuditChannelsManifestHash {
-		if err := applyTransportExtension(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if digest != preIdempotencyRecoveryManifestHash {
-		if err := applyEconomyAuditChannelsExtension(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if err := applyIdempotencyRecoveryExtension(ctx, tx); err != nil {
+	if err := applyLedgerRetentionExtension(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
