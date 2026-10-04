@@ -121,7 +121,11 @@ export function useRetainedOperation<TVariables, TResult>(
   useEffect(() => {
     mounted.current = true;
     const requests = active.current;
-    const unsubscribe = client.getQueryCache().subscribe(() => {
+    const unsubscribe = client.getQueryCache().subscribe((event) => {
+      const key = event.query.queryKey;
+      if (key.length !== 2 || key[1] !== 'session' || (key[0] !== 'admin' && key[0] !== 'user'))
+        return;
+      if (event.type !== 'removed' && event.type !== 'updated') return;
       if (deniedFrame.current) {
         const station = deniedFrame.current === 'admin' ? 'admin' : 'user';
         if (client.getQueryData([station, 'session'])) {

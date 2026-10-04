@@ -85,7 +85,7 @@ function normalizedPage<T>(
   const data = array(root.data, `${label} data`, window.pageSize).map(decode);
   const identities = new Set(data.map(identity));
   if (identities.size !== data.length) invalidResponse(`${label} identities`);
-  validatePageResponse(pagination, window.page, window.pageSize, data.length);
+  validatePageResponse(pagination, window.page, window.pageSize);
   return { data, next_cursor: null, pagination };
 }
 
@@ -131,7 +131,7 @@ function normalizedDetail(value: unknown, window: ReportPageWindow): NumberedRep
   );
   const materialsPagination = normalizePageMetadata(root.materials_pagination);
   const materials = normalizedMaterials(root.materials, window);
-  validatePageResponse(materialsPagination, window.page, window.pageSize, materials.data.length);
+  validatePageResponse(materialsPagination, window.page, window.pageSize);
   const decision = root.decision === null ? null : normalizeReportDecision(root.decision);
   return { ...summary, materials, materials_pagination: materialsPagination, decision };
 }

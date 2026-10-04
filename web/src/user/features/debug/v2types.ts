@@ -227,7 +227,7 @@ export function normalizeDebugBody(value: unknown): DebugBody {
   const truncated = boolean(root.truncated, 'Debug truncation marker');
   if (captured > byteCount || truncated !== (captured < byteCount)) invalidResponse('Debug request body length');
   return {
-    media_type: string(root.media_type, 'Debug media type', { min: 1, max: 256, bytes: 256 }),
+    media_type: string(root.media_type, 'Debug media type', { min: 1 }),
     byte_count: byteCount,
     text: textValue,
     base64: base64Value,
@@ -243,7 +243,7 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
   const requestRoot = record(root.request, ['route_kind', 'model', 'stream', 'body'], 'Debug request');
   const request: DebugRequest = {
     route_kind: oneOf(requestRoot.route_kind, MODEL_CALL_ROUTES, 'Debug route kind'),
-    model: string(requestRoot.model, 'Debug model', { max: 512, bytes: 2_048 }),
+    model: string(requestRoot.model, 'Debug model'),
     stream: boolean(requestRoot.stream, 'Debug stream flag'),
     body: normalizeDebugBody(requestRoot.body),
   };
@@ -257,8 +257,8 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
       result_kind: oneOf(item.result_kind, ['response', 'synthetic'] as const, 'Debug upstream result kind'),
       ...(item.gateway_user_attribution_sent === undefined ? {} : { gateway_user_attribution_sent: boolean(item.gateway_user_attribution_sent, 'Gateway cost attribution sent') }),
       status_code: nullableInteger(item.status_code, 'Debug upstream status', 100, 599),
-      upstream_code: nullableString(item.upstream_code, 'Debug upstream code', { min: 1, max: 64, bytes: 64, ascii: true }),
-      diag: nullableString(item.diag, 'Debug safe diagnostic', { max: 4_096, bytes: 4_096 }),
+      upstream_code: nullableString(item.upstream_code, 'Debug upstream code', { min: 1, ascii: true }),
+      diag: nullableString(item.diag, 'Debug safe diagnostic'),
       usage: normalizeDebugUsage(item.usage),
       completed_at: unixSecond(item.completed_at, 'Debug upstream completion time'),
     };
@@ -274,7 +274,7 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
   if (root.caller_result !== null) {
     const item = record(root.caller_result, ['http_status', 'error_code', 'source', 'message', 'completed_at'], 'Debug caller result');
     const source = oneOf(item.source, ['platform', 'upstream'] as const, 'Debug caller source');
-    const message = string(item.message, 'Debug caller message', { min: 1, max: 1_024, bytes: 1_024 });
+    const message = string(item.message, 'Debug caller message', { min: 1 });
     const errorCode = item.error_code === null
       ? null
       : oneOf(item.error_code, STABLE_ERROR_CODES, 'Debug caller error code');

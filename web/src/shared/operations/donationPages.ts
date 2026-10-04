@@ -358,7 +358,7 @@ function pageReview(value: unknown, label: string): DonationPageReviewResult | n
       ['approve', 'reject', 'force_reject'] as const,
       `${label} decision`,
     ),
-    reason: string(root.reason, `${label} reason`, { max: 1_024, bytes: 4_096, multiline: true }),
+    reason: string(root.reason, `${label} reason`, { multiline: true }),
     reviewed_at: unixSecond(root.reviewed_at, `${label} time`),
   };
 }
@@ -439,11 +439,7 @@ function donationCommon(
     id: decimalID(root.id, `${label} id`),
     status,
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
-    description: string(root.description, `${label} description`, {
-      max: 1_024,
-      bytes: 4_096,
-      multiline: true,
-    }),
+    description: string(root.description, `${label} description`, { multiline: true }),
     review_result: review,
     created_at: unixSecond(root.created_at, `${label} creation time`),
     updated_at: unixSecond(root.updated_at, `${label} update time`),
@@ -461,12 +457,8 @@ function adminOwner(value: unknown, label: string): AdminDonationPageOwner | nul
   const root = record(value, ['user_id', 'discord_id', 'display_name'], label);
   return {
     user_id: decimalID(root.user_id, `${label} id`),
-    discord_id: nullableString(root.discord_id, `${label} Discord id`, {
-      max: 128,
-      bytes: 128,
-      ascii: true,
-    }),
-    display_name: string(root.display_name, `${label} display`, { min: 1, max: 128, bytes: 512 }),
+    discord_id: nullableString(root.discord_id, `${label} Discord id`, { ascii: true }),
+    display_name: string(root.display_name, `${label} display`, { min: 1 }),
   };
 }
 
@@ -475,12 +467,8 @@ function stewardOwner(value: unknown, label: string): StewardDonationPageOwner |
   const root = record(value, ['user_id', 'discord_id', 'display_name'], label);
   return {
     user_id: decimalID(root.user_id, `${label} id`),
-    discord_id: nullableString(root.discord_id, `${label} Discord id`, {
-      max: 128,
-      bytes: 128,
-      ascii: true,
-    }),
-    display_name: string(root.display_name, `${label} display`, { min: 1, max: 128, bytes: 512 }),
+    discord_id: nullableString(root.discord_id, `${label} Discord id`, { ascii: true }),
+    display_name: string(root.display_name, `${label} display`, { min: 1 }),
   };
 }
 
@@ -599,19 +587,11 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     donation_note:
       root.donation_note === undefined
         ? ''
-        : string(root.donation_note, `${label} donor note`, {
-            max: 1024,
-            bytes: 4096,
-            multiline: true,
-          }),
+        : string(root.donation_note, `${label} donor note`, { multiline: true }),
     approval_note:
       root.approval_note == null
         ? null
-        : string(root.approval_note, `${label} approval note`, {
-            max: 1024,
-            bytes: 4096,
-            multiline: true,
-          }),
+        : string(root.approval_note, `${label} approval note`, { multiline: true }),
     visible_models:
       root.visible_models === undefined
         ? []
@@ -623,7 +603,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
             );
             return {
               model_id: decimalID(model.model_id, 'model id'),
-              full_name: string(model.full_name, 'model name', { max: 256 }),
+              full_name: string(model.full_name, 'model name'),
               enabled: boolean(model.enabled, 'model enabled'),
               binding_count: decimal(model.binding_count, 'model binding count'),
             };
@@ -711,7 +691,7 @@ function normalizePage<T>(
   if (root.next_cursor !== null) invalidResponse(`${label} cursor`);
   const metadata = normalizePageMetadata(root.pagination);
   const data = array(root.data, `${label} data`, 100).map(item);
-  validatePageResponse(metadata, page, pageSize, data.length);
+  validatePageResponse(metadata, page, pageSize);
   return { data, next_cursor: null, pagination: metadata };
 }
 

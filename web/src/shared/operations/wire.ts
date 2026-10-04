@@ -20,7 +20,8 @@ export function record(
   const result = value as WireRecord;
   const allowedSet = new Set(allowed);
   if (Object.keys(result).some((key) => !allowedSet.has(key))) invalidResponse(label);
-  if (required.some((key) => !Object.prototype.hasOwnProperty.call(result, key))) invalidResponse(label);
+  if (required.some((key) => !Object.prototype.hasOwnProperty.call(result, key)))
+    invalidResponse(label);
   return result;
 }
 
@@ -30,26 +31,22 @@ export function array(value: unknown, label: string, maximum = 10_000): unknown[
 }
 
 function containsForbiddenControl(value: string, multiline: boolean): boolean {
-  for (const character of value) {
-    const code = character.codePointAt(0) ?? 0;
-    if (code === 0x7f || (code < 0x20 && (!multiline || (code !== 0x09 && code !== 0x0a && code !== 0x0d)))) {
-      return true;
-    }
-  }
-  return false;
+  // eslint-disable-next-line no-control-regex -- Match display controls in one pass.
+  return (multiline ? /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/ : /[\x00-\x1f\x7f]/).test(value);
 }
 
 export function string(
   value: unknown,
   label: string,
-  options: { min?: number; max?: number; bytes?: number; multiline?: boolean; ascii?: boolean } = {},
+  options: { min?: number; multiline?: boolean; ascii?: boolean } = {},
 ): string {
   if (typeof value !== 'string') invalidResponse(label);
-  const { min = 0, max = 4_096, bytes = Number.POSITIVE_INFINITY, multiline = false, ascii = false } = options;
-  const runes = Array.from(value);
-  if (runes.length < min || runes.length > max || new TextEncoder().encode(value).byteLength > bytes) invalidResponse(label);
+  const { min = 0, multiline = false, ascii = false } = options;
+  if (min === 1 ? value.length === 0 : min > 1 && Array.from(value).length < min)
+    invalidResponse(label);
   if (containsForbiddenControl(value, multiline)) invalidResponse(label);
-  if (ascii && runes.some((character) => (character.codePointAt(0) ?? 0) > 0x7e)) invalidResponse(label);
+  // eslint-disable-next-line no-control-regex -- Preserve allowed multiline ASCII controls.
+  if (ascii && /[^\x00-\x7e]/.test(value)) invalidResponse(label);
   return value;
 }
 
@@ -66,8 +63,14 @@ export function boolean(value: unknown, label: string): boolean {
   return value;
 }
 
-export function integer(value: unknown, label: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
-  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) invalidResponse(label);
+export function integer(
+  value: unknown,
+  label: string,
+  minimum = 0,
+  maximum = Number.MAX_SAFE_INTEGER,
+): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum)
+    invalidResponse(label);
   return value as number;
 }
 
@@ -88,12 +91,20 @@ export function nullableUnixSecond(value: unknown, label: string): number | null
   return value === null ? null : unixSecond(value, label);
 }
 
-export function oneOf<const T extends string>(value: unknown, values: readonly T[], label: string): T {
+export function oneOf<const T extends string>(
+  value: unknown,
+  values: readonly T[],
+  label: string,
+): T {
   if (typeof value !== 'string' || !values.includes(value as T)) invalidResponse(label);
   return value as T;
 }
 
-export function decimal(value: unknown, label: string, options: { positive?: boolean; u128?: boolean } = {}): string {
+export function decimal(
+  value: unknown,
+  label: string,
+  options: { positive?: boolean; u128?: boolean } = {},
+): string {
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) invalidResponse(label);
   let parsed: bigint;
   try {
@@ -107,7 +118,8 @@ export function decimal(value: unknown, label: string, options: { positive?: boo
 }
 
 export function signedDecimal(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !/^-?(0|[1-9][0-9]*)$/.test(value) || value === '-0') invalidResponse(label);
+  if (typeof value !== 'string' || !/^-?(0|[1-9][0-9]*)$/.test(value) || value === '-0')
+    invalidResponse(label);
   let parsed: bigint;
   try {
     parsed = BigInt(value);
@@ -119,9 +131,18 @@ export function signedDecimal(value: unknown, label: string): string {
 }
 
 /** Canonical credit string: signed integer with at most three fractional digits. */
-export function amount(value: unknown, label: string, signed = true, maximumMilli = SM128_MAX): string {
-  if (typeof value !== 'string' || !/^-?(0|[1-9][0-9]*)(?:\.[0-9]{0,2}[1-9])?$/.test(value)
-    || value === '-0' || value.trim() !== value) {
+export function amount(
+  value: unknown,
+  label: string,
+  signed = true,
+  maximumMilli = SM128_MAX,
+): string {
+  if (
+    typeof value !== 'string' ||
+    !/^-?(0|[1-9][0-9]*)(?:\.[0-9]{0,2}[1-9])?$/.test(value) ||
+    value === '-0' ||
+    value.trim() !== value
+  ) {
     invalidResponse(label);
   }
   if (!signed && value.startsWith('-')) invalidResponse(label);
@@ -147,7 +168,8 @@ export function nullableDecimalID(value: unknown, label: string): string | null 
 }
 
 export function opaqueID(value: unknown, prefix: string, label: string): string {
-  if (typeof value !== 'string' || value.length !== prefix.length + 22 || !value.startsWith(prefix)) invalidResponse(label);
+  if (typeof value !== 'string' || value.length !== prefix.length + 22 || !value.startsWith(prefix))
+    invalidResponse(label);
   const suffix = value.slice(prefix.length);
   if (!/^[A-Za-z0-9_-]{22}$/.test(suffix) || !/[AQgw]$/.test(suffix)) invalidResponse(label);
   return value;
@@ -165,14 +187,15 @@ export interface CursorPage<T> {
 /** A canonical, unpadded raw-base64url pagination cursor. */
 export function cursor(value: unknown, label = 'cursor'): string | null {
   if (value === null) return null;
-  const token = string(value, label, { min: 1, max: 512, bytes: 512, ascii: true });
+  const token = string(value, label, { min: 1, ascii: true });
   if (!/^[A-Za-z0-9_-]+$/.test(token) || token.length % 4 === 1) invalidResponse(label);
 
   let canonical: string;
   try {
-    const padded = token.replaceAll('-', '+').replaceAll('_', '/')
-      + '='.repeat((4 - token.length % 4) % 4);
-    canonical = globalThis.btoa(globalThis.atob(padded))
+    const padded =
+      token.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (token.length % 4)) % 4);
+    canonical = globalThis
+      .btoa(globalThis.atob(padded))
       .replaceAll('+', '-')
       .replaceAll('/', '_')
       .replace(/=+$/, '');
@@ -191,7 +214,11 @@ export function page<T>(value: unknown, label: string, item: (entry: unknown) =>
   };
 }
 
-export function optionalField<T>(root: WireRecord, key: string, decode: (value: unknown) => T): T | undefined {
+export function optionalField<T>(
+  root: WireRecord,
+  key: string,
+  decode: (value: unknown) => T,
+): T | undefined {
   return Object.prototype.hasOwnProperty.call(root, key) ? decode(root[key]) : undefined;
 }
 

@@ -1,4 +1,4 @@
-import { contentHash, normalizeLevel, stateDigestForVersion } from "./canonical";
+import { prepareLevel, stateDigestForVersion } from "./canonical";
 import { boundsOverlap, containsPolygon, polygonIntersectionArea, Rat, ringBounds, translatePolygon, type Bounds } from "./geometry";
 import { preparedFootprintOverlap, preparedIntersectsFish, preparePolygon, extendBounds, rectIntersectsCenter, type PreparedPolygon } from "./prepared";
 import { initialFishRNG, nextTurnBit, nextTurnWord, scoreUnits, stars, validateInputs } from "./protocol";
@@ -28,8 +28,9 @@ export class Engine {
 
   constructor(level: Level, seed: Uint8Array) {
     if (seed.length !== 32) throw new Error("seed must contain 32 bytes");
-    this.level = normalizeLevel(level);
-    this.contentHash = contentHash(this.level);
+    const prepared = prepareLevel(level);
+    this.level = prepared.level;
+    this.contentHash = prepared.contentHash;
     this.current = {
       tick: 0, solid_revision: 0,
       fish: this.level.fish.map((fish): FishState => ({ id: fish.id, x: fish.x, y: fish.y, heading: fish.heading, status: "walking", bowl_id: 0, turn_dir: 0, turn_distance: 0, flow_id: 0, speed_remainder: 0, x_remainder: 0, y_remainder: 0, rng: initialFishRNG(seed, fish.id), ...(this.level.engine_version !== 1 ? { motion: { turn_remainder: 0, ambiguous_turn_dir: 0 } } : {}) })).sort((a, b) => a.id - b.id),

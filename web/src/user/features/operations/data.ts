@@ -131,10 +131,10 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
     'usage',
   ] as const;
   const user = record(envelope.user, fields, 'user session subject');
-  nullableString(user.avatar, 'avatar', { max: 512, bytes: 2_048 });
-  nullableString(user.avatar_url, 'avatar URL', { max: 4_096, bytes: 4_096 });
-  nullableString(user.guild_nick, 'guild nickname', { max: 128, bytes: 512 });
-  nullableString(user.guild_avatar_url, 'guild avatar URL', { max: 4_096, bytes: 4_096 });
+  nullableString(user.avatar, 'avatar');
+  nullableString(user.avatar_url, 'avatar URL');
+  nullableString(user.guild_nick, 'guild nickname');
+  nullableString(user.guild_avatar_url, 'guild avatar URL');
   nullableUnixSecond(user.banned_until, 'ban deadline');
   nullableUnixSecond(user.charity_suspended_until, 'charity suspension deadline');
   nullableDecimal(user.endpoint_limit, 'endpoint limit');
@@ -146,7 +146,7 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
   amount(user.balance, 'balance', true);
   amount(user.game_balance, 'game balance', true);
   amount(user.donation_credit, 'donation credit', false);
-  string(user.level_display_name, 'level display name', { min: 1, max: 128, bytes: 512 });
+  string(user.level_display_name, 'level display name', { min: 1 });
   boolean(user.game_profile_public, 'game profile visibility');
   boolean(user.charity_profile_public, 'charity profile visibility');
   automaticRestrictions(user.automatic_restrictions);
@@ -156,7 +156,7 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
   for (const field of USAGE_FIELDS) decimal(usage[field], `usage ${field}`);
   return {
     id: decimalID(user.id, 'user id'),
-    username: string(user.username, 'username', { min: 1, max: 128, bytes: 512 }),
+    username: string(user.username, 'username', { min: 1 }),
     lang: oneOf(user.lang, ['', 'zh', 'en'] as const, 'user language'),
     effective_level: integer(user.effective_level, 'effective level', 1, 6),
     is_banned: boolean(user.is_banned, 'ban state'),
@@ -241,11 +241,7 @@ export function normalizeIssue(value: unknown): Issue {
     id: opaqueID(root.id, 'iss_', 'issue id'),
     state,
     ...tuple,
-    safe_detail: string(root.safe_detail, 'issue detail', {
-      max: 4_096,
-      bytes: 4_096,
-      multiline: true,
-    }),
+    safe_detail: string(root.safe_detail, 'issue detail', { multiline: true }),
     deep_link: deepLink,
     first_seen_at: unixSecond(root.first_seen_at, 'issue first seen time'),
     last_seen_at: unixSecond(root.last_seen_at, 'issue last seen time'),
@@ -304,21 +300,17 @@ function normalizeAnnouncementCommon(
       root.fallback_from === null
         ? null
         : oneOf(root.fallback_from, ['zh', 'en'] as const, 'announcement fallback language'),
-    title: string(root.title, 'announcement title', { min: 1, max: 160, bytes: 640 }),
+    title: string(root.title, 'announcement title', { min: 1 }),
   };
   if (detail) {
     return {
       ...common,
-      rendered_body: string(root.rendered_body, 'rendered announcement body', {
-        max: 65_536,
-        bytes: 65_536,
-        multiline: true,
-      }),
+      rendered_body: string(root.rendered_body, 'rendered announcement body', { multiline: true }),
     };
   }
   return {
     ...common,
-    excerpt: string(root.excerpt, 'announcement excerpt', { max: 240, bytes: 960 }),
+    excerpt: string(root.excerpt, 'announcement excerpt'),
   };
 }
 
@@ -435,7 +427,7 @@ export async function getAnnouncementsPage(
     normalizeAnnouncementPage,
     { signal },
   );
-  validatePageResponse(result.pagination, pageNumber, pageSize, result.data.length);
+  validatePageResponse(result.pagination, pageNumber, pageSize);
   return result;
 }
 

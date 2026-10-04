@@ -30,14 +30,14 @@ export type ActivityStatus = (typeof statuses)[number];
 const maxMilli = (1n << 127n) - 1n,
   maxPrice = 9_000_000_000_000_000n;
 function sequence(v: unknown) {
-  const result = decimal(string(v, 'revision', { min: 1, max: 19 }), 'revision', {
+  const result = decimal(string(v, 'revision', { min: 1 }), 'revision', {
     positive: true,
   });
   if (BigInt(result) > 9_223_372_036_854_775_807n) invalidResponse('revision');
   return result;
 }
 function units(v: unknown, positive = false) {
-  const result = decimal(string(v, 'currency quantity', { min: 1, max: 39 }), 'currency quantity', {
+  const result = decimal(string(v, 'currency quantity', { min: 1 }), 'currency quantity', {
     positive,
   });
   if (BigInt(result) * 1000n > maxMilli) invalidResponse('currency quantity');
@@ -95,7 +95,7 @@ export function decodeDetail(value: unknown) {
   const coverKey = oneOf(v.cover_key, ['picture-book', 'fat-fish'] as const, 'activity cover');
   if (key !== coverKey) invalidResponse('activity cover');
   const common = {
-    name: string(v.name, 'activity name', { min: 1, max: 128 }),
+    name: string(v.name, 'activity name', { min: 1 }),
     cover_key: coverKey,
     visible: boolean(v.visible, 'visibility'),
     starts_at: start,
@@ -207,7 +207,7 @@ export function updateConfig(input: ActivityConfigInput, key: string) {
         brush_price: normalizePrice(input.module_config.brush_price),
       },
     };
-    decimal(string(input.module_config.brush_cap, 'brush cap', { max: 39 }), 'brush cap');
+    decimal(string(input.module_config.brush_cap, 'brush cap'), 'brush cap');
   } catch {
     throw new ApiError('invalid_request', 'Check the prices and brush cap.', 400);
   }

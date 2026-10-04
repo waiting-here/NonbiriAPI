@@ -89,7 +89,7 @@ export function normalizeRanking(value: unknown, board: RankBoard, window: RankW
     invalidResponse('unpublished bidding board');
   let offset = 0n;
   if (pagination) {
-    validatePageResponse(pagination, page, 20, rows.length);
+    validatePageResponse(pagination, page, 20);
     offset = (BigInt(pagination.page) - 1n) * 20n;
     if (me !== null) invalidResponse('charity extra row');
   }

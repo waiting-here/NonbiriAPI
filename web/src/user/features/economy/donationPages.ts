@@ -204,7 +204,7 @@ function pageResponse<T>(
   if (root.next_cursor !== null) invalidResponse(`${label} cursor`);
   const pagination = normalizePageMetadata(root.pagination);
   const data = array(root.data, `${label} data`, 100).map(normalizeItem);
-  validatePageResponse(pagination, requestedPage, requestedSize, data.length);
+  validatePageResponse(pagination, requestedPage, requestedSize);
   return { data, nextCursor: null, pagination };
 }
 
@@ -218,7 +218,7 @@ function normalizeReviewResult(value: unknown, label: string): DonationReviewRes
       ['approve', 'reject'] as const,
       `${label} decision`,
     ),
-    reason: string(root.reason, `${label} reason`, { max: 1_024, bytes: 4_096 }),
+    reason: string(root.reason, `${label} reason`),
     reviewedAt: unixSecond(root.reviewed_at, `${label} time`),
   };
 }
@@ -350,7 +350,7 @@ function normalizeOwnerDonation(
         : boolean(root.discord_public_thanks, `${label} public thanks`),
     status,
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
-    description: string(root.description, `${label} description`, { max: 1_024, bytes: 4_096 }),
+    description: string(root.description, `${label} description`),
     reviewResult,
     createdAt,
     updatedAt,

@@ -145,11 +145,7 @@ function normalizeDeletionPenalty(value: unknown, label: string): DeletedAccount
     state: oneOf(root.state, ['known', 'unknown'] as const, `${label} state`),
     active_at_deletion:
       root.active_at_deletion === null ? null : boolean(root.active_at_deletion, `${label} active`),
-    reason: nullableString(root.reason, `${label} reason`, {
-      max: 1024,
-      bytes: 4096,
-      multiline: true,
-    }),
+    reason: nullableString(root.reason, `${label} reason`, { multiline: true }),
     until: nullableUnixSecond(root.until, `${label} until`),
   };
 }
@@ -183,7 +179,7 @@ export function normalizeDeletedAccount(value: unknown): DeletedAccount {
   return {
     record_id: decimalID(root.record_id, 'record id'),
     former_user_id: nullableID(root.former_user_id, 'former user id'),
-    discord_id: nullableString(root.discord_id, 'former Discord id', { max: 128, bytes: 128 }),
+    discord_id: nullableString(root.discord_id, 'former Discord id'),
     snapshot_version: integer(root.snapshot_version, 'snapshot version', 1, 2) as 1 | 2,
     registered_at: nullableUnixSecond(root.registered_at, 'registration time'),
     deleted_at: nullableUnixSecond(root.deleted_at, 'deletion time'),
@@ -283,26 +279,15 @@ export function normalizeAdminUser(value: unknown): AdminUser {
   const manual = level.manual === null ? null : integer(level.manual, 'manual level', 1, 6);
   const isBanned = boolean(root.is_banned, 'user banned state');
   const bannedUntil = nullableUnixSecond(root.banned_until, 'ban expiry');
-  const bannedReason = string(root.banned_reason, 'ban reason', {
-    max: 1_024,
-    bytes: 4_096,
-    multiline: true,
-  });
+  const bannedReason = string(root.banned_reason, 'ban reason', { multiline: true });
   if (!isBanned && (bannedUntil !== null || bannedReason !== '')) invalidResponse('user ban state');
   return {
     id: decimalID(root.id, 'administrator user id'),
-    discord_id: nullableString(root.discord_id, 'Discord id', {
-      max: 128,
-      bytes: 128,
-      ascii: true,
-    }),
-    username: string(root.username, 'username', { min: 1, max: 128, bytes: 512 }),
-    avatar_url: nullableString(root.avatar_url, 'avatar URL', { max: 4_096, bytes: 4_096 }),
-    guild_nick: nullableString(root.guild_nick, 'guild nickname', { max: 128, bytes: 512 }),
-    guild_avatar_url: nullableString(root.guild_avatar_url, 'guild avatar URL', {
-      max: 4_096,
-      bytes: 4_096,
-    }),
+    discord_id: nullableString(root.discord_id, 'Discord id', { ascii: true }),
+    username: string(root.username, 'username', { min: 1 }),
+    avatar_url: nullableString(root.avatar_url, 'avatar URL'),
+    guild_nick: nullableString(root.guild_nick, 'guild nickname'),
+    guild_avatar_url: nullableString(root.guild_avatar_url, 'guild avatar URL'),
     is_admin: boolean(root.is_admin, 'administrator marker'),
     is_banned: isBanned,
     banned_reason: bannedReason,
@@ -329,7 +314,7 @@ export function normalizeAdminUser(value: unknown): AdminUser {
       manual,
       automatic,
       effective,
-      display_name: string(level.display_name, 'level display name', { max: 64, bytes: 256 }),
+      display_name: string(level.display_name, 'level display name'),
     },
     game_profile_public: boolean(root.game_profile_public, 'game profile setting'),
     revision: decimal(root.revision, 'user revision', { positive: true }),
@@ -512,9 +497,9 @@ export function getDeletionDuelAborts(
           );
           const result: DeletionDuelAbort = {
             id: decimalID(row.id, 'duel abort id'),
-            discord_id: string(row.discord_id, 'duel abort Discord id', { max: 20, ascii: true }),
+            discord_id: string(row.discord_id, 'duel abort Discord id', { ascii: true }),
             game_key: oneOf(row.game_key, ['bidding', 'likes'] as const, 'duel abort game'),
-            match_id: string(row.match_id, 'duel abort match id', { min: 1, max: 128, bytes: 128 }),
+            match_id: string(row.match_id, 'duel abort match id', { min: 1 }),
             former_user_id: decimalID(row.former_user_id, 'duel abort former user id'),
             reason: oneOf(
               row.reason,

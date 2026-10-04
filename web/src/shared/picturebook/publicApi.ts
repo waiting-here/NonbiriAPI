@@ -40,7 +40,7 @@ import {
 
 export const pictureBookBase = '/api/limited-activities/picture-book';
 export function revision(value: unknown, allowZero = false): string {
-  const result = decimal(string(value, 'revision', { min: 1, max: 19 }), 'revision', {
+  const result = decimal(string(value, 'revision', { min: 1 }), 'revision', {
     positive: !allowZero,
   });
   if (BigInt(result) > 9223372036854775807n) invalidResponse('revision');
@@ -48,8 +48,8 @@ export function revision(value: unknown, allowZero = false): string {
 }
 export function decodePrice(value: unknown): Price {
   const v = record(value, ['paper', 'brush'], 'image price');
-  const paper = string(v.paper, 'paper quantity', { min: 1, max: 39 }),
-    brush = string(v.brush, 'brush quantity', { min: 1, max: 39 });
+  const paper = string(v.paper, 'paper quantity', { min: 1 }),
+    brush = string(v.brush, 'brush quantity', { min: 1 });
   if (currencyUnits(paper) === null || currencyUnits(brush) === null)
     invalidResponse('image price');
   return { paper, brush };
@@ -62,7 +62,7 @@ export function decodePricingPolicy(value: unknown): PricingPolicy {
     tiers: array(v.tiers, 'price tiers', 64).map((entry) => {
       const row = record(entry, ['tier', 'paper', 'brush'], 'price tier');
       return {
-        tier: string(row.tier, 'price tier', { min: 1, max: 128, bytes: 128 }),
+        tier: string(row.tier, 'price tier', { min: 1 }),
         ...decodePrice({ paper: row.paper, brush: row.brush }),
       };
     }),
@@ -109,15 +109,11 @@ export function decodeSizeCapability(value: unknown): SizeCapability {
           );
           return {
             ...(Object.hasOwn(row, 'ratio')
-              ? { ratio: string(row.ratio, 'ratio', { min: 1, max: 128, bytes: 128 }) }
+              ? { ratio: string(row.ratio, 'ratio', { min: 1 }) }
               : {}),
             ...(Object.hasOwn(row, 'resolution')
               ? {
-                  resolution: string(row.resolution, 'resolution', {
-                    min: 1,
-                    max: 128,
-                    bytes: 128,
-                  }),
+                  resolution: string(row.resolution, 'resolution', { min: 1 }),
                 }
               : {}),
             ...(Object.hasOwn(row, 'width')
@@ -127,7 +123,7 @@ export function decodeSizeCapability(value: unknown): SizeCapability {
               ? { height: integer(row.height, 'height', 1, 65536) }
               : {}),
             ...(Object.hasOwn(row, 'tier')
-              ? { tier: string(row.tier, 'tier', { min: 1, max: 128, bytes: 128 }) }
+              ? { tier: string(row.tier, 'tier', { min: 1 }) }
               : {}),
           };
         })
@@ -149,7 +145,7 @@ function finite(value: unknown): number {
 function scalar(value: unknown): Scalar {
   return typeof value === 'number'
     ? finite(value)
-    : string(value, 'parameter value', { bytes: 512, max: 512 });
+    : string(value, 'parameter value');
 }
 function decodeDimensions(value: unknown): SizeDimensions {
   const dimensions = record(value, ['format', 'width', 'height'], 'size dimensions');
@@ -309,12 +305,8 @@ export function decodeModel(value: unknown): ImageModel {
   );
   const model: ImageModel = {
     id: opaqueID(v.id, 'imdl_', 'image model'),
-    display_name: string(v.display_name, 'model display name', { min: 1, max: 128, bytes: 512 }),
-    description: string(v.description, 'model description', {
-      max: 4096,
-      bytes: 4096,
-      multiline: true,
-    }),
+    display_name: string(v.display_name, 'model display name', { min: 1 }),
+    description: string(v.description, 'model description', { multiline: true }),
     revision: revision(v.revision),
     price: decodePrice(v.price),
     parameters: decodeParameters(v.parameters),
@@ -392,7 +384,7 @@ export function decodeTask(value: unknown): ImageTask {
     error_code:
       v.error_code === null
         ? null
-        : string(v.error_code, 'task error', { max: 96, bytes: 96, ascii: true }),
+        : string(v.error_code, 'task error', { ascii: true }),
     images: array(v.images, 'task images', 16).map(decodeImageInfo),
   };
 
@@ -443,7 +435,7 @@ export function imagePage<T>(value: unknown, decode: (entry: unknown) => T): Ima
   const cursor =
     v.next_cursor === null
       ? null
-      : string(v.next_cursor, 'image cursor', { min: 1, max: 2048, bytes: 2048, ascii: true });
+      : string(v.next_cursor, 'image cursor', { min: 1, ascii: true });
   return { data: array(v.data, 'image page entries', 100).map(decode), next_cursor: cursor };
 }
 export const getModels = (cursor?: string, signal?: AbortSignal) =>
@@ -496,7 +488,7 @@ export function decodeQuote(value: unknown) {
       values: Object.fromEntries(
         Object.entries(values).map(([key, entry]) => [
           key,
-          string(entry, key, { min: 1, max: 512, bytes: 512 }),
+          string(entry, key, { min: 1 }),
         ]),
       ),
       selection: {
@@ -507,7 +499,7 @@ export function decodeQuote(value: unknown) {
           ? { height: integer(selection.height, 'quote height', 1, 65536) }
           : {}),
         ...(Object.hasOwn(selection, 'tier')
-          ? { tier: string(selection.tier, 'quote tier', { min: 1, max: 128, bytes: 128 }) }
+          ? { tier: string(selection.tier, 'quote tier', { min: 1 }) }
           : {}),
         ...(Object.hasOwn(selection, 'auto')
           ? { auto: boolean(selection.auto, 'automatic size') }
@@ -517,7 +509,7 @@ export function decodeQuote(value: unknown) {
     unit: decodePrice(v.unit),
     total: decodePrice(v.total),
     basis: oneOf(v.basis, ['default', 'tier', 'size', 'auto'], 'quote basis'),
-    price_key: string(v.price_key, 'price key', { max: 128, bytes: 128 }),
+    price_key: string(v.price_key, 'price key'),
   };
 }
 export const quoteTask = (input: SubmitInput, signal?: AbortSignal) =>

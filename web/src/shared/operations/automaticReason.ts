@@ -15,17 +15,13 @@ export function normalizeAutomaticReason(value: unknown): AutomaticReason | null
     ['kind', 'schema_version', 'params'],
   );
   return {
-    kind: string(root.kind, 'automatic reason kind', { min: 1, max: 64 }),
+    kind: string(root.kind, 'automatic reason kind', { min: 1 }),
     schema_version: integer(root.schema_version, 'automatic reason version', 1, 100),
     manual_text:
-      nullableString(root.manual_text ?? null, 'manual reason', {
-        max: 4096,
-        bytes: 4096,
-        multiline: true,
-      }) ?? '',
+      nullableString(root.manual_text ?? null, 'manual reason', { multiline: true }) ?? '',
     rules: array(root.rules ?? [], 'reason rules', 100).map((value) => {
       const item = record(value, ['name', 'rule_id', 'revision'], 'reason rule', ['name']);
-      return { name: string(item.name, 'rule name', { min: 1, max: 120, bytes: 480 }) };
+      return { name: string(item.name, 'rule name', { min: 1 }) };
     }),
   };
 }

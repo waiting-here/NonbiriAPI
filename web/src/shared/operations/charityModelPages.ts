@@ -65,7 +65,7 @@ export function getManagedCharityModelsPage(
         role === 'admin' ? normalizeAdminCharityModel : normalizeStewardCharityModel,
       );
       const pagination = normalizePageMetadata(root.pagination);
-      validatePageResponse(pagination, page, pageSize, data.length);
+      validatePageResponse(pagination, page, pageSize);
       if (
         new Set(data.map((row) => row.id)).size !== data.length ||
         data.some(

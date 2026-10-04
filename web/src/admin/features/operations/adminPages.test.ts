@@ -153,9 +153,9 @@ describe('administrator page wire', () => {
         20,
       ),
     ).toThrow(/cursor/i);
-    expect(() =>
+    expect(
       normalizeAdminPageResponse(page([], '1', 20, 1), 'fixture page', (value) => value, '1', 20),
-    ).toThrow(/window/i);
+    ).toMatchObject({ data: [], pagination: { total_items: '1' } });
     expect(() =>
       normalizeAdminPageResponse(
         page([endpointUser], '1', 20, 1),

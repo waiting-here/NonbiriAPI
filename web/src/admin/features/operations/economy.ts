@@ -93,7 +93,7 @@ export function normalizePeriod(value: unknown): Period {
   if (closes !== opens + 86_400) invalidResponse('Thursday window');
   return {
     id: opaqueID(root.id, 'thu_', 'Thursday period id'),
-    period_key: string(root.period_key, 'Thursday period key', { min: 1, max: 128, bytes: 128, ascii: true }),
+    period_key: string(root.period_key, 'Thursday period key', { min: 1, ascii: true }),
     state, revision: decimal(root.revision, 'Thursday revision', { positive: true }), opens_at: opens, closes_at: closes,
     literature: isActivityLiterature(root.literature) ? root.literature : invalidResponse('Thursday literature'),
     entry: amount(root.entry, 'Thursday entry', false), per_user_limit: integer(root.per_user_limit, 'Thursday user limit', 1, 1_000),
@@ -299,24 +299,9 @@ export function normalizeActiveCounts(value: unknown): ActiveCounts {
           ['fishing', 'linklink', 'rps', 'bidding', 'likes', 'blackjack'] as const,
           'active game',
         ),
-        mode: nullableString(row.mode, 'active game mode', {
-          min: 1,
-          max: 64,
-          bytes: 64,
-          ascii: true,
-        }),
-        spec: nullableString(row.spec, 'active game specification', {
-          min: 1,
-          max: 64,
-          bytes: 64,
-          ascii: true,
-        }),
-        phase: nullableString(row.phase, 'active game phase', {
-          min: 1,
-          max: 64,
-          bytes: 64,
-          ascii: true,
-        }),
+        mode: nullableString(row.mode, 'active game mode', { min: 1, ascii: true }),
+        spec: nullableString(row.spec, 'active game specification', { min: 1, ascii: true }),
+        phase: nullableString(row.phase, 'active game phase', { min: 1, ascii: true }),
         count: decimal(row.count, 'active game count'),
       };
     }),

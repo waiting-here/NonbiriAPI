@@ -25,7 +25,7 @@ export function getAccessDenial(cursor?: string, signal?: AbortSignal) {
         next_cursor:
           root.next_cursor === undefined
             ? undefined
-            : string(root.next_cursor, 'denial cursor', { min: 1, max: 128, ascii: true }),
+            : string(root.next_cursor, 'denial cursor', { min: 1, ascii: true }),
         items: array(root.items, 'denial reasons', 20).map((value): DenialReason => {
           const item = record(
             value,
@@ -47,18 +47,14 @@ export function getAccessDenial(cursor?: string, signal?: AbortSignal) {
               ['ban', 'blacklist', 'blacklist_note'] as const,
               'denial reason kind',
             ),
-            reason: string(item.reason, 'denial reason text', {
-              max: 4096,
-              bytes: 16384,
-              multiline: true,
-            }),
+            reason: string(item.reason, 'denial reason text', { multiline: true }),
             started_at: unixSecond(item.started_at, 'denial start'),
             ends_at: nullableUnixSecond(item.ends_at, 'denial end'),
             automatic:
               item.automatic === undefined ? undefined : automaticRestrictions([item.automatic])[0],
             automatic_reason: normalizeAutomaticReason(item.automatic_reason),
             reason_codes: array(item.reason_codes ?? [], 'reason codes', 32).map((code) =>
-              string(code, 'reason code', { max: 64, ascii: true }),
+              string(code, 'reason code', { ascii: true }),
             ),
           };
         }),

@@ -155,7 +155,7 @@ function CharityContent() {
         className="charity-catalog-workspace economy-model-workspace"
         aria-label={t('user.charity.catalog.modelsList')}
       >
-        <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} />
+        <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} enabled={tab === 'models'} />
         <aside className="economy-charity-sidebar">
           <Leaderboard board="charity" enabled={tab === 'models'} foldHelp />
           <CharitySafetyNotice />

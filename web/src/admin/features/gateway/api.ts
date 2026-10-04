@@ -55,11 +55,11 @@ export function normalizeGatewayCapability(value: unknown): GatewayCapabilityRec
     'Gateway capability',
   );
   return {
-    id: string(row.id, 'Gateway capability ID', { min: 1, max: 128 }),
+    id: string(row.id, 'Gateway capability ID', { min: 1 }),
     revision: decimal(row.revision, 'Gateway capability revision', { positive: true }),
     updated_at: unixSecond(row.updated_at, 'Gateway capability update time'),
-    base_url: string(row.base_url, 'Gateway base URL', { min: 1, max: 8192 }),
-    model: string(row.model, 'Gateway upstream model', { min: 1, max: 512 }),
+    base_url: string(row.base_url, 'Gateway base URL', { min: 1 }),
+    model: string(row.model, 'Gateway upstream model', { min: 1 }),
     ...normalizeGatewayCapabilityPolicy({
       adapter: row.adapter,
       efforts: row.efforts,
@@ -98,7 +98,7 @@ export function writeGatewayCapability(
       const result = record(value, ['id', 'deleted'], 'Gateway capability deletion');
       if (result.deleted !== true) invalidResponse('Gateway capability deletion');
       return {
-        id: string(result.id, 'Gateway capability ID', { min: 1, max: 128 }),
+        id: string(result.id, 'Gateway capability ID', { min: 1 }),
         deleted: true,
       };
     },

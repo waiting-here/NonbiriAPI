@@ -112,7 +112,7 @@ function scanResults(value: unknown, id: string, page: string, size: PageSize): 
   });
   const items = list(o.items, request, 100);
   const scan = clientScan(o.scan);
-  validatePageResponse(metadata, page, size, items.length);
+  validatePageResponse(metadata, page, size);
   if (scan.id !== id || BigInt(metadata.total_items) > 100000n) return invalid();
   return { ...metadata, scan, items };
 }
@@ -153,7 +153,7 @@ function taskResults<T>(
   const metadata = pageMetadata(o);
   const items = list(o.items, decode, 100);
   const scan = taskScan(o.scan);
-  validatePageResponse(metadata, requestedPage, size, items.length);
+  validatePageResponse(metadata, requestedPage, size);
   if (scan.id !== scanID || BigInt(metadata.total_items) > 100000n) return invalid();
   return { ...metadata, scan, items, coverage: text(o.coverage, 64) };
 }
@@ -822,7 +822,7 @@ export function riskAPI(role: RiskRole) {
           const metadata = pageMetadata(o);
           const items = list(o.items, rule);
           const changed = bool(o.changed);
-          validatePageResponse(metadata, changed ? '1' : page, size, items.length);
+          validatePageResponse(metadata, changed ? '1' : page, size);
           return { ...metadata, items, revision: text(o.revision, 64), changed };
         },
         { page, page_size: size, revision },
@@ -873,7 +873,7 @@ export function riskAPI(role: RiskRole) {
           const o = obj(v);
           const metadata = pageMetadata(o);
           const items = list(o.data, access);
-          validatePageResponse(metadata, requestedPage, size, items.length);
+          validatePageResponse(metadata, requestedPage, size);
           return {
             ...metadata,
             items,

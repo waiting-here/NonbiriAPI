@@ -24,7 +24,7 @@ import { parameterKeys, type ParameterKey } from '@shared/picturebook/publicType
 import type { SubmitInput } from '@shared/picturebook/publicTypes';
 
 const base = '/admin/api/limited-activities/picture-book';
-const pointer = (v: unknown) => string(v, 'JSON pointer', { max: 512, bytes: 512 });
+const pointer = (v: unknown) => string(v, 'JSON pointer');
 const jsonSize = (v: unknown, max: number, label: string) => {
   if (new TextEncoder().encode(JSON.stringify(v)).byteLength > max) invalidResponse(label);
 };
@@ -85,12 +85,12 @@ export function decodeAdapter(value: unknown) {
     'response adapter',
     ['working_states', 'success_states', 'failure_states', 'images_pointer'],
   );
-  const path = (entry: unknown) => string(entry, 'relative path', { min: 1, max: 512, bytes: 512 });
+  const path = (entry: unknown) => string(entry, 'relative path', { min: 1 });
   const optionalPointer = (entry: Record<string, unknown>, key: string) =>
     Object.hasOwn(entry, key) ? { [key]: pointer(entry[key]) } : {};
   const states = (entry: unknown) =>
     array(entry, 'response states', 32).map((item) =>
-      string(item, 'response state', { min: 1, max: 128, bytes: 128 }),
+      string(item, 'response state', { min: 1 }),
     );
   const poll = Object.hasOwn(v, 'poll')
     ? record(v.poll, ['method', 'path'], 'poll adapter')
@@ -107,11 +107,7 @@ export function decodeAdapter(value: unknown) {
           indicator_value:
             typeof value.indicator_value === 'boolean'
               ? value.indicator_value
-              : string(value.indicator_value, 'receipt indicator', {
-                  min: 1,
-                  max: 128,
-                  bytes: 128,
-                }),
+              : string(value.indicator_value, 'receipt indicator', { min: 1 }),
         };
       })()
     : undefined;
@@ -206,7 +202,7 @@ export function decodeUpstream(value: unknown) {
   return {
     revision: revision(v.revision),
     configured: boolean(v.configured, 'upstream configuration'),
-    base_url: string(v.base_url, 'upstream address', { max: 4096, bytes: 4096 }),
+    base_url: string(v.base_url, 'upstream address'),
     secret_set: boolean(v.secret_set, 'stored key'),
     rpm: v.rpm === null ? null : integer(v.rpm, 'RPM', 1, 10000),
     concurrency: v.concurrency === null ? null : integer(v.concurrency, 'concurrency', 1, 32),
@@ -216,7 +212,7 @@ export function decodeUpstream(value: unknown) {
     execution_timeout_seconds: integer(v.execution_timeout_seconds, 'execution timeout', 60, 86400),
     memory_budget_mib: integer(v.memory_budget_mib, 'image memory', 512, 4096),
     image_origins: array(v.image_origins, 'image origins', 8).map((origin) =>
-      string(origin, 'image origin', { min: 1, max: 4096, bytes: 4096 }),
+      string(origin, 'image origin', { min: 1 }),
     ),
     adapter: v.adapter === null ? null : decodeAdapter(v.adapter),
     control: v.control === null ? null : decodeControl(v.control),
@@ -232,9 +228,9 @@ function decodeIssue(value: unknown) {
   const v = record(value, ['model_id', 'field_path', 'code', 'safe_message'], 'model issue');
   return {
     model_id: opaqueID(v.model_id, 'imdl_', 'model id'),
-    field_path: string(v.field_path, 'field path', { max: 256, bytes: 256 }),
-    code: string(v.code, 'issue code', { max: 96, bytes: 96, ascii: true }),
-    safe_message: string(v.safe_message, 'model message', { max: 512, bytes: 512 }),
+    field_path: string(v.field_path, 'field path'),
+    code: string(v.code, 'issue code', { ascii: true }),
+    safe_message: string(v.safe_message, 'model message'),
   };
 }
 export function decodeAdminModel(value: unknown) {
@@ -313,20 +309,12 @@ export function decodeAdminModel(value: unknown) {
     invalidResponse('parameter capability alignment');
   return {
     id: opaqueID(v.id, 'imdl_', 'image model'),
-    upstream_model_id: string(v.upstream_model_id, 'upstream model', {
-      min: 1,
-      max: 512,
-      bytes: 2048,
-    }),
+    upstream_model_id: string(v.upstream_model_id, 'upstream model', { min: 1 }),
     metadata: v.metadata,
     configured: boolean(v.configured, 'configured model'),
     revision: revision(v.revision, true),
-    display_name: string(v.display_name, 'display name', { max: 128, bytes: 512 }),
-    description: string(v.description, 'model description', {
-      max: 4096,
-      bytes: 4096,
-      multiline: true,
-    }),
+    display_name: string(v.display_name, 'display name'),
+    description: string(v.description, 'model description', { multiline: true }),
     enabled: boolean(v.enabled, 'model availability'),
     price: decodePrice(v.price),
     parameters,
@@ -382,7 +370,7 @@ export function decodeRefresh(value: unknown) {
     error_code:
       v.error_code === null
         ? null
-        : string(v.error_code, 'discovery error', { max: 96, bytes: 96, ascii: true }),
+        : string(v.error_code, 'discovery error', { ascii: true }),
   };
 }
 export const getUpstream = (signal?: AbortSignal) =>
@@ -462,7 +450,7 @@ export const checkModel = (input: {
           unit: decodePrice(quote.unit),
           total: decodePrice(quote.total),
           basis: oneOf(quote.basis, ['size', 'tier', 'default', 'auto'], 'quote basis'),
-          price_key: string(quote.price_key, 'price key', { max: 128, bytes: 128 }),
+          price_key: string(quote.price_key, 'price key'),
         },
       };
     },
@@ -505,9 +493,9 @@ export const saveModelsBatch = (
           );
           return {
             model_id: issue.model_id === '' ? '' : opaqueID(issue.model_id, 'imdl_', 'model id'),
-            field_path: string(issue.field_path, 'field path', { max: 256, bytes: 256 }),
-            code: string(issue.code, 'issue code', { max: 96, bytes: 96, ascii: true }),
-            safe_message: string(issue.safe_message, 'safe message', { max: 512, bytes: 512 }),
+            field_path: string(issue.field_path, 'field path'),
+            code: string(issue.code, 'issue code', { ascii: true }),
+            safe_message: string(issue.safe_message, 'safe message'),
           };
         }),
       };

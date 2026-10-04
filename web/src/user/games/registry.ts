@@ -1,10 +1,36 @@
 import { createElement, lazy, Suspense, type ComponentType } from 'react';
-import { FishingGame } from './fishing/FishingGame';
-import { LinkLinkGame } from './linklink/LinkLinkGame';
-import { RPSGame } from './rps/RPSGame';
+import { LoadingState } from '@shared/components/States';
 import { BiddingPage, LikesPage } from './common/duel/DuelPage';
-const Blackjack = lazy(async () => ({ default: (await import('./blackjack/BlackjackGame')).BlackjackGame }));
-function BlackjackPage() { return createElement(Suspense, {}, createElement(Blackjack)); }
+const Fishing = lazy(async () => ({
+  default: (await import('./fishing/FishingGame')).FishingGame,
+}));
+const LinkLink = lazy(async () => ({
+  default: (await import('./linklink/LinkLinkGame')).LinkLinkGame,
+}));
+const RPS = lazy(async () => ({ default: (await import('./rps/RPSGame')).RPSGame }));
+const Blackjack = lazy(async () => ({
+  default: (await import('./blackjack/BlackjackGame')).BlackjackGame,
+}));
+function FishingPage() {
+  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(Fishing));
+}
+function LinkLinkPage() {
+  return createElement(
+    Suspense,
+    { fallback: createElement(LoadingState) },
+    createElement(LinkLink),
+  );
+}
+function RPSPage() {
+  return createElement(Suspense, { fallback: createElement(LoadingState) }, createElement(RPS));
+}
+function BlackjackPage() {
+  return createElement(
+    Suspense,
+    { fallback: createElement(LoadingState) },
+    createElement(Blackjack),
+  );
+}
 
 /**
  * The user station keeps game registration separate from connector
@@ -40,19 +66,19 @@ export const gameRegistry: readonly GameRegistration[] = Object.freeze([
     id: 'fishing',
     version: 1,
     titleKey: 'games.fishing.title',
-    page: FishingGame,
+    page: FishingPage,
   },
   {
     id: 'linklink',
     version: 1,
     titleKey: 'games.linklink.title',
-    page: LinkLinkGame,
+    page: LinkLinkPage,
   },
   {
     id: 'rps',
     version: 1,
     titleKey: 'games.rps.title',
-    page: RPSGame,
+    page: RPSPage,
   },
   { id: 'bidding', version: 1, titleKey: 'games.bidding.title', page: BiddingPage },
   { id: 'likes', version: 1, titleKey: 'games.likes.title', page: LikesPage },

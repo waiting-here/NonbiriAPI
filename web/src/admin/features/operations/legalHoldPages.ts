@@ -61,7 +61,7 @@ export function normalizeLegalHoldPageResponse(
   if (root.next_cursor !== null) invalidResponse('legal hold page cursor');
   const pagination = normalizePageMetadata(root.pagination);
   const data = array(root.data, 'legal hold page data', 100).map(normalizeLegalHoldSummary);
-  validatePageResponse(pagination, requestedPage, requestedSize, data.length);
+  validatePageResponse(pagination, requestedPage, requestedSize);
 
   const ids = new Set<string>();
   for (const hold of data) {

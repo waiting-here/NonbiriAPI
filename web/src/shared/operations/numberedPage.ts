@@ -29,7 +29,7 @@ export function normalizeNumberedPage<T>(
   const pagination = normalizePageMetadata(root.pagination);
   if (pagination.page_size !== requestedSize) invalidResponse(`${label} page size`);
   const data = array(root.data, `${label} data`, pagination.page_size).map(item);
-  validatePageResponse(pagination, requestedPage, requestedSize, data.length);
+  validatePageResponse(pagination, requestedPage, requestedSize);
   if (identity && new Set(data.map(identity)).size !== data.length) {
     invalidResponse(`${label} duplicate identity`);
   }

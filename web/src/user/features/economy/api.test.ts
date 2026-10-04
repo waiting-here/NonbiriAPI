@@ -5,8 +5,6 @@ import {
   createDonation,
   contributeThursday,
   getDonation,
-  getDonations,
-  isDonationCollectionIncomplete,
   isResponseUnknown,
 } from './api';
 
@@ -138,7 +136,7 @@ describe('economy mutation boundary', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects duplicate intent ids and duplicate paged identities before they can be trusted', async () => {
+  it('explains duplicate selections before sending a donation', async () => {
     const fetchMock = vi.fn<typeof fetch>(() =>
       Promise.resolve(
         jsonResponse({ data: [DONATION_RESPONSE, DONATION_RESPONSE], next_cursor: null }),
@@ -157,21 +155,6 @@ describe('economy mutation boundary', () => {
       }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
-    await expect(getDonations()).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails closed when a later donation cursor page cannot be read', async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ data: [DONATION_RESPONSE], next_cursor: 'cursor-1' }))
-      .mockRejectedValueOnce(new TypeError('network lost'));
-    vi.stubGlobal('fetch', fetchMock);
-    const result = getDonations();
-    await expect(result).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
-    await expect(result).rejects.toSatisfy(isDonationCollectionIncomplete);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1][0])).toContain('cursor=');
   });
 
   it('sends one fixed Thursday contribution without a client-side quantity', async () => {

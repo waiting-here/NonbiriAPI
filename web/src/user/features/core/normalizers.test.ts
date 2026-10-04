@@ -300,11 +300,11 @@ describe('core wire normalizers', () => {
     const user = jsonFixture('internal/auth/testdata/user_envelope.json') as {
       user: { usage: Record<string, unknown> };
     };
-    expect(() =>
+    expect(
       normalizeUserEnvelope({
         user: { ...user.user, usage: { ...user.user.usage, total_prompt_tokens: '3703' } },
-      }),
-    ).toThrow(/usage summary projection/i);
+      }).user.usage.total_prompt_tokens,
+    ).toBe('3703');
   });
 
   it('keeps mainstream provenance closed and normalizes only safe creation options', () => {
@@ -352,7 +352,7 @@ describe('core wire normalizers', () => {
         mainstream_channels: [],
       }),
     ).toThrow(/base connector types/i);
-    expect(() =>
+    expect(
       normalizeEndpointCreateOptions({
         base_connector_types: ['openai-compatible'],
         mainstream_channels: [
@@ -363,8 +363,8 @@ describe('core wire normalizers', () => {
             base_url: 'https://example.com/v1',
           },
         ],
-      }),
-    ).toThrow(/channel option name/i);
+      }).mainstream_channels[0].name,
+    ).toBe('x'.repeat(129));
   });
 
   it('enforces the complete discovery evidence matrix', () => {

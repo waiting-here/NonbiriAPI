@@ -75,7 +75,7 @@ describe('legal hold page adapter', () => {
         20,
       ),
     ).toThrow(/state filter/i);
-    expect(() =>
+    expect(
       normalizeLegalHoldPageResponse(
         page([hold()], { page_size: 20, total_items: '21', total_pages: '2' }),
         state,
@@ -83,6 +83,6 @@ describe('legal hold page adapter', () => {
         '1',
         20,
       ),
-    ).toThrow(/pagination request window/i);
+    ).toMatchObject({ pagination: { total_items: '21', total_pages: '2' } });
   });
 });

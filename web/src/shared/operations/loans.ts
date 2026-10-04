@@ -138,12 +138,7 @@ export function normalizeLoanQuote(value: unknown) {
   );
   const as_of = unixSecond(root.as_of, 'loan quote time'),
     expires_at = unixSecond(root.expires_at, 'loan expiry');
-  const quote_token = string(root.quote_token, 'loan quote token', {
-    min: 1,
-    max: 2048,
-    bytes: 2048,
-    ascii: true,
-  });
+  const quote_token = string(root.quote_token, 'loan quote token', { min: 1, ascii: true });
   if (expires_at !== as_of + 60 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(quote_token))
     invalidResponse('loan quote');
   return {

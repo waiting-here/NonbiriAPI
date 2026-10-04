@@ -93,9 +93,9 @@ export function normalizeLevel(level: Level): Level {
 }
 
 export function parseLevel(raw: string): Level {
-  if (utf8(raw).length === 0 || utf8(raw).length > MAX_LEVEL_BYTES) throw new Error("level size exceeds bounds");
+  const size = utf8(raw).length;
+  if (size === 0 || size > MAX_LEVEL_BYTES) throw new Error("level size exceeds bounds");
   const level = strictJSON(raw, 16) as Level;
-  validateLevel(level);
   return normalizeLevel(level);
 }
 
@@ -115,6 +115,10 @@ export function canonicalJSON(data: unknown): string {
 
 export function normalizedLevelBytes(level: Level): Uint8Array { return utf8(canonicalJSON(normalizeLevel(level))); }
 export function contentHash(level: Level): string { return hex(sha256(normalizedLevelBytes(level))); }
+export function prepareLevel(level: Level): { level: Level; contentHash: string } {
+  const normalized = normalizeLevel(level);
+  return { level: normalized, contentHash: hex(sha256(utf8(canonicalJSON(normalized)))) };
+}
 export function stateDigest(state: EngineState): string { return digestMotion(state, 5000, false); }
 export function stateDigestForVersion(version: number, state: EngineState): string {
   if (!supportedVersions(version, SCORING_VERSION)) throw new Error("unsupported state rules version");

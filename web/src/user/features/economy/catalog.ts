@@ -317,11 +317,7 @@ export function charityCatalogFilterKey(filters: CharityCatalogUrlFilters): stri
 }
 
 function normalizePublicDescription(value: unknown): string {
-  const description = string(value, 'charity catalog public description', {
-    max: 1_024,
-    bytes: 4_096,
-    multiline: true,
-  });
+  const description = string(value, 'charity catalog public description', { multiline: true });
   if (!wellFormedUTF8(description) || description.includes('\r')) {
     invalidResponse('charity catalog public description');
   }
@@ -469,7 +465,6 @@ export async function getCharityCatalog(
     result.pagination,
     normalized.page,
     normalized.pageSize,
-    result.models.length,
   );
   return result;
 }

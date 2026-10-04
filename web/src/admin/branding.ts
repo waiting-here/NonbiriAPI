@@ -12,8 +12,8 @@ export function useAdminBranding() {
         ['site_name', 'site_logo_url'],
         'public branding',
       );
-      const siteName = string(value.site_name, 'site name', { max: 256, bytes: 256 });
-      const logo = string(value.site_logo_url, 'site logo', { max: 2048, bytes: 2048 });
+      const siteName = string(value.site_name, 'site name');
+      const logo = string(value.site_logo_url, 'site logo');
       return { siteName, siteLogoURL: isPublicLogoURL(logo) ? logo : '' };
     },
     staleTime: 60_000,

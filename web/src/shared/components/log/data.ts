@@ -297,12 +297,7 @@ function commonRow(root: WireRecord): LogRowCommon {
       ? null
       : oneOf(root.caller_result_class, RESULT_CLASSES, 'caller result class');
   const callerStatus = nullableInteger(root.caller_status, 'caller status', 100, 599);
-  const callerErrorCode = nullableString(root.caller_error_code, 'caller error code', {
-    min: 1,
-    max: 64,
-    bytes: 64,
-    ascii: true,
-  });
+  const callerErrorCode = nullableString(root.caller_error_code, 'caller error code', { min: 1, ascii: true });
   if (callerErrorCode !== null && !/^[a-z0-9_]+$/.test(callerErrorCode))
     invalidResponse('caller error code');
   const startedAt = unixSecond(root.started_at, 'log start time');
@@ -350,7 +345,7 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
     'model',
   ]);
   const common = commonRow(probe);
-  const model = string(probe.model, 'logical model', { max: 512, bytes: 2_048 });
+  const model = string(probe.model, 'logical model');
   if (isCharityRoute(common.route_kind)) {
     if (Object.prototype.hasOwnProperty.call(probe, 'attempt_count'))
       invalidResponse('charity log row');
@@ -407,11 +402,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
 }
 
 function managementCharityModel(root: WireRecord, route: LogRouteKind): string | null {
-  const model = nullableString(root.charity_model ?? null, 'requested charity model', {
-    min: 1,
-    max: 512,
-    bytes: 512,
-  });
+  const model = nullableString(root.charity_model ?? null, 'requested charity model', { min: 1 });
   if (!isCharityRoute(route) && model !== null) invalidResponse('non-charity model projection');
   return model;
 }
@@ -420,16 +411,8 @@ function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
   if (value === null) return null;
   const root = record(value, ['discord_nickname', 'discord_id'], 'caller identity');
   return {
-    discord_nickname: nullableString(root.discord_nickname, 'caller Discord nickname', {
-      min: 1,
-      max: 256,
-      bytes: 256,
-    }),
-    discord_id: nullableString(root.discord_id, 'caller Discord ID', {
-      min: 1,
-      max: 128,
-      bytes: 128,
-    }),
+    discord_nickname: nullableString(root.discord_nickname, 'caller Discord nickname', { min: 1 }),
+    discord_id: nullableString(root.discord_id, 'caller Discord ID', { min: 1 }),
   };
 }
 
@@ -466,11 +449,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
 }
 
 function commonAttempt(root: WireRecord): LogAttemptCommon {
-  const endpointBaseURL = string(root.endpoint_base_url, 'endpoint base URL', {
-    min: 1,
-    max: 4_096,
-    bytes: 4_096,
-  });
+  const endpointBaseURL = string(root.endpoint_base_url, 'endpoint base URL', { min: 1 });
   let parsed: URL;
   try {
     parsed = new URL(endpointBaseURL);
@@ -507,18 +486,10 @@ function commonAttempt(root: WireRecord): LogAttemptCommon {
       ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
       'connector type',
     ),
-    upstream_model_id: string(root.upstream_model_id, 'upstream model id', {
-      max: 512,
-      bytes: 2_048,
-    }),
+    upstream_model_id: string(root.upstream_model_id, 'upstream model id'),
     status_code: statusCode,
-    upstream_code: nullableString(root.upstream_code, 'upstream code', {
-      min: 1,
-      max: 64,
-      bytes: 64,
-      ascii: true,
-    }),
-    diag: nullableString(root.diag, 'safe diagnostic', { max: 4_096, bytes: 4_096 }),
+    upstream_code: nullableString(root.upstream_code, 'upstream code', { min: 1, ascii: true }),
+    diag: nullableString(root.diag, 'safe diagnostic'),
     usage: normalizeLogUsage(root.usage),
     started_at: startedAt,
     completed_at: completedAt,
@@ -530,12 +501,8 @@ export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
   return {
     ...commonAttempt(root),
     role: 'user',
-    endpoint_note: string(root.endpoint_note, 'endpoint note', {
-      max: 1_024,
-      bytes: 4_096,
-      multiline: true,
-    }),
-    key_note: string(root.key_note, 'key note', { max: 1_024, bytes: 4_096, multiline: true }),
+    endpoint_note: string(root.endpoint_note, 'endpoint note', { multiline: true }),
+    key_note: string(root.key_note, 'key note', { multiline: true }),
   };
 }
 

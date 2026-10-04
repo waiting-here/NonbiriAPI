@@ -18,10 +18,22 @@ const DATETIME_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
+let browserZone: string | undefined;
+
+// Re-resolve after returning to the app so an OS timezone change is picked up.
+function refreshBrowserZone() {
+  browserZone = undefined;
+  formatters.clear();
+}
+if (typeof window !== 'undefined') window.addEventListener('focus', refreshBrowserZone);
+if (typeof document !== 'undefined')
+  document.addEventListener('visibilitychange', refreshBrowserZone);
 
 function formatter(locale: Locale, context: TimeContext): Intl.DateTimeFormat {
   const zone =
-    context.mode === 'site' ? 'UTC' : Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    context.mode === 'site'
+      ? 'UTC'
+      : (browserZone ??= Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const key = `${locale}:${zone}`;
   let fmt = formatters.get(key);
   if (!fmt) {

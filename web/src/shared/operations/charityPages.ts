@@ -149,7 +149,7 @@ function normalizeCandidatePage(
   const data = array(root.data, `${role} binding candidate data`, 100).map((entry, index) =>
     normalizeCharityBindingCandidate(entry, `${role} binding candidate ${index + 1}`),
   );
-  validatePageResponse(metadata, page, pageSize, data.length);
+  validatePageResponse(metadata, page, pageSize);
   if (
     normalizedFilters.donation_id !== '' &&
     data.some((entry) => entry.donation_id !== normalizedFilters.donation_id)

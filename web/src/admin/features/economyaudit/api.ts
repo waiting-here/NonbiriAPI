@@ -28,7 +28,7 @@ export interface AuditFilter {
 }
 
 function money(value: unknown, signed = false): string {
-  const result = string(value, 'audit amount', { min: 1, max: 65, ascii: true });
+  const result = string(value, 'audit amount', { min: 1, ascii: true });
   if (!(signed ? /^(?:0|-?[1-9][0-9]{0,63})$/ : /^(?:0|[1-9][0-9]{0,63})$/).test(result))
     invalidResponse('audit amount');
   return result;
@@ -37,7 +37,7 @@ function nullableMoney(value: unknown) {
   return value === null ? null : money(value, true);
 }
 function sequence(value: unknown) {
-  return decimal(string(value, 'ledger sequence', { max: 19 }), 'ledger sequence');
+  return decimal(string(value, 'ledger sequence'), 'ledger sequence');
 }
 
 export function metrics(value: unknown) {
@@ -204,9 +204,9 @@ export function decodeChannels(value: unknown) {
         'audit channel',
       );
       return {
-        kind: string(c.kind, 'operation kind', { max: 64 }),
-        source_type: string(c.source_type, 'source type', { max: 32 }),
-        channel: string(c.channel, 'channel', { max: 32 }),
+        kind: string(c.kind, 'operation kind'),
+        source_type: string(c.source_type, 'source type'),
+        channel: string(c.channel, 'channel'),
         known: boolean(c.known, 'classified'),
         metrics: metrics(c.metrics),
       };
@@ -220,7 +220,7 @@ export function decodeOperations(value: unknown) {
   return {
     metadata: metadata(v.metadata),
     anchor_seq: sequence(v.anchor_seq),
-    next_cursor: nullableString(v.next_cursor, 'audit cursor', { min: 1, max: 2048 }),
+    next_cursor: nullableString(v.next_cursor, 'audit cursor', { min: 1 }),
     data: array(v.data, 'audit operations', 100).map((item) => {
       const o = record(
         item,
@@ -244,13 +244,13 @@ export function decodeOperations(value: unknown) {
       return {
         id: opaqueID(o.id, 'op_', 'operation ID'),
         ledger_seq: sequence(o.ledger_seq),
-        kind: string(o.kind, 'operation kind', { max: 64 }),
-        source_type: string(o.source_type, 'source type', { max: 32 }),
-        source_id: string(o.source_id, 'source ID', { max: 64 }),
+        kind: string(o.kind, 'operation kind'),
+        source_type: string(o.source_type, 'source type'),
+        source_id: string(o.source_id, 'source ID'),
         created_at: unixSecond(o.created_at, 'operation time'),
         classification: {
-          channel: string(c.channel, 'channel', { max: 32 }),
-          behavior: string(c.behavior, 'behavior', { max: 32 }),
+          channel: string(c.channel, 'channel'),
+          behavior: string(c.behavior, 'behavior'),
           known: boolean(c.known, 'classified'),
         },
         entries: array(o.entries, 'operation entries', 256).map((item) => {

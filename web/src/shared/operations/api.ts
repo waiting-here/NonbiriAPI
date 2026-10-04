@@ -47,7 +47,7 @@ export async function elevateAdmin(password: string): Promise<AdminElevation> {
   });
   const root = record(payload, ['token', 'expires_at'], 'administrator elevation');
   return {
-    token: string(root.token, 'administrator elevation token', { min: 1, max: 4096 }),
+    token: string(root.token, 'administrator elevation token', { min: 1 }),
     expires_at: unixSecond(root.expires_at, 'administrator elevation expiry'),
   };
 }

@@ -153,8 +153,8 @@ export function containsForbiddenControl(value: string): boolean {
   });
 }
 
-function sourceText(value: unknown, label: string, maximum: number, bytes: number): string {
-  const result = string(value, label, { min: 1, max: maximum, bytes });
+function sourceText(value: unknown, label: string): string {
+  const result = string(value, label, { min: 1 });
   if (containsForbiddenControl(result)) invalidResponse(label);
   return result;
 }
@@ -176,7 +176,7 @@ export function normalizeManagedSource(
     ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
     `${label} connector`,
   );
-  const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`, 4_096, 4_096);
+  const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`);
   if (kind === 'custom') {
     record(value, ['kind', 'connector_type', 'base_url'], label);
     return { kind, connector_type: connectorType, base_url: baseURL };
@@ -194,7 +194,7 @@ export function normalizeManagedSource(
         ] as const)
       : (['kind', 'connector_type', 'base_url', 'channel_id', 'name'] as const);
   const source = record(value, fields, label);
-  const name = sourceText(source.name, `${label} channel name`, 128, 512);
+  const name = sourceText(source.name, `${label} channel name`);
   if (name.trim() !== name) invalidResponse(`${label} channel name`);
   const mainstream: Extract<ManagedSafeSource, { kind: 'mainstream' }> = {
     kind,
@@ -350,16 +350,8 @@ export function normalizeManagedKey(
     idle,
     id: decimalID(root.id, `${label} id`),
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, `${label} endpoint key id`),
-    display_head: string(root.display_head, `${label} display head`, {
-      max: 16,
-      bytes: 16,
-      ascii: true,
-    }),
-    display_tail: string(root.display_tail, `${label} display tail`, {
-      max: 16,
-      bytes: 16,
-      ascii: true,
-    }),
+    display_head: string(root.display_head, `${label} display head`, { ascii: true }),
+    display_tail: string(root.display_tail, `${label} display tail`, { ascii: true }),
     safe_source: normalizeManagedSource(root.safe_source, `${label} source`, role),
     physical_enabled: boolean(root.physical_enabled, `${label} physical switch`),
     charity_state: state,
@@ -413,11 +405,7 @@ export function normalizeManagedKey(
       failure_disabled: boolean(streak.failure_disabled, `${label} failure-disabled marker`),
     },
     ended_reason: endedReason,
-    safe_note: string(root.safe_note, `${label} safe note`, {
-      max: 256,
-      bytes: 1_024,
-      multiline: true,
-    }),
+    safe_note: string(root.safe_note, `${label} safe note`, { multiline: true }),
     max_concurrency:
       root.max_concurrency == null
         ? null
@@ -514,11 +502,7 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
         ['approve', 'reject', 'force_reject'] as const,
         `${label} review decision`,
       ),
-      reason: string(value.reason, `${label} review reason`, {
-        max: 1_024,
-        bytes: 4_096,
-        multiline: true,
-      }),
+      reason: string(value.reason, `${label} review reason`, { multiline: true }),
       reviewed_at: unixSecond(value.reviewed_at, `${label} review time`),
     };
   }
@@ -560,11 +544,7 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
         : boolean(root.discord_public_thanks, `${label} public thanks`),
     handling: normalizeDonationHandling(root.handling),
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
-    description: string(root.description, `${label} donor description`, {
-      max: 1_024,
-      bytes: 4_096,
-      multiline: true,
-    }),
+    description: string(root.description, `${label} donor description`, { multiline: true }),
     review_result: review,
     keys: array(root.keys, `${label} keys`, 100).map((item) =>
       normalizeManagedKey(item, `${label} key`, 'admin'),
@@ -617,16 +597,8 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     );
     owner = {
       user_id: decimalID(item.user_id, 'administrator donation owner id'),
-      discord_id: nullableString(item.discord_id, 'administrator donation Discord id', {
-        max: 128,
-        bytes: 128,
-        ascii: true,
-      }),
-      display_name: string(item.display_name, 'administrator donation owner display', {
-        min: 1,
-        max: 128,
-        bytes: 512,
-      }),
+      discord_id: nullableString(item.discord_id, 'administrator donation Discord id', { ascii: true }),
+      display_name: string(item.display_name, 'administrator donation owner display', { min: 1 }),
     };
   }
   return { ...common, owner };
@@ -675,16 +647,8 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
     ...common,
     owner: {
       user_id: decimalID(item.user_id, 'steward owner id'),
-      discord_id: nullableString(item.discord_id, 'steward owner Discord id', {
-        max: 128,
-        bytes: 128,
-        ascii: true,
-      }),
-      display_name: string(item.display_name, 'steward owner display', {
-        min: 1,
-        max: 128,
-        bytes: 512,
-      }),
+      discord_id: nullableString(item.discord_id, 'steward owner Discord id', { ascii: true }),
+      display_name: string(item.display_name, 'steward owner display', { min: 1 }),
     },
   };
 }
@@ -792,9 +756,9 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     label,
     required,
   );
-  const provider = string(root.provider, `${label} provider`, { min: 1, max: 64, bytes: 256 });
-  const model = string(root.model, `${label} model`, { min: 1, max: 64, bytes: 256 });
-  const fullName = string(root.full_name, `${label} full name`, { min: 7, max: 133, bytes: 521 });
+  const provider = string(root.provider, `${label} provider`, { min: 1 });
+  const model = string(root.model, `${label} model`, { min: 1 });
+  const fullName = string(root.full_name, `${label} full name`, { min: 7 });
   if (fullName !== `[公益]${provider}/${model}`) invalidResponse(`${label} full name`);
   const allowedLevels = normalizeAllowedLevels(root.allowed_levels, `${label} allowed levels`);
   const publicDescription = normalizePublicDescription(
@@ -857,11 +821,7 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   const samples = decimal(rolling.sample_count, `${label} sample count`);
   const success = decimal(rolling.success_count, `${label} success count`);
   if (BigInt(success) > BigInt(samples)) invalidResponse(`${label} success count`);
-  const percent = nullableString(rolling.percent, `${label} success percent`, {
-    max: 6,
-    bytes: 6,
-    ascii: true,
-  });
+  const percent = nullableString(rolling.percent, `${label} success percent`, { ascii: true });
   if (
     (samples === '0') !== (percent === null) ||
     (percent !== null && !/^(0|[1-9][0-9]?|100)(\.[0-9]{1,2})?$/.test(percent))
@@ -934,7 +894,7 @@ function normalizeAllowedLevels(value: unknown, label: string): number[] {
 function normalizeExcludedFields(value: unknown, label: string): string[] {
   if (value === undefined) return [];
   const fields = array(value, `${label} excluded fields`, 32).map((item) =>
-    string(item, `${label} excluded field`, { min: 1, max: 64, ascii: true }),
+    string(item, `${label} excluded field`, { min: 1, ascii: true }),
   );
   const valid = excludedFields(fields.join(','));
   if (!valid || valid.length !== fields.length) invalidResponse(`${label} excluded fields`);
@@ -1002,21 +962,9 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
       ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
       `${label} connector`,
     ),
-    canonical_base_url: string(root.canonical_base_url, `${label} base URL`, {
-      min: 1,
-      max: 4_096,
-      bytes: 4_096,
-    }),
-    display_head: string(root.display_head, `${label} display head`, {
-      max: 16,
-      bytes: 16,
-      ascii: true,
-    }),
-    display_tail: string(root.display_tail, `${label} display tail`, {
-      max: 16,
-      bytes: 16,
-      ascii: true,
-    }),
+    canonical_base_url: string(root.canonical_base_url, `${label} base URL`, { min: 1 }),
+    display_head: string(root.display_head, `${label} display head`, { ascii: true }),
+    display_tail: string(root.display_tail, `${label} display tail`, { ascii: true }),
   };
 }
 
@@ -1056,11 +1004,7 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
     donation_key_id: decimalID(root.donation_key_id, `${label} donation key id`),
     donation_id: decimalID(root.donation_id, `${label} donation id`),
     source: normalizeSource(root.source, `${label} source`),
-    upstream_model_id: string(root.upstream_model_id, `${label} upstream model`, {
-      min: 1,
-      max: 512,
-      bytes: 2_048,
-    }),
+    upstream_model_id: string(root.upstream_model_id, `${label} upstream model`, { min: 1 }),
     source_types: normalizeSourceTypes(root.source_types, `${label} source types`),
     ...(root.gateway_capabilities === undefined
       ? {}
@@ -1089,11 +1033,7 @@ export function normalizeCharityBindingCandidate(
     donation_key_id: decimalID(root.donation_key_id, `${label} donation key id`),
     donation_id: decimalID(root.donation_id, `${label} donation id`),
     source: normalizeSource(root.source, `${label} source`),
-    upstream_model_id: string(root.upstream_model_id, `${label} upstream model`, {
-      min: 1,
-      max: 512,
-      bytes: 2_048,
-    }),
+    upstream_model_id: string(root.upstream_model_id, `${label} upstream model`, { min: 1 }),
     source_types: normalizeCandidateSourceTypes(root.source_types, `${label} source types`),
   };
 }
@@ -1311,11 +1251,7 @@ export const getBindingDonations = (role: CharityRole, id: string, cursor: strin
         const root = record(entry, ['id', 'description', 'key_count'], 'binding donation');
         return {
           id: decimalID(root.id, 'donation id'),
-          description: string(root.description, 'donation description', {
-            max: 1024,
-            bytes: 4096,
-            multiline: true,
-          }),
+          description: string(root.description, 'donation description', { multiline: true }),
           key_count: integer(root.key_count, 'key count', 1, 1000000),
         };
       }),
@@ -1342,20 +1278,12 @@ export const getBindingSourceKeys = (
         return {
           donation_key_id: decimalID(root.donation_key_id, 'donation key id'),
           source: normalizeSource(root.source, 'shared source'),
-          note: string(root.note, 'shared note', { max: 256, bytes: 1024, multiline: true }),
-          donation_note: string(root.donation_note ?? '', 'donor note', {
-            max: 1024,
-            bytes: 4096,
-            multiline: true,
-          }),
+          note: string(root.note, 'shared note', { multiline: true }),
+          donation_note: string(root.donation_note ?? '', 'donor note', { multiline: true }),
           approval_note:
             root.approval_note == null
               ? null
-              : string(root.approval_note, 'approval note', {
-                  max: 1024,
-                  bytes: 4096,
-                  multiline: true,
-                }),
+              : string(root.approval_note, 'approval note', { multiline: true }),
         };
       }),
   );

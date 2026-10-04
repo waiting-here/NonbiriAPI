@@ -228,7 +228,7 @@ function CatalogFilters({
   );
 }
 
-export function CharityCatalogPanel({ accountID }: { accountID: string | undefined }) {
+export function CharityCatalogPanel({ accountID, enabled = true }: { accountID: string | undefined; enabled?: boolean }) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchState();
   const urlState = readCharityCatalogUrlState(searchParams);
@@ -245,7 +245,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
     pageSize: pager.pageSize,
   };
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const catalog = useCharityCatalog(accountID, filter);
+  const catalog = useCharityCatalog(accountID, filter, enabled);
 
   useEffect(() => {
     if (!urlState.needsNormalization) return;

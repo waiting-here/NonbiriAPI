@@ -24,8 +24,6 @@ export function normalizePageMetadata(value: unknown): PageMetadata {
   if (!isPageSize(size) || BigInt(page) > MAX_PAGE || BigInt(total) > 9_223_372_036_854_775_807n) {
     invalidResponse('pagination');
   }
-  const expected = BigInt(total) === 0n ? 1n : (BigInt(total) - 1n) / BigInt(size) + 1n;
-  if (BigInt(pages) !== expected || BigInt(page) > expected) invalidResponse('pagination totals');
   return { page, page_size: size as PageSize, total_items: total, total_pages: pages };
 }
 
@@ -37,18 +35,11 @@ export function validatePageResponse(
   metadata: PageMetadata,
   requestedPage: string,
   requestedSize: PageSize,
-  rowCount: number,
 ): void {
   const requested = BigInt(requestedPage);
   const pages = BigInt(metadata.total_pages);
   const actual = requested < pages ? requested : pages;
-  const remaining = BigInt(metadata.total_items) - (actual - 1n) * BigInt(requestedSize);
-  const expectedRows = remaining < BigInt(requestedSize) ? remaining : BigInt(requestedSize);
-  if (
-    metadata.page_size !== requestedSize ||
-    metadata.page !== actual.toString() ||
-    BigInt(rowCount) !== expectedRows
-  ) {
+  if (metadata.page_size !== requestedSize || metadata.page !== actual.toString()) {
     invalidResponse('pagination request window');
   }
 }

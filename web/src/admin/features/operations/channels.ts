@@ -82,10 +82,7 @@ function hasForbiddenControl(value: string): boolean {
 }
 
 function normalizedChannelName(value: unknown): string {
-  const name = string(value, 'mainstream channel name', {
-    min: 1,
-    max: 128,
-  });
+  const name = string(value, 'mainstream channel name', { min: 1 });
   // `trim` is only a validation check. The authority's exact Unicode scalar
   // sequence is returned unchanged and is never normalized client-side.
   if (name.trim() !== name || hasForbiddenControl(name)) invalidResponse('mainstream channel name');
@@ -93,11 +90,7 @@ function normalizedChannelName(value: unknown): string {
 }
 
 function normalizedChannelURL(value: unknown): string {
-  const url = string(value, 'mainstream channel canonical URL', {
-    min: 1,
-    max: 4_096,
-    bytes: 4_096,
-  });
+  const url = string(value, 'mainstream channel canonical URL', { min: 1 });
   if (hasForbiddenControl(url)) invalidResponse('mainstream channel canonical URL');
   return url;
 }

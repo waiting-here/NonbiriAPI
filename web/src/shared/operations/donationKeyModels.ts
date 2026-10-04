@@ -72,12 +72,8 @@ function normalizeCandidate(value: unknown): ManualCandidate {
     'candidate model',
   );
   return {
-    upstream_model_id: string(row.upstream_model_id, 'upstream model', {
-      min: 1,
-      max: 512,
-      bytes: 2048,
-    }),
-    display_name: string(row.display_name, 'candidate display', { min: 1, max: 512, bytes: 2048 }),
+    upstream_model_id: string(row.upstream_model_id, 'upstream model', { min: 1 }),
+    display_name: string(row.display_name, 'candidate display', { min: 1 }),
     source: oneOf(row.source, ['automatic', 'manual', 'both'] as const, 'candidate source'),
     verified: boolean(row.verified, 'candidate verified'),
     manual_entry_id: nullableDecimalID(row.manual_entry_id, 'manual entry id'),
@@ -145,7 +141,7 @@ export function getDonationKeyModels(
             invalidResponse('binding counts');
           return {
             model_id: decimalID(row.model_id, 'model id'),
-            full_name: string(row.full_name, 'model name', { min: 1, max: 140, bytes: 560 }),
+            full_name: string(row.full_name, 'model name', { min: 1 }),
             enabled: boolean(row.enabled, 'model enabled'),
             binding_count: count,
             available_binding_count: available,
@@ -254,11 +250,7 @@ export function getDonationKeyModelBindings(
           );
           return {
             binding_id: decimalID(row.binding_id, 'binding id'),
-            upstream_model_id: string(row.upstream_model_id, 'upstream model id', {
-              min: 1,
-              max: 512,
-              bytes: 2048,
-            }),
+            upstream_model_id: string(row.upstream_model_id, 'upstream model id', { min: 1 }),
             ord: integer(row.ord, 'binding order', 0, 255),
             state: oneOf(row.state, donationBindingStates, 'binding state'),
           };

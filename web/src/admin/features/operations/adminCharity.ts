@@ -76,7 +76,7 @@ function hasForbiddenControl(value: string): boolean {
 }
 
 function channelName(value: unknown): string {
-  const name = string(value, 'administrator charity channel name', { min: 1, max: 128 });
+  const name = string(value, 'administrator charity channel name', { min: 1 });
   if (name.trim() !== name || hasForbiddenControl(name)) {
     invalidResponse('administrator charity channel name');
   }
@@ -84,11 +84,7 @@ function channelName(value: unknown): string {
 }
 
 function channelURL(value: unknown): string {
-  const url = string(value, 'administrator charity source URL', {
-    min: 1,
-    max: 4_096,
-    bytes: 4_096,
-  });
+  const url = string(value, 'administrator charity source URL', { min: 1 });
   if (hasForbiddenControl(url)) invalidResponse('administrator charity source URL');
   return url;
 }
@@ -101,16 +97,8 @@ function validateAdminOwner(value: unknown): void {
     'administrator charity owner',
   );
   decimalID(root.user_id, 'administrator charity owner ID');
-  nullableString(root.discord_id, 'administrator charity owner Discord ID', {
-    min: 1,
-    max: 64,
-    bytes: 64,
-    ascii: true,
-  });
-  string(root.display_name, 'administrator charity owner display name', {
-    max: 128,
-    bytes: 512,
-  });
+  nullableString(root.discord_id, 'administrator charity owner Discord ID', { min: 1, ascii: true });
+  string(root.display_name, 'administrator charity owner display name');
 }
 
 function validateAdminReviewer(value: unknown): boolean {
@@ -265,21 +253,9 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
     invalidResponse('administrator charity idle state');
   }
   nullableDecimalID(root.endpoint_key_id, 'administrator charity source endpoint key ID');
-  const displayHead = string(root.display_head, 'administrator charity key head', {
-    max: 16,
-    bytes: 16,
-    ascii: true,
-  });
-  const displayTail = string(root.display_tail, 'administrator charity key tail', {
-    max: 16,
-    bytes: 16,
-    ascii: true,
-  });
-  string(root.safe_note, 'administrator charity safe note', {
-    max: 256,
-    bytes: 1_024,
-    multiline: true,
-  });
+  const displayHead = string(root.display_head, 'administrator charity key head', { ascii: true });
+  const displayTail = string(root.display_tail, 'administrator charity key tail', { ascii: true });
+  string(root.safe_note, 'administrator charity safe note', { multiline: true });
   const limits = record(
     root.limits,
     ['price', 'calls', 'tokens'],
@@ -397,11 +373,7 @@ function normalizeReview(
     ),
     // Review text is deliberately validated but not returned to the page's
     // grouped projection. It is management material, not group metadata.
-    reason: string(root.reason, 'administrator charity review reason', {
-      max: 1_024,
-      bytes: 4_096,
-      multiline: true,
-    }),
+    reason: string(root.reason, 'administrator charity review reason', { multiline: true }),
     reviewed_at: unixSecond(root.reviewed_at, 'administrator charity review time'),
   };
   if (!reviewerPresent && (result.decision !== 'approve' || result.reason !== '')) {
@@ -436,11 +408,7 @@ export function normalizeAdminCharityDonation(value: unknown): AdminCharityDonat
   // Validate the closed management projection without retaining donor text,
   // owner identity or reviewer identity in the feature-local query cache.
   normalizeDonationHandling(root.handling);
-  string(root.description, 'administrator charity description', {
-    max: 1_024,
-    bytes: 4_096,
-    multiline: true,
-  });
+  string(root.description, 'administrator charity description', { multiline: true });
   validateAdminOwner(root.owner);
   const reviewerPresent = validateAdminReviewer(root.reviewer);
   const review = normalizeReview(root.review_result, reviewerPresent);
