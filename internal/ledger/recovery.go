@@ -229,27 +229,12 @@ func collectReservations(ctx context.Context, tx *sql.Tx, includeOutstanding boo
 		{"rps_session", `SELECT id,ledger_rows_remaining FROM game_rps_sessions ORDER BY id`, reservationRPSSession},
 		{"game_onboarding", `SELECT id,ledger_rows_remaining FROM game_onboarding_holds ORDER BY id`, reservationGameOnboarding},
 	}
-	present, err := db.DuelStoragePresent(ctx, tx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if present {
-		queries = append(queries, reservationQuery{"duel_queue", `SELECT id,ledger_rows_remaining FROM game_duel_queue ORDER BY id`, reservationDuelQueue}, reservationQuery{"duel_session", `SELECT id,ledger_rows_remaining FROM game_duel_sessions ORDER BY id`, reservationDuelSession})
-	}
-	blackjackPresent, err := db.BlackjackStoragePresent(ctx, tx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if blackjackPresent {
-		queries = append(queries, reservationQuery{"blackjack_payment", `SELECT id,ledger_rows_remaining FROM game_blackjack_payments ORDER BY id`, reservationBlackjackPayment})
-	}
-	var imagePresent bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='image_activity_tasks')`).Scan(&imagePresent); err != nil {
-		return nil, nil, err
-	}
-	if imagePresent {
-		queries = append(queries, reservationQuery{"image_task", `SELECT id,ledger_rows_remaining FROM image_activity_tasks ORDER BY id`, reservationImageTask})
-	}
+	queries = append(queries,
+		reservationQuery{"duel_queue", `SELECT id,ledger_rows_remaining FROM game_duel_queue ORDER BY id`, reservationDuelQueue},
+		reservationQuery{"duel_session", `SELECT id,ledger_rows_remaining FROM game_duel_sessions ORDER BY id`, reservationDuelSession},
+		reservationQuery{"blackjack_payment", `SELECT id,ledger_rows_remaining FROM game_blackjack_payments ORDER BY id`, reservationBlackjackPayment},
+		reservationQuery{"image_task", `SELECT id,ledger_rows_remaining FROM image_activity_tasks ORDER BY id`, reservationImageTask},
+	)
 	for _, item := range queries {
 		query := item.query
 		if db.IsActiveRecovery(ctx) {

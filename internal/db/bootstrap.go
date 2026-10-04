@@ -725,7 +725,7 @@ func openValidatedSource(ctx context.Context, path string, expected *sourceSnaps
 		return failError(startupError(StartupUnsafePath))
 	}
 	RecordStartupStage(ctx, StageSchemaUpgrade)
-	if err := extendKnownGenerationTwoSchema(ctx, d); err != nil {
+	if err := upgradeStartupSchema(ctx, d, secrets); err != nil {
 		return failError(startupSQLFailure(ctx, err, StartupSchemaMismatch))
 	}
 	RecordStartupCheckpoint(ctx, StageSchemaUpgrade)

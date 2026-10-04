@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/continuity"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/useractivity"
@@ -252,24 +251,12 @@ JOIN game_rps_sessions session ON session.id=seat.session_id
 WHERE seat.user_id=? AND session.state IN ('started','terminal_processing')`); err != nil {
 		return nil, ledger.Account{}, err
 	}
-	present, err := db.DuelStoragePresent(ctx, tx)
-	if err != nil {
-		return nil, ledger.Account{}, classifyDatabaseError("read duel asset storage", err)
-	}
-	if present {
-		if err := addIntRows(`SELECT game_paid_milli FROM game_duel_queue WHERE user_id=?`); err != nil {
-			return nil, ledger.Account{}, err
-		}
-		if err := addIntRows(`SELECT p.game_paid_milli FROM game_duel_seats p JOIN game_duel_sessions g ON g.id=p.session_id WHERE p.user_id=? AND g.state='active'`); err != nil {
-			return nil, ledger.Account{}, err
-		}
-	}
-	blackjackPresent, err := db.BlackjackStoragePresent(ctx, tx)
-	if err != nil {
-		return nil, ledger.Account{}, classifyDatabaseError("read blackjack asset storage", err)
-	}
-	if blackjackPresent {
-		if err := addIntRows(`SELECT p.game_paid_milli FROM game_blackjack_payments p JOIN game_blackjack_entries e ON e.id=p.entry_id WHERE e.user_id=? AND p.state='reserved'`); err != nil {
+	for _, query := range []string{
+		`SELECT game_paid_milli FROM game_duel_queue WHERE user_id=?`,
+		`SELECT p.game_paid_milli FROM game_duel_seats p JOIN game_duel_sessions g ON g.id=p.session_id WHERE p.user_id=? AND g.state='active'`,
+		`SELECT p.game_paid_milli FROM game_blackjack_payments p JOIN game_blackjack_entries e ON e.id=p.entry_id WHERE e.user_id=? AND p.state='reserved'`,
+	} {
+		if err := addIntRows(query); err != nil {
 			return nil, ledger.Account{}, err
 		}
 	}

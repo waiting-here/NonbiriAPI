@@ -3,33 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"strings"
 )
-
-const preLedgerRetentionManifestHash = "e2f99944f596dda1702a76de6c7ba540761bd1d27f748c437968df0ecc1cf452"
-const ledgerRetentionMarker = "\n-- Ledger detail retention\n"
-
-func preLedgerRetentionSchema() string {
-	previous, _, _ := strings.Cut(preQueryIndexesSchema(), ledgerRetentionMarker)
-	return previous
-}
-
-func applyLedgerRetentionExtension(ctx context.Context, tx *sql.Tx) error {
-	manifest, err := readGenerationManifest(ctx, tx)
-	if err != nil {
-		return err
-	}
-	if generationManifestDigest(manifest) != preLedgerRetentionManifestHash {
-		return errors.New("unrecognized ledger retention source manifest")
-	}
-	_, additive, ok := strings.Cut(preQueryIndexesSchema(), ledgerRetentionMarker)
-	if !ok {
-		return errors.New("canonical ledger retention schema is missing")
-	}
-	_, err = tx.ExecContext(ctx, additive)
-	return err
-}
 
 // LedgerCompactionState also supports the historical schemas validated within
 // an upgrade, before the retention extension has been applied.

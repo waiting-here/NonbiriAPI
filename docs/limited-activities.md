@@ -93,7 +93,7 @@ Account export includes the owner's exchange receipts and exact balances. Exchan
 
 ## Lake Notes
 
-`lake-notes` is independent of Pond Fishing. It starts hidden, with no open schedule and all four exchange directions disabled. An administrator must configure the activity envelope and publish a finite period. Hiding removes the directory entry; it is not the participation gate. The activity and period must both be open, with no pause or maintenance.
+`lake-notes` is independent of Pond Fishing. It starts hidden, with no open schedule and all four exchange directions disabled. An administrator must configure the activity envelope and publish a finite period. Participation requires a visible, open activity and an open period, with no pause or maintenance.
 
 The server saves coins, experience, equipment, bait, catches, collections, contracts and one current cast per account. The full profile continues across devices and later periods; old browser-local coins or saves are not imported. The original gameplay includes equipment/loadouts, skills, bait, locations, fishing, treasure/debris, sales and contracts. Closed periods retain progress and coins. Read-only profile/rule access remains available when play is closed.
 

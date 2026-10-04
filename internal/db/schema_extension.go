@@ -3,55 +3,236 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"errors"
+	"fmt"
+
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-// GenerationTwoCompatibility describes the exact structural identities accepted
-// before startup recovery. It does not replace data, credential or ledger checks.
+// GenerationTwoCompatibility describes accepted schema and data versions.
 type GenerationTwoCompatibility struct {
 	SchemaHash           string   `json:"schema_hash"`
 	ManifestHash         string   `json:"manifest_hash"`
+	SchemaVersion        int      `json:"schema_version"`
 	SourceManifestHashes []string `json:"source_manifest_hashes"`
+	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
-var generationTwoSourceManifestHashes = [...]string{preLedgerRetentionManifestHash, preQueryIndexesManifestHash}
+// Data-only changes also advance version, even when manifest stays unchanged.
+type schemaMigration struct {
+	version  int
+	manifest string
+	sql      string
+	apply    func(context.Context, *sql.Tx) error
+}
 
-// GenerationTwoCompatibilityDescriptor returns a detached read-only snapshot
-// of the same migration registry used by startup validation.
+type schemaBridge struct {
+	manifest string
+	sql      string
+}
+
+type schemaRegistry struct {
+	versions []schemaMigration
+	bridges  []schemaBridge
+}
+
+// Freeze the baseline and each successor at its first stable publication.
+// Fresh DDL can evolve; published migration steps remain immutable.
+var storageSchema = schemaRegistry{
+	versions: []schemaMigration{{version: 1, manifest: baselineManifestHash}},
+	bridges:  preReleaseSchemaBridges(),
+}
+
 func GenerationTwoCompatibilityDescriptor() GenerationTwoCompatibility {
-	return GenerationTwoCompatibility{
-		SchemaHash:           PinnedGenerationTwoSchemaHash,
-		ManifestHash:         PinnedGenerationTwoManifestHash,
-		SourceManifestHashes: append([]string(nil), generationTwoSourceManifestHashes[:]...),
+	out := GenerationTwoCompatibility{
+		SchemaHash: PinnedGenerationTwoSchemaHash, ManifestHash: PinnedGenerationTwoManifestHash,
+		SchemaVersion: len(storageSchema.versions), SourceManifestHashes: []string{}, SourceSchemaVersions: []int{},
 	}
+	seen := map[string]bool{}
+	add := func(hash string) {
+		if !seen[hash] {
+			out.SourceManifestHashes = append(out.SourceManifestHashes, hash)
+			seen[hash] = true
+		}
+	}
+	for _, bridge := range storageSchema.bridges {
+		add(bridge.manifest)
+	}
+	for _, version := range storageSchema.versions[:len(storageSchema.versions)-1] {
+		add(version.manifest)
+		out.SourceSchemaVersions = append(out.SourceSchemaVersions, version.version)
+	}
+	return out
 }
 
-func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
+func (registry schemaRegistry) validate() error {
+	if len(registry.versions) == 0 {
+		return errors.New("schema baseline is missing")
+	}
+	validHash := func(value string) bool {
+		raw, err := hex.DecodeString(value)
+		return err == nil && len(raw) == 32 && hex.EncodeToString(raw) == value
+	}
+	for i, step := range registry.versions {
+		if step.version != i+1 || !validHash(step.manifest) ||
+			i == 0 && (step.sql != "" || step.apply != nil) ||
+			i > 0 && step.sql == "" && step.apply == nil {
+			return errors.New("schema migration chain is incomplete")
+		}
+	}
+	seen := map[string]bool{}
+	for _, bridge := range registry.bridges {
+		if !validHash(bridge.manifest) || bridge.sql == "" || seen[bridge.manifest] {
+			return errors.New("invalid prerelease schema bridge")
+		}
+		seen[bridge.manifest] = true
+	}
+	return nil
+}
+
+type schemaPlan struct {
+	bridge *schemaBridge
+	steps  []schemaMigration
+	target schemaMigration
+}
+
+func (plan schemaPlan) needed() bool { return plan.bridge != nil || len(plan.steps) != 0 }
+
+func (registry schemaRegistry) plan(ctx context.Context, q queryer) (schemaPlan, error) {
+	var plan schemaPlan
+	if err := registry.validate(); err != nil {
+		return plan, err
+	}
+	manifest, err := readGenerationManifest(ctx, q)
+	if err != nil {
+		return plan, err
+	}
+	hash := generationManifestDigest(manifest)
+	plan.target = registry.versions[len(registry.versions)-1]
+	versioned := false
+	for _, table := range manifest.Tables {
+		versioned = versioned || table.Name == "schema_state"
+	}
+	if !versioned {
+		for i := range registry.bridges {
+			if registry.bridges[i].manifest == hash {
+				plan.bridge = &registry.bridges[i]
+				plan.steps = registry.versions[1:]
+				return plan, nil
+			}
+		}
+		return plan, errors.New("unrecognized prerelease schema")
+	}
+	version, err := readSchemaVersion(ctx, q)
+	if err != nil {
+		return plan, err
+	}
+	if version < 1 || version > len(registry.versions) || registry.versions[version-1].manifest != hash {
+		return plan, errors.New("unsupported schema version or manifest")
+	}
+	plan.steps = registry.versions[version:]
+	return plan, nil
+}
+
+func readSchemaVersion(ctx context.Context, q queryer) (int, error) {
+	var version int
+	err := q.QueryRowContext(ctx, "SELECT version FROM schema_state WHERE id=1").Scan(&version)
+	return version, err
+}
+
+func (plan schemaPlan) apply(ctx context.Context, tx *sql.Tx) error {
+	if !plan.needed() {
+		return nil
+	}
+	if plan.bridge != nil {
+		if _, err := tx.ExecContext(ctx, plan.bridge.sql); err != nil {
+			return fmt.Errorf("initialize stable storage: %w", err)
+		}
+	}
+	for _, step := range plan.steps {
+		if step.sql != "" {
+			if _, err := tx.ExecContext(ctx, step.sql); err != nil {
+				return fmt.Errorf("migrate storage to %d: %w", step.version, err)
+			}
+		}
+		if step.apply != nil {
+			if err := step.apply(ctx, tx); err != nil {
+				return fmt.Errorf("migrate data to %d: %w", step.version, err)
+			}
+		}
+		result, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", step.version, step.version-1)
+		if err != nil {
+			return err
+		}
+		if changed, err := result.RowsAffected(); err != nil || changed != 1 {
+			return errors.New("schema version changed during migration")
+		}
+	}
+	manifest, err := readGenerationManifest(ctx, tx)
+	if err != nil {
+		return err
+	}
+	version, err := readSchemaVersion(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if version != plan.target.version || generationManifestDigest(manifest) != plan.target.manifest {
+		return errors.New("schema migration did not reach its target")
+	}
+	return nil
+}
+
+func currentSchemaPlan(ctx context.Context, q queryer) (schemaPlan, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
-		return false, errors.New("generation-two schema hash drift")
+		return schemaPlan{}, errors.New("generation-two schema hash drift")
 	}
 	expected, err := expectedGenerationTwoManifestHash()
 	if err != nil {
-		return false, err
+		return schemaPlan{}, err
 	}
-	actual, err := readGenerationManifest(ctx, q)
-	if err != nil {
-		return false, err
+	if len(storageSchema.versions) == 0 || storageSchema.versions[len(storageSchema.versions)-1].manifest != expected {
+		return schemaPlan{}, errors.New("schema registry target differs from fresh storage")
 	}
-	digest := generationManifestDigest(actual)
-	if digest == expected {
-		return false, nil
-	}
-	for _, source := range generationTwoSourceManifestHashes {
-		if digest == source {
-			return true, nil
-		}
-	}
-	return false, errors.New("generation-two schema manifest mismatch")
+	return storageSchema.plan(ctx, q)
+}
+
+func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
+	plan, err := currentSchemaPlan(ctx, q)
+	return plan.needed(), err
 }
 
 func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error {
 	return runGenerationTwoExtension(ctx, database, extendGenerationTwoTransaction)
+}
+
+func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
+	plan, err := currentSchemaPlan(ctx, tx)
+	if err != nil {
+		return err
+	}
+	return plan.apply(ctx, tx)
+}
+
+func upgradeStartupSchema(ctx context.Context, database *sql.DB, secrets secret.GenerationTwoContextCodec) error {
+	return runGenerationTwoExtension(ctx, database, func(ctx context.Context, tx *sql.Tx) error {
+		plan, err := currentSchemaPlan(ctx, tx)
+		if err != nil || !plan.needed() {
+			return err
+		}
+		if err := plan.apply(ctx, tx); err != nil {
+			return err
+		}
+		// Predecessors may lack new keys or fixed rows. Validate the target
+		// inside the migration transaction, before any change can commit.
+		if err := validateStartupSeed(ctx, tx); err != nil {
+			return err
+		}
+		if err := validateSourceConfig(ctx, tx); err != nil {
+			return err
+		}
+		return validateEndpointKeyEnvelopes(ctx, tx, secrets)
+	})
 }
 
 // Startup finishes rollback before returning, including after cancellation.
@@ -64,8 +245,8 @@ func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend fun
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// All migration statements retain ctx. Only the transaction lifetime is
-	// detached so database/sql cannot return before an async rollback finishes.
+	// Statements retain ctx; the detached transaction lifetime prevents an
+	// asynchronous database/sql rollback from outliving the startup result.
 	tx, err := conn.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
 		return err
@@ -78,31 +259,8 @@ func runGenerationTwoExtension(ctx context.Context, database *sql.DB, extend fun
 	if err := extend(ctx, tx); err != nil {
 		return err
 	}
-	// BeginTx's detached context cannot provide Commit's original cancel gate.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return tx.Commit()
-}
-
-func extendGenerationTwoTransaction(ctx context.Context, tx *sql.Tx) error {
-	needed, err := generationTwoExtensionNeeded(ctx, tx)
-	if err != nil || !needed {
-		return err
-	}
-	manifest, err := readGenerationManifest(ctx, tx)
-	if err != nil {
-		return err
-	}
-	if generationManifestDigest(manifest) == preLedgerRetentionManifestHash {
-		if err := applyLedgerRetentionExtension(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if err := applyQueryIndexesExtension(ctx, tx); err != nil {
-		return err
-	}
-	// Additive retention storage preserves existing monetary facts. Full history
-	// checks remain available through offline maintenance verification.
-	return validateGenerationTwoManifest(ctx, tx)
 }

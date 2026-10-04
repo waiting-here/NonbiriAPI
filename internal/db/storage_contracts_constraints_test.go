@@ -23,8 +23,11 @@ func TestStorageContractsCompatibilityRegistryIsDetachedAndClosed(t *testing.T) 
 		}
 		seen[hash] = true
 	}
-	if len(seen) != 2 || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] {
+	if len(seen) != 3 || !seen[preLedgerRetentionManifestHash] || !seen[preQueryIndexesManifestHash] || !seen[preStorageVersionManifestHash] {
 		t.Fatal("deployed source missing")
+	}
+	if descriptor.SchemaVersion != 1 || len(descriptor.SourceSchemaVersions) != 0 {
+		t.Fatal("unexpected stable schema history")
 	}
 	descriptor.SourceManifestHashes[0] = "unknown"
 	if reflect.DeepEqual(descriptor, GenerationTwoCompatibilityDescriptor()) {

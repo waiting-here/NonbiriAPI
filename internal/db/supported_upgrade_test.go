@@ -2,11 +2,34 @@ package db
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"fmt"
+	_ "embed"
 	"testing"
 )
+
+// These small reverse DDL fixtures reconstruct empty predecessor schemas.
+// Production upgrades only use the forward SQL in migrations/.
+//
+//go:embed testdata/pre_release_current.sql
+var preReleaseCurrentFixture string
+
+//go:embed testdata/pre_release_indexes.sql
+var preReleaseIndexesFixture string
+
+//go:embed testdata/pre_release_ledger.sql
+var preReleaseLedgerFixture string
+
+func preStorageVersionSchema() string {
+	return generationTwoSchema + preReleaseCurrentFixture
+}
+
+func preQueryIndexesSchema() string {
+	return preStorageVersionSchema() + preReleaseIndexesFixture
+}
+
+func preLedgerRetentionSchema() string {
+	return preQueryIndexesSchema() + preReleaseLedgerFixture
+}
 
 func supportedSourceFixture(t *testing.T) *sql.DB {
 	t.Helper()
@@ -33,13 +56,10 @@ func supportedSourceFixture(t *testing.T) *sql.DB {
 }
 
 func TestSupportedReleasedSchemaIdentity(t *testing.T) {
-	const releasedSchemaHash = "41d6ba87261075647661ec37279c2cd83a6c3b32c97206d2b4b3cb68c05e69e5"
-	if got := fmt.Sprintf("%x", sha256.Sum256([]byte(preLedgerRetentionSchema()))); got != releasedSchemaHash {
-		t.Fatalf("released schema identity changed: %s", got)
-	}
 	for _, source := range []struct{ schema, manifest string }{
 		{preLedgerRetentionSchema(), preLedgerRetentionManifestHash},
 		{preQueryIndexesSchema(), preQueryIndexesManifestHash},
+		{preStorageVersionSchema(), preStorageVersionManifestHash},
 	} {
 		database, err := sql.Open("sqlite", ":memory:")
 		if err != nil {
@@ -54,6 +74,9 @@ func TestSupportedReleasedSchemaIdentity(t *testing.T) {
 			}
 			assertRetainedManifest(t, database, PinnedGenerationTwoManifestHash)
 			assertForeignKeyEnforcement(t, database)
+			if version, err := readSchemaVersion(context.Background(), database); err != nil || version != 1 {
+				t.Fatal("stable baseline not reached", version, err)
+			}
 		}
 		_ = database.Close()
 	}

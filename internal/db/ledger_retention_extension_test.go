@@ -40,7 +40,7 @@ func TestLedgerRetentionUpgradePreservesCurrentLedgerAndRollsBack(t *testing.T) 
 	hostileMustExec(t, database, `UPDATE credit_capacity SET last_ledger_seq=1 WHERE id=1`)
 	cancelled, cancel := context.WithCancel(ctx)
 	err = runGenerationTwoExtension(cancelled, database, func(ctx context.Context, tx *sql.Tx) error {
-		if err := applyLedgerRetentionExtension(ctx, tx); err != nil {
+		if _, err := tx.ExecContext(ctx, ledgerRetentionSQL); err != nil {
 			return err
 		}
 		cancel()

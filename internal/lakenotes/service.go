@@ -193,15 +193,15 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 type profileRow struct {
 	profile  rules.Profile
 	revision int64
-	rulesID  string
 }
 
 func profileTx(ctx context.Context, tx *sql.Tx, user int64, create bool, now int64) (profileRow, error) {
 	var row profileRow
 	var raw, coinRaw []byte
-	e := tx.QueryRowContext(ctx, "SELECT revision,rules_id,coin_mag,profile FROM lake_notes_profiles WHERE user_id=?", user).Scan(&row.revision, &row.rulesID, &coinRaw, &raw)
+	var version int
+	e := tx.QueryRowContext(ctx, "SELECT revision,storage_version,coin_mag,profile FROM lake_notes_profiles WHERE user_id=?", user).Scan(&row.revision, &version, &coinRaw, &raw)
 	if errors.Is(e, sql.ErrNoRows) {
-		row = profileRow{rules.InitialProfile(), 1, rules.RulesID}
+		row = profileRow{rules.InitialProfile(), 1}
 		if !create {
 			return row, nil
 		}
@@ -209,18 +209,18 @@ func profileTx(ctx context.Context, tx *sql.Tx, user int64, create bool, now int
 		if e != nil {
 			return row, e
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_profiles(user_id,revision,rules_id,coin_mag,profile,updated_at) VALUES(?,1,?,zeroblob(16),?,?)", user, rules.RulesID, raw, now)
+		_, e = tx.ExecContext(ctx, "INSERT INTO lake_notes_profiles(user_id,revision,rules_id,storage_version,coin_mag,profile,updated_at) VALUES(?,1,?,?,zeroblob(16),?,?)", user, rules.RulesID, profileStorageVersion, raw, now)
 		return row, e
 	}
 	if e != nil {
 		return row, e
 	}
-	row.profile, e = rules.DecodeProfile(raw)
+	row.profile, e = decodeStoredProfile(version, raw)
 	if e != nil {
 		return row, ErrInvariant
 	}
 	coin, e := db.DecodeU128(coinRaw)
-	if e != nil || coin.Decimal() != string(row.profile.Coins) || row.rulesID != rules.RulesID {
+	if e != nil || coin.Decimal() != string(row.profile.Coins) {
 		return row, ErrInvariant
 	}
 	return row, nil
@@ -237,7 +237,7 @@ func saveProfileTx(ctx context.Context, tx *sql.Tx, user int64, row *profileRow,
 	if e != nil {
 		return ErrInvariant
 	}
-	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_profiles SET profile=?,coin_mag=?,revision=revision+1,updated_at=? WHERE user_id=? AND revision=?", raw, db.EncodeU128(coin), now, user, row.revision)
+	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_profiles SET profile=?,coin_mag=?,rules_id=?,storage_version=?,revision=revision+1,updated_at=? WHERE user_id=? AND revision=?", raw, db.EncodeU128(coin), rules.RulesID, profileStorageVersion, now, user, row.revision)
 	if e != nil {
 		return e
 	}
@@ -271,7 +271,7 @@ func (s *Service) profileViewTx(ctx context.Context, tx *sql.Tx, user int64, now
 	if e != nil {
 		return ProfileView{}, e
 	}
-	out := ProfileView{Revision: rev(row.revision), RulesID: row.rulesID, Profile: row.profile, Wallet: w}
+	out := ProfileView{Revision: rev(row.revision), RulesID: rules.RulesID, Profile: row.profile, Wallet: w}
 	if _, e = s.qualifiedTx(ctx, tx, user, now.Unix()); e != nil {
 		if !closedError(e) {
 			return out, e

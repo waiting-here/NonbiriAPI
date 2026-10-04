@@ -20,6 +20,10 @@ This checklist does not itself assert a pass.
 - Check exact fresh/upgrade manifest equality, injected-failure rollback,
   repeated startup, unknown/partial schema zero-write rejection and old-binary
   rejection. Unregistered intermediate schemas are outside this guarantee.
+- At v1.0.0, freeze the stable database baseline. Each later v1.x release must
+  upgrade every earlier stable schema/data revision directly, with populated
+  fixtures and immutable migration steps. Cover data-only revisions, new config
+  defaults and saved game formats; see [database upgrades](database-upgrades.md).
 - Preserve old account/entry IDs, settled charges, saved rules, configured games,
   security roots and legal overrides. Preserve already configured loans, quick
   stakes, charity achievement and the game-statistics start. Keep new activities
