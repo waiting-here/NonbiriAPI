@@ -448,11 +448,13 @@ it('blocks steward editing of a bound rule even when its ban is disabled', async
     station: 'user',
   });
   await view.user.click(screen.getByRole('tab', { name: 'Client rules' }));
-  expect(
-    await screen.findByText(/Only an administrator can edit or remove this bound rule/),
-  ).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+  await waitFor(() => {
+    expect(
+      screen.getByText(/Only an administrator can edit or remove this bound rule/),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+  });
 });
 
 it('restores a saved aggregate scan’s frozen signal, call kind and time across history navigation', async () => {
