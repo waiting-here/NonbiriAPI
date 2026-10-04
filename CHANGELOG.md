@@ -50,6 +50,7 @@ This entry describes the rc.5 Linux/amd64 source prerelease. Build from the tagg
 
 ### Fixed
 
+- Startup idempotency recovery uses indexed accepted and expired-record queues, avoiding scans of large live response records while preserving replay windows, ordering and bounded transaction batches.
 - Donation details accept exhausted usage totals that exceed a configured cap, including output-heavy calls.
 - Credit auditing recognizes Fat Fish and Lake Notes ledger channels and resumes historical projection without discarding existing totals.
 - OpenAI-compatible SSE normalizes an invalid first string completion ID into one stable ID per attempt, preserving valid IDs, reasoning, tools, usage and terminal checks. Credential reflection is checked before normalization.

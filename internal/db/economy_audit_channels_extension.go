@@ -13,7 +13,7 @@ const economyAuditChannelsAfter = "'picture_book','inactivity','penalty','fat_fi
 
 // Keep the exact released predecessor as the input to historical extensions.
 func preEconomyAuditChannelsSchema() string {
-	return strings.Replace(generationTwoSchema, economyAuditChannelsAfter, economyAuditChannelsBefore, 1)
+	return strings.Replace(preIdempotencyRecoverySchema(), economyAuditChannelsAfter, economyAuditChannelsBefore, 1)
 }
 
 func applyEconomyAuditChannelsExtension(ctx context.Context, tx *sql.Tx) error {

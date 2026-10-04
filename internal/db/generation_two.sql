@@ -6918,3 +6918,6 @@ CREATE TABLE gateway_model_capabilities_state (
 -- Model chat transport rules
 ALTER TABLE models ADD COLUMN transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream'));
 ALTER TABLE charity_models ADD COLUMN transport_rule TEXT NOT NULL DEFAULT 'passthrough' CHECK(transport_rule IN ('passthrough','force_non_stream','force_stream'));
+
+-- Idempotency recovery access
+CREATE INDEX idx_idempotency_recovery ON idempotency_records(state,expires_at,scope,actor_scope_hash,key_hash);
