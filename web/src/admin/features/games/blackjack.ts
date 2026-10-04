@@ -19,7 +19,7 @@ const datasets = ['recent', 'anonymous'] as const;
 const phase = (v: unknown) => oneOf(v, ['result', 'cancelled'] as const, 'result phase');
 const reason = (v: unknown) =>
   oneOf(v, ['completed', 'server_restart', 'closed', 'maintenance'] as const, 'result reason');
-const cursor = (v: unknown) => nullableString(v, 'history cursor', { min: 1, max: 2048 });
+const cursor = (v: unknown) => nullableString(v, 'history cursor', { min: 1 });
 function ref(v: unknown, dataset: BlackjackDataset) {
   return opaqueID(v, dataset === 'recent' ? 'bjt_' : 'bja_', 'table reference');
 }

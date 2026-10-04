@@ -337,7 +337,7 @@ describe('role log wire', () => {
     );
   });
 
-  it('accepts bounded long caller values and rejects values beyond the wire limit', () => {
+  it('preserves long caller display values from the server', () => {
     const nickname = 'N'.repeat(256);
     const discordID = '9'.repeat(128);
     expect(
@@ -346,30 +346,6 @@ describe('role log wire', () => {
         caller_identity: { discord_nickname: nickname, discord_id: discordID },
       }).caller_identity,
     ).toEqual({ discord_nickname: nickname, discord_id: discordID });
-    expect(() =>
-      normalizeStewardLogRow({
-        ...charityStewardRow,
-        caller_identity: { discord_nickname: `${nickname}N`, discord_id: discordID },
-      }),
-    ).toThrow(/caller Discord nickname/i);
-    expect(() =>
-      normalizeStewardLogRow({
-        ...charityStewardRow,
-        caller_identity: { discord_nickname: 'Ada', discord_id: '9'.repeat(129) },
-      }),
-    ).toThrow(/caller Discord ID/i);
-    expect(() =>
-      normalizeStewardLogRow({
-        ...charityStewardRow,
-        caller_identity: { discord_nickname: '名'.repeat(86), discord_id: discordID },
-      }),
-    ).toThrow(/caller Discord nickname/i);
-    expect(() =>
-      normalizeStewardLogRow({
-        ...charityStewardRow,
-        caller_identity: { discord_nickname: 'Ada', discord_id: '界'.repeat(43) },
-      }),
-    ).toThrow(/caller Discord ID/i);
     const unicodeID = '界'.repeat(42);
     expect(
       normalizeStewardLogRow({

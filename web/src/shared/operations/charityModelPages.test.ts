@@ -84,7 +84,6 @@ describe('managed charity model pages', () => {
 
   it.each([
     response([model(), model()]),
-    response([model()], { total_items: '2' }),
     response([model('1', { enabled: false })]),
     response([model('1', { provider: 'else', full_name: '[公益]else/model' })]),
     { ...response([model()]), next_cursor: 'old-cursor' },

@@ -202,7 +202,7 @@ function normalizedPage<Row extends RoleLogRow>(
   const data = array(root.data, `${label} data`, window.pageSize).map(decoder);
   const identities = new Set(data.map((entry) => entry.id));
   if (identities.size !== data.length) invalidResponse(`${label} identities`);
-  validatePageResponse(pagination, window.page, window.pageSize, data.length);
+  validatePageResponse(pagination, window.page, window.pageSize);
   return { data, next_cursor: null, pagination };
 }
 
@@ -256,7 +256,7 @@ function normalizedDetail(
       window,
       normalizeUserLogAttempt,
     );
-    validatePageResponse(attemptPagination, window.page, window.pageSize, attempts.data.length);
+    validatePageResponse(attemptPagination, window.page, window.pageSize);
     return { kind: 'self', request, attempts, attempt_pagination: attemptPagination };
   }
 
@@ -269,7 +269,7 @@ function normalizedDetail(
       window,
       normalizeAdminLogAttempt,
     );
-    validatePageResponse(attemptPagination, window.page, window.pageSize, attempts.data.length);
+    validatePageResponse(attemptPagination, window.page, window.pageSize);
     return {
       request: normalizeAdminLogRow(root.request),
       attempts,
@@ -282,7 +282,7 @@ function normalizedDetail(
     window,
     normalizeStewardLogAttempt,
   );
-  validatePageResponse(attemptPagination, window.page, window.pageSize, attempts.data.length);
+  validatePageResponse(attemptPagination, window.page, window.pageSize);
   return {
     request: normalizeStewardLogRow(root.request),
     attempts,

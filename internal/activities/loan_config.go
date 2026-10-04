@@ -56,27 +56,21 @@ func (c loanConfig) wire() LoanConfig {
 	return LoanConfig{c.enabled, c.tiers, formatMilliPointsInt64(c.a), formatMilliPointsInt64(c.b)}
 }
 
-func readLoanConfigTx(ctx context.Context, tx *sql.Tx) (loanConfig, error) {
+func parseLoanConfig(raw map[string]string) (loanConfig, error) {
 	var c loanConfig
-	var enabled, tiers, a, b string
-	for key, value := range map[string]*string{"enabled": &enabled, "tiers": &tiers, "a_milli": &a, "b_milli": &b} {
-		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, "activity_loan_"+key).Scan(value); err != nil {
-			return c, classifyDatabaseError("read loan configuration", err)
-		}
-	}
 	var ok bool
-	if c.enabled, ok = parseConfigBool(enabled); !ok {
+	if c.enabled, ok = parseConfigBool(raw["activity_loan_enabled"]); !ok {
 		return c, ErrInvariant
 	}
 	var values []string
-	if json.Unmarshal([]byte(tiers), &values) != nil || len(values) != 3 {
+	if json.Unmarshal([]byte(raw["activity_loan_tiers"]), &values) != nil || len(values) != 3 {
 		return c, ErrInvariant
 	}
 	copy(c.tiers[:], values)
-	if c.a, ok = parseStoredConfigMilli(a); !ok {
+	if c.a, ok = parseStoredConfigMilli(raw["activity_loan_a_milli"]); !ok {
 		return c, ErrInvariant
 	}
-	if c.b, ok = parseStoredConfigMilli(b); !ok || !c.valid() {
+	if c.b, ok = parseStoredConfigMilli(raw["activity_loan_b_milli"]); !ok || !c.valid() {
 		return c, ErrInvariant
 	}
 	return c, nil

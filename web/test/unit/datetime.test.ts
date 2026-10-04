@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { formatDateTime } from '../../src/shared/utils/datetime';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); window.dispatchEvent(new Event('focus')); });
 
 it('shows Unix zero and rejects wall-clock strings without an explicit offset', () => {
   expect(formatDateTime(0)).not.toBe('—');
@@ -12,6 +12,7 @@ it('shows Unix zero and rejects wall-clock strings without an explicit offset', 
 });
 
 it('does not retain the previous browser zone in a locale cache', () => {
+  window.dispatchEvent(new Event('focus'));
   let zone = 'America/New_York';
   const native = Intl.DateTimeFormat.prototype.resolvedOptions;
   vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
@@ -22,10 +23,12 @@ it('does not retain the previous browser zone in a locale cache', () => {
   const instant = Date.parse('2026-06-15T12:00:00Z') / 1000;
   const first = formatDateTime(instant, 'en');
   zone = 'Asia/Kolkata';
+  window.dispatchEvent(new Event('focus'));
   const second = formatDateTime(instant, 'en');
   expect(second).not.toBe(first);
   expect(second).toMatch(/05:30|5:30|17:30/);
   zone = 'America/New_York';
+  window.dispatchEvent(new Event('focus'));
   expect(formatDateTime(instant, 'en')).toBe(first);
 });
 

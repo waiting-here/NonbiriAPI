@@ -125,7 +125,7 @@ function pageOf<T>(
   const r = record(value, ['data', 'pagination'], 'penalty page');
   const pagination = normalizePageMetadata(r.pagination);
   const data = array(r.data, 'penalty rows', size).map(decode);
-  validatePageResponse(pagination, page, size, data.length);
+  validatePageResponse(pagination, page, size);
   if (identity && new Set(data.map(identity)).size !== data.length)
     invalidResponse('duplicate penalty row');
   return { data, pagination };

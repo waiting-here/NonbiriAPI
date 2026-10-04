@@ -34,16 +34,11 @@ function entry(value: unknown): BlacklistEntry {
     'blacklist entry',
     ['discord_id', 'reason', 'created_at', 'user_id'],
   );
-  const id = string(root.discord_id, 'Discord ID', { max: 20 });
+  const id = string(root.discord_id, 'Discord ID');
   if (!validDiscordID(id)) invalidResponse('Discord ID');
   return {
     discord_id: id,
-    reason: string(root.reason, 'blacklist reason', {
-      min: 1,
-      max: 2000,
-      bytes: 8000,
-      multiline: true,
-    }),
+    reason: string(root.reason, 'blacklist reason', { min: 1, multiline: true }),
     created_at: unixSecond(root.created_at, 'blacklist creation time'),
     user_id: root.user_id === null ? null : decimalID(root.user_id, 'blacklisted user'),
     first_actor_kind:
@@ -87,7 +82,7 @@ export function getBlacklist(
       if (root.next_cursor !== null) invalidResponse('blacklist cursor');
       const data = array(root.data, 'blacklist entries', 100).map(entry);
       const pagination = normalizePageMetadata(root.pagination);
-      validatePageResponse(pagination, page, pageSize, data.length);
+      validatePageResponse(pagination, page, pageSize);
       if (
         new Set(data.map((item) => item.discord_id)).size !== data.length ||
         (discordID && data.some((item) => item.discord_id !== discordID))
@@ -154,19 +149,14 @@ export function getBlacklistEvents(
               ? null
               : decimalID(row.actor_user_id, 'blacklist event actor id'),
           reason_codes: array(row.reason_codes, 'blacklist event reasons', 2).map((code) =>
-            string(code, 'blacklist reason code', { max: 64, ascii: true }),
+            string(code, 'blacklist reason code', { ascii: true }),
           ),
-          safe_note: string(row.safe_note, 'blacklist event note', {
-            min: 1,
-            max: 2000,
-            bytes: 8000,
-            multiline: true,
-          }),
+          safe_note: string(row.safe_note, 'blacklist event note', { min: 1, multiline: true }),
           created_at: unixSecond(row.created_at, 'blacklist event time'),
         };
       });
       const pagination = normalizePageMetadata(root.pagination);
-      validatePageResponse(pagination, page, 20, data.length);
+      validatePageResponse(pagination, page, 20);
       return { data, pagination };
     },
     { signal },

@@ -96,7 +96,7 @@ export function blackjackConfig(v: unknown): BlackjackConfig {
   };
 }
 function hash(v: unknown) {
-  const value = string(v, 'configuration hash', { min: 64, max: 64 });
+  const value = string(v, 'configuration hash', { min: 64 });
   if (!/^[a-f0-9]{64}$/.test(value)) invalidResponse('configuration hash');
   return value;
 }
@@ -248,7 +248,7 @@ export function blackjackTable(v: unknown, live = false) {
           const identity = record(value, ['seat', 'display_name', 'avatar_url'], 'live identity');
           const seat = seatNo(identity.seat);
           if (!fact.seats.some((s) => s.seat === seat)) invalidResponse('live identity seat');
-          const avatar = nullableString(identity.avatar_url, 'live avatar', { max: 2048 });
+          const avatar = nullableString(identity.avatar_url, 'live avatar');
           if (avatar !== null) {
             let parsed: URL;
             try {
@@ -267,7 +267,7 @@ export function blackjackTable(v: unknown, live = false) {
           }
           return {
             seat,
-            display_name: string(identity.display_name, 'live name', { min: 1, max: 128 }),
+            display_name: string(identity.display_name, 'live name', { min: 1 }),
             avatar_url: avatar,
           };
         })
@@ -413,6 +413,6 @@ export function blackjackHistory(v: unknown) {
   const r = record(v, ['items', 'next_cursor'], 'blackjack history');
   return {
     items: array(r.items, 'history', 50).map(blackjackSummary),
-    next_cursor: nullableString(r.next_cursor, 'cursor', { min: 1, max: 2048 }),
+    next_cursor: nullableString(r.next_cursor, 'cursor', { min: 1 }),
   };
 }

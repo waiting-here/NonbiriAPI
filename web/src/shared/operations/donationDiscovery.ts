@@ -102,7 +102,7 @@ export function selectDonationDiscoveries(
         next_cursor:
           body.next_cursor === null
             ? null
-            : string(body.next_cursor, 'discovery cursor', { min: 1, max: 4096, bytes: 4096 }),
+            : string(body.next_cursor, 'discovery cursor', { min: 1 }),
       };
     },
     {

@@ -17,11 +17,7 @@ export const logOriginFields = [
 export function normalizeLogOrigin(root: WireRecord): LogOrigin {
   return {
     origin_user_id: nullableDecimalID(root.origin_user_id ?? null, 'original user id'),
-    origin_discord_id: nullableString(root.origin_discord_id ?? null, 'original Discord id', {
-      min: 1,
-      max: 128,
-      bytes: 128,
-    }),
+    origin_discord_id: nullableString(root.origin_discord_id ?? null, 'original Discord id', { min: 1 }),
     origin_deleted:
       root.origin_deleted === undefined
         ? root.user_id === null

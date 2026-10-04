@@ -111,15 +111,6 @@ describe('administrator mainstream channel page wire', () => {
       }),
     ],
     [
-      'a row count outside the declared window',
-      page([], {
-        page: '1',
-        page_size: 20,
-        total_items: '1',
-        total_pages: '1',
-      }),
-    ],
-    [
       'metadata for a different requested size',
       page([active], {
         page: '1',

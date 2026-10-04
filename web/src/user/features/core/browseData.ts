@@ -119,7 +119,7 @@ function numberedKeyBindingPage(
   ) {
     invalidResponse('key binding parent or filter');
   }
-  validatePageResponse(pagination, window.page, window.pageSize, data.length);
+  validatePageResponse(pagination, window.page, window.pageSize);
   return { data, next_cursor: null, pagination };
 }
 

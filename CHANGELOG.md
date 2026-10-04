@@ -12,12 +12,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Fresh databases use consolidated schema definitions. Explicit schema/data revisions apply forward migrations atomically, with target configuration validated before commit; stable v1.x releases will retain direct upgrades from v1.0.0 onward.
 - Lake Notes versions saved profiles and cast formats independently of catalog identity, while unfinished casts retain exact simulation rules. Obsolete bootstrap backfills and repeated checks for historical table availability are removed.
 - Covering indexes and bounded detail loading speed up credit history. Request-log totals avoid display-only account joins and use an index that also covers unfinished requests.
+- Mutations refresh visible query windows together and leave older pages stale until revisited. Response adapters avoid repeated text-length and pagination-total checks; obsolete full-collection donation reads are removed.
+- Activity configuration uses batched reads, game configuration reuses compiled snapshots, and unchanged session timestamps no longer cause writes. Date formatting reuses the browser time zone, game screens load on demand, and level initialization avoids repeated validation.
 - Bilingual READMEs focus on setup and development, and release documentation specifies source-only distribution.
 
 - Credit transaction details and account exports retain the last 30 days. Six-hour maintenance replaces expired entries with opening balances and non-personal audit totals, preserving current balances, pending settlement, held evidence and minimal receipts needed to prevent duplicate rewards. Historical audit ranges use complete site hours after detail compaction.
 
 ### Fixed
 
+- Completed image tasks publish their downloadable results before a status reader can observe success, preventing a brief missing-image response.
 - The charity ranking is visible beside the shared-model catalog on desktop and below it on mobile.
 - Inactivity-policy previews support page sizes, previous and next pages, and direct page selection. An optional execution time uses the site's configured time zone; leaving it blank preserves elapsed-time scheduling.
 

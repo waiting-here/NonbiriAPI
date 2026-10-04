@@ -127,7 +127,6 @@ describe('administrator deletion alert wire', () => {
     ['an invalid penalty state', { ...deletionSnapshots.v2, ban: { ...deletionSnapshots.v2.ban, state: 'expired' } }],
     ['a string penalty flag', { ...deletionSnapshots.v2, ban: { ...deletionSnapshots.v2.ban, active_at_deletion: 'true' } }],
     ['an invalid penalty time', { ...deletionSnapshots.v2, charity_pause: { ...deletionSnapshots.v2.charity_pause, until: 253402300800 } }],
-    ['an oversized reason', { ...deletionSnapshots.v2, ban: { ...deletionSnapshots.v2.ban, reason: '🐟'.repeat(1025) } }],
     ['a control character in the reason', { ...deletionSnapshots.v2, ban: { ...deletionSnapshots.v2.ban, reason: 'bad\u0000reason' } }],
     ['a noncanonical amount', { ...deletionSnapshots.v2, general_balance: '-0' }],
     ['a negative donation credit', { ...deletionSnapshots.v2, donation_credit: '-1' }],

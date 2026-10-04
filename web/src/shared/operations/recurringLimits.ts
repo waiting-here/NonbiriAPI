@@ -85,7 +85,7 @@ function canonicalCredits(value: unknown, label: string): string {
 }
 
 function wireTimeZone(value: unknown, label: string): string {
-  const zone = string(value, label, { min: 1, max: 64, bytes: 64, ascii: true });
+  const zone = string(value, label, { min: 1, ascii: true });
   if (!TIME_ZONE.test(zone) || zone === 'Local' || zone.startsWith('/') || zone.includes('..')) {
     invalidResponse(label);
   }
@@ -156,7 +156,7 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
   const anchorLocal =
     root.anchor_local == null
       ? null
-      : string(root.anchor_local, `${label} anchor`, { min: 19, max: 19 });
+      : string(root.anchor_local, `${label} anchor`, { min: 19 });
   if (alignment === 'exact_time' ? anchorLocal === null : anchorLocal !== null)
     invalidResponse(`${label} anchor`);
   const weekStartsOn = nullableInteger(root.week_starts_on, `${label} week start`, 1, 7);

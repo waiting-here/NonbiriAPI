@@ -162,16 +162,16 @@ describe('charity catalog normalizer', () => {
     expect(() =>
       normalizeCharityCatalog(catalogPage([catalogModel({ public_description: '\u0080' })])),
     ).toThrow();
-    expect(() =>
+    expect(
       normalizeCharityCatalog(
         catalogPage([catalogModel({ public_description: 'x'.repeat(1_025) })]),
-      ),
-    ).toThrow();
-    expect(() =>
+      ).models[0].publicDescription,
+    ).toBe('x'.repeat(1_025));
+    expect(
       normalizeCharityCatalog(
         catalogPage([catalogModel({ public_description: '界'.repeat(1_367) })]),
-      ),
-    ).toThrow();
+      ).models[0].publicDescription,
+    ).toBe('界'.repeat(1_367));
   });
 
   it('rejects a page whose item count does not match the server window', () => {

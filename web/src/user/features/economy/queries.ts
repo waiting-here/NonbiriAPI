@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useMutation,
   useQuery,
@@ -22,8 +22,6 @@ import {
   getActivities,
   getCharityCapability,
   getDonation,
-  getDonations,
-  getEndpointChoices,
   terminateDonation,
   withdrawDonation,
   type CreateDonationInput,
@@ -36,8 +34,6 @@ export const economyKeys = {
   charityCapability: ['user', 'economy', 'charity-capability'] as const,
   donations: ['user', 'economy', 'donations'] as const,
   donation: (id: string) => ['user', 'economy', 'donations', id] as const,
-  endpointChoices: (membershipSignature: string) =>
-    ['user', 'economy', 'endpoint-choices', membershipSignature] as const,
   endpointChoicesRoot: ['user', 'economy', 'endpoint-choices'] as const,
   activities: ['user', 'economy', 'activities'] as const,
 };
@@ -78,16 +74,6 @@ export function useCharityCapability(enabled = true) {
   });
 }
 
-export function useDonations(enabled = true) {
-  const queryClient = useQueryClient();
-  return useQuery({
-    queryKey: economyKeys.donations,
-    queryFn: ({ signal }) => economySessionRequest(queryClient, () => getDonations(signal)),
-    enabled,
-    staleTime: 5_000,
-  });
-}
-
 export function useDonation(id: string | undefined, enabled = true) {
   const queryClient = useQueryClient();
   return useQuery({
@@ -97,30 +83,6 @@ export function useDonation(id: string | undefined, enabled = true) {
       return economySessionRequest(queryClient, () => getDonation(id, signal));
     },
     enabled: enabled && Boolean(id),
-  });
-}
-
-function membershipSignature(donations: readonly Donation[]): string {
-  return donations
-    .filter((donation) => donation.status === 'pending' || donation.status === 'approved')
-    .flatMap((donation) => donation.keys)
-    .flatMap((key) => (key.endpointKeyId ? [key.endpointKeyId] : []))
-    .sort((left, right) =>
-      BigInt(left) < BigInt(right) ? -1 : BigInt(left) > BigInt(right) ? 1 : 0,
-    )
-    .join('|');
-}
-
-export function useEndpointKeyChoices(donations: readonly Donation[], enabled: boolean) {
-  const queryClient = useQueryClient();
-  const signature = useMemo(() => membershipSignature(donations), [donations]);
-  return useQuery({
-    queryKey: economyKeys.endpointChoices(signature),
-    queryFn: ({ signal }) =>
-      economySessionRequest(queryClient, () => getEndpointChoices(donations, signal)),
-    enabled,
-    staleTime: 5_000,
-    placeholderData: (previous) => previous,
   });
 }
 

@@ -31,9 +31,6 @@ describe('admin match records', () => {
       normalizeExport({ ...recent, items: Array(101).fill(recent.items[0]) }, 'likes', 'recent'),
     ).toThrow();
     expect(() =>
-      normalizeExport({ ...recent, next_cursor: 'x'.repeat(4097) }, 'likes', 'recent'),
-    ).toThrow();
-    expect(() =>
       normalizeExport(
         { ...recent, items: [{ ...recent.items[1], round_no: 2 }] },
         'likes',

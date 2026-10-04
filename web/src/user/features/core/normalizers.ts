@@ -91,23 +91,17 @@ function exactRecord(
 }
 
 function hasForbiddenScalar(value: string): boolean {
-  for (const character of value) {
-    const point = character.codePointAt(0) ?? 0;
-    if (point < 32 || (point >= 127 && point <= 159) || (point >= 0xd800 && point <= 0xdfff))
-      return true;
-  }
-  return false;
+  // eslint-disable-next-line no-control-regex -- Match controls and lone surrogates in one pass.
+  return /[\x00-\x1f\x7f-\x9f\ud800-\udfff]/u.test(value);
 }
 
 function scalarString(
   value: unknown,
-  maximum: number,
   label: string,
   options: { allowEmpty?: boolean; rejectEdgeWhitespace?: boolean } = {},
 ): string {
   if (typeof value !== 'string' || hasForbiddenScalar(value)) invalid(label);
-  const scalars = Array.from(value);
-  if ((!options.allowEmpty && scalars.length === 0) || scalars.length > maximum) invalid(label);
+  if (!options.allowEmpty && value.length === 0) invalid(label);
   if (
     options.rejectEdgeWhitespace &&
     value.length > 0 &&
@@ -196,7 +190,7 @@ function creditMilli(value: string): bigint {
 }
 
 function httpsURL(value: unknown, label: string): string {
-  const candidate = scalarString(value, 2_048, label);
+  const candidate = scalarString(value, label);
   let parsed: URL;
   try {
     parsed = new URL(candidate);
@@ -230,7 +224,7 @@ function boundedArray<T>(
 
 function nullableCursor(value: unknown): string | null {
   if (value === null) return null;
-  return scalarString(value, 512, 'pagination cursor');
+  return scalarString(value, 'pagination cursor');
 }
 
 function uniqueBy<T>(values: readonly T[], key: (value: T) => string, label: string): void {
@@ -244,7 +238,7 @@ function uniqueBy<T>(values: readonly T[], key: (value: T) => string, label: str
 
 function opaqueID(value: unknown, prefix: string, label: string): string {
   const expectedLength = prefix.length + 22;
-  const candidate = scalarString(value, expectedLength, label);
+  const candidate = scalarString(value, label);
   const suffix = candidate.slice(prefix.length);
   if (
     candidate.length !== expectedLength ||
@@ -504,16 +498,6 @@ export function normalizeUsageSummary(value: unknown): UsageSummary {
     total_completion_tokens: u128(record.total_completion_tokens, 'completion token count'),
     total_unknown_usage_requests: u128(record.total_unknown_usage_requests, 'unknown usage count'),
   };
-  if (
-    BigInt(result.total_prompt_tokens) !==
-      BigInt(result.total_uncached_input_tokens) +
-        BigInt(result.total_cache_write_input_tokens) +
-        BigInt(result.total_cache_read_input_tokens) ||
-    result.total_completion_tokens !== result.total_output_tokens ||
-    BigInt(result.total_unknown_usage_requests) > BigInt(result.total_requests)
-  ) {
-    invalid('usage summary projection');
-  }
   return result;
 }
 
@@ -562,13 +546,13 @@ export function normalizeUserProfile(value: unknown): UserProfile {
   if (updatedAt < createdAt) invalid('account update time');
   return {
     id: id(record.id, 'user id'),
-    username: scalarString(record.username, 128, 'username'),
-    avatar: record.avatar === null ? null : scalarString(record.avatar, 512, 'avatar hash'),
+    username: scalarString(record.username, 'username'),
+    avatar: record.avatar === null ? null : scalarString(record.avatar, 'avatar hash'),
     avatar_url: nullableHTTPSURL(record.avatar_url, 'avatar URL'),
     guild_nick:
       record.guild_nick === null
         ? null
-        : scalarString(record.guild_nick, 128, 'guild nickname', { allowEmpty: true }),
+        : scalarString(record.guild_nick, 'guild nickname', { allowEmpty: true }),
     guild_avatar_url: nullableHTTPSURL(record.guild_avatar_url, 'guild avatar URL'),
     lang: lang as AccountLanguage,
     is_banned: exactBoolean(record.is_banned, 'ban state'),
@@ -590,7 +574,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     game_balance: creditAmount(record.game_balance, 'game balance', true),
     donation_credit: creditAmount(record.donation_credit, 'donation credit', false),
     effective_level: record.effective_level as UserProfile['effective_level'],
-    level_display_name: scalarString(record.level_display_name, 64, 'level display name', {
+    level_display_name: scalarString(record.level_display_name, 'level display name', {
       allowEmpty: true,
     }),
     game_profile_public: exactBoolean(record.game_profile_public, 'game profile setting'),
@@ -618,7 +602,7 @@ export function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
     return {
       kind: 'mainstream',
       channel_id: opaqueID(record.channel_id, 'mch_', 'endpoint origin channel id'),
-      name: scalarString(record.name, 128, 'endpoint origin channel name', {
+      name: scalarString(record.name, 'endpoint origin channel name', {
         rejectEdgeWhitespace: true,
       }),
     };
@@ -635,7 +619,7 @@ export function normalizeMainstreamChannelOption(value: unknown): MainstreamChan
   );
   return {
     id: opaqueID(record.id, 'mch_', 'mainstream channel option id'),
-    name: scalarString(record.name, 128, 'mainstream channel option name', {
+    name: scalarString(record.name, 'mainstream channel option name', {
       rejectEdgeWhitespace: true,
     }),
     connector_type: connectorType(record.connector_type),
@@ -738,20 +722,19 @@ export function normalizeKeyBindingView(value: unknown): KeyBindingView {
   return {
     id: id(record.id, 'key binding id'),
     model_id: id(record.model_id, 'key binding model id'),
-    model_full_name: scalarString(record.model_full_name, 129, 'key binding model full name'),
+    model_full_name: scalarString(record.model_full_name, 'key binding model full name'),
     endpoint_id: id(record.endpoint_id, 'key binding endpoint id'),
     endpoint_key_id: id(record.endpoint_key_id, 'key binding endpoint key id'),
     endpoint_base_url: normalizeBaseURL(record.endpoint_base_url, 'key binding endpoint base URL'),
     connector_type: connectorType(record.connector_type),
-    endpoint_note: scalarString(record.endpoint_note, 1_024, 'key binding endpoint note', {
+    endpoint_note: scalarString(record.endpoint_note, 'key binding endpoint note', {
       allowEmpty: true,
     }),
     display_head: asciiFragment(record.display_head, 'key binding display head'),
     display_tail: asciiFragment(record.display_tail, 'key binding display tail'),
-    key_note: scalarString(record.key_note, 1_024, 'key binding key note', { allowEmpty: true }),
+    key_note: scalarString(record.key_note, 'key binding key note', { allowEmpty: true }),
     upstream_model_id: manualValue(
       record.upstream_model_id,
-      512,
       false,
       'key binding upstream model id',
     ),
@@ -937,7 +920,7 @@ export function normalizeEndpoint(value: unknown): Endpoint {
     connector_type: connectorType(record.connector_type),
     base_url: normalizeBaseURL(record.base_url, 'endpoint base URL'),
     origin: normalizeEndpointOrigin(record.origin),
-    note: scalarString(record.note, 1_024, 'endpoint note', { allowEmpty: true }),
+    note: scalarString(record.note, 'endpoint note', { allowEmpty: true }),
     enabled,
     revision: decimal(record.revision, 'endpoint revision', true),
     key_count: keyCount,
@@ -982,7 +965,7 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
     endpoint_id: endpointID,
     display_head: asciiFragment(record.display_head, 'key display head'),
     display_tail: asciiFragment(record.display_tail, 'key display tail'),
-    note: scalarString(record.note, 1_024, 'endpoint key note', { allowEmpty: true }),
+    note: scalarString(record.note, 'endpoint key note', { allowEmpty: true }),
     enabled: exactBoolean(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBoolean(record.force_store_false, 'endpoint key store policy'),
     max_concurrency: keyRoutingLimit(record.max_concurrency),
@@ -1009,7 +992,7 @@ export function normalizeCallerKeyMetadata(value: unknown): CallerKeyMetadata {
     [],
     'CallerKey metadata',
   );
-  const display = scalarString(record.display, 13, 'CallerKey display');
+  const display = scalarString(record.display, 'CallerKey display');
   if (!/^nbk_[A-Za-z0-9_-]{4}…[A-Za-z0-9_-]{4}$/.test(display)) invalid('CallerKey display');
   const createdAt = unixTime(record.created_at, 'CallerKey creation time');
   const updatedAt = unixTime(record.updated_at, 'CallerKey update time');
@@ -1038,7 +1021,7 @@ export function normalizeCallerKeySecret(
   expectedGeneration: string,
 ): CallerKeySecret {
   const record = exactRecord(value, ['secret', 'metadata'], [], 'CallerKey one-time response');
-  const secret = scalarString(record.secret, 47, 'CallerKey secret');
+  const secret = scalarString(record.secret, 'CallerKey secret');
   if (!CALLER_SECRET.test(secret)) invalid('CallerKey secret');
   const metadata = normalizeCallerKeyMetadata(record.metadata);
   let expectedNext: string;
@@ -1150,8 +1133,8 @@ export function normalizeDiscoveryEvidence(value: unknown): DiscoveryEvidence {
   };
 }
 
-function manualValue(value: unknown, maximum: number, allowEmpty: boolean, label: string): string {
-  return scalarString(value, maximum, label, {
+function manualValue(value: unknown, allowEmpty: boolean, label: string): string {
+  return scalarString(value, label, {
     allowEmpty,
     rejectEdgeWhitespace: typeof value === 'string' && value.length > 0,
   });
@@ -1166,7 +1149,7 @@ export function validateManualValue(value: string, maximum: number, allowEmpty: 
 }
 
 function logicalName(value: unknown, label: string): string {
-  return scalarString(value, 64, label, { rejectEdgeWhitespace: true });
+  return scalarString(value, label, { rejectEdgeWhitespace: true });
 }
 
 export function validateLogicalName(value: string): string {
@@ -1222,8 +1205,8 @@ export function normalizeCatalogEntry(value: unknown): CatalogEntry {
   return {
     id: id(record.id, 'catalog entry id'),
     source_type: sourceType,
-    upstream_model_id: manualValue(record.upstream_model_id, 512, false, 'upstream model id'),
-    provider: manualValue(record.provider, 128, true, 'catalog provider'),
+    upstream_model_id: manualValue(record.upstream_model_id, false, 'upstream model id'),
+    provider: manualValue(record.provider, true, 'catalog provider'),
     source_revision: decimal(record.source_revision, 'catalog source revision', true),
     pair_revision: decimal(record.pair_revision, 'catalog pair revision', true),
     created_at: createdAt,
@@ -1296,7 +1279,7 @@ export function normalizeModel(value: unknown): Model {
   const provider = logicalName(record.provider, 'logical model provider');
   if (provider.startsWith('[公益]')) invalid('logical model provider');
   const model = logicalName(record.model, 'logical model name');
-  const fullName = scalarString(record.full_name, 129, 'logical model full name');
+  const fullName = scalarString(record.full_name, 'logical model full name');
   if (fullName !== `${provider}/${model}`) invalid('logical model full name');
   if (record.route_strategy !== 'ordered' && record.route_strategy !== 'random')
     invalid('route strategy');
@@ -1361,7 +1344,7 @@ export function normalizeBindingCandidate(value: unknown): BindingCandidate {
     endpoint_key_id: id(record.endpoint_key_id, 'candidate endpoint key id'),
     endpoint_base_url: normalizeBaseURL(record.endpoint_base_url, 'candidate endpoint base URL'),
     connector_type: connectorType(record.connector_type),
-    endpoint_note: scalarString(record.endpoint_note, 1_024, 'candidate endpoint note', {
+    endpoint_note: scalarString(record.endpoint_note, 'candidate endpoint note', {
       allowEmpty: true,
     }),
     endpoint_key_display_head: asciiFragment(
@@ -1372,15 +1355,10 @@ export function normalizeBindingCandidate(value: unknown): BindingCandidate {
       record.endpoint_key_display_tail,
       'candidate key display tail',
     ),
-    endpoint_key_note: scalarString(record.endpoint_key_note, 1_024, 'candidate key note', {
+    endpoint_key_note: scalarString(record.endpoint_key_note, 'candidate key note', {
       allowEmpty: true,
     }),
-    upstream_model_id: manualValue(
-      record.upstream_model_id,
-      512,
-      false,
-      'candidate upstream model id',
-    ),
+    upstream_model_id: manualValue(record.upstream_model_id, false, 'candidate upstream model id'),
     source_types: normalizeSourceTypes(record.source_types),
   };
 }
@@ -1415,7 +1393,7 @@ export function normalizeBinding(value: unknown): Binding {
     endpoint_key_id: id(record.endpoint_key_id, 'binding endpoint key id'),
     endpoint_base_url: normalizeBaseURL(record.endpoint_base_url, 'binding endpoint base URL'),
     connector_type: connectorType(record.connector_type),
-    endpoint_note: scalarString(record.endpoint_note, 1_024, 'binding endpoint note', {
+    endpoint_note: scalarString(record.endpoint_note, 'binding endpoint note', {
       allowEmpty: true,
     }),
     endpoint_key_display_head: asciiFragment(
@@ -1426,15 +1404,10 @@ export function normalizeBinding(value: unknown): Binding {
       record.endpoint_key_display_tail,
       'binding key display tail',
     ),
-    endpoint_key_note: scalarString(record.endpoint_key_note, 1_024, 'binding key note', {
+    endpoint_key_note: scalarString(record.endpoint_key_note, 'binding key note', {
       allowEmpty: true,
     }),
-    upstream_model_id: manualValue(
-      record.upstream_model_id,
-      512,
-      false,
-      'binding upstream model id',
-    ),
+    upstream_model_id: manualValue(record.upstream_model_id, false, 'binding upstream model id'),
     ord: record.ord as number,
   };
 }
@@ -1463,7 +1436,7 @@ export function normalizeBindingsResponse(value: unknown): BindingsResponse {
 
 export function normalizeDiscoveryAccepted(value: unknown): DiscoveryAccepted {
   const record = exactRecord(value, ['operation_id', 'evidence'], [], 'discovery acceptance');
-  const operationId = scalarString(record.operation_id, 25, 'discovery operation id');
+  const operationId = scalarString(record.operation_id, 'discovery operation id');
   if (!OPERATION_ID.test(operationId)) invalid('discovery operation id');
   return {
     operation_id: operationId,
@@ -1571,13 +1544,13 @@ export function canonicalBaseURLPreview(value: string): string {
 }
 
 function asciiFragment(value: unknown, label: string): string {
-  const fragment = scalarString(value, 16, label, { allowEmpty: true });
+  const fragment = scalarString(value, label, { allowEmpty: true });
   if (!/^[\x20-\x7e]*$/.test(fragment) || fragment.length > 16) invalid(label);
   return fragment;
 }
 
 function normalizeBaseURL(value: unknown, label: string): string {
-  const candidate = scalarString(value, 4_096, label);
+  const candidate = scalarString(value, label);
   if (new TextEncoder().encode(candidate).byteLength > 4_096) invalid(label);
   let parsed: URL;
   try {

@@ -164,11 +164,7 @@ export function normalizeReportSummary(value: unknown): ReportCaseSummary {
       ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
       'reported connector',
     ),
-    canonical_base_url: string(root.canonical_base_url, 'reported canonical URL', {
-      min: 1,
-      max: 4_096,
-      bytes: 4_096,
-    }),
+    canonical_base_url: string(root.canonical_base_url, 'reported canonical URL', { min: 1 }),
     material_version: decimal(root.material_version, 'report material version', { positive: true }),
     target_version: decimal(root.target_version, 'report target version', { positive: true }),
     deadline: unixSecond(root.deadline, 'report deadline'),
@@ -197,24 +193,14 @@ export function normalizeReportMaterial(value: unknown): ReportMaterial {
     const item = record(root.reporter, ['user_id', 'discord_id'], 'reporter');
     reporter = {
       user_id: decimalID(item.user_id, 'reporter user id'),
-      discord_id: string(item.discord_id, 'reporter Discord id', {
-        min: 1,
-        max: 64,
-        bytes: 64,
-        ascii: true,
-      }),
+      discord_id: string(item.discord_id, 'reporter Discord id', { min: 1, ascii: true }),
     };
   }
   return {
     id: decimalID(root.id, 'report material id'),
-    note_text: string(root.note_text, 'report note', { max: 2_048, bytes: 8_192, multiline: true }),
+    note_text: string(root.note_text, 'report note', { multiline: true }),
     reporter,
-    source_ip: string(root.source_ip, 'report source IP', {
-      min: 2,
-      max: 64,
-      bytes: 64,
-      ascii: true,
-    }),
+    source_ip: string(root.source_ip, 'report source IP', { min: 2, ascii: true }),
     created_at: unixSecond(root.created_at, 'report material time'),
   };
 }
@@ -241,11 +227,7 @@ export function normalizeReportDecision(value: unknown): ReportDecision {
       ['approve', 'reject', 'expire', 'resume_processing'] as const,
       'report decision action',
     ),
-    reason: string(item.reason, 'report decision reason', {
-      max: 1_024,
-      bytes: 4_096,
-      multiline: true,
-    }),
+    reason: string(item.reason, 'report decision reason', { multiline: true }),
     actor_user_id: nullableDecimalID(item.actor_user_id, 'report decision actor'),
     created_at: unixSecond(item.created_at, 'report decision time'),
   };
@@ -335,16 +317,8 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
     );
     owner = {
       user_id: decimalID(item.user_id, 'target owner id'),
-      discord_id: string(item.discord_id, 'target owner Discord id', {
-        min: 1,
-        max: 64,
-        bytes: 64,
-        ascii: true,
-      }),
-      display_name: string(item.display_name, 'target owner display name', {
-        max: 128,
-        bytes: 512,
-      }),
+      discord_id: string(item.discord_id, 'target owner Discord id', { min: 1, ascii: true }),
+      display_name: string(item.display_name, 'target owner display name'),
     };
   }
   const endpoint = record(
@@ -352,12 +326,7 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
     ['connector_type', 'canonical_base_url', 'display_head', 'display_tail'],
     'report target endpoint',
   );
-  const keyRef = string(root.key_ref, 'report key reference', {
-    min: 43,
-    max: 43,
-    bytes: 43,
-    ascii: true,
-  });
+  const keyRef = string(root.key_ref, 'report key reference', { min: 43, ascii: true });
   if (!/^[A-Za-z0-9_-]{43}$/.test(keyRef)) invalidResponse('report key reference');
   const state = oneOf(
     root.state,
@@ -392,21 +361,9 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
         ['openai-compatible', 'anthropic-compatible', 'ai-sdk-gateway-v3'] as const,
         'target connector',
       ),
-      canonical_base_url: string(endpoint.canonical_base_url, 'target canonical URL', {
-        min: 1,
-        max: 4_096,
-        bytes: 4_096,
-      }),
-      display_head: string(endpoint.display_head, 'target key head', {
-        max: 16,
-        bytes: 16,
-        ascii: true,
-      }),
-      display_tail: string(endpoint.display_tail, 'target key tail', {
-        max: 16,
-        bytes: 16,
-        ascii: true,
-      }),
+      canonical_base_url: string(endpoint.canonical_base_url, 'target canonical URL', { min: 1 }),
+      display_head: string(endpoint.display_head, 'target key head', { ascii: true }),
+      display_tail: string(endpoint.display_tail, 'target key tail', { ascii: true }),
     },
     discovered_version: decimal(root.discovered_version, 'target discovered version', {
       positive: true,

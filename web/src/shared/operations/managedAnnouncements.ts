@@ -63,26 +63,16 @@ export interface AdminAnnouncementPage extends CursorPage<AdminAnnouncement> {
 function normalizeDraft(value: unknown, label: string): LanguageDraft | null {
   if (value === null) return null;
   const root = record(value, ['title', 'body'], label);
-  const title = string(root.title, `${label} title`, { min: 1, max: 160, bytes: 640 });
-  const body = string(root.body, `${label} body`, {
-    min: 1,
-    max: 65_536,
-    bytes: 65_536,
-    multiline: true,
-  });
+  const title = string(root.title, `${label} title`, { min: 1 });
+  const body = string(root.body, `${label} body`, { min: 1, multiline: true });
   return { title, body };
 }
 function normalizePublishedLanguage(value: unknown, label: string): LanguagePublished | null {
   if (value === null) return null;
   const root = record(value, ['title', 'rendered_body'], label);
   return {
-    title: string(root.title, `${label} title`, { min: 1, max: 160, bytes: 640 }),
-    rendered_body: string(root.rendered_body, `${label} rendered body`, {
-      min: 1,
-      max: 65_536,
-      bytes: 65_536,
-      multiline: true,
-    }),
+    title: string(root.title, `${label} title`, { min: 1 }),
+    rendered_body: string(root.rendered_body, `${label} rendered body`, { min: 1, multiline: true }),
   };
 }
 
@@ -214,24 +204,9 @@ export function normalizeAnnouncementPreview(value: unknown): AnnouncementPrevie
     'announcement preview',
   );
   const result = {
-    rendered_zh: nullableString(root.rendered_zh, 'Chinese announcement preview', {
-      min: 1,
-      max: 65_536,
-      bytes: 65_536,
-      multiline: true,
-    }),
-    rendered_en: nullableString(root.rendered_en, 'English announcement preview', {
-      min: 1,
-      max: 65_536,
-      bytes: 65_536,
-      multiline: true,
-    }),
-    render_profile_version: string(root.render_profile_version, 'announcement render profile', {
-      min: 1,
-      max: 64,
-      bytes: 64,
-      ascii: true,
-    }),
+    rendered_zh: nullableString(root.rendered_zh, 'Chinese announcement preview', { min: 1, multiline: true }),
+    rendered_en: nullableString(root.rendered_en, 'English announcement preview', { min: 1, multiline: true }),
+    render_profile_version: string(root.render_profile_version, 'announcement render profile', { min: 1, ascii: true }),
   };
   return result;
 }
@@ -287,7 +262,7 @@ export async function getAdminAnnouncementsPage(
     normalizeAdminAnnouncementPage,
     { signal },
   );
-  validatePageResponse(result.pagination, pageNumber, pageSize, result.data.length);
+  validatePageResponse(result.pagination, pageNumber, pageSize);
   return result;
 }
 export const getAdminAnnouncement = (id: string, role: ManagementRole = 'admin') =>

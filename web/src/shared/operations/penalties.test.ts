@@ -13,16 +13,16 @@ import {
 import { readLoginRestrictions } from './restrictions';
 
 describe('penalty boundary', () => {
-  it('validates a complete page and rejects truncation, mixed owners and hidden additions', () => {
+  it('preserves server pagination and rejects malformed penalty projections', () => {
     const value = { ...penaltyPage([penalty]), legacy_details_unavailable: false };
     expect(normalizePenaltyList(value, '1', 20).data[0].id).toBe(penalty.id);
-    expect(() =>
+    expect(
       normalizePenaltyList(
         { ...value, pagination: { ...value.pagination, total_items: '2' } },
         '1',
         20,
-      ),
-    ).toThrow();
+      ).pagination.total_items,
+    ).toBe('2');
     expect(() =>
       normalizePenaltyList({ ...value, data: [{ ...penalty, rules: {} }] }, '1', 20),
     ).toThrow();

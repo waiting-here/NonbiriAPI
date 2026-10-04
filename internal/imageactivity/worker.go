@@ -633,15 +633,18 @@ func (s *Service) settle(ctx context.Context, id, state, code string, images []i
 				}
 			}
 		}
-		if err == nil {
+		if err == nil && won && allowed && len(images) > 0 {
+			var published bool
+			published, err = s.memory.commitAndPublish(tx.Commit, id, row.user, images, now+resultLifetime)
+			if err == nil {
+				return published
+			}
+		} else if err == nil {
 			err = tx.Commit()
 		} else {
 			tx.Rollback()
 		}
 		if err == nil {
-			if won && allowed && len(images) > 0 {
-				return s.memory.publish(id, row.user, images, now+resultLifetime)
-			}
 			return false
 		}
 		if errors.Is(err, ErrNotFound) {

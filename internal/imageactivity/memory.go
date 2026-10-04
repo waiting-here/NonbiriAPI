@@ -110,6 +110,20 @@ func (m *memoryStore) dropPayload(id string) {
 func (m *memoryStore) publish(id string, owner int64, images []imageBytes, expires int64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.publishLocked(id, owner, images, expires)
+}
+
+// Keep readers behind publication once the completed task becomes visible in SQL.
+func (m *memoryStore) commitAndPublish(commit func() error, id string, owner int64, images []imageBytes, expires int64) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := commit(); err != nil {
+		return false, err
+	}
+	return m.publishLocked(id, owner, images, expires), nil
+}
+
+func (m *memoryStore) publishLocked(id string, owner int64, images []imageBytes, expires int64) bool {
 	item := m.items[id]
 	if item == nil || item.retired || !item.running || item.owner != owner || owner <= 0 {
 		return false

@@ -148,7 +148,7 @@ export function normalizeEndpointOverview(value: unknown): EndpointOverview {
     };
   });
   return {
-    base_url: string(root.base_url, 'canonical endpoint URL', { min: 1, max: 4_096, bytes: 4_096 }),
+    base_url: string(root.base_url, 'canonical endpoint URL', { min: 1 }),
     user_count: decimal(root.user_count, 'endpoint user count'),
     endpoint_count: decimal(root.endpoint_count, 'endpoint count'),
     key_count: decimal(root.key_count, 'endpoint key count'),
@@ -203,11 +203,7 @@ function normalizeAlertDeletionPenalty(value: unknown, label: string): DeletedAc
     state: oneOf(root.state, ['known', 'unknown'] as const, `${label} state`),
     active_at_deletion:
       root.active_at_deletion === null ? null : boolean(root.active_at_deletion, `${label} active`),
-    reason: nullableString(root.reason, `${label} reason`, {
-      max: 1024,
-      bytes: 4096,
-      multiline: true,
-    }),
+    reason: nullableString(root.reason, `${label} reason`, { multiline: true }),
     until: nullableUnixSecond(root.until, `${label} until`),
   };
 }
@@ -237,7 +233,7 @@ function normalizeAccountDeletion(value: unknown): AccountDeletion {
   const root = record(value, [...balances, ...metadata], 'account deletion', balances);
   const amounts: AccountDeletionBalances = {
     user_id: decimalID(root.user_id, 'deleted user'),
-    discord_id: string(root.discord_id, 'Discord ID', { max: 128, bytes: 128 }),
+    discord_id: string(root.discord_id, 'Discord ID'),
     general_balance: amount(root.general_balance, 'general balance'),
     game_balance: amount(root.game_balance, 'game balance'),
     donation_credit: amount(root.donation_credit, 'donation credit', false, (1n << 128n) - 1n),
@@ -306,8 +302,8 @@ export function normalizeAdminAlert(value: unknown): AdminAlert {
       : {}),
     id: decimalID(root.id, 'alert id'),
     kind: oneOf(root.kind, ALERT_KINDS, 'alert kind'),
-    message: string(root.message, 'alert message', { max: 4_096, bytes: 4_096, multiline: true }),
-    ref: nullableString(root.ref, 'alert reference', { max: 512, bytes: 2_048 }),
+    message: string(root.message, 'alert message', { multiline: true }),
+    ref: nullableString(root.ref, 'alert reference'),
     subject_user_id:
       root.subject_user_id === null
         ? null
@@ -347,8 +343,8 @@ export interface SiteConfigCatalogEntry {
 function localText(value: unknown, label: string): LocalText {
   const root = record(value, ['zh', 'en'], label);
   return {
-    zh: string(root.zh, `${label} Chinese`, { max: 4_096, bytes: 8_192, multiline: true }),
-    en: string(root.en, `${label} English`, { max: 4_096, bytes: 8_192, multiline: true }),
+    zh: string(root.zh, `${label} Chinese`, { multiline: true }),
+    en: string(root.en, `${label} English`, { multiline: true }),
   };
 }
 
@@ -386,29 +382,15 @@ export function normalizeSiteConfigCatalogEntry(value: unknown): SiteConfigCatal
     'write_endpoint',
   ] as const;
   const root = record(value, fields, 'site configuration catalog entry');
-  const key = string(root.key, 'site configuration key', {
-    min: 1,
-    max: 128,
-    bytes: 128,
-    ascii: true,
-  });
+  const key = string(root.key, 'site configuration key', { min: 1, ascii: true });
   if (!/^[a-z0-9_]+$/.test(key) || key === 'default_locale')
     invalidResponse('site configuration key');
-  const writeEndpoint = string(root.write_endpoint, 'site configuration write endpoint', {
-    max: 256,
-    bytes: 256,
-    ascii: true,
-  });
+  const writeEndpoint = string(root.write_endpoint, 'site configuration write endpoint', { ascii: true });
   if (writeEndpoint !== '' && !writeEndpoint.startsWith('/admin/api/'))
     invalidResponse('site configuration write endpoint');
   return {
     key,
-    group: string(root.group, 'site configuration group', {
-      min: 1,
-      max: 64,
-      bytes: 64,
-      ascii: true,
-    }),
+    group: string(root.group, 'site configuration group', { min: 1, ascii: true }),
     type: oneOf(
       root.type,
       ['boolean', 'integer', 'amount', 'string', 'text', 'enum'] as const,
@@ -425,7 +407,7 @@ export function normalizeSiteConfigCatalogEntry(value: unknown): SiteConfigCatal
     maximum: safeCatalogScalar(root.maximum, 'site configuration maximum'),
     step: safeCatalogScalar(root.step, 'site configuration step'),
     allowed_values: array(root.allowed_values, 'site configuration allowed values', 128).map(
-      (item) => string(item, 'site configuration allowed value', { max: 256, bytes: 1_024 }),
+      (item) => string(item, 'site configuration allowed value'),
     ),
     zero_semantics: localText(root.zero_semantics, 'site configuration zero semantics'),
     null_semantics: localText(root.null_semantics, 'site configuration null semantics'),
@@ -434,7 +416,7 @@ export function normalizeSiteConfigCatalogEntry(value: unknown): SiteConfigCatal
       root.independent_gates,
       'site configuration independent gates',
       64,
-    ).map((item) => string(item, 'site configuration gate', { max: 128, bytes: 128, ascii: true })),
+    ).map((item) => string(item, 'site configuration gate', { ascii: true })),
     write_endpoint: writeEndpoint,
   };
 }
@@ -561,22 +543,12 @@ export function normalizeLegalHoldDetail(value: unknown): LegalHoldDetail {
       Object.entries(root).filter(([key]) => key !== 'basis' && key !== 'end_reason'),
     ),
   );
-  const endReason = nullableString(root.end_reason, 'legal hold end reason', {
-    min: 1,
-    max: 1_024,
-    bytes: 4_096,
-    multiline: true,
-  });
+  const endReason = nullableString(root.end_reason, 'legal hold end reason', { min: 1, multiline: true });
   if ((summary.state === 'active') !== (endReason === null))
     invalidResponse('legal hold end reason state');
   return {
     ...summary,
-    basis: string(root.basis, 'legal hold basis', {
-      min: 1,
-      max: 1_024,
-      bytes: 4_096,
-      multiline: true,
-    }),
+    basis: string(root.basis, 'legal hold basis', { min: 1, multiline: true }),
     end_reason: endReason,
   };
 }
@@ -643,12 +615,7 @@ export function patchSiteSetting(
     entry.write_endpoint,
     (payload) => {
       const root = record(payload, ['key', 'value', 'revision'], 'site configuration mutation');
-      const responseKey = string(root.key, 'site configuration result key', {
-        min: 1,
-        max: 128,
-        bytes: 128,
-        ascii: true,
-      });
+      const responseKey = string(root.key, 'site configuration result key', { min: 1, ascii: true });
       if (responseKey !== entry.key) invalidResponse('site configuration result key');
       return {
         key: responseKey,
@@ -668,7 +635,7 @@ export function patchSiteSettings(
     (payload) => {
       const root = record(payload, ['revision', 'changed_keys'], 'site configuration update');
       const changed = array(root.changed_keys, 'changed configuration keys', 64).map((value) =>
-        string(value, 'configuration key', { min: 1, max: 128, ascii: true }),
+        string(value, 'configuration key', { min: 1, ascii: true }),
       );
       if (
         changed.some((name) => !Object.hasOwn(input.values, name)) ||

@@ -89,7 +89,7 @@ export interface ExportPage {
 }
 const encoder = new TextEncoder();
 const cursor = (value: unknown) =>
-  nullableString(value, 'history cursor', { min: 1, max: 4096, bytes: 4096, ascii: true });
+  nullableString(value, 'history cursor', { min: 1, ascii: true });
 const ref = (value: unknown, game: GameID, dataset: Dataset) =>
   opaqueID(
     value,
@@ -97,7 +97,7 @@ const ref = (value: unknown, game: GameID, dataset: Dataset) =>
     'match reference',
   );
 const hash = (value: unknown) => {
-  const s = string(value, 'content hash', { min: 64, max: 64, ascii: true });
+  const s = string(value, 'content hash', { min: 64, ascii: true });
   if (!/^[a-f0-9]{64}$/.test(s)) invalidResponse('content hash');
   return s;
 };
@@ -132,7 +132,7 @@ function jsonValue(value: unknown, anonymous = false): JSONValue {
     if (v === null || typeof v === 'boolean') return v;
     if (typeof v === 'number') return integer(v, 'game number', -Number.MAX_SAFE_INTEGER);
     if (typeof v === 'string')
-      return string(v, 'game text', { max: 65_536, bytes: 262_144, multiline: true });
+      return string(v, 'game text', { multiline: true });
     if (Array.isArray(v))
       return array(v, 'game array', 4096).map((entry) => visit(entry, depth + 1));
     if (typeof v !== 'object') invalidResponse('game value');
@@ -144,7 +144,7 @@ function jsonValue(value: unknown, anonymous = false): JSONValue {
       invalidResponse('game record fields');
     return Object.fromEntries(
       entries.map(([key, entry]) => [
-        string(key, 'game field', { max: 160 }),
+        string(key, 'game field'),
         visit(entry, depth + 1),
       ]),
     );
@@ -170,7 +170,7 @@ function recent(value: unknown): Recent {
       );
       return {
         user_id: p.user_id === null ? null : decimal(p.user_id, 'participant', { positive: true }),
-        display_name: string(p.display_name, 'participant name', { max: 128 }),
+        display_name: string(p.display_name, 'participant name'),
         general_paid: amount(p.general_paid, 'general payment', false),
         game_paid: amount(p.game_paid, 'game payment', false),
       };
@@ -201,7 +201,7 @@ function summaryFields(
     rules_version: integer(r.rules_version, 'rules version', 1, 2147483647),
     content_hash: hash(r.content_hash),
     outcome: oneOf(r.outcome, ['normal', 'draw', 'system_cancelled'], 'outcome'),
-    reason: string(r.reason, 'outcome reason', { max: 64, ascii: true }),
+    reason: string(r.reason, 'outcome reason', { ascii: true }),
     winner: r.winner === null ? null : integer(r.winner, 'winner', 0, 1),
     scores: pair(r.scores, 'scores').map((s) => integer(s, 'score', 0, 1_000_000_000)),
     ticket: amount(r.ticket, 'ticket', false),

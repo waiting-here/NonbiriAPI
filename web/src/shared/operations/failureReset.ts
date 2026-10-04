@@ -57,7 +57,7 @@ export function selectFailureResets(
         next_cursor:
           page.next_cursor === null
             ? null
-            : string(page.next_cursor, 'selection cursor', { min: 1, max: 4096, bytes: 4096 }),
+            : string(page.next_cursor, 'selection cursor', { min: 1 }),
       };
     },
     { method: 'POST', json: { selection, cursor } },

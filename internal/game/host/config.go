@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"math"
 	"net/http"
 	"strconv"
@@ -17,6 +18,12 @@ const RouteAdminGamesConfig = "/admin/api/games/config"
 const RouteAdminActiveCounts = "/admin/api/games/active-counts"
 const RouteGames = "/api/games"
 const RouteHomeSummary = "/api/home/game-summary"
+
+type configurationCache struct {
+	revision int64
+	raw      map[string]string
+	snapshot game.Configuration
+}
 
 func (service *Service) ReadGamesConfig(ctx context.Context) (game.WireConfiguration, error) {
 	if service == nil || ctx == nil {
@@ -163,11 +170,12 @@ func (service *Service) PatchGamesConfig(ctx context.Context, body []byte, idemp
 }
 
 func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (game.Configuration, int64, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT key,value FROM site_config WHERE key IN (`+placeholders(len(service.registry.ConfigKeys()))+`)`, stringArgs(service.registry.ConfigKeys())...)
+	keys := service.registry.ConfigKeys()
+	rows, err := tx.QueryContext(ctx, `SELECT key,value FROM site_config WHERE key IN (`+placeholders(len(keys))+`)`, stringArgs(keys)...)
 	if err != nil {
 		return game.Configuration{}, 0, classifyDB(err)
 	}
-	values := make(map[string]string, len(service.registry.ConfigKeys()))
+	values := make(map[string]string, len(keys))
 	for rows.Next() {
 		var key string
 		var value sql.NullString
@@ -188,17 +196,25 @@ func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (game.Conf
 	if err := rows.Close(); err != nil {
 		return game.Configuration{}, 0, classifyDB(err)
 	}
-	if len(values) != len(service.registry.ConfigKeys()) {
+	if len(values) != len(keys) {
 		return game.Configuration{}, 0, ErrInvariant
 	}
 	var revision int64
 	if err := tx.QueryRowContext(ctx, `SELECT revision FROM config_revisions WHERE domain='games'`).Scan(&revision); err != nil {
 		return game.Configuration{}, 0, classifyDB(err)
 	}
+	// Cache compilation only: every caller still reads its own transaction's
+	// values, including uncommitted edits and reads following a rollback.
+	service.configMu.Lock()
+	defer service.configMu.Unlock()
+	if service.configCache.revision == revision && maps.Equal(service.configCache.raw, values) {
+		return service.configCache.snapshot, revision, nil
+	}
 	snapshot, err := game.CompileConfiguration(service.registry, values)
 	if err != nil {
 		return game.Configuration{}, 0, ErrInvariant
 	}
+	service.configCache = configurationCache{revision: revision, raw: values, snapshot: snapshot}
 	return snapshot, revision, nil
 }
 

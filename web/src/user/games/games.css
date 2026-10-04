@@ -4,6 +4,16 @@
   overflow-wrap: anywhere;
 }
 
+@media (min-width: 40rem) {
+  .game-page > .nb-page-header {
+    flex-wrap: wrap;
+  }
+
+  .game-page > .nb-page-header > .nb-page-header__lead {
+    flex-basis: 16rem;
+  }
+}
+
 .game-center-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

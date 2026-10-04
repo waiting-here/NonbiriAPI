@@ -21,7 +21,8 @@ function boundedText(value: unknown, maxCharacters: number, maxBytes?: number): 
   const normalized = cleanText(value);
   if (!normalized) return undefined;
   const characters = Array.from(normalized);
-  let bounded = characters.length > maxCharacters ? characters.slice(0, maxCharacters).join('') : normalized;
+  let bounded =
+    characters.length > maxCharacters ? characters.slice(0, maxCharacters).join('') : normalized;
   const byteLimit = maxBytes ?? Number.POSITIVE_INFINITY;
   if (byteLimit < Number.POSITIVE_INFINITY) {
     const encoder = new TextEncoder();
@@ -34,7 +35,8 @@ function boundedText(value: unknown, maxCharacters: number, maxBytes?: number): 
       prefix += character;
       bytes += characterBytes;
     }
-    if (prefix.length < bounded.length || bounded.length < characters.length) bounded = `${prefix}…`;
+    if (prefix.length < bounded.length || bounded.length < characters.length)
+      bounded = `${prefix}…`;
     else bounded = prefix;
   } else if (characters.length > maxCharacters) {
     bounded = `${bounded}…`;
@@ -127,7 +129,10 @@ function fallbackMessage(status: number): string {
 }
 
 function elevatedTokenForPath(path: string): string | undefined {
-  if (typeof document === 'undefined' || (path !== '/api/account/export' && path !== '/api/account/delete')) {
+  if (
+    typeof document === 'undefined' ||
+    (path !== '/api/account/export' && path !== '/api/account/delete')
+  ) {
     return undefined;
   }
   const matches = document.cookie
@@ -161,7 +166,7 @@ export function isNotFoundError(error: unknown): boolean {
 }
 
 /**
- * Re-read the exact query families affected by a mutation.  A mutation can
+ * Refresh visible queries and invalidate inactive pages affected by a mutation. A mutation can
  * commit before its response is lost or malformed, so callers must never
  * restore a local snapshot as a rollback.  The returned error is the first
  * failed authority read; callers keep the original mutation error when one
@@ -177,34 +182,33 @@ export async function refetchAuthoritativeQueries(
     removeOnIgnoredError?: boolean;
   }[],
 ): Promise<unknown | undefined> {
-  let firstError: unknown;
+  const targets = new Map<
+    string,
+    { queryKey: QueryKey; refresh: boolean; spec: (typeof specs)[number] }
+  >();
   for (const spec of specs) {
     const exact = spec.exact ?? true;
-    const matches = client.getQueryCache()
-      .findAll({ queryKey: spec.queryKey, exact })
-      .map((query) => query.queryKey);
-    const keys = matches.length > 0 ? matches : [spec.queryKey];
-    for (const queryKey of keys) {
-      try {
-        await client.refetchQueries({ queryKey, exact: true, type: 'all' });
-      } catch (error) {
-        if (spec.ignoreError?.(error)) {
-          if (spec.removeOnIgnoredError) client.removeQueries({ queryKey, exact: true });
-        } else {
-          firstError ??= error;
-        }
-      }
-      const state = client.getQueryState(queryKey);
-      if (state?.error) {
-        if (spec.ignoreError?.(state.error)) {
-          if (spec.removeOnIgnoredError) client.removeQueries({ queryKey, exact: true });
-        } else {
-          firstError ??= state.error;
-        }
-      }
+    for (const query of client.getQueryCache().findAll({ queryKey: spec.queryKey, exact })) {
+      const { queryKey, queryHash } = query;
+      // An exact target can be required by the next step even without an observer.
+      const prior = targets.get(queryHash);
+      if (!prior || exact)
+        targets.set(queryHash, { queryKey, refresh: exact || query.isActive(), spec });
     }
   }
-  return firstError;
+  const results = await Promise.all(
+    [...targets.values()].map(async ({ queryKey, refresh, spec }) => {
+      await client.invalidateQueries({ queryKey, exact: true, refetchType: 'none' });
+      if (!refresh) return;
+      try {
+        await client.refetchQueries({ queryKey, exact: true, type: 'all' }, { throwOnError: true });
+      } catch (error) {
+        if (!spec.ignoreError?.(error)) return error;
+        if (spec.removeOnIgnoredError) client.removeQueries({ queryKey, exact: true });
+      }
+    }),
+  );
+  return results.find((error) => error !== undefined);
 }
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
@@ -256,6 +260,10 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     return (await response.json()) as T;
   } catch {
     if (!contentType.toLowerCase().includes('json')) return undefined as T;
-    throw new ApiError('invalid_response', 'The server returned an invalid response.', response.status);
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid response.',
+      response.status,
+    );
   }
 }

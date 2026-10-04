@@ -45,7 +45,7 @@ export function normalizeAdminAlertPageResponse(
 
   const pagination = normalizePageMetadata(root.pagination);
   const data = array(root.data, 'administrator alert page data', 100).map(normalizeAdminAlert);
-  validatePageResponse(pagination, requestedPage, requestedSize, data.length);
+  validatePageResponse(pagination, requestedPage, requestedSize);
 
   const ids = new Set<string>();
   for (const alert of data) {

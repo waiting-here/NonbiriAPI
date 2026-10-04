@@ -106,7 +106,8 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	var bannedUntil sql.NullInt64
 	var absolute int64
 	var expires int64
-	err = tx.QueryRowContext(ctx, `SELECT s.user_id,s.cred_gen,s.expires_at,s.absolute_expires_at,u.username,u.is_admin,u.is_banned,u.banned_until FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`, hash).Scan(&p.actor.UserID, &p.actor.SessionGeneration, &expires, &absolute, &p.username, &storedKind, &banned, &bannedUntil)
+	var lastSeen int64
+	err = tx.QueryRowContext(ctx, `SELECT s.user_id,s.cred_gen,s.expires_at,s.absolute_expires_at,s.last_seen_at,u.username,u.is_admin,u.is_banned,u.banned_until FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`, hash).Scan(&p.actor.UserID, &p.actor.SessionGeneration, &expires, &absolute, &lastSeen, &p.username, &storedKind, &banned, &bannedUntil)
 	if errors.Is(err, sql.ErrNoRows) {
 		return sessionPrincipal{}, errSessionUnauthorized
 	}
@@ -153,13 +154,16 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	if newExpiry > absolute {
 		newExpiry = absolute
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE sessions SET last_seen_at=?,expires_at=? WHERE token_hash=? AND user_id=? AND cred_gen=? AND expires_at=? AND absolute_expires_at=?`, now, newExpiry, hash, p.actor.UserID, p.actor.SessionGeneration, expires, absolute)
-	if err != nil {
-		return sessionPrincipal{}, fmt.Errorf("authenticate session: touch: %w", err)
-	}
-	n, err := result.RowsAffected()
-	if err != nil || n != 1 {
-		return sessionPrincipal{}, errSessionUnauthorized
+	// Several requests in one second have the same persisted timestamps.
+	if lastSeen != now || expires != newExpiry {
+		result, err := tx.ExecContext(ctx, `UPDATE sessions SET last_seen_at=?,expires_at=? WHERE token_hash=? AND user_id=? AND cred_gen=? AND expires_at=? AND absolute_expires_at=?`, now, newExpiry, hash, p.actor.UserID, p.actor.SessionGeneration, expires, absolute)
+		if err != nil {
+			return sessionPrincipal{}, fmt.Errorf("authenticate session: touch: %w", err)
+		}
+		n, err := result.RowsAffected()
+		if err != nil || n != 1 {
+			return sessionPrincipal{}, errSessionUnauthorized
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return sessionPrincipal{}, fmt.Errorf("authenticate session: commit: %w", err)

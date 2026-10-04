@@ -25,7 +25,7 @@ export function automaticRestrictions(value: unknown) {
         ['charity_rpm', 'charity_short_content'] as const,
         'restriction reason code',
       ),
-      reason: string(item.reason, 'restriction reason', { min: 1, max: 256, bytes: 1024 }),
+      reason: string(item.reason, 'restriction reason', { min: 1 }),
       started_at: startedAt,
       ends_at: endsAt,
     };

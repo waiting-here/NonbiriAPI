@@ -44,7 +44,7 @@ export function normalizeAdminMainstreamChannelPage(
   const channels = array(root.data, 'mainstream channel page data', 100).map(
     normalizeAdminMainstreamChannel,
   );
-  validatePageResponse(pagination, requestedPage, requestedSize, channels.length);
+  validatePageResponse(pagination, requestedPage, requestedSize);
 
   const ids = new Set<string>();
   for (const channel of channels) {

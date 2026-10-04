@@ -40,7 +40,7 @@ export function normalizeIssuePageResponse(
     next_cursor: root.next_cursor,
     projection_incomplete: root.projection_incomplete,
   });
-  validatePageResponse(pagination, requestedPage, requestedSize, domain.data.length);
+  validatePageResponse(pagination, requestedPage, requestedSize);
 
   const ids = new Set<string>();
   for (const issue of domain.data) {

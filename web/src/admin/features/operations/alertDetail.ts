@@ -88,7 +88,7 @@ export function normalizeTargetDiagnostic(
   const fields = record(value, ['kind', 'id', 'facts', 'related_issue_ids'], 'target diagnostic');
   if (fields.kind !== kind || fields.id !== id) invalidResponse('target diagnostic identity');
   const relatedIssueIDs = array(fields.related_issue_ids, 'related issues', 20).map((entry) => {
-    const issueID = string(entry, 'related issue id', { min: 26, max: 26, ascii: true });
+    const issueID = string(entry, 'related issue id', { min: 26, ascii: true });
     if (!isDiagnosticTarget('issue', issueID)) invalidResponse('related issue id');
     return issueID;
   });
@@ -138,9 +138,9 @@ export function validAlertID(value: string | null): value is string {
 
 function fact(value: unknown): AlertFact {
   const fields = record(value, ['key', 'value'], 'alert fact');
-  const key = string(fields.key, 'fact key', { min: 1, max: 64, ascii: true });
+  const key = string(fields.key, 'fact key', { min: 1, ascii: true });
   if (!/^[a-z0-9_]+$/.test(key)) invalidResponse('fact key');
-  return { key, value: string(fields.value, 'fact value', { max: 1024, bytes: 4096 }) };
+  return { key, value: string(fields.value, 'fact value') };
 }
 
 function target(value: unknown): AlertTarget {
@@ -151,7 +151,7 @@ function target(value: unknown): AlertTarget {
     ['kind', 'id', 'available', 'status'],
   );
   const kind = oneOf(fields.kind, TARGET_KINDS, 'alert target kind');
-  const id = string(fields.id, 'alert target id', { min: 1, max: 64, ascii: true });
+  const id = string(fields.id, 'alert target id', { min: 1, ascii: true });
   if (
     ['deleted_account', 'donation', 'donation_key', 'endpoint_key', 'endpoint', 'user'].includes(
       kind,
@@ -160,15 +160,11 @@ function target(value: unknown): AlertTarget {
     if (!validAlertID(id)) invalidResponse('alert target id');
   } else if (!/^[A-Za-z0-9_-]+$/.test(id)) invalidResponse('alert target id');
   const available = boolean(fields.available, 'alert target availability');
-  const status = string(fields.status, 'alert target status', { max: 64, ascii: true });
+  const status = string(fields.status, 'alert target status', { ascii: true });
   const reason =
     fields.unavailable_reason === undefined
       ? undefined
-      : string(fields.unavailable_reason, 'target unavailable reason', {
-          min: 1,
-          max: 64,
-          ascii: true,
-        });
+      : string(fields.unavailable_reason, 'target unavailable reason', { min: 1, ascii: true });
   if (available === Boolean(reason)) invalidResponse('alert target availability');
   return { kind, id, available, status, ...(reason ? { unavailable_reason: reason } : {}) };
 }
@@ -201,11 +197,7 @@ export function normalizeAdminAlertDetail(value: unknown): AdminAlertDetail {
           const reason =
             row.unavailable_reason === undefined
               ? undefined
-              : string(row.unavailable_reason, 'related log unavailable reason', {
-                  min: 1,
-                  max: 64,
-                  ascii: true,
-                });
+              : string(row.unavailable_reason, 'related log unavailable reason', { min: 1, ascii: true });
           if (available === Boolean(reason)) invalidResponse('related log availability');
           const from = unixSecond(row.from, 'related log start');
           const to = unixSecond(row.to, 'related log end');
