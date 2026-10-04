@@ -46,23 +46,27 @@ func readActivityConfigTx(ctx context.Context, tx *sql.Tx) (activityConfig, erro
 	if config.revision < 1 {
 		return activityConfig{}, ErrInvariant
 	}
-	var err error
-	if config.loan, err = readLoanConfigTx(ctx, tx); err != nil {
-		return activityConfig{}, err
+	rows, err := tx.QueryContext(ctx, `SELECT key,value FROM site_config WHERE key IN (
+ 'activities_enabled','activity_welfare_enabled','activity_welfare_threshold_milli',
+ 'activity_welfare_cap_milli','activity_thursday_enabled','site_timezone_offset_minutes',
+ 'activity_loan_enabled','activity_loan_tiers','activity_loan_a_milli','activity_loan_b_milli')`)
+	if err != nil {
+		return activityConfig{}, classifyDatabaseError("read activity configuration", err)
 	}
-	keys := []string{
-		configActivitiesEnabled, configWelfareEnabled, configWelfareThreshold,
-		configWelfareCap, configThursdayEnabled, configSiteTimezone,
-	}
-	values := make(map[string]string, len(keys))
-	for _, key := range keys {
-		var value string
-		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, key).Scan(&value); errors.Is(err, sql.ErrNoRows) && key == configSiteTimezone {
-			value = ""
-		} else if err != nil {
+	defer rows.Close()
+	values := make(map[string]string, 10)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
 			return activityConfig{}, classifyDatabaseError("read activity configuration", err)
 		}
 		values[key] = value
+	}
+	if err := rows.Err(); err != nil {
+		return activityConfig{}, classifyDatabaseError("read activity configuration", err)
+	}
+	if config.loan, err = parseLoanConfig(values); err != nil {
+		return activityConfig{}, err
 	}
 	var ok bool
 	if config.masterEnabled, ok = parseConfigBool(values[configActivitiesEnabled]); !ok {

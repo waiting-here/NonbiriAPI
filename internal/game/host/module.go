@@ -97,6 +97,8 @@ type Service struct {
 	workerStarted    bool
 	routesRegistered bool
 	recovered        map[string]bool
+	configMu         sync.Mutex
+	configCache      configurationCache
 }
 
 func New(options Options) (*Service, error) {
