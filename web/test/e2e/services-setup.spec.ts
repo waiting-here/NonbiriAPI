@@ -116,6 +116,7 @@ for (const locale of ['en', 'zh'] as const) {
       empty = false,
       failedRead = false,
       failedModel = false;
+    let discoveryRefreshes = 0;
     const bound = new Set<string>();
     const writes: { path: string; body: Record<string, unknown>; identity: string | undefined }[] =
       [];
@@ -161,7 +162,9 @@ for (const locale of ['en', 'zh'] as const) {
                 url.searchParams,
               ),
             );
-      if (/\/keys\/\d+\/models\/refresh$/.test(path))
+      if (/\/keys\/\d+\/models\/refresh$/.test(path)) {
+        discoveryRefreshes++;
+        if (discoveryRefreshes === 2) failedRead = false;
         return fulfill(
           {
             operation_id: 'op_000000000000000000000A',
@@ -169,6 +172,7 @@ for (const locale of ['en', 'zh'] as const) {
           },
           202,
         );
+      }
       if (/\/keys\/\d+\/models$/.test(path)) {
         const current = failedRead
           ? { ...evidence, state: 'failed', result: null, count: null, safe_class: 'transport' }
@@ -388,11 +392,11 @@ for (const locale of ['en', 'zh'] as const) {
       ),
     ).toBeVisible();
     await shot('read-failed');
-    failedRead = false;
     await page
       .getByRole('button', { name: copy('Retry loading models', '重试读取'), exact: true })
       .click();
     await expect(page.getByLabel('model-a', { exact: true })).toBeVisible();
+    expect(discoveryRefreshes).toBe(2);
     await page.getByLabel(copy('Model name prefix', '模型名前缀'), { exact: true }).fill('demo');
     await page.getByLabel('model-a', { exact: true }).check();
     await page.getByLabel('model-b', { exact: true }).check();
